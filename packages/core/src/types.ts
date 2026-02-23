@@ -33,6 +33,15 @@ export interface AuthError {
   message: string;
 }
 
+export class PollarError extends Error {
+  readonly code: string;
+  constructor(code: string, message?: string) {
+    super(message ?? code);
+    this.name = 'PollarError';
+    this.code = code;
+  }
+}
+
 export type Status = 'unauthenticated' | 'restored' | 'authenticated' | 'awaiting_auth' | 'logging_in';
 
 export interface PollarState {

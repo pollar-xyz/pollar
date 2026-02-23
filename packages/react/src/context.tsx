@@ -1,54 +1,98 @@
 'use client';
 
-import { PollarClient, PollarClientConfig, PollarState } from '@pollar/auth-core';
+import { PollarClient, PollarClientConfig, PollarState } from '@pollar/core';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { LoginModal } from './LoginModal';
+
+export interface PollarStyles {
+  theme?: 'light' | 'dark';
+  accentColor?: string;
+  logoBase64?: string;
+  emailEnabled?: boolean;
+  embeddedWallets?: boolean;
+  providers?: {
+    google?: boolean;
+    discord?: boolean;
+    x?: boolean;
+    github?: boolean;
+    apple?: boolean;
+  };
+}
+
+async function fetchRemoteStyles(baseUrl: string, apiKey: string): Promise<PollarStyles> {
+  const res = await fetch(`${baseUrl}/v1/styles`, {
+    headers: { 'x-polo-api-key': apiKey },
+  });
+  if (!res.ok) return {};
+  const body = (await res.json()) as { content?: PollarStyles };
+  return body.content ?? {};
+}
 
 interface PollarContextValue {
   walletAddress: string;
   getClient: () => PollarClient;
   login: () => void;
   logout: () => void;
-  status: PollarState['status'],
+  status: PollarState['status'];
+  styles: PollarStyles;
 }
 
 const PollarContext = createContext<PollarContextValue | null>(null);
 
 interface PollarProviderProps {
   config: PollarClientConfig;
+  styles?: PollarStyles;
   children: ReactNode;
 }
 
-export function PollarProvider({ config, children }: PollarProviderProps) {
+export function PollarProvider({ config, styles: propStyles, children }: PollarProviderProps) {
   const clientRef = useRef<PollarClient | null>(null);
-  const [ state, setState ] = useState<PollarState | null>(null);
+  const [state, setState] = useState<PollarState | null>(null);
+  const [styles, setStyles] = useState<PollarStyles>(propStyles ?? {});
+
   if (clientRef.current === null) {
     clientRef.current = new PollarClient(config);
   }
-  
+
   useEffect(() => {
     return clientRef.current?.onStateChange((state) => {
       setState(state);
     });
   }, []);
-  
-  const [ modalOpen, setModalOpen ] = useState(false);
-  
-  const contextValue: PollarContextValue = useMemo(() => ({
-    walletAddress: state?.session?.wallet?.publicKey || '',
-    getClient: () => clientRef.current!,
-    login: () => setModalOpen(true),
-    logout: () => clientRef.current?.logout(),
-    status: state?.status || 'unauthenticated',
-  }), [ state ]);
-  
+
+  useEffect(() => {
+    fetchRemoteStyles(config.baseUrl, config.apiKey)
+      .then((fetched) => {
+        setStyles({
+          ...fetched,
+          ...propStyles,
+          providers: { ...fetched.providers, ...propStyles?.providers },
+        });
+      })
+      .catch(() => {
+        setStyles(propStyles ?? {});
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const contextValue: PollarContextValue = useMemo(
+    () => ({
+      walletAddress: state?.session?.wallet?.publicKey || '',
+      getClient: () => clientRef.current!,
+      login: () => setModalOpen(true),
+      logout: () => clientRef.current?.logout(),
+      status: state?.status || 'unauthenticated',
+      styles,
+    }),
+    [state, styles],
+  );
+
   return (
     <PollarContext.Provider value={contextValue}>
       {children}
-      <LoginModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-      />
+      <LoginModal open={modalOpen} onClose={() => setModalOpen(false)} />
     </PollarContext.Provider>
   );
 }

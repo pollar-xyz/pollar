@@ -33,10 +33,10 @@
   "peerDependencies": {
     "react": ">=18",
     "react-dom": ">=18",
-    "@pollar/auth-core": "*"
+    "@pollar/core": "*"
   },
   "dependencies": {
-    "@pollar/auth-core": "*"
+    "@pollar/core": "*"
   },
   "devDependencies": {
     "@types/react": "^18.0.0",

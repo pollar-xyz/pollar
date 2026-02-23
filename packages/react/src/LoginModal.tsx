@@ -1,5 +1,6 @@
 'use client';
 
+import { PollarError } from '@pollar/core';
 import { useState } from 'react';
 import { usePollar } from './context';
 import './LoginModal.css';
@@ -9,25 +10,43 @@ interface LoginModalProps {
   onClose: () => void;
 }
 
+const ERROR_MESSAGES: Record<string, string> = {
+  API_KEY_NOT_FOUND: 'Invalid API key. Contact the app administrator.',
+  API_KEY_EXPIRED: 'API key has expired. Contact the app administrator.',
+  ORIGIN_NOT_ALLOWED: 'This origin is not authorized. Contact the app administrator.',
+};
+
+function getErrorMessage(err: unknown): string {
+  if (err instanceof PollarError && ERROR_MESSAGES[err.code]) {
+    return ERROR_MESSAGES[err.code] ?? '';
+  }
+  return 'Something went wrong. Please try again.';
+}
+
 export function LoginModal({ open, onClose }: LoginModalProps) {
   const [email, setEmail] = useState('');
   const { getClient } = usePollar();
   const [emailView, setEmailView] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!open) return null;
 
   function handleClose() {
     setEmailView(false);
     setEmail('');
+    setError(null);
     onClose();
   }
 
   async function handleGoogle() {
     setLoading(true);
+    setError(null);
     try {
       await getClient().login({ provider: 'google' });
       handleClose();
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -36,9 +55,12 @@ export function LoginModal({ open, onClose }: LoginModalProps) {
   async function handleEmail() {
     if (!email) return;
     setLoading(true);
+    setError(null);
     try {
       await getClient().login({ provider: 'email', email });
       handleClose();
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -52,6 +74,8 @@ export function LoginModal({ open, onClose }: LoginModalProps) {
         </button>
 
         <h2 className="pollar-title">Sign in</h2>
+
+        {error && <p className="pollar-error">{error}</p>}
 
         {!emailView ? (
           <div className="pollar-actions">
@@ -77,11 +101,7 @@ export function LoginModal({ open, onClose }: LoginModalProps) {
               Continue with Google
             </button>
 
-            <button
-              onClick={() => setEmailView(true)}
-              disabled={loading}
-              className="pollar-btn"
-            >
+            <button onClick={() => setEmailView(true)} disabled={loading} className="pollar-btn">
               <svg
                 width="18"
                 height="18"

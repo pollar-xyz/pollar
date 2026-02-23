@@ -61,6 +61,25 @@
   }
 }
 
+.pollar-error {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pollar-error {
+    background-color: #2a1515;
+    border-color: #7f1d1d;
+    color: #f87171;
+  }
+}
+
 .pollar-actions {
   display: flex;
   flex-direction: column;

@@ -1,3 +1,4 @@
+import { PollarError } from './types';
 import type { AuthSession, LoginOptions, PollarClientConfig, PollarState, Status } from './types';
 
 const STORAGE_KEY = 'pollar:session';
@@ -115,9 +116,7 @@ export class PollarClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientToken: this.id }),
     });
-    
-    if (!res.ok) throw new Error('Login failed');
-    
+
     const session = (await res.json()) as { content: AuthSession };
     console.log('[PollarClient]', { session });
     if (this._isValidSession(session?.content)) {
@@ -226,13 +225,32 @@ export class PollarClient {
     for (const cb of this._stateListeners) cb(state);
   }
   
-  private _fetch(path: string, init: RequestInit = {}): Promise<Response> {
-    return globalThis.fetch(`${this.basePath}${path}`, {
+  private async _fetch(path: string, init: RequestInit = {}): Promise<Response> {
+    const res = await globalThis.fetch(`${this.basePath}${path}`, {
       ...init,
       headers: {
         'x-polo-api-key': this.config.apiKey,
         ...init.headers,
       },
     });
+
+    if (!res.ok) {
+      let code = 'UNKNOWN_ERROR';
+      try {
+        const body = (await res.json()) as { error?: { code?: string } | string; message?: string };
+        if (typeof body.error === 'object' && body.error?.code) {
+          code = body.error.code;
+        } else if (typeof body.error === 'string') {
+          code = body.error;
+        } else if (typeof body.message === 'string') {
+          code = body.message;
+        }
+      } catch {
+        // ignore parse errors
+      }
+      throw new PollarError(code);
+    }
+
+    return res;
   }
 }
