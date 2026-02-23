@@ -82,6 +82,7 @@ export class PollarClient {
     });
 
     const session = (await res.json()) as { content: AuthSession };
+    console.info('[PollarClient]', { session });
     if (this._isValidSession(session?.content)) {
       this._storeSession(session.content);
       this._emit('authenticated');
@@ -152,7 +153,7 @@ export class PollarClient {
     });
 
     const session = (await res.json()) as { content: AuthSession };
-    console.log('[PollarClient]', { session });
+    console.info('[PollarClient]', { session });
     if (this._isValidSession(session?.content)) {
       this._storeSession(session.content);
       this._emit('authenticated');

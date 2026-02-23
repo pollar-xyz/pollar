@@ -9,16 +9,10 @@ function cropWallet(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-function ButtonLogo({ logoBase64 }: { logoBase64?: string | undefined }) {
-  if (logoBase64) {
-    return <img src={logoBase64} alt="Pollar" width={22} height={22} className="wallet-btn-logo" />;
-  }
-  return (
-    <svg width="22" height="22" viewBox="0 0 64 64" fill="none" aria-hidden>
-      <rect width="64" height="64" rx="16" fill="white" fillOpacity="0.9" />
-      <path d="M32 14l16 8v12c0 9-7 17-16 20C23 51 16 43 16 34V22l16-8z" fill="currentColor" />
-    </svg>
-  );
+const POLLAR_LOGO = 'https://pollar.xyz/logo_polo.png';
+
+function ButtonLogo() {
+  return <img src={POLLAR_LOGO} alt="Pollar" width={22} height={22} className="wallet-btn-logo" />;
 }
 
 export function WalletButton() {
@@ -63,7 +57,7 @@ export function WalletButton() {
         style={{ backgroundColor: accentColor }}
         onClick={login}
       >
-        <ButtonLogo logoBase64={logoBase64} />
+        <ButtonLogo />
         Login with Pollar
       </button>
     );

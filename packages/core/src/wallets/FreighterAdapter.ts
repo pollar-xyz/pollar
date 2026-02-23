@@ -33,21 +33,17 @@ export class FreighterAdapter implements WalletAdapter {
   }
 
   async connect(): Promise<ConnectWalletResponse> {
-    console.log('>>connect');
     const connected = await isConnected();
     if (!connected) {
       throw new Error('Freighter wallet is not installed');
     }
-    console.log('>>', { connected });
 
     const allowed = await isAllowed();
-    console.log('>>', { allowed });
     if (!allowed) {
       await setAllowed();
     }
 
     const userInfo = await getUserInfo();
-    console.log('>>>', { userInfo });
     if (!userInfo?.publicKey) {
       throw new Error('Failed to get user information from Freighter');
     }

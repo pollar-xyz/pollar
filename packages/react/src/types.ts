@@ -1,5 +1,14 @@
 import type { AuthSession, PollarClientConfig, LoginOptions } from '@pollar/auth-core';
 
+export interface PollarApplication {
+  name?: string;
+}
+
+export interface PollarConfig {
+  application?: PollarApplication;
+  styles?: PollarStyles;
+}
+
 export interface PollarStyles {
   theme?: 'light' | 'dark';
   accentColor?: string;
