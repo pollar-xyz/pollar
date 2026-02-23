@@ -1,7 +1,7 @@
 {
-  "name": "@pollar/core",
-  "version": "0.1.5",
-  "description": "Core authentication functions for Pollar services",
+  "name": "@pollar/react",
+  "version": "0.1.1",
+  "description": "React components for Pollar authentication",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -15,23 +15,28 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       }
-    }
+    },
+    "./styles.css": "./dist/index.css"
   },
   "files": [
     "dist"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "lint": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
-  "devDependencies": {
-    "tsup": "^8.3.0",
-    "typescript": "^5.7.0"
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18",
+    "@pollar/core": "*"
   },
   "dependencies": {
-    "@stellar/freighter-api": "^2.0.0"
-  }
+    "@pollar/core": "*"
+  },
+  "yalcSig": "271fe7ea3b7ad9e5eccbdb44d3a9d452"
 }

@@ -3,21 +3,7 @@
 import { PollarClient, PollarClientConfig, PollarState } from '@pollar/core';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { LoginModal } from './LoginModal';
-
-export interface PollarStyles {
-  theme?: 'light' | 'dark';
-  accentColor?: string;
-  logoBase64?: string;
-  emailEnabled?: boolean;
-  embeddedWallets?: boolean;
-  providers?: {
-    google?: boolean;
-    discord?: boolean;
-    x?: boolean;
-    github?: boolean;
-    apple?: boolean;
-  };
-}
+import type { PollarStyles } from './types';
 
 async function fetchRemoteStyles(baseUrl: string, apiKey: string): Promise<PollarStyles> {
   const res = await fetch(`${baseUrl}/v1/styles`, {

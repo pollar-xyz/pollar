@@ -20,5 +20,9 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "npm@10.9.4"
+  "packageManager": "npm@10.9.4",
+  "dependencies": {
+    "@pollar/core": "file:.yalc/@pollar/core",
+    "@pollar/react": "file:.yalc/@pollar/react"
+  }
 }

@@ -1,19 +1,40 @@
-.wallet-sign-in-btn {
-  padding: 10px 20px;
-  border-radius: 8px;
-  background: #18181b;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 500;
+/* ---- Unauthenticated: login button ---- */
+/* flex items-center gap-3 rounded-xl px-6 py-3.5 text-base font-bold text-white shadow-lg transition-all */
+.wallet-login-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 0.75rem;
   border: none;
+  padding: 0.875rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
   cursor: pointer;
-  transition: background 0.15s;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  transition: all 0.15s;
 }
 
-.wallet-sign-in-btn:hover {
-  background: #3f3f46;
+/* hover:opacity-90 hover:shadow-xl */
+.wallet-login-btn:hover {
+  opacity: 0.9;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
+/* active:scale-[0.98] */
+.wallet-login-btn:active {
+  transform: scale(0.98);
+}
+
+/* brightness-0 invert — white logo on colored background */
+.wallet-btn-logo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+/* ---- Authenticated: wrapper + dropdown ---- */
 .wallet-wrapper {
   position: relative;
   display: inline-block;
@@ -25,7 +46,6 @@
   gap: 8px;
   padding: 10px 16px;
   border-radius: 8px;
-  background: #18181b;
   color: #fff;
   font-size: 14px;
   font-weight: 500;
@@ -35,7 +55,7 @@
 }
 
 .wallet-btn:hover {
-  background: #3f3f46;
+  opacity: 0.9;
 }
 
 .wallet-chevron {
@@ -53,8 +73,7 @@
   top: calc(100% + 6px);
   right: 0;
   min-width: 180px;
-  background: #fff;
-  border: 1px solid #e4e4e7;
+  border: 1px solid;
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   overflow: hidden;
@@ -69,7 +88,6 @@
   padding: 11px 16px;
   font-size: 14px;
   font-weight: 400;
-  color: #18181b;
   background: none;
   border: none;
   cursor: pointer;
@@ -78,7 +96,7 @@
 }
 
 .wallet-dropdown-item:hover {
-  background: #f4f4f5;
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .wallet-dropdown-item.danger {
@@ -87,46 +105,4 @@
 
 .wallet-dropdown-item.danger:hover {
   background: #fef2f2;
-}
-
-@media (prefers-color-scheme: dark) {
-  .wallet-sign-in-btn {
-    background: #fafafa;
-    color: #18181b;
-  }
-
-  .wallet-sign-in-btn:hover {
-    background: #e4e4e7;
-  }
-
-  .wallet-btn {
-    background: #fafafa;
-    color: #18181b;
-  }
-
-  .wallet-btn:hover {
-    background: #e4e4e7;
-  }
-
-  .wallet-dropdown {
-    background: #18181b;
-    border-color: #3f3f46;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  }
-
-  .wallet-dropdown-item {
-    color: #fafafa;
-  }
-
-  .wallet-dropdown-item:hover {
-    background: #27272a;
-  }
-
-  .wallet-dropdown-item.danger {
-    color: #f87171;
-  }
-
-  .wallet-dropdown-item.danger:hover {
-    background: #2a1515;
-  }
 }

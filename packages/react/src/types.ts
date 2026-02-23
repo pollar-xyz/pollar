@@ -1,5 +1,20 @@
 import type { AuthSession, PollarClientConfig, LoginOptions } from '@pollar/auth-core';
 
+export interface PollarStyles {
+  theme?: 'light' | 'dark';
+  accentColor?: string;
+  logoBase64?: string;
+  emailEnabled?: boolean;
+  embeddedWallets?: boolean;
+  providers?: {
+    google?: boolean;
+    discord?: boolean;
+    x?: boolean;
+    github?: boolean;
+    apple?: boolean;
+  };
+}
+
 export interface AuthProviderProps {
   config: PollarClientConfig;
   children: React.ReactNode;

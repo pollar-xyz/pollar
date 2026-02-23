@@ -1,3 +1,4 @@
+/* ---- Overlay ---- */
 .pollar-overlay {
   position: fixed;
   inset: 0;
@@ -8,61 +9,58 @@
   background-color: rgba(0, 0, 0, 0.5);
 }
 
+/* ---- Modal card ---- */
+/* w-full max-w-[460px] rounded-2xl border p-8 shadow-2xl transition-all duration-300 */
 .pollar-modal {
-  position: relative;
   width: 100%;
-  max-width: 384px;
-  border-radius: 16px;
-  background-color: #fff;
-  padding: 32px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  max-width: 460px;
+  border-radius: 1rem;
+  border: 1px solid;
+  padding: 2rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  transition: all 300ms;
+  box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  .pollar-modal {
-    background-color: #18181b;
-  }
-}
-
-.pollar-close {
-  position: absolute;
-  right: 16px;
-  top: 16px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #a1a1aa;
-  font-size: 16px;
-  line-height: 1;
-  padding: 4px;
-}
-
-.pollar-close:hover {
-  color: #3f3f46;
-}
-
-@media (prefers-color-scheme: dark) {
-  .pollar-close:hover {
-    color: #e4e4e7;
-  }
-}
-
-.pollar-title {
-  margin: 0 0 24px;
+/* ---- Header: mb-7 text-center ---- */
+.pollar-header {
+  margin-bottom: 1.75rem;
   text-align: center;
-  font-size: 20px;
-  font-weight: 600;
-  color: #09090b;
 }
 
-@media (prefers-color-scheme: dark) {
-  .pollar-title {
-    color: #fafafa;
-  }
+/* mb-4 flex justify-center */
+.pollar-logo-wrap {
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: center;
 }
 
+/* h-16 w-16 object-contain drop-shadow-lg */
+.pollar-logo {
+  height: 4rem;
+  width: 4rem;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 8px rgba(0, 0, 0, 0.04)) drop-shadow(0 4px 3px rgba(0, 0, 0, 0.1));
+}
+
+/* mb-2 text-3xl font-bold */
+.pollar-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.875rem;
+  line-height: 2.25rem;
+  font-weight: 700;
+}
+
+/* text-base */
+.pollar-subtitle {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+/* ---- Error ---- */
 .pollar-error {
-  margin: 0 0 16px;
+  margin: 0 0 1rem;
   padding: 10px 14px;
   border-radius: 8px;
   background-color: #fef2f2;
@@ -72,136 +70,246 @@
   line-height: 1.4;
 }
 
-@media (prefers-color-scheme: dark) {
-  .pollar-error {
-    background-color: #2a1515;
-    border-color: #7f1d1d;
-    color: #f87171;
-  }
+/* ---- Email section: mb-4 ---- */
+.pollar-email-section {
+  margin-bottom: 1rem;
 }
 
-.pollar-actions {
+/* w-full rounded-lg border border-[#D1D5DB] bg-white px-4 py-3.5 text-base */
+.pollar-email-input {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid #d1d5db;
+  background-color: #fff;
+  padding: 0.875rem 1rem;
+  font-size: 1rem;
+  color: #111827;
+  box-sizing: border-box;
+}
+
+.pollar-email-input::placeholder {
+  color: #9ca3af;
+}
+
+.pollar-email-input:focus {
+  outline: none;
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--pollar-accent, #005db4);
+}
+
+.pollar-email-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* mt-3 w-full rounded-lg py-3.5 text-base font-bold text-white transition-all */
+.pollar-submit-btn {
+  margin-top: 0.75rem;
+  width: 100%;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.875rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+/* hover:opacity-90 hover:shadow-lg */
+.pollar-submit-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* active:scale-[0.98] */
+.pollar-submit-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.pollar-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- Divider: relative my-5 ---- */
+.pollar-divider {
+  position: relative;
+  margin: 1.25rem 0;
+}
+
+/* absolute inset-0 flex items-center */
+.pollar-divider-line {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+/* w-full border-t border-[#E5E7EB] */
+.pollar-divider-line::after {
+  content: '';
+  width: 100%;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* relative flex justify-center text-sm */
+.pollar-divider-label {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  font-size: 0.875rem;
+}
+
+/* px-4 font-medium */
+.pollar-divider-text {
+  padding: 0 1rem;
+  font-weight: 500;
+}
+
+/* ---- Social list: mb-4 space-y-2.5 ---- */
+.pollar-social-list {
+  margin-bottom: 1rem;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0.625rem;
 }
 
-.pollar-btn {
+/* flex w-full items-center justify-center gap-3 rounded-lg border px-4 py-3.5 transition-all */
+.pollar-social-btn {
   display: flex;
   width: 100%;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  border-radius: 8px;
-  border: 1px solid #e4e4e7;
-  padding: 12px 16px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #27272a;
-  background-color: #fff;
+  gap: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid;
+  padding: 0.875rem 1rem;
   cursor: pointer;
-  transition: background-color 0.15s;
-}
-
-.pollar-btn:hover:not(:disabled) {
-  background-color: #f4f4f5;
-}
-
-.pollar-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-@media (prefers-color-scheme: dark) {
-  .pollar-btn {
-    border-color: #3f3f46;
-    color: #f4f4f5;
-    background-color: transparent;
-  }
-
-  .pollar-btn:hover:not(:disabled) {
-    background-color: #27272a;
-  }
-}
-
-.pollar-back {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  color: #71717a;
-  padding: 0;
-  margin-bottom: 4px;
-  align-self: flex-start;
-}
-
-.pollar-back:hover {
-  color: #27272a;
-}
-
-@media (prefers-color-scheme: dark) {
-  .pollar-back:hover {
-    color: #e4e4e7;
-  }
-}
-
-.pollar-input {
-  width: 100%;
-  border-radius: 8px;
-  border: 1px solid #e4e4e7;
-  padding: 12px 16px;
-  font-size: 14px;
-  outline: none;
+  transition: all 0.15s;
   box-sizing: border-box;
-  color: #09090b;
-  background-color: #fff;
+  background: none;
 }
 
-.pollar-input:focus {
-  box-shadow: 0 0 0 2px #09090b;
+/* hover:scale-[1.01] hover:shadow-md */
+.pollar-social-btn:hover:not(:disabled) {
+  transform: scale(1.01);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
-@media (prefers-color-scheme: dark) {
-  .pollar-input {
-    border-color: #3f3f46;
-    background-color: #27272a;
-    color: #f4f4f5;
-  }
-
-  .pollar-input:focus {
-    box-shadow: 0 0 0 2px #a1a1aa;
-  }
+/* active:scale-[0.99] */
+.pollar-social-btn:active:not(:disabled) {
+  transform: scale(0.99);
 }
 
-.pollar-btn-primary {
-  width: 100%;
-  border-radius: 8px;
-  border: none;
-  padding: 12px 16px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #fff;
-  background-color: #09090b;
-  cursor: pointer;
-  transition: background-color 0.15s;
-}
-
-.pollar-btn-primary:hover:not(:disabled) {
-  background-color: #3f3f46;
-}
-
-.pollar-btn-primary:disabled {
+.pollar-social-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-@media (prefers-color-scheme: dark) {
-  .pollar-btn-primary {
-    background-color: #fafafa;
-    color: #09090b;
-  }
+/* text-base font-semibold */
+.pollar-social-btn-text {
+  font-size: 1rem;
+  font-weight: 600;
+}
 
-  .pollar-btn-primary:hover:not(:disabled) {
-    background-color: #e4e4e7;
-  }
+/* ---- Wallet section ---- */
+.pollar-wallet-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pollar-wallet-label {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pollar-wallet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+/* flex w-full items-center justify-center gap-2.5 rounded-lg border-2 px-4 py-3.5 text-base font-semibold transition-all */
+.pollar-wallet-btn {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  border-radius: 0.5rem;
+  border: 2px solid;
+  padding: 0.875rem 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-sizing: border-box;
+  background: none;
+}
+
+/* hover:scale-[1.01] hover:shadow-md */
+.pollar-wallet-btn:hover:not(:disabled) {
+  transform: scale(1.01);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* active:scale-[0.99] */
+.pollar-wallet-btn:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.pollar-wallet-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* h-5 w-5 */
+.pollar-wallet-icon {
+  height: 1.25rem;
+  width: 1.25rem;
+  flex-shrink: 0;
+}
+
+/* ---- Footer ---- */
+/* mt-6 flex items-center justify-center gap-2 border-t pt-6 */
+.pollar-footer {
+  margin-top: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-top: 1px solid;
+  padding-top: 1.5rem;
+}
+
+/* text-sm */
+.pollar-footer-protected {
+  font-size: 0.875rem;
+}
+
+/* flex items-center gap-2 */
+.pollar-footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* h-[18px] w-[18px] object-contain */
+.pollar-footer-logo {
+  height: 18px;
+  width: 18px;
+  object-fit: contain;
+}
+
+/* text-sm font-bold */
+.pollar-footer-name {
+  font-size: 0.875rem;
+  font-weight: 700;
 }

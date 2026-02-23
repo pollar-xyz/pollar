@@ -9,46 +9,73 @@ function cropWallet(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+function ButtonLogo({ logoBase64 }: { logoBase64?: string | undefined }) {
+  if (logoBase64) {
+    return <img src={logoBase64} alt="Pollar" width={22} height={22} className="wallet-btn-logo" />;
+  }
+  return (
+    <svg width="22" height="22" viewBox="0 0 64 64" fill="none" aria-hidden>
+      <rect width="64" height="64" rx="16" fill="white" fillOpacity="0.9" />
+      <path d="M32 14l16 8v12c0 9-7 17-16 20C23 51 16 43 16 34V22l16-8z" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function WalletButton() {
-  const { login, logout, walletAddress, status } = usePollar();
-  const [ open, setOpen ] = useState(false);
-  const [ copied, setCopied ] = useState(false);
+  const { login, logout, walletAddress, styles } = usePollar();
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  console.log({ walletAddress, status });
+
+  const { theme = 'light', accentColor = '#005DB4', logoBase64 } = styles;
+  const isDark = theme === 'dark';
+  const dropdownBg = isDark ? '#18181b' : '#fff';
+  const dropdownBorder = isDark ? '#3f3f46' : '#e4e4e7';
+  const itemColor = isDark ? '#fafafa' : '#18181b';
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     }
-    
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-  
+
   async function handleCopy() {
     if (!walletAddress) return;
     await navigator.clipboard.writeText(walletAddress);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
-  
+
   function handleLogout() {
     setOpen(false);
     logout();
   }
-  
+
   if (!walletAddress) {
     return (
-      <button className="wallet-sign-in-btn" onClick={login}>
-        Sign in
+      <button
+        type="button"
+        className="wallet-login-btn"
+        style={{ backgroundColor: accentColor }}
+        onClick={login}
+      >
+        <ButtonLogo logoBase64={logoBase64} />
+        Login with Pollar
       </button>
     );
   }
-  
+
   return (
     <div className="wallet-wrapper" ref={wrapperRef}>
-      <button className="wallet-btn" onClick={() => setOpen((v) => !v)}>
+      <button
+        className="wallet-btn"
+        style={{ backgroundColor: accentColor }}
+        onClick={() => setOpen((v) => !v)}
+      >
         {cropWallet(walletAddress)}
         <svg
           className={`wallet-chevron${open ? ' open' : ''}`}
@@ -62,10 +89,17 @@ export function WalletButton() {
           <polyline points="2,4 6,8 10,4" />
         </svg>
       </button>
-      
+
       {open && (
-        <div className="wallet-dropdown">
-          <button className="wallet-dropdown-item" onClick={handleCopy}>
+        <div
+          className="wallet-dropdown"
+          style={{ backgroundColor: dropdownBg, borderColor: dropdownBorder }}
+        >
+          <button
+            className="wallet-dropdown-item"
+            style={{ color: itemColor }}
+            onClick={handleCopy}
+          >
             <svg
               width="14"
               height="14"

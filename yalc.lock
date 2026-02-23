@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "packages": {
+    "@pollar/react": {
+      "signature": "271fe7ea3b7ad9e5eccbdb44d3a9d452",
+      "file": true
+    },
+    "@pollar/core": {
+      "signature": "c0b6a754b94f322a5591df92f8413eec",
+      "file": true
+    }
+  }
+}
