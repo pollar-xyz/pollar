@@ -1,50 +1,62 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
-import { PollarClient } from '@pollar/auth-core';
-import type { AuthSession, LoginOptions } from '@pollar/auth-core';
-import type { AuthContextValue, AuthProviderProps } from './types';
+'use client';
 
-const AuthContext = createContext<AuthContextValue | null>(null);
+import { PollarClient, PollarClientConfig, PollarState } from '@pollar/auth-core';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { LoginModal } from './LoginModal';
 
-export function AuthProvider({ config, children }: AuthProviderProps) {
-  const [session, setSession] = useState<AuthSession | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+interface PollarContextValue {
+  walletAddress: string;
+  getClient: () => PollarClient;
+  login: () => void;
+  logout: () => void;
+  status: PollarState['status'],
+}
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const client = useMemo(() => new PollarClient(config), [config.baseUrl]);
+const PollarContext = createContext<PollarContextValue | null>(null);
 
-  const handleLogin = (options: LoginOptions) => {
-    client.login(options);
-  };
+interface PollarProviderProps {
+  config: PollarClientConfig;
+  children: ReactNode;
+}
 
-  const handleLogout = async () => {
-    setIsLoading(true);
-    try {
-      // TODO: call logout(client) from @pollar/auth-core
-      setSession(null);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+export function PollarProvider({ config, children }: PollarProviderProps) {
+  const clientRef = useRef<PollarClient | null>(null);
+  const [ state, setState ] = useState<PollarState | null>(null);
+  if (clientRef.current === null) {
+    clientRef.current = new PollarClient(config);
+  }
+  
+  useEffect(() => {
+    return clientRef.current?.onStateChange((state) => {
+      setState(state);
+    });
+  }, []);
+  
+  const [ modalOpen, setModalOpen ] = useState(false);
+  
+  const contextValue: PollarContextValue = useMemo(() => ({
+    walletAddress: state?.session?.wallet?.publicKey || '',
+    getClient: () => clientRef.current!,
+    login: () => setModalOpen(true),
+    logout: () => clientRef.current?.logout(),
+    status: state?.status || 'unauthenticated',
+  }), [ state ]);
+  
   return (
-    <AuthContext.Provider
-      value={{
-        session,
-        isLoading,
-        isAuthenticated: session !== null,
-        login: handleLogin,
-        logout: handleLogout,
-      }}
-    >
+    <PollarContext.Provider value={contextValue}>
       {children}
-    </AuthContext.Provider>
+      <LoginModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+      />
+    </PollarContext.Provider>
   );
 }
 
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
+export function usePollar() {
+  const ctx = useContext(PollarContext);
   if (!ctx) {
-    throw new Error('useAuth must be used within an <AuthProvider>');
+    throw new Error('usePollar must be used inside <PollarProvider>');
   }
   return ctx;
 }

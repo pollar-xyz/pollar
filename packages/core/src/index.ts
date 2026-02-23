@@ -8,4 +8,6 @@ export type {
   PollarClientConfig,
   AuthError,
   LoginOptions,
+  Status,
+  PollarState,
 } from './types';

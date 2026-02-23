@@ -1,6 +1,16 @@
-import type { AuthSession, LoginOptions, PollarClientConfig } from './types';
+import type { AuthSession, LoginOptions, PollarClientConfig, PollarState, Status } from './types';
 
 const STORAGE_KEY = 'pollar:session';
+
+const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+
+function warnServerSide(method: string): void {
+  console.warn(
+    `[PollarClient] \`${method}\` was called on the server. ` +
+    'PollarClient requires browser APIs (window, localStorage). ' +
+    'Make sure to use PollarClient only inside a Client Component.',
+  );
+}
 
 export class PollarClient {
   readonly config: PollarClientConfig;
@@ -8,45 +18,66 @@ export class PollarClient {
   readonly basePath: string;
   
   private _session: AuthSession | null;
-  private _listeners = new Set<(session: AuthSession | null) => void>();
+  private _status: Status = 'unauthenticated';
+  private _stateListeners = new Set<(state: PollarState) => void>();
   
   constructor(config: PollarClientConfig) {
     this.config = config;
     this.id = crypto.randomUUID();
     this.basePath = `${config.baseUrl}/v1`;
     
+    if (!isBrowser) {
+      warnServerSide('constructor');
+      this._session = null;
+      return;
+    }
+    
     this._session = this._readStorage();
+    if (this._session) {
+      this._emit('restored');
+    }
     
     window.addEventListener('storage', (e: StorageEvent) => {
       if (e.key === STORAGE_KEY) {
         this._session = this._readStorage();
+        this._emit(this._session ? 'restored' : 'unauthenticated');
       }
     });
   }
   
-  getSession(): AuthSession | null {
-    return this._session;
+  getState(): PollarState {
+    return { session: this._session, status: this._status };
   }
   
-  onSessionChange(cb: (session: AuthSession | null) => void): () => void {
-    this._listeners.add(cb);
-    this._notify();
-    return () => this._listeners.delete(cb);
+  onStateChange(cb: (state: PollarState) => void): () => void {
+    this._stateListeners.add(cb);
+    cb(this.getState());
+    return () => this._stateListeners.delete(cb);
   }
   
   async logout(): Promise<void> {
-    if (!this._session) return;
+    if (!isBrowser) {
+      warnServerSide('logout');
+      return;
+    }
+    if (!this._session) {
+      return;
+    }
     
-    await this._fetch('/auth/logout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: this._session.token.refreshToken }),
-    });
+    // await this._fetch('/auth/logout', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify({ refreshToken: this._session.token.refreshToken }),
+    // });
     
     this._clearSession();
   }
   
   async login(options: LoginOptions): Promise<void> {
+    if (!isBrowser) {
+      warnServerSide('login');
+      return;
+    }
     const url = new URL(`${this.basePath}/auth/${options.provider}`);
     url.searchParams.set('api_key', this.config.apiKey);
     url.searchParams.set('client_token', this.id);
@@ -68,6 +99,7 @@ export class PollarClient {
     
     const popup = window.open(url.toString(), '_blank');
     
+    this._emit('awaiting_auth');
     await new Promise<void>((resolve) => {
       const interval = setInterval(() => {
         if (popup?.closed) {
@@ -77,6 +109,7 @@ export class PollarClient {
       }, 500);
     });
     
+    this._emit('logging_in');
     const res = await this._fetch(`/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -86,9 +119,10 @@ export class PollarClient {
     if (!res.ok) throw new Error('Login failed');
     
     const session = (await res.json()) as { content: AuthSession };
-    console.log({ session });
+    console.log('[PollarClient]', { session });
     if (this._isValidSession(session?.content)) {
       this._storeSession(session.content);
+      this._emit('authenticated');
     } else {
       this._clearSession();
     }
@@ -96,27 +130,28 @@ export class PollarClient {
   
   private _readStorage(): AuthSession | null {
     const raw = localStorage.getItem(STORAGE_KEY);
-    console.log({ raw });
-    if (!raw) return null;
+    if (!raw) {
+      return null;
+    }
     
     try {
       const session = JSON.parse(raw) as unknown;
       
       if (!this._isValidSession(session)) {
         localStorage.removeItem(STORAGE_KEY);
-        console.warn('Token not valid');
+        console.warn('[PollarClient] Token not valid');
         return null;
       }
       
       if (session.token.expiresAt * 1000 < Date.now()) {
         localStorage.removeItem(STORAGE_KEY);
-        console.warn(`Token expired: ${session.token.expiresAt}`);
+        console.warn(`[PollarClient] Token expired: ${session.token.expiresAt}`);
         return null;
       }
       
       return session;
     } catch (error) {
-      console.error(error);
+      console.error('[PollarClient]', error);
       localStorage.removeItem(STORAGE_KEY);
       return null;
     }
@@ -124,7 +159,7 @@ export class PollarClient {
   
   private _isValidSession(value: unknown): value is AuthSession {
     if (typeof value !== 'object' || value === null) {
-      console.warn('[_isValidSession] value is not an object:', value);
+      console.warn('[PollarClient][_isValidSession] value is not an object:', value);
       return false;
     }
     
@@ -132,42 +167,42 @@ export class PollarClient {
     
     const user = s['user'];
     if (typeof user !== 'object' || user === null) {
-      console.warn('[_isValidSession] user is missing or not an object:', user);
+      console.warn('[PollarClient][_isValidSession] user is missing or not an object:', user);
       return false;
     }
     const u = user as Record<string, unknown>;
     if (typeof u['id'] !== 'string' || u['id'] === '') {
-      console.warn('[_isValidSession] user.id is missing or empty:', u['id']);
+      console.warn('[PollarClient][_isValidSession] user.id is missing or empty:', u['id']);
       return false;
     }
     
     const token = s['token'];
     if (typeof token !== 'object' || token === null) {
-      console.warn('[_isValidSession] token is missing or not an object:', token);
+      console.warn('[PollarClient][_isValidSession] token is missing or not an object:', token);
       return false;
     }
     const t = token as Record<string, unknown>;
     if (typeof t['accessToken'] !== 'string' || t['accessToken'] === '') {
-      console.warn('[_isValidSession] token.accessToken is missing or empty:', t['accessToken']);
+      console.warn('[PollarClient][_isValidSession] token.accessToken is missing or empty:', t['accessToken']);
       return false;
     }
     if (typeof t['refreshToken'] !== 'string' || t['refreshToken'] === '') {
-      console.warn('[_isValidSession] token.refreshToken is missing or empty:', t['refreshToken']);
+      console.warn('[PollarClient][_isValidSession] token.refreshToken is missing or empty:', t['refreshToken']);
       return false;
     }
     if (typeof t['expiresAt'] !== 'number' || !Number.isFinite(t['expiresAt'])) {
-      console.warn('[_isValidSession] token.expiresAt is missing or not a finite number:', t['expiresAt']);
+      console.warn('[PollarClient][_isValidSession] token.expiresAt is missing or not a finite number:', t['expiresAt']);
       return false;
     }
     
     const wallet = s['wallet'];
     if (typeof wallet !== 'object' || wallet === null) {
-      console.warn('[_isValidSession] wallet is missing or not an object:', wallet);
+      console.warn('[PollarClient][_isValidSession] wallet is missing or not an object:', wallet);
       return false;
     }
     const w = wallet as Record<string, unknown>;
     if (w['publicKey'] !== null && typeof w['publicKey'] !== 'string') {
-      console.warn('[_isValidSession] wallet.publicKey is neither null nor a string:', w['publicKey']);
+      console.warn('[PollarClient][_isValidSession] wallet.publicKey is neither null nor a string:', w['publicKey']);
       return false;
     }
     
@@ -177,17 +212,18 @@ export class PollarClient {
   private _storeSession(session: AuthSession): void {
     this._session = session;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-    this._notify();
   }
   
   private _clearSession(): void {
     this._session = null;
     localStorage.removeItem(STORAGE_KEY);
-    this._notify();
+    this._emit('unauthenticated');
   }
   
-  private _notify(): void {
-    for (const cb of this._listeners) cb(this._session);
+  private _emit(status: Status): void {
+    this._status = status;
+    const state = this.getState();
+    for (const cb of this._stateListeners) cb(state);
   }
   
   private _fetch(path: string, init: RequestInit = {}): Promise<Response> {

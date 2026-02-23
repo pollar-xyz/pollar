@@ -5,12 +5,14 @@
     "build": "turbo build",
     "dev": "turbo dev",
     "lint": "turbo lint",
-    "clean": "turbo clean"
+    "clean": "turbo clean",
+    "publish:core": "cd packages/core && npm publish --registry https://verdaccio.oscargauss.com/",
+    "publish:react": "cd packages/react && npm publish --registry https://verdaccio.oscargauss.com/"
   },
   "devDependencies": {
+    "prettier": "^3.4.0",
     "turbo": "^2.3.0",
-    "typescript": "^5.7.0",
-    "prettier": "^3.4.0"
+    "typescript": "^5.7.0"
   },
   "workspaces": [
     "packages/*"

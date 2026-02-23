@@ -1,6 +1,6 @@
 {
-  "name": "@pollar/auth-react",
-  "version": "0.1.0",
+  "name": "@pollar/react",
+  "version": "0.1.1",
   "description": "React components for Pollar authentication",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -15,10 +15,15 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       }
-    }
+    },
+    "./styles.css": "./dist/index.css"
   },
-  "files": ["dist"],
-  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",

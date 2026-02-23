@@ -33,6 +33,13 @@ export interface AuthError {
   message: string;
 }
 
+export type Status = 'unauthenticated' | 'restored' | 'authenticated' | 'awaiting_auth' | 'logging_in';
+
+export interface PollarState {
+  session: AuthSession | null;
+  status: Status;
+}
+
 export type LoginOptions =
   | { provider: 'google' }
   | { provider: 'github' }
