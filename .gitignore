@@ -10,3 +10,5 @@ dist
 
 #
 stellar-wallet-kit
+
+*.tgz
