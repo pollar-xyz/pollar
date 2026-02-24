@@ -1,4 +1,4 @@
-import type { AuthSession, PollarClientConfig, LoginOptions } from '@pollar/auth-core';
+import type { AuthSession, PollarClientConfig, LoginOptions } from '@pollar/core';
 
 export interface PollarApplication {
   name?: string;
