@@ -1,136 +1,9 @@
 'use client';
 
 import { StateLoginCodes, StateStatus } from '@pollar/core';
-import { RefObject, useRef, useState } from 'react';
-
-const LOGIN_CODE_MESSAGES: Record<StateLoginCodes, { text: string }> = {
-  CREATE_SESSION_START: { text: 'Starting session…' },
-  CREATE_SESSION_ERROR: { text: 'Failed to create session' },
-  CREATE_SESSION_SUCCESS: { text: 'Session created' },
-  EMAIL_AUTH_START: { text: 'Sending code…' },
-  EMAIL_AUTH_START_ERROR: { text: 'Failed to send email' },
-  EMAIL_AUTH_START_SUCCESS: { text: 'Code sent — check your inbox' },
-  EMAIL_AUTH_CODE_ERROR: { text: 'Invalid code. Try again.' },
-  EMAIL_AUTH_CODE_SUCCESS: { text: 'Code verified!' },
-  WALLET_AUTH_FREIGHTER_NOT_INSTALLED: { text: 'Freighter is not installed' },
-  WALLET_AUTH_ALBEDO_NOT_INSTALLED: { text: 'Albedo is not available' },
-  WALLET_AUTH_WALLET_NOT_AVAILABLE: { text: 'Wallet not available' },
-  STREAM_POLL_START: { text: 'Waiting for verification…' },
-  STREAM_POLL_EVENT: { text: 'Waiting for verification…' },
-  STREAM_POLL_READY: { text: 'Verified' },
-  FETCH_SESSION_START: { text: 'Authenticating…' },
-  FETCH_SESSION_SUCCESS: { text: 'Authenticated!' },
-  FETCH_SESSION_ERROR: { text: 'Authentication failed' },
-  ERROR_UNKNOWN: { text: 'Something went wrong' },
-  ABORTED: { text: 'Login cancelled' },
-};
-
-function LoginStatusBanner({
-  code,
-  status,
-  onCancel,
-}: {
-  code: StateLoginCodes | null;
-  status: StateStatus;
-  onCancel?: () => void;
-}) {
-  if (!code) return <div className="pollar-status" />;
-  const { text } = LOGIN_CODE_MESSAGES[code] || { text: '' };
-  const isLoading = status === StateStatus.LOADING;
-  const icon =
-    status === StateStatus.ERROR ? (
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-        <circle cx="7" cy="7" r="7" fill="currentColor" />
-        <path d="M4.5 4.5l5 5M9.5 4.5l-5 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    ) : status === StateStatus.SUCCESS ? (
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-        <circle cx="7" cy="7" r="7" fill="currentColor" />
-        <path d="M3.5 7l2.5 2.5 4.5-5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ) : (
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-        <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="22 10" />
-      </svg>
-    );
-
-  return (
-    <div className="pollar-status" data-kind={status}>
-      {icon}
-      <span>{text}</span>
-      {isLoading && onCancel && (
-        <button type="button" className="pollar-status-cancel" onClick={onCancel}>
-          Cancel
-        </button>
-      )}
-    </div>
-  );
-}
-
-function EmailCodeInput({
-  onSubmit,
-  loading,
-  error,
-}: {
-  onSubmit: (code: string) => void;
-  loading: boolean;
-  error: string | null;
-}) {
-  const [digits, setDigits] = useState(['', '', '', '', '', '']);
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-  function submit(next: string[]) {
-    if (next.every(Boolean)) onSubmit(next.join(''));
-  }
-
-  function handleChange(index: number, value: string) {
-    const cleaned = value.replace(/\D/g, '').slice(-1);
-    const next = digits.map((d, i) => (i === index ? cleaned : d));
-    setDigits(next);
-    if (cleaned && index < 5) inputRefs.current[index + 1]?.focus();
-    submit(next);
-  }
-
-  function handleKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Backspace' && !digits[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-  }
-
-  function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
-    e.preventDefault();
-    const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-    const next = Array.from({ length: 6 }, (_, i) => text[i] ?? '');
-    setDigits(next);
-    inputRefs.current[Math.min(text.length - 1, 5)]?.focus();
-    submit(next);
-  }
-
-  return (
-    <div className="pollar-code-section">
-      <p className="pollar-code-label">Enter the 6-digit code sent to your email</p>
-      <div className="pollar-code-inputs">
-        {digits.map((digit, i) => (
-          <input
-            key={i}
-            ref={(el) => {
-              inputRefs.current[i] = el;
-            }}
-            type="text"
-            inputMode="numeric"
-            maxLength={2}
-            value={digit}
-            className="pollar-code-input"
-            onChange={(e) => handleChange(i, e.target.value)}
-            onKeyDown={(e) => handleKeyDown(i, e)}
-            onPaste={handlePaste}
-          />
-        ))}
-      </div>
-      {error && <div className="pollar-error">{error}</div>}
-    </div>
-  );
-}
+import { RefObject } from 'react';
+import { EmailCodeInput } from './EmailCodeInput';
+import { LoginStatusBanner } from './LoginStatusBanner';
 
 interface LoginModalTemplateProps {
   theme: string;
@@ -157,8 +30,8 @@ interface LoginModalTemplateProps {
   loginStateCode: StateLoginCodes | null;
   awaitingEmailCode?: boolean;
   onCodeSubmit?: (code: string) => void;
-  codeError?: string | null;
   cancelLoginRef: RefObject<(() => void) | null>;
+  onRetry: () => void;
 }
 
 export function LoginModalTemplate({
@@ -180,8 +53,8 @@ export function LoginModalTemplate({
   loginStateCode,
   awaitingEmailCode = false,
   onCodeSubmit,
-  codeError = null,
   cancelLoginRef,
+  onRetry,
 }: LoginModalTemplateProps) {
   const isDark = theme === 'dark';
   const enabledSocial = Object.entries(providers).filter(([, enabled]) => enabled);
@@ -211,7 +84,7 @@ export function LoginModalTemplate({
       </div>
 
       {awaitingEmailCode ? (
-        <EmailCodeInput onSubmit={onCodeSubmit ?? (() => {})} loading={isLoading} error={codeError} />
+        <EmailCodeInput onSubmit={onCodeSubmit ?? (() => {})} />
       ) : (
         <>
           {error && <div className="pollar-error">{error}</div>}
@@ -281,7 +154,7 @@ export function LoginModalTemplate({
         </>
       )}
 
-      <LoginStatusBanner code={loginStateCode} status={status} onCancel={() => cancelLoginRef.current?.()} />
+      <LoginStatusBanner code={loginStateCode} status={status} onCancel={() => cancelLoginRef.current?.()} onRetry={onRetry} />
 
       <div className="pollar-footer">
         <span className="pollar-footer-protected">Protected by</span>

@@ -1,28 +1,13 @@
 'use client';
 
-import { PollarError, STATE_VAR_CODES, StateLoginCodes, StateStatus, StateVar, WalletType } from '@pollar/core';
+import { STATE_VAR_CODES, StateLoginCodes, StateStatus, StateVar, WalletType } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
-import { usePollar } from './context';
-import { LoginModalTemplate } from './login-modal-template';
+import { usePollar } from '../../context';
+import { LoginModalTemplate } from './LoginModalTemplate';
 import './LoginModal.css';
 
 interface LoginModalProps {
   onClose: () => void;
-}
-
-const ERROR_MESSAGES: Record<string, string> = {
-  API_KEY_NOT_FOUND: 'Invalid API key. Contact the app administrator.',
-  API_KEY_EXPIRED: 'API key has expired. Contact the app administrator.',
-  ORIGIN_NOT_ALLOWED: 'This origin is not authorized. Contact the app administrator.',
-  FREIGHTER_NOT_INSTALLED: 'Freighter is not installed. Get it at freighter.app.',
-  WALLET_NOT_AVAILABLE: 'Wallet is not available.',
-};
-
-function getErrorMessage(err: unknown): string {
-  if (err instanceof PollarError && ERROR_MESSAGES[err.code]) {
-    return ERROR_MESSAGES[err.code] ?? '';
-  }
-  return 'Something went wrong. Please try again.';
 }
 
 function isLoginCode(code: string): code is StateLoginCodes {
@@ -37,7 +22,6 @@ export function LoginModal({ onClose }: LoginModalProps) {
   const [loginStateCode, setLoginStateCode] = useState<StateLoginCodes | null>(null);
   const [awaitingEmailCode, setAwaitingEmailCode] = useState(false);
   const [clientSessionId, setClientSessionId] = useState<string | null>(null);
-  const [codeError, setCodeError] = useState<string | null>(null);
 
   useEffect(() => {
     return getClient()?.onStateChange((state) => {
@@ -68,7 +52,6 @@ export function LoginModal({ onClose }: LoginModalProps) {
     setError(null);
     setAwaitingEmailCode(false);
     setClientSessionId(null);
-    setCodeError(null);
     onClose();
   }
 
@@ -95,6 +78,10 @@ export function LoginModal({ onClose }: LoginModalProps) {
   async function handleVerifyCode(code: string) {
     if (!clientSessionId) return;
     void getClient().verifyEmailCode(clientSessionId, code);
+  }
+
+  function handleRetry() {
+    getClient().logout();
   }
 
   return (
@@ -125,8 +112,8 @@ export function LoginModal({ onClose }: LoginModalProps) {
         loginStateCode={loginStateCode}
         awaitingEmailCode={awaitingEmailCode}
         onCodeSubmit={handleVerifyCode}
-        codeError={codeError}
         cancelLoginRef={cancelLoginRef}
+        onRetry={handleRetry}
       />
     </div>
   );

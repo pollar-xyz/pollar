@@ -2,7 +2,7 @@
 
 import { pollarApiClient, PollarClient, PollarClientConfig, PollarState } from '@pollar/core';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { LoginModal } from './LoginModal';
+import { LoginModal } from './components/login-modal/LoginModal';
 import type { PollarConfig, PollarStyles } from './types';
 
 const emptyResponse = {
