@@ -6,8 +6,8 @@ import {
   PollarStateEntry,
   STATE_VAR_CODES,
   StateLoginCodes,
+  StateStatus,
   StateVar,
-  StateVarCodes,
 } from '../types';
 import { AlbedoAdapter, FreighterAdapter, WalletType } from '../wallets';
 import { isValidSession } from './session';
@@ -17,7 +17,14 @@ export type LoginDeps = {
   basePath: string;
   apiKey: string;
   clientId: string;
-  emitState: (state: StateVar, code: StateVarCodes, level: PollarStateEntry['level'], data?: unknown) => void;
+  signal: AbortSignal;
+  emitState: (
+    state: PollarStateEntry['var'],
+    code: PollarStateEntry['code'],
+    level: PollarStateEntry['level'],
+    status: PollarStateEntry['status'],
+    data?: PollarStateEntry['data'],
+  ) => void;
   storeSession: (session: PollarLogin) => void;
   clearSession: () => void;
 };
@@ -26,23 +33,30 @@ const emitResponse = (
   response: { data?: any; error?: any },
   successCode: StateLoginCodes,
   errorCode: StateLoginCodes,
-  emitLog: (state: StateVar, code: StateLoginCodes, level: PollarStateEntry['level'], data?: unknown) => void,
+  emitLog: (
+    state: StateVar,
+    code: StateLoginCodes,
+    level: PollarStateEntry['level'],
+    status: PollarStateEntry['status'],
+    data?: unknown,
+  ) => void,
 ) => {
   const isSuccess = !!response.data && !response.error;
   emitLog(
     StateVar.LOGIN,
     isSuccess ? successCode : errorCode,
     isSuccess ? 'info' : 'error',
+    isSuccess ? StateStatus.LOADING : StateStatus.ERROR,
     isSuccess ? response.data : response.error,
   );
   return isSuccess;
 };
 
 export async function login(options: LoginOptions, deps: LoginDeps): Promise<void> {
-  const { basePath, apiKey, clientId, emitState, storeSession, clearSession } = deps;
+  const { basePath, apiKey, clientId, signal, emitState, storeSession, clearSession } = deps;
 
-  emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].CREATE_SESSION_START, 'info');
-  const createSessionResponse = await pollarApiClient.POST('/auth/session');
+  emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].CREATE_SESSION_START, 'info', StateStatus.LOADING);
+  const createSessionResponse = await pollarApiClient.POST('/auth/session', { signal });
 
   if (
     !emitResponse(
@@ -59,9 +73,12 @@ export async function login(options: LoginOptions, deps: LoginDeps): Promise<voi
 
   switch (options.provider) {
     case 'email': {
-      emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].EMAIL_AUTH_START, 'info', { email: options.email });
+      emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].EMAIL_AUTH_START, 'info', StateStatus.LOADING, {
+        email: options.email,
+      });
       const emailRes = await pollarApiClient.POST(`/auth/email`, {
         body: { clientSessionId, email: options.email },
+        signal,
       });
 
       if (
@@ -98,26 +115,34 @@ export async function login(options: LoginOptions, deps: LoginDeps): Promise<voi
     }
   }
 
-  emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].STREAM_POLL_START, 'info', { clientSessionId });
-  await streamUntilFound(clientSessionId, (data) => {
-    if (data['status'] === 'ready') {
-      emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].STREAM_POLL_READY, 'info');
-      return true;
-    }
-    emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].STREAM_POLL_EVENT, 'info', data);
-    return false;
+  emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].STREAM_POLL_START, 'info', StateStatus.LOADING, {
+    clientSessionId,
   });
+  await streamUntilFound(
+    clientSessionId,
+    (data) => {
+      if (data['status'] === 'ready') {
+        emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].STREAM_POLL_READY, 'info', StateStatus.LOADING);
+        return true;
+      }
+      emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].STREAM_POLL_EVENT, 'info', StateStatus.LOADING, data);
+      return false;
+    },
+    200,
+    signal,
+  );
 
-  emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_START, 'info');
+  emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_START, 'info', StateStatus.LOADING);
   const { data, error } = await pollarApiClient.POST(`/auth/login`, {
     body: { clientSessionId },
+    signal,
   });
 
   if (isValidSession(data?.content)) {
     storeSession(data.content);
-    emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_SUCCESS, 'info');
+    emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_SUCCESS, 'info', StateStatus.SUCCESS);
   } else {
     clearSession();
-    emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_ERROR, 'error', error);
+    emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_ERROR, 'error', StateStatus.ERROR, error);
   }
 }

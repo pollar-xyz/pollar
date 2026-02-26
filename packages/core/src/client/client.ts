@@ -7,6 +7,7 @@ import {
   PollarState,
   PollarStateEntry,
   STATE_VAR_CODES,
+  StateStatus,
   StateVar,
   StateVarCodes,
   Status,
@@ -73,19 +74,30 @@ export class PollarClient {
     return { session: this._session, status: this._status };
   }
 
-  async login(options: LoginOptions): Promise<void> {
+  async login(options: LoginOptions): Promise<{ cb: () => void }> {
     if (!isBrowser) {
       warnServerSide('login');
-      return;
+      return {
+        cb: () => {},
+      };
     }
-    return loginFn(options, {
+
+    const controller = new AbortController();
+
+    loginFn(options, {
       basePath: this.basePath,
       apiKey: this.config.apiKey,
       clientId: this.id,
+      signal: controller.signal,
       emitState: this._emitState.bind(this),
       storeSession: this._storeSession.bind(this),
       clearSession: this._clearSession.bind(this),
+    }).catch((e: unknown) => {
+      if (e instanceof Error && e.name === 'AbortError') return;
+      throw e;
     });
+
+    return { cb: () => controller.abort() };
   }
 
   onStateChange(cb: (state: PollarStateEntry) => void): () => void {
@@ -143,11 +155,17 @@ export class PollarClient {
   private _clearSession(): void {
     this._session = null;
     removeStorage();
-    this._emitState(StateVar.WALLET_ADDRESS, STATE_VAR_CODES[StateVar.WALLET_ADDRESS].EMPTY_ADDRESS, 'info');
+    this._emitState(StateVar.WALLET_ADDRESS, STATE_VAR_CODES[StateVar.WALLET_ADDRESS].EMPTY_ADDRESS, 'info', StateStatus.NONE);
   }
 
-  private _emitState(fn: StateVar, code: StateVarCodes, level: PollarStateEntry['level'], data?: unknown): void {
-    const stateEntry: PollarStateEntry = { var: fn, code, level, data, ts: Date.now() };
+  private _emitState(
+    fn: StateVar,
+    code: StateVarCodes,
+    level: PollarStateEntry['level'],
+    status: PollarStateEntry['status'],
+    data?: unknown,
+  ): void {
+    const stateEntry: PollarStateEntry = { var: fn, code, level, data, status, ts: Date.now() };
     this._state[fn].push(stateEntry);
     console[level]('[PollarClient]', stateEntry);
     for (const cb of this._stateListeners) {

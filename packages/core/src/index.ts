@@ -9,7 +9,7 @@ export type {
   SignAuthEntryOptions,
   SignAuthEntryResponse,
 } from './wallets';
-export { StateVar, STATE_VAR_CODES } from './types';
+export { StateVar, STATE_VAR_CODES, StateStatus } from './types';
 export type {
   AuthCredentials,
   AuthToken,

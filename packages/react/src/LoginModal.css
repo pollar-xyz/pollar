@@ -261,6 +261,7 @@
     justify-content: center;
     gap: 8px;
     padding: 10px 14px;
+    min-height: 40px;
 }
 
 .pollar-status span {
@@ -286,7 +287,6 @@
 
 /* ---- Footer ---- */
 .pollar-footer {
-    margin-top: 1.5rem;
     display: flex;
     align-items: center;
     justify-content: center;

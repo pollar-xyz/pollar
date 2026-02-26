@@ -59,6 +59,7 @@ export const StateVar = {
   WALLET_ADDRESS: 'WALLET_ADDRESS',
   LOGIN: 'LOGIN',
 } as const;
+export type StateVar = (typeof StateVar)[keyof typeof StateVar];
 
 export const STATE_VAR_CODES = {
   [StateVar.LOGIN]: {
@@ -81,8 +82,6 @@ export const STATE_VAR_CODES = {
   },
 } as const;
 
-export type StateVar = (typeof StateVar)[keyof typeof StateVar];
-
 type LoginCodes = (typeof STATE_VAR_CODES)[typeof StateVar.LOGIN];
 export type StateLoginCodes = LoginCodes[keyof (typeof STATE_VAR_CODES)[typeof StateVar.LOGIN]];
 
@@ -91,9 +90,18 @@ export type StateWalletAddressCodes = WalletAddressCodes[keyof (typeof STATE_VAR
 
 export type StateVarCodes = StateLoginCodes | StateWalletAddressCodes;
 
+export const StateStatus = {
+  NONE: 'NONE',
+  LOADING: 'LOADING',
+  SUCCESS: 'SUCCESS',
+  ERROR: 'ERROR',
+} as const;
+export type StateStatus = (typeof StateStatus)[keyof typeof StateStatus];
+
 export interface PollarStateEntry {
   var: StateVar;
   code: StateVarCodes;
+  status: StateStatus;
   level: 'info' | 'warn' | 'error';
   data?: unknown;
   ts: number;

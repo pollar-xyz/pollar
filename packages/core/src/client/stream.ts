@@ -1,23 +1,39 @@
 import { pollarApiClient } from '../api/client';
 
+function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(resolve, ms);
+    signal.addEventListener('abort', () => {
+      clearTimeout(t);
+      reject(new DOMException('Aborted', 'AbortError'));
+    }, { once: true });
+  });
+}
+
 export async function streamUntilFound(
   clientSessionId: string,
   check: (data: Record<string, unknown>) => boolean,
   retryDelayMs = 200,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   while (true) {
+    signal?.throwIfAborted();
+
     let data, error;
     try {
       ({ data, error } = await pollarApiClient.GET('/auth/session/status/{clientSessionId}', {
         params: { path: { clientSessionId } },
         parseAs: 'stream',
+        signal: signal ?? null,
       }));
-    } catch (error) {
-      console.warn(error);
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') throw e;
+      console.warn(e);
     }
 
     if (error || !data) {
-      await new Promise((r) => setTimeout(r, retryDelayMs));
+      if (signal) await abortableDelay(retryDelayMs, signal);
+      else await new Promise((r) => setTimeout(r, retryDelayMs));
       continue;
     }
 
@@ -27,6 +43,7 @@ export async function streamUntilFound(
 
     try {
       while (true) {
+        signal?.throwIfAborted();
         const { done, value } = await reader.read();
         if (done) {
           streamDone = true;
@@ -48,9 +65,9 @@ export async function streamUntilFound(
           }
         }
       }
-    } catch (error) {
-      // stream cortado abruptamente
-      console.warn(error);
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') throw e;
+      console.warn(e);
     } finally {
       reader.releaseLock();
     }
@@ -58,7 +75,8 @@ export async function streamUntilFound(
     // stream cerrado sin encontrar el valor → reintenta
     const delay = streamDone ? retryDelayMs : 0;
     if (delay) {
-      await new Promise((r) => setTimeout(r, delay));
+      if (signal) await abortableDelay(delay, signal);
+      else await new Promise((r) => setTimeout(r, delay));
     }
   }
 }

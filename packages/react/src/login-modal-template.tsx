@@ -3,21 +3,22 @@
 import { StateLoginCodes } from '@pollar/core';
 
 const LOGIN_CODE_MESSAGES: Record<StateLoginCodes, { text: string; kind: 'loading' | 'success' | 'error' }> = {
-  CREATE_SESSION_START:  { text: 'Starting session…',            kind: 'loading' },
-  CREATE_SESSION_ERROR:  { text: 'Failed to create session',     kind: 'error'   },
-  CREATE_SESSION_SUCCESS:{ text: 'Session created',              kind: 'success' },
-  EMAIL_AUTH_START:      { text: 'Sending code…',                kind: 'loading' },
-  EMAIL_AUTH_ERROR:      { text: 'Failed to send email',         kind: 'error'   },
-  EMAIL_AUTH_SUCCESS:    { text: 'Code sent — check your inbox', kind: 'success' },
-  STREAM_POLL_START:     { text: 'Waiting for verification…',    kind: 'loading' },
-  STREAM_POLL_EVENT:     { text: 'Waiting for verification…',    kind: 'loading' },
-  STREAM_POLL_READY:     { text: 'Verified',                     kind: 'success' },
-  FETCH_SESSION_START:   { text: 'Authenticating…',              kind: 'loading' },
-  FETCH_SESSION_SUCCESS: { text: 'Authenticated!',               kind: 'success' },
-  FETCH_SESSION_ERROR:   { text: 'Authentication failed',        kind: 'error'   },
+  CREATE_SESSION_START: { text: 'Starting session…', kind: 'loading' },
+  CREATE_SESSION_ERROR: { text: 'Failed to create session', kind: 'error' },
+  CREATE_SESSION_SUCCESS: { text: 'Session created', kind: 'success' },
+  EMAIL_AUTH_START: { text: 'Sending code…', kind: 'loading' },
+  EMAIL_AUTH_ERROR: { text: 'Failed to send email', kind: 'error' },
+  EMAIL_AUTH_SUCCESS: { text: 'Code sent — check your inbox', kind: 'success' },
+  STREAM_POLL_START: { text: 'Waiting for verification…', kind: 'loading' },
+  STREAM_POLL_EVENT: { text: 'Waiting for verification…', kind: 'loading' },
+  STREAM_POLL_READY: { text: 'Verified', kind: 'success' },
+  FETCH_SESSION_START: { text: 'Authenticating…', kind: 'loading' },
+  FETCH_SESSION_SUCCESS: { text: 'Authenticated!', kind: 'success' },
+  FETCH_SESSION_ERROR: { text: 'Authentication failed', kind: 'error' },
 };
 
-function LoginStatusBanner({ code }: { code: StateLoginCodes }) {
+function LoginStatusBanner({ code }: { code: StateLoginCodes | null }) {
+  if (!code) return <div className="pollar-status" />;
   const { text, kind } = LOGIN_CODE_MESSAGES[code];
   const icon =
     kind === 'error' ? (
@@ -63,7 +64,7 @@ interface LoginModalTemplateProps {
   error?: string | null;
   onEmailChange?: (email: string) => void;
   onEmailSubmit?: () => void;
-  onSocialLogin?: (provider: string) => void;
+  onSocialLogin?: (provider: 'google' | 'github') => void;
   onFreighterConnect?: () => void;
   onAlbedoConnect?: () => void;
   loginStateCode: StateLoginCodes | null;
@@ -91,26 +92,22 @@ export function LoginModalTemplate({
   const enabledSocial = Object.entries(providers).filter(([, enabled]) => enabled);
 
   const cssVars = {
-    '--pollar-accent':       accentColor,
-    '--pollar-bg':           isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border':       isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text':         isDark ? '#ffffff' : '#111827',
-    '--pollar-muted':        isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg':     isDark ? '#374151' : '#ffffff',
-    '--pollar-error-bg':     isDark ? '#2a1515' : '#fef2f2',
+    '--pollar-accent': accentColor,
+    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
+    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
+    '--pollar-text': isDark ? '#ffffff' : '#111827',
+    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
+    '--pollar-input-bg': isDark ? '#374151' : '#ffffff',
+    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
     '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text':   isDark ? '#f87171' : '#dc2626',
+    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
   } as React.CSSProperties;
 
   return (
     <div className="pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
       <div className="pollar-header">
         <div className="pollar-logo-wrap">
-          <img
-            src={logoUrl ?? 'https://pollar.xyz/logo_polo.png'}
-            alt="Logo"
-            className="pollar-logo"
-          />
+          <img src={logoUrl ?? 'https://pollar.xyz/logo_polo.png'} alt="Logo" className="pollar-logo" />
         </div>
         <h2 className="pollar-title">{appName}</h2>
         <p className="pollar-subtitle">Log in or sign up</p>
@@ -129,12 +126,7 @@ export function LoginModalTemplate({
             onChange={(e) => onEmailChange?.(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && onEmailSubmit?.()}
           />
-          <button
-            type="button"
-            disabled={loading || !email}
-            className="pollar-submit-btn"
-            onClick={onEmailSubmit}
-          >
+          <button type="button" disabled={loading || !email} className="pollar-submit-btn" onClick={onEmailSubmit}>
             Submit
           </button>
         </div>
@@ -157,7 +149,7 @@ export function LoginModalTemplate({
               type="button"
               disabled={loading}
               className="pollar-social-btn"
-              onClick={() => onSocialLogin?.(key)}
+              onClick={() => onSocialLogin?.(key as 'google' | 'github')}
             >
               <span className="pollar-social-btn-text">{key}</span>
             </button>
@@ -186,7 +178,7 @@ export function LoginModalTemplate({
         </div>
       )}
 
-      {loginStateCode && <LoginStatusBanner code={loginStateCode} />}
+      <LoginStatusBanner code={loginStateCode} />
 
       <div className="pollar-footer">
         <span className="pollar-footer-protected">Protected by</span>

@@ -1,6 +1,6 @@
 'use client';
 
-import { PollarError, STATE_VAR_CODES, StateLoginCodes, StateVar, WalletType } from '@pollar/core';
+import { PollarError, STATE_VAR_CODES, StateLoginCodes, StateStatus, StateVar, WalletType } from '@pollar/core';
 import { useEffect, useState } from 'react';
 import { usePollar } from './context';
 import { LoginModalTemplate } from './login-modal-template';
@@ -32,7 +32,7 @@ function isLoginCode(code: string): code is StateLoginCodes {
 export function LoginModal({ onClose }: LoginModalProps) {
   const [email, setEmail] = useState('');
   const { getClient, styles, config } = usePollar();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<StateStatus>(StateStatus.NONE);
   const [error, setError] = useState<string | null>(null);
   const [loginStateCode, setLoginStateCode] = useState<StateLoginCodes | null>(null);
 
@@ -41,9 +41,10 @@ export function LoginModal({ onClose }: LoginModalProps) {
       console.log({ state });
       if (state.var === StateVar.LOGIN && isLoginCode(state.code)) {
         setLoginStateCode(state.code);
-        console.log('login', state.code);
+        setLoading(state.status);
+        if ((state.data as any).status === 'AWAITING_EMAIL') {
+        }
       }
-      // setState(state);
     });
   }, []);
 
@@ -56,43 +57,35 @@ export function LoginModal({ onClose }: LoginModalProps) {
   }
 
   async function handleEmail() {
-    if (!email) return;
-    setLoading(true);
+    if (!email) {
+      return;
+    }
     setError(null);
     try {
       await getClient().login({ provider: 'email', email });
-      handleClose();
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
-      setLoading(false);
     }
   }
 
-  async function handleSocialLogin(provider: string) {
-    setLoading(true);
+  async function handleSocialLogin(provider: 'google' | 'github') {
     setError(null);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await getClient().login({ provider } as any);
-      handleClose();
+      await getClient().login({ provider });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
-      setLoading(false);
     }
   }
 
   async function handleWalletConnect(type: WalletType) {
-    setLoading(true);
     setError(null);
     try {
       await getClient().connectWallet(type);
-      handleClose();
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
-      setLoading(false);
     }
   }
 
@@ -114,7 +107,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
         }}
         appName={config.application?.name ?? 'Pollar'}
         email={email}
-        loading={loading}
+        loading={loading === StateStatus.LOADING}
         error={error}
         onEmailChange={setEmail}
         onEmailSubmit={handleEmail}
