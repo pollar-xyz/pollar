@@ -1,6 +1,6 @@
 {
   "name": "@pollar/react",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "React components for Pollar authentication",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

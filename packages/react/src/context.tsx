@@ -38,6 +38,8 @@ interface PollarContextValue {
   getClient: () => PollarClient;
   openLoginModal: () => void;
   isAuthenticated: boolean;
+  login: (options: LoginOptions) => void;
+  logout: () => void;
   config: PollarConfig;
   styles: PollarStyles;
 }
