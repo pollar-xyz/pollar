@@ -1,7 +1,7 @@
 'use client';
 
 import { PollarError, STATE_VAR_CODES, StateLoginCodes, StateStatus, StateVar, WalletType } from '@pollar/core';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePollar } from './context';
 import { LoginModalTemplate } from './login-modal-template';
 import './LoginModal.css';
@@ -32,17 +32,30 @@ function isLoginCode(code: string): code is StateLoginCodes {
 export function LoginModal({ onClose }: LoginModalProps) {
   const [email, setEmail] = useState('');
   const { getClient, styles, config } = usePollar();
-  const [loading, setLoading] = useState<StateStatus>(StateStatus.NONE);
+  const [status, setStatus] = useState<StateStatus>(StateStatus.NONE);
   const [error, setError] = useState<string | null>(null);
   const [loginStateCode, setLoginStateCode] = useState<StateLoginCodes | null>(null);
+  const [awaitingEmailCode, setAwaitingEmailCode] = useState(false);
+  const [clientSessionId, setClientSessionId] = useState<string | null>(null);
+  const [codeError, setCodeError] = useState<string | null>(null);
 
   useEffect(() => {
     return getClient()?.onStateChange((state) => {
-      console.log({ state });
       if (state.var === StateVar.LOGIN && isLoginCode(state.code)) {
         setLoginStateCode(state.code);
-        setLoading(state.status);
-        if ((state.data as any).status === 'AWAITING_EMAIL') {
+        setStatus(state.status);
+        if (state.code === STATE_VAR_CODES[StateVar.LOGIN].STREAM_POLL_START) {
+          const data = state.data as { clientSessionId: string };
+          setClientSessionId(data.clientSessionId);
+        }
+        if (state.code === STATE_VAR_CODES[StateVar.LOGIN].STREAM_POLL_EVENT) {
+          const data = state.data as { status?: string };
+          if (data?.status === 'AWAITING_EMAIL') {
+            setAwaitingEmailCode(true);
+          }
+        }
+        if (state.code === STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_SUCCESS) {
+          setAwaitingEmailCode(false);
         }
       }
     });
@@ -53,40 +66,35 @@ export function LoginModal({ onClose }: LoginModalProps) {
   function handleClose() {
     setEmail('');
     setError(null);
+    setAwaitingEmailCode(false);
+    setClientSessionId(null);
+    setCodeError(null);
     onClose();
   }
 
-  async function handleEmail() {
+  const cancelLoginRef = useRef<(() => void) | null>(null);
+
+  function handleEmail() {
     if (!email) {
       return;
     }
-    setError(null);
-    try {
-      await getClient().login({ provider: 'email', email });
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-    }
+    const { cancelLogin } = getClient().login({ provider: 'email', email });
+    cancelLoginRef.current = cancelLogin;
   }
 
-  async function handleSocialLogin(provider: 'google' | 'github') {
-    setError(null);
-    try {
-      await getClient().login({ provider });
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-    }
+  function handleSocialLogin(provider: 'google' | 'github') {
+    const { cancelLogin } = getClient().login({ provider });
+    cancelLoginRef.current = cancelLogin;
   }
 
-  async function handleWalletConnect(type: WalletType) {
-    setError(null);
-    try {
-      await getClient().connectWallet(type);
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-    }
+  function handleWalletConnect(type: WalletType) {
+    const { cancelLogin } = getClient().login({ provider: 'wallet', type });
+    cancelLoginRef.current = cancelLogin;
+  }
+
+  async function handleVerifyCode(code: string) {
+    if (!clientSessionId) return;
+    void getClient().verifyEmailCode(clientSessionId, code);
   }
 
   return (
@@ -107,7 +115,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
         }}
         appName={config.application?.name ?? 'Pollar'}
         email={email}
-        loading={loading === StateStatus.LOADING}
+        status={status}
         error={error}
         onEmailChange={setEmail}
         onEmailSubmit={handleEmail}
@@ -115,6 +123,10 @@ export function LoginModal({ onClose }: LoginModalProps) {
         onFreighterConnect={() => handleWalletConnect(WalletType.FREIGHTER)}
         onAlbedoConnect={() => handleWalletConnect(WalletType.ALBEDO)}
         loginStateCode={loginStateCode}
+        awaitingEmailCode={awaitingEmailCode}
+        onCodeSubmit={handleVerifyCode}
+        codeError={codeError}
+        cancelLoginRef={cancelLoginRef}
       />
     </div>
   );

@@ -254,6 +254,49 @@
     flex-shrink: 0;
 }
 
+/* ---- Code input ---- */
+.pollar-code-section {
+    margin-bottom: 1rem;
+}
+
+.pollar-code-label {
+    margin: 0 0 1rem;
+    font-size: 0.875rem;
+    color: var(--pollar-muted);
+    text-align: center;
+}
+
+.pollar-code-inputs {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+}
+
+.pollar-code-input {
+    width: 2.75rem;
+    height: 3rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--pollar-border);
+    background-color: var(--pollar-input-bg);
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--pollar-text);
+    text-align: center;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.pollar-code-input:focus {
+    box-shadow: 0 0 0 2px var(--pollar-accent);
+    border-color: transparent;
+}
+
+.pollar-code-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 /* ---- Status banner ---- */
 .pollar-status {
     display: flex;
@@ -269,19 +312,37 @@
     font-weight: 500;
 }
 
-.pollar-status[data-kind='error'] {
+.pollar-status-cancel {
+    margin-left: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+    background: transparent;
+    color: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+}
+
+.pollar-status-cancel:hover {
+    opacity: 1;
+}
+
+.pollar-status[data-kind='ERROR'] {
     color: #ef4444;
 }
 
-.pollar-status[data-kind='success'] {
+.pollar-status[data-kind='SUCCESS'] {
     color: #10b981;
 }
 
-.pollar-status[data-kind='loading'] {
+.pollar-status[data-kind='LOADING'] {
     color: var(--pollar-accent);
 }
 
-.pollar-status[data-kind='loading'] svg {
+.pollar-status[data-kind='LOADING'] svg {
     animation: pollar-spin 1s linear infinite;
 }
 
