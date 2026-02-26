@@ -74,11 +74,11 @@ export class PollarClient {
     return { session: this._session, status: this._status };
   }
 
-  async login(options: LoginOptions): Promise<{ cb: () => void }> {
+  login(options: LoginOptions): { cancelLogin: () => void } {
     if (!isBrowser) {
       warnServerSide('login');
       return {
-        cb: () => {},
+        cancelLogin: () => {},
       };
     }
 
@@ -92,18 +92,52 @@ export class PollarClient {
       emitState: this._emitState.bind(this),
       storeSession: this._storeSession.bind(this),
       clearSession: this._clearSession.bind(this),
-    }).catch((e: unknown) => {
-      if (e instanceof Error && e.name === 'AbortError') return;
-      throw e;
+    }).catch((error: unknown) => {
+      if (error instanceof Error && error.name === 'AbortError') {
+        this._emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].ERROR_ABORTED, 'error', StateStatus.ERROR);
+        return;
+      }
+      this._emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].ERROR_UNKNOWN, 'error', StateStatus.ERROR, { error });
     });
 
-    return { cb: () => controller.abort() };
+    return { cancelLogin: () => controller.abort() };
   }
 
   onStateChange(cb: (state: PollarStateEntry) => void): () => void {
     this._stateListeners.add(cb);
     // cb(this.getState());
     return () => this._stateListeners.delete(cb);
+  }
+
+  async verifyEmailCode(clientSessionId: string, code: string): Promise<void> {
+    if (!isBrowser) {
+      warnServerSide('verifyEmailCode');
+      return;
+    }
+    try {
+      const { error, data } = await pollarApiClient.POST('/auth/email/verify-code', {
+        body: { clientSessionId, code },
+      });
+      if (error || !data || data?.content?.code !== 'SDK_EMAIL_CODE_VERIFIED') {
+        this._emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].EMAIL_AUTH_CODE_ERROR, 'error', StateStatus.ERROR, {
+          data,
+          error,
+        });
+        return;
+      }
+
+      this._emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].EMAIL_AUTH_CODE_SUCCESS, 'info', StateStatus.SUCCESS, {
+        data,
+        error,
+      });
+    } catch (error) {
+      this._emitState(
+        StateVar.LOGIN,
+        STATE_VAR_CODES[StateVar.LOGIN].WALLET_AUTH_ALBEDO_NOT_INSTALLED,
+        'error',
+        StateStatus.ERROR,
+      );
+    }
   }
 
   async connectWallet(type: WalletType): Promise<void> {
@@ -138,7 +172,7 @@ export class PollarClient {
     // }
   }
 
-  async logout(): Promise<void> {
+  logout(): void {
     if (!isBrowser) {
       warnServerSide('logout');
       return;
@@ -155,6 +189,11 @@ export class PollarClient {
   private _clearSession(): void {
     this._session = null;
     removeStorage();
+    this._state = {
+      [StateVar.LOGIN]: [],
+      [StateVar.WALLET_ADDRESS]: [],
+    };
+    this._emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].NONE, 'info', StateStatus.NONE);
     this._emitState(StateVar.WALLET_ADDRESS, STATE_VAR_CODES[StateVar.WALLET_ADDRESS].EMPTY_ADDRESS, 'info', StateStatus.NONE);
   }
 

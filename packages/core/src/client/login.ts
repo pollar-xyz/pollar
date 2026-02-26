@@ -1,14 +1,5 @@
 import { pollarApiClient } from '../api/client';
-import {
-  LoginOptions,
-  PollarError,
-  PollarLogin,
-  PollarStateEntry,
-  STATE_VAR_CODES,
-  StateLoginCodes,
-  StateStatus,
-  StateVar,
-} from '../types';
+import { LoginOptions, PollarLogin, PollarStateEntry, STATE_VAR_CODES, StateLoginCodes, StateStatus, StateVar } from '../types';
 import { AlbedoAdapter, FreighterAdapter, WalletType } from '../wallets';
 import { isValidSession } from './session';
 import { streamUntilFound } from './stream';
@@ -84,8 +75,8 @@ export async function login(options: LoginOptions, deps: LoginDeps): Promise<voi
       if (
         !emitResponse(
           emailRes,
-          STATE_VAR_CODES[StateVar.LOGIN].EMAIL_AUTH_SUCCESS,
-          STATE_VAR_CODES[StateVar.LOGIN].EMAIL_AUTH_ERROR,
+          STATE_VAR_CODES[StateVar.LOGIN].EMAIL_AUTH_START_SUCCESS,
+          STATE_VAR_CODES[StateVar.LOGIN].EMAIL_AUTH_START_ERROR,
           emitState,
         )
       ) {
@@ -98,7 +89,7 @@ export async function login(options: LoginOptions, deps: LoginDeps): Promise<voi
     case 'github': {
       const url = new URL(`${basePath}/auth/${options.provider}`);
       url.searchParams.set('api_key', apiKey);
-      url.searchParams.set('client_session_id', clientId);
+      url.searchParams.set('client_session_id', clientSessionId);
       url.searchParams.set('redirect_uri', window.location.origin);
       window.open(url.toString(), '_blank');
       break;
@@ -108,7 +99,17 @@ export async function login(options: LoginOptions, deps: LoginDeps): Promise<voi
 
       const available = await adapter.isAvailable();
       if (!available) {
-        throw new PollarError(options.type === WalletType.FREIGHTER ? 'FREIGHTER_NOT_INSTALLED' : 'WALLET_NOT_AVAILABLE');
+        emitState(
+          StateVar.LOGIN,
+          options.type === WalletType.FREIGHTER
+            ? STATE_VAR_CODES[StateVar.LOGIN].WALLET_AUTH_FREIGHTER_NOT_INSTALLED
+            : STATE_VAR_CODES[StateVar.LOGIN].WALLET_AUTH_ALBEDO_NOT_INSTALLED,
+          'info',
+          StateStatus.LOADING,
+          {
+            type: options.type,
+          },
+        );
       }
 
       const { publicKey } = await adapter.connect();
@@ -121,7 +122,7 @@ export async function login(options: LoginOptions, deps: LoginDeps): Promise<voi
   await streamUntilFound(
     clientSessionId,
     (data) => {
-      if (data['status'] === 'ready') {
+      if (data['status'] === 'READY') {
         emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].STREAM_POLL_READY, 'info', StateStatus.LOADING);
         return true;
       }
