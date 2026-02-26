@@ -246,11 +246,11 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": {
+                        status: string;
                         user: {
                             id?: string;
                             ready: boolean;
                         };
-                        status: string;
                         data: {
                             mail: string;
                             first_name: string;
@@ -349,7 +349,10 @@ export interface operations {
                         /** @constant */
                         success: true;
                         content: {
-                            code: string;
+                            /** @constant */
+                            code: "SDK_EMAIL_CODE_SENT";
+                            clientSessionId: string;
+                            email: string;
                         };
                     };
                 };
@@ -408,7 +411,9 @@ export interface operations {
                         /** @constant */
                         success: true;
                         content: {
-                            code: string;
+                            /** @constant */
+                            code: "SDK_EMAIL_CODE_VERIFIED";
+                            clientSessionId: string;
                         };
                     };
                 };
@@ -467,7 +472,10 @@ export interface operations {
                         /** @constant */
                         success: true;
                         content: {
-                            code: string;
+                            /** @constant */
+                            code: "SDK_WALLET_AUTHENTICATED";
+                            clientSessionId: string;
+                            walletAddress: string;
                         };
                     };
                 };
@@ -527,16 +535,20 @@ export interface operations {
                         content: {
                             /** @constant */
                             code: "SDK_LOGIN_SUCCESS";
+                            clientSessionId: string;
+                            userId: string | null;
+                            status: string;
                             token: {
                                 accessToken: string;
                                 refreshToken: string;
                                 expiresAt: number;
                             };
                             user: {
-                                id: string;
+                                id?: string;
+                                ready: boolean;
                             };
                             wallet: {
-                                publicKey: string;
+                                publicKey: string | null;
                             };
                             data: {
                                 mail: string;

@@ -21,7 +21,7 @@ export interface AuthWallet {
 }
 
 type ConfigResponse = pollarPaths['/auth/login']['post']['responses'][200]['content']['application/json'];
-export type PollarLogin = ConfigResponse['content'];
+export type PollarLoginState = ConfigResponse['content'];
 
 export interface PollarClientConfig {
   baseUrl: string;
@@ -45,7 +45,7 @@ export class PollarError extends Error {
 export type Status = 'unauthenticated' | 'restored' | 'authenticated' | 'awaiting_auth' | 'logging_in';
 
 export interface PollarState {
-  session: PollarLogin | null;
+  session: PollarLoginState | null;
   status: Status;
 }
 

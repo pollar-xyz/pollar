@@ -1,7 +1,15 @@
 'use client';
 
-import { pollarApiClient, PollarClient, PollarClientConfig, PollarState } from '@pollar/core';
-import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  isValidSession,
+  pollarApiClient,
+  PollarClient,
+  PollarClientConfig,
+  PollarLoginState,
+  STATE_VAR_CODES,
+  StateVar,
+} from '@pollar/core';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { LoginModal } from './components/login-modal/LoginModal';
 import type { PollarConfig, PollarStyles } from './types';
 
@@ -27,9 +35,8 @@ async function fetchRemoteConfig(): Promise<PollarConfig> {
 interface PollarContextValue {
   walletAddress: string;
   getClient: () => PollarClient;
-  login: () => void;
-  logout: () => void;
-  status: PollarState['status'];
+  openLoginModal: () => void;
+  isAuthenticated: boolean;
   config: PollarConfig;
   styles: PollarStyles;
 }
@@ -43,19 +50,19 @@ interface PollarProviderProps {
 }
 
 export function PollarProvider({ config, styles: propStyles, children }: PollarProviderProps) {
-  const clientRef = useRef<PollarClient | null>(null);
-  const [state, setState] = useState<PollarState | null>(null);
+  const [pollarClient] = useState<PollarClient>(() => new PollarClient(config));
+  const [state, setState] = useState<PollarLoginState | null>(null);
   const [remoteConfig, setRemoteConfig] = useState<PollarConfig>(emptyResponse);
   const [styles, setStyles] = useState<PollarStyles>(propStyles ?? {});
-
-  if (clientRef.current === null) {
-    clientRef.current = new PollarClient(config);
-  }
+  console.log({ state });
 
   useEffect(() => {
-    return clientRef.current?.onStateChange((state) => {
-      console.log({ state });
-      // setState(state);
+    return pollarClient.onStateChange((stateEntry) => {
+      if (stateEntry.var === StateVar.WALLET_ADDRESS) {
+        if (stateEntry.code === STATE_VAR_CODES[StateVar.WALLET_ADDRESS].UPDATED_ADDRESS && isValidSession(stateEntry.data)) {
+          setState(stateEntry.data);
+        }
+      }
     });
   }, []);
 
@@ -78,15 +85,14 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
 
   const contextValue: PollarContextValue = useMemo(
     () => ({
-      walletAddress: state?.session?.wallet?.publicKey || '',
-      getClient: () => clientRef.current!,
-      login: () => setModalOpen(true),
-      logout: () => clientRef.current?.logout(),
-      status: state?.status || 'unauthenticated',
+      walletAddress: state?.wallet?.publicKey || '',
+      getClient: () => pollarClient,
+      openLoginModal: () => setModalOpen(true),
+      isAuthenticated: pollarClient.isAuthenticated(),
       config: remoteConfig,
       styles,
     }),
-    [state, remoteConfig, styles],
+    [state, remoteConfig, styles, pollarClient],
   );
 
   return (

@@ -3,7 +3,7 @@ import {
   LoginOptions,
   PollarClientConfig,
   PollarError,
-  PollarLogin,
+  PollarLoginState,
   PollarState,
   PollarStateEntry,
   STATE_VAR_CODES,
@@ -31,7 +31,7 @@ export class PollarClient {
   readonly id: string;
   readonly basePath: string;
 
-  private _session: PollarLogin | null;
+  private _session: PollarLoginState | null;
   private _status: Status = 'unauthenticated';
   private _stateListeners = new Set<(log: PollarStateEntry) => void>();
   private _state: { [key in StateVar]: PollarStateEntry[] } = {
@@ -68,6 +68,10 @@ export class PollarClient {
         return request;
       },
     });
+  }
+
+  isAuthenticated(): boolean {
+    return !!this._session?.wallet?.publicKey;
   }
 
   getState(): PollarState {
@@ -181,9 +185,16 @@ export class PollarClient {
     this._clearSession();
   }
 
-  private _storeSession(session: PollarLogin): void {
+  private _storeSession(session: PollarLoginState): void {
     this._session = session;
     writeStorage(session);
+    this._emitState(
+      StateVar.WALLET_ADDRESS,
+      STATE_VAR_CODES[StateVar.WALLET_ADDRESS].UPDATED_ADDRESS,
+      'info',
+      StateStatus.SUCCESS,
+      session,
+    );
   }
 
   private _clearSession(): void {

@@ -1,8 +1,8 @@
-import { PollarLogin } from '../types';
+import { PollarLoginState } from '../types';
 
 export const STORAGE_KEY = 'pollar:session';
 
-export function isValidSession(value: unknown): value is PollarLogin {
+export function isValidSession(value: unknown): value is PollarLoginState {
   if (typeof value !== 'object' || value === null) {
     console.warn('[PollarClient][isValidSession] value is not an object:', value);
     return false;
@@ -33,24 +33,15 @@ export function isValidSession(value: unknown): value is PollarLogin {
   }
   const t = token as Record<string, unknown>;
   if (typeof t['accessToken'] !== 'string' || t['accessToken'] === '') {
-    console.warn(
-      '[PollarClient][isValidSession] token.accessToken is missing or empty:',
-      t['accessToken'],
-    );
+    console.warn('[PollarClient][isValidSession] token.accessToken is missing or empty:', t['accessToken']);
     return false;
   }
   if (typeof t['refreshToken'] !== 'string' || t['refreshToken'] === '') {
-    console.warn(
-      '[PollarClient][isValidSession] token.refreshToken is missing or empty:',
-      t['refreshToken'],
-    );
+    console.warn('[PollarClient][isValidSession] token.refreshToken is missing or empty:', t['refreshToken']);
     return false;
   }
   if (typeof t['expiresAt'] !== 'number' || !Number.isFinite(t['expiresAt'])) {
-    console.warn(
-      '[PollarClient][isValidSession] token.expiresAt is missing or not a finite number:',
-      t['expiresAt'],
-    );
+    console.warn('[PollarClient][isValidSession] token.expiresAt is missing or not a finite number:', t['expiresAt']);
     return false;
   }
 
@@ -61,10 +52,7 @@ export function isValidSession(value: unknown): value is PollarLogin {
   }
   const w = wallet as Record<string, unknown>;
   if (typeof w['publicKey'] !== 'string' || w['publicKey'] === '') {
-    console.warn(
-      '[PollarClient][isValidSession] wallet.publicKey is missing or not a string:',
-      w['publicKey'],
-    );
+    console.warn('[PollarClient][isValidSession] wallet.publicKey is missing or not a string:', w['publicKey']);
     return false;
   }
 
@@ -85,10 +73,7 @@ export function isValidSession(value: unknown): value is PollarLogin {
   for (const field of ['email', 'google', 'github', 'wallet'] as const) {
     const v = d[field];
     if (v !== null && (typeof v !== 'object' || v === null)) {
-      console.warn(
-        `[PollarClient][isValidSession] data.${field} is neither null nor an object:`,
-        v,
-      );
+      console.warn(`[PollarClient][isValidSession] data.${field} is neither null nor an object:`, v);
       return false;
     }
   }
@@ -96,7 +81,7 @@ export function isValidSession(value: unknown): value is PollarLogin {
   return true;
 }
 
-export function readStorage(): PollarLogin | null {
+export function readStorage(): PollarLoginState | null {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) {
     return null;
@@ -125,7 +110,7 @@ export function readStorage(): PollarLogin | null {
   }
 }
 
-export function writeStorage(session: PollarLogin): void {
+export function writeStorage(session: PollarLoginState): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
 }
 

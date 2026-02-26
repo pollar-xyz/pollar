@@ -16,7 +16,7 @@ function ButtonLogo() {
 }
 
 export function WalletButton() {
-  const { login, logout, walletAddress, styles } = usePollar();
+  const { getClient, walletAddress, styles, openLoginModal } = usePollar();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -46,17 +46,12 @@ export function WalletButton() {
 
   function handleLogout() {
     setOpen(false);
-    logout();
+    getClient().logout();
   }
 
   if (!walletAddress) {
     return (
-      <button
-        type="button"
-        className="wallet-login-btn"
-        style={{ backgroundColor: accentColor }}
-        onClick={login}
-      >
+      <button type="button" className="wallet-login-btn" style={{ backgroundColor: accentColor }} onClick={openLoginModal}>
         <ButtonLogo />
         Login with Pollar
       </button>
@@ -65,11 +60,7 @@ export function WalletButton() {
 
   return (
     <div className="wallet-wrapper" ref={wrapperRef}>
-      <button
-        className="wallet-btn"
-        style={{ backgroundColor: accentColor }}
-        onClick={() => setOpen((v) => !v)}
-      >
+      <button className="wallet-btn" style={{ backgroundColor: accentColor }} onClick={() => setOpen((v) => !v)}>
         {cropWallet(walletAddress)}
         <svg
           className={`wallet-chevron${open ? ' open' : ''}`}
@@ -85,15 +76,8 @@ export function WalletButton() {
       </button>
 
       {open && (
-        <div
-          className="wallet-dropdown"
-          style={{ backgroundColor: dropdownBg, borderColor: dropdownBorder }}
-        >
-          <button
-            className="wallet-dropdown-item"
-            style={{ color: itemColor }}
-            onClick={handleCopy}
-          >
+        <div className="wallet-dropdown" style={{ backgroundColor: dropdownBg, borderColor: dropdownBorder }}>
+          <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={handleCopy}>
             <svg
               width="14"
               height="14"

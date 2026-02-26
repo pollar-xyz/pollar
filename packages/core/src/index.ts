@@ -13,7 +13,7 @@ export { StateVar, STATE_VAR_CODES, StateStatus } from './types';
 export type {
   AuthCredentials,
   AuthToken,
-  PollarLogin,
+  PollarLoginState,
   AuthUser,
   AuthWallet,
   PollarClientConfig,
@@ -26,3 +26,4 @@ export type {
 } from './types';
 export { pollarApiClient } from './api/client';
 export type { paths as pollarPaths } from './api/schema';
+export { isValidSession } from './client/session';

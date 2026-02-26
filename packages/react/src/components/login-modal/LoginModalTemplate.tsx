@@ -3,6 +3,7 @@
 import { StateLoginCodes, StateStatus } from '@pollar/core';
 import { RefObject } from 'react';
 import { EmailCodeInput } from './EmailCodeInput';
+import { GoogleButton } from './GoogleButton';
 import { LoginStatusBanner } from './LoginStatusBanner';
 
 interface LoginModalTemplateProps {
@@ -117,17 +118,9 @@ export function LoginModalTemplate({
 
           {enabledSocial.length > 0 && (
             <div className="pollar-social-list">
-              {enabledSocial.map(([key]) => (
-                <button
-                  key={key}
-                  type="button"
-                  disabled={isLoading}
-                  className="pollar-social-btn"
-                  onClick={() => onSocialLogin?.(key as 'google' | 'github')}
-                >
-                  <span className="pollar-social-btn-text">{key}</span>
-                </button>
-              ))}
+              {enabledSocial.some(([key]) => key === 'google') && (
+                <GoogleButton disabled={isLoading} onClick={() => onSocialLogin?.('google')} />
+              )}
             </div>
           )}
 

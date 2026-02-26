@@ -24,22 +24,23 @@ export function LoginModal({ onClose }: LoginModalProps) {
   const [clientSessionId, setClientSessionId] = useState<string | null>(null);
 
   useEffect(() => {
-    return getClient()?.onStateChange((state) => {
-      if (state.var === StateVar.LOGIN && isLoginCode(state.code)) {
-        setLoginStateCode(state.code);
-        setStatus(state.status);
-        if (state.code === STATE_VAR_CODES[StateVar.LOGIN].STREAM_POLL_START) {
-          const data = state.data as { clientSessionId: string };
+    return getClient().onStateChange((stateEntry) => {
+      if (stateEntry.var === StateVar.LOGIN && isLoginCode(stateEntry.code)) {
+        setLoginStateCode(stateEntry.code);
+        setStatus(stateEntry.status);
+        if (stateEntry.code === STATE_VAR_CODES[StateVar.LOGIN].STREAM_POLL_START) {
+          const data = stateEntry.data as { clientSessionId: string };
           setClientSessionId(data.clientSessionId);
         }
-        if (state.code === STATE_VAR_CODES[StateVar.LOGIN].STREAM_POLL_EVENT) {
-          const data = state.data as { status?: string };
+        if (stateEntry.code === STATE_VAR_CODES[StateVar.LOGIN].STREAM_POLL_EVENT) {
+          const data = stateEntry.data as { status?: string };
           if (data?.status === 'AWAITING_EMAIL') {
             setAwaitingEmailCode(true);
           }
         }
-        if (state.code === STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_SUCCESS) {
+        if (stateEntry.code === STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_SUCCESS) {
           setAwaitingEmailCode(false);
+          setTimeout(onClose, 1000);
         }
       }
     });

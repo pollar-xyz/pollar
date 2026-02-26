@@ -1,5 +1,13 @@
 import { pollarApiClient } from '../api/client';
-import { LoginOptions, PollarLogin, PollarStateEntry, STATE_VAR_CODES, StateLoginCodes, StateStatus, StateVar } from '../types';
+import {
+  LoginOptions,
+  PollarLoginState,
+  PollarStateEntry,
+  STATE_VAR_CODES,
+  StateLoginCodes,
+  StateStatus,
+  StateVar,
+} from '../types';
 import { AlbedoAdapter, FreighterAdapter, WalletType } from '../wallets';
 import { isValidSession } from './session';
 import { streamUntilFound } from './stream';
@@ -16,7 +24,7 @@ export type LoginDeps = {
     status: PollarStateEntry['status'],
     data?: PollarStateEntry['data'],
   ) => void;
-  storeSession: (session: PollarLogin) => void;
+  storeSession: (session: PollarLoginState) => void;
   clearSession: () => void;
 };
 
@@ -140,10 +148,10 @@ export async function login(options: LoginOptions, deps: LoginDeps): Promise<voi
   });
 
   if (isValidSession(data?.content)) {
-    storeSession(data.content);
     emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_SUCCESS, 'info', StateStatus.SUCCESS);
+    storeSession(data.content);
   } else {
     clearSession();
-    emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_ERROR, 'error', StateStatus.ERROR, error);
+    emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_ERROR, 'error', StateStatus.ERROR, { error, data });
   }
 }
