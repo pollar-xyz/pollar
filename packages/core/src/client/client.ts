@@ -2,7 +2,6 @@ import { createApiClient, PollarApiClient } from '../api/client';
 import {
   LoginOptions,
   PollarClientConfig,
-  PollarError,
   PollarLoginState,
   PollarState,
   PollarStateEntry,
@@ -12,7 +11,6 @@ import {
   StateVarCodes,
   Status,
 } from '../types';
-import { AlbedoAdapter, FreighterAdapter, WalletType } from '../wallets';
 import { login as loginFn } from './login';
 import { readStorage, removeStorage, STORAGE_KEY, writeStorage } from './session';
 
@@ -20,9 +18,7 @@ const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'unde
 
 function warnServerSide(method: string): void {
   console.warn(
-    `[PollarClient] \`${method}\` was called on the server. ` +
-      'PollarClient requires browser APIs (window, localStorage). ' +
-      'Make sure to use PollarClient only inside a Client Component.',
+    `[PollarClient] ${method}() called server-side — browser APIs unavailable. Use PollarClient only in Client Components.`,
   );
 }
 
@@ -58,15 +54,18 @@ export class PollarClient {
       return;
     }
 
+    console.info(`[PollarClient] Initialized — endpoint: ${this.basePath}`);
+
     this._session = readStorage();
     if (this._session) {
-      // this._emit('restored');
+      console.info('[PollarClient] Session restored from storage');
     }
 
     window.addEventListener('storage', (e: StorageEvent) => {
       if (e.key === STORAGE_KEY) {
+        const prev = this._session;
         this._session = readStorage();
-        // this._emitState(this._session ? 'restored' : 'unauthenticated');
+        console.info(`[PollarClient] Storage event — session ${this._session ? 'updated' : prev ? 'cleared' : 'unchanged'}`);
       }
     });
   }
@@ -93,6 +92,8 @@ export class PollarClient {
 
     const controller = new AbortController();
 
+    console.info(`[PollarClient] Login started — provider: ${options.provider}`);
+
     loginFn(options, {
       api: this._api,
       basePath: this.basePath,
@@ -103,9 +104,11 @@ export class PollarClient {
       clearSession: this._clearSession.bind(this),
     }).catch((error: unknown) => {
       if (error instanceof Error && error.name === 'AbortError') {
+        console.info('[PollarClient] Login aborted by user');
         this._emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].ERROR_ABORTED, 'error', StateStatus.ERROR);
         return;
       }
+      console.error('[PollarClient] Login failed with unexpected error', error);
       this._emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].ERROR_UNKNOWN, 'error', StateStatus.ERROR, { error });
     });
 
@@ -149,48 +152,18 @@ export class PollarClient {
     }
   }
 
-  async connectWallet(type: WalletType): Promise<void> {
-    if (!isBrowser) {
-      warnServerSide('connectWallet');
-      throw new PollarError('SERVER_SIDE');
-    }
-
-    const adapter = type === WalletType.FREIGHTER ? new FreighterAdapter() : new AlbedoAdapter();
-
-    const available = await adapter.isAvailable();
-    if (!available) {
-      throw new PollarError(type === WalletType.FREIGHTER ? 'FREIGHTER_NOT_INSTALLED' : 'WALLET_NOT_AVAILABLE');
-    }
-
-    const { publicKey } = await adapter.connect();
-
-    // this._emit('logging_in');
-    // const res = await this._fetch(`/auth/login-wallet`, {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ walletAddress: publicKey, clientId: this.id }),
-    // });
-    //
-    // const session = (await res.json()) as { content: PollarLogin };
-    // console.info('[PollarClient]', { session });
-    // if (isValidSession(session?.content)) {
-    //   this._storeSession(session.content);
-    //   this._emit('authenticated');
-    // } else {
-    //   this._clearSession();
-    // }
-  }
-
   logout(): void {
     if (!isBrowser) {
       warnServerSide('logout');
       return;
     }
 
+    console.info('[PollarClient] Logout requested');
     this._clearSession();
   }
 
   private _storeSession(session: PollarLoginState): void {
+    console.info(`[PollarClient] Session stored — user: ${session.userId ?? 'anonymous'}`);
     this._session = session;
     writeStorage(session);
     this._emitState(
@@ -203,6 +176,7 @@ export class PollarClient {
   }
 
   private _clearSession(): void {
+    console.info('[PollarClient] Session cleared');
     this._session = null;
     removeStorage();
     this._state = {
@@ -227,7 +201,7 @@ export class PollarClient {
   ): void {
     const stateEntry: PollarStateEntry = { var: fn, code, level, data, status, ts: Date.now() };
     this._state[fn].push(stateEntry);
-    console[level]('[PollarClient]', stateEntry);
+    console[level](`[PollarClient] ${fn}:${code} — ${status}`);
     for (const cb of this._stateListeners) {
       cb(stateEntry);
     }

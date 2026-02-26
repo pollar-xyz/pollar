@@ -61,7 +61,6 @@ export async function streamUntilFound(
           if (!dataLine) continue;
           try {
             const parsed = JSON.parse(dataLine.slice('data:'.length).trim());
-            console.info('[PollarClient] SSE', parsed);
             if (check(parsed)) {
               return parsed;
             }
