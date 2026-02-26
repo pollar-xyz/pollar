@@ -24,7 +24,7 @@ type ConfigResponse = pollarPaths['/auth/login']['post']['responses'][200]['cont
 export type PollarLoginState = ConfigResponse['content'];
 
 export interface PollarClientConfig {
-  baseUrl: string;
+  baseUrl?: string;
   apiKey: string;
 }
 

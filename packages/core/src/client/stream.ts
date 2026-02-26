@@ -1,16 +1,21 @@
-import { pollarApiClient } from '../api/client';
+import { PollarApiClient } from '../api/client';
 
 function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const t = setTimeout(resolve, ms);
-    signal.addEventListener('abort', () => {
-      clearTimeout(t);
-      reject(new DOMException('Aborted', 'AbortError'));
-    }, { once: true });
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(t);
+        reject(new DOMException('Aborted', 'AbortError'));
+      },
+      { once: true },
+    );
   });
 }
 
 export async function streamUntilFound(
+  api: PollarApiClient,
   clientSessionId: string,
   check: (data: Record<string, unknown>) => boolean,
   retryDelayMs = 200,
@@ -21,7 +26,7 @@ export async function streamUntilFound(
 
     let data, error;
     try {
-      ({ data, error } = await pollarApiClient.GET('/auth/session/status/{clientSessionId}', {
+      ({ data, error } = await api.GET('/auth/session/status/{clientSessionId}', {
         params: { path: { clientSessionId } },
         parseAs: 'stream',
         signal: signal ?? null,

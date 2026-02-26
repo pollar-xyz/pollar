@@ -1,4 +1,4 @@
-import { pollarApiClient } from '../api/client';
+import { PollarApiClient } from '../api/client';
 import {
   LoginOptions,
   PollarLoginState,
@@ -13,6 +13,7 @@ import { isValidSession } from './session';
 import { streamUntilFound } from './stream';
 
 export type LoginDeps = {
+  api: PollarApiClient;
   basePath: string;
   apiKey: string;
   clientId: string;
@@ -52,10 +53,10 @@ const emitResponse = (
 };
 
 export async function login(options: LoginOptions, deps: LoginDeps): Promise<void> {
-  const { basePath, apiKey, clientId, signal, emitState, storeSession, clearSession } = deps;
+  const { api, basePath, apiKey, clientId, signal, emitState, storeSession, clearSession } = deps;
 
   emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].CREATE_SESSION_START, 'info', StateStatus.LOADING);
-  const createSessionResponse = await pollarApiClient.POST('/auth/session', { signal });
+  const createSessionResponse = await api.POST('/auth/session', { signal });
 
   if (
     !emitResponse(
@@ -75,7 +76,7 @@ export async function login(options: LoginOptions, deps: LoginDeps): Promise<voi
       emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].EMAIL_AUTH_START, 'info', StateStatus.LOADING, {
         email: options.email,
       });
-      const emailRes = await pollarApiClient.POST(`/auth/email`, {
+      const emailRes = await api.POST(`/auth/email`, {
         body: { clientSessionId, email: options.email },
         signal,
       });
@@ -128,6 +129,7 @@ export async function login(options: LoginOptions, deps: LoginDeps): Promise<voi
     clientSessionId,
   });
   await streamUntilFound(
+    api,
     clientSessionId,
     (data) => {
       if (data['status'] === 'READY') {
@@ -142,7 +144,7 @@ export async function login(options: LoginOptions, deps: LoginDeps): Promise<voi
   );
 
   emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_START, 'info', StateStatus.LOADING);
-  const { data, error } = await pollarApiClient.POST(`/auth/login`, {
+  const { data, error } = await api.POST(`/auth/login`, {
     body: { clientSessionId },
     signal,
   });

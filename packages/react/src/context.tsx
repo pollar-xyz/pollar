@@ -2,7 +2,7 @@
 
 import {
   isValidSession,
-  pollarApiClient,
+  PollarApiClient,
   PollarClient,
   PollarClientConfig,
   PollarLoginState,
@@ -20,9 +20,9 @@ const emptyResponse = {
   styles: {},
 };
 
-async function fetchRemoteConfig(): Promise<PollarConfig> {
+async function fetchRemoteConfig(api: PollarApiClient): Promise<PollarConfig> {
   try {
-    const { data, error } = await pollarApiClient.GET(`/config`);
+    const { data, error } = await api.GET(`/config`);
     if (!data || error) {
       return emptyResponse;
     }
@@ -70,10 +70,10 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
         setState(null);
       }
     });
-  }, []);
+  }, [pollarClient]);
 
   useEffect(() => {
-    fetchRemoteConfig()
+    fetchRemoteConfig(pollarClient.getApi())
       .then((fetched) => {
         setRemoteConfig(fetched);
         setStyles({
@@ -85,7 +85,7 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
       .catch(() => {
         setStyles(propStyles ?? {});
       });
-  }, []);
+  }, [pollarClient]);
 
   const [modalOpen, setModalOpen] = useState(false);
 

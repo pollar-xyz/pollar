@@ -1,6 +1,8 @@
 import createClient from 'openapi-fetch';
 import type { paths } from './schema';
 
-export const pollarApiClient = createClient<paths>({
-  baseUrl: 'https://sdk.api.local.pollar.xyz/v1',
-});
+export type PollarApiClient = ReturnType<typeof createApiClient>;
+
+export function createApiClient(baseUrl: string) {
+  return createClient<paths>({ baseUrl });
+}

@@ -1,4 +1,4 @@
-import { pollarApiClient } from '../api/client';
+import { createApiClient, PollarApiClient } from '../api/client';
 import {
   LoginOptions,
   PollarClientConfig,
@@ -27,10 +27,11 @@ function warnServerSide(method: string): void {
 }
 
 export class PollarClient {
-  readonly config: PollarClientConfig;
+  readonly apiKey: string;
   readonly id: string;
   readonly basePath: string;
 
+  private readonly _api: PollarApiClient;
   private _session: PollarLoginState | null;
   private _status: Status = 'unauthenticated';
   private _stateListeners = new Set<(log: PollarStateEntry) => void>();
@@ -40,9 +41,16 @@ export class PollarClient {
   };
 
   constructor(config: PollarClientConfig) {
-    this.config = config;
+    this.apiKey = config.apiKey;
     this.id = crypto.randomUUID();
-    this.basePath = `${config.baseUrl}/v1`;
+    this.basePath = `${config.baseUrl || 'https://sdk.api.pollar.xyz'}/v1`;
+    this._api = createApiClient(this.basePath);
+    this._api.use({
+      onRequest({ request }: { request: Request }) {
+        request.headers.set('x-pollar-api-key', config.apiKey);
+        return request;
+      },
+    });
 
     if (!isBrowser) {
       warnServerSide('constructor');
@@ -61,13 +69,6 @@ export class PollarClient {
         // this._emitState(this._session ? 'restored' : 'unauthenticated');
       }
     });
-
-    pollarApiClient.use({
-      onRequest({ request }) {
-        request.headers.set('x-pollar-api-key', config.apiKey);
-        return request;
-      },
-    });
   }
 
   isAuthenticated(): boolean {
@@ -76,6 +77,10 @@ export class PollarClient {
 
   getState(): PollarState {
     return { session: this._session, status: this._status };
+  }
+
+  getApi(): PollarApiClient {
+    return this._api;
   }
 
   login(options: LoginOptions): { cancelLogin: () => void } {
@@ -89,8 +94,9 @@ export class PollarClient {
     const controller = new AbortController();
 
     loginFn(options, {
+      api: this._api,
       basePath: this.basePath,
-      apiKey: this.config.apiKey,
+      apiKey: this.apiKey,
       clientId: this.id,
       signal: controller.signal,
       emitState: this._emitState.bind(this),
@@ -119,7 +125,7 @@ export class PollarClient {
       return;
     }
     try {
-      const { error, data } = await pollarApiClient.POST('/auth/email/verify-code', {
+      const { error, data } = await this._api.POST('/auth/email/verify-code', {
         body: { clientSessionId, code },
       });
       if (error || !data || data?.content?.code !== 'SDK_EMAIL_CODE_VERIFIED') {
@@ -226,34 +232,5 @@ export class PollarClient {
     for (const cb of this._stateListeners) {
       cb(stateEntry);
     }
-  }
-
-  private async _fetch(path: string, init: RequestInit = {}): Promise<Response> {
-    const res = await globalThis.fetch(`${this.basePath}${path}`, {
-      ...init,
-      headers: {
-        'x-polo-api-key': this.config.apiKey,
-        ...init.headers,
-      },
-    });
-
-    if (!res.ok) {
-      let code = 'UNKNOWN_ERROR';
-      try {
-        const body = (await res.json()) as { error?: { code?: string } | string; message?: string };
-        if (typeof body.error === 'object' && body.error?.code) {
-          code = body.error.code;
-        } else if (typeof body.error === 'string') {
-          code = body.error;
-        } else if (typeof body.message === 'string') {
-          code = body.message;
-        }
-      } catch {
-        // ignore parse errors
-      }
-      throw new PollarError(code);
-    }
-
-    return res;
   }
 }
