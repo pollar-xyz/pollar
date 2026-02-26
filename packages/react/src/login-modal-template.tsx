@@ -1,9 +1,53 @@
 'use client';
 
+import { StateLoginCodes } from '@pollar/core';
+
+const LOGIN_CODE_MESSAGES: Record<StateLoginCodes, { text: string; kind: 'loading' | 'success' | 'error' }> = {
+  CREATE_SESSION_START:  { text: 'Starting session…',            kind: 'loading' },
+  CREATE_SESSION_ERROR:  { text: 'Failed to create session',     kind: 'error'   },
+  CREATE_SESSION_SUCCESS:{ text: 'Session created',              kind: 'success' },
+  EMAIL_AUTH_START:      { text: 'Sending code…',                kind: 'loading' },
+  EMAIL_AUTH_ERROR:      { text: 'Failed to send email',         kind: 'error'   },
+  EMAIL_AUTH_SUCCESS:    { text: 'Code sent — check your inbox', kind: 'success' },
+  STREAM_POLL_START:     { text: 'Waiting for verification…',    kind: 'loading' },
+  STREAM_POLL_EVENT:     { text: 'Waiting for verification…',    kind: 'loading' },
+  STREAM_POLL_READY:     { text: 'Verified',                     kind: 'success' },
+  FETCH_SESSION_START:   { text: 'Authenticating…',              kind: 'loading' },
+  FETCH_SESSION_SUCCESS: { text: 'Authenticated!',               kind: 'success' },
+  FETCH_SESSION_ERROR:   { text: 'Authentication failed',        kind: 'error'   },
+};
+
+function LoginStatusBanner({ code }: { code: StateLoginCodes }) {
+  const { text, kind } = LOGIN_CODE_MESSAGES[code];
+  const icon =
+    kind === 'error' ? (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+        <circle cx="7" cy="7" r="7" fill="currentColor" />
+        <path d="M4.5 4.5l5 5M9.5 4.5l-5 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    ) : kind === 'success' ? (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+        <circle cx="7" cy="7" r="7" fill="currentColor" />
+        <path d="M3.5 7l2.5 2.5 4.5-5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ) : (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+        <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="22 10" />
+      </svg>
+    );
+
+  return (
+    <div className="pollar-status" data-kind={kind}>
+      {icon}
+      <span>{text}</span>
+    </div>
+  );
+}
+
 interface LoginModalTemplateProps {
-  theme: 'light' | 'dark';
+  theme: string;
   accentColor: string;
-  logoBase64: string | null;
+  logoUrl: string | null;
   emailEnabled: boolean;
   embeddedWallets: boolean;
   providers: {
@@ -14,7 +58,6 @@ interface LoginModalTemplateProps {
     apple: boolean;
   };
   appName: string;
-  // Interactive props (optional — omit for static preview)
   email?: string;
   loading?: boolean;
   error?: string | null;
@@ -23,12 +66,13 @@ interface LoginModalTemplateProps {
   onSocialLogin?: (provider: string) => void;
   onFreighterConnect?: () => void;
   onAlbedoConnect?: () => void;
+  loginStateCode: StateLoginCodes | null;
 }
 
 export function LoginModalTemplate({
   theme,
   accentColor,
-  logoBase64,
+  logoUrl,
   emailEnabled,
   embeddedWallets,
   providers,
@@ -41,222 +85,98 @@ export function LoginModalTemplate({
   onSocialLogin,
   onFreighterConnect,
   onAlbedoConnect,
+  loginStateCode,
 }: LoginModalTemplateProps) {
   const isDark = theme === 'dark';
-  const bg = isDark ? '#1a1a1a' : '#FFFFFF';
-  const border = isDark ? '#374151' : '#E5E7EB';
-  const textPrimary = isDark ? '#FFFFFF' : '#111827';
-  const textMuted = isDark ? '#9CA3AF' : '#6B7280';
-  const socialBg = isDark ? '#374151' : '#FFFFFF';
-
   const enabledSocial = Object.entries(providers).filter(([, enabled]) => enabled);
 
+  const cssVars = {
+    '--pollar-accent':       accentColor,
+    '--pollar-bg':           isDark ? '#1a1a1a' : '#ffffff',
+    '--pollar-border':       isDark ? '#374151' : '#e5e7eb',
+    '--pollar-text':         isDark ? '#ffffff' : '#111827',
+    '--pollar-muted':        isDark ? '#9ca3af' : '#6b7280',
+    '--pollar-input-bg':     isDark ? '#374151' : '#ffffff',
+    '--pollar-error-bg':     isDark ? '#2a1515' : '#fef2f2',
+    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
+    '--pollar-error-text':   isDark ? '#f87171' : '#dc2626',
+  } as React.CSSProperties;
+
   return (
-    <div
-      style={{
-        width: '100%',
-        maxWidth: 460,
-        borderRadius: 16,
-        border: `1px solid ${border}`,
-        padding: 32,
-        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
-        backgroundColor: bg,
-        transition: 'all 0.3s',
-        boxSizing: 'border-box',
-      }}
-    >
-      {/* Header */}
-      <div style={{ marginBottom: 28, textAlign: 'center' }}>
-        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center' }}>
+    <div className="pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
+      <div className="pollar-header">
+        <div className="pollar-logo-wrap">
           <img
-            src={logoBase64 ?? 'https://pollar.xyz/logo_polo.png'}
+            src={logoUrl ?? 'https://pollar.xyz/logo_polo.png'}
             alt="Logo"
-            style={{ height: 64, width: 64, objectFit: 'contain', filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))' }}
+            className="pollar-logo"
           />
         </div>
-        <h2 style={{ margin: '0 0 8px 0', fontSize: 30, fontWeight: 700, color: textPrimary }}>
-          {appName}
-        </h2>
-        <p style={{ margin: 0, fontSize: 16, color: textMuted }}>Log in or sign up</p>
+        <h2 className="pollar-title">{appName}</h2>
+        <p className="pollar-subtitle">Log in or sign up</p>
       </div>
 
-      {/* Error */}
-      {error && (
-        <div
-          style={{
-            marginBottom: 16,
-            padding: '10px 14px',
-            borderRadius: 8,
-            backgroundColor: isDark ? '#2a1515' : '#fef2f2',
-            border: `1px solid ${isDark ? '#7f1d1d' : '#fecaca'}`,
-            color: isDark ? '#f87171' : '#dc2626',
-            fontSize: 13,
-            lineHeight: 1.4,
-          }}
-        >
-          {error}
-        </div>
-      )}
+      {error && <div className="pollar-error">{error}</div>}
 
-      {/* Email */}
       {emailEnabled && (
-        <div style={{ marginBottom: 16 }}>
+        <div className="pollar-email-section">
           <input
             type="email"
             placeholder="you@email.com"
             value={email}
             disabled={loading}
+            className="pollar-email-input"
             onChange={(e) => onEmailChange?.(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && onEmailSubmit?.()}
-            style={{
-              width: '100%',
-              borderRadius: 8,
-              border: '1px solid #D1D5DB',
-              backgroundColor: isDark ? '#374151' : '#FFFFFF',
-              padding: '14px 16px',
-              fontSize: 16,
-              color: textPrimary,
-              outline: 'none',
-              boxSizing: 'border-box',
-              opacity: loading ? 0.5 : 1,
-            }}
           />
           <button
             type="button"
             disabled={loading || !email}
+            className="pollar-submit-btn"
             onClick={onEmailSubmit}
-            style={{
-              display: 'block',
-              marginTop: 12,
-              width: '100%',
-              borderRadius: 8,
-              padding: '14px 0',
-              fontSize: 16,
-              fontWeight: 700,
-              color: '#FFFFFF',
-              backgroundColor: accentColor,
-              border: 'none',
-              cursor: loading || !email ? 'not-allowed' : 'pointer',
-              opacity: loading || !email ? 0.5 : 1,
-              boxSizing: 'border-box',
-            }}
           >
             Submit
           </button>
         </div>
       )}
 
-      {/* Divider */}
       {emailEnabled && enabledSocial.length > 0 && (
-        <div style={{ position: 'relative', margin: '20px 0' }}>
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center' }}>
-            <div style={{ width: '100%', borderTop: `1px solid ${border}` }} />
-          </div>
-          <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', fontSize: 14 }}>
-            <span style={{ padding: '0 16px', fontWeight: 500, color: textMuted, backgroundColor: bg }}>
-              or continue with
-            </span>
+        <div className="pollar-divider">
+          <div className="pollar-divider-line" />
+          <div className="pollar-divider-label">
+            <span className="pollar-divider-text">or continue with</span>
           </div>
         </div>
       )}
 
-      {/* Social providers */}
       {enabledSocial.length > 0 && (
-        <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="pollar-social-list">
           {enabledSocial.map(([key]) => (
             <button
               key={key}
               type="button"
               disabled={loading}
+              className="pollar-social-btn"
               onClick={() => onSocialLogin?.(key)}
-              style={{
-                display: 'flex',
-                width: '100%',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 12,
-                borderRadius: 8,
-                border: `1px solid ${border}`,
-                backgroundColor: socialBg,
-                padding: '14px 16px',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.5 : 1,
-                boxSizing: 'border-box',
-              }}
             >
-              <span style={{ fontSize: 16, fontWeight: 600, color: textPrimary }}>{key}</span>
+              <span className="pollar-social-btn-text">{key}</span>
             </button>
           ))}
         </div>
       )}
 
-      {/* Embedded wallets */}
       {embeddedWallets && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 0 }}>
-          <p
-            style={{
-              margin: 0,
-              fontSize: 11,
-              fontWeight: 500,
-              textAlign: 'center',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              color: textMuted,
-            }}
-          >
-            Continue with a wallet
-          </p>
-          <button
-            type="button"
-            disabled={loading}
-            onClick={onFreighterConnect}
-            style={{
-              display: 'flex',
-              width: '100%',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 10,
-              borderRadius: 8,
-              border: `2px solid ${accentColor}`,
-              backgroundColor: `${accentColor}10`,
-              color: accentColor,
-              padding: '14px 16px',
-              fontSize: 16,
-              fontWeight: 600,
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.5 : 1,
-              boxSizing: 'border-box',
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 32 32" fill="none" aria-hidden>
+        <div className="pollar-wallet-section">
+          <p className="pollar-wallet-label">Continue with a wallet</p>
+          <button type="button" disabled={loading} className="pollar-wallet-btn" onClick={onFreighterConnect}>
+            <svg className="pollar-wallet-icon" viewBox="0 0 32 32" fill="none" aria-hidden>
               <circle cx="16" cy="16" r="16" fill="#5E4AE3" />
               <path d="M10 16l4-6h8l-4 6 4 6h-8l-4-6z" fill="white" />
             </svg>
             Freighter
           </button>
-          <button
-            type="button"
-            disabled={loading}
-            onClick={onAlbedoConnect}
-            style={{
-              display: 'flex',
-              width: '100%',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 10,
-              borderRadius: 8,
-              border: `2px solid ${accentColor}`,
-              backgroundColor: `${accentColor}10`,
-              color: accentColor,
-              padding: '14px 16px',
-              fontSize: 16,
-              fontWeight: 600,
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.5 : 1,
-              boxSizing: 'border-box',
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 32 32" fill="none" aria-hidden>
+          <button type="button" disabled={loading} className="pollar-wallet-btn" onClick={onAlbedoConnect}>
+            <svg className="pollar-wallet-icon" viewBox="0 0 32 32" fill="none" aria-hidden>
               <circle cx="16" cy="16" r="16" fill="#F5A623" />
               <circle cx="16" cy="16" r="7" fill="white" />
               <circle cx="16" cy="16" r="3" fill="#F5A623" />
@@ -266,22 +186,13 @@ export function LoginModalTemplate({
         </div>
       )}
 
-      {/* Footer */}
-      <div
-        style={{
-          marginTop: 24,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 8,
-          borderTop: `1px solid ${border}`,
-          paddingTop: 24,
-        }}
-      >
-        <span style={{ fontSize: 14, color: textMuted }}>Protected by</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <img src="https://pollar.xyz/logo_polo.png" alt="Pollar" style={{ width: 18, height: 18 }} />
-          <span style={{ fontSize: 14, fontWeight: 700, color: textPrimary }}>Pollar</span>
+      {loginStateCode && <LoginStatusBanner code={loginStateCode} />}
+
+      <div className="pollar-footer">
+        <span className="pollar-footer-protected">Protected by</span>
+        <div className="pollar-footer-brand">
+          <img src="https://pollar.xyz/logo_polo.png" alt="Pollar" className="pollar-footer-logo" />
+          <span className="pollar-footer-name">Pollar</span>
         </div>
       </div>
     </div>

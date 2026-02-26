@@ -1,14 +1,12 @@
 'use client';
 
-import { PollarError, WalletType } from '@pollar/core';
-import { useState } from 'react';
+import { PollarError, STATE_VAR_CODES, StateLoginCodes, StateVar, WalletType } from '@pollar/core';
+import { useEffect, useState } from 'react';
 import { usePollar } from './context';
 import { LoginModalTemplate } from './login-modal-template';
-import type { PollarStyles } from './types';
 import './LoginModal.css';
 
 interface LoginModalProps {
-  open: boolean;
   onClose: () => void;
 }
 
@@ -27,15 +25,29 @@ function getErrorMessage(err: unknown): string {
   return 'Something went wrong. Please try again.';
 }
 
-export function LoginModal({ open, onClose }: LoginModalProps) {
+function isLoginCode(code: string): code is StateLoginCodes {
+  return (Object.values(STATE_VAR_CODES[StateVar.LOGIN]) as string[]).includes(code);
+}
+
+export function LoginModal({ onClose }: LoginModalProps) {
   const [email, setEmail] = useState('');
   const { getClient, styles, config } = usePollar();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loginStateCode, setLoginStateCode] = useState<StateLoginCodes | null>(null);
 
-  if (!open) return null;
+  useEffect(() => {
+    return getClient()?.onStateChange((state) => {
+      console.log({ state });
+      if (state.var === StateVar.LOGIN && isLoginCode(state.code)) {
+        setLoginStateCode(state.code);
+        console.log('login', state.code);
+      }
+      // setState(state);
+    });
+  }, []);
 
-  const { theme = 'light', accentColor = '#005DB4', logoBase64, emailEnabled, embeddedWallets, providers } = styles;
+  const { theme = 'light', accentColor = '#005DB4', logoUrl, emailEnabled, embeddedWallets, providers } = styles;
 
   function handleClose() {
     setEmail('');
@@ -86,31 +98,31 @@ export function LoginModal({ open, onClose }: LoginModalProps) {
 
   return (
     <div className="pollar-overlay" onClick={handleClose}>
-      <div onClick={(e) => e.stopPropagation()}>
-        <LoginModalTemplate
-          theme={theme}
-          accentColor={accentColor}
-          logoBase64={logoBase64 ?? null}
-          emailEnabled={!!emailEnabled}
-          embeddedWallets={!!embeddedWallets}
-          providers={{
-            google: !!providers?.google,
-            discord: !!providers?.discord,
-            x: !!providers?.x,
-            github: !!providers?.github,
-            apple: !!providers?.apple,
-          }}
-          appName={config.application?.name ?? 'Pollar'}
-          email={email}
-          loading={loading}
-          error={error}
-          onEmailChange={setEmail}
-          onEmailSubmit={handleEmail}
-          onSocialLogin={handleSocialLogin}
-          onFreighterConnect={() => handleWalletConnect(WalletType.FREIGHTER)}
-          onAlbedoConnect={() => handleWalletConnect(WalletType.ALBEDO)}
-        />
-      </div>
+      <style>{`@keyframes pollar-spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
+      <LoginModalTemplate
+        theme={theme}
+        accentColor={accentColor}
+        logoUrl={logoUrl ?? null}
+        emailEnabled={!!emailEnabled}
+        embeddedWallets={!!embeddedWallets}
+        providers={{
+          google: !!providers?.google,
+          discord: !!providers?.discord,
+          x: !!providers?.x,
+          github: !!providers?.github,
+          apple: !!providers?.apple,
+        }}
+        appName={config.application?.name ?? 'Pollar'}
+        email={email}
+        loading={loading}
+        error={error}
+        onEmailChange={setEmail}
+        onEmailSubmit={handleEmail}
+        onSocialLogin={handleSocialLogin}
+        onFreighterConnect={() => handleWalletConnect(WalletType.FREIGHTER)}
+        onAlbedoConnect={() => handleWalletConnect(WalletType.ALBEDO)}
+        loginStateCode={loginStateCode}
+      />
     </div>
   );
 }

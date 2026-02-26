@@ -1,28 +1,10 @@
-import type { AuthSession, PollarClientConfig, LoginOptions } from '@pollar/core';
+import { LoginOptions, PollarClientConfig, PollarLogin, pollarPaths } from '@pollar/core';
 
-export interface PollarApplication {
-  name?: string;
-}
+type ConfigResponse =
+  pollarPaths['/config']['get']['responses'][200]['content']['application/json'];
+export type PollarConfig = ConfigResponse['content'];
 
-export interface PollarConfig {
-  application?: PollarApplication;
-  styles?: PollarStyles;
-}
-
-export interface PollarStyles {
-  theme?: 'light' | 'dark';
-  accentColor?: string;
-  logoBase64?: string;
-  emailEnabled?: boolean;
-  embeddedWallets?: boolean;
-  providers?: {
-    google?: boolean;
-    discord?: boolean;
-    x?: boolean;
-    github?: boolean;
-    apple?: boolean;
-  };
-}
+export type PollarStyles = PollarConfig['styles'];
 
 export interface AuthProviderProps {
   config: PollarClientConfig;
@@ -30,7 +12,7 @@ export interface AuthProviderProps {
 }
 
 export interface AuthContextValue {
-  session: AuthSession | null;
+  session: PollarLogin | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (options: LoginOptions) => void;

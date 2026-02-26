@@ -8,5 +8,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   treeshake: true,
-  noExternal: ['@stellar/freighter-api'],
+  noExternal: ['@stellar/freighter-api', 'openapi-fetch'],
 });

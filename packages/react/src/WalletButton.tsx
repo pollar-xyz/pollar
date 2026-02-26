@@ -21,7 +21,7 @@ export function WalletButton() {
   const [copied, setCopied] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const { theme = 'light', accentColor = '#005DB4', logoBase64 } = styles;
+  const { theme = 'light', accentColor = '#005DB4' } = styles;
   const isDark = theme === 'dark';
   const dropdownBg = isDark ? '#18181b' : '#fff';
   const dropdownBorder = isDark ? '#3f3f46' : '#e4e4e7';

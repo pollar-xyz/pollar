@@ -7,8 +7,10 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "clean": "turbo clean",
-    "publish:core": "cd packages/core && npm publish --registry https://verdaccio.oscargauss.com/",
-    "publish:react": "cd packages/react && npm publish --registry https://verdaccio.oscargauss.com/"
+    "dev:push": "npm run build && cd packages/core && yalc publish && cd ../../packages/react && yalc publish",
+    "core:publish": "cd packages/core && npm publish --registry https://verdaccio.oscargauss.com/",
+    "react:publish": "cd packages/react && npm publish --registry https://verdaccio.oscargauss.com/",
+    "core:update-openapi": "curl -k https://sdk.api.local.pollar.xyz/openapi.json -o /tmp/openapi.json && npx openapi-typescript /tmp/openapi.json -o ./packages/core/src/api/schema.d.ts"
   },
   "devDependencies": {
     "prettier": "^3.4.0",

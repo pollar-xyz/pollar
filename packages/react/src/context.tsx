@@ -1,19 +1,27 @@
 'use client';
 
-import { PollarClient, PollarClientConfig, PollarState } from '@pollar/core';
+import { pollarApiClient, PollarClient, PollarClientConfig, PollarState } from '@pollar/core';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { LoginModal } from './LoginModal';
 import type { PollarConfig, PollarStyles } from './types';
 
-async function fetchRemoteConfig(
-  baseUrl: string,
-  apiKey: string,
-): Promise<{ content: PollarConfig }> {
-  const res = await fetch(`${baseUrl}/v1/config`, {
-    headers: { 'x-polo-api-key': apiKey },
-  });
-  if (!res.ok) return { content: {} };
-  return (await res.json()) as { content: PollarConfig };
+const emptyResponse = {
+  application: {
+    name: '',
+  },
+  styles: {},
+};
+
+async function fetchRemoteConfig(): Promise<PollarConfig> {
+  try {
+    const { data, error } = await pollarApiClient.GET(`/config`);
+    if (!data || error) {
+      return emptyResponse;
+    }
+    return data.content;
+  } catch {
+    return emptyResponse;
+  }
 }
 
 interface PollarContextValue {
@@ -37,7 +45,7 @@ interface PollarProviderProps {
 export function PollarProvider({ config, styles: propStyles, children }: PollarProviderProps) {
   const clientRef = useRef<PollarClient | null>(null);
   const [state, setState] = useState<PollarState | null>(null);
-  const [remoteConfig, setRemoteConfig] = useState<PollarConfig>({});
+  const [remoteConfig, setRemoteConfig] = useState<PollarConfig>(emptyResponse);
   const [styles, setStyles] = useState<PollarStyles>(propStyles ?? {});
 
   if (clientRef.current === null) {
@@ -46,24 +54,24 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
 
   useEffect(() => {
     return clientRef.current?.onStateChange((state) => {
-      setState(state);
+      console.log({ state });
+      // setState(state);
     });
   }, []);
 
   useEffect(() => {
-    fetchRemoteConfig(config.baseUrl, config.apiKey)
+    fetchRemoteConfig()
       .then((fetched) => {
-        setRemoteConfig(fetched.content);
+        setRemoteConfig(fetched);
         setStyles({
-          ...fetched.content.styles,
+          ...fetched.styles,
           ...propStyles,
-          providers: { ...fetched.content.styles?.providers, ...propStyles?.providers },
+          providers: { ...fetched.styles?.providers, ...propStyles?.providers },
         });
       })
       .catch(() => {
         setStyles(propStyles ?? {});
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -84,7 +92,7 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
   return (
     <PollarContext.Provider value={contextValue}>
       {children}
-      <LoginModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      {modalOpen && <LoginModal onClose={() => setModalOpen(false)} />}
     </PollarContext.Provider>
   );
 }
