@@ -16,7 +16,6 @@ export type LoginDeps = {
   api: PollarApiClient;
   basePath: string;
   apiKey: string;
-  clientId: string;
   signal: AbortSignal;
   emitState: (
     state: PollarStateEntry['var'],
@@ -53,7 +52,7 @@ const emitResponse = (
 };
 
 export async function login(options: LoginOptions, deps: LoginDeps): Promise<void> {
-  const { api, basePath, apiKey, clientId, signal, emitState, storeSession, clearSession } = deps;
+  const { api, basePath, apiKey, signal, emitState, storeSession, clearSession } = deps;
 
   emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].CREATE_SESSION_START, 'info', StateStatus.LOADING);
   const createSessionResponse = await api.POST('/auth/session', { signal });
@@ -91,7 +90,6 @@ export async function login(options: LoginOptions, deps: LoginDeps): Promise<voi
       ) {
         return;
       }
-
       break;
     }
     case 'google':
@@ -104,24 +102,57 @@ export async function login(options: LoginOptions, deps: LoginDeps): Promise<voi
       break;
     }
     case 'wallet': {
-      const adapter = options.type === WalletType.FREIGHTER ? new FreighterAdapter() : new AlbedoAdapter();
+      try {
+        emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].WALLET_AUTH_START, 'info', StateStatus.LOADING, {
+          adapter: options.type,
+        });
+        const adapter = options.type === WalletType.FREIGHTER ? new FreighterAdapter() : new AlbedoAdapter();
 
-      const available = await adapter.isAvailable();
-      if (!available) {
-        emitState(
-          StateVar.LOGIN,
-          options.type === WalletType.FREIGHTER
-            ? STATE_VAR_CODES[StateVar.LOGIN].WALLET_AUTH_FREIGHTER_NOT_INSTALLED
-            : STATE_VAR_CODES[StateVar.LOGIN].WALLET_AUTH_ALBEDO_NOT_INSTALLED,
-          'info',
-          StateStatus.LOADING,
-          {
-            type: options.type,
-          },
-        );
+        const available = await adapter.isAvailable();
+        if (!available) {
+          emitState(
+            StateVar.LOGIN,
+            options.type === WalletType.FREIGHTER
+              ? STATE_VAR_CODES[StateVar.LOGIN].WALLET_AUTH_FREIGHTER_NOT_INSTALLED
+              : STATE_VAR_CODES[StateVar.LOGIN].WALLET_AUTH_ALBEDO_NOT_INSTALLED,
+            'info',
+            StateStatus.LOADING,
+            {
+              type: options.type,
+            },
+          );
+        }
+
+        const { publicKey } = await adapter.connect();
+        emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].WALLET_AUTH_CONNECTED, 'info', StateStatus.LOADING, {
+          adapter: options.type,
+          publicKey,
+        });
+        emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].WALLET_AUTH_LOGIN_START, 'info', StateStatus.LOADING, {
+          adapter: options.type,
+          publicKey,
+        });
+        const emailRes = await api.POST(`/auth/wallet`, {
+          body: { clientSessionId, walletAddress: publicKey },
+          signal,
+        });
+
+        if (
+          !emitResponse(
+            emailRes,
+            STATE_VAR_CODES[StateVar.LOGIN].WALLET_AUTH_LOGIN_START_SUCCESS,
+            STATE_VAR_CODES[StateVar.LOGIN].WALLET_AUTH_LOGIN_START_ERROR,
+            emitState,
+          )
+        ) {
+          return;
+        }
+      } catch (error) {
+        emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].WALLET_AUTH_ERROR, 'error', StateStatus.ERROR, {
+          clientSessionId,
+        });
       }
-
-      const { publicKey } = await adapter.connect();
+      break;
     }
   }
 

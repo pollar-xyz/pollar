@@ -81,6 +81,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/github": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Redirect to GitHub OAuth
+         * @description Redirects the user to the GitHub OAuth consent screen.
+         */
+        get: operations["getAuthGithub"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/email": {
         parameters: {
             query?: never;
@@ -115,7 +135,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth/login-wallet": {
+    "/auth/wallet": {
         parameters: {
             query?: never;
             header?: never;
@@ -125,7 +145,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Authenticate with a Stellar wallet */
-        post: operations["postAuthLoginWallet"];
+        post: operations["postAuthWallet"];
         delete?: never;
         options?: never;
         head?: never;
@@ -421,6 +441,80 @@ export interface operations {
             };
         };
     };
+    getAuthGithub: {
+        parameters: {
+            query: {
+                api_key: string;
+                client_session_id: string;
+                redirect_uri: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to GitHub OAuth */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
     postAuthEmail: {
         parameters: {
             query?: never;
@@ -597,7 +691,7 @@ export interface operations {
             };
         };
     };
-    postAuthLoginWallet: {
+    postAuthWallet: {
         parameters: {
             query?: never;
             header?: never;

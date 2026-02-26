@@ -97,7 +97,6 @@ export class PollarClient {
       api: this._api,
       basePath: this.basePath,
       apiKey: this.apiKey,
-      clientId: this.id,
       signal: controller.signal,
       emitState: this._emitState.bind(this),
       storeSession: this._storeSession.bind(this),
