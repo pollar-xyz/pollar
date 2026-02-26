@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health check */
+        get: operations["getHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/session": {
         parameters: {
             query?: never;
@@ -187,6 +204,34 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Service is healthy */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: true;
+                        content: {
+                            /** @constant */
+                            status: "ok";
+                            version: string;
+                        };
+                    };
+                };
+            };
+        };
+    };
     postAuthSession: {
         parameters: {
             query?: never;
@@ -215,6 +260,32 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -256,32 +327,21 @@ export interface operations {
                             first_name: string;
                             last_name: string;
                             avatar: string;
-                            email: {
-                                address: string;
-                            } | null;
-                            google: {
-                                id: string;
-                            } | null;
-                            github: {
-                                id: string;
-                            } | null;
-                            wallet: {
-                                address: string;
-                            } | null;
+                            providers: {
+                                email: {
+                                    address: string;
+                                } | null;
+                                google: {
+                                    id: string;
+                                } | null;
+                                github: {
+                                    id: string;
+                                } | null;
+                                wallet: {
+                                    address: string;
+                                } | null;
+                            };
                         };
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        error: string;
                     };
                 };
             };
@@ -309,6 +369,45 @@ export interface operations {
             };
             /** @description Validation error */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -383,6 +482,32 @@ export interface operations {
                     };
                 };
             };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
         };
     };
     postAuthEmailVerifyCode: {
@@ -433,6 +558,32 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -506,6 +657,32 @@ export interface operations {
                     };
                 };
             };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
         };
     };
     postAuthLogin: {
@@ -555,18 +732,20 @@ export interface operations {
                                 first_name: string;
                                 last_name: string;
                                 avatar: string;
-                                email: {
-                                    address: string;
-                                } | null;
-                                google: {
-                                    id: string;
-                                } | null;
-                                github: {
-                                    id: string;
-                                } | null;
-                                wallet: {
-                                    address: string;
-                                } | null;
+                                providers: {
+                                    email: {
+                                        address: string;
+                                    } | null;
+                                    google: {
+                                        id: string;
+                                    } | null;
+                                    github: {
+                                        id: string;
+                                    } | null;
+                                    wallet: {
+                                        address: string;
+                                    } | null;
+                                };
                             };
                         };
                     };
@@ -587,6 +766,32 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -625,7 +830,7 @@ export interface operations {
                             styles: {
                                 theme?: string;
                                 accentColor?: string;
-                                logoUrl?: string | null;
+                                logoUrl?: string;
                                 emailEnabled?: boolean;
                                 embeddedWallets?: boolean;
                                 providers?: {
@@ -642,6 +847,32 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

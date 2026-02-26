@@ -204,8 +204,13 @@ export class PollarClient {
       [StateVar.LOGIN]: [],
       [StateVar.WALLET_ADDRESS]: [],
     };
-    this._emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].NONE, 'info', StateStatus.NONE);
-    this._emitState(StateVar.WALLET_ADDRESS, STATE_VAR_CODES[StateVar.WALLET_ADDRESS].EMPTY_ADDRESS, 'info', StateStatus.NONE);
+    this._emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].LOGOUT, 'info', StateStatus.NONE);
+    this._emitState(
+      StateVar.WALLET_ADDRESS,
+      STATE_VAR_CODES[StateVar.WALLET_ADDRESS].REMOVED_ADDRESS,
+      'info',
+      StateStatus.NONE,
+    );
   }
 
   private _emitState(

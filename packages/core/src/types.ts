@@ -63,7 +63,7 @@ export type StateVar = (typeof StateVar)[keyof typeof StateVar];
 
 export const STATE_VAR_CODES = {
   [StateVar.LOGIN]: {
-    NONE: 'NONE',
+    LOGOUT: 'LOGOUT',
     CREATE_SESSION_START: 'CREATE_SESSION_START',
     CREATE_SESSION_ERROR: 'CREATE_SESSION_ERROR',
     CREATE_SESSION_SUCCESS: 'CREATE_SESSION_SUCCESS',
@@ -85,7 +85,7 @@ export const STATE_VAR_CODES = {
     ERROR_UNKNOWN: 'ERROR_UNKNOWN',
   },
   [StateVar.WALLET_ADDRESS]: {
-    EMPTY_ADDRESS: 'EMPTY_ADDRESS',
+    REMOVED_ADDRESS: 'REMOVED_ADDRESS',
     UPDATED_ADDRESS: 'UPDATED_ADDRESS',
   },
 } as const;

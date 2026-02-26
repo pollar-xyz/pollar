@@ -54,7 +54,6 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
   const [state, setState] = useState<PollarLoginState | null>(null);
   const [remoteConfig, setRemoteConfig] = useState<PollarConfig>(emptyResponse);
   const [styles, setStyles] = useState<PollarStyles>(propStyles ?? {});
-  console.log({ state });
 
   useEffect(() => {
     return pollarClient.onStateChange((stateEntry) => {
@@ -62,6 +61,13 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
         if (stateEntry.code === STATE_VAR_CODES[StateVar.WALLET_ADDRESS].UPDATED_ADDRESS && isValidSession(stateEntry.data)) {
           setState(stateEntry.data);
         }
+      }
+      if (
+        (stateEntry.var === StateVar.WALLET_ADDRESS &&
+          stateEntry.code === STATE_VAR_CODES[StateVar.WALLET_ADDRESS].REMOVED_ADDRESS) ||
+        (stateEntry.var === StateVar.LOGIN && stateEntry.code === STATE_VAR_CODES[StateVar.LOGIN].LOGOUT)
+      ) {
+        setState(null);
       }
     });
   }, []);

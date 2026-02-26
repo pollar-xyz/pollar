@@ -9,6 +9,5 @@ dist
 .idea
 
 #
-stellar-wallet-kit
-
+/libs/
 *.tgz

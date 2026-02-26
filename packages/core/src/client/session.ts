@@ -15,14 +15,18 @@ export function isValidSession(value: unknown): value is PollarLoginState {
     return false;
   }
 
-  const user = s['user'];
-  if (typeof user !== 'object' || user === null) {
-    console.warn('[PollarClient][isValidSession] user is missing or not an object:', user);
+  if (typeof s['clientSessionId'] !== 'string' || s['clientSessionId'] === '') {
+    console.warn('[PollarClient][isValidSession] clientSessionId is missing or empty:', s['clientSessionId']);
     return false;
   }
-  const u = user as Record<string, unknown>;
-  if (typeof u['id'] !== 'string' || u['id'] === '') {
-    console.warn('[PollarClient][isValidSession] user.id is missing or empty:', u['id']);
+
+  if (s['userId'] !== null && typeof s['userId'] !== 'string') {
+    console.warn('[PollarClient][isValidSession] userId is not a string or null:', s['userId']);
+    return false;
+  }
+
+  if (typeof s['status'] !== 'string') {
+    console.warn('[PollarClient][isValidSession] status is not a string:', s['status']);
     return false;
   }
 
@@ -45,14 +49,29 @@ export function isValidSession(value: unknown): value is PollarLoginState {
     return false;
   }
 
+  const user = s['user'];
+  if (typeof user !== 'object' || user === null) {
+    console.warn('[PollarClient][isValidSession] user is missing or not an object:', user);
+    return false;
+  }
+  const u = user as Record<string, unknown>;
+  if (u['id'] !== undefined && typeof u['id'] !== 'string') {
+    console.warn('[PollarClient][isValidSession] user.id is not a string:', u['id']);
+    return false;
+  }
+  if (typeof u['ready'] !== 'boolean') {
+    console.warn('[PollarClient][isValidSession] user.ready is not a boolean:', u['ready']);
+    return false;
+  }
+
   const wallet = s['wallet'];
   if (typeof wallet !== 'object' || wallet === null) {
     console.warn('[PollarClient][isValidSession] wallet is missing or not an object:', wallet);
     return false;
   }
   const w = wallet as Record<string, unknown>;
-  if (typeof w['publicKey'] !== 'string' || w['publicKey'] === '') {
-    console.warn('[PollarClient][isValidSession] wallet.publicKey is missing or not a string:', w['publicKey']);
+  if (w['publicKey'] !== null && typeof w['publicKey'] !== 'string') {
+    console.warn('[PollarClient][isValidSession] wallet.publicKey is not a string or null:', w['publicKey']);
     return false;
   }
 
@@ -70,10 +89,25 @@ export function isValidSession(value: unknown): value is PollarLoginState {
     }
   }
 
-  for (const field of ['email', 'google', 'github', 'wallet'] as const) {
-    const v = d[field];
-    if (v !== null && (typeof v !== 'object' || v === null)) {
-      console.warn(`[PollarClient][isValidSession] data.${field} is neither null nor an object:`, v);
+  const providers = d['providers'];
+  if (typeof providers !== 'object' || providers === null) {
+    console.warn('[PollarClient][isValidSession] data.providers is missing or not an object:', providers);
+    return false;
+  }
+  const p = providers as Record<string, unknown>;
+
+  const providerInnerField = { email: 'address', google: 'id', github: 'id', wallet: 'address' } as const;
+
+  for (const [field, innerField] of Object.entries(providerInnerField) as [keyof typeof providerInnerField, string][]) {
+    const v = p[field];
+    if (v === null) continue;
+    if (typeof v !== 'object') {
+      console.warn(`[PollarClient][isValidSession] data.providers.${field} is not an object or null:`, v);
+      return false;
+    }
+    const vObj = v as Record<string, unknown>;
+    if (typeof vObj[innerField] !== 'string' || vObj[innerField] === '') {
+      console.warn(`[PollarClient][isValidSession] data.providers.${field}.${innerField} is not a string:`, vObj[innerField]);
       return false;
     }
   }

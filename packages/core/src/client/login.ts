@@ -151,7 +151,7 @@ export async function login(options: LoginOptions, deps: LoginDeps): Promise<voi
     emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_SUCCESS, 'info', StateStatus.SUCCESS);
     storeSession(data.content);
   } else {
-    clearSession();
     emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_ERROR, 'error', StateStatus.ERROR, { error, data });
+    clearSession();
   }
 }
