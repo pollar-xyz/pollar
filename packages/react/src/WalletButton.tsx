@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { LOGO_POLLAR } from './constants';
 import { usePollar } from './context';
 import './WalletButton.css';
 
@@ -9,10 +10,8 @@ function cropWallet(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-const POLLAR_LOGO = 'https://pollar.xyz/logo_polo.png';
-
 function ButtonLogo() {
-  return <img src={POLLAR_LOGO} alt="Pollar" width={22} height={22} className="wallet-btn-logo" />;
+  return <img src={LOGO_POLLAR} alt="Pollar" width={22} height={22} className="wallet-btn-logo" />;
 }
 
 export function WalletButton() {

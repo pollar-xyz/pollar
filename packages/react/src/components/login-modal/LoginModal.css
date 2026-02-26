@@ -93,12 +93,15 @@
 }
 
 .pollar-submit-btn {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     margin-top: 0.75rem;
     width: 100%;
+    height: var(--pollar-buttons-height, 44px);
     border: none;
-    border-radius: 0.5rem;
-    padding: 0.875rem;
+    border-radius: var(--pollar-buttons-border-radius, 0.5rem);
+    padding: 0 0.875rem;
     font-size: 1rem;
     font-weight: 700;
     color: #fff;
@@ -167,13 +170,14 @@
 .pollar-social-btn {
     display: flex;
     width: 100%;
+    height: var(--pollar-buttons-height, 44px);
     align-items: center;
     justify-content: center;
     gap: 0.75rem;
-    border-radius: 0.5rem;
+    border-radius: var(--pollar-buttons-border-radius, 0.5rem);
     border: 1px solid var(--pollar-border);
     background-color: var(--pollar-input-bg);
-    padding: 0.875rem 1rem;
+    padding: 0 1rem;
     cursor: pointer;
     transition: all 0.15s;
     box-sizing: border-box;
@@ -219,14 +223,15 @@
 .pollar-wallet-btn {
     display: flex;
     width: 100%;
+    height: var(--pollar-buttons-height, 44px);
     align-items: center;
     justify-content: center;
     gap: 0.625rem;
-    border-radius: 0.5rem;
-    border: 2px solid var(--pollar-accent);
+    border-radius: var(--pollar-buttons-border-radius, 0.5rem);
+    border: 1px solid var(--pollar-accent);
     background-color: color-mix(in srgb, var(--pollar-accent) 6%, transparent);
     color: var(--pollar-accent);
-    padding: 0.875rem 1rem;
+    padding: 0 1rem;
     font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
@@ -315,7 +320,7 @@
 .pollar-status-cancel {
     margin-left: 4px;
     padding: 2px 8px;
-    border-radius: 4px;
+    border-radius: var(--pollar-buttons-border-radius, 4px);
     border: 1px solid currentColor;
     background: transparent;
     color: inherit;

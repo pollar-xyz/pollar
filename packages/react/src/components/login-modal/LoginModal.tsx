@@ -87,7 +87,6 @@ export function LoginModal({ onClose }: LoginModalProps) {
 
   return (
     <div className="pollar-overlay" onClick={handleClose}>
-      <style>{`@keyframes pollar-spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
       <LoginModalTemplate
         theme={theme}
         accentColor={accentColor}

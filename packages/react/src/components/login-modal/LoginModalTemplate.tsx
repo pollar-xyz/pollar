@@ -2,7 +2,9 @@
 
 import { StateLoginCodes, StateStatus } from '@pollar/core';
 import { RefObject } from 'react';
+import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
 import { EmailCodeInput } from './EmailCodeInput';
+import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
 import { LoginStatusBanner } from './LoginStatusBanner';
 
@@ -62,6 +64,8 @@ export function LoginModalTemplate({
 
   const cssVars = {
     '--pollar-accent': accentColor,
+    '--pollar-buttons-border-radius': '6px',
+    '--pollar-buttons-height': '44px',
     '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
     '--pollar-border': isDark ? '#374151' : '#e5e7eb',
     '--pollar-text': isDark ? '#ffffff' : '#111827',
@@ -78,7 +82,7 @@ export function LoginModalTemplate({
     <div className="pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
       <div className="pollar-header">
         <div className="pollar-logo-wrap">
-          <img src={logoUrl ?? 'https://pollar.xyz/logo_polo.png'} alt="Logo" className="pollar-logo" />
+          <img src={logoUrl ?? LOGO_POLLAR} alt="Logo" className="pollar-logo" />
         </div>
         <h2 className="pollar-title">{appName}</h2>
         <p className="pollar-subtitle">Log in or sign up</p>
@@ -121,6 +125,9 @@ export function LoginModalTemplate({
               {enabledSocial.some(([key]) => key === 'google') && (
                 <GoogleButton disabled={isLoading} onClick={() => onSocialLogin?.('google')} />
               )}
+              {enabledSocial.some(([key]) => key === 'github') && (
+                <GithubButton disabled={isLoading} onClick={() => onSocialLogin?.('github')} />
+              )}
             </div>
           )}
 
@@ -128,18 +135,11 @@ export function LoginModalTemplate({
             <div className="pollar-wallet-section">
               <p className="pollar-wallet-label">Continue with a wallet</p>
               <button type="button" disabled={isLoading} className="pollar-wallet-btn" onClick={onFreighterConnect}>
-                <svg className="pollar-wallet-icon" viewBox="0 0 32 32" fill="none" aria-hidden>
-                  <circle cx="16" cy="16" r="16" fill="#5E4AE3" />
-                  <path d="M10 16l4-6h8l-4 6 4 6h-8l-4-6z" fill="white" />
-                </svg>
+                <img src={LOGO_FREIGHTER} alt="Freighter" className="pollar-wallet-icon" />
                 Freighter
               </button>
               <button type="button" disabled={isLoading} className="pollar-wallet-btn" onClick={onAlbedoConnect}>
-                <svg className="pollar-wallet-icon" viewBox="0 0 32 32" fill="none" aria-hidden>
-                  <circle cx="16" cy="16" r="16" fill="#F5A623" />
-                  <circle cx="16" cy="16" r="7" fill="white" />
-                  <circle cx="16" cy="16" r="3" fill="#F5A623" />
-                </svg>
+                <img src={LOGO_ALBEDO} alt="Albedo" className="pollar-wallet-icon" />
                 Albedo
               </button>
             </div>
@@ -152,7 +152,7 @@ export function LoginModalTemplate({
       <div className="pollar-footer">
         <span className="pollar-footer-protected">Protected by</span>
         <div className="pollar-footer-brand">
-          <img src="https://pollar.xyz/logo_polo.png" alt="Pollar" className="pollar-footer-logo" />
+          <img src={LOGO_POLLAR} alt="Pollar" className="pollar-footer-logo" />
           <span className="pollar-footer-name">Pollar</span>
         </div>
       </div>
