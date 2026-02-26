@@ -28,7 +28,7 @@ export class PollarClient {
   readonly basePath: string;
 
   private readonly _api: PollarApiClient;
-  private _session: PollarLoginState | null;
+  private _session: PollarLoginState | null = null;
   private _status: Status = 'unauthenticated';
   private _stateListeners = new Set<(log: PollarStateEntry) => void>();
   private _state: { [key in StateVar]: PollarStateEntry[] } = {
@@ -56,16 +56,13 @@ export class PollarClient {
 
     console.info(`[PollarClient] Initialized — endpoint: ${this.basePath}`);
 
-    this._session = readStorage();
-    if (this._session) {
-      console.info('[PollarClient] Session restored from storage');
-    }
+    this._readStore();
 
     window.addEventListener('storage', (e: StorageEvent) => {
       if (e.key === STORAGE_KEY) {
         const prev = this._session;
-        this._session = readStorage();
         console.info(`[PollarClient] Storage event — session ${this._session ? 'updated' : prev ? 'cleared' : 'unchanged'}`);
+        this._readStore();
       }
     });
   }
@@ -117,7 +114,11 @@ export class PollarClient {
 
   onStateChange(cb: (state: PollarStateEntry) => void): () => void {
     this._stateListeners.add(cb);
-    // cb(this.getState());
+    for (const [, stateEntry] of Object.entries(this._state)) {
+      if (stateEntry.length >= 1) {
+        cb(stateEntry.at(-1)!);
+      }
+    }
     return () => this._stateListeners.delete(cb);
   }
 
@@ -162,6 +163,28 @@ export class PollarClient {
     this._clearSession();
   }
 
+  private _readStore() {
+    this._session = readStorage();
+    if (this._session) {
+      this._emitState(
+        StateVar.WALLET_ADDRESS,
+        STATE_VAR_CODES[StateVar.WALLET_ADDRESS].UPDATED_ADDRESS,
+        'info',
+        StateStatus.SUCCESS,
+        this._session,
+      );
+      console.info('[PollarClient] Session restored from storage');
+    } else {
+      this._emitState(
+        StateVar.WALLET_ADDRESS,
+        STATE_VAR_CODES[StateVar.WALLET_ADDRESS].REMOVED_ADDRESS,
+        'info',
+        StateStatus.SUCCESS,
+      );
+      console.info('[PollarClient] Session NO restored from storage');
+    }
+  }
+
   private _storeSession(session: PollarLoginState): void {
     console.info(`[PollarClient] Session stored — user: ${session.userId ?? 'anonymous'}`);
     this._session = session;
@@ -171,7 +194,7 @@ export class PollarClient {
       STATE_VAR_CODES[StateVar.WALLET_ADDRESS].UPDATED_ADDRESS,
       'info',
       StateStatus.SUCCESS,
-      session,
+      this._session,
     );
   }
 
