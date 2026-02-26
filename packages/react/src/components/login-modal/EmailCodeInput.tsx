@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react';
 
 interface EmailCodeInputProps {
+  email?: string;
   onSubmit: (code: string) => void;
 }
 
-export function EmailCodeInput({ onSubmit }: EmailCodeInputProps) {
+export function EmailCodeInput({ email, onSubmit }: EmailCodeInputProps) {
   const [digits, setDigits] = useState(['', '', '', '', '', '']);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -37,7 +38,10 @@ export function EmailCodeInput({ onSubmit }: EmailCodeInputProps) {
 
   return (
     <div className="pollar-code-section">
-      <p className="pollar-code-label">Enter the 6-digit code sent to your email</p>
+      <p className="pollar-code-label">
+        Enter the 6-digit code sent to{' '}
+        {email ? <strong>{email}</strong> : 'your email'}
+      </p>
       <div className="pollar-code-inputs">
         {digits.map((digit, i) => (
           <input

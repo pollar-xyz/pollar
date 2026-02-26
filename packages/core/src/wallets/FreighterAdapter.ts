@@ -70,10 +70,7 @@ export class FreighterAdapter implements WalletAdapter {
     return getNetwork();
   }
 
-  async signTransaction(
-    xdr: string,
-    options?: SignTransactionOptions,
-  ): Promise<SignTransactionResponse> {
+  async signTransaction(xdr: string, options?: SignTransactionOptions): Promise<SignTransactionResponse> {
     const result = await signTransaction(xdr, {
       network: options?.network,
       networkPassphrase: options?.networkPassphrase,
@@ -85,10 +82,7 @@ export class FreighterAdapter implements WalletAdapter {
     return { signedTxXdr: result };
   }
 
-  async signAuthEntry(
-    entryXdr: string,
-    options?: SignAuthEntryOptions,
-  ): Promise<SignAuthEntryResponse> {
+  async signAuthEntry(entryXdr: string, options?: SignAuthEntryOptions): Promise<SignAuthEntryResponse> {
     const result = await signAuthEntry(entryXdr, { accountToSign: options?.accountToSign });
     if (!result || typeof result !== 'string') {
       throw new Error('Invalid response from Freighter');

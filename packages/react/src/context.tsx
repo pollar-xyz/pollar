@@ -2,6 +2,7 @@
 
 import {
   isValidSession,
+  LoginOptions,
   PollarApiClient,
   PollarClient,
   PollarClientConfig,
@@ -95,6 +96,8 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
       getClient: () => pollarClient,
       openLoginModal: () => setModalOpen(true),
       isAuthenticated: pollarClient.isAuthenticated(),
+      login: (options: LoginOptions) => pollarClient.login(options),
+      logout: () => pollarClient.logout(),
       config: remoteConfig,
       styles,
     }),

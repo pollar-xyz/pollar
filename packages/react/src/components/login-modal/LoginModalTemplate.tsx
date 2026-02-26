@@ -89,7 +89,7 @@ export function LoginModalTemplate({
       </div>
 
       {awaitingEmailCode ? (
-        <EmailCodeInput onSubmit={onCodeSubmit ?? (() => {})} />
+        <EmailCodeInput email={email} onSubmit={onCodeSubmit ?? (() => {})} />
       ) : (
         <>
           {error && <div className="pollar-error">{error}</div>}

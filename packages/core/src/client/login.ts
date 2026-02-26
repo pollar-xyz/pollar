@@ -12,6 +12,19 @@ import { AlbedoAdapter, FreighterAdapter, WalletType } from '../wallets';
 import { isValidSession } from './session';
 import { streamUntilFound } from './stream';
 
+function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      if (signal.aborted) {
+        reject(new DOMException('Aborted', 'AbortError'));
+        return;
+      }
+      signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+    }),
+  ]);
+}
+
 export type LoginDeps = {
   api: PollarApiClient;
   basePath: string;
@@ -108,7 +121,7 @@ export async function login(options: LoginOptions, deps: LoginDeps): Promise<voi
         });
         const adapter = options.type === WalletType.FREIGHTER ? new FreighterAdapter() : new AlbedoAdapter();
 
-        const available = await adapter.isAvailable();
+        const available = await withSignal(adapter.isAvailable(), signal);
         if (!available) {
           emitState(
             StateVar.LOGIN,
@@ -123,7 +136,7 @@ export async function login(options: LoginOptions, deps: LoginDeps): Promise<voi
           );
         }
 
-        const { publicKey } = await adapter.connect();
+        const { publicKey } = await withSignal(adapter.connect(), signal);
         emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].WALLET_AUTH_CONNECTED, 'info', StateStatus.LOADING, {
           adapter: options.type,
           publicKey,
