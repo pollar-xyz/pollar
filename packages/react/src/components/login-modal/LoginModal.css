@@ -384,6 +384,12 @@
     color: var(--pollar-text);
 }
 
+.pollar-footer-version {
+    font-size: 0.7rem;
+    color: var(--pollar-muted);
+    opacity: 0.6;
+}
+
 /* ---- Overlay ---- */
 .pollar-overlay {
     position: fixed;

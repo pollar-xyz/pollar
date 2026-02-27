@@ -1,4 +1,4 @@
-import { pollarPaths } from './index';
+import { pollarPaths, StellarNetwork } from './index';
 import { WalletType } from './wallets';
 
 export interface AuthCredentials {
@@ -24,6 +24,7 @@ type ConfigResponse = pollarPaths['/auth/login']['post']['responses'][200]['cont
 export type PollarLoginState = ConfigResponse['content'];
 
 export interface PollarClientConfig {
+  stellarNetwork?: StellarNetwork;
   baseUrl?: string;
   apiKey: string;
 }
@@ -46,23 +47,23 @@ export type Status = 'unauthenticated' | 'restored' | 'authenticated' | 'awaitin
 
 export interface PollarState {
   session: PollarLoginState | null;
-  status: Status;
 }
 
-export type LoginOptions =
+export type PollarLoginOptions =
   | { provider: 'google' }
   | { provider: 'github' }
   | { provider: 'email'; email: string }
   | { provider: 'wallet'; type: WalletType };
 
-export const StateVar = {
+export const PollarStateVar = {
   WALLET_ADDRESS: 'WALLET_ADDRESS',
   LOGIN: 'LOGIN',
 } as const;
-export type StateVar = (typeof StateVar)[keyof typeof StateVar];
+export type PollarStateVar = (typeof PollarStateVar)[keyof typeof PollarStateVar];
 
 export const STATE_VAR_CODES = {
-  [StateVar.LOGIN]: {
+  [PollarStateVar.LOGIN]: {
+    NONE: 'NONE',
     LOGOUT: 'LOGOUT',
     CREATE_SESSION_START: 'CREATE_SESSION_START',
     CREATE_SESSION_ERROR: 'CREATE_SESSION_ERROR',
@@ -89,17 +90,18 @@ export const STATE_VAR_CODES = {
     ERROR_ABORTED: 'ABORTED',
     ERROR_UNKNOWN: 'ERROR_UNKNOWN',
   },
-  [StateVar.WALLET_ADDRESS]: {
+  [PollarStateVar.WALLET_ADDRESS]: {
+    NONE: 'NONE',
     REMOVED_ADDRESS: 'REMOVED_ADDRESS',
     UPDATED_ADDRESS: 'UPDATED_ADDRESS',
   },
 } as const;
 
-type LoginCodes = (typeof STATE_VAR_CODES)[typeof StateVar.LOGIN];
-export type StateLoginCodes = LoginCodes[keyof (typeof STATE_VAR_CODES)[typeof StateVar.LOGIN]];
+type LoginCodes = (typeof STATE_VAR_CODES)[typeof PollarStateVar.LOGIN];
+export type StateLoginCodes = LoginCodes[keyof (typeof STATE_VAR_CODES)[typeof PollarStateVar.LOGIN]];
 
-type WalletAddressCodes = (typeof STATE_VAR_CODES)[typeof StateVar.WALLET_ADDRESS];
-export type StateWalletAddressCodes = WalletAddressCodes[keyof (typeof STATE_VAR_CODES)[typeof StateVar.WALLET_ADDRESS]];
+type WalletAddressCodes = (typeof STATE_VAR_CODES)[typeof PollarStateVar.WALLET_ADDRESS];
+export type StateWalletAddressCodes = WalletAddressCodes[keyof (typeof STATE_VAR_CODES)[typeof PollarStateVar.WALLET_ADDRESS]];
 
 export type StateVarCodes = StateLoginCodes | StateWalletAddressCodes;
 
@@ -112,7 +114,7 @@ export const StateStatus = {
 export type StateStatus = (typeof StateStatus)[keyof typeof StateStatus];
 
 export interface PollarStateEntry {
-  var: StateVar;
+  var: PollarStateVar;
   code: StateVarCodes;
   status: StateStatus;
   level: 'info' | 'warn' | 'error';

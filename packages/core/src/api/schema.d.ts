@@ -212,6 +212,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tx/build": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Build unsigned payment transaction
+         * @description Builds an unsigned XDR for a native XLM payment. Client must sign and submit via POST /tx/submit.
+         */
+        post: operations["postTxBuild"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tx/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit signed transaction
+         * @description Submits a signed transaction envelope to the Stellar network.
+         */
+        post: operations["postTxSubmit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tx/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get transaction status
+         * @description Returns transaction status by hash. PENDING = not yet confirmed in Horizon.
+         */
+        get: operations["getTxStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -240,6 +300,8 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @enum {string} */
+                        code: "APPLICATION_DELETED" | "API_KEY_DELETED" | "EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_VERIFIED" | "SDK_WALLET_AUTHENTICATED" | "SDK_SESSION_CREATED" | "SDK_LOGIN_SUCCESS" | "HUB_API_HEALTH_OK" | "HUB_AUTH_CODE_SENT" | "HUB_AUTH_CODE_VERIFIED" | "HUB_AUTH_ME" | "HUB_API_KEY_LIST" | "HUB_API_KEY_CREATED" | "HUB_API_KEY_UPDATED" | "HUB_APPLICATION_LIST" | "HUB_APPLICATION_FOUND" | "HUB_APPLICATION_CREATED" | "HUB_APPLICATION_UPDATED" | "HUB_APPLICATION_WALLET_FUNDED" | "HUB_APPLICATION_USER_WALLET_FUNDED" | "HUB_APPLICATION_WALLET_CREATED" | "HUB_APPLICATION_WALLET_EXISTS" | "HUB_APPLICATION_WALLETS" | "HUB_APPLICATION_SDK_USERS" | "SDK_API_HEALTH_OK" | "SDK_APPLICATION_CONFIG" | "WALLET_SERVICE_HEALTH_OK" | "WALLET_SERVICE_WALLET_CREATED" | "WALLET_SERVICE_WALLET_FOUND" | "WALLET_SERVICE_WALLET_FUNDED" | "WALLET_SERVICE_PAYMENT_IDEMPOTENT" | "WALLET_SERVICE_PAYMENT_EXECUTED" | "WALLET_SERVICE_PAYMENT_SENT" | "WALLET_SERVICE_TRUSTLINE_ESTABLISHED" | "WALLET_SERVICE_BALANCE_FETCHED" | "WALLET_SERVICE_TX_IDEMPOTENT" | "WALLET_SERVICE_TX_EXECUTED" | "WALLET_SERVICE_TX_STATUS" | "HASHER_SERVICE_HEALTH_OK" | "HASHER_SERVICE_HASH_GENERATED" | "STELLAR_WATCHER_HEALTH_OK";
                         /** @constant */
                         success: true;
                         content: {
@@ -268,11 +330,11 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @enum {string} */
+                        code: "APPLICATION_DELETED" | "API_KEY_DELETED" | "EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_VERIFIED" | "SDK_WALLET_AUTHENTICATED" | "SDK_SESSION_CREATED" | "SDK_LOGIN_SUCCESS" | "HUB_API_HEALTH_OK" | "HUB_AUTH_CODE_SENT" | "HUB_AUTH_CODE_VERIFIED" | "HUB_AUTH_ME" | "HUB_API_KEY_LIST" | "HUB_API_KEY_CREATED" | "HUB_API_KEY_UPDATED" | "HUB_APPLICATION_LIST" | "HUB_APPLICATION_FOUND" | "HUB_APPLICATION_CREATED" | "HUB_APPLICATION_UPDATED" | "HUB_APPLICATION_WALLET_FUNDED" | "HUB_APPLICATION_USER_WALLET_FUNDED" | "HUB_APPLICATION_WALLET_CREATED" | "HUB_APPLICATION_WALLET_EXISTS" | "HUB_APPLICATION_WALLETS" | "HUB_APPLICATION_SDK_USERS" | "SDK_API_HEALTH_OK" | "SDK_APPLICATION_CONFIG" | "WALLET_SERVICE_HEALTH_OK" | "WALLET_SERVICE_WALLET_CREATED" | "WALLET_SERVICE_WALLET_FOUND" | "WALLET_SERVICE_WALLET_FUNDED" | "WALLET_SERVICE_PAYMENT_IDEMPOTENT" | "WALLET_SERVICE_PAYMENT_EXECUTED" | "WALLET_SERVICE_PAYMENT_SENT" | "WALLET_SERVICE_TRUSTLINE_ESTABLISHED" | "WALLET_SERVICE_BALANCE_FETCHED" | "WALLET_SERVICE_TX_IDEMPOTENT" | "WALLET_SERVICE_TX_EXECUTED" | "WALLET_SERVICE_TX_STATUS" | "HASHER_SERVICE_HEALTH_OK" | "HASHER_SERVICE_HASH_GENERATED" | "STELLAR_WATCHER_HEALTH_OK";
                         /** @constant */
                         success: true;
                         content: {
-                            /** @constant */
-                            code: "SDK_SESSION_CREATED";
                             clientSessionId: string;
                         };
                     };
@@ -539,11 +601,11 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @enum {string} */
+                        code: "APPLICATION_DELETED" | "API_KEY_DELETED" | "EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_VERIFIED" | "SDK_WALLET_AUTHENTICATED" | "SDK_SESSION_CREATED" | "SDK_LOGIN_SUCCESS" | "HUB_API_HEALTH_OK" | "HUB_AUTH_CODE_SENT" | "HUB_AUTH_CODE_VERIFIED" | "HUB_AUTH_ME" | "HUB_API_KEY_LIST" | "HUB_API_KEY_CREATED" | "HUB_API_KEY_UPDATED" | "HUB_APPLICATION_LIST" | "HUB_APPLICATION_FOUND" | "HUB_APPLICATION_CREATED" | "HUB_APPLICATION_UPDATED" | "HUB_APPLICATION_WALLET_FUNDED" | "HUB_APPLICATION_USER_WALLET_FUNDED" | "HUB_APPLICATION_WALLET_CREATED" | "HUB_APPLICATION_WALLET_EXISTS" | "HUB_APPLICATION_WALLETS" | "HUB_APPLICATION_SDK_USERS" | "SDK_API_HEALTH_OK" | "SDK_APPLICATION_CONFIG" | "WALLET_SERVICE_HEALTH_OK" | "WALLET_SERVICE_WALLET_CREATED" | "WALLET_SERVICE_WALLET_FOUND" | "WALLET_SERVICE_WALLET_FUNDED" | "WALLET_SERVICE_PAYMENT_IDEMPOTENT" | "WALLET_SERVICE_PAYMENT_EXECUTED" | "WALLET_SERVICE_PAYMENT_SENT" | "WALLET_SERVICE_TRUSTLINE_ESTABLISHED" | "WALLET_SERVICE_BALANCE_FETCHED" | "WALLET_SERVICE_TX_IDEMPOTENT" | "WALLET_SERVICE_TX_EXECUTED" | "WALLET_SERVICE_TX_STATUS" | "HASHER_SERVICE_HEALTH_OK" | "HASHER_SERVICE_HASH_GENERATED" | "STELLAR_WATCHER_HEALTH_OK";
                         /** @constant */
                         success: true;
                         content: {
-                            /** @constant */
-                            code: "SDK_EMAIL_CODE_SENT";
                             clientSessionId: string;
                             email: string;
                         };
@@ -627,11 +689,11 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @enum {string} */
+                        code: "APPLICATION_DELETED" | "API_KEY_DELETED" | "EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_VERIFIED" | "SDK_WALLET_AUTHENTICATED" | "SDK_SESSION_CREATED" | "SDK_LOGIN_SUCCESS" | "HUB_API_HEALTH_OK" | "HUB_AUTH_CODE_SENT" | "HUB_AUTH_CODE_VERIFIED" | "HUB_AUTH_ME" | "HUB_API_KEY_LIST" | "HUB_API_KEY_CREATED" | "HUB_API_KEY_UPDATED" | "HUB_APPLICATION_LIST" | "HUB_APPLICATION_FOUND" | "HUB_APPLICATION_CREATED" | "HUB_APPLICATION_UPDATED" | "HUB_APPLICATION_WALLET_FUNDED" | "HUB_APPLICATION_USER_WALLET_FUNDED" | "HUB_APPLICATION_WALLET_CREATED" | "HUB_APPLICATION_WALLET_EXISTS" | "HUB_APPLICATION_WALLETS" | "HUB_APPLICATION_SDK_USERS" | "SDK_API_HEALTH_OK" | "SDK_APPLICATION_CONFIG" | "WALLET_SERVICE_HEALTH_OK" | "WALLET_SERVICE_WALLET_CREATED" | "WALLET_SERVICE_WALLET_FOUND" | "WALLET_SERVICE_WALLET_FUNDED" | "WALLET_SERVICE_PAYMENT_IDEMPOTENT" | "WALLET_SERVICE_PAYMENT_EXECUTED" | "WALLET_SERVICE_PAYMENT_SENT" | "WALLET_SERVICE_TRUSTLINE_ESTABLISHED" | "WALLET_SERVICE_BALANCE_FETCHED" | "WALLET_SERVICE_TX_IDEMPOTENT" | "WALLET_SERVICE_TX_EXECUTED" | "WALLET_SERVICE_TX_STATUS" | "HASHER_SERVICE_HEALTH_OK" | "HASHER_SERVICE_HASH_GENERATED" | "STELLAR_WATCHER_HEALTH_OK";
                         /** @constant */
                         success: true;
                         content: {
-                            /** @constant */
-                            code: "SDK_EMAIL_CODE_VERIFIED";
                             clientSessionId: string;
                         };
                     };
@@ -714,11 +776,11 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @enum {string} */
+                        code: "APPLICATION_DELETED" | "API_KEY_DELETED" | "EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_VERIFIED" | "SDK_WALLET_AUTHENTICATED" | "SDK_SESSION_CREATED" | "SDK_LOGIN_SUCCESS" | "HUB_API_HEALTH_OK" | "HUB_AUTH_CODE_SENT" | "HUB_AUTH_CODE_VERIFIED" | "HUB_AUTH_ME" | "HUB_API_KEY_LIST" | "HUB_API_KEY_CREATED" | "HUB_API_KEY_UPDATED" | "HUB_APPLICATION_LIST" | "HUB_APPLICATION_FOUND" | "HUB_APPLICATION_CREATED" | "HUB_APPLICATION_UPDATED" | "HUB_APPLICATION_WALLET_FUNDED" | "HUB_APPLICATION_USER_WALLET_FUNDED" | "HUB_APPLICATION_WALLET_CREATED" | "HUB_APPLICATION_WALLET_EXISTS" | "HUB_APPLICATION_WALLETS" | "HUB_APPLICATION_SDK_USERS" | "SDK_API_HEALTH_OK" | "SDK_APPLICATION_CONFIG" | "WALLET_SERVICE_HEALTH_OK" | "WALLET_SERVICE_WALLET_CREATED" | "WALLET_SERVICE_WALLET_FOUND" | "WALLET_SERVICE_WALLET_FUNDED" | "WALLET_SERVICE_PAYMENT_IDEMPOTENT" | "WALLET_SERVICE_PAYMENT_EXECUTED" | "WALLET_SERVICE_PAYMENT_SENT" | "WALLET_SERVICE_TRUSTLINE_ESTABLISHED" | "WALLET_SERVICE_BALANCE_FETCHED" | "WALLET_SERVICE_TX_IDEMPOTENT" | "WALLET_SERVICE_TX_EXECUTED" | "WALLET_SERVICE_TX_STATUS" | "HASHER_SERVICE_HEALTH_OK" | "HASHER_SERVICE_HASH_GENERATED" | "STELLAR_WATCHER_HEALTH_OK";
                         /** @constant */
                         success: true;
                         content: {
-                            /** @constant */
-                            code: "SDK_WALLET_AUTHENTICATED";
                             clientSessionId: string;
                             walletAddress: string;
                         };
@@ -801,11 +863,11 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @enum {string} */
+                        code: "APPLICATION_DELETED" | "API_KEY_DELETED" | "EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_VERIFIED" | "SDK_WALLET_AUTHENTICATED" | "SDK_SESSION_CREATED" | "SDK_LOGIN_SUCCESS" | "HUB_API_HEALTH_OK" | "HUB_AUTH_CODE_SENT" | "HUB_AUTH_CODE_VERIFIED" | "HUB_AUTH_ME" | "HUB_API_KEY_LIST" | "HUB_API_KEY_CREATED" | "HUB_API_KEY_UPDATED" | "HUB_APPLICATION_LIST" | "HUB_APPLICATION_FOUND" | "HUB_APPLICATION_CREATED" | "HUB_APPLICATION_UPDATED" | "HUB_APPLICATION_WALLET_FUNDED" | "HUB_APPLICATION_USER_WALLET_FUNDED" | "HUB_APPLICATION_WALLET_CREATED" | "HUB_APPLICATION_WALLET_EXISTS" | "HUB_APPLICATION_WALLETS" | "HUB_APPLICATION_SDK_USERS" | "SDK_API_HEALTH_OK" | "SDK_APPLICATION_CONFIG" | "WALLET_SERVICE_HEALTH_OK" | "WALLET_SERVICE_WALLET_CREATED" | "WALLET_SERVICE_WALLET_FOUND" | "WALLET_SERVICE_WALLET_FUNDED" | "WALLET_SERVICE_PAYMENT_IDEMPOTENT" | "WALLET_SERVICE_PAYMENT_EXECUTED" | "WALLET_SERVICE_PAYMENT_SENT" | "WALLET_SERVICE_TRUSTLINE_ESTABLISHED" | "WALLET_SERVICE_BALANCE_FETCHED" | "WALLET_SERVICE_TX_IDEMPOTENT" | "WALLET_SERVICE_TX_EXECUTED" | "WALLET_SERVICE_TX_STATUS" | "HASHER_SERVICE_HEALTH_OK" | "HASHER_SERVICE_HASH_GENERATED" | "STELLAR_WATCHER_HEALTH_OK";
                         /** @constant */
                         success: true;
                         content: {
-                            /** @constant */
-                            code: "SDK_LOGIN_SUCCESS";
                             clientSessionId: string;
                             userId: string | null;
                             status: string;
@@ -820,6 +882,8 @@ export interface operations {
                             };
                             wallet: {
                                 publicKey: string | null;
+                                existsOnStellar?: boolean;
+                                createdAt?: number;
                             };
                             data: {
                                 mail: string;
@@ -915,6 +979,8 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @enum {string} */
+                        code: "APPLICATION_DELETED" | "API_KEY_DELETED" | "EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_VERIFIED" | "SDK_WALLET_AUTHENTICATED" | "SDK_SESSION_CREATED" | "SDK_LOGIN_SUCCESS" | "HUB_API_HEALTH_OK" | "HUB_AUTH_CODE_SENT" | "HUB_AUTH_CODE_VERIFIED" | "HUB_AUTH_ME" | "HUB_API_KEY_LIST" | "HUB_API_KEY_CREATED" | "HUB_API_KEY_UPDATED" | "HUB_APPLICATION_LIST" | "HUB_APPLICATION_FOUND" | "HUB_APPLICATION_CREATED" | "HUB_APPLICATION_UPDATED" | "HUB_APPLICATION_WALLET_FUNDED" | "HUB_APPLICATION_USER_WALLET_FUNDED" | "HUB_APPLICATION_WALLET_CREATED" | "HUB_APPLICATION_WALLET_EXISTS" | "HUB_APPLICATION_WALLETS" | "HUB_APPLICATION_SDK_USERS" | "SDK_API_HEALTH_OK" | "SDK_APPLICATION_CONFIG" | "WALLET_SERVICE_HEALTH_OK" | "WALLET_SERVICE_WALLET_CREATED" | "WALLET_SERVICE_WALLET_FOUND" | "WALLET_SERVICE_WALLET_FUNDED" | "WALLET_SERVICE_PAYMENT_IDEMPOTENT" | "WALLET_SERVICE_PAYMENT_EXECUTED" | "WALLET_SERVICE_PAYMENT_SENT" | "WALLET_SERVICE_TRUSTLINE_ESTABLISHED" | "WALLET_SERVICE_BALANCE_FETCHED" | "WALLET_SERVICE_TX_IDEMPOTENT" | "WALLET_SERVICE_TX_EXECUTED" | "WALLET_SERVICE_TX_STATUS" | "HASHER_SERVICE_HEALTH_OK" | "HASHER_SERVICE_HASH_GENERATED" | "STELLAR_WATCHER_HEALTH_OK";
                         /** @constant */
                         success: true;
                         content: {
@@ -1002,6 +1068,201 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    postTxBuild: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unsigned XDR and summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "APPLICATION_DELETED" | "API_KEY_DELETED" | "EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_VERIFIED" | "SDK_WALLET_AUTHENTICATED" | "SDK_SESSION_CREATED" | "SDK_LOGIN_SUCCESS" | "HUB_API_HEALTH_OK" | "HUB_AUTH_CODE_SENT" | "HUB_AUTH_CODE_VERIFIED" | "HUB_AUTH_ME" | "HUB_API_KEY_LIST" | "HUB_API_KEY_CREATED" | "HUB_API_KEY_UPDATED" | "HUB_APPLICATION_LIST" | "HUB_APPLICATION_FOUND" | "HUB_APPLICATION_CREATED" | "HUB_APPLICATION_UPDATED" | "HUB_APPLICATION_WALLET_FUNDED" | "HUB_APPLICATION_USER_WALLET_FUNDED" | "HUB_APPLICATION_WALLET_CREATED" | "HUB_APPLICATION_WALLET_EXISTS" | "HUB_APPLICATION_WALLETS" | "HUB_APPLICATION_SDK_USERS" | "SDK_API_HEALTH_OK" | "SDK_APPLICATION_CONFIG" | "WALLET_SERVICE_HEALTH_OK" | "WALLET_SERVICE_WALLET_CREATED" | "WALLET_SERVICE_WALLET_FOUND" | "WALLET_SERVICE_WALLET_FUNDED" | "WALLET_SERVICE_PAYMENT_IDEMPOTENT" | "WALLET_SERVICE_PAYMENT_EXECUTED" | "WALLET_SERVICE_PAYMENT_SENT" | "WALLET_SERVICE_TRUSTLINE_ESTABLISHED" | "WALLET_SERVICE_BALANCE_FETCHED" | "WALLET_SERVICE_TX_IDEMPOTENT" | "WALLET_SERVICE_TX_EXECUTED" | "WALLET_SERVICE_TX_STATUS" | "HASHER_SERVICE_HEALTH_OK" | "HASHER_SERVICE_HASH_GENERATED" | "STELLAR_WATCHER_HEALTH_OK";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            unsignedXdr: string;
+                            networkPassphrase: string;
+                            estimatedFee: string;
+                            summary: {
+                                title: string;
+                                lines: string[];
+                                network: string;
+                                fee: string;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Horizon error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    postTxSubmit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Submit result (PENDING | SUCCESS | FAILED) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "APPLICATION_DELETED" | "API_KEY_DELETED" | "EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_VERIFIED" | "SDK_WALLET_AUTHENTICATED" | "SDK_SESSION_CREATED" | "SDK_LOGIN_SUCCESS" | "HUB_API_HEALTH_OK" | "HUB_AUTH_CODE_SENT" | "HUB_AUTH_CODE_VERIFIED" | "HUB_AUTH_ME" | "HUB_API_KEY_LIST" | "HUB_API_KEY_CREATED" | "HUB_API_KEY_UPDATED" | "HUB_APPLICATION_LIST" | "HUB_APPLICATION_FOUND" | "HUB_APPLICATION_CREATED" | "HUB_APPLICATION_UPDATED" | "HUB_APPLICATION_WALLET_FUNDED" | "HUB_APPLICATION_USER_WALLET_FUNDED" | "HUB_APPLICATION_WALLET_CREATED" | "HUB_APPLICATION_WALLET_EXISTS" | "HUB_APPLICATION_WALLETS" | "HUB_APPLICATION_SDK_USERS" | "SDK_API_HEALTH_OK" | "SDK_APPLICATION_CONFIG" | "WALLET_SERVICE_HEALTH_OK" | "WALLET_SERVICE_WALLET_CREATED" | "WALLET_SERVICE_WALLET_FOUND" | "WALLET_SERVICE_WALLET_FUNDED" | "WALLET_SERVICE_PAYMENT_IDEMPOTENT" | "WALLET_SERVICE_PAYMENT_EXECUTED" | "WALLET_SERVICE_PAYMENT_SENT" | "WALLET_SERVICE_TRUSTLINE_ESTABLISHED" | "WALLET_SERVICE_BALANCE_FETCHED" | "WALLET_SERVICE_TX_IDEMPOTENT" | "WALLET_SERVICE_TX_EXECUTED" | "WALLET_SERVICE_TX_STATUS" | "HASHER_SERVICE_HEALTH_OK" | "HASHER_SERVICE_HASH_GENERATED" | "STELLAR_WATCHER_HEALTH_OK";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            hash: string;
+                            /** @enum {string} */
+                            status: "PENDING" | "SUCCESS" | "FAILED";
+                            resultCode?: string;
+                            message?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    getTxStatus: {
+        parameters: {
+            query: {
+                network: "testnet" | "mainnet";
+                hash: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transaction status (PENDING si no existe aún en Horizon) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "APPLICATION_DELETED" | "API_KEY_DELETED" | "EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_SENT" | "SDK_EMAIL_CODE_VERIFIED" | "SDK_WALLET_AUTHENTICATED" | "SDK_SESSION_CREATED" | "SDK_LOGIN_SUCCESS" | "HUB_API_HEALTH_OK" | "HUB_AUTH_CODE_SENT" | "HUB_AUTH_CODE_VERIFIED" | "HUB_AUTH_ME" | "HUB_API_KEY_LIST" | "HUB_API_KEY_CREATED" | "HUB_API_KEY_UPDATED" | "HUB_APPLICATION_LIST" | "HUB_APPLICATION_FOUND" | "HUB_APPLICATION_CREATED" | "HUB_APPLICATION_UPDATED" | "HUB_APPLICATION_WALLET_FUNDED" | "HUB_APPLICATION_USER_WALLET_FUNDED" | "HUB_APPLICATION_WALLET_CREATED" | "HUB_APPLICATION_WALLET_EXISTS" | "HUB_APPLICATION_WALLETS" | "HUB_APPLICATION_SDK_USERS" | "SDK_API_HEALTH_OK" | "SDK_APPLICATION_CONFIG" | "WALLET_SERVICE_HEALTH_OK" | "WALLET_SERVICE_WALLET_CREATED" | "WALLET_SERVICE_WALLET_FOUND" | "WALLET_SERVICE_WALLET_FUNDED" | "WALLET_SERVICE_PAYMENT_IDEMPOTENT" | "WALLET_SERVICE_PAYMENT_EXECUTED" | "WALLET_SERVICE_PAYMENT_SENT" | "WALLET_SERVICE_TRUSTLINE_ESTABLISHED" | "WALLET_SERVICE_BALANCE_FETCHED" | "WALLET_SERVICE_TX_IDEMPOTENT" | "WALLET_SERVICE_TX_EXECUTED" | "WALLET_SERVICE_TX_STATUS" | "HASHER_SERVICE_HEALTH_OK" | "HASHER_SERVICE_HASH_GENERATED" | "STELLAR_WATCHER_HEALTH_OK";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            hash: string;
+                            /** @enum {string} */
+                            status: "PENDING" | "SUCCESS" | "FAILED";
+                            resultCode?: string;
+                            ledger?: number;
+                            message?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

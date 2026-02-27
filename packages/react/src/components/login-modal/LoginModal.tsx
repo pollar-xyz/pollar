@@ -1,6 +1,6 @@
 'use client';
 
-import { STATE_VAR_CODES, StateLoginCodes, StateStatus, StateVar, WalletType } from '@pollar/core';
+import { PollarStateVar, STATE_VAR_CODES, StateLoginCodes, StateStatus, WalletType } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { LoginModalTemplate } from './LoginModalTemplate';
@@ -11,7 +11,7 @@ interface LoginModalProps {
 }
 
 function isLoginCode(code: string): code is StateLoginCodes {
-  return (Object.values(STATE_VAR_CODES[StateVar.LOGIN]) as string[]).includes(code);
+  return (Object.values(STATE_VAR_CODES[PollarStateVar.LOGIN]) as string[]).includes(code);
 }
 
 export function LoginModal({ onClose }: LoginModalProps) {
@@ -25,20 +25,20 @@ export function LoginModal({ onClose }: LoginModalProps) {
 
   useEffect(() => {
     return getClient().onStateChange((stateEntry) => {
-      if (stateEntry.var === StateVar.LOGIN && isLoginCode(stateEntry.code)) {
+      if (stateEntry.var === PollarStateVar.LOGIN && isLoginCode(stateEntry.code)) {
         setLoginStateCode(stateEntry.code);
         setStatus(stateEntry.status);
-        if (stateEntry.code === STATE_VAR_CODES[StateVar.LOGIN].STREAM_POLL_START) {
+        if (stateEntry.code === STATE_VAR_CODES[PollarStateVar.LOGIN].STREAM_POLL_START) {
           const data = stateEntry.data as { clientSessionId: string };
           setClientSessionId(data.clientSessionId);
         }
-        if (stateEntry.code === STATE_VAR_CODES[StateVar.LOGIN].STREAM_POLL_EVENT) {
+        if (stateEntry.code === STATE_VAR_CODES[PollarStateVar.LOGIN].STREAM_POLL_EVENT) {
           const data = stateEntry.data as { status?: string };
           if (data?.status === 'AWAITING_EMAIL') {
             setAwaitingEmailCode(true);
           }
         }
-        if (stateEntry.code === STATE_VAR_CODES[StateVar.LOGIN].FETCH_SESSION_SUCCESS) {
+        if (stateEntry.code === STATE_VAR_CODES[PollarStateVar.LOGIN].FETCH_SESSION_SUCCESS) {
           setAwaitingEmailCode(false);
           setTimeout(onClose, 1000);
         }

@@ -4,94 +4,108 @@ export const STORAGE_KEY = 'pollar:session';
 
 export function isValidSession(value: unknown): value is PollarLoginState {
   if (typeof value !== 'object' || value === null) {
-    console.warn('[PollarClient:session] Invalid session —value is not an object:', value);
+    console.warn('[PollarClient:session] Invalid session — value is not an object');
     return false;
   }
 
   const s = value as Record<string, unknown>;
 
-  if (s['code'] !== 'SDK_LOGIN_SUCCESS') {
-    console.warn('[PollarClient:session] Invalid session —code is not SDK_LOGIN_SUCCESS:', s['code']);
-    return false;
-  }
-
+  // clientSessionId: string
   if (typeof s['clientSessionId'] !== 'string' || s['clientSessionId'] === '') {
-    console.warn('[PollarClient:session] Invalid session —clientSessionId is missing or empty:', s['clientSessionId']);
+    console.warn('[PollarClient:session] Invalid session — clientSessionId missing or empty');
     return false;
   }
 
+  // userId: string | null  (required, explicitly null or string)
   if (s['userId'] !== null && typeof s['userId'] !== 'string') {
-    console.warn('[PollarClient:session] Invalid session —userId is not a string or null:', s['userId']);
+    console.warn('[PollarClient:session] Invalid session — userId must be string or null, got:', typeof s['userId']);
     return false;
   }
 
+  // status: string
   if (typeof s['status'] !== 'string') {
-    console.warn('[PollarClient:session] Invalid session —status is not a string:', s['status']);
+    console.warn('[PollarClient:session] Invalid session — status must be string, got:', typeof s['status']);
     return false;
   }
 
+  // token: { accessToken: string, refreshToken: string, expiresAt: number }
   const token = s['token'];
   if (typeof token !== 'object' || token === null) {
-    console.warn('[PollarClient:session] Invalid session —token is missing or not an object:', token);
+    console.warn('[PollarClient:session] Invalid session — token missing or not an object');
     return false;
   }
   const t = token as Record<string, unknown>;
   if (typeof t['accessToken'] !== 'string' || t['accessToken'] === '') {
-    console.warn('[PollarClient:session] Invalid session —token.accessToken is missing or empty:', t['accessToken']);
+    console.warn('[PollarClient:session] Invalid session — token.accessToken missing or empty');
     return false;
   }
   if (typeof t['refreshToken'] !== 'string' || t['refreshToken'] === '') {
-    console.warn('[PollarClient:session] Invalid session —token.refreshToken is missing or empty:', t['refreshToken']);
+    console.warn('[PollarClient:session] Invalid session — token.refreshToken missing or empty');
     return false;
   }
   if (typeof t['expiresAt'] !== 'number' || !Number.isFinite(t['expiresAt'])) {
-    console.warn('[PollarClient:session] Invalid session —token.expiresAt is missing or not a finite number:', t['expiresAt']);
+    console.warn('[PollarClient:session] Invalid session — token.expiresAt must be a finite number');
     return false;
   }
 
+  // user: { id?: string, ready: boolean }
   const user = s['user'];
   if (typeof user !== 'object' || user === null) {
-    console.warn('[PollarClient:session] Invalid session —user is missing or not an object:', user);
+    console.warn('[PollarClient:session] Invalid session — user missing or not an object');
     return false;
   }
   const u = user as Record<string, unknown>;
   if (u['id'] !== undefined && typeof u['id'] !== 'string') {
-    console.warn('[PollarClient:session] Invalid session —user.id is not a string:', u['id']);
+    console.warn('[PollarClient:session] Invalid session — user.id must be string if present, got:', typeof u['id']);
     return false;
   }
   if (typeof u['ready'] !== 'boolean') {
-    console.warn('[PollarClient:session] Invalid session —user.ready is not a boolean:', u['ready']);
+    console.warn('[PollarClient:session] Invalid session — user.ready must be boolean, got:', typeof u['ready']);
     return false;
   }
 
+  // wallet: { publicKey: string | null, existsOnStellar?: boolean, createdAt?: number }
   const wallet = s['wallet'];
   if (typeof wallet !== 'object' || wallet === null) {
-    console.warn('[PollarClient:session] Invalid session —wallet is missing or not an object:', wallet);
+    console.warn('[PollarClient:session] Invalid session — wallet missing or not an object');
     return false;
   }
   const w = wallet as Record<string, unknown>;
   if (w['publicKey'] !== null && typeof w['publicKey'] !== 'string') {
-    console.warn('[PollarClient:session] Invalid session —wallet.publicKey is not a string or null:', w['publicKey']);
+    console.warn(
+      '[PollarClient:session] Invalid session — wallet.publicKey must be string or null, got:',
+      typeof w['publicKey'],
+    );
+    return false;
+  }
+  if (w['existsOnStellar'] !== undefined && typeof w['existsOnStellar'] !== 'boolean') {
+    console.warn('[PollarClient:session] Invalid session — wallet.existsOnStellar must be boolean if present');
+    return false;
+  }
+  if (w['createdAt'] !== undefined && (typeof w['createdAt'] !== 'number' || !Number.isFinite(w['createdAt']))) {
+    console.warn('[PollarClient:session] Invalid session — wallet.createdAt must be a finite number if present');
     return false;
   }
 
+  // data: { mail, first_name, last_name, avatar: string, providers: {...} }
   const data = s['data'];
   if (typeof data !== 'object' || data === null) {
-    console.warn('[PollarClient:session] Invalid session —data is missing or not an object:', data);
+    console.warn('[PollarClient:session] Invalid session — data missing or not an object');
     return false;
   }
   const d = data as Record<string, unknown>;
 
   for (const field of ['mail', 'first_name', 'last_name', 'avatar'] as const) {
     if (typeof d[field] !== 'string') {
-      console.warn(`[PollarClient:session] Invalid session —data.${field} is not a string:`, d[field]);
+      console.warn(`[PollarClient:session] Invalid session — data.${field} must be string, got:`, typeof d[field]);
       return false;
     }
   }
 
+  // providers: { email: {address:string}|null, google: {id:string}|null, github: {id:string}|null, wallet: {address:string}|null }
   const providers = d['providers'];
   if (typeof providers !== 'object' || providers === null) {
-    console.warn('[PollarClient:session] Invalid session —data.providers is missing or not an object:', providers);
+    console.warn('[PollarClient:session] Invalid session — data.providers missing or not an object');
     return false;
   }
   const p = providers as Record<string, unknown>;
@@ -102,12 +116,12 @@ export function isValidSession(value: unknown): value is PollarLoginState {
     const v = p[field];
     if (v === null) continue;
     if (typeof v !== 'object') {
-      console.warn(`[PollarClient:session] Invalid session —data.providers.${field} is not an object or null:`, v);
+      console.warn(`[PollarClient:session] Invalid session — data.providers.${field} must be object or null, got:`, typeof v);
       return false;
     }
     const vObj = v as Record<string, unknown>;
     if (typeof vObj[innerField] !== 'string' || vObj[innerField] === '') {
-      console.warn(`[PollarClient:session] Invalid session —data.providers.${field}.${innerField} is not a string:`, vObj[innerField]);
+      console.warn(`[PollarClient:session] Invalid session — data.providers.${field}.${innerField} must be a non-empty string`);
       return false;
     }
   }

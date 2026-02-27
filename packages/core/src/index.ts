@@ -9,7 +9,7 @@ export type {
   SignAuthEntryOptions,
   SignAuthEntryResponse,
 } from './wallets';
-export { StateVar, STATE_VAR_CODES, StateStatus } from './types';
+export { PollarStateVar, STATE_VAR_CODES, StateStatus } from './types';
 export type {
   AuthCredentials,
   AuthToken,
@@ -18,7 +18,7 @@ export type {
   AuthWallet,
   PollarClientConfig,
   AuthError,
-  LoginOptions,
+  PollarLoginOptions,
   Status,
   PollarState,
   PollarStateEntry,
@@ -27,3 +27,5 @@ export type {
 export { PollarApiClient } from './api/client';
 export type { paths as pollarPaths } from './api/schema';
 export { isValidSession } from './client/session';
+export { StellarClient } from './stellar/StellarClient';
+export type { StellarNetwork, StellarClientConfig, StellarBalance, GetBalancesResult } from './stellar/StellarClient';

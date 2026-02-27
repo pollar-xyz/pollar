@@ -1,15 +1,14 @@
 import { createApiClient, PollarApiClient } from '../api/client';
 import {
-  LoginOptions,
   PollarClientConfig,
+  PollarLoginOptions,
   PollarLoginState,
   PollarState,
   PollarStateEntry,
+  PollarStateVar,
   STATE_VAR_CODES,
   StateStatus,
-  StateVar,
   StateVarCodes,
-  Status,
 } from '../types';
 import { login as loginFn } from './login';
 import { readStorage, removeStorage, STORAGE_KEY, writeStorage } from './session';
@@ -29,11 +28,10 @@ export class PollarClient {
 
   private readonly _api: PollarApiClient;
   private _session: PollarLoginState | null = null;
-  private _status: Status = 'unauthenticated';
   private _stateListeners = new Set<(log: PollarStateEntry) => void>();
-  private _state: { [key in StateVar]: PollarStateEntry[] } = {
-    [StateVar.LOGIN]: [],
-    [StateVar.WALLET_ADDRESS]: [],
+  private _state: { [key in PollarStateVar]: PollarStateEntry[] } = {
+    [PollarStateVar.LOGIN]: [],
+    [PollarStateVar.WALLET_ADDRESS]: [],
   };
 
   constructor(config: PollarClientConfig) {
@@ -72,14 +70,14 @@ export class PollarClient {
   }
 
   getState(): PollarState {
-    return { session: this._session, status: this._status };
+    return { session: this._session };
   }
 
   getApi(): PollarApiClient {
     return this._api;
   }
 
-  login(options: LoginOptions): { cancelLogin: () => void } {
+  login(options: PollarLoginOptions): { cancelLogin: () => void } {
     if (!isBrowser) {
       warnServerSide('login');
       return {
@@ -102,11 +100,13 @@ export class PollarClient {
     }).catch((error: unknown) => {
       if (error instanceof Error && error.name === 'AbortError') {
         console.info('[PollarClient] Login aborted by user');
-        this._emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].ERROR_ABORTED, 'error', StateStatus.ERROR);
+        this._emitState(PollarStateVar.LOGIN, STATE_VAR_CODES[PollarStateVar.LOGIN].ERROR_ABORTED, 'error', StateStatus.ERROR);
         return;
       }
       console.error('[PollarClient] Login failed with unexpected error', error);
-      this._emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].ERROR_UNKNOWN, 'error', StateStatus.ERROR, { error });
+      this._emitState(PollarStateVar.LOGIN, STATE_VAR_CODES[PollarStateVar.LOGIN].ERROR_UNKNOWN, 'error', StateStatus.ERROR, {
+        error,
+      });
     });
 
     return { cancelLogin: () => controller.abort() };
@@ -131,22 +131,34 @@ export class PollarClient {
       const { error, data } = await this._api.POST('/auth/email/verify-code', {
         body: { clientSessionId, code },
       });
-      if (error || !data || data?.content?.code !== 'SDK_EMAIL_CODE_VERIFIED') {
-        this._emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].EMAIL_AUTH_CODE_ERROR, 'error', StateStatus.ERROR, {
-          data,
-          error,
-        });
+      if (error || !data || data?.code !== 'SDK_EMAIL_CODE_VERIFIED') {
+        this._emitState(
+          PollarStateVar.LOGIN,
+          STATE_VAR_CODES[PollarStateVar.LOGIN].EMAIL_AUTH_CODE_ERROR,
+          'error',
+          StateStatus.ERROR,
+          {
+            data,
+            error,
+          },
+        );
         return;
       }
 
-      this._emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].EMAIL_AUTH_CODE_SUCCESS, 'info', StateStatus.SUCCESS, {
-        data,
-        error,
-      });
+      this._emitState(
+        PollarStateVar.LOGIN,
+        STATE_VAR_CODES[PollarStateVar.LOGIN].EMAIL_AUTH_CODE_SUCCESS,
+        'info',
+        StateStatus.SUCCESS,
+        {
+          data,
+          error,
+        },
+      );
     } catch (error) {
       this._emitState(
-        StateVar.LOGIN,
-        STATE_VAR_CODES[StateVar.LOGIN].WALLET_AUTH_ALBEDO_NOT_INSTALLED,
+        PollarStateVar.LOGIN,
+        STATE_VAR_CODES[PollarStateVar.LOGIN].WALLET_AUTH_ALBEDO_NOT_INSTALLED,
         'error',
         StateStatus.ERROR,
       );
@@ -167,8 +179,8 @@ export class PollarClient {
     this._session = readStorage();
     if (this._session) {
       this._emitState(
-        StateVar.WALLET_ADDRESS,
-        STATE_VAR_CODES[StateVar.WALLET_ADDRESS].UPDATED_ADDRESS,
+        PollarStateVar.WALLET_ADDRESS,
+        STATE_VAR_CODES[PollarStateVar.WALLET_ADDRESS].UPDATED_ADDRESS,
         'info',
         StateStatus.SUCCESS,
         this._session,
@@ -176,8 +188,8 @@ export class PollarClient {
       console.info('[PollarClient] Session restored from storage');
     } else {
       this._emitState(
-        StateVar.WALLET_ADDRESS,
-        STATE_VAR_CODES[StateVar.WALLET_ADDRESS].REMOVED_ADDRESS,
+        PollarStateVar.WALLET_ADDRESS,
+        STATE_VAR_CODES[PollarStateVar.WALLET_ADDRESS].REMOVED_ADDRESS,
         'info',
         StateStatus.SUCCESS,
       );
@@ -190,8 +202,8 @@ export class PollarClient {
     this._session = session;
     writeStorage(session);
     this._emitState(
-      StateVar.WALLET_ADDRESS,
-      STATE_VAR_CODES[StateVar.WALLET_ADDRESS].UPDATED_ADDRESS,
+      PollarStateVar.WALLET_ADDRESS,
+      STATE_VAR_CODES[PollarStateVar.WALLET_ADDRESS].UPDATED_ADDRESS,
       'info',
       StateStatus.SUCCESS,
       this._session,
@@ -203,20 +215,20 @@ export class PollarClient {
     this._session = null;
     removeStorage();
     this._state = {
-      [StateVar.LOGIN]: [],
-      [StateVar.WALLET_ADDRESS]: [],
+      [PollarStateVar.LOGIN]: [],
+      [PollarStateVar.WALLET_ADDRESS]: [],
     };
-    this._emitState(StateVar.LOGIN, STATE_VAR_CODES[StateVar.LOGIN].LOGOUT, 'info', StateStatus.NONE);
+    this._emitState(PollarStateVar.LOGIN, STATE_VAR_CODES[PollarStateVar.LOGIN].LOGOUT, 'info', StateStatus.NONE);
     this._emitState(
-      StateVar.WALLET_ADDRESS,
-      STATE_VAR_CODES[StateVar.WALLET_ADDRESS].REMOVED_ADDRESS,
+      PollarStateVar.WALLET_ADDRESS,
+      STATE_VAR_CODES[PollarStateVar.WALLET_ADDRESS].REMOVED_ADDRESS,
       'info',
       StateStatus.NONE,
     );
   }
 
   private _emitState(
-    fn: StateVar,
+    fn: PollarStateVar,
     code: StateVarCodes,
     level: PollarStateEntry['level'],
     status: PollarStateEntry['status'],

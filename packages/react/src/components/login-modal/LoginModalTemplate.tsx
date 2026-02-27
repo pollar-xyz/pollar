@@ -3,6 +3,8 @@
 import { StateLoginCodes, StateStatus } from '@pollar/core';
 import { RefObject } from 'react';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
+
+declare const __POLLAR_VERSION__: string;
 import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
@@ -154,6 +156,7 @@ export function LoginModalTemplate({
         <div className="pollar-footer-brand">
           <img src={LOGO_POLLAR} alt="Pollar" className="pollar-footer-logo" />
           <span className="pollar-footer-name">Pollar</span>
+          <span className="pollar-footer-version">v{__POLLAR_VERSION__}</span>
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { LoginOptions, PollarClientConfig, PollarLoginState, pollarPaths } from '@pollar/core';
+import { PollarClientConfig, PollarLoginOptions, PollarLoginState, pollarPaths } from '@pollar/core';
 
 type ConfigResponse = pollarPaths['/config']['get']['responses'][200]['content']['application/json'];
 export type PollarConfig = ConfigResponse['content'];
@@ -14,7 +14,7 @@ export interface AuthContextValue {
   session: PollarLoginState | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (options: LoginOptions) => void;
+  login: (options: PollarLoginOptions) => void;
   logout: () => Promise<void>;
 }
 
