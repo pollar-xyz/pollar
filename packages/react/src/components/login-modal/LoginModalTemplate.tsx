@@ -3,11 +3,10 @@
 import { StateAuthenticationCodes, StateStatus } from '@pollar/core';
 import { type CSSProperties, type RefObject } from 'react';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
-import { PollarModalFooter } from '../commons';
+import { ModalStatusBanner, PollarModalFooter } from '../commons';
 import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
-import { LoginStatusBanner } from './LoginStatusBanner';
 
 interface LoginModalTemplateProps {
   theme: string;
@@ -148,7 +147,7 @@ export function LoginModalTemplate({
         </>
       )}
 
-      <LoginStatusBanner code={loginStateCode} status={status} onCancel={() => cancelLoginRef.current?.()} onRetry={onRetry} />
+      <ModalStatusBanner code={loginStateCode} status={status} onCancel={() => cancelLoginRef.current?.()} onRetry={onRetry} />
 
       <PollarModalFooter />
     </div>

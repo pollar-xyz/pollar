@@ -135,6 +135,33 @@
     color: var(--pollar-text);
 }
 
+.pollar-tx-result-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.625rem;
+}
+
+.pollar-tx-result-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid var(--pollar-border);
+    background: none;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--pollar-muted);
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 150ms, background 150ms;
+}
+
+.pollar-tx-result-btn:hover {
+    color: var(--pollar-text);
+    background: var(--pollar-input-bg);
+}
+
 /* ---- Sign button ---- */
 .pollar-tx-sign-btn {
     width: 100%;

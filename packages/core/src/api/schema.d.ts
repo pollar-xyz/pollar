@@ -232,7 +232,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/tx/submit": {
+    "/tx/sign-and-send": {
         parameters: {
             query?: never;
             header?: never;
@@ -245,7 +245,7 @@ export interface paths {
          * Submit signed transaction
          * @description Submits a signed transaction envelope to the Stellar network.
          */
-        post: operations["postTxSubmit"];
+        post: operations["postTxSignAndSend"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1092,7 +1092,7 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    network: "testnet" | "mainnet";
+                    network: "testnet" | "public";
                     publicKey: string;
                     /** @constant */
                     operation: "payment";
@@ -1133,7 +1133,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** @constant */
-                        code: "SDK_TX_BUILD";
+                        code: "SDK_TX_BUILT";
                         /** @constant */
                         success: true;
                         content: {
@@ -1176,7 +1176,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Horizon error */
+            /** @description Transaction build error */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -1191,14 +1191,22 @@ export interface operations {
             };
         };
     };
-    postTxSubmit: {
+    postTxSignAndSend: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    network: "testnet" | "public";
+                    signedXdr: string;
+                };
+            };
+        };
         responses: {
             /** @description Submit result (PENDING | SUCCESS | FAILED) */
             200: {
@@ -1252,7 +1260,7 @@ export interface operations {
     getTxStatus: {
         parameters: {
             query: {
-                network: "testnet" | "mainnet";
+                network: "testnet" | "public";
                 hash: string;
             };
             header?: never;

@@ -7,8 +7,8 @@ import {
   PollarState,
   PollarStateEntry,
   StateVarCodes,
-  SubmitTxResult,
   TxBuildBody,
+  TxSignAndSendBody,
 } from '../types';
 import { emitResponse } from './helpers';
 import { login as loginFn } from './login';
@@ -31,6 +31,7 @@ export class PollarClient {
   private _session: PollarApplicationConfigContent | null = null;
   private _stateListeners = new Set<(log: PollarStateEntry) => void>();
   private _state: PollarState = {
+    network: [],
     authentication: [],
     transaction: [],
   };
@@ -63,6 +64,10 @@ export class PollarClient {
         console.info(`[PollarClient] Storage event — session ${this._session ? 'updated' : prev ? 'cleared' : 'unchanged'}`);
         this._readStore();
       }
+    });
+
+    this._emitState('network', STATE_VAR_CODES.network.NETWORK_UPDATED, 'info', StateStatus.SUCCESS, {
+      network: 'testnet',
     });
   }
 
@@ -154,6 +159,10 @@ export class PollarClient {
     }
   }
 
+  getNetwork() {
+    return (this._state.network.at(-1)?.data as { network: string })?.network === 'public' ? 'public' : 'testnet';
+  }
+
   async buildTx(
     operation: TxBuildBody['operation'],
     params: TxBuildBody['params'],
@@ -165,7 +174,7 @@ export class PollarClient {
     }
 
     const body: TxBuildBody = {
-      network: 'testnet',
+      network: this.getNetwork(),
       publicKey: this._session?.wallet?.publicKey,
       operation,
       params,
@@ -174,9 +183,7 @@ export class PollarClient {
 
     try {
       this._emitState('transaction', STATE_VAR_CODES.transaction.BUILD_TRANSACTION_START, 'info', StateStatus.LOADING);
-
       const response = await this._api.POST('/tx/build', { body });
-      console.log({ response });
       if (
         !emitResponse(
           PollarStateVar.TRANSACTION,
@@ -197,20 +204,32 @@ export class PollarClient {
     }
   }
 
-  async submitTx(signedXdr: string): Promise<SubmitTxResult> {
+  async submitTx(signedXdr: string): Promise<void> {
+    const body: TxSignAndSendBody = {
+      network: this.getNetwork(),
+      signedXdr,
+    };
+
     try {
-      console.info('[PollarClient] Submitting signed transaction');
-      const { data, error } = await (this._api.POST as Function)('/tx/submit', { body: { signedXdr } });
-      if (error || !data?.success) {
-        const msg = (error as any)?.message ?? data?.error ?? 'Failed to submit transaction';
-        console.warn('[PollarClient] submitTx error —', msg);
-        return { success: false, error: msg };
+      this._emitState('transaction', STATE_VAR_CODES.transaction.SIGN_SEND_TRANSACTION_START, 'info', StateStatus.LOADING);
+      const response = await this._api.POST('/tx/sign-and-send', { body });
+      if (
+        !emitResponse(
+          PollarStateVar.TRANSACTION,
+          response,
+          { code: STATE_VAR_CODES.transaction.SIGN_SEND_TRANSACTION_SUCCESS, status: StateStatus.SUCCESS },
+          STATE_VAR_CODES.transaction.SIGN_SEND_TRANSACTION_ERROR,
+          this._emitState.bind(this),
+        )
+      ) {
+        return;
       }
-      return { success: true, ...data.content };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Network error';
-      console.warn('[PollarClient] submitTx network error —', msg);
-      return { success: false, error: msg };
+    } catch (error) {
+      this._emitState('transaction', STATE_VAR_CODES.transaction.SIGN_SEND_TRANSACTION_ERROR, 'error', StateStatus.ERROR, {
+        body,
+        error,
+      });
+      return;
     }
   }
 
@@ -259,6 +278,7 @@ export class PollarClient {
     this._session = null;
     removeStorage();
     this._state = {
+      network: [],
       authentication: [],
       transaction: [],
     };

@@ -12,10 +12,10 @@ import {
   STATE_VAR_CODES,
   StateStatus,
   StellarClient,
-  SubmitTxResult,
   TxBuildBody,
 } from '@pollar/core';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { ModalErrorBoundary } from './components/commons';
 import { LoginModal } from './components/login-modal/LoginModal';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import type { PollarConfig, PollarStyles } from './types';
@@ -64,7 +64,7 @@ interface PollarContextValue {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ) => Promise<void>;
-  submitTx: (signedXdr: string) => Promise<SubmitTxResult>;
+  submitTx: (signedXdr: string) => Promise<void>;
 }
 
 const PollarContext = createContext<PollarContextValue | null>(null);
@@ -80,6 +80,13 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
   const [stellarClient] = useState<StellarClient>(() => new StellarClient(config.stellarNetwork || 'testnet'));
   const [sessionState, setSessionState] = useState<PollarApplicationConfigContent | null>(null);
   const [state, setState] = useState<PollarState>({
+    network: {
+      var: 'network',
+      code: STATE_VAR_CODES.network.NONE,
+      status: StateStatus.NONE,
+      level: 'info',
+      ts: 0,
+    },
     authentication: {
       var: 'authentication',
       code: STATE_VAR_CODES.authentication.NONE,
@@ -183,8 +190,16 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
   return (
     <PollarContext.Provider value={contextValue}>
       {children}
-      {loginModalOpen && <LoginModal onClose={() => setLoginModalOpen(false)} />}
-      {transactionModalOpen && <TransactionModal onClose={() => setTransactionModalOpen(false)} />}
+      {loginModalOpen && (
+        <ModalErrorBoundary onClose={() => setLoginModalOpen(false)}>
+          <LoginModal onClose={() => setLoginModalOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {transactionModalOpen && (
+        <ModalErrorBoundary onClose={() => setTransactionModalOpen(false)}>
+          <TransactionModal onClose={() => setTransactionModalOpen(false)} />
+        </ModalErrorBoundary>
+      )}
     </PollarContext.Provider>
   );
 }
