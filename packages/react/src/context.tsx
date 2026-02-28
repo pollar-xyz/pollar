@@ -3,18 +3,21 @@
 import {
   isValidSession,
   PollarApiClient,
+  PollarApplicationConfigContent,
   PollarClient,
   PollarClientConfig,
   PollarLoginOptions,
-  PollarLoginState,
   PollarStateEntry,
   PollarStateVar,
   STATE_VAR_CODES,
   StateStatus,
   StellarClient,
+  SubmitTxResult,
+  TxBuildBody,
 } from '@pollar/core';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { LoginModal } from './components/login-modal/LoginModal';
+import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import type { PollarConfig, PollarStyles } from './types';
 
 const emptyResponse = {
@@ -26,7 +29,7 @@ const emptyResponse = {
 
 async function fetchRemoteConfig(api: PollarApiClient): Promise<PollarConfig> {
   try {
-    const { data, error } = await api.GET(`/config`);
+    const { data, error } = await api.GET(`/applications/config`);
     if (!data || error) {
       return emptyResponse;
     }
@@ -42,6 +45,12 @@ interface PollarContextValue {
   walletAddress: string;
   getClient: () => PollarClient;
   openLoginModal: () => void;
+  sendTransaction: (
+    operation: TxBuildBody['operation'],
+    params: TxBuildBody['params'],
+    options?: TxBuildBody['options'],
+  ) => void;
+  openTransactionModal: () => void;
   isAuthenticated: boolean;
   login: (options: PollarLoginOptions) => void;
   logout: () => void;
@@ -50,6 +59,12 @@ interface PollarContextValue {
   state: PollarState;
   // stellar
   getBalance: (publicKey?: string) => any;
+  buildTx: (
+    operation: TxBuildBody['operation'],
+    params: TxBuildBody['params'],
+    options?: TxBuildBody['options'],
+  ) => Promise<void>;
+  submitTx: (signedXdr: string) => Promise<SubmitTxResult>;
 }
 
 const PollarContext = createContext<PollarContextValue | null>(null);
@@ -63,18 +78,18 @@ interface PollarProviderProps {
 export function PollarProvider({ config, styles: propStyles, children }: PollarProviderProps) {
   const [pollarClient] = useState<PollarClient>(() => new PollarClient(config));
   const [stellarClient] = useState<StellarClient>(() => new StellarClient(config.stellarNetwork || 'testnet'));
-  const [sessionState, setSessionState] = useState<PollarLoginState | null>(null);
+  const [sessionState, setSessionState] = useState<PollarApplicationConfigContent | null>(null);
   const [state, setState] = useState<PollarState>({
-    [PollarStateVar.LOGIN]: {
-      var: PollarStateVar.LOGIN,
-      code: STATE_VAR_CODES[PollarStateVar.LOGIN].NONE,
+    authentication: {
+      var: 'authentication',
+      code: STATE_VAR_CODES.authentication.NONE,
       status: StateStatus.NONE,
       level: 'info',
       ts: 0,
     },
-    [PollarStateVar.WALLET_ADDRESS]: {
-      var: PollarStateVar.WALLET_ADDRESS,
-      code: STATE_VAR_CODES[PollarStateVar.WALLET_ADDRESS].NONE,
+    transaction: {
+      var: 'transaction',
+      code: STATE_VAR_CODES.transaction.NONE,
       status: StateStatus.NONE,
       level: 'info',
       ts: 0,
@@ -94,25 +109,22 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
         }
         return prevState;
       });
-      if (stateEntry.var === PollarStateVar.WALLET_ADDRESS) {
+      if (stateEntry.var === 'authentication') {
         if (
-          stateEntry.code === STATE_VAR_CODES[PollarStateVar.WALLET_ADDRESS].UPDATED_ADDRESS &&
+          (stateEntry.code === STATE_VAR_CODES.authentication.SESSION_STORED ||
+            STATE_VAR_CODES.authentication.RESTORED_SESSION_SUCCESS) &&
           isValidSession(stateEntry.data)
         ) {
           setSessionState((prevState) => {
             if (JSON.stringify(prevState) !== JSON.stringify(stateEntry.data)) {
-              return stateEntry.data as PollarLoginState;
+              return stateEntry.data as PollarApplicationConfigContent;
             }
             return prevState;
           });
         }
-      }
-      if (
-        (stateEntry.var === PollarStateVar.WALLET_ADDRESS &&
-          stateEntry.code === STATE_VAR_CODES[PollarStateVar.WALLET_ADDRESS].REMOVED_ADDRESS) ||
-        (stateEntry.var === PollarStateVar.LOGIN && stateEntry.code === STATE_VAR_CODES[PollarStateVar.LOGIN].LOGOUT)
-      ) {
-        setSessionState(null);
+        if (stateEntry.code === STATE_VAR_CODES.authentication.LOGOUT) {
+          setSessionState(null);
+        }
       }
     });
   }, [pollarClient]);
@@ -132,34 +144,47 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
       });
   }, [pollarClient]);
 
-  const [modalOpen, setModalOpen] = useState(false);
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [transactionModalOpen, setTransactionModalOpen] = useState(false);
 
   const contextValue: PollarContextValue = useMemo(
-    () => ({
-      walletAddress: sessionState?.wallet?.publicKey || '',
-      getClient: () => pollarClient,
-      openLoginModal: () => setModalOpen(true),
-      isAuthenticated: pollarClient.isAuthenticated(),
-      login: (options: PollarLoginOptions) => pollarClient.login(options),
-      logout: () => pollarClient.logout(),
-      config: remoteConfig,
-      state,
-      styles,
-      async getBalance(publicKey?: string) {
-        const pk = publicKey || sessionState?.wallet?.publicKey;
-        if (pk) {
-          return stellarClient.getBalances(pk);
-        }
-        return null;
-      },
-    }),
+    () =>
+      ({
+        walletAddress: sessionState?.wallet?.publicKey || '',
+        getClient: () => pollarClient,
+        // client
+        state,
+        login: (options: PollarLoginOptions) => pollarClient.login(options),
+        logout: () => pollarClient.logout(),
+        isAuthenticated: pollarClient.isAuthenticated(),
+        buildTx: (operation, params, options) => pollarClient.buildTx(operation, params, options),
+        submitTx: (signedXdr: string) => pollarClient.submitTx(signedXdr),
+        // react
+        sendTransaction: (operation, params, options) => {
+          void pollarClient.buildTx(operation, params, options);
+          setTransactionModalOpen(true);
+        },
+        openTransactionModal: () => setTransactionModalOpen(true),
+        openLoginModal: () => setLoginModalOpen(true),
+        config: remoteConfig,
+        styles,
+        // stellar
+        async getBalance(publicKey?: string) {
+          const pk = publicKey || sessionState?.wallet?.publicKey;
+          if (pk) {
+            return await stellarClient.getBalances(pk);
+          }
+          return { success: false, errorCode: 'NO_WALLET_FOUND', balances: [] };
+        },
+      }) as PollarContextValue,
     [sessionState, remoteConfig, styles, pollarClient, state],
   );
 
   return (
     <PollarContext.Provider value={contextValue}>
       {children}
-      {modalOpen && <LoginModal onClose={() => setModalOpen(false)} />}
+      {loginModalOpen && <LoginModal onClose={() => setLoginModalOpen(false)} />}
+      {transactionModalOpen && <TransactionModal onClose={() => setTransactionModalOpen(false)} />}
     </PollarContext.Provider>
   );
 }

@@ -1,6 +1,7 @@
 import { StateLoginCodes, StateStatus } from '@pollar/core';
 
 const LOGIN_CODE_MESSAGES: Record<StateLoginCodes, { text: string }> = {
+  NONE: { text: '' },
   LOGOUT: { text: 'Logged out' },
   CREATE_SESSION_START: { text: 'Starting session…' },
   CREATE_SESSION_ERROR: { text: 'Failed to start session' },

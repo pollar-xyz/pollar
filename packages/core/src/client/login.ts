@@ -1,14 +1,8 @@
 import { PollarApiClient } from '../api/client';
-import {
-  PollarLoginOptions,
-  PollarLoginState,
-  PollarStateEntry,
-  PollarStateVar,
-  STATE_VAR_CODES,
-  StateLoginCodes,
-  StateStatus,
-} from '../types';
+import { PollarStateVar, STATE_VAR_CODES, StateStatus } from '../constants';
+import { PollarApplicationConfigContent, PollarLoginOptions, PollarStateEntry } from '../types';
 import { AlbedoAdapter, FreighterAdapter, WalletType } from '../wallets';
+import { emitResponse } from './helpers';
 import { isValidSession } from './session';
 import { streamUntilFound } from './stream';
 
@@ -37,44 +31,22 @@ export type LoginDeps = {
     status: PollarStateEntry['status'],
     data?: PollarStateEntry['data'],
   ) => void;
-  storeSession: (session: PollarLoginState) => void;
+  storeSession: (session: PollarApplicationConfigContent) => void;
   clearSession: () => void;
-};
-
-const emitResponse = (
-  response: { data?: any; error?: any },
-  successCode: StateLoginCodes,
-  errorCode: StateLoginCodes,
-  emitLog: (
-    state: PollarStateVar,
-    code: StateLoginCodes,
-    level: PollarStateEntry['level'],
-    status: PollarStateEntry['status'],
-    data?: unknown,
-  ) => void,
-) => {
-  const isSuccess = !!response.data && !response.error;
-  emitLog(
-    PollarStateVar.LOGIN,
-    isSuccess ? successCode : errorCode,
-    isSuccess ? 'info' : 'error',
-    isSuccess ? StateStatus.LOADING : StateStatus.ERROR,
-    isSuccess ? response.data : response.error,
-  );
-  return isSuccess;
 };
 
 export async function login(options: PollarLoginOptions, deps: LoginDeps): Promise<void> {
   const { api, basePath, apiKey, signal, emitState, storeSession, clearSession } = deps;
 
-  emitState(PollarStateVar.LOGIN, STATE_VAR_CODES[PollarStateVar.LOGIN].CREATE_SESSION_START, 'info', StateStatus.LOADING);
+  emitState('authentication', STATE_VAR_CODES.authentication.CREATE_SESSION_START, 'info', StateStatus.LOADING);
   const createSessionResponse = await api.POST('/auth/session', { signal });
 
   if (
     !emitResponse(
+      PollarStateVar.AUTHENTICATION,
       createSessionResponse,
-      STATE_VAR_CODES[PollarStateVar.LOGIN].CREATE_SESSION_SUCCESS,
-      STATE_VAR_CODES[PollarStateVar.LOGIN].CREATE_SESSION_ERROR,
+      { code: STATE_VAR_CODES.authentication.CREATE_SESSION_SUCCESS },
+      STATE_VAR_CODES.authentication.CREATE_SESSION_ERROR,
       emitState,
     )
   ) {
@@ -85,7 +57,7 @@ export async function login(options: PollarLoginOptions, deps: LoginDeps): Promi
 
   switch (options.provider) {
     case 'email': {
-      emitState(PollarStateVar.LOGIN, STATE_VAR_CODES[PollarStateVar.LOGIN].EMAIL_AUTH_START, 'info', StateStatus.LOADING, {
+      emitState('authentication', STATE_VAR_CODES.authentication.EMAIL_AUTH_START, 'info', StateStatus.LOADING, {
         email: options.email,
       });
       const emailRes = await api.POST(`/auth/email`, {
@@ -95,9 +67,10 @@ export async function login(options: PollarLoginOptions, deps: LoginDeps): Promi
 
       if (
         !emitResponse(
+          PollarStateVar.AUTHENTICATION,
           emailRes,
-          STATE_VAR_CODES[PollarStateVar.LOGIN].EMAIL_AUTH_START_SUCCESS,
-          STATE_VAR_CODES[PollarStateVar.LOGIN].EMAIL_AUTH_START_ERROR,
+          { code: STATE_VAR_CODES.authentication.EMAIL_AUTH_START_SUCCESS },
+          STATE_VAR_CODES.authentication.EMAIL_AUTH_START_ERROR,
           emitState,
         )
       ) {
@@ -116,7 +89,7 @@ export async function login(options: PollarLoginOptions, deps: LoginDeps): Promi
     }
     case 'wallet': {
       try {
-        emitState(PollarStateVar.LOGIN, STATE_VAR_CODES[PollarStateVar.LOGIN].WALLET_AUTH_START, 'info', StateStatus.LOADING, {
+        emitState('authentication', STATE_VAR_CODES.authentication.WALLET_AUTH_START, 'info', StateStatus.LOADING, {
           adapter: options.type,
         });
         const adapter = options.type === WalletType.FREIGHTER ? new FreighterAdapter() : new AlbedoAdapter();
@@ -124,10 +97,10 @@ export async function login(options: PollarLoginOptions, deps: LoginDeps): Promi
         const available = await withSignal(adapter.isAvailable(), signal);
         if (!available) {
           emitState(
-            PollarStateVar.LOGIN,
+            'authentication',
             options.type === WalletType.FREIGHTER
-              ? STATE_VAR_CODES[PollarStateVar.LOGIN].WALLET_AUTH_FREIGHTER_NOT_INSTALLED
-              : STATE_VAR_CODES[PollarStateVar.LOGIN].WALLET_AUTH_ALBEDO_NOT_INSTALLED,
+              ? STATE_VAR_CODES.authentication.WALLET_AUTH_FREIGHTER_NOT_INSTALLED
+              : STATE_VAR_CODES.authentication.WALLET_AUTH_ALBEDO_NOT_INSTALLED,
             'info',
             StateStatus.LOADING,
             {
@@ -137,26 +110,14 @@ export async function login(options: PollarLoginOptions, deps: LoginDeps): Promi
         }
 
         const { publicKey } = await withSignal(adapter.connect(), signal);
-        emitState(
-          PollarStateVar.LOGIN,
-          STATE_VAR_CODES[PollarStateVar.LOGIN].WALLET_AUTH_CONNECTED,
-          'info',
-          StateStatus.LOADING,
-          {
-            adapter: options.type,
-            publicKey,
-          },
-        );
-        emitState(
-          PollarStateVar.LOGIN,
-          STATE_VAR_CODES[PollarStateVar.LOGIN].WALLET_AUTH_LOGIN_START,
-          'info',
-          StateStatus.LOADING,
-          {
-            adapter: options.type,
-            publicKey,
-          },
-        );
+        emitState('authentication', STATE_VAR_CODES.authentication.WALLET_AUTH_CONNECTED, 'info', StateStatus.LOADING, {
+          adapter: options.type,
+          publicKey,
+        });
+        emitState('authentication', STATE_VAR_CODES.authentication.WALLET_AUTH_LOGIN_START, 'info', StateStatus.LOADING, {
+          adapter: options.type,
+          publicKey,
+        });
         const emailRes = await api.POST(`/auth/wallet`, {
           body: { clientSessionId, walletAddress: publicKey },
           signal,
@@ -164,16 +125,17 @@ export async function login(options: PollarLoginOptions, deps: LoginDeps): Promi
 
         if (
           !emitResponse(
+            PollarStateVar.AUTHENTICATION,
             emailRes,
-            STATE_VAR_CODES[PollarStateVar.LOGIN].WALLET_AUTH_LOGIN_START_SUCCESS,
-            STATE_VAR_CODES[PollarStateVar.LOGIN].WALLET_AUTH_LOGIN_START_ERROR,
+            { code: STATE_VAR_CODES.authentication.WALLET_AUTH_LOGIN_START_SUCCESS },
+            STATE_VAR_CODES.authentication.WALLET_AUTH_LOGIN_START_ERROR,
             emitState,
           )
         ) {
           return;
         }
       } catch (error) {
-        emitState(PollarStateVar.LOGIN, STATE_VAR_CODES[PollarStateVar.LOGIN].WALLET_AUTH_ERROR, 'error', StateStatus.ERROR, {
+        emitState('authentication', STATE_VAR_CODES.authentication.WALLET_AUTH_ERROR, 'error', StateStatus.ERROR, {
           clientSessionId,
         });
       }
@@ -181,7 +143,7 @@ export async function login(options: PollarLoginOptions, deps: LoginDeps): Promi
     }
   }
 
-  emitState(PollarStateVar.LOGIN, STATE_VAR_CODES[PollarStateVar.LOGIN].STREAM_POLL_START, 'info', StateStatus.LOADING, {
+  emitState('authentication', STATE_VAR_CODES.authentication.STREAM_POLL_START, 'info', StateStatus.LOADING, {
     clientSessionId,
   });
   await streamUntilFound(
@@ -190,12 +152,12 @@ export async function login(options: PollarLoginOptions, deps: LoginDeps): Promi
     (data) => {
       const status = data?.status;
       if (status === 'READY') {
-        emitState(PollarStateVar.LOGIN, STATE_VAR_CODES[PollarStateVar.LOGIN].STREAM_POLL_READY, 'info', StateStatus.LOADING);
+        emitState('authentication', STATE_VAR_CODES.authentication.STREAM_POLL_READY, 'info', StateStatus.LOADING);
         return true;
       }
       emitState(
-        PollarStateVar.LOGIN,
-        (STATE_VAR_CODES[PollarStateVar.LOGIN].STREAM_POLL_EVENT + (status ? `/${status}` : '')) as PollarStateEntry['code'],
+        'authentication',
+        (STATE_VAR_CODES.authentication.STREAM_POLL_EVENT + (status ? `/${status}` : '')) as PollarStateEntry['code'],
         'info',
         StateStatus.LOADING,
         data,
@@ -206,17 +168,17 @@ export async function login(options: PollarLoginOptions, deps: LoginDeps): Promi
     signal,
   );
 
-  emitState(PollarStateVar.LOGIN, STATE_VAR_CODES[PollarStateVar.LOGIN].FETCH_SESSION_START, 'info', StateStatus.LOADING);
+  emitState('authentication', STATE_VAR_CODES.authentication.FETCH_SESSION_START, 'info', StateStatus.LOADING);
   const { data, error } = await api.POST(`/auth/login`, {
     body: { clientSessionId },
     signal,
   });
 
   if (data?.code === 'SDK_LOGIN_SUCCESS' && isValidSession(data?.content)) {
-    emitState(PollarStateVar.LOGIN, STATE_VAR_CODES[PollarStateVar.LOGIN].FETCH_SESSION_SUCCESS, 'info', StateStatus.SUCCESS);
+    emitState('authentication', STATE_VAR_CODES.authentication.FETCH_SESSION_SUCCESS, 'info', StateStatus.SUCCESS);
     storeSession(data.content);
   } else {
-    emitState(PollarStateVar.LOGIN, STATE_VAR_CODES[PollarStateVar.LOGIN].FETCH_SESSION_ERROR, 'error', StateStatus.ERROR, {
+    emitState('authentication', STATE_VAR_CODES.authentication.FETCH_SESSION_ERROR, 'error', StateStatus.ERROR, {
       error,
       data,
     });

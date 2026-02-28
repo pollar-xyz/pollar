@@ -1,8 +1,8 @@
-import { PollarLoginState } from '../types';
+import { PollarApplicationConfigContent } from '../types';
 
 export const STORAGE_KEY = 'pollar:session';
 
-export function isValidSession(value: unknown): value is PollarLoginState {
+export function isValidSession(value: unknown): value is PollarApplicationConfigContent {
   if (typeof value !== 'object' || value === null) {
     console.warn('[PollarClient:session] Invalid session — value is not an object');
     return false;
@@ -129,7 +129,7 @@ export function isValidSession(value: unknown): value is PollarLoginState {
   return true;
 }
 
-export function readStorage(): PollarLoginState | null {
+export function readStorage(): PollarApplicationConfigContent | null {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) {
     return null;
@@ -158,7 +158,7 @@ export function readStorage(): PollarLoginState | null {
   }
 }
 
-export function writeStorage(session: PollarLoginState): void {
+export function writeStorage(session: PollarApplicationConfigContent): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
   console.info('[PollarClient:session] Session written to storage');
 }

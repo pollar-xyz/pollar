@@ -1,15 +1,16 @@
 import { createApiClient, PollarApiClient } from '../api/client';
+import { PollarStateVar, STATE_VAR_CODES, StateStatus } from '../constants';
 import {
+  PollarApplicationConfigContent,
   PollarClientConfig,
   PollarLoginOptions,
-  PollarLoginState,
   PollarState,
   PollarStateEntry,
-  PollarStateVar,
-  STATE_VAR_CODES,
-  StateStatus,
   StateVarCodes,
+  SubmitTxResult,
+  TxBuildBody,
 } from '../types';
+import { emitResponse } from './helpers';
 import { login as loginFn } from './login';
 import { readStorage, removeStorage, STORAGE_KEY, writeStorage } from './session';
 
@@ -27,11 +28,11 @@ export class PollarClient {
   readonly basePath: string;
 
   private readonly _api: PollarApiClient;
-  private _session: PollarLoginState | null = null;
+  private _session: PollarApplicationConfigContent | null = null;
   private _stateListeners = new Set<(log: PollarStateEntry) => void>();
-  private _state: { [key in PollarStateVar]: PollarStateEntry[] } = {
-    [PollarStateVar.LOGIN]: [],
-    [PollarStateVar.WALLET_ADDRESS]: [],
+  private _state: PollarState = {
+    authentication: [],
+    transaction: [],
   };
 
   constructor(config: PollarClientConfig) {
@@ -69,7 +70,7 @@ export class PollarClient {
     return !!this._session?.wallet?.publicKey;
   }
 
-  getState(): PollarState {
+  getState() {
     return { session: this._session };
   }
 
@@ -100,11 +101,11 @@ export class PollarClient {
     }).catch((error: unknown) => {
       if (error instanceof Error && error.name === 'AbortError') {
         console.info('[PollarClient] Login aborted by user');
-        this._emitState(PollarStateVar.LOGIN, STATE_VAR_CODES[PollarStateVar.LOGIN].ERROR_ABORTED, 'error', StateStatus.ERROR);
+        this._emitState('authentication', STATE_VAR_CODES.authentication.ERROR_ABORTED, 'error', StateStatus.ERROR);
         return;
       }
       console.error('[PollarClient] Login failed with unexpected error', error);
-      this._emitState(PollarStateVar.LOGIN, STATE_VAR_CODES[PollarStateVar.LOGIN].ERROR_UNKNOWN, 'error', StateStatus.ERROR, {
+      this._emitState('authentication', STATE_VAR_CODES.authentication.ERROR_UNKNOWN, 'error', StateStatus.ERROR, {
         error,
       });
     });
@@ -132,36 +133,84 @@ export class PollarClient {
         body: { clientSessionId, code },
       });
       if (error || !data || data?.code !== 'SDK_EMAIL_CODE_VERIFIED') {
-        this._emitState(
-          PollarStateVar.LOGIN,
-          STATE_VAR_CODES[PollarStateVar.LOGIN].EMAIL_AUTH_CODE_ERROR,
-          'error',
-          StateStatus.ERROR,
-          {
-            data,
-            error,
-          },
-        );
+        this._emitState('authentication', STATE_VAR_CODES.authentication.EMAIL_AUTH_CODE_ERROR, 'error', StateStatus.ERROR, {
+          data,
+          error,
+        });
         return;
       }
 
-      this._emitState(
-        PollarStateVar.LOGIN,
-        STATE_VAR_CODES[PollarStateVar.LOGIN].EMAIL_AUTH_CODE_SUCCESS,
-        'info',
-        StateStatus.SUCCESS,
-        {
-          data,
-          error,
-        },
-      );
+      this._emitState('authentication', STATE_VAR_CODES.authentication.EMAIL_AUTH_CODE_SUCCESS, 'info', StateStatus.SUCCESS, {
+        data,
+        error,
+      });
     } catch (error) {
       this._emitState(
-        PollarStateVar.LOGIN,
-        STATE_VAR_CODES[PollarStateVar.LOGIN].WALLET_AUTH_ALBEDO_NOT_INSTALLED,
+        'authentication',
+        STATE_VAR_CODES.authentication.WALLET_AUTH_ALBEDO_NOT_INSTALLED,
         'error',
         StateStatus.ERROR,
       );
+    }
+  }
+
+  async buildTx(
+    operation: TxBuildBody['operation'],
+    params: TxBuildBody['params'],
+    options?: TxBuildBody['options'],
+  ): Promise<void> {
+    if (!this._session?.wallet?.publicKey) {
+      this._emitState('transaction', STATE_VAR_CODES.transaction.BUILD_TRANSACTION_ERROR_NO_WALLET, 'error', StateStatus.ERROR);
+      return;
+    }
+
+    const body: TxBuildBody = {
+      network: 'testnet',
+      publicKey: this._session?.wallet?.publicKey,
+      operation,
+      params,
+      options: options || {},
+    };
+
+    try {
+      this._emitState('transaction', STATE_VAR_CODES.transaction.BUILD_TRANSACTION_START, 'info', StateStatus.LOADING);
+
+      const response = await this._api.POST('/tx/build', { body });
+      console.log({ response });
+      if (
+        !emitResponse(
+          PollarStateVar.TRANSACTION,
+          response,
+          { code: STATE_VAR_CODES.transaction.BUILD_TRANSACTION_SUCCESS, status: StateStatus.SUCCESS },
+          STATE_VAR_CODES.transaction.BUILD_TRANSACTION_ERROR,
+          this._emitState.bind(this),
+        )
+      ) {
+        return;
+      }
+    } catch (error) {
+      this._emitState('transaction', STATE_VAR_CODES.transaction.BUILD_TRANSACTION_ERROR, 'error', StateStatus.ERROR, {
+        body,
+        error,
+      });
+      return;
+    }
+  }
+
+  async submitTx(signedXdr: string): Promise<SubmitTxResult> {
+    try {
+      console.info('[PollarClient] Submitting signed transaction');
+      const { data, error } = await (this._api.POST as Function)('/tx/submit', { body: { signedXdr } });
+      if (error || !data?.success) {
+        const msg = (error as any)?.message ?? data?.error ?? 'Failed to submit transaction';
+        console.warn('[PollarClient] submitTx error —', msg);
+        return { success: false, error: msg };
+      }
+      return { success: true, ...data.content };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Network error';
+      console.warn('[PollarClient] submitTx network error —', msg);
+      return { success: false, error: msg };
     }
   }
 
@@ -179,31 +228,26 @@ export class PollarClient {
     this._session = readStorage();
     if (this._session) {
       this._emitState(
-        PollarStateVar.WALLET_ADDRESS,
-        STATE_VAR_CODES[PollarStateVar.WALLET_ADDRESS].UPDATED_ADDRESS,
+        'authentication',
+        STATE_VAR_CODES.authentication.RESTORED_SESSION_SUCCESS,
         'info',
         StateStatus.SUCCESS,
         this._session,
       );
       console.info('[PollarClient] Session restored from storage');
     } else {
-      this._emitState(
-        PollarStateVar.WALLET_ADDRESS,
-        STATE_VAR_CODES[PollarStateVar.WALLET_ADDRESS].REMOVED_ADDRESS,
-        'info',
-        StateStatus.SUCCESS,
-      );
+      this._emitState('authentication', STATE_VAR_CODES.authentication.RESTORED_SESSION_SUCCESS, 'warn', StateStatus.ERROR);
       console.info('[PollarClient] Session NO restored from storage');
     }
   }
 
-  private _storeSession(session: PollarLoginState): void {
+  private _storeSession(session: PollarApplicationConfigContent): void {
     console.info(`[PollarClient] Session stored — user: ${session.userId ?? 'anonymous'}`);
     this._session = session;
     writeStorage(session);
     this._emitState(
-      PollarStateVar.WALLET_ADDRESS,
-      STATE_VAR_CODES[PollarStateVar.WALLET_ADDRESS].UPDATED_ADDRESS,
+      'authentication',
+      STATE_VAR_CODES.authentication.SESSION_STORED,
       'info',
       StateStatus.SUCCESS,
       this._session,
@@ -215,16 +259,10 @@ export class PollarClient {
     this._session = null;
     removeStorage();
     this._state = {
-      [PollarStateVar.LOGIN]: [],
-      [PollarStateVar.WALLET_ADDRESS]: [],
+      authentication: [],
+      transaction: [],
     };
-    this._emitState(PollarStateVar.LOGIN, STATE_VAR_CODES[PollarStateVar.LOGIN].LOGOUT, 'info', StateStatus.NONE);
-    this._emitState(
-      PollarStateVar.WALLET_ADDRESS,
-      STATE_VAR_CODES[PollarStateVar.WALLET_ADDRESS].REMOVED_ADDRESS,
-      'info',
-      StateStatus.NONE,
-    );
+    this._emitState('authentication', STATE_VAR_CODES.authentication.LOGOUT, 'info', StateStatus.NONE);
   }
 
   private _emitState(

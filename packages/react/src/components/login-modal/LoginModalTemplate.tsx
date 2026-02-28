@@ -1,10 +1,9 @@
 'use client';
 
-import { StateLoginCodes, StateStatus } from '@pollar/core';
-import { RefObject } from 'react';
+import { StateAuthenticationCodes, StateStatus } from '@pollar/core';
+import { type CSSProperties, type RefObject } from 'react';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
-
-declare const __POLLAR_VERSION__: string;
+import { PollarModalFooter } from '../commons';
 import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
@@ -32,7 +31,7 @@ interface LoginModalTemplateProps {
   onSocialLogin?: (provider: 'google' | 'github') => void;
   onFreighterConnect?: () => void;
   onAlbedoConnect?: () => void;
-  loginStateCode: StateLoginCodes | null;
+  loginStateCode: StateAuthenticationCodes | null;
   awaitingEmailCode?: boolean;
   onCodeSubmit?: (code: string) => void;
   cancelLoginRef: RefObject<(() => void) | null>;
@@ -76,7 +75,7 @@ export function LoginModalTemplate({
     '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
     '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
     '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-  } as React.CSSProperties;
+  } as CSSProperties;
 
   const isLoading = status === StateStatus.LOADING;
 
@@ -151,14 +150,7 @@ export function LoginModalTemplate({
 
       <LoginStatusBanner code={loginStateCode} status={status} onCancel={() => cancelLoginRef.current?.()} onRetry={onRetry} />
 
-      <div className="pollar-footer">
-        <span className="pollar-footer-protected">Protected by</span>
-        <div className="pollar-footer-brand">
-          <img src={LOGO_POLLAR} alt="Pollar" className="pollar-footer-logo" />
-          <span className="pollar-footer-name">Pollar</span>
-          <span className="pollar-footer-version">v{__POLLAR_VERSION__}</span>
-        </div>
-      </div>
+      <PollarModalFooter />
     </div>
   );
 }
