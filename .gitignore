@@ -11,3 +11,5 @@ dist
 #
 /libs/
 *.tgz
+
+.yalc
