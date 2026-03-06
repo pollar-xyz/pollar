@@ -255,7 +255,7 @@ export class PollarClient {
       );
       console.info('[PollarClient] Session restored from storage');
     } else {
-      this._emitState('authentication', STATE_VAR_CODES.authentication.RESTORED_SESSION_SUCCESS, 'warn', StateStatus.ERROR);
+      this._emitState('authentication', STATE_VAR_CODES.authentication.NO_RESTORED_SESSION, 'info', StateStatus.NONE);
       console.info('[PollarClient] Session NO restored from storage');
     }
   }

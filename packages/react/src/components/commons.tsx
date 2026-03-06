@@ -66,6 +66,7 @@ const LOGIN_CODE_MESSAGES: Record<StateAuthenticationCodes | StateTransactionCod
   FETCH_SESSION_START: { text: 'Loading session…' },
   FETCH_SESSION_SUCCESS: { text: 'Welcome back!' },
   FETCH_SESSION_ERROR: { text: 'Failed to load session' },
+  NO_RESTORED_SESSION: { text: '' },
   RESTORED_SESSION_SUCCESS: { text: 'Session restored' },
   RESTORED_SESSION_ERROR: { text: 'Failed to restore session' },
   SESSION_STORED: { text: 'Session saved' },
