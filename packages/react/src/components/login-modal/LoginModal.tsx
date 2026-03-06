@@ -11,7 +11,7 @@ interface LoginModalProps {
 }
 
 function isLoginCode(code: string): code is StateAuthenticationCodes {
-  return (Object.values(STATE_VAR_CODES[PollarStateVar.AUTHENTICATION]) as string[]).includes(code);
+  return (Object.values(STATE_VAR_CODES[PollarStateVar.AUTHENTICATION]) as string[]).some((c) => code.startsWith(c));
 }
 
 export function LoginModal({ onClose }: LoginModalProps) {
@@ -32,10 +32,11 @@ export function LoginModal({ onClose }: LoginModalProps) {
           const data = stateEntry.data as { clientSessionId: string };
           setClientSessionId(data.clientSessionId);
         }
-        if (stateEntry.code === STATE_VAR_CODES[PollarStateVar.AUTHENTICATION].STREAM_POLL_EVENT) {
-          const data = stateEntry.data as { status?: string };
-          if (data?.status === 'AWAITING_EMAIL') {
+        if (stateEntry.code === STATE_VAR_CODES[PollarStateVar.AUTHENTICATION].EMAIL_AUTH_START_SUCCESS) {
+          const data = stateEntry.data as { code?: string; content: { clientSessionId: string } };
+          if (data?.code === 'SDK_EMAIL_CODE_SENT') {
             setAwaitingEmailCode(true);
+            setClientSessionId(data?.content?.clientSessionId);
           }
         }
         if (stateEntry.code === STATE_VAR_CODES[PollarStateVar.AUTHENTICATION].FETCH_SESSION_SUCCESS) {
