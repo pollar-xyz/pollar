@@ -38,6 +38,13 @@ export type LoginDeps = {
 export async function login(options: PollarLoginOptions, deps: LoginDeps): Promise<void> {
   const { api, basePath, apiKey, signal, emitState, storeSession, clearSession } = deps;
 
+  // Open the OAuth popup immediately (before any await) so Safari/iOS doesn't block it.
+  // On non-OAuth providers this stays null and is never used.
+  const oauthPopup =
+    options.provider === 'google' || options.provider === 'github'
+      ? window.open('about:blank', '_blank')
+      : null;
+
   emitState('authentication', STATE_VAR_CODES.authentication.CREATE_SESSION_START, 'info', StateStatus.LOADING);
   const createSessionResponse = await api.POST('/auth/session', { signal });
 
@@ -50,6 +57,7 @@ export async function login(options: PollarLoginOptions, deps: LoginDeps): Promi
       emitState,
     )
   ) {
+    oauthPopup?.close();
     return;
   }
 
@@ -84,7 +92,12 @@ export async function login(options: PollarLoginOptions, deps: LoginDeps): Promi
       url.searchParams.set('api_key', apiKey);
       url.searchParams.set('client_session_id', clientSessionId);
       url.searchParams.set('redirect_uri', window.location.origin);
-      window.open(url.toString(), '_blank');
+      if (oauthPopup) {
+        oauthPopup.location.href = url.toString();
+      } else {
+        // Fallback: popup was blocked by the browser
+        window.open(url.toString(), '_blank');
+      }
       break;
     }
     case 'wallet': {
