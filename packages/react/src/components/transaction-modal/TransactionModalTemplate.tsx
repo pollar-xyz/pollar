@@ -2,7 +2,7 @@
 
 import { StateStatus, StateTransactionCodes, TxBuildResponse } from '@pollar/core';
 import React, { useState } from 'react';
-import { ModalStatusBanner, PollarModalFooter } from '../commons';
+import { ModalStatusBanner, PollarModalFooter, TRANSACTION_CODE_MESSAGES } from '../commons';
 
 export interface TransactionModalTemplateProps {
   theme: string;
@@ -189,10 +189,8 @@ export function TransactionModalTemplate({
       )}
 
       <ModalStatusBanner
-        code={transactionStateCode}
+        message={TRANSACTION_CODE_MESSAGES[transactionStateCode] ?? ''}
         status={status}
-        // onCancel={() => cancelLoginRef.current?.()}
-        // onRetry={onRetry}
       />
 
       <PollarModalFooter />

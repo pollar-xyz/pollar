@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  isValidSession,
   PollarApiClient,
   PollarApplicationConfigContent,
   PollarClient,
@@ -87,13 +86,6 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
       level: 'info',
       ts: 0,
     },
-    authentication: {
-      var: 'authentication',
-      code: STATE_VAR_CODES.authentication.NONE,
-      status: StateStatus.NONE,
-      level: 'info',
-      ts: 0,
-    },
     transaction: {
       var: 'transaction',
       code: STATE_VAR_CODES.transaction.NONE,
@@ -109,29 +101,19 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
     return pollarClient.onStateChange((stateEntry) => {
       setState((prevState) => {
         if (JSON.stringify(prevState[stateEntry.var]) !== JSON.stringify(stateEntry)) {
-          return {
-            ...prevState,
-            [stateEntry.var]: stateEntry,
-          };
+          return { ...prevState, [stateEntry.var]: stateEntry };
         }
         return prevState;
       });
-      if (stateEntry.var === 'authentication') {
-        if (
-          (stateEntry.code === STATE_VAR_CODES.authentication.SESSION_STORED ||
-            STATE_VAR_CODES.authentication.RESTORED_SESSION_SUCCESS) &&
-          isValidSession(stateEntry.data)
-        ) {
-          setSessionState((prevState) => {
-            if (JSON.stringify(prevState) !== JSON.stringify(stateEntry.data)) {
-              return stateEntry.data as PollarApplicationConfigContent;
-            }
-            return prevState;
-          });
-        }
-        if (stateEntry.code === STATE_VAR_CODES.authentication.LOGOUT) {
-          setSessionState(null);
-        }
+    });
+  }, [pollarClient]);
+
+  useEffect(() => {
+    return pollarClient.onAuthStateChange((authState) => {
+      if (authState.step === 'authenticated') {
+        setSessionState((prev) => (JSON.stringify(prev) !== JSON.stringify(authState.session) ? authState.session : prev));
+      } else if (authState.step === 'idle') {
+        setSessionState(null);
       }
     });
   }, [pollarClient]);
@@ -159,14 +141,12 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
       ({
         walletAddress: sessionState?.wallet?.publicKey || '',
         getClient: () => pollarClient,
-        // client
         state,
         login: (options: PollarLoginOptions) => pollarClient.login(options),
         logout: () => pollarClient.logout(),
         isAuthenticated: pollarClient.isAuthenticated(),
         buildTx: (operation, params, options) => pollarClient.buildTx(operation, params, options),
         submitTx: (signedXdr: string) => pollarClient.submitTx(signedXdr),
-        // react
         sendTransaction: (operation, params, options) => {
           void pollarClient.buildTx(operation, params, options);
           setTransactionModalOpen(true);
@@ -175,7 +155,6 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
         openLoginModal: () => setLoginModalOpen(true),
         config: remoteConfig,
         styles,
-        // stellar
         async getBalance(publicKey?: string) {
           const pk = publicKey || sessionState?.wallet?.publicKey;
           if (pk) {

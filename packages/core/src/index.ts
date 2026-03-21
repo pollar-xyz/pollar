@@ -9,6 +9,7 @@ export type {
   SignAuthEntryResponse,
 } from './wallets';
 export type * from './types';
+export { AUTH_ERROR_CODES } from './types';
 export { PollarApiClient } from './api/client';
 export type { paths as pollarPaths } from './api/schema';
 export { isValidSession } from './client/session';
