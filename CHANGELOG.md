@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.5.0
+
+### `@pollar/core`
+
+- **New:** `getKycProviders(country)` — fetches available KYC providers for a given country *(not yet implemented on backend)*
+- **New:** `resolveKyc(providerId, level)` — starts a KYC session or returns `alreadyApproved` if the user is already verified *(not yet implemented on backend)*
+- **New:** `pollKycStatus(providerId, options)` — polls KYC verification result with configurable interval and timeout *(not yet implemented on backend)*
+- **New:** `getRampsQuote(params)` — fetches on/off-ramp quotes from available providers *(not yet implemented on backend)*
+- **New:** `createOnRamp(body)` — initiates an on-ramp transaction and returns payment instructions *(not yet implemented on backend)*
+- **New:** `fetchTxHistory(params)` — fetches paginated transaction history for the authenticated user
+- **New:** `getBalance()` — fetches Stellar account balances via `StellarClient`
+- **New:** Types: `KycProvider`, `KycStatus`, `KycStartResponse`, `RampDirection`, `RampQuote`, `PaymentInstructions`, `RampsOnrampBody`, `TxHistoryRecord`, `TxHistoryState`, `WalletBalanceRecord`, `WalletBalanceContent`
+- **Refactor:** `transaction` and `txHistory` state now managed inside `PollarClient` and exposed via `onStateChange` — consumers no longer need to track these externally
+- **Refactor:** `helpers.ts` removed; logic inlined into `client.ts`
+
+### `@pollar/react`
+
+- **New:** `KycModal` — full identity verification flow: provider selection, iframe/form verification, status polling, and result display with `KycStatus` badge *(UI only — backend not yet implemented, uses mock data)*
+- **New:** `RampWidget` — buy/sell crypto UI: direction tabs, amount/currency/country inputs, provider route selection, and payment instructions display *(UI only — backend not yet implemented, uses mock data)*
+- **New:** `TxHistoryModal` — paginated transaction history with refresh and prev/next pagination
+- **New:** `WalletBalanceModal` — displays Stellar account balances with refresh support
+- **New:** `shared.css` — single source of truth for shared modal styles: `@keyframes`, `.pollar-overlay`, header layout, close button, refresh button, primary/secondary buttons, spinner, empty/error states, footer, and status banner — eliminates duplicate CSS across all modals
+- **Refactor:** `context.tsx` exposes `txHistory`, `transaction`, `getBalance`, and `walletAddress` directly from the provider — no more redundant state in consuming components
+- **Refactor:** All modal CSS files cleaned up to remove duplicates; each modal only defines styles unique to it
+- **Fix:** `PollarModalFooter` and `ModalStatusBanner` now reliably styled in any modal, independent of whether `LoginModal` CSS is loaded
+
 ## 0.4.5
 
 ### `@pollar/core`
