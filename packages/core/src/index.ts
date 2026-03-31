@@ -15,4 +15,9 @@ export type { paths as pollarPaths } from './api/schema';
 export { isValidSession } from './client/session';
 export { StellarClient } from './stellar/StellarClient';
 export type { StellarNetwork, StellarClientConfig, StellarBalance, GetBalancesResult } from './stellar/StellarClient';
-export { StateStatus, PollarStateVar, STATE_VAR_CODES } from './constants';
+
+// ─── KYC endpoints ────────────────────────────────────────────────────────────
+export { getKycStatus, getKycProviders, startKyc, resolveKyc, pollKycStatus } from './api/endpoints/kyc';
+
+// ─── Ramps endpoints ──────────────────────────────────────────────────────────
+export { getRampsQuote, createOnRamp, createOffRamp, getRampTransaction, pollRampTransaction } from './api/endpoints/ramps';

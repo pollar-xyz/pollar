@@ -1,6 +1,8 @@
 'use client';
 
-import { AUTH_ERROR_CODES, AuthState, StateStatus } from '@pollar/core';
+import { AUTH_ERROR_CODES, AuthState } from '@pollar/core';
+
+type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 import { type CSSProperties } from 'react';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter } from '../commons';
@@ -37,10 +39,10 @@ function authStateToStatus(step: AuthState['step']): StateStatus {
   const success: AuthState['step'][] = ['authenticated', 'entering_code'];
   const error: AuthState['step'][] = ['error', 'wallet_not_installed'];
 
-  if (loading.includes(step)) return StateStatus.LOADING;
-  if (success.includes(step)) return StateStatus.SUCCESS;
-  if (error.includes(step)) return StateStatus.ERROR;
-  return StateStatus.NONE;
+  if (loading.includes(step)) return 'LOADING';
+  if (success.includes(step)) return 'SUCCESS';
+  if (error.includes(step)) return 'ERROR';
+  return 'NONE';
 }
 
 interface LoginModalTemplateProps {
@@ -110,7 +112,7 @@ export function LoginModalTemplate({
   } as CSSProperties;
 
   const status = authStateToStatus(authState.step);
-  const isLoading = status === StateStatus.LOADING;
+  const isLoading = status === 'LOADING';
   const isEmailCodeError =
     authState.step === 'error' &&
     (authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_EXPIRED ||

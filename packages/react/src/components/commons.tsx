@@ -1,4 +1,5 @@
-import { StateStatus, StateTransactionCodes } from '@pollar/core';
+type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
+
 import { Component, type ReactNode } from 'react';
 import { LOGO_POLLAR } from '../constants';
 
@@ -41,17 +42,6 @@ export const PollarModalFooter = () => {
   );
 };
 
-export const TRANSACTION_CODE_MESSAGES: Record<StateTransactionCodes, string> = {
-  NONE: '',
-  BUILD_TRANSACTION_START: 'Building transaction…',
-  BUILD_TRANSACTION_SUCCESS: 'Transaction built, ready to sign and send',
-  BUILD_TRANSACTION_ERROR: 'Failed to build transaction',
-  BUILD_TRANSACTION_ERROR_NO_WALLET: 'No wallet connected',
-  SIGN_SEND_TRANSACTION_START: 'Signing and sending transaction…',
-  SIGN_SEND_TRANSACTION_SUCCESS: 'Transaction signed',
-  SIGN_SEND_TRANSACTION_ERROR: 'Signing rejected',
-};
-
 interface ModalStatusBannerProps {
   message: string;
   status: StateStatus;
@@ -60,11 +50,11 @@ interface ModalStatusBannerProps {
 }
 
 export function ModalStatusBanner({ message, status, onCancel, onRetry }: ModalStatusBannerProps) {
-  if (!message && status === StateStatus.NONE) {
+  if (!message && status === 'NONE') {
     return <div className="pollar-status" />;
   }
 
-  const isLoading = status === StateStatus.LOADING;
+  const isLoading = status === 'LOADING';
   const icon =
     status === 'ERROR' ? (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
@@ -91,7 +81,7 @@ export function ModalStatusBanner({ message, status, onCancel, onRetry }: ModalS
           Cancel
         </button>
       )}
-      {status === StateStatus.ERROR && onRetry && (
+      {status === 'ERROR' && onRetry && (
         <button type="button" className="pollar-status-cancel" onClick={onRetry}>
           Retry
         </button>

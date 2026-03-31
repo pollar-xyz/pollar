@@ -285,3 +285,31 @@
     max-height: 120px;
     overflow-y: auto;
 }
+/* ---- Error details ---- */
+.pollar-tx-error-details {
+    margin-bottom: 1rem;
+}
+
+.pollar-tx-error-details-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--pollar-error-text);
+    margin: 0 0 0.375rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.pollar-tx-error-details-content {
+    margin: 0;
+    padding: 0.75rem;
+    background: var(--pollar-input-bg, rgba(0,0,0,0.04));
+    border: 1px solid var(--pollar-border);
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 0.6875rem;
+    color: var(--pollar-error-text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 160px;
+    overflow-y: auto;
+}

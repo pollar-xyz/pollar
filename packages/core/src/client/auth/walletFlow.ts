@@ -1,7 +1,7 @@
 import { AUTH_ERROR_CODES } from '../../types';
 import { AlbedoAdapter, FreighterAdapter, WalletType } from '../../wallets';
 import { authenticate } from './authenticate';
-import { FlowDeps } from './deps';
+import { createAuthSession, FlowDeps } from './deps';
 
 function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   return Promise.race([
@@ -19,21 +19,8 @@ function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 export async function loginWallet(type: WalletType, deps: FlowDeps): Promise<void> {
   const { api, signal, setAuthState } = deps;
 
-  setAuthState({ step: 'creating_session' });
-
-  const { data, error } = await api.POST('/auth/session', { signal });
-
-  if (error || !data?.success) {
-    setAuthState({
-      step: 'error',
-      previousStep: 'creating_session',
-      message: 'Failed to create session',
-      errorCode: AUTH_ERROR_CODES.SESSION_CREATE_FAILED,
-    });
-    return;
-  }
-
-  const clientSessionId = data.content.clientSessionId;
+  const clientSessionId = await createAuthSession(deps);
+  if (!clientSessionId) return;
 
   try {
     setAuthState({ step: 'connecting_wallet', walletType: type });
@@ -46,6 +33,7 @@ export async function loginWallet(type: WalletType, deps: FlowDeps): Promise<voi
     }
 
     const { publicKey } = await withSignal(adapter.connect(), signal);
+    deps.storeWalletAdapter(adapter);
     setAuthState({ step: 'authenticating_wallet' });
 
     const { data: walletData, error: walletError } = await api.POST('/auth/wallet', {

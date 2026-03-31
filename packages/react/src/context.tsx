@@ -1,22 +1,24 @@
 'use client';
 
 import {
-  PollarApiClient,
+  NetworkState,
   PollarApplicationConfigContent,
   PollarClient,
   PollarClientConfig,
   PollarLoginOptions,
-  PollarStateEntry,
-  PollarStateVar,
-  STATE_VAR_CODES,
-  StateStatus,
   StellarClient,
+  StellarNetwork,
+  TransactionState,
   TxBuildBody,
+  TxHistoryState,
 } from '@pollar/core';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { ModalErrorBoundary } from './components/commons';
+import { KycModal } from './components/kyc-modal/KycModal';
 import { LoginModal } from './components/login-modal/LoginModal';
+import { RampWidget } from './components/ramp-widget/RampWidget';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
+import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
 import type { PollarConfig, PollarStyles } from './types';
 
 const emptyResponse = {
@@ -26,44 +28,46 @@ const emptyResponse = {
   styles: {},
 };
 
-async function fetchRemoteConfig(api: PollarApiClient): Promise<PollarConfig> {
-  try {
-    const { data, error } = await api.GET(`/applications/config`);
-    if (!data || error) {
-      return emptyResponse;
-    }
-    return data.content;
-  } catch {
-    return emptyResponse;
-  }
+async function fetchRemoteConfig(client: PollarClient): Promise<PollarConfig> {
+  const content = await client.getAppConfig();
+  return (content as PollarConfig | null) ?? emptyResponse;
 }
-
-type PollarState = { [key in PollarStateVar]: PollarStateEntry };
 
 interface PollarContextValue {
   walletAddress: string;
   getClient: () => PollarClient;
   openLoginModal: () => void;
-  sendTransaction: (
-    operation: TxBuildBody['operation'],
-    params: TxBuildBody['params'],
-    options?: TxBuildBody['options'],
-  ) => void;
-  openTransactionModal: () => void;
+
   isAuthenticated: boolean;
   login: (options: PollarLoginOptions) => void;
   logout: () => void;
   config: PollarConfig;
   styles: PollarStyles;
-  state: PollarState;
-  // stellar
-  getBalance: (publicKey?: string) => any;
+  // transactions
+  openTransactionModal: () => void;
+  transaction: TransactionState;
   buildTx: (
     operation: TxBuildBody['operation'],
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ) => Promise<void>;
-  submitTx: (signedXdr: string) => Promise<void>;
+  signAndSubmitTx: (signedXdr: string) => Promise<void>;
+  // network
+  network: StellarNetwork;
+  setNetwork: (network: StellarNetwork) => void;
+  // stellar
+  getBalance: (publicKey?: string) => any;
+  // kyc
+  openKycModal: (options?: {
+    country?: string;
+    level?: 'basic' | 'intermediate' | 'enhanced';
+    onApproved?: () => void;
+  }) => void;
+  // ramps
+  openRampWidget: () => void;
+  // tx history
+  txHistory: TxHistoryState;
+  openTxHistoryModal: () => void;
 }
 
 const PollarContext = createContext<PollarContextValue | null>(null);
@@ -76,35 +80,28 @@ interface PollarProviderProps {
 
 export function PollarProvider({ config, styles: propStyles, children }: PollarProviderProps) {
   const [pollarClient] = useState<PollarClient>(() => new PollarClient(config));
-  const [stellarClient] = useState<StellarClient>(() => new StellarClient(config.stellarNetwork || 'testnet'));
+  const [networkState, setNetworkState] = useState<NetworkState>(() => pollarClient.getNetworkState());
+  const stellarClient = useMemo(() => {
+    const network = networkState.step === 'connected' ? networkState.network : 'testnet';
+    return new StellarClient(network);
+  }, [networkState]);
   const [sessionState, setSessionState] = useState<PollarApplicationConfigContent | null>(null);
-  const [state, setState] = useState<PollarState>({
-    network: {
-      var: 'network',
-      code: STATE_VAR_CODES.network.NONE,
-      status: StateStatus.NONE,
-      level: 'info',
-      ts: 0,
-    },
-    transaction: {
-      var: 'transaction',
-      code: STATE_VAR_CODES.transaction.NONE,
-      status: StateStatus.NONE,
-      level: 'info',
-      ts: 0,
-    },
-  });
+  const [transaction, setTransaction] = useState<TransactionState>({ step: 'idle' });
+  const [txHistory, setTxHistory] = useState<TxHistoryState>({ step: 'idle' });
   const [remoteConfig, setRemoteConfig] = useState<PollarConfig>(emptyResponse);
   const [styles, setStyles] = useState<PollarStyles>(propStyles ?? {});
 
   useEffect(() => {
-    return pollarClient.onStateChange((stateEntry) => {
-      setState((prevState) => {
-        if (JSON.stringify(prevState[stateEntry.var]) !== JSON.stringify(stateEntry)) {
-          return { ...prevState, [stateEntry.var]: stateEntry };
-        }
-        return prevState;
-      });
+    return pollarClient.onTransactionStateChange(setTransaction);
+  }, [pollarClient]);
+
+  useEffect(() => {
+    return pollarClient.onTxHistoryStateChange(setTxHistory);
+  }, [pollarClient]);
+
+  useEffect(() => {
+    return pollarClient.onNetworkStateChange((state) => {
+      setNetworkState(state);
     });
   }, [pollarClient]);
 
@@ -119,7 +116,7 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
   }, [pollarClient]);
 
   useEffect(() => {
-    fetchRemoteConfig(pollarClient.getApi())
+    fetchRemoteConfig(pollarClient)
       .then((fetched) => {
         setRemoteConfig(fetched);
         setStyles({
@@ -133,26 +130,45 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
       });
   }, [pollarClient]);
 
+  useEffect(() => {
+    if (transaction.step !== 'idle') {
+      setTransactionModalOpen(true);
+    }
+  }, [transaction.step]);
+
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [transactionModalOpen, setTransactionModalOpen] = useState(false);
+  const [kycModalOpen, setKycModalOpen] = useState(false);
+  const [kycModalOptions, setKycModalOptions] = useState<{
+    country?: string;
+    level?: 'basic' | 'intermediate' | 'enhanced';
+    onApproved?: () => void;
+  }>({});
+  const [rampWidgetOpen, setRampWidgetOpen] = useState(false);
+  const [txHistoryModalOpen, setTxHistoryModalOpen] = useState(false);
 
   const contextValue: PollarContextValue = useMemo(
     () =>
       ({
         walletAddress: sessionState?.wallet?.publicKey || '',
         getClient: () => pollarClient,
-        state,
+        transaction,
         login: (options: PollarLoginOptions) => pollarClient.login(options),
         logout: () => pollarClient.logout(),
-        isAuthenticated: pollarClient.isAuthenticated(),
+        isAuthenticated: !!sessionState?.wallet?.publicKey,
         buildTx: (operation, params, options) => pollarClient.buildTx(operation, params, options),
-        submitTx: (signedXdr: string) => pollarClient.submitTx(signedXdr),
-        sendTransaction: (operation, params, options) => {
-          void pollarClient.buildTx(operation, params, options);
-          setTransactionModalOpen(true);
-        },
+        signAndSubmitTx: (signedXdr: string) => pollarClient.signAndSubmitTx(signedXdr),
         openTransactionModal: () => setTransactionModalOpen(true),
         openLoginModal: () => setLoginModalOpen(true),
+        openKycModal: (options = {}) => {
+          setKycModalOptions(options);
+          setKycModalOpen(true);
+        },
+        openRampWidget: () => setRampWidgetOpen(true),
+        txHistory,
+        openTxHistoryModal: () => setTxHistoryModalOpen(true),
+        network: networkState.step === 'connected' ? networkState.network : 'testnet',
+        setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
         config: remoteConfig,
         styles,
         async getBalance(publicKey?: string) {
@@ -163,7 +179,7 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
           return { success: false, errorCode: 'NO_WALLET_FOUND', balances: [] };
         },
       }) as PollarContextValue,
-    [sessionState, remoteConfig, styles, pollarClient, state],
+    [sessionState, remoteConfig, styles, pollarClient, transaction, txHistory, networkState, stellarClient],
   );
 
   return (
@@ -177,6 +193,26 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
       {transactionModalOpen && (
         <ModalErrorBoundary onClose={() => setTransactionModalOpen(false)}>
           <TransactionModal onClose={() => setTransactionModalOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {kycModalOpen && (
+        <ModalErrorBoundary onClose={() => setKycModalOpen(false)}>
+          <KycModal
+            onClose={() => setKycModalOpen(false)}
+            {...(kycModalOptions.country !== undefined && { country: kycModalOptions.country })}
+            {...(kycModalOptions.level !== undefined && { level: kycModalOptions.level })}
+            {...(kycModalOptions.onApproved !== undefined && { onApproved: kycModalOptions.onApproved })}
+          />
+        </ModalErrorBoundary>
+      )}
+      {rampWidgetOpen && (
+        <ModalErrorBoundary onClose={() => setRampWidgetOpen(false)}>
+          <RampWidget onClose={() => setRampWidgetOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {txHistoryModalOpen && (
+        <ModalErrorBoundary onClose={() => setTxHistoryModalOpen(false)}>
+          <TxHistoryModal onClose={() => setTxHistoryModalOpen(false)} />
         </ModalErrorBoundary>
       )}
     </PollarContext.Provider>

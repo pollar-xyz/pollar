@@ -1,0 +1,220 @@
+/* ─── KYC Badge ─────────────────────────────────────────────────────────────── */
+.pollar-kyc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--pollar-kyc-color, #6b7280);
+  background-color: color-mix(in srgb, var(--pollar-kyc-color, #6b7280) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pollar-kyc-color, #6b7280) 30%, transparent);
+}
+
+.pollar-kyc-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--pollar-kyc-color, #6b7280);
+  animation: pollar-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pollar-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ─── KYC Modal ─────────────────────────────────────────────────────────────── */
+.pollar-kyc-modal {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  border-radius: 1rem;
+  border: 1px solid var(--pollar-border);
+  padding: 2rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  background-color: var(--pollar-bg);
+  box-sizing: border-box;
+}
+
+.pollar-kyc-header {
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.pollar-kyc-title {
+  margin: 0 0 0.375rem;
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--pollar-text);
+}
+
+.pollar-kyc-subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--pollar-muted);
+}
+
+/* ─── Provider list ─────────────────────────────────────────────────────────── */
+.pollar-kyc-providers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin-bottom: 1.5rem;
+}
+
+.pollar-kyc-provider-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border-radius: 0.625rem;
+  border: 1px solid var(--pollar-border);
+  background-color: var(--pollar-input-bg);
+  cursor: pointer;
+  transition: all 0.15s;
+  box-sizing: border-box;
+}
+
+.pollar-kyc-provider-btn:hover:not(:disabled) {
+  border-color: var(--pollar-accent);
+  box-shadow: 0 0 0 1px var(--pollar-accent);
+}
+
+.pollar-kyc-provider-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pollar-kyc-provider-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--pollar-text);
+}
+
+.pollar-kyc-provider-flow {
+  font-size: 0.75rem;
+  color: var(--pollar-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ─── KYC iframe placeholder ────────────────────────────────────────────────── */
+.pollar-kyc-iframe-wrap {
+  width: 100%;
+  height: 400px;
+  border-radius: 0.5rem;
+  border: 1px solid var(--pollar-border);
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.pollar-kyc-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.pollar-kyc-iframe-mock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  height: 100%;
+  background-color: var(--pollar-input-bg);
+  color: var(--pollar-muted);
+  font-size: 0.875rem;
+  text-align: center;
+  padding: 1.5rem;
+  box-sizing: border-box;
+}
+
+/* ─── Polling state ─────────────────────────────────────────────────────────── */
+.pollar-kyc-polling {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 0;
+  text-align: center;
+}
+
+.pollar-kyc-polling-text {
+  font-size: 0.9rem;
+  color: var(--pollar-muted);
+}
+
+/* ─── Result ────────────────────────────────────────────────────────────────── */
+.pollar-kyc-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem 0;
+  text-align: center;
+}
+
+.pollar-kyc-result-icon {
+  font-size: 2.5rem;
+}
+
+.pollar-kyc-result-text {
+  font-size: 0.9rem;
+  color: var(--pollar-muted);
+}
+
+/* ─── Actions ───────────────────────────────────────────────────────────────── */
+.pollar-kyc-actions {
+  display: flex;
+  gap: 0.625rem;
+  margin-top: 1rem;
+}
+
+.pollar-kyc-btn-primary {
+  flex: 1;
+  height: var(--pollar-buttons-height, 44px);
+  border: none;
+  border-radius: var(--pollar-buttons-border-radius, 0.5rem);
+  background-color: var(--pollar-accent);
+  color: #fff;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.pollar-kyc-btn-primary:hover:not(:disabled) { opacity: 0.9; }
+.pollar-kyc-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.pollar-kyc-btn-secondary {
+  height: var(--pollar-buttons-height, 44px);
+  padding: 0 1rem;
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-buttons-border-radius, 0.5rem);
+  background-color: transparent;
+  color: var(--pollar-muted);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pollar-kyc-btn-secondary:hover { color: var(--pollar-text); border-color: var(--pollar-text); }
+
+/* ─── Spinner ───────────────────────────────────────────────────────────────── */
+.pollar-kyc-spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid color-mix(in srgb, var(--pollar-accent) 20%, transparent);
+  border-top-color: var(--pollar-accent);
+  border-radius: 50%;
+  animation: pollar-spin 0.8s linear infinite;
+}
+
+@keyframes pollar-spin {
+  to { transform: rotate(360deg); }
+}

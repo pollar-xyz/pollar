@@ -48,7 +48,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
   }
 
   function handleSocialLogin(provider: 'google' | 'github') {
-    getClient().loginOAuth(provider);
+    getClient().login({ provider });
   }
 
   function handleWalletConnect(type: WalletType) {

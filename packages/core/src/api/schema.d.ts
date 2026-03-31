@@ -242,8 +242,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Submit signed transaction
-         * @description Submits a signed transaction envelope to the Stellar network.
+         * Sign and submit transaction
+         * @description Sends an unsigned XDR to the wallet service for signing, then submits the signed transaction to the Stellar network.
          */
         post: operations["postTxSignAndSend"];
         delete?: never;
@@ -264,6 +264,166 @@ export interface paths {
          * @description Returns transaction status by hash. PENDING = not yet confirmed in Horizon.
          */
         get: operations["getTxStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tx/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get transaction history
+         * @description Returns paginated transaction history for the authenticated SDK user. Only includes transactions submitted through Pollar. Transactions appear as PENDING immediately after /tx/build and are updated to SUCCESS or FAILED after /tx/sign-and-send.
+         */
+        get: operations["getTxHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/kyc/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get KYC status
+         * @description Returns the KYC verification status of the authenticated end-user. Optionally filter by a specific provider. If no providerId is given, returns the first active verification found across all providers configured for the application.
+         */
+        get: operations["getKycStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/kyc/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List available KYC providers
+         * @description Returns the KYC providers enabled for the application, filtered by the given country (ISO 3166-1 alpha-2). Use this to show the user which KYC options are available before calling POST /kyc/start.
+         */
+        get: operations["getKycProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/kyc/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a KYC session
+         * @description Initiates a KYC verification session with the specified provider and level. Returns a sessionId and either a kycUrl (for iframe/redirect flows) or a fields array (for form flows). The session expires in 30 minutes.
+         */
+        post: operations["postKycStart"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ramps/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get ramp quotes
+         * @description Returns available quotes for converting fiat to crypto (onramp) or crypto to fiat (offramp) for a given country, amount, and currency. Each quote includes a quoteId valid for 15 minutes. Pass the quoteId to POST /ramps/onramp or POST /ramps/offramp to execute the transaction.
+         */
+        get: operations["getRampsQuote"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ramps/onramp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create onramp transaction
+         * @description Initiates a fiat-to-crypto onramp transaction using a previously obtained quoteId. Returns payment instructions (CLABE, PIX key, etc.) the user must use to send funds. The quote expires in 15 minutes — a new one must be requested after expiry.
+         */
+        post: operations["postRampsOnramp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ramps/offramp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create offramp transaction
+         * @description Initiates a crypto-to-fiat offramp transaction using a previously obtained quoteId. Funds will be sent from the user's wallet to the provided bank account. The quote expires in 15 minutes.
+         */
+        post: operations["postRampsOfframp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ramps/transaction/{txId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get ramp transaction status
+         * @description Returns the current status of an onramp or offramp transaction. Use this endpoint to poll for status updates. Only the authenticated user who created the transaction can access it.
+         */
+        get: operations["getRampsTransactionByTxId"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1092,8 +1252,21 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    network: "testnet" | "public";
+                    network: "testnet" | "mainnet";
                     publicKey: string;
+                    options?: {
+                        timeoutSec?: number;
+                        memo?: {
+                            /** @constant */
+                            type: "text";
+                            value: string;
+                        } | {
+                            /** @constant */
+                            type: "id";
+                            value: string;
+                        };
+                    };
+                } & ({
                     /** @constant */
                     operation: "payment";
                     params: {
@@ -1107,21 +1280,174 @@ export interface operations {
                             type: "credit_alphanum4";
                             code: string;
                             issuer: string;
+                        } | {
+                            /** @constant */
+                            type: "credit_alphanum12";
+                            code: string;
+                            issuer: string;
                         };
                     };
-                    options?: {
-                        timeoutSec?: number;
-                        memo?: {
+                } | {
+                    /** @constant */
+                    operation: "change_trust";
+                    params: {
+                        asset: {
                             /** @constant */
-                            type: "text";
+                            type: "credit_alphanum4";
+                            code: string;
+                            issuer: string;
+                        } | {
+                            /** @constant */
+                            type: "credit_alphanum12";
+                            code: string;
+                            issuer: string;
+                        } | {
+                            /** @constant */
+                            type: "liquidity_pool_shares";
+                            assetA: {
+                                /** @constant */
+                                type: "native";
+                            } | {
+                                /** @constant */
+                                type: "credit_alphanum4";
+                                code: string;
+                                issuer: string;
+                            } | {
+                                /** @constant */
+                                type: "credit_alphanum12";
+                                code: string;
+                                issuer: string;
+                            };
+                            assetB: {
+                                /** @constant */
+                                type: "native";
+                            } | {
+                                /** @constant */
+                                type: "credit_alphanum4";
+                                code: string;
+                                issuer: string;
+                            } | {
+                                /** @constant */
+                                type: "credit_alphanum12";
+                                code: string;
+                                issuer: string;
+                            };
+                        };
+                        limit?: string;
+                    };
+                } | {
+                    /** @constant */
+                    operation: "path_payment_strict_send";
+                    params: {
+                        destination: string;
+                        sendAsset: {
+                            /** @constant */
+                            type: "native";
+                        } | {
+                            /** @constant */
+                            type: "credit_alphanum4";
+                            code: string;
+                            issuer: string;
+                        } | {
+                            /** @constant */
+                            type: "credit_alphanum12";
+                            code: string;
+                            issuer: string;
+                        };
+                        sendAmount: string;
+                        destAsset: {
+                            /** @constant */
+                            type: "native";
+                        } | {
+                            /** @constant */
+                            type: "credit_alphanum4";
+                            code: string;
+                            issuer: string;
+                        } | {
+                            /** @constant */
+                            type: "credit_alphanum12";
+                            code: string;
+                            issuer: string;
+                        };
+                        destMin: string;
+                        /** @default [] */
+                        path?: ({
+                            /** @constant */
+                            type: "native";
+                        } | {
+                            /** @constant */
+                            type: "credit_alphanum4";
+                            code: string;
+                            issuer: string;
+                        } | {
+                            /** @constant */
+                            type: "credit_alphanum12";
+                            code: string;
+                            issuer: string;
+                        })[];
+                    };
+                } | {
+                    /** @constant */
+                    operation: "create_account";
+                    params: {
+                        destination: string;
+                        startingBalance: string;
+                    };
+                } | {
+                    /** @constant */
+                    operation: "invoke_contract";
+                    params: {
+                        contractId: string;
+                        method: string;
+                        /** @default [] */
+                        args?: ({
+                            /** @constant */
+                            type: "bool";
+                            value: boolean;
+                        } | {
+                            /** @constant */
+                            type: "i32";
+                            value: number;
+                        } | {
+                            /** @constant */
+                            type: "u32";
+                            value: number;
+                        } | {
+                            /** @enum {string} */
+                            type: "i64" | "u64" | "i128" | "u128" | "i256" | "u256";
                             value: string;
                         } | {
                             /** @constant */
-                            type: "id";
+                            type: "address";
                             value: string;
-                        };
+                        } | {
+                            /** @enum {string} */
+                            type: "string" | "symbol";
+                            value: string;
+                        } | {
+                            /** @constant */
+                            type: "bytes";
+                            /** @description Base64-encoded bytes */
+                            value: string;
+                        } | {
+                            /** @constant */
+                            type: "vec";
+                            /** @description Array of ScValArg items */
+                            value: unknown[];
+                        } | {
+                            /** @constant */
+                            type: "map";
+                            /** @description Array of {key, val} ScValArg pairs */
+                            value: {
+                                key: unknown;
+                                val: unknown;
+                            }[];
+                        } | {
+                            /** @constant */
+                            type: "void";
+                        })[];
                     };
-                };
+                });
             };
         };
         responses: {
@@ -1202,8 +1528,9 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    network: "testnet" | "public";
-                    signedXdr: string;
+                    network: "testnet" | "mainnet";
+                    publicKey: string;
+                    unsignedXdr: string;
                 };
             };
         };
@@ -1260,7 +1587,7 @@ export interface operations {
     getTxStatus: {
         parameters: {
             query: {
-                network: "testnet" | "public";
+                network: "testnet" | "mainnet";
                 hash: string;
             };
             header?: never;
@@ -1306,6 +1633,621 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    getTxHistory: {
+        parameters: {
+            query?: {
+                network?: "testnet" | "mainnet";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated list of transactions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_TX_HISTORY";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            records: {
+                                id: string;
+                                hash: string;
+                                /** @enum {string} */
+                                network: "testnet" | "mainnet";
+                                /** @enum {string} */
+                                status: "PENDING" | "SUCCESS" | "FAILED";
+                                operation: string;
+                                feeXlm?: string;
+                                resultCode?: string;
+                                details: {
+                                    [key: string]: unknown;
+                                };
+                                summary: string;
+                                createdAt: string;
+                            }[];
+                            total: number;
+                            limit: number;
+                            offset: number;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    getKycStatus: {
+        parameters: {
+            query?: {
+                providerId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description KYC status for the authenticated user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_KYC_STATUS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            /** @enum {string} */
+                            status: "none" | "pending" | "approved" | "rejected";
+                            /** @enum {string} */
+                            level?: "basic" | "intermediate" | "enhanced";
+                            providerId: string;
+                            expiresAt?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    getKycProviders: {
+        parameters: {
+            query: {
+                country: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List of KYC providers available for the country */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_KYC_PROVIDERS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            providers: {
+                                id: string;
+                                name: string;
+                                /** @enum {string} */
+                                flow: "iframe" | "form" | "redirect";
+                                levels: ("basic" | "intermediate" | "enhanced")[];
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    postKycStart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    providerId: string;
+                    /** @enum {string} */
+                    level: "basic" | "intermediate" | "enhanced";
+                };
+            };
+        };
+        responses: {
+            /** @description KYC session created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_KYC_STARTED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            sessionId: string;
+                            kycUrl?: string;
+                            fields?: {
+                                name: string;
+                                type: string;
+                                required: boolean;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Provider not found or not enabled for this application */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    getRampsQuote: {
+        parameters: {
+            query: {
+                country: string;
+                amount: number;
+                currency: string;
+                direction: "onramp" | "offramp";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List of available quotes sorted by recommendation. First item is the best option. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_RAMPS_QUOTES";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            quotes: {
+                                quoteId: string;
+                                provider: string;
+                                fee: number;
+                                feeCurrency: string;
+                                rate: number;
+                                /** @enum {string} */
+                                rail: "SPEI" | "PIX" | "PSE" | "ACH";
+                                /** @enum {string} */
+                                protocol: "SEP-24" | "REST";
+                                estimatedTime: string;
+                                recommended: boolean;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    postRampsOnramp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    quoteId: string;
+                    amount: number;
+                    currency: string;
+                    country: string;
+                    walletAddress: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Onramp transaction created with payment instructions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_RAMPS_ONRAMP_CREATED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            txId: string;
+                            provider: string;
+                            /** @enum {string} */
+                            status: "pending" | "processing" | "completed" | "failed";
+                            paymentInstructions: {
+                                /** @enum {string} */
+                                type: "CLABE" | "PIX" | "PSE" | "ACH";
+                                value: string;
+                                amount: number;
+                                currency: string;
+                                expiresAt?: string;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error or quote expired */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Quote not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    postRampsOfframp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    quoteId: string;
+                    amount: number;
+                    currency: string;
+                    country: string;
+                    walletAddress: string;
+                    bankDetails: {
+                        /** @enum {string} */
+                        type: "CLABE" | "PIX" | "PSE" | "ACH";
+                        value: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Offramp transaction created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_RAMPS_OFFRAMP_CREATED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            txId: string;
+                            provider: string;
+                            /** @enum {string} */
+                            status: "pending" | "processing" | "completed" | "failed";
+                        };
+                    };
+                };
+            };
+            /** @description Validation error or quote expired */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Quote not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    getRampsTransactionByTxId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Transaction ID returned by POST /ramps/onramp or POST /ramps/offramp */
+                txId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transaction status and details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_RAMPS_TX_STATUS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            txId: string;
+                            provider: string;
+                            /** @enum {string} */
+                            status: "pending" | "processing" | "completed" | "failed";
+                            /** @enum {string} */
+                            direction: "onramp" | "offramp";
+                            amount: number;
+                            currency: string;
+                            updatedAt: string;
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
