@@ -1,0 +1,237 @@
+/* ─── Animations ──────────────────────────────────────────────────────────────── */
+@keyframes pollar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pollar-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ─── Overlay ─────────────────────────────────────────────────────────────────── */
+.pollar-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* ─── Modal header (title left, actions right) ────────────────────────────────── */
+.pollar-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.pollar-modal-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--pollar-text);
+  margin: 0;
+}
+
+.pollar-modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ─── Close button ────────────────────────────────────────────────────────────── */
+.pollar-modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--pollar-muted);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  transition: color 150ms, background 150ms;
+}
+
+.pollar-modal-close:hover {
+  color: var(--pollar-text);
+  background: var(--pollar-border);
+}
+
+/* ─── Refresh button ──────────────────────────────────────────────────────────── */
+.pollar-modal-refresh-btn {
+  background: none;
+  border: 1px solid var(--pollar-border);
+  cursor: pointer;
+  color: var(--pollar-muted);
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: color 150ms, background 150ms;
+}
+
+.pollar-modal-refresh-btn:hover:not(:disabled) {
+  color: var(--pollar-text);
+  background: var(--pollar-border);
+}
+
+.pollar-modal-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pollar-modal-refresh-icon.spinning {
+  animation: pollar-spin 0.8s linear infinite;
+}
+
+/* ─── Action button container ─────────────────────────────────────────────────── */
+.pollar-modal-actions {
+  display: flex;
+  gap: 0.625rem;
+  margin-top: 1rem;
+}
+
+/* ─── Primary button ──────────────────────────────────────────────────────────── */
+.pollar-btn-primary {
+  flex: 1;
+  height: var(--pollar-buttons-height, 44px);
+  border: none;
+  border-radius: var(--pollar-buttons-border-radius, 0.5rem);
+  background-color: var(--pollar-accent);
+  color: #fff;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.pollar-btn-primary:hover:not(:disabled) { opacity: 0.9; }
+.pollar-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ─── Secondary button ────────────────────────────────────────────────────────── */
+.pollar-btn-secondary {
+  height: var(--pollar-buttons-height, 44px);
+  padding: 0 1rem;
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-buttons-border-radius, 0.5rem);
+  background-color: transparent;
+  color: var(--pollar-muted);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pollar-btn-secondary:hover:not(:disabled) { color: var(--pollar-text); border-color: var(--pollar-text); }
+
+/* ─── Spinner ─────────────────────────────────────────────────────────────────── */
+.pollar-spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid color-mix(in srgb, var(--pollar-accent) 20%, transparent);
+  border-top-color: var(--pollar-accent);
+  border-radius: 50%;
+  animation: pollar-spin 0.8s linear infinite;
+}
+
+/* ─── Empty / error states ────────────────────────────────────────────────────── */
+.pollar-modal-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--pollar-muted);
+  font-size: 0.875rem;
+}
+
+.pollar-modal-error {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  color: var(--pollar-error-text, #dc2626);
+  font-size: 0.875rem;
+}
+
+/* ─── Footer ──────────────────────────────────────────────────────────────────── */
+.pollar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-top: 1px solid var(--pollar-border);
+  padding-top: 1.5rem;
+}
+
+.pollar-footer-protected {
+  font-size: 0.875rem;
+  color: var(--pollar-muted);
+}
+
+.pollar-footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pollar-footer-logo {
+  height: 18px;
+  width: 18px;
+  object-fit: contain;
+}
+
+.pollar-footer-name {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--pollar-text);
+}
+
+.pollar-footer-version {
+  font-size: 0.7rem;
+  color: var(--pollar-muted);
+  opacity: 0.6;
+}
+
+/* ─── Status banner ───────────────────────────────────────────────────────────── */
+.pollar-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  min-height: 40px;
+}
+
+.pollar-status span {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.pollar-status-cancel {
+  margin-left: 4px;
+  padding: 2px 8px;
+  border-radius: var(--pollar-buttons-border-radius, 4px);
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.pollar-status-cancel:hover {
+  opacity: 1;
+}
+
+.pollar-status[data-kind='ERROR']   { color: #ef4444; }
+.pollar-status[data-kind='SUCCESS'] { color: #10b981; }
+.pollar-status[data-kind='LOADING'] { color: var(--pollar-accent); }
+.pollar-status[data-kind='LOADING'] svg { animation: pollar-spin 1s linear infinite; }

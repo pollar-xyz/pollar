@@ -148,11 +148,11 @@ export function RampWidgetTemplate({
             </select>
           </div>
 
-          <div className="pollar-ramp-actions">
-            <button type="button" className="pollar-ramp-btn-secondary" onClick={onClose}>
+          <div className="pollar-modal-actions">
+            <button type="button" className="pollar-btn-secondary" onClick={onClose}>
               Cancel
             </button>
-            <button type="button" className="pollar-ramp-btn-primary" disabled={!amount || isLoading} onClick={onFindRoute}>
+            <button type="button" className="pollar-btn-primary" disabled={!amount || isLoading} onClick={onFindRoute}>
               Find best route
             </button>
           </div>
@@ -177,7 +177,7 @@ export function RampWidgetTemplate({
               <RouteDisplay key={i} quote={q} onSelect={onSelectQuote} />
             ))}
           </div>
-          <button type="button" className="pollar-ramp-btn-secondary" onClick={onClose}>
+          <button type="button" className="pollar-btn-secondary" onClick={onClose}>
             Cancel
           </button>
         </>
@@ -221,7 +221,7 @@ export function RampWidgetTemplate({
             </p>
           )}
 
-          <button type="button" className="pollar-ramp-btn-primary" onClick={onClose}>
+          <button type="button" className="pollar-btn-primary" onClick={onClose}>
             Done
           </button>
         </div>

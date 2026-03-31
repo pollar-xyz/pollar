@@ -81,6 +81,12 @@ export class PollarFlowError extends Error {
   }
 }
 
+// ─── Wallet balance types ─────────────────────────────────────────────────────
+
+export type WalletBalanceContent =
+  pollarPaths['/wallet/balance']['get']['responses'][200]['content']['application/json']['content'];
+export type WalletBalanceRecord = WalletBalanceContent['balances'][number];
+
 // ─── Tx history types ─────────────────────────────────────────────────────────
 
 export type TxHistoryRecord =

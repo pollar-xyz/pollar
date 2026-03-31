@@ -17,7 +17,6 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps): Pro
 
   if (data?.code === 'SDK_LOGIN_SUCCESS' && isValidSession(data?.content)) {
     storeSession(data.content);
-    // _storeSession in client.ts transitions to 'authenticated'
   } else {
     setAuthState({
       step: 'error',

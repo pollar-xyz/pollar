@@ -33,6 +33,7 @@ import {
   TxHistoryParams,
   TxHistoryState,
   TxSignAndSendBody,
+  WalletBalanceContent,
 } from '../types';
 import { WalletAdapter, WalletType } from '../wallets';
 import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/emailFlow';
@@ -300,6 +301,17 @@ export class PollarClient {
     } catch {
       this._setTxHistoryState({ step: 'error', params, message: 'Failed to load history' });
     }
+  }
+
+  // ─── Wallet balance ───────────────────────────────────────────────────────
+
+  async getWalletBalance(publicKey?: string): Promise<WalletBalanceContent | null> {
+    const pk = publicKey ?? this._session?.wallet?.publicKey;
+    if (!pk) return null;
+    const network = this.getNetwork();
+    const { data, error } = await this._api.GET('/wallet/balance', { params: { query: { publicKey: pk, network } } });
+    if (!error && data?.success && data.content) return data.content;
+    return null;
   }
 
   // ─── Transactions ─────────────────────────────────────────────────────────

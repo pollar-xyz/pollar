@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { usePollar } from '../../context';
 import type { RampStep } from './RampWidgetTemplate';
 import { RampWidgetTemplate } from './RampWidgetTemplate';
+import '../shared.css';
 import './RampWidget.css';
 
 interface RampWidgetProps {

@@ -4,6 +4,7 @@ import { AUTH_ERROR_CODES, AuthState, WalletType } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { LoginModalTemplate } from './LoginModalTemplate';
+import '../shared.css';
 import './LoginModal.css';
 
 interface LoginModalProps {

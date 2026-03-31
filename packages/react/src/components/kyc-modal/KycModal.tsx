@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { usePollar } from '../../context';
 import type { KycStep } from './KycModalTemplate';
 import { KycModalTemplate } from './KycModalTemplate';
+import '../shared.css';
 import './KycModal.css';
 
 interface KycModalProps {

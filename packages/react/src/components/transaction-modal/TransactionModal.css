@@ -11,38 +11,6 @@
     font-family: inherit;
 }
 
-/* ---- Header ---- */
-.pollar-tx-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1.25rem;
-}
-
-.pollar-tx-title {
-    font-size: 1.125rem;
-    font-weight: 700;
-    color: var(--pollar-text);
-    margin: 0;
-}
-
-.pollar-tx-close {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--pollar-muted);
-    padding: 4px;
-    display: flex;
-    align-items: center;
-    border-radius: 6px;
-    transition: color 150ms, background 150ms;
-}
-
-.pollar-tx-close:hover {
-    color: var(--pollar-text);
-    background: var(--pollar-border);
-}
-
 /* ---- Summary card ---- */
 .pollar-tx-summary {
     background: var(--pollar-input-bg, rgba(0,0,0,0.04));
@@ -162,36 +130,10 @@
     background: var(--pollar-input-bg);
 }
 
-/* ---- Sign button ---- */
+/* ---- Sign button (extends .pollar-btn-primary) ---- */
 .pollar-tx-sign-btn {
     width: 100%;
-    height: var(--pollar-buttons-height, 44px);
-    border: none;
-    border-radius: var(--pollar-buttons-border-radius, 8px);
-    background: var(--pollar-accent, #005DB4);
-    color: #fff;
-    font-size: 0.9375rem;
     font-weight: 600;
-    cursor: pointer;
-    transition: opacity 150ms;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-}
-
-.pollar-tx-sign-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.pollar-tx-sign-btn:not(:disabled):hover {
-    opacity: 0.88;
-}
-
-/* ---- Spinner (reuse pollar-spin) ---- */
-.pollar-tx-spinner {
-    animation: pollar-spin 0.9s linear infinite;
 }
 
 /* ---- Status banner ---- */
@@ -211,40 +153,6 @@
 
 .pollar-tx-status[data-kind="SUCCESS"] {
     color: var(--pollar-success-text, #16a34a);
-}
-
-/* ---- Footer ---- */
-.pollar-tx-footer {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    margin-top: 1rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--pollar-border);
-}
-
-.pollar-tx-footer-protected {
-    font-size: 0.75rem;
-    color: var(--pollar-muted);
-}
-
-.pollar-tx-footer-brand {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-
-.pollar-tx-footer-logo {
-    height: 14px;
-    width: 14px;
-    object-fit: contain;
-}
-
-.pollar-tx-footer-name {
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: var(--pollar-text);
 }
 
 /* ---- XDR toggle ---- */
@@ -285,6 +193,7 @@
     max-height: 120px;
     overflow-y: auto;
 }
+
 /* ---- Error details ---- */
 .pollar-tx-error-details {
     margin-bottom: 1rem;

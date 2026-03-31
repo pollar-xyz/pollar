@@ -11,6 +11,7 @@ import {
   TransactionState,
   TxBuildBody,
   TxHistoryState,
+  WalletBalanceContent,
 } from '@pollar/core';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { ModalErrorBoundary } from './components/commons';
@@ -19,6 +20,7 @@ import { LoginModal } from './components/login-modal/LoginModal';
 import { RampWidget } from './components/ramp-widget/RampWidget';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
+import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 import type { PollarConfig, PollarStyles } from './types';
 
 const emptyResponse = {
@@ -56,7 +58,7 @@ interface PollarContextValue {
   network: StellarNetwork;
   setNetwork: (network: StellarNetwork) => void;
   // stellar
-  getBalance: (publicKey?: string) => any;
+  getBalance: (publicKey?: string) => Promise<WalletBalanceContent | null>;
   // kyc
   openKycModal: (options?: {
     country?: string;
@@ -68,6 +70,8 @@ interface PollarContextValue {
   // tx history
   txHistory: TxHistoryState;
   openTxHistoryModal: () => void;
+  // wallet balance
+  openWalletBalanceModal: () => void;
 }
 
 const PollarContext = createContext<PollarContextValue | null>(null);
@@ -146,6 +150,7 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
   }>({});
   const [rampWidgetOpen, setRampWidgetOpen] = useState(false);
   const [txHistoryModalOpen, setTxHistoryModalOpen] = useState(false);
+  const [walletBalanceModalOpen, setWalletBalanceModalOpen] = useState(false);
 
   const contextValue: PollarContextValue = useMemo(
     () =>
@@ -167,17 +172,12 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
         openRampWidget: () => setRampWidgetOpen(true),
         txHistory,
         openTxHistoryModal: () => setTxHistoryModalOpen(true),
+        openWalletBalanceModal: () => setWalletBalanceModalOpen(true),
         network: networkState.step === 'connected' ? networkState.network : 'testnet',
         setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
         config: remoteConfig,
         styles,
-        async getBalance(publicKey?: string) {
-          const pk = publicKey || sessionState?.wallet?.publicKey;
-          if (pk) {
-            return await stellarClient.getBalances(pk);
-          }
-          return { success: false, errorCode: 'NO_WALLET_FOUND', balances: [] };
-        },
+        getBalance: (publicKey?: string) => pollarClient.getWalletBalance(publicKey),
       }) as PollarContextValue,
     [sessionState, remoteConfig, styles, pollarClient, transaction, txHistory, networkState, stellarClient],
   );
@@ -213,6 +213,11 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
       {txHistoryModalOpen && (
         <ModalErrorBoundary onClose={() => setTxHistoryModalOpen(false)}>
           <TxHistoryModal onClose={() => setTxHistoryModalOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {walletBalanceModalOpen && (
+        <ModalErrorBoundary onClose={() => setWalletBalanceModalOpen(false)}>
+          <WalletBalanceModal onClose={() => setWalletBalanceModalOpen(false)} />
         </ModalErrorBoundary>
       )}
     </PollarContext.Provider>

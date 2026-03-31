@@ -87,11 +87,11 @@ export function KycModalTemplate({
               </div>
             )}
           </div>
-          <div className="pollar-kyc-actions">
-            <button type="button" className="pollar-kyc-btn-secondary" onClick={onClose}>
+          <div className="pollar-modal-actions">
+            <button type="button" className="pollar-btn-secondary" onClick={onClose}>
               Cancel
             </button>
-            <button type="button" className="pollar-kyc-btn-primary" onClick={onDoneVerifying}>
+            <button type="button" className="pollar-btn-primary" onClick={onDoneVerifying}>
               I've completed verification
             </button>
           </div>
@@ -100,7 +100,7 @@ export function KycModalTemplate({
 
       {step === 'polling' && (
         <div className="pollar-kyc-polling">
-          <div className="pollar-kyc-spinner" />
+          <div className="pollar-spinner" />
           <p className="pollar-kyc-polling-text">Checking verification status…</p>
         </div>
       )}
@@ -112,8 +112,8 @@ export function KycModalTemplate({
           <p className="pollar-kyc-result-text">
             {kycStatus === 'approved' ? 'Your identity has been verified successfully.' : 'Verification was not approved. Please try again.'}
           </p>
-          <div className="pollar-kyc-actions">
-            <button type="button" className="pollar-kyc-btn-primary" onClick={onClose}>
+          <div className="pollar-modal-actions">
+            <button type="button" className="pollar-btn-primary" onClick={onClose}>
               Close
             </button>
           </div>

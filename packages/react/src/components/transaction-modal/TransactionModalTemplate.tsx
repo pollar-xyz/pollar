@@ -69,9 +69,9 @@ export function TransactionModalTemplate({
 
   return (
     <div className="pollar-tx-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
-      <div className="pollar-tx-header">
-        <h2 className="pollar-tx-title">Transaction</h2>
-        <button className="pollar-tx-close" onClick={onClose} aria-label="Close">
+      <div className="pollar-modal-header">
+        <h2 className="pollar-modal-title">Transaction</h2>
+        <button className="pollar-modal-close" onClick={onClose} aria-label="Close">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
             <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
@@ -164,17 +164,17 @@ export function TransactionModalTemplate({
       )}
 
       {isBuilt && (
-        <button className="pollar-tx-sign-btn" onClick={onSignAndSend}>
+        <button className="pollar-btn-primary pollar-tx-sign-btn" onClick={onSignAndSend}>
           Sign &amp; Send
         </button>
       )}
       {isSigning && (
-        <button className="pollar-tx-sign-btn" disabled>
+        <button className="pollar-btn-primary pollar-tx-sign-btn" disabled>
           Signing &amp; sending…
         </button>
       )}
       {isSuccess && (
-        <button className="pollar-tx-sign-btn" onClick={onClose}>
+        <button className="pollar-btn-primary pollar-tx-sign-btn" onClick={onClose}>
           Done
         </button>
       )}

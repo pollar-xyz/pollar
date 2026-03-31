@@ -1,6 +1,7 @@
 'use client';
 
 import { usePollar } from '../../context';
+import '../shared.css';
 import './TransactionModal.css';
 import { TransactionModalTemplate } from './TransactionModalTemplate';
 

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { usePollar } from '../../context';
+import '../shared.css';
 import './TxHistoryModal.css';
 import { TxHistoryModalTemplate } from './TxHistoryModalTemplate';
 

@@ -1,0 +1,71 @@
+/* ---- Wallet balance modal ---- */
+.pollar-bal-modal {
+    width: 100%;
+    max-width: 380px;
+    border-radius: 1rem;
+    border: 1px solid var(--pollar-border);
+    padding: 1.75rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    background-color: var(--pollar-bg);
+    box-sizing: border-box;
+    font-family: inherit;
+}
+
+/* ---- Address chip ---- */
+.pollar-bal-address {
+    font-size: 0.75rem;
+    font-family: monospace;
+    color: var(--pollar-muted);
+    background: var(--pollar-input-bg, rgba(0,0,0,0.04));
+    border: 1px solid var(--pollar-border);
+    border-radius: 6px;
+    padding: 0.375rem 0.75rem;
+    margin-bottom: 1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ---- Balance list ---- */
+.pollar-bal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.pollar-bal-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--pollar-input-bg, rgba(0,0,0,0.04));
+    border: 1px solid var(--pollar-border);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+}
+
+.pollar-bal-asset {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--pollar-text);
+}
+
+.pollar-bal-amounts {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.125rem;
+}
+
+.pollar-bal-amount {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: var(--pollar-text);
+    font-variant-numeric: tabular-nums;
+}
+
+.pollar-bal-available {
+    font-size: 0.6875rem;
+    color: var(--pollar-muted);
+    font-variant-numeric: tabular-nums;
+}

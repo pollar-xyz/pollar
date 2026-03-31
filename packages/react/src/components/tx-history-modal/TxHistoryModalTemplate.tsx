@@ -63,12 +63,12 @@ export function TxHistoryModalTemplate({
 
   return (
     <div className="pollar-hist-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
-      <div className="pollar-hist-header">
-        <h2 className="pollar-hist-title">Transaction History</h2>
-        <div className="pollar-hist-header-actions">
-          <button className="pollar-hist-refresh-btn" onClick={onRefresh} disabled={isLoading}>
+      <div className="pollar-modal-header">
+        <h2 className="pollar-modal-title">Transaction History</h2>
+        <div className="pollar-modal-header-actions">
+            <button className="pollar-modal-refresh-btn" onClick={onRefresh} disabled={isLoading}>
             <svg
-              className={`pollar-hist-refresh-icon${isLoading ? ' spinning' : ''}`}
+              className={`pollar-modal-refresh-icon${isLoading ? ' spinning' : ''}`}
               width="13"
               height="13"
               viewBox="0 0 13 13"
@@ -85,7 +85,7 @@ export function TxHistoryModalTemplate({
             </svg>
             Refresh
           </button>
-          <button className="pollar-hist-close" onClick={onClose} aria-label="Close">
+          <button className="pollar-modal-close" onClick={onClose} aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
               <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
@@ -95,16 +95,16 @@ export function TxHistoryModalTemplate({
 
       <div className="pollar-hist-list">
         {txHistory.step === 'idle' && (
-          <div className="pollar-hist-empty">Click Refresh to load transactions.</div>
+          <div className="pollar-modal-empty">Click Refresh to load transactions.</div>
         )}
         {isLoading && (
-          <div className="pollar-hist-empty">Loading…</div>
+          <div className="pollar-modal-empty">Loading…</div>
         )}
         {txHistory.step === 'error' && (
-          <div className="pollar-hist-empty">{txHistory.message}</div>
+          <div className="pollar-modal-empty">{txHistory.message}</div>
         )}
         {txHistory.step === 'loaded' && records.length === 0 && (
-          <div className="pollar-hist-empty">No transactions yet.</div>
+          <div className="pollar-modal-empty">No transactions yet.</div>
         )}
         {records.map((record) => (
           <div key={record.id} className="pollar-hist-item">

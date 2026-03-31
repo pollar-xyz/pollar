@@ -11,82 +11,6 @@
     font-family: inherit;
 }
 
-/* ---- Header ---- */
-.pollar-hist-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1.25rem;
-}
-
-.pollar-hist-title {
-    font-size: 1.125rem;
-    font-weight: 700;
-    color: var(--pollar-text);
-    margin: 0;
-}
-
-.pollar-hist-header-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.pollar-hist-refresh-btn {
-    background: none;
-    border: 1px solid var(--pollar-border);
-    cursor: pointer;
-    color: var(--pollar-muted);
-    padding: 5px 10px;
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    border-radius: 6px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    transition: color 150ms, background 150ms;
-}
-
-.pollar-hist-refresh-btn:hover:not(:disabled) {
-    color: var(--pollar-text);
-    background: var(--pollar-border);
-}
-
-.pollar-hist-refresh-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.pollar-hist-refresh-icon {
-    transition: transform 600ms;
-}
-
-.pollar-hist-refresh-icon.spinning {
-    animation: pollar-spin 0.8s linear infinite;
-}
-
-@keyframes pollar-spin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
-}
-
-.pollar-hist-close {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--pollar-muted);
-    padding: 4px;
-    display: flex;
-    align-items: center;
-    border-radius: 6px;
-    transition: color 150ms, background 150ms;
-}
-
-.pollar-hist-close:hover {
-    color: var(--pollar-text);
-    background: var(--pollar-border);
-}
-
 /* ---- List ---- */
 .pollar-hist-list {
     display: flex;
@@ -152,14 +76,6 @@
 .pollar-hist-item-badge[data-status="PENDING"] {
     background: rgba(107, 114, 128, 0.12);
     color: var(--pollar-muted);
-}
-
-/* ---- Empty / loading / error states ---- */
-.pollar-hist-empty {
-    text-align: center;
-    padding: 2rem 1rem;
-    color: var(--pollar-muted);
-    font-size: 0.875rem;
 }
 
 /* ---- Pagination ---- */
