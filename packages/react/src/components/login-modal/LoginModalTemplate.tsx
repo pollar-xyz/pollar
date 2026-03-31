@@ -1,12 +1,49 @@
 'use client';
 
-import { StateAuthenticationCodes, StateStatus } from '@pollar/core';
-import { type CSSProperties, type RefObject } from 'react';
+import { AUTH_ERROR_CODES, AuthState } from '@pollar/core';
+
+type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
+import { type CSSProperties } from 'react';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter } from '../commons';
 import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
+
+const AUTH_STATE_MESSAGES: Record<AuthState['step'], string> = {
+  idle: '',
+  creating_session: 'Initializing…',
+  entering_email: '',
+  sending_email: 'Sending…',
+  entering_code: 'Code sent — check your inbox',
+  verifying_email_code: 'Verifying…',
+  opening_oauth: 'Redirecting…',
+  connecting_wallet: 'Connecting wallet…',
+  wallet_not_installed: 'Wallet not installed',
+  authenticating_wallet: 'Signing in with wallet…',
+  authenticating: 'Authenticating…',
+  authenticated: 'Welcome!',
+  error: '',
+};
+
+function authStateToStatus(step: AuthState['step']): StateStatus {
+  const loading: AuthState['step'][] = [
+    'creating_session',
+    'sending_email',
+    'verifying_email_code',
+    'opening_oauth',
+    'connecting_wallet',
+    'authenticating_wallet',
+    'authenticating',
+  ];
+  const success: AuthState['step'][] = ['authenticated', 'entering_code'];
+  const error: AuthState['step'][] = ['error', 'wallet_not_installed'];
+
+  if (loading.includes(step)) return 'LOADING';
+  if (success.includes(step)) return 'SUCCESS';
+  if (error.includes(step)) return 'ERROR';
+  return 'NONE';
+}
 
 interface LoginModalTemplateProps {
   theme: string;
@@ -23,17 +60,16 @@ interface LoginModalTemplateProps {
   };
   appName: string;
   email?: string;
-  status: StateStatus;
-  error?: string | null;
   onEmailChange?: (email: string) => void;
   onEmailSubmit?: () => void;
   onSocialLogin?: (provider: 'google' | 'github') => void;
   onFreighterConnect?: () => void;
   onAlbedoConnect?: () => void;
-  loginStateCode: StateAuthenticationCodes | null;
-  awaitingEmailCode?: boolean;
+  authState: AuthState;
+  codeInputKey?: number;
   onCodeSubmit?: (code: string) => void;
-  cancelLoginRef: RefObject<(() => void) | null>;
+  onBack: () => void;
+  onCancel: () => void;
   onRetry: () => void;
 }
 
@@ -46,17 +82,16 @@ export function LoginModalTemplate({
   providers,
   appName,
   email = '',
-  status,
-  error,
   onEmailChange,
   onEmailSubmit,
   onSocialLogin,
   onFreighterConnect,
   onAlbedoConnect,
-  loginStateCode,
-  awaitingEmailCode = false,
+  authState,
+  codeInputKey,
   onCodeSubmit,
-  cancelLoginRef,
+  onBack,
+  onCancel,
   onRetry,
 }: LoginModalTemplateProps) {
   const isDark = theme === 'dark';
@@ -76,7 +111,16 @@ export function LoginModalTemplate({
     '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
   } as CSSProperties;
 
-  const isLoading = status === StateStatus.LOADING;
+  const status = authStateToStatus(authState.step);
+  const isLoading = status === 'LOADING';
+  const isEmailCodeError =
+    authState.step === 'error' &&
+    (authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_EXPIRED ||
+      authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_INVALID);
+  const awaitingEmailCode =
+    authState.step === 'entering_code' || authState.step === 'verifying_email_code' || isEmailCodeError;
+  const statusMessage =
+    authState.step === 'error' ? authState.message : AUTH_STATE_MESSAGES[authState.step];
 
   return (
     <div className="pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
@@ -89,11 +133,14 @@ export function LoginModalTemplate({
       </div>
 
       {awaitingEmailCode ? (
-        <EmailCodeInput email={email} onSubmit={onCodeSubmit ?? (() => {})} />
+        <>
+          <button type="button" className="pollar-back-btn" onClick={onBack}>
+            ← Back
+          </button>
+          <EmailCodeInput key={codeInputKey} email={email} onSubmit={onCodeSubmit ?? (() => {})} />
+        </>
       ) : (
         <>
-          {error && <div className="pollar-error">{error}</div>}
-
           {emailEnabled && (
             <div className="pollar-email-section">
               <input
@@ -147,7 +194,12 @@ export function LoginModalTemplate({
         </>
       )}
 
-      <ModalStatusBanner code={loginStateCode} status={status} onCancel={() => cancelLoginRef.current?.()} onRetry={onRetry} />
+      <ModalStatusBanner
+        message={statusMessage}
+        status={status}
+        onCancel={onCancel}
+        onRetry={isEmailCodeError ? undefined : onRetry}
+      />
 
       <PollarModalFooter />
     </div>

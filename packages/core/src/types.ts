@@ -1,4 +1,3 @@
-import { PollarStateVar, STATE_VAR_CODES, StateStatus } from './constants';
 import { pollarPaths, StellarNetwork } from './index';
 import { WalletType } from './wallets';
 
@@ -26,25 +25,112 @@ export type PollarLoginOptions =
   | { provider: 'email'; email: string }
   | { provider: 'wallet'; type: WalletType };
 
-type NetworkCodes = (typeof STATE_VAR_CODES)[typeof PollarStateVar.NETWORK];
-export type StateNetworkCodes = NetworkCodes[keyof (typeof STATE_VAR_CODES)[typeof PollarStateVar.NETWORK]];
+export type TxBuildContent = TxBuildResponse['content'];
 
-type AuthenticationCodes = (typeof STATE_VAR_CODES)[typeof PollarStateVar.AUTHENTICATION];
-export type StateAuthenticationCodes =
-  AuthenticationCodes[keyof (typeof STATE_VAR_CODES)[typeof PollarStateVar.AUTHENTICATION]];
+export type TransactionState =
+  | { step: 'idle' }
+  | { step: 'building' }
+  | { step: 'built'; buildData: TxBuildContent }
+  | { step: 'signing'; buildData: TxBuildContent }
+  | { step: 'success'; buildData: TxBuildContent; hash: string }
+  | { step: 'error'; details?: string; buildData?: TxBuildContent };
 
-type TransactionCodes = (typeof STATE_VAR_CODES)[typeof PollarStateVar.TRANSACTION];
-export type StateTransactionCodes = TransactionCodes[keyof (typeof STATE_VAR_CODES)[typeof PollarStateVar.TRANSACTION]];
+export const AUTH_ERROR_CODES = {
+  SESSION_CREATE_FAILED: 'SESSION_CREATE_FAILED',
+  EMAIL_SEND_FAILED: 'EMAIL_SEND_FAILED',
+  EMAIL_VERIFY_FAILED: 'EMAIL_VERIFY_FAILED',
+  EMAIL_CODE_EXPIRED: 'EMAIL_CODE_EXPIRED',
+  EMAIL_CODE_INVALID: 'EMAIL_CODE_INVALID',
+  AUTH_FAILED: 'AUTH_FAILED',
+  WALLET_CONNECT_FAILED: 'WALLET_CONNECT_FAILED',
+  WALLET_AUTH_FAILED: 'WALLET_AUTH_FAILED',
+  UNEXPECTED_ERROR: 'UNEXPECTED_ERROR',
+} as const;
 
-export type StateVarCodes = StateNetworkCodes | StateAuthenticationCodes | StateTransactionCodes;
+export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[keyof typeof AUTH_ERROR_CODES];
 
-export interface PollarStateEntry {
-  var: PollarStateVar;
-  code: StateVarCodes;
-  status: StateStatus;
-  level: 'info' | 'warn' | 'error';
-  data?: unknown;
-  ts: number;
+export type AuthState =
+  | { step: 'idle' }
+  | { step: 'creating_session' }
+  | { step: 'entering_email'; clientSessionId: string }
+  | { step: 'sending_email'; email: string }
+  | { step: 'entering_code'; clientSessionId: string; email: string }
+  | { step: 'verifying_email_code'; clientSessionId: string; email: string }
+  | { step: 'opening_oauth'; provider: 'google' | 'github' }
+  | { step: 'connecting_wallet'; walletType: WalletType }
+  | { step: 'wallet_not_installed'; walletType: WalletType }
+  | { step: 'authenticating_wallet' }
+  | { step: 'authenticating' }
+  | { step: 'authenticated'; session: PollarApplicationConfigContent }
+  | {
+      step: 'error';
+      previousStep: string;
+      message: string;
+      errorCode: AuthErrorCode;
+      clientSessionId?: string;
+      email?: string;
+    };
+
+export type NetworkState = { step: 'idle' } | { step: 'connected'; network: StellarNetwork };
+
+export class PollarFlowError extends Error {
+  readonly code = 'INVALID_FLOW' as const;
+  constructor(message: string) {
+    super(message);
+    this.name = 'PollarFlowError';
+  }
 }
 
-export type PollarState = { [key in PollarStateVar]: PollarStateEntry[] };
+// ─── Wallet balance types ─────────────────────────────────────────────────────
+
+export type WalletBalanceContent =
+  pollarPaths['/wallet/balance']['get']['responses'][200]['content']['application/json']['content'];
+export type WalletBalanceRecord = WalletBalanceContent['balances'][number];
+
+// ─── Tx history types ─────────────────────────────────────────────────────────
+
+export type TxHistoryRecord =
+  pollarPaths['/tx/history']['get']['responses'][200]['content']['application/json']['content']['records'][number];
+
+export type TxHistoryParams = NonNullable<pollarPaths['/tx/history']['get']['parameters']['query']>;
+
+export type TxHistoryContent =
+  pollarPaths['/tx/history']['get']['responses'][200]['content']['application/json']['content'];
+
+export type TxHistoryState =
+  | { step: 'idle' }
+  | { step: 'loading'; params: TxHistoryParams }
+  | { step: 'loaded'; params: TxHistoryParams; data: TxHistoryContent }
+  | { step: 'error'; params: TxHistoryParams; message: string };
+
+// ─── KYC types ────────────────────────────────────────────────────────────────
+
+export type KycLevel = 'basic' | 'intermediate' | 'enhanced';
+export type KycStatus = 'none' | 'pending' | 'approved' | 'rejected';
+export type KycFlow = 'iframe' | 'form' | 'redirect';
+
+export type KycProvider =
+  pollarPaths['/kyc/providers']['get']['responses'][200]['content']['application/json']['content']['providers'][number];
+export type KycStartBody = NonNullable<pollarPaths['/kyc/start']['post']['requestBody']>['content']['application/json'];
+export type KycStartResponse = pollarPaths['/kyc/start']['post']['responses'][200]['content']['application/json']['content'];
+
+// ─── Ramps types ──────────────────────────────────────────────────────────────
+
+export type RampsQuoteQuery = NonNullable<pollarPaths['/ramps/quote']['get']['parameters']['query']>;
+export type RampQuote =
+  pollarPaths['/ramps/quote']['get']['responses'][200]['content']['application/json']['content']['quotes'][number];
+export type RampsQuoteResponse = pollarPaths['/ramps/quote']['get']['responses'][200]['content']['application/json']['content'];
+
+export type RampsOnrampBody = NonNullable<pollarPaths['/ramps/onramp']['post']['requestBody']>['content']['application/json'];
+export type RampsOnrampResponse =
+  pollarPaths['/ramps/onramp']['post']['responses'][200]['content']['application/json']['content'];
+
+export type RampsOfframpBody = NonNullable<pollarPaths['/ramps/offramp']['post']['requestBody']>['content']['application/json'];
+export type RampsOfframpResponse =
+  pollarPaths['/ramps/offramp']['post']['responses'][200]['content']['application/json']['content'];
+
+export type RampsTransactionResponse =
+  pollarPaths['/ramps/transaction/{txId}']['get']['responses'][200]['content']['application/json']['content'];
+export type RampTxStatus = RampsTransactionResponse['status'];
+export type RampDirection = RampsTransactionResponse['direction'];
+export type PaymentInstructions = RampsOnrampResponse['paymentInstructions'];
