@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.1
+
+### `@pollar/core`
+
+- **New:** External wallet support (Freighter, Albedo, etc.) — users can now sign and submit transactions directly from their own wallet without Pollar holding the keys
+- **Refactor:** `signAndSubmitTx()` now handles both custodial (social/email login) and external wallet flows — `signAndSubmitExternalTx()` removed
+- **Fix:** Connecting with an external wallet no longer triggers custodial wallet creation on the backend
+
+### `@pollar/react`
+
+- **Refactor:** `TransactionModal` UI updates — design improvements to the modal layout and styles
+- **Refactor:** `signAndSubmitExternalTx` removed from context; consumers use `signAndSubmitTx` for all flows
+
 ## 0.5.0
 
 ### `@pollar/core`

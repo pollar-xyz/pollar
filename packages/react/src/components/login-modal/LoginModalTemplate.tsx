@@ -3,7 +3,7 @@
 import { AUTH_ERROR_CODES, AuthState } from '@pollar/core';
 
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
-import { type CSSProperties } from 'react';
+import { type CSSProperties, useState } from 'react';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter } from '../commons';
 import { EmailCodeInput } from './EmailCodeInput';
@@ -94,6 +94,8 @@ export function LoginModalTemplate({
   onCancel,
   onRetry,
 }: LoginModalTemplateProps) {
+  const [showWalletPicker, setShowWalletPicker] = useState(false);
+
   const isDark = theme === 'dark';
   const enabledSocial = Object.entries(providers).filter(([, enabled]) => enabled);
 
@@ -122,8 +124,21 @@ export function LoginModalTemplate({
   const statusMessage =
     authState.step === 'error' ? authState.message : AUTH_STATE_MESSAGES[authState.step];
 
+  const BackButton = ({ onClick }: { onClick: () => void }) => (
+    <button type="button" className="pollar-back-btn" onClick={onClick} aria-label="Back">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M15 19l-7-7 7-7" />
+      </svg>
+    </button>
+  );
+
   return (
     <div className="pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
+      <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 6L6 18M6 6l12 12" />
+        </svg>
+      </button>
       <div className="pollar-header">
         <div className="pollar-logo-wrap">
           <img src={logoUrl ?? LOGO_POLLAR} alt="Logo" className="pollar-logo" />
@@ -134,10 +149,32 @@ export function LoginModalTemplate({
 
       {awaitingEmailCode ? (
         <>
-          <button type="button" className="pollar-back-btn" onClick={onBack}>
-            ← Back
-          </button>
-          <EmailCodeInput key={codeInputKey} email={email} onSubmit={onCodeSubmit ?? (() => {})} />
+          <BackButton onClick={onBack} />
+          <EmailCodeInput key={codeInputKey} email={email} onSubmit={onCodeSubmit ?? (() => { })} />
+        </>
+      ) : showWalletPicker ? (
+        <>
+          <BackButton onClick={() => setShowWalletPicker(false)} />
+          <div className="pollar-wallet-list">
+            <button
+              type="button"
+              disabled={isLoading}
+              className="pollar-wallet-list-btn"
+              onClick={onFreighterConnect}
+            >
+              <img src={LOGO_FREIGHTER} alt="Freighter" className="pollar-wallet-list-icon" />
+              <span className="pollar-wallet-list-name">Freighter</span>
+            </button>
+            <button
+              type="button"
+              disabled={isLoading}
+              className="pollar-wallet-list-btn"
+              onClick={onAlbedoConnect}
+            >
+              <img src={LOGO_ALBEDO} alt="Albedo" className="pollar-wallet-list-icon" />
+              <span className="pollar-wallet-list-name">Albedo</span>
+            </button>
+          </div>
         </>
       ) : (
         <>
@@ -180,14 +217,16 @@ export function LoginModalTemplate({
 
           {embeddedWallets && (
             <div className="pollar-wallet-section">
-              <p className="pollar-wallet-label">Continue with a wallet</p>
-              <button type="button" disabled={isLoading} className="pollar-wallet-btn" onClick={onFreighterConnect}>
-                <img src={LOGO_FREIGHTER} alt="Freighter" className="pollar-wallet-icon" />
-                Freighter
-              </button>
-              <button type="button" disabled={isLoading} className="pollar-wallet-btn" onClick={onAlbedoConnect}>
-                <img src={LOGO_ALBEDO} alt="Albedo" className="pollar-wallet-icon" />
-                Albedo
+              <button
+                type="button"
+                disabled={isLoading}
+                className="pollar-wallet-entry-btn"
+                onClick={() => setShowWalletPicker(true)}
+              >
+                <svg width="18" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+                Wallet
               </button>
             </div>
           )}

@@ -60,6 +60,30 @@
   background: var(--pollar-border);
 }
 
+.pollar-close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: var(--pollar-buttons-border-radius, 6px);
+  border: 1px solid var(--pollar-border);
+  background-color: transparent;
+  color: var(--pollar-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pollar-close-btn:hover {
+  background-color: var(--pollar-input-bg);
+  color: var(--pollar-text);
+  border-color: var(--pollar-text);
+}
+
 /* ─── Refresh button ──────────────────────────────────────────────────────────── */
 .pollar-modal-refresh-btn {
   background: none;

@@ -1,6 +1,6 @@
 {
   "name": "@pollar/core",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Core authentication functions for Pollar services",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

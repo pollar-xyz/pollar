@@ -32,14 +32,15 @@ import {
   TxBuildBody,
   TxHistoryParams,
   TxHistoryState,
+  TxBuildContent,
   TxSignAndSendBody,
   WalletBalanceContent,
 } from '../types';
-import { WalletAdapter, WalletType } from '../wallets';
+import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletType } from '../wallets';
 import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/emailFlow';
 import { loginOAuth } from './auth/oauthFlow';
 import { loginWallet } from './auth/walletFlow';
-import { readStorage, removeStorage, STORAGE_KEY, writeStorage } from './session';
+import { readStorage, readWalletType, removeStorage, STORAGE_KEY, writeStorage, writeWalletType } from './session';
 
 const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
 
@@ -348,33 +349,41 @@ export class PollarClient {
     }
   }
 
+  getWalletType(): WalletType | null {
+    return this._walletAdapter?.type ?? null;
+  }
+
   async signAndSubmitTx(unsignedXdr: string): Promise<void> {
-    if (this._transactionState?.step !== 'built') {
-      throw new PollarFlowError(
-        `signAndSubmitTx() requires step 'built', current step is '${this._transactionState?.step ?? 'none'}'`,
-      );
-    }
+    const state = this._transactionState;
+    const buildData =
+      state?.step === 'built' ? state.buildData :
+      state?.step === 'error' ? state.buildData :
+      undefined;
+    const isBuiltFlow = !!buildData;
+    const stateExtra: { buildData?: TxBuildContent; external?: true } = buildData ? { buildData } : { external: true };
 
-    const buildData = this._transactionState.buildData;
+    this._setTransactionState({ step: 'signing', ...stateExtra });
 
-    this._setTransactionState({ step: 'signing', buildData });
+    const accountToSign = isBuiltFlow
+      ? this._session?.wallet?.publicKey
+      : (this._session?.data?.providers?.wallet?.address ?? this._session?.wallet?.publicKey);
 
     if (this._walletAdapter) {
       // External wallet (Freighter/Albedo): sign client-side, submit directly to Horizon
       try {
-        const signOpts = this._session?.wallet?.publicKey
-          ? { networkPassphrase: this._networkPassphrase(), accountToSign: this._session.wallet.publicKey }
+        const signOpts = accountToSign
+          ? { networkPassphrase: this._networkPassphrase(), accountToSign }
           : { networkPassphrase: this._networkPassphrase() };
         const { signedTxXdr } = await this._walletAdapter.signTransaction(unsignedXdr, signOpts);
         const stellarClient = new StellarClient(this.getNetwork());
         const result = await stellarClient.submitTransaction(signedTxXdr);
         if (result.success) {
-          this._setTransactionState({ step: 'success', buildData: buildData!, hash: result.hash });
+          this._setTransactionState({ step: 'success', ...stateExtra, hash: result.hash });
         } else {
-          this._setTransactionState({ step: 'error', ...(buildData && { buildData }), details: result.errorCode });
+          this._setTransactionState({ step: 'error', ...stateExtra, details: result.errorCode });
         }
       } catch {
-        this._setTransactionState({ step: 'error', ...(buildData && { buildData }) });
+        this._setTransactionState({ step: 'error', ...stateExtra });
       }
       return;
     }
@@ -388,13 +397,13 @@ export class PollarClient {
     try {
       const { data, error } = await this._api.POST('/tx/sign-and-send', { body });
       if (!error && data?.success && data.content?.hash) {
-        this._setTransactionState({ step: 'success', buildData: buildData!, hash: data.content.hash });
+        this._setTransactionState({ step: 'success', ...stateExtra, hash: data.content.hash });
       } else {
         const details = (error as { details?: string } | undefined)?.details;
-        this._setTransactionState({ step: 'error', ...(buildData && { buildData }), ...(details && { details }) });
+        this._setTransactionState({ step: 'error', ...stateExtra, ...(details && { details }) });
       }
     } catch {
-      this._setTransactionState({ step: 'error', ...(buildData && { buildData }) });
+      this._setTransactionState({ step: 'error', ...stateExtra });
     }
   }
 
@@ -471,8 +480,9 @@ export class PollarClient {
       setAuthState: this._setAuthState.bind(this),
       storeSession: this._storeSession.bind(this),
       clearSession: this._clearSession.bind(this),
-      storeWalletAdapter: (adapter: WalletAdapter) => {
+      storeWalletAdapter: (adapter: WalletAdapter, type: WalletType) => {
         this._walletAdapter = adapter;
+        writeWalletType(type);
       },
     };
   }
@@ -496,6 +506,15 @@ export class PollarClient {
     this._session = readStorage();
     if (this._session) {
       this._authState = { step: 'authenticated', session: this._session };
+      // Re-instantiate external wallet adapter if user logged in with one
+      if (this._session.data?.providers?.wallet?.address) {
+        const storedType = readWalletType();
+        if (storedType === WalletType.FREIGHTER) {
+          this._walletAdapter = new FreighterAdapter();
+        } else if (storedType === WalletType.ALBEDO) {
+          this._walletAdapter = new AlbedoAdapter();
+        }
+      }
       console.info('[PollarClient] Session restored from storage');
     } else {
       console.info('[PollarClient] No session in storage');

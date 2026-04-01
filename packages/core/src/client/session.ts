@@ -1,6 +1,7 @@
 import { PollarApplicationConfigContent } from '../types';
 
 export const STORAGE_KEY = 'pollar:session';
+export const WALLET_TYPE_KEY = 'pollar:walletType';
 
 export function isValidSession(value: unknown): value is PollarApplicationConfigContent {
   if (typeof value !== 'object' || value === null) {
@@ -165,5 +166,14 @@ export function writeStorage(session: PollarApplicationConfigContent): void {
 
 export function removeStorage(): void {
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(WALLET_TYPE_KEY);
   console.info('[PollarClient:session] Session removed from storage');
+}
+
+export function writeWalletType(type: string): void {
+  localStorage.setItem(WALLET_TYPE_KEY, type);
+}
+
+export function readWalletType(): string | null {
+  return localStorage.getItem(WALLET_TYPE_KEY);
 }

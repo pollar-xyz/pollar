@@ -31,9 +31,9 @@ export type TransactionState =
   | { step: 'idle' }
   | { step: 'building' }
   | { step: 'built'; buildData: TxBuildContent }
-  | { step: 'signing'; buildData: TxBuildContent }
-  | { step: 'success'; buildData: TxBuildContent; hash: string }
-  | { step: 'error'; details?: string; buildData?: TxBuildContent };
+  | { step: 'signing'; buildData?: TxBuildContent; external?: true }
+  | { step: 'success'; buildData?: TxBuildContent; hash: string; external?: true }
+  | { step: 'error'; details?: string; buildData?: TxBuildContent; external?: true };
 
 export const AUTH_ERROR_CODES = {
   SESSION_CREATE_FAILED: 'SESSION_CREATE_FAILED',
