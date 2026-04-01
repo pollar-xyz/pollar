@@ -12,6 +12,31 @@
     box-sizing: border-box;
 }
 
+/* ---- Close button ---- */
+.pollar-close-btn {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border-radius: var(--pollar-buttons-border-radius, 6px);
+    border: 1px solid var(--pollar-border);
+    background-color: transparent;
+    color: var(--pollar-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.pollar-close-btn:hover {
+    background-color: var(--pollar-input-bg);
+    color: var(--pollar-text);
+    border-color: var(--pollar-text);
+}
+
 /* ---- Back button ---- */
 .pollar-back-btn {
     position: absolute;
@@ -19,14 +44,14 @@
     left: 1rem;
     display: flex;
     align-items: center;
-    gap: 0.25rem;
-    padding: 0.375rem 0.75rem;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
     border-radius: var(--pollar-buttons-border-radius, 6px);
     border: 1px solid var(--pollar-border);
     background-color: transparent;
     color: var(--pollar-muted);
-    font-size: 0.875rem;
-    font-weight: 500;
     cursor: pointer;
     transition: all 0.15s;
 }
@@ -181,7 +206,7 @@
 
 /* ---- Social ---- */
 .pollar-social-list {
-    margin-bottom: 1rem;
+    margin-bottom: .625rem;
     display: flex;
     flex-direction: column;
     gap: 0.625rem;
@@ -230,6 +255,58 @@
     gap: 0.625rem;
 }
 
+.pollar-wallet-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+}
+
+.pollar-wallet-list-btn {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 0.75rem;
+    border-radius: var(--pollar-buttons-border-radius, 0.5rem);
+    border: 1px solid transparent;
+    background-color: transparent;
+    color: var(--pollar-text);
+    cursor: pointer;
+    transition: all 0.15s;
+    box-sizing: border-box;
+    text-align: left;
+}
+
+.pollar-wallet-list-btn:hover:not(:disabled) {
+    background-color: var(--pollar-input-bg);
+    border-color: var(--pollar-accent);
+    color: var(--pollar-accent);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+.pollar-wallet-list-btn:active:not(:disabled) {
+    transform: scale(0.99);
+}
+
+.pollar-wallet-list-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pollar-wallet-list-icon {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 0.625rem;
+    flex-shrink: 0;
+    object-fit: contain;
+}
+
+.pollar-wallet-list-name {
+    font-size: 1rem;
+    font-weight: 500;
+}
+
 .pollar-wallet-label {
     margin: 0;
     font-size: 0.6875rem;
@@ -246,14 +323,14 @@
     height: var(--pollar-buttons-height, 44px);
     align-items: center;
     justify-content: center;
-    gap: 0.625rem;
+    gap: 0.75rem;
     border-radius: var(--pollar-buttons-border-radius, 0.5rem);
-    border: 1px solid var(--pollar-accent);
-    background-color: color-mix(in srgb, var(--pollar-accent) 6%, transparent);
-    color: var(--pollar-accent);
+    border: 1px solid var(--pollar-border);
+    background-color: var(--pollar-input-bg);
+    color: var(--pollar-text);
     padding: 0 1rem;
     font-size: 1rem;
-    font-weight: 600;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.15s;
     box-sizing: border-box;
@@ -269,6 +346,41 @@
 }
 
 .pollar-wallet-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pollar-wallet-entry-btn {
+    display: flex;
+    width: 100%;
+    height: var(--pollar-buttons-height, 44px);
+    align-items: center;
+    justify-content: center;
+    gap: 0.625rem;
+    border-radius: var(--pollar-buttons-border-radius, 0.5rem);
+    border: 1px solid var(--pollar-border);
+    background-color: var(--pollar-input-bg);
+    color: var(--pollar-text);
+    padding: 0 1rem;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.pollar-wallet-entry-btn:hover:not(:disabled) {
+    border-color: var(--pollar-accent);
+    color: var(--pollar-accent);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+.pollar-wallet-entry-btn:active:not(:disabled) {
+    transform: scale(0.99);
+}
+
+.pollar-wallet-entry-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }

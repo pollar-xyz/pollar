@@ -98,7 +98,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
         codeInputKey={codeInputKey}
         onCodeSubmit={handleVerifyCode}
         onBack={handleBack}
-        onCancel={() => getClient().cancelLogin()}
+        onCancel={handleClose}
         onRetry={handleRetry}
       />
     </div>

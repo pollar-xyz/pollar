@@ -1,58 +1,55 @@
 .github-button {
   -webkit-appearance: none;
   appearance: none;
-  background-color: #24292f;
-  border: 1px solid rgba(240, 246, 252, 0.1);
+  background-color: var(--pollar-input-bg);
+  border: 1px solid var(--pollar-border);
   border-radius: var(--pollar-buttons-border-radius, 6px);
   box-sizing: border-box;
-  color: #ffffff;
+  color: var(--pollar-text);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 0.75rem;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-  font-size: 14px;
+  font-size: 1rem;
   font-weight: 500;
-  height: var(--pollar-buttons-height, 40px);
-  letter-spacing: 0.25px;
+  height: var(--pollar-buttons-height, 44px);
+  letter-spacing: normal;
   outline: none;
   overflow: hidden;
-  padding: 0 16px;
-  transition: background-color 0.2s, box-shadow 0.2s;
+  padding: 0 1rem;
+  transition: transform 0.15s, box-shadow 0.15s;
   white-space: nowrap;
-  width: auto;
-  max-width: 400px;
-  min-width: min-content;
+  width: 100%;
   user-select: none;
 }
 
 .github-button-icon {
   width: 20px;
   height: 20px;
-  object-fit: contain;
   flex-shrink: 0;
 }
 
 .github-button-contents {
-  flex-grow: 1;
+  flex-grow: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .github-button:not(:disabled):hover {
-  background-color: #32383f;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
+  border-color: var(--pollar-accent);
+  color: var(--pollar-accent);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 
 .github-button:not(:disabled):active {
-  background-color: #3a4149;
+  transform: scale(0.99);
 }
 
 .github-button:disabled {
   cursor: default;
-  background-color: #24292f61;
-  border-color: rgba(240, 246, 252, 0.05);
+  opacity: 0.5;
 }
 
 .github-button:disabled .github-button-icon,
