@@ -3,7 +3,7 @@
 import { AUTH_ERROR_CODES, AuthState } from '@pollar/core';
 
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
-import { type CSSProperties } from 'react';
+import { type CSSProperties, useState } from 'react';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter } from '../commons';
 import { EmailCodeInput } from './EmailCodeInput';
@@ -94,6 +94,8 @@ export function LoginModalTemplate({
   onCancel,
   onRetry,
 }: LoginModalTemplateProps) {
+  const [showWalletPicker, setShowWalletPicker] = useState(false);
+
   const isDark = theme === 'dark';
   const enabledSocial = Object.entries(providers).filter(([, enabled]) => enabled);
 
@@ -139,6 +141,22 @@ export function LoginModalTemplate({
           </button>
           <EmailCodeInput key={codeInputKey} email={email} onSubmit={onCodeSubmit ?? (() => {})} />
         </>
+      ) : showWalletPicker ? (
+        <>
+          <button type="button" className="pollar-back-btn" onClick={() => setShowWalletPicker(false)}>
+            ← Back
+          </button>
+          <div className="pollar-wallet-section">
+            <button type="button" disabled={isLoading} className="pollar-wallet-btn" onClick={onFreighterConnect}>
+              <img src={LOGO_FREIGHTER} alt="Freighter" className="pollar-wallet-icon" />
+              Freighter
+            </button>
+            <button type="button" disabled={isLoading} className="pollar-wallet-btn" onClick={onAlbedoConnect}>
+              <img src={LOGO_ALBEDO} alt="Albedo" className="pollar-wallet-icon" />
+              Albedo
+            </button>
+          </div>
+        </>
       ) : (
         <>
           {emailEnabled && (
@@ -180,14 +198,13 @@ export function LoginModalTemplate({
 
           {embeddedWallets && (
             <div className="pollar-wallet-section">
-              <p className="pollar-wallet-label">Continue with a wallet</p>
-              <button type="button" disabled={isLoading} className="pollar-wallet-btn" onClick={onFreighterConnect}>
-                <img src={LOGO_FREIGHTER} alt="Freighter" className="pollar-wallet-icon" />
-                Freighter
-              </button>
-              <button type="button" disabled={isLoading} className="pollar-wallet-btn" onClick={onAlbedoConnect}>
-                <img src={LOGO_ALBEDO} alt="Albedo" className="pollar-wallet-icon" />
-                Albedo
+              <button
+                type="button"
+                disabled={isLoading}
+                className="pollar-wallet-btn"
+                onClick={() => setShowWalletPicker(true)}
+              >
+                Continue with a wallet
               </button>
             </div>
           )}

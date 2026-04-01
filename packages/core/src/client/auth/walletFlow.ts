@@ -22,6 +22,8 @@ export async function loginWallet(type: WalletType, deps: FlowDeps): Promise<voi
   const clientSessionId = await createAuthSession(deps);
   if (!clientSessionId) return;
 
+  let connectedWallet: string;
+
   try {
     setAuthState({ step: 'connecting_wallet', walletType: type });
     const adapter = type === WalletType.FREIGHTER ? new FreighterAdapter() : new AlbedoAdapter();
@@ -33,6 +35,7 @@ export async function loginWallet(type: WalletType, deps: FlowDeps): Promise<voi
     }
 
     const { publicKey } = await withSignal(adapter.connect(), signal);
+    connectedWallet = publicKey;
     deps.storeWalletAdapter(adapter);
     setAuthState({ step: 'authenticating_wallet' });
 
@@ -60,5 +63,5 @@ export async function loginWallet(type: WalletType, deps: FlowDeps): Promise<voi
     return;
   }
 
-  await authenticate(clientSessionId, deps);
+  await authenticate(clientSessionId, deps, connectedWallet);
 }
