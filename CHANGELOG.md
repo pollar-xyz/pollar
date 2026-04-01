@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.5.2
+
+### `@pollar/core`
+
+- **Refactor:** `client.ts` — internal improvements and minor API adjustments
+- **New:** Additional type exports in `types.ts`
+- **Fix:** `schema.d.ts` updated to reflect latest API spec
+
+### `@pollar/react`
+
+- **Refactor:** `WalletButton` split into logic and template layers — `WalletButton.tsx` handles state and behavior, `WalletButtonTemplate.tsx` handles rendering only
+- **Refactor:** `WalletBalanceModal` split into logic and template layers — `WalletBalanceModalTemplate.tsx` added as a pure presentational component
+- **Refactor:** `TransactionModal` and `TransactionModalTemplate` updated
+- **Fix:** `tsup.config.ts` — replaced `import pkg from './package.json'` with `readFileSync` to resolve `TS2732` error; replaced unsupported `jsx` option with `esbuildOptions`
+- **Fix:** `tsconfig.json` — added `resolveJsonModule: true`
+- **Refactor:** `context.tsx` and `index.ts` updated to export new template components and types
+- **New:** `WalletBalanceModalTemplate`, `WalletButtonTemplate` exported from `@pollar/react`
+
+### Docs
+
+- **New:** `docs/1 Pollar react.md` — full API reference for `@pollar/react`: `PollarProvider`, `usePollar()`, all modal entry points, components, and template components
+- **New:** `docs/2 Pollar core.md` — full API reference for `@pollar/core`: `PollarClient` constructor, auth flows, transactions, wallet balance, tx history, KYC, ramps, and all exported types
+
 ## 0.5.1
 
 ### `@pollar/core`

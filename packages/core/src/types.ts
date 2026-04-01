@@ -87,6 +87,12 @@ export type WalletBalanceContent =
   pollarPaths['/wallet/balance']['get']['responses'][200]['content']['application/json']['content'];
 export type WalletBalanceRecord = WalletBalanceContent['balances'][number];
 
+export type WalletBalanceState =
+  | { step: 'idle' }
+  | { step: 'loading' }
+  | { step: 'loaded'; data: WalletBalanceContent }
+  | { step: 'error'; message: string };
+
 // ─── Tx history types ─────────────────────────────────────────────────────────
 
 export type TxHistoryRecord =

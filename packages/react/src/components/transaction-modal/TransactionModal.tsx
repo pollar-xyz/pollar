@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { usePollar } from '../../context';
 import '../shared.css';
 import './TransactionModal.css';
@@ -13,10 +14,26 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
   const { getClient, styles, transaction, network, walletType } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
 
-  async function handleSignAndSend() {
+  const [showXdr, setShowXdr] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const hash = transaction.step === 'success' ? transaction.hash : null;
+  const buildData = 'buildData' in transaction ? transaction.buildData : null;
+  const explorerNetwork = buildData?.summary.network?.toLowerCase().includes('testnet') ? 'testnet' : 'public';
+  const explorerUrl = hash ? `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}` : null;
+
+  function handleSignAndSend() {
     if (transaction.step === 'built') {
-      await getClient().signAndSubmitTx(transaction.buildData.unsignedXdr);
+      void getClient().signAndSubmitTx(transaction.buildData.unsignedXdr);
     }
+  }
+
+  function handleCopyHash() {
+    if (!hash) return;
+    navigator.clipboard.writeText(hash).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   }
 
   async function handleRetry() {
@@ -31,10 +48,14 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
         theme={theme}
         accentColor={accentColor}
         transaction={transaction}
-        network={network}
+        showXdr={showXdr}
+        copied={copied}
+        explorerUrl={explorerUrl}
         walletType={walletType}
         onClose={onClose}
         onSignAndSend={handleSignAndSend}
+        onToggleXdr={() => setShowXdr((v) => !v)}
+        onCopyHash={handleCopyHash}
         onRetry={handleRetry}
       />
     </div>

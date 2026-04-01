@@ -1,56 +1,52 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { LOGO_POLLAR } from './constants';
-import { usePollar } from './context';
-import './WalletButton.css';
+import { LOGO_POLLAR } from '../../constants';
+
+function ButtonLogo() {
+  return <img src={LOGO_POLLAR} alt="Pollar" width={22} height={22} className="wallet-btn-logo" />;
+}
+
+export interface WalletButtonTemplateProps {
+  walletAddress: string | null;
+  accentColor: string;
+  open: boolean;
+  copied: boolean;
+  dropdownBg: string;
+  dropdownBorder: string;
+  itemColor: string;
+  wrapperRef: React.RefObject<HTMLDivElement>;
+  onToggleOpen: () => void;
+  onCopy: () => void;
+  onWalletBalance: () => void;
+  onTxHistory: () => void;
+  onLogout: () => void;
+  onLogin: () => void;
+}
 
 function cropWallet(address: string) {
   if (address.length <= 12) return address;
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-function ButtonLogo() {
-  return <img src={LOGO_POLLAR} alt="Pollar" width={22} height={22} className="wallet-btn-logo" />;
-}
-
-export function WalletButton() {
-  const { getClient, walletAddress, styles, openLoginModal, openTxHistoryModal, openWalletBalanceModal } = usePollar();
-  const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
-  const isDark = theme === 'dark';
-  const dropdownBg = isDark ? '#18181b' : '#fff';
-  const dropdownBorder = isDark ? '#3f3f46' : '#e4e4e7';
-  const itemColor = isDark ? '#fafafa' : '#18181b';
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  async function handleCopy() {
-    if (!walletAddress) return;
-    await navigator.clipboard.writeText(walletAddress);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }
-
-  function handleLogout() {
-    setOpen(false);
-    getClient().logout();
-  }
-
+export function WalletButtonTemplate({
+  walletAddress,
+  accentColor,
+  open,
+  copied,
+  dropdownBg,
+  dropdownBorder,
+  itemColor,
+  wrapperRef,
+  onToggleOpen,
+  onCopy,
+  onWalletBalance,
+  onTxHistory,
+  onLogout,
+  onLogin,
+}: WalletButtonTemplateProps) {
   if (!walletAddress) {
     return (
-      <button type="button" className="wallet-login-btn" style={{ backgroundColor: accentColor }} onClick={openLoginModal}>
+      <button type="button" className="wallet-login-btn" style={{ backgroundColor: accentColor }} onClick={onLogin}>
         <ButtonLogo />
         Login with Pollar
       </button>
@@ -59,7 +55,7 @@ export function WalletButton() {
 
   return (
     <div className="wallet-wrapper" ref={wrapperRef}>
-      <button className="wallet-btn" style={{ backgroundColor: accentColor }} onClick={() => setOpen((v) => !v)}>
+      <button className="wallet-btn" style={{ backgroundColor: accentColor }} onClick={onToggleOpen}>
         {cropWallet(walletAddress)}
         <svg
           className={`wallet-chevron${open ? ' open' : ''}`}
@@ -76,7 +72,7 @@ export function WalletButton() {
 
       {open && (
         <div className="wallet-dropdown" style={{ backgroundColor: dropdownBg, borderColor: dropdownBorder }}>
-          <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={handleCopy}>
+          <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onCopy}>
             <svg
               width="14"
               height="14"
@@ -95,7 +91,7 @@ export function WalletButton() {
           <button
             className="wallet-dropdown-item"
             style={{ color: itemColor }}
-            onClick={() => { setOpen(false); openWalletBalanceModal(); }}
+            onClick={onWalletBalance}
           >
             <svg
               width="14"
@@ -116,7 +112,7 @@ export function WalletButton() {
           <button
             className="wallet-dropdown-item"
             style={{ color: itemColor }}
-            onClick={() => { setOpen(false); openTxHistoryModal(); }}
+            onClick={onTxHistory}
           >
             <svg
               width="14"
@@ -136,7 +132,7 @@ export function WalletButton() {
             </svg>
             Transaction history
           </button>
-          <button className="wallet-dropdown-item danger" onClick={handleLogout}>
+          <button className="wallet-dropdown-item danger" onClick={onLogout}>
             <svg
               width="14"
               height="14"
