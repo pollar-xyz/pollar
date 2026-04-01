@@ -1,7 +1,7 @@
 'use client';
 
-import { StellarNetwork, TransactionState, WalletType } from '@pollar/core';
-import React, { useState } from 'react';
+import { TransactionState, WalletType } from '@pollar/core';
+import React from 'react';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter } from '../commons';
 
@@ -9,22 +9,38 @@ export interface TransactionModalTemplateProps {
   theme: string;
   accentColor: string;
   transaction: TransactionState;
-  network: StellarNetwork;
+  showXdr: boolean;
+  copied: boolean;
+  explorerUrl: string | null;
   walletType?: WalletType | null;
   onClose: () => void;
   onSignAndSend: () => void;
+  onToggleXdr: () => void;
+  onCopyHash: () => void;
   onRetry?: () => void;
 }
 
+const STATUS_MESSAGES: Record<TransactionState['step'], string> = {
+  idle: '',
+  building: 'Building transaction…',
+  built: 'Ready to sign and send',
+  signing: 'Signing and sending transaction…',
+  success: 'Transaction sent successfully',
+  error: 'Transaction failed',
+};
 
 export function TransactionModalTemplate({
   theme,
   accentColor,
   transaction,
-  network,
+  showXdr,
+  copied,
+  explorerUrl,
   walletType,
   onClose,
   onSignAndSend,
+  onToggleXdr,
+  onCopyHash,
   onRetry,
 }: TransactionModalTemplateProps) {
   const isDark = theme === 'dark';
@@ -42,9 +58,6 @@ export function TransactionModalTemplate({
     '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
   } as React.CSSProperties;
 
-  const [showXdr, setShowXdr] = useState(false);
-  const [copied, setCopied] = useState(false);
-
   const buildData = 'buildData' in transaction ? transaction.buildData : null;
   const hash = transaction.step === 'success' ? transaction.hash : null;
   const errorDetails = transaction.step === 'error' ? (transaction.details ?? null) : null;
@@ -55,35 +68,23 @@ export function TransactionModalTemplate({
   const isError = transaction.step === 'error';
   const showDetails = buildData !== null && (isBuilt || isSigning || isSuccess);
 
-  const explorerNetwork = buildData?.summary.network?.toLowerCase().includes('testnet') ? 'testnet'
-    : buildData ? 'public'
-      : network === 'testnet' ? 'testnet' : 'public';
-  const explorerUrl = hash ? `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}` : null;
-
-  function handleCopyHash() {
-    if (!hash) return;
-    navigator.clipboard.writeText(hash).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-
-  const statusMessage: Record<TransactionState['step'], string> = {
-    idle: '',
-    building: 'Building transaction…',
-    built: 'Ready to sign and send',
-    signing: 'Signing and sending transaction…',
-    success: 'Transaction sent successfully',
-    error: 'Transaction failed',
-  };
-
   return (
     <div className="pollar-tx-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
       <div className="pollar-modal-header">
         <h2 className="pollar-modal-title">Transaction</h2>
       </div>
       <button type="button" className="pollar-close-btn" onClick={onClose} aria-label="Close">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
           <path d="M18 6L6 18M6 6l12 12" />
         </svg>
       </button>
@@ -111,7 +112,7 @@ export function TransactionModalTemplate({
             </div>
           </div>
           <div className="pollar-tx-xdr">
-            <button className="pollar-tx-xdr-toggle" onClick={() => setShowXdr((v) => !v)}>
+            <button className="pollar-tx-xdr-toggle" onClick={onToggleXdr}>
               <svg
                 width="12"
                 height="12"
@@ -128,8 +129,6 @@ export function TransactionModalTemplate({
           </div>
         </>
       )}
-
-
 
       {isError && errorDetails && (
         <div className="pollar-tx-error-details">
@@ -156,9 +155,13 @@ export function TransactionModalTemplate({
             >
               <circle cx="44" cy="44" r="36" fill="none" stroke="var(--pollar-border)" strokeWidth="3" />
               <circle
-                cx="44" cy="44" r="36"
+                cx="44"
+                cy="44"
+                r="36"
                 fill="none"
-                stroke={isSuccess ? 'var(--pollar-success-text)' : isError ? 'var(--pollar-error-text)' : 'var(--pollar-accent)'}
+                stroke={
+                  isSuccess ? 'var(--pollar-success-text)' : isError ? 'var(--pollar-error-text)' : 'var(--pollar-accent)'
+                }
                 strokeWidth="3"
                 strokeLinecap="round"
                 strokeDasharray={isSigning ? '169.6 56.6' : '999 0'}
@@ -168,7 +171,13 @@ export function TransactionModalTemplate({
             </svg>
             <div className="pollar-tx-wallet-icon">
               <img
-                src={walletType === WalletType.FREIGHTER ? LOGO_FREIGHTER : walletType === WalletType.ALBEDO ? LOGO_ALBEDO : LOGO_POLLAR}
+                src={
+                  walletType === WalletType.FREIGHTER
+                    ? LOGO_FREIGHTER
+                    : walletType === WalletType.ALBEDO
+                      ? LOGO_ALBEDO
+                      : LOGO_POLLAR
+                }
                 alt={walletType === WalletType.FREIGHTER ? 'Freighter' : walletType === WalletType.ALBEDO ? 'Albedo' : 'Pollar'}
                 className="pollar-tx-wallet-img"
               />
@@ -198,12 +207,18 @@ export function TransactionModalTemplate({
           <span className="pollar-tx-result-label">Transaction hash</span>
           <span className="pollar-tx-result-hash">{hash}</span>
           <div className="pollar-tx-result-actions">
-            <button className="pollar-tx-result-btn" onClick={handleCopyHash}>
+            <button className="pollar-tx-result-btn" onClick={onCopyHash}>
               {copied ? (
                 <>
                   <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
                     <circle cx="7" cy="7" r="7" fill="currentColor" />
-                    <path d="M3.5 7l2.5 2.5 4.5-5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <path
+                      d="M3.5 7l2.5 2.5 4.5-5"
+                      stroke="white"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                   Copied!
                 </>
@@ -211,7 +226,12 @@ export function TransactionModalTemplate({
                 <>
                   <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
                     <rect x="4" y="4" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-                    <path d="M3 9H2a1 1 0 01-1-1V2a1 1 0 011-1h6a1 1 0 011 1v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    <path
+                      d="M3 9H2a1 1 0 01-1-1V2a1 1 0 011-1h6a1 1 0 011 1v1"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
                   </svg>
                   Copy hash
                 </>
@@ -220,8 +240,19 @@ export function TransactionModalTemplate({
             {explorerUrl && (
               <a className="pollar-tx-result-btn" href={explorerUrl} target="_blank" rel="noopener noreferrer">
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
-                  <path d="M5 2H2a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  <path d="M8 1h4m0 0v4m0-4L6 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path
+                    d="M5 2H2a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V8"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M8 1h4m0 0v4m0-4L6 7"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
                 View on Explorer
               </a>
@@ -236,7 +267,10 @@ export function TransactionModalTemplate({
         </button>
       )}
 
-      <ModalStatusBanner message={statusMessage[transaction.step]} status={isError ? 'ERROR' : isSigning || transaction.step === 'building' ? 'LOADING' : isSuccess ? 'SUCCESS' : 'NONE'} />
+      <ModalStatusBanner
+        message={STATUS_MESSAGES[transaction.step]}
+        status={isError ? 'ERROR' : isSigning || transaction.step === 'building' ? 'LOADING' : isSuccess ? 'SUCCESS' : 'NONE'}
+      />
 
       <PollarModalFooter />
     </div>

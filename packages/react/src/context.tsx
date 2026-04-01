@@ -6,12 +6,11 @@ import {
   PollarClient,
   PollarClientConfig,
   PollarLoginOptions,
-  StellarClient,
   StellarNetwork,
   TransactionState,
   TxBuildBody,
   TxHistoryState,
-  WalletBalanceContent,
+  WalletBalanceState,
   WalletType,
 } from '@pollar/core';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
@@ -59,8 +58,9 @@ interface PollarContextValue {
   // network
   network: StellarNetwork;
   setNetwork: (network: StellarNetwork) => void;
-  // stellar
-  getBalance: (publicKey?: string) => Promise<WalletBalanceContent | null>;
+  // wallet balance
+  walletBalance: WalletBalanceState;
+  refreshBalance: (publicKey?: string) => Promise<void>;
   // kyc
   openKycModal: (options?: {
     country?: string;
@@ -87,13 +87,10 @@ interface PollarProviderProps {
 export function PollarProvider({ config, styles: propStyles, children }: PollarProviderProps) {
   const [pollarClient] = useState<PollarClient>(() => new PollarClient(config));
   const [networkState, setNetworkState] = useState<NetworkState>(() => pollarClient.getNetworkState());
-  const stellarClient = useMemo(() => {
-    const network = networkState.step === 'connected' ? networkState.network : 'testnet';
-    return new StellarClient(network);
-  }, [networkState]);
   const [sessionState, setSessionState] = useState<PollarApplicationConfigContent | null>(null);
   const [transaction, setTransaction] = useState<TransactionState>({ step: 'idle' });
   const [txHistory, setTxHistory] = useState<TxHistoryState>({ step: 'idle' });
+  const [walletBalance, setWalletBalance] = useState<WalletBalanceState>({ step: 'idle' });
   const [remoteConfig, setRemoteConfig] = useState<PollarConfig>(emptyResponse);
   const [styles, setStyles] = useState<PollarStyles>(propStyles ?? {});
 
@@ -103,6 +100,10 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
 
   useEffect(() => {
     return pollarClient.onTxHistoryStateChange(setTxHistory);
+  }, [pollarClient]);
+
+  useEffect(() => {
+    return pollarClient.onWalletBalanceStateChange(setWalletBalance);
   }, [pollarClient]);
 
   useEffect(() => {
@@ -176,13 +177,14 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
         txHistory,
         openTxHistoryModal: () => setTxHistoryModalOpen(true),
         openWalletBalanceModal: () => setWalletBalanceModalOpen(true),
+        walletBalance,
+        refreshBalance: (publicKey?: string) => pollarClient.refreshBalance(publicKey),
         network: networkState.step === 'connected' ? networkState.network : 'testnet',
         setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
         config: remoteConfig,
         styles,
-        getBalance: (publicKey?: string) => pollarClient.getWalletBalance(publicKey),
       }) as PollarContextValue,
-    [sessionState, remoteConfig, styles, pollarClient, transaction, txHistory, networkState, stellarClient],
+    [sessionState, remoteConfig, styles, pollarClient, transaction, txHistory, networkState, walletBalance],
   );
 
   return (

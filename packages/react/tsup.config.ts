@@ -1,6 +1,7 @@
-import { defineConfig } from 'tsup';
 import { readFileSync, writeFileSync } from 'fs';
-import pkg from './package.json';
+import { defineConfig } from 'tsup';
+
+const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'));
 
 export default defineConfig({
   entry: ['src/index.ts'],
@@ -11,7 +12,9 @@ export default defineConfig({
   clean: true,
   treeshake: true,
   external: ['react', 'react-dom', '@pollar/core'],
-  jsx: 'react-jsx',
+  esbuildOptions(options) {
+    options.jsx = 'automatic';
+  },
   define: {
     __POLLAR_VERSION__: JSON.stringify(pkg.version),
   },

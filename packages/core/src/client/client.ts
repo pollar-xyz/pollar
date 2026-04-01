@@ -34,7 +34,7 @@ import {
   TxHistoryState,
   TxBuildContent,
   TxSignAndSendBody,
-  WalletBalanceContent,
+  WalletBalanceState,
 } from '../types';
 import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletType } from '../wallets';
 import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/emailFlow';
@@ -63,6 +63,8 @@ export class PollarClient {
   private _transactionStateListeners = new Set<(state: TransactionState) => void>();
   private _txHistoryState: TxHistoryState = { step: 'idle' };
   private _txHistoryStateListeners = new Set<(state: TxHistoryState) => void>();
+  private _walletBalanceState: WalletBalanceState = { step: 'idle' };
+  private _walletBalanceStateListeners = new Set<(state: WalletBalanceState) => void>();
   private _authState: AuthState = { step: 'idle' };
   private _authStateListeners = new Set<(state: AuthState) => void>();
   private _networkState: NetworkState = { step: 'idle' };
@@ -274,11 +276,6 @@ export class PollarClient {
 
   // ─── Tx history ──────────────────────────────────────────────────────────
 
-  private _setTxHistoryState(next: TxHistoryState): void {
-    this._txHistoryState = next;
-    for (const cb of this._txHistoryStateListeners) cb(next);
-  }
-
   getTxHistoryState(): TxHistoryState {
     return this._txHistoryState;
   }
@@ -306,13 +303,34 @@ export class PollarClient {
 
   // ─── Wallet balance ───────────────────────────────────────────────────────
 
-  async getWalletBalance(publicKey?: string): Promise<WalletBalanceContent | null> {
+  getWalletBalanceState(): WalletBalanceState {
+    return this._walletBalanceState;
+  }
+
+  onWalletBalanceStateChange(cb: (state: WalletBalanceState) => void): () => void {
+    this._walletBalanceStateListeners.add(cb);
+    cb(this._walletBalanceState);
+    return () => this._walletBalanceStateListeners.delete(cb);
+  }
+
+  async refreshBalance(publicKey?: string): Promise<void> {
     const pk = publicKey ?? this._session?.wallet?.publicKey;
-    if (!pk) return null;
-    const network = this.getNetwork();
-    const { data, error } = await this._api.GET('/wallet/balance', { params: { query: { publicKey: pk, network } } });
-    if (!error && data?.success && data.content) return data.content;
-    return null;
+    if (!pk) {
+      this._setWalletBalanceState({ step: 'error', message: 'No wallet connected' });
+      return;
+    }
+    this._setWalletBalanceState({ step: 'loading' });
+    try {
+      const network = this.getNetwork();
+      const { data, error } = await this._api.GET('/wallet/balance', { params: { query: { publicKey: pk, network } } });
+      if (!error && data?.success && data.content) {
+        this._setWalletBalanceState({ step: 'loaded', data: data.content });
+      } else {
+        this._setWalletBalanceState({ step: 'error', message: 'Failed to load balance' });
+      }
+    } catch {
+      this._setWalletBalanceState({ step: 'error', message: 'Failed to load balance' });
+    }
   }
 
   // ─── Transactions ─────────────────────────────────────────────────────────
@@ -461,6 +479,16 @@ export class PollarClient {
 
   pollRampTransaction(txId: string, opts?: { intervalMs?: number; timeoutMs?: number }): Promise<RampTxStatus> {
     return pollRampTransaction(this._api, txId, opts);
+  }
+
+  private _setTxHistoryState(next: TxHistoryState): void {
+    this._txHistoryState = next;
+    for (const cb of this._txHistoryStateListeners) cb(next);
+  }
+
+  private _setWalletBalanceState(next: WalletBalanceState): void {
+    this._walletBalanceState = next;
+    for (const cb of this._walletBalanceStateListeners) cb(next);
   }
 
   // ─── Private ──────────────────────────────────────────────────────────────

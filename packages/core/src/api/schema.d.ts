@@ -1779,6 +1779,8 @@ export interface operations {
                                 balance: string;
                                 available: string;
                                 limit?: string;
+                                enabledInApp: boolean;
+                                trustlineRemoved: boolean;
                             }[];
                         };
                     };
