@@ -12,6 +12,7 @@ import {
   TxBuildBody,
   TxHistoryState,
   WalletBalanceContent,
+  WalletType,
 } from '@pollar/core';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { ModalErrorBoundary } from './components/commons';
@@ -53,7 +54,8 @@ interface PollarContextValue {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ) => Promise<void>;
-  signAndSubmitTx: (signedXdr: string) => Promise<void>;
+  signAndSubmitTx: (unsignedXdr: string) => Promise<void>;
+  walletType: WalletType | null;
   // network
   network: StellarNetwork;
   setNetwork: (network: StellarNetwork) => void;
@@ -155,14 +157,15 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
   const contextValue: PollarContextValue = useMemo(
     () =>
       ({
-        walletAddress: sessionState?.wallet?.publicKey || '',
+        walletAddress: sessionState?.data?.providers?.wallet?.address || sessionState?.wallet?.publicKey || '',
         getClient: () => pollarClient,
         transaction,
         login: (options: PollarLoginOptions) => pollarClient.login(options),
         logout: () => pollarClient.logout(),
         isAuthenticated: !!sessionState?.wallet?.publicKey,
         buildTx: (operation, params, options) => pollarClient.buildTx(operation, params, options),
-        signAndSubmitTx: (signedXdr: string) => pollarClient.signAndSubmitTx(signedXdr),
+        signAndSubmitTx: (unsignedXdr: string) => pollarClient.signAndSubmitTx(unsignedXdr),
+        walletType: pollarClient.getWalletType(),
         openTransactionModal: () => setTransactionModalOpen(true),
         openLoginModal: () => setLoginModalOpen(true),
         openKycModal: (options = {}) => {

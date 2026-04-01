@@ -1,6 +1,6 @@
 import { PollarApiClient } from '../../api/client';
 import { AUTH_ERROR_CODES, AuthState, PollarApplicationConfigContent } from '../../types';
-import { WalletAdapter } from '../../wallets';
+import { WalletAdapter, WalletType } from '../../wallets';
 
 export type FlowDeps = {
   api: PollarApiClient;
@@ -8,7 +8,7 @@ export type FlowDeps = {
   setAuthState: (state: AuthState) => void;
   storeSession: (session: PollarApplicationConfigContent) => void;
   clearSession: () => void;
-  storeWalletAdapter: (adapter: WalletAdapter) => void;
+  storeWalletAdapter: (adapter: WalletAdapter, type: WalletType) => void;
 };
 
 export async function createAuthSession(deps: FlowDeps): Promise<string | null> {

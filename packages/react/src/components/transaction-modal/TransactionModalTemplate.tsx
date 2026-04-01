@@ -1,23 +1,31 @@
 'use client';
 
-import { TransactionState } from '@pollar/core';
+import { StellarNetwork, TransactionState, WalletType } from '@pollar/core';
 import React, { useState } from 'react';
+import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter } from '../commons';
 
 export interface TransactionModalTemplateProps {
   theme: string;
   accentColor: string;
   transaction: TransactionState;
+  network: StellarNetwork;
+  walletType?: WalletType | null;
   onClose: () => void;
   onSignAndSend: () => void;
+  onRetry?: () => void;
 }
+
 
 export function TransactionModalTemplate({
   theme,
   accentColor,
   transaction,
+  network,
+  walletType,
   onClose,
   onSignAndSend,
+  onRetry,
 }: TransactionModalTemplateProps) {
   const isDark = theme === 'dark';
 
@@ -47,7 +55,9 @@ export function TransactionModalTemplate({
   const isError = transaction.step === 'error';
   const showDetails = buildData !== null && (isBuilt || isSigning || isSuccess);
 
-  const explorerNetwork = buildData?.summary.network?.toLowerCase().includes('testnet') ? 'testnet' : 'public';
+  const explorerNetwork = buildData?.summary.network?.toLowerCase().includes('testnet') ? 'testnet'
+    : buildData ? 'public'
+      : network === 'testnet' ? 'testnet' : 'public';
   const explorerUrl = hash ? `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}` : null;
 
   function handleCopyHash() {
@@ -71,12 +81,12 @@ export function TransactionModalTemplate({
     <div className="pollar-tx-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
       <div className="pollar-modal-header">
         <h2 className="pollar-modal-title">Transaction</h2>
-        <button className="pollar-modal-close" onClick={onClose} aria-label="Close">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </button>
       </div>
+      <button type="button" className="pollar-close-btn" onClick={onClose} aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M18 6L6 18M6 6l12 12" />
+        </svg>
+      </button>
 
       {showDetails && buildData && (
         <>
@@ -119,6 +129,70 @@ export function TransactionModalTemplate({
         </>
       )}
 
+
+
+      {isError && errorDetails && (
+        <div className="pollar-tx-error-details">
+          <p className="pollar-tx-error-details-label">Error details</p>
+          <pre className="pollar-tx-error-details-content">{errorDetails}</pre>
+        </div>
+      )}
+
+      {isBuilt && (
+        <button className="pollar-btn-primary pollar-tx-sign-btn" onClick={onSignAndSend}>
+          Sign &amp; Send
+        </button>
+      )}
+
+      {(isSigning || isSuccess || isError) && (
+        <div className="pollar-tx-wallet-spinner">
+          <div className="pollar-tx-spinner-ring">
+            <svg
+              viewBox="0 0 88 88"
+              width="88"
+              height="88"
+              className={`pollar-tx-spinner-svg${isSigning ? ' pollar-tx-spinner-rotating' : ''}`}
+              aria-hidden
+            >
+              <circle cx="44" cy="44" r="36" fill="none" stroke="var(--pollar-border)" strokeWidth="3" />
+              <circle
+                cx="44" cy="44" r="36"
+                fill="none"
+                stroke={isSuccess ? 'var(--pollar-success-text)' : isError ? 'var(--pollar-error-text)' : 'var(--pollar-accent)'}
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray={isSigning ? '169.6 56.6' : '999 0'}
+                transform="rotate(-90 44 44)"
+                style={{ transition: isSigning ? 'none' : 'stroke 400ms, stroke-dasharray 400ms' }}
+              />
+            </svg>
+            <div className="pollar-tx-wallet-icon">
+              <img
+                src={walletType === WalletType.FREIGHTER ? LOGO_FREIGHTER : walletType === WalletType.ALBEDO ? LOGO_ALBEDO : LOGO_POLLAR}
+                alt={walletType === WalletType.FREIGHTER ? 'Freighter' : walletType === WalletType.ALBEDO ? 'Albedo' : 'Pollar'}
+                className="pollar-tx-wallet-img"
+              />
+            </div>
+          </div>
+
+          {isSigning && (
+            <p className="pollar-tx-spinner-label">
+              {walletType === WalletType.FREIGHTER
+                ? 'Waiting for Freighter…'
+                : walletType === WalletType.ALBEDO
+                  ? 'Waiting for Albedo…'
+                  : 'Signing and sending…'}
+            </p>
+          )}
+
+          {isError && onRetry && 'buildData' in transaction && transaction.buildData && (
+            <button className="pollar-btn-secondary pollar-tx-retry-btn" onClick={onRetry}>
+              Try again
+            </button>
+          )}
+        </div>
+      )}
+
       {isSuccess && hash && (
         <div className="pollar-tx-result">
           <span className="pollar-tx-result-label">Transaction hash</span>
@@ -156,23 +230,6 @@ export function TransactionModalTemplate({
         </div>
       )}
 
-      {isError && errorDetails && (
-        <div className="pollar-tx-error-details">
-          <p className="pollar-tx-error-details-label">Error details</p>
-          <pre className="pollar-tx-error-details-content">{errorDetails}</pre>
-        </div>
-      )}
-
-      {isBuilt && (
-        <button className="pollar-btn-primary pollar-tx-sign-btn" onClick={onSignAndSend}>
-          Sign &amp; Send
-        </button>
-      )}
-      {isSigning && (
-        <button className="pollar-btn-primary pollar-tx-sign-btn" disabled>
-          Signing &amp; sending…
-        </button>
-      )}
       {isSuccess && (
         <button className="pollar-btn-primary pollar-tx-sign-btn" onClick={onClose}>
           Done

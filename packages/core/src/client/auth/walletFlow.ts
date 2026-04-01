@@ -36,7 +36,7 @@ export async function loginWallet(type: WalletType, deps: FlowDeps): Promise<voi
 
     const { publicKey } = await withSignal(adapter.connect(), signal);
     connectedWallet = publicKey;
-    deps.storeWalletAdapter(adapter);
+    deps.storeWalletAdapter(adapter, type);
     setAuthState({ step: 'authenticating_wallet' });
 
     const { data: walletData, error: walletError } = await api.POST('/auth/wallet', {

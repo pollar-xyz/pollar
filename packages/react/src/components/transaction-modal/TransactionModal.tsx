@@ -10,11 +10,17 @@ interface TransactionModalProps {
 }
 
 export function TransactionModal({ onClose }: TransactionModalProps) {
-  const { getClient, styles, transaction } = usePollar();
+  const { getClient, styles, transaction, network, walletType } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
 
   async function handleSignAndSend() {
     if (transaction.step === 'built') {
+      await getClient().signAndSubmitTx(transaction.buildData.unsignedXdr);
+    }
+  }
+
+  async function handleRetry() {
+    if (transaction.step === 'error' && transaction.buildData) {
       await getClient().signAndSubmitTx(transaction.buildData.unsignedXdr);
     }
   }
@@ -25,8 +31,11 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
         theme={theme}
         accentColor={accentColor}
         transaction={transaction}
+        network={network}
+        walletType={walletType}
         onClose={onClose}
         onSignAndSend={handleSignAndSend}
+        onRetry={handleRetry}
       />
     </div>
   );
