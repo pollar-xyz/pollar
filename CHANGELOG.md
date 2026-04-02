@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.3
+
+### `@pollar/core`
+
+- **New:** `EscrowFn`, `EscrowAdapter`, and `PollarAdapters` types — generic adapter contract for wrapping external signing functions (e.g. Trustless Work SDK)
+
+### `@pollar/react`
+
+- **New:** `adapters` prop on `PollarProvider` — accepts any named set of adapters; adapter functions receive params, return an unsigned XDR, and Pollar handles signing and submission automatically
+- **New:** `createPollarAdapterHook(key)` — factory that generates a fully-typed hook (e.g. `usePollarEscrow`) mirroring the adapter's API with automatic XDR signing built in
+- **New:** Explorer link on each row in `TxHistoryModal` — opens the transaction on `stellar.expert` with the correct network (testnet/mainnet)
+- **Fix:** Unified CSS variables and base class across all modals via `shared.css` — eliminates duplicated style declarations
+- **Fix:** Transaction explorer URL in `TransactionModal` now correctly resolves network from `buildData.summary.network` before falling back to context network
+
 ## 0.5.2
 
 ### `@pollar/core`
