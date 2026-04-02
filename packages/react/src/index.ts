@@ -1,4 +1,5 @@
 export { PollarProvider, usePollar } from './context';
+export { createPollarAdapterHook } from './usePollarAdapter';
 export type {
   AuthProviderProps,
   AuthContextValue,

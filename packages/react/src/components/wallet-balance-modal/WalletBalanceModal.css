@@ -1,14 +1,6 @@
 /* ---- Wallet balance modal ---- */
 .pollar-bal-modal {
-    width: 100%;
     max-width: 380px;
-    border-radius: 1rem;
-    border: 1px solid var(--pollar-border);
-    padding: 1.75rem;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-    background-color: var(--pollar-bg);
-    box-sizing: border-box;
-    font-family: inherit;
 }
 
 /* ---- Address chip ---- */
@@ -16,9 +8,9 @@
     font-size: 0.75rem;
     font-family: monospace;
     color: var(--pollar-muted);
-    background: var(--pollar-input-bg, rgba(0,0,0,0.04));
+    background: var(--pollar-input-bg);
     border: 1px solid var(--pollar-border);
-    border-radius: 6px;
+    border-radius: var(--pollar-card-border-radius, 10px);
     padding: 0.375rem 0.75rem;
     margin-bottom: 1rem;
     overflow: hidden;
@@ -38,9 +30,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: var(--pollar-input-bg, rgba(0,0,0,0.04));
+    background: var(--pollar-input-bg);
     border: 1px solid var(--pollar-border);
-    border-radius: 10px;
+    border-radius: var(--pollar-card-border-radius, 10px);
     padding: 0.75rem 1rem;
 }
 

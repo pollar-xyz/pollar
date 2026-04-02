@@ -43,15 +43,20 @@ export function TxHistoryModalTemplate({
 
   const cssVars = {
     '--pollar-accent': accentColor,
-    '--pollar-buttons-border-radius': '8px',
-    '--pollar-buttons-height': '44px',
     '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
     '--pollar-border': isDark ? '#374151' : '#e5e7eb',
     '--pollar-text': isDark ? '#ffffff' : '#111827',
     '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : 'rgba(0,0,0,0.04)',
+    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
+    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
+    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
     '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
     '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
+    '--pollar-buttons-border-radius': '6px',
+    '--pollar-buttons-height': '44px',
+    '--pollar-input-height': '44px',
+    '--pollar-input-border-radius': '0.5rem',
+    '--pollar-card-border-radius': '10px',
   } as CSSProperties;
 
   const isLoading = txHistory.step === 'loading';
@@ -62,7 +67,7 @@ export function TxHistoryModalTemplate({
   const showPagination = txHistory.step === 'loaded' && total > PAGE_SIZE;
 
   return (
-    <div className="pollar-hist-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
+    <div className="pollar-modal-card pollar-hist-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
       <div className="pollar-modal-header">
         <h2 className="pollar-modal-title">Transaction History</h2>
         <div className="pollar-modal-header-actions">

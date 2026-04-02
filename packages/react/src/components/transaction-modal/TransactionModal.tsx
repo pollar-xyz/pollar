@@ -19,7 +19,13 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
 
   const hash = transaction.step === 'success' ? transaction.hash : null;
   const buildData = 'buildData' in transaction ? transaction.buildData : null;
-  const explorerNetwork = buildData?.summary.network?.toLowerCase().includes('testnet') ? 'testnet' : 'public';
+  const explorerNetwork = buildData?.summary.network?.toLowerCase().includes('testnet')
+    ? 'testnet'
+    : buildData
+      ? 'public'
+      : network === 'testnet'
+        ? 'testnet'
+        : 'public';
   const explorerUrl = hash ? `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}` : null;
 
   function handleSignAndSend() {

@@ -101,16 +101,23 @@ export function LoginModalTemplate({
 
   const cssVars = {
     '--pollar-accent': accentColor,
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
     '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
     '--pollar-border': isDark ? '#374151' : '#e5e7eb',
     '--pollar-text': isDark ? '#ffffff' : '#111827',
     '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#ffffff',
+    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
     '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
     '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
     '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
+    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
+    '--pollar-buttons-border-radius': '6px',
+    '--pollar-buttons-height': '44px',
+    '--pollar-input-height': '44px',
+    '--pollar-input-border-radius': '0.5rem',
+    '--pollar-card-border-radius': '10px',
+    '--pollar-modal-padding': '2rem',
+    '--pollar-modal-heading-size': '1.375rem',
+    '--pollar-modal-subtitle-size': '0.9rem',
   } as CSSProperties;
 
   const status = authStateToStatus(authState.step);
@@ -133,7 +140,7 @@ export function LoginModalTemplate({
   );
 
   return (
-    <div className="pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
+    <div className="pollar-modal-card pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
       <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label="Close">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M18 6L6 18M6 6l12 12" />
@@ -189,7 +196,7 @@ export function LoginModalTemplate({
                 onChange={(e) => onEmailChange?.(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && onEmailSubmit?.()}
               />
-              <button type="button" disabled={isLoading || !email} className="pollar-submit-btn" onClick={onEmailSubmit}>
+              <button type="button" disabled={isLoading || !email} className="pollar-btn-primary" style={{ marginTop: '0.75rem', width: '100%' }} onClick={onEmailSubmit}>
                 Submit
               </button>
             </div>

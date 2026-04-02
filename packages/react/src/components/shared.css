@@ -21,6 +21,37 @@
   background-color: rgba(0, 0, 0, 0.5);
 }
 
+/* ─── Modal card base (all modals extend this) ────────────────────────────────── */
+.pollar-modal-card {
+  position: relative;
+  width: 100%;
+  border-radius: 1rem;
+  border: 1px solid var(--pollar-border);
+  padding: var(--pollar-modal-padding, 1.75rem);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  background-color: var(--pollar-bg);
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+/* ─── Common input ────────────────────────────────────────────────────────────── */
+.pollar-input {
+  width: 100%;
+  height: var(--pollar-input-height, 44px);
+  padding: 0 1rem;
+  border-radius: var(--pollar-input-border-radius, 0.5rem);
+  border: 1px solid var(--pollar-border);
+  background-color: var(--pollar-input-bg);
+  color: var(--pollar-text);
+  font-size: 1rem;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.pollar-input::placeholder { color: var(--pollar-muted); }
+.pollar-input:focus { box-shadow: 0 0 0 2px var(--pollar-accent); border-color: transparent; }
+.pollar-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* ─── Modal header (title left, actions right) ────────────────────────────────── */
 .pollar-modal-header {
   display: flex;
@@ -42,28 +73,10 @@
   gap: 0.5rem;
 }
 
-/* ─── Close button ────────────────────────────────────────────────────────────── */
+/* ─── Icon nav buttons (close / back — shared base) ──────────────────────────── */
+.pollar-close-btn,
+.pollar-back-btn,
 .pollar-modal-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--pollar-muted);
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  border-radius: 6px;
-  transition: color 150ms, background 150ms;
-}
-
-.pollar-modal-close:hover {
-  color: var(--pollar-text);
-  background: var(--pollar-border);
-}
-
-.pollar-close-btn {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -75,13 +88,28 @@
   background-color: transparent;
   color: var(--pollar-muted);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.pollar-close-btn:hover {
+.pollar-close-btn:hover,
+.pollar-back-btn:hover,
+.pollar-modal-close:hover {
   background-color: var(--pollar-input-bg);
   color: var(--pollar-text);
   border-color: var(--pollar-text);
+}
+
+/* Absolute positioned variants */
+.pollar-close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+}
+
+.pollar-back-btn {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
 }
 
 /* ─── Refresh button ──────────────────────────────────────────────────────────── */
