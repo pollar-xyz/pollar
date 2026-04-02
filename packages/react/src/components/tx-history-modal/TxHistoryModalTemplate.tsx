@@ -111,17 +111,28 @@ export function TxHistoryModalTemplate({
         {txHistory.step === 'loaded' && records.length === 0 && (
           <div className="pollar-modal-empty">No transactions yet.</div>
         )}
-        {records.map((record) => (
-          <div key={record.id} className="pollar-hist-item">
-            <span className="pollar-hist-item-summary">{record.summary}</span>
-            <StatusBadge status={record.status} />
-            <span className="pollar-hist-item-meta">
-              <span>{record.operation}</span>
-              {record.feeXlm && <span>· {record.feeXlm} XLM</span>}
-              <span>· {formatDate(record.createdAt)}</span>
-            </span>
-          </div>
-        ))}
+        {records.map((record) => {
+          const explorerUrl = `https://stellar.expert/explorer/${record.network === 'testnet' ? 'testnet' : 'public'}/tx/${record.hash}`;
+          return (
+            <div key={record.id} className="pollar-hist-item">
+              <span className="pollar-hist-item-summary">{record.summary}</span>
+              <StatusBadge status={record.status} />
+              <span className="pollar-hist-item-meta">
+                <span>{record.operation}</span>
+                {record.feeXlm && <span>· {record.feeXlm} XLM</span>}
+                <span>· {formatDate(record.createdAt)}</span>
+                <span>·</span>
+                <a className="pollar-hist-item-explorer" href={explorerUrl} target="_blank" rel="noopener noreferrer" aria-label="View on Stellar Explorer">
+                  <svg width="11" height="11" viewBox="0 0 13 13" fill="none" aria-hidden>
+                    <path d="M5 2H2a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    <path d="M8 1h4m0 0v4m0-4L6 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Explorer
+                </a>
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       {showPagination && (

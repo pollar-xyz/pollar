@@ -70,6 +70,19 @@
     color: var(--pollar-muted);
 }
 
+.pollar-hist-item-explorer {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--pollar-muted);
+    text-decoration: none;
+    transition: color 150ms;
+}
+
+.pollar-hist-item-explorer:hover {
+    color: var(--pollar-accent);
+}
+
 /* ---- Pagination ---- */
 .pollar-hist-pagination {
     display: flex;
