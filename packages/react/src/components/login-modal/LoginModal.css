@@ -1,40 +1,6 @@
 /* ---- Modal card ---- */
 .pollar-modal {
-    position: relative;
-    width: 100%;
     max-width: 460px;
-    border-radius: 1rem;
-    border: 1px solid var(--pollar-border);
-    padding: 2rem;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-    background-color: var(--pollar-bg);
-    transition: all 300ms;
-    box-sizing: border-box;
-}
-
-/* ---- Back button ---- */
-.pollar-back-btn {
-    position: absolute;
-    top: 1rem;
-    left: 1rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 2rem;
-    height: 2rem;
-    padding: 0;
-    border-radius: var(--pollar-buttons-border-radius, 6px);
-    border: 1px solid var(--pollar-border);
-    background-color: transparent;
-    color: var(--pollar-muted);
-    cursor: pointer;
-    transition: all 0.15s;
-}
-
-.pollar-back-btn:hover {
-    background-color: var(--pollar-input-bg);
-    color: var(--pollar-text);
-    border-color: var(--pollar-text);
 }
 
 /* ---- Header ---- */
@@ -58,14 +24,14 @@
 
 .pollar-title {
     margin: 0 0 0.5rem;
-    font-size: 1.875rem;
+    font-size: var(--pollar-modal-heading-size, 1.375rem);
     font-weight: 700;
     color: var(--pollar-text);
 }
 
 .pollar-subtitle {
     margin: 0;
-    font-size: 1rem;
+    font-size: var(--pollar-modal-subtitle-size, 0.9rem);
     color: var(--pollar-muted);
 }
 
@@ -88,62 +54,20 @@
 
 .pollar-email-input {
     width: 100%;
-    border-radius: 0.5rem;
+    height: var(--pollar-input-height, 44px);
+    padding: 0 1rem;
+    border-radius: var(--pollar-input-border-radius, 0.5rem);
     border: 1px solid var(--pollar-border);
     background-color: var(--pollar-input-bg);
-    padding: 0.875rem 1rem;
     font-size: 1rem;
     color: var(--pollar-text);
     outline: none;
     box-sizing: border-box;
 }
 
-.pollar-email-input::placeholder {
-    color: var(--pollar-muted);
-}
-
-.pollar-email-input:focus {
-    box-shadow: 0 0 0 2px var(--pollar-accent);
-    border-color: transparent;
-}
-
-.pollar-email-input:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.pollar-submit-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-top: 0.75rem;
-    width: 100%;
-    height: var(--pollar-buttons-height, 44px);
-    border: none;
-    border-radius: var(--pollar-buttons-border-radius, 0.5rem);
-    padding: 0 0.875rem;
-    font-size: 1rem;
-    font-weight: 700;
-    color: #fff;
-    background-color: var(--pollar-accent);
-    cursor: pointer;
-    transition: all 0.15s;
-    box-sizing: border-box;
-}
-
-.pollar-submit-btn:hover:not(:disabled) {
-    opacity: 0.9;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-}
-
-.pollar-submit-btn:active:not(:disabled) {
-    transform: scale(0.98);
-}
-
-.pollar-submit-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
+.pollar-email-input::placeholder { color: var(--pollar-muted); }
+.pollar-email-input:focus { box-shadow: 0 0 0 2px var(--pollar-accent); border-color: transparent; }
+.pollar-email-input:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ---- Divider ---- */
 .pollar-divider {

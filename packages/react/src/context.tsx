@@ -2,6 +2,7 @@
 
 import {
   NetworkState,
+  PollarAdapters,
   PollarApplicationConfigContent,
   PollarClient,
   PollarClientConfig,
@@ -74,6 +75,8 @@ interface PollarContextValue {
   openTxHistoryModal: () => void;
   // wallet balance
   openWalletBalanceModal: () => void;
+  // adapters
+  adapters?: PollarAdapters;
 }
 
 const PollarContext = createContext<PollarContextValue | null>(null);
@@ -81,10 +84,11 @@ const PollarContext = createContext<PollarContextValue | null>(null);
 interface PollarProviderProps {
   config: PollarClientConfig;
   styles?: PollarStyles;
+  adapters?: PollarAdapters;
   children: ReactNode;
 }
 
-export function PollarProvider({ config, styles: propStyles, children }: PollarProviderProps) {
+export function PollarProvider({ config, styles: propStyles, adapters, children }: PollarProviderProps) {
   const [pollarClient] = useState<PollarClient>(() => new PollarClient(config));
   const [networkState, setNetworkState] = useState<NetworkState>(() => pollarClient.getNetworkState());
   const [sessionState, setSessionState] = useState<PollarApplicationConfigContent | null>(null);
@@ -183,6 +187,7 @@ export function PollarProvider({ config, styles: propStyles, children }: PollarP
         setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
         config: remoteConfig,
         styles,
+        adapters,
       }) as PollarContextValue,
     [sessionState, remoteConfig, styles, pollarClient, transaction, txHistory, networkState, walletBalance],
   );

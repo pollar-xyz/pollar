@@ -1,14 +1,6 @@
 /* ---- Tx history modal ---- */
 .pollar-hist-modal {
-    width: 100%;
     max-width: 480px;
-    border-radius: 1rem;
-    border: 1px solid var(--pollar-border);
-    padding: 1.75rem;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-    background-color: var(--pollar-bg);
-    box-sizing: border-box;
-    font-family: inherit;
 }
 
 /* ---- List ---- */
@@ -27,9 +19,9 @@
     grid-template-rows: auto auto;
     column-gap: 0.75rem;
     row-gap: 0.125rem;
-    background: var(--pollar-input-bg, rgba(0,0,0,0.04));
+    background: var(--pollar-input-bg);
     border: 1px solid var(--pollar-border);
-    border-radius: 10px;
+    border-radius: var(--pollar-card-border-radius, 10px);
     padding: 0.75rem 1rem;
 }
 
@@ -78,6 +70,19 @@
     color: var(--pollar-muted);
 }
 
+.pollar-hist-item-explorer {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--pollar-muted);
+    text-decoration: none;
+    transition: color 150ms;
+}
+
+.pollar-hist-item-explorer:hover {
+    color: var(--pollar-accent);
+}
+
 /* ---- Pagination ---- */
 .pollar-hist-pagination {
     display: flex;
@@ -99,7 +104,7 @@
 .pollar-hist-page-btn {
     background: none;
     border: 1px solid var(--pollar-border);
-    border-radius: 6px;
+    border-radius: var(--pollar-buttons-border-radius, 6px);
     padding: 4px 10px;
     font-size: 0.75rem;
     font-weight: 500;

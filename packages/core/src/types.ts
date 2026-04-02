@@ -140,3 +140,13 @@ export type RampsTransactionResponse =
 export type RampTxStatus = RampsTransactionResponse['status'];
 export type RampDirection = RampsTransactionResponse['direction'];
 export type PaymentInstructions = RampsOnrampResponse['paymentInstructions'];
+
+// ─── Adapter types ────────────────────────────────────────────────────────────
+
+export type EscrowFn<TParams = unknown> = (params: TParams) => Promise<{ unsignedTransaction: string }>;
+
+export type EscrowAdapter = Record<string, EscrowFn<any>>;
+
+export interface PollarAdapters {
+  [key: string]: EscrowAdapter;
+}
