@@ -42,7 +42,7 @@ import { loginOAuth } from './auth/oauthFlow';
 import { loginWallet } from './auth/walletFlow';
 import { readStorage, readWalletType, removeStorage, STORAGE_KEY, writeStorage, writeWalletType } from './session';
 
-const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+const isBrowser = typeof window !== 'undefined' || (typeof navigator !== 'undefined' && navigator.product === 'ReactNative');
 
 function warnServerSide(method: string): void {
   console.warn(
@@ -75,7 +75,12 @@ export class PollarClient {
 
   constructor(config: PollarClientConfig) {
     this.apiKey = config.apiKey;
-    this.id = crypto.randomUUID();
+    this.id = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
     this.basePath = `${config.baseUrl || 'https://sdk.api.pollar.xyz'}/v1`;
     this._api = createApiClient(this.basePath);
     const self = this;
@@ -102,13 +107,15 @@ export class PollarClient {
 
     this._restoreSession();
 
-    window.addEventListener('storage', (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) {
-        const prev = this._session;
-        console.info(`[PollarClient] Storage event — session ${this._session ? 'updated' : prev ? 'cleared' : 'unchanged'}`);
-        this._restoreSession();
-      }
-    });
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('storage', (e: StorageEvent) => {
+        if (e.key === STORAGE_KEY) {
+          const prev = this._session;
+          console.info(`[PollarClient] Storage event — session ${this._session ? 'updated' : prev ? 'cleared' : 'unchanged'}`);
+          this._restoreSession();
+        }
+      });
+    }
   }
 
   // ─── Auth state ──────────────────────────────────────────────────────────────
@@ -375,8 +382,8 @@ export class PollarClient {
     const state = this._transactionState;
     const buildData =
       state?.step === 'built' ? state.buildData :
-      state?.step === 'error' ? state.buildData :
-      undefined;
+        state?.step === 'error' ? state.buildData :
+          undefined;
     const isBuiltFlow = !!buildData;
     const stateExtra: { buildData?: TxBuildContent; external?: true } = buildData ? { buildData } : { external: true };
 

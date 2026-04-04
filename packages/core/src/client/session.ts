@@ -1,5 +1,19 @@
 import { PollarApplicationConfigContent } from '../types';
 
+function getStorage() {
+  if (typeof localStorage !== 'undefined') return localStorage;
+  if (typeof globalThis !== 'undefined' && (globalThis as any).__pollarStorage) return (globalThis as any).__pollarStorage;
+  const mem: Record<string, string> = {};
+  const mockStorage = {
+    getItem: (k: string) => mem[k] || null,
+    setItem: (k: string, v: string) => { mem[k] = String(v); },
+    removeItem: (k: string) => { delete mem[k]; },
+    clear: () => { for (const k in mem) delete mem[k]; }
+  };
+  if (typeof globalThis !== 'undefined') (globalThis as any).__pollarStorage = mockStorage;
+  return mockStorage;
+}
+
 export const STORAGE_KEY = 'pollar:session';
 export const WALLET_TYPE_KEY = 'pollar:walletType';
 
@@ -131,7 +145,7 @@ export function isValidSession(value: unknown): value is PollarApplicationConfig
 }
 
 export function readStorage(): PollarApplicationConfigContent | null {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = getStorage().getItem(STORAGE_KEY);
   if (!raw) {
     return null;
   }
@@ -140,13 +154,13 @@ export function readStorage(): PollarApplicationConfigContent | null {
     const session = JSON.parse(raw) as unknown;
 
     if (!isValidSession(session)) {
-      localStorage.removeItem(STORAGE_KEY);
+      getStorage().removeItem(STORAGE_KEY);
       console.warn('[PollarClient:session] Stored session is invalid — clearing storage');
       return null;
     }
 
     if (session.token.expiresAt * 1000 < Date.now()) {
-      localStorage.removeItem(STORAGE_KEY);
+      getStorage().removeItem(STORAGE_KEY);
       console.warn('[PollarClient:session] Session token has expired — clearing storage');
       return null;
     }
@@ -154,26 +168,26 @@ export function readStorage(): PollarApplicationConfigContent | null {
     return session;
   } catch (error) {
     console.error('[PollarClient:session] Failed to parse session from storage', error);
-    localStorage.removeItem(STORAGE_KEY);
+    getStorage().removeItem(STORAGE_KEY);
     return null;
   }
 }
 
 export function writeStorage(session: PollarApplicationConfigContent): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  getStorage().setItem(STORAGE_KEY, JSON.stringify(session));
   console.info('[PollarClient:session] Session written to storage');
 }
 
 export function removeStorage(): void {
-  localStorage.removeItem(STORAGE_KEY);
-  localStorage.removeItem(WALLET_TYPE_KEY);
+  getStorage().removeItem(STORAGE_KEY);
+  getStorage().removeItem(WALLET_TYPE_KEY);
   console.info('[PollarClient:session] Session removed from storage');
 }
 
 export function writeWalletType(type: string): void {
-  localStorage.setItem(WALLET_TYPE_KEY, type);
+  getStorage().setItem(WALLET_TYPE_KEY, type);
 }
 
 export function readWalletType(): string | null {
-  return localStorage.getItem(WALLET_TYPE_KEY);
+  return getStorage().getItem(WALLET_TYPE_KEY);
 }
