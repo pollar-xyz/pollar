@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { usePollar } from '../../context';
 import '../shared.css';
 import './TxHistoryModal.css';
@@ -17,10 +17,14 @@ export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const [offset, setOffset] = useState(0);
 
-  function load(nextOffset: number) {
+  const load = useCallback((nextOffset: number) => {
     setOffset(nextOffset);
     void getClient().fetchTxHistory({ limit: PAGE_SIZE, offset: nextOffset });
-  }
+  }, [getClient]);
+
+  useEffect(() => {
+    load(0);
+  }, [load]);
 
   return (
     <div className="pollar-overlay" onClick={onClose}>

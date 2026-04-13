@@ -11,12 +11,12 @@ interface WalletBalanceModalProps {
 }
 
 export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
-  const { walletBalance, refreshBalance, walletAddress, styles } = usePollar();
+  const { walletBalance, refreshWalletBalance, walletAddress, styles } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
 
   useEffect(() => {
-    void refreshBalance();
-  }, []);
+    void refreshWalletBalance();
+  }, [refreshWalletBalance]);
 
   return (
     <div className="pollar-overlay" onClick={onClose}>
@@ -25,7 +25,7 @@ export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
         accentColor={accentColor}
         walletBalance={walletBalance}
         walletAddress={walletAddress}
-        onRefresh={() => refreshBalance()}
+        onRefresh={() => refreshWalletBalance()}
         onClose={onClose}
       />
     </div>

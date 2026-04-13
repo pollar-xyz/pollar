@@ -11,7 +11,7 @@ interface TransactionModalProps {
 }
 
 export function TransactionModal({ onClose }: TransactionModalProps) {
-  const { getClient, styles, transaction, network, walletType } = usePollar();
+  const { getClient, styles, tx: transaction, network, walletType } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
 
   const [showXdr, setShowXdr] = useState(false);

@@ -12,6 +12,7 @@ export default defineConfig({
   clean: true,
   treeshake: true,
   external: ['react', 'react-dom', '@pollar/core'],
+  noExternal: ['qr.js'],
   esbuildOptions(options) {
     options.jsx = 'automatic';
   },

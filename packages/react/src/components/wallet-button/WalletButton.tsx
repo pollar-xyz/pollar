@@ -6,10 +6,22 @@ import { WalletButtonTemplate } from './WalletButtonTemplate';
 import './WalletButton.css';
 
 export function WalletButton() {
-  const { getClient, walletAddress, styles, openLoginModal, openTxHistoryModal, openWalletBalanceModal } = usePollar();
+  const {
+    getClient,
+    walletAddress,
+    styles,
+    openLoginModal,
+    openTxHistoryModal,
+    openWalletBalanceModal,
+    openSendModal,
+    openReceiveModal,
+    tx: transaction,
+    walletType,
+  } = usePollar();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const isInProgress = transaction.step === 'building' || transaction.step === 'signing';
 
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const isDark = theme === 'dark';
@@ -49,6 +61,16 @@ export function WalletButton() {
     openTxHistoryModal();
   }
 
+  function handleSend() {
+    setOpen(false);
+    openSendModal();
+  }
+
+  function handleReceive() {
+    setOpen(false);
+    openReceiveModal();
+  }
+
   return (
     <WalletButtonTemplate
       walletAddress={walletAddress ?? null}
@@ -59,10 +81,14 @@ export function WalletButton() {
       dropdownBorder={dropdownBorder}
       itemColor={itemColor}
       wrapperRef={wrapperRef}
+      isInProgress={isInProgress}
+      walletType={walletType}
       onToggleOpen={() => setOpen((v) => !v)}
       onCopy={handleCopy}
       onWalletBalance={handleWalletBalance}
       onTxHistory={handleTxHistory}
+      onSend={handleSend}
+      onReceive={handleReceive}
       onLogout={handleLogout}
       onLogin={openLoginModal}
     />

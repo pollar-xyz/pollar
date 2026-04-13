@@ -1,6 +1,6 @@
 {
   "name": "polar-auth-monorepo",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",

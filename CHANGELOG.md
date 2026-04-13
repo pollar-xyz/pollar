@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.6.0
+
+### `@pollar/react`
+
+#### New features
+
+- **New:** `SendModal` — full send flow within a single modal: asset picker (grouped by app-enabled vs. other), amount input with available balance hint, destination address, and inline transaction status (build → sign → success/error) without opening a secondary modal
+- **New:** `ReceiveModal` — displays the connected wallet address as a QR code with copy-to-clipboard support; no external QR dependency required for consumers
+- **New:** `TxStatusView` — shared transaction status component extracted from `TransactionModal` and reused by `SendModal`; renders the full build/sign/success/error lifecycle with XDR toggle, hash copy, and explorer link
+- **New:** `WalletButton` dropdown now includes **Send** and **Receive** actions that open the respective modals directly
+- **New:** Inline transaction spinner in `WalletButton` — a small animated arc appears to the right of the wallet address during in-progress transactions; button width and layout are unaffected
+- **New:** `TxHistoryModal` auto-fetches transaction history on open (first page, offset 0)
+- **New:** ESLint configuration (`eslint.config.mjs`) with `typescript-eslint` and `eslint-plugin-react-hooks` — covers both TypeScript and React hooks rules across the package
+
+#### Breaking changes — context API renames
+
+The following names exported from `usePollar()` have been renamed for consistency and clarity:
+
+| Before | After |
+|---|---|
+| `transaction` | `tx` |
+| `openTransactionModal` | `openTxModal` |
+| `config` | `appConfig` |
+| `openRampWidget` | `openRampModal` |
+| `refreshBalance` | `refreshWalletBalance` |
+
+#### Improvements
+
+- **Perf:** `getClient` and `refreshWalletBalance` are now wrapped in `useCallback` with stable deps — consumers can safely include them in `useEffect` dependency arrays without triggering unnecessary re-runs
+- **Perf:** `adapters` prop uses a `useRef` pattern inside the provider — prevents `useMemo` from recomputing the context value when the consumer passes an unstable `adapters` reference
+- **Refactor:** Context value object reorganized by domain (session, auth, transactions, wallet balance, network, KYC, ramp, config) with inline comments
+- **Fix:** `TransactionModal` no longer auto-opens when transaction state changes — call `openTxModal()` explicitly when needed
+- **Fix:** QR code rendering does not require consumers to install any additional package — `qr.js` is bundled and the `react-qr-code` source is vendored internally
+
 ## 0.5.3
 
 ### `@pollar/core`
