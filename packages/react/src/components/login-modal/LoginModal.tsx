@@ -18,6 +18,9 @@ export function LoginModal({ onClose }: LoginModalProps) {
   const [codeInputKey, setCodeInputKey] = useState(0);
   const pendingEmail = useRef<string | null>(null);
 
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     return getClient().onAuthStateChange((next) => {
       setAuthState(next);
@@ -29,11 +32,10 @@ export function LoginModal({ onClose }: LoginModalProps) {
         setCodeInputKey((k) => k + 1);
       }
       if (next.step === 'authenticated') {
-        setTimeout(onClose, 1000);
+        setTimeout(onCloseRef.current, 1000);
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [getClient]);
 
   const { theme = 'light', accentColor = '#005DB4', logoUrl, emailEnabled, embeddedWallets, providers } = styles;
 

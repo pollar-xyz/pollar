@@ -21,7 +21,7 @@ function assetParam(record: WalletBalanceRecord) {
 }
 
 export function SendModal({ onClose }: SendModalProps) {
-  const { walletBalance, refreshBalance, buildTx, signAndSubmitTx, tx: transaction, walletType, network, styles } =
+  const { walletBalance, refreshWalletBalance, buildTx, signAndSubmitTx, tx: transaction, walletType, network, styles } =
     usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
 
@@ -34,9 +34,8 @@ export function SendModal({ onClose }: SendModalProps) {
   const [formError, setFormError] = useState('');
 
   useEffect(() => {
-    void refreshBalance();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void refreshWalletBalance();
+  }, [refreshWalletBalance]);
 
   const balanceData = walletBalance.step === 'loaded' ? walletBalance.data : null;
   const allAssets = balanceData?.balances ?? [];

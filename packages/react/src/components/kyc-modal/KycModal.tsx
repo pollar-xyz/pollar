@@ -33,12 +33,12 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved 
 
   useEffect(() => {
     setIsLoading(true);
-    client.getKycProviders(country)
+    getClient()
+      .getKycProviders(country)
       .then((result) => setProviders(result.providers))
       .catch(() => setProviders([]))
       .finally(() => setIsLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [country]);
+  }, [getClient, country]);
 
   async function handleSelectProvider(provider: KycProvider) {
     setSelectedProvider(provider);

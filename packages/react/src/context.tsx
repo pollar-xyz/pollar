@@ -14,7 +14,7 @@ import {
   WalletBalanceState,
   WalletType,
 } from '@pollar/core';
-import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ModalErrorBoundary } from './components/commons';
 import { KycModal } from './components/kyc-modal/KycModal';
 import { LoginModal } from './components/login-modal/LoginModal';
@@ -63,7 +63,7 @@ interface PollarContextValue {
   setNetwork: (network: StellarNetwork) => void;
   // wallet balance
   walletBalance: WalletBalanceState;
-  refreshBalance: (publicKey?: string) => Promise<void>;
+  refreshWalletBalance: () => Promise<void>;
   // kyc
   openKycModal: (options?: {
     country?: string;
@@ -103,6 +103,9 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
   const [remoteConfig, setRemoteConfig] = useState<PollarConfig>(emptyResponse);
   const [styles, setStyles] = useState<PollarStyles>(propStyles ?? {});
 
+  const propStylesRef = useRef(propStyles);
+  propStylesRef.current = propStyles;
+
   useEffect(() => {
     return pollarClient.onTransactionStateChange(setTransaction);
   }, [pollarClient]);
@@ -132,6 +135,7 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
   }, [pollarClient]);
 
   useEffect(() => {
+    const propStyles = propStylesRef.current;
     fetchRemoteConfig(pollarClient)
       .then((fetched) => {
         setRemoteConfig(fetched);
@@ -144,10 +148,7 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
       .catch(() => {
         setStyles(propStyles ?? {});
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pollarClient]);
-
-  // TransactionModal is NOT auto-opened — call openTxModal() explicitly if needed.
 
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [transactionModalOpen, setTransactionModalOpen] = useState(false);
@@ -166,49 +167,54 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
   const adaptersRef = useRef(adapters);
   adaptersRef.current = adapters;
 
+  const walletAddress = sessionState?.data?.providers?.wallet?.address || sessionState?.wallet?.publicKey || '';
+  const getClient = useCallback(() => pollarClient, [pollarClient]);
+  const refreshWalletBalance = useCallback(() => pollarClient.refreshBalance(walletAddress), [pollarClient, walletAddress]);
+
   const contextValue: PollarContextValue = useMemo(
     () =>
       ({
-        walletAddress: sessionState?.data?.providers?.wallet?.address || sessionState?.wallet?.publicKey || '',
-        getClient: () => pollarClient,
-        tx: transaction,
+        // session
+        walletAddress,
+        isAuthenticated: !!walletAddress,
+        walletType: pollarClient.getWalletType(),
+        // client
+        getClient,
+        // auth
         login: (options: PollarLoginOptions) => pollarClient.login(options),
         logout: () => pollarClient.logout(),
-        isAuthenticated: !!sessionState?.wallet?.publicKey,
+        openLoginModal: () => setLoginModalOpen(true),
+        // transactions
+        tx: transaction,
         buildTx: (operation, params, options) => pollarClient.buildTx(operation, params, options),
         signAndSubmitTx: (unsignedXdr: string) => pollarClient.signAndSubmitTx(unsignedXdr),
-        walletType: pollarClient.getWalletType(),
         openTxModal: () => setTransactionModalOpen(true),
-        openLoginModal: () => setLoginModalOpen(true),
+        // tx history
+        txHistory,
+        openTxHistoryModal: () => setTxHistoryModalOpen(true),
+        // wallet balance
+        walletBalance,
+        refreshWalletBalance,
+        openWalletBalanceModal: () => setWalletBalanceModalOpen(true),
+        // send / receive
+        openSendModal: () => setSendModalOpen(true),
+        openReceiveModal: () => setReceiveModalOpen(true),
+        // network
+        network: networkState.step === 'connected' ? networkState.network : 'testnet',
+        setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
+        // kyc
         openKycModal: (options = {}) => {
           setKycModalOptions(options);
           setKycModalOpen(true);
         },
+        // ramp
         openRampModal: () => setRampModalOpen(true),
-        txHistory,
-        openTxHistoryModal: () => setTxHistoryModalOpen(true),
-        openWalletBalanceModal: () => setWalletBalanceModalOpen(true),
-        openSendModal: () => setSendModalOpen(true),
-        openReceiveModal: () => setReceiveModalOpen(true),
-        walletBalance,
-        refreshBalance: (publicKey?: string) => pollarClient.refreshBalance(publicKey),
-        network: networkState.step === 'connected' ? networkState.network : 'testnet',
-        setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
+        // config
         appConfig: remoteConfig,
         styles,
         adapters: adaptersRef.current,
       }) as PollarContextValue,
-    [
-      sessionState?.data?.providers?.wallet?.address,
-      sessionState?.wallet?.publicKey,
-      transaction,
-      pollarClient,
-      txHistory,
-      walletBalance,
-      networkState,
-      remoteConfig,
-      styles
-    ],
+    [walletAddress, pollarClient, getClient, transaction, txHistory, walletBalance, refreshWalletBalance, networkState, remoteConfig, styles],
   );
 
   return (
