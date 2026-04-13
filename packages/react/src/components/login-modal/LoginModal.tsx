@@ -13,7 +13,7 @@ interface LoginModalProps {
 
 export function LoginModal({ onClose }: LoginModalProps) {
   const [email, setEmail] = useState('');
-  const { getClient, styles, config } = usePollar();
+  const { getClient, styles, appConfig: config } = usePollar();
   const [authState, setAuthState] = useState<AuthState>(() => getClient().getAuthState());
   const [codeInputKey, setCodeInputKey] = useState(0);
   const pendingEmail = useRef<string | null>(null);
@@ -32,6 +32,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
         setTimeout(onClose, 1000);
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const { theme = 'light', accentColor = '#005DB4', logoUrl, emailEnabled, embeddedWallets, providers } = styles;

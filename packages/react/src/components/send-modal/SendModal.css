@@ -1,0 +1,64 @@
+/* ---- Send modal ---- */
+.pollar-send-modal {
+  max-width: 420px;
+}
+
+/* ---- Header left group (back + title) ---- */
+.pollar-send-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ---- Form field wrapper ---- */
+.pollar-send-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: 1rem;
+}
+
+/* ---- Field label ---- */
+.pollar-send-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--pollar-muted);
+}
+
+/* ---- Label row (label + available hint) ---- */
+.pollar-send-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+/* ---- Available balance hint ---- */
+.pollar-send-hint {
+  font-size: 0.75rem;
+  color: var(--pollar-muted);
+}
+
+/* ---- Native select styling ---- */
+.pollar-send-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.875rem center;
+  padding-right: 2.25rem;
+  cursor: pointer;
+}
+
+/* ---- Loading skeleton for asset selector ---- */
+.pollar-send-skeleton {
+  height: var(--pollar-input-height, 44px);
+  border-radius: var(--pollar-input-border-radius, 0.5rem);
+  background: linear-gradient(
+    90deg,
+    var(--pollar-input-bg) 25%,
+    var(--pollar-border) 50%,
+    var(--pollar-input-bg) 75%
+  );
+  background-size: 200% 100%;
+  animation: pollar-pulse 1.4s ease-in-out infinite;
+}

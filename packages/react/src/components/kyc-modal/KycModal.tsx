@@ -37,6 +37,7 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved 
       .then((result) => setProviders(result.providers))
       .catch(() => setProviders([]))
       .finally(() => setIsLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [country]);
 
   async function handleSelectProvider(provider: KycProvider) {

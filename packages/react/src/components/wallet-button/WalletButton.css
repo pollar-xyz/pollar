@@ -106,3 +106,34 @@
 .wallet-dropdown-item.danger:hover {
   background: #fef2f2;
 }
+
+/* ---- Dropdown divider ---- */
+.wallet-dropdown-divider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.08);
+  margin: 2px 0;
+}
+
+/* ---- Wallet button label (shrinks to make room for spinner) ---- */
+.wallet-btn-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---- In-progress: small inline spinner (same size as chevron) ---- */
+.wallet-btn:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.wallet-btn-spinner {
+  flex-shrink: 0;
+  animation: pollar-wallet-spin 1.1s linear infinite;
+}
+
+@keyframes pollar-wallet-spin {
+  to { transform: rotate(360deg); }
+}

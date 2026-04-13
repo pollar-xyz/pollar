@@ -14,11 +14,13 @@ import {
   WalletBalanceState,
   WalletType,
 } from '@pollar/core';
-import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ModalErrorBoundary } from './components/commons';
 import { KycModal } from './components/kyc-modal/KycModal';
 import { LoginModal } from './components/login-modal/LoginModal';
+import { ReceiveModal } from './components/receive-modal/ReceiveModal';
 import { RampWidget } from './components/ramp-widget/RampWidget';
+import { SendModal } from './components/send-modal/SendModal';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
@@ -44,11 +46,11 @@ interface PollarContextValue {
   isAuthenticated: boolean;
   login: (options: PollarLoginOptions) => void;
   logout: () => void;
-  config: PollarConfig;
+  appConfig: PollarConfig;
   styles: PollarStyles;
   // transactions
-  openTransactionModal: () => void;
-  transaction: TransactionState;
+  openTxModal: () => void;
+  tx: TransactionState;
   buildTx: (
     operation: TxBuildBody['operation'],
     params: TxBuildBody['params'],
@@ -69,12 +71,15 @@ interface PollarContextValue {
     onApproved?: () => void;
   }) => void;
   // ramps
-  openRampWidget: () => void;
+  openRampModal: () => void;
   // tx history
   txHistory: TxHistoryState;
   openTxHistoryModal: () => void;
   // wallet balance
   openWalletBalanceModal: () => void;
+  // send / receive
+  openSendModal: () => void;
+  openReceiveModal: () => void;
   // adapters
   adapters?: PollarAdapters;
 }
@@ -139,13 +144,10 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
       .catch(() => {
         setStyles(propStyles ?? {});
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pollarClient]);
 
-  useEffect(() => {
-    if (transaction.step !== 'idle') {
-      setTransactionModalOpen(true);
-    }
-  }, [transaction.step]);
+  // TransactionModal is NOT auto-opened — call openTxModal() explicitly if needed.
 
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [transactionModalOpen, setTransactionModalOpen] = useState(false);
@@ -155,41 +157,58 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
     level?: 'basic' | 'intermediate' | 'enhanced';
     onApproved?: () => void;
   }>({});
-  const [rampWidgetOpen, setRampWidgetOpen] = useState(false);
+  const [rampModalOpen, setRampModalOpen] = useState(false);
   const [txHistoryModalOpen, setTxHistoryModalOpen] = useState(false);
   const [walletBalanceModalOpen, setWalletBalanceModalOpen] = useState(false);
+  const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [receiveModalOpen, setReceiveModalOpen] = useState(false);
+
+  const adaptersRef = useRef(adapters);
+  adaptersRef.current = adapters;
 
   const contextValue: PollarContextValue = useMemo(
     () =>
       ({
         walletAddress: sessionState?.data?.providers?.wallet?.address || sessionState?.wallet?.publicKey || '',
         getClient: () => pollarClient,
-        transaction,
+        tx: transaction,
         login: (options: PollarLoginOptions) => pollarClient.login(options),
         logout: () => pollarClient.logout(),
         isAuthenticated: !!sessionState?.wallet?.publicKey,
         buildTx: (operation, params, options) => pollarClient.buildTx(operation, params, options),
         signAndSubmitTx: (unsignedXdr: string) => pollarClient.signAndSubmitTx(unsignedXdr),
         walletType: pollarClient.getWalletType(),
-        openTransactionModal: () => setTransactionModalOpen(true),
+        openTxModal: () => setTransactionModalOpen(true),
         openLoginModal: () => setLoginModalOpen(true),
         openKycModal: (options = {}) => {
           setKycModalOptions(options);
           setKycModalOpen(true);
         },
-        openRampWidget: () => setRampWidgetOpen(true),
+        openRampModal: () => setRampModalOpen(true),
         txHistory,
         openTxHistoryModal: () => setTxHistoryModalOpen(true),
         openWalletBalanceModal: () => setWalletBalanceModalOpen(true),
+        openSendModal: () => setSendModalOpen(true),
+        openReceiveModal: () => setReceiveModalOpen(true),
         walletBalance,
         refreshBalance: (publicKey?: string) => pollarClient.refreshBalance(publicKey),
         network: networkState.step === 'connected' ? networkState.network : 'testnet',
         setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
-        config: remoteConfig,
+        appConfig: remoteConfig,
         styles,
-        adapters,
+        adapters: adaptersRef.current,
       }) as PollarContextValue,
-    [sessionState, remoteConfig, styles, pollarClient, transaction, txHistory, networkState, walletBalance],
+    [
+      sessionState?.data?.providers?.wallet?.address,
+      sessionState?.wallet?.publicKey,
+      transaction,
+      pollarClient,
+      txHistory,
+      walletBalance,
+      networkState,
+      remoteConfig,
+      styles
+    ],
   );
 
   return (
@@ -215,9 +234,9 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
           />
         </ModalErrorBoundary>
       )}
-      {rampWidgetOpen && (
-        <ModalErrorBoundary onClose={() => setRampWidgetOpen(false)}>
-          <RampWidget onClose={() => setRampWidgetOpen(false)} />
+      {rampModalOpen && (
+        <ModalErrorBoundary onClose={() => setRampModalOpen(false)}>
+          <RampWidget onClose={() => setRampModalOpen(false)} />
         </ModalErrorBoundary>
       )}
       {txHistoryModalOpen && (
@@ -228,6 +247,16 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
       {walletBalanceModalOpen && (
         <ModalErrorBoundary onClose={() => setWalletBalanceModalOpen(false)}>
           <WalletBalanceModal onClose={() => setWalletBalanceModalOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {sendModalOpen && (
+        <ModalErrorBoundary onClose={() => setSendModalOpen(false)}>
+          <SendModal onClose={() => setSendModalOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {receiveModalOpen && (
+        <ModalErrorBoundary onClose={() => setReceiveModalOpen(false)}>
+          <ReceiveModal onClose={() => setReceiveModalOpen(false)} />
         </ModalErrorBoundary>
       )}
     </PollarContext.Provider>

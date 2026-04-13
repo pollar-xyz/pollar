@@ -16,6 +16,7 @@ export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
 
   useEffect(() => {
     void refreshBalance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
