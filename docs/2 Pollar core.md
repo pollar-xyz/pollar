@@ -529,6 +529,104 @@ const config = await pollar.getAppConfig();
 
 ---
 
+## Wallet Adapters
+
+`@pollar/core` ships two ready-made wallet adapters and exports the `WalletAdapter` interface for building custom ones.
+
+### `WalletAdapter` interface
+
+| Method                              | Returns                          | Description                                         |
+|-------------------------------------|----------------------------------|-----------------------------------------------------|
+| `type`                              | `WalletType`                     | Wallet type identifier.                             |
+| `isAvailable()`                     | `Promise<boolean>`               | Whether the wallet extension is installed.          |
+| `connect()`                         | `Promise<ConnectWalletResponse>` | Connects the wallet and returns the public key.     |
+| `disconnect()`                      | `Promise<void>`                  | Disconnects the wallet.                             |
+| `getPublicKey()`                    | `Promise<string \| null>`        | Returns the current public key, or null.            |
+| `signTransaction(xdr, options?)`    | `Promise<SignTransactionResponse>`| Signs a transaction XDR.                           |
+| `signAuthEntry(entryXdr, options?)` | `Promise<SignAuthEntryResponse>` | Signs a Soroban auth entry.                         |
+
+### `FreighterAdapter`
+
+Implements `WalletAdapter` for the [Freighter](https://www.freighter.app/) browser extension.
+
+```typescript
+import { FreighterAdapter, WalletType } from '@pollar/core';
+
+const adapter = new FreighterAdapter();
+const available = await adapter.isAvailable();
+```
+
+### `AlbedoAdapter`
+
+Implements `WalletAdapter` for [Albedo](https://albedo.link/) (popup/redirect flow, no extension required).
+
+```typescript
+import { AlbedoAdapter } from '@pollar/core';
+
+const adapter = new AlbedoAdapter();
+```
+
+---
+
+## `StellarClient`
+
+Lightweight client for submitting signed transactions directly to the Stellar Horizon API.
+
+```typescript
+import { StellarClient } from '@pollar/core';
+
+const stellar = new StellarClient({ network: 'testnet' });
+const result = await stellar.submitTransaction(signedXdr);
+
+if (result.success) {
+  console.log('Hash:', result.hash);
+} else {
+  console.error('Error:', result.errorCode);
+}
+```
+
+**Constructor options:**
+
+| Option    | Type             | Description                                                    |
+|-----------|------------------|----------------------------------------------------------------|
+| `network` | `StellarNetwork` | `'testnet'` or `'mainnet'`. Also accepts a custom Horizon URL. |
+
+---
+
+## `isValidSession`
+
+Utility that checks whether a session object is still valid (not expired).
+
+```typescript
+import { isValidSession } from '@pollar/core';
+
+const valid = isValidSession(session);
+```
+
+---
+
+## Custom Adapters
+
+`PollarAdapters` is a generic record type that maps adapter names to `EscrowAdapter` instances. Adapters allow you to wrap external signing functions (e.g. Trustless Work SDK) and have Pollar handle signing and submission automatically.
+
+```typescript
+import type { EscrowFn, EscrowAdapter, PollarAdapters } from '@pollar/core';
+
+// An EscrowFn receives params and returns an unsigned XDR string
+const createEscrow: EscrowFn<{ amount: string; counterparty: string }> = async (params) => {
+  const xdr = await trustlessWork.buildEscrow(params);
+  return xdr; // unsigned XDR
+};
+
+const adapters: PollarAdapters = {
+  escrow: { createEscrow },
+};
+```
+
+Pass `adapters` to `<PollarProvider>` (React) or use them directly with `createPollarAdapterHook` from `@pollar/react`.
+
+---
+
 ## Types
 
 ```typescript
@@ -541,11 +639,13 @@ import type {
   TransactionState,
   TxBuildBody,
   TxBuildContent,
+  TxSignAndSendBody,
   TxHistoryState,
   TxHistoryParams,
   TxHistoryRecord,
   WalletBalanceState,
   WalletBalanceRecord,
+  WalletBalanceContent,
   KycLevel,
   KycStatus,
   KycFlow,
@@ -563,8 +663,11 @@ import type {
   RampTxStatus,
   RampDirection,
   PaymentInstructions,
+  EscrowFn,
+  EscrowAdapter,
+  PollarAdapters,
   PollarFlowError,
 } from '@pollar/core';
 
-import { WalletType } from '@pollar/core';
+import { WalletType, FreighterAdapter, AlbedoAdapter, StellarClient, isValidSession } from '@pollar/core';
 ```
