@@ -6,6 +6,15 @@ export { defaultStorage } from './storage/autodetect';
 export { createLocalStorageAdapter, createMemoryAdapter } from './storage/web';
 export type { LocalStorageAdapterOptions } from './storage/web';
 
+// ─── KeyManager + DPoP ────────────────────────────────────────────────────────
+export type { KeyManager, PublicEcJwk } from './keys/types';
+export { defaultKeyManager } from './keys/autodetect';
+export { WebCryptoKeyManager } from './keys/web-crypto';
+export { NobleKeyManager } from './keys/noble';
+export { computeJwkThumbprint, canonicalEcJwk } from './keys/thumbprint';
+export { buildProof, normalizeHtu } from './dpop';
+export type { BuildProofArgs } from './dpop';
+
 export { FreighterAdapter, AlbedoAdapter, WalletType } from './wallets';
 export type {
   WalletAdapter,
