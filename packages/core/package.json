@@ -15,6 +15,26 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       }
+    },
+    "./adapters/expo": {
+      "import": {
+        "types": "./dist/adapters/expo-secure-store.d.mts",
+        "default": "./dist/adapters/expo-secure-store.mjs"
+      },
+      "require": {
+        "types": "./dist/adapters/expo-secure-store.d.ts",
+        "default": "./dist/adapters/expo-secure-store.js"
+      }
+    },
+    "./adapters/react-native-keychain": {
+      "import": {
+        "types": "./dist/adapters/react-native-keychain.d.mts",
+        "default": "./dist/adapters/react-native-keychain.mjs"
+      },
+      "require": {
+        "types": "./dist/adapters/react-native-keychain.d.ts",
+        "default": "./dist/adapters/react-native-keychain.js"
+      }
     }
   },
   "files": [
@@ -34,5 +54,17 @@
   "dependencies": {
     "@stellar/freighter-api": "^2.0.0",
     "openapi-fetch": "^0.17.0"
+  },
+  "peerDependencies": {
+    "expo-secure-store": ">=12",
+    "react-native-keychain": ">=8"
+  },
+  "peerDependenciesMeta": {
+    "expo-secure-store": {
+      "optional": true
+    },
+    "react-native-keychain": {
+      "optional": true
+    }
   }
 }

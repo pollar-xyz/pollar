@@ -1,4 +1,11 @@
 export { PollarClient } from './client/client';
+
+// ─── Storage ──────────────────────────────────────────────────────────────────
+export type { Storage, OnStorageDegrade, StorageDegradeReason } from './storage/types';
+export { defaultStorage } from './storage/autodetect';
+export { createLocalStorageAdapter, createMemoryAdapter } from './storage/web';
+export type { LocalStorageAdapterOptions } from './storage/web';
+
 export { FreighterAdapter, AlbedoAdapter, WalletType } from './wallets';
 export type {
   WalletAdapter,

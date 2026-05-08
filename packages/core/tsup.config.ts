@@ -1,7 +1,11 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: {
+    index: 'src/index.ts',
+    'adapters/expo-secure-store': 'src/adapters/expo-secure-store.ts',
+    'adapters/react-native-keychain': 'src/adapters/react-native-keychain.ts',
+  },
   format: ['cjs', 'esm'],
   dts: true,
   splitting: false,

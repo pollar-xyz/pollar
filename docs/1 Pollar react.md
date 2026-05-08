@@ -363,10 +363,10 @@ Factory function that generates a fully-typed hook wrapping a named adapter from
 
 ```tsx
 import { createPollarAdapterHook } from '@pollar/react';
-import type { EscrowAdapter } from '@pollar/core';
+import type { PollarAdapter } from '@pollar/core';
 
 // Define once — outside your component
-const usePollarEscrow = createPollarAdapterHook<EscrowAdapter>('escrow');
+const usePollarEscrow = createPollarAdapterHook<PollarAdapter>('escrow');
 
 function MyComponent() {
   const escrow = usePollarEscrow();
@@ -414,4 +414,4 @@ import type {
 } from '@pollar/react';
 ```
 
-Core types such as `TransactionState`, `TxHistoryState`, `WalletBalanceState`, `PollarLoginOptions`, `StellarNetwork`, `WalletType`, `EscrowFn`, `EscrowAdapter`, and `PollarAdapters` are imported directly from `@pollar/core`.
+Core types such as `TransactionState`, `TxHistoryState`, `WalletBalanceState`, `PollarLoginOptions`, `StellarNetwork`, `WalletType`, `AdapterFn`, `PollarAdapter`, and `PollarAdapters` are imported directly from `@pollar/core`.

@@ -143,10 +143,10 @@ export type PaymentInstructions = RampsOnrampResponse['paymentInstructions'];
 
 // ─── Adapter types ────────────────────────────────────────────────────────────
 
-export type EscrowFn<TParams = unknown> = (params: TParams) => Promise<{ unsignedTransaction: string }>;
+export type AdapterFn<TParams = unknown> = (params: TParams) => Promise<{ unsignedTransaction: string }>;
 
-export type EscrowAdapter = Record<string, EscrowFn<any>>;
+export type PollarAdapter = Record<string, AdapterFn<any>>;
 
 export interface PollarAdapters {
-  [key: string]: EscrowAdapter;
+  [key: string]: PollarAdapter;
 }
