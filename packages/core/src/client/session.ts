@@ -1,47 +1,78 @@
-import { PollarApplicationConfigContent } from '../types';
+import type { Storage } from '../storage/types';
+import type { PollarPersistedSession } from '../types';
 
-export const STORAGE_KEY = 'pollar:session';
-export const WALLET_TYPE_KEY = 'pollar:walletType';
+/**
+ * Persisted session shape (stored via the injected `Storage` adapter).
+ *
+ * Compared to the full `/auth/login` response:
+ *   - `data.{mail,first_name,last_name,avatar,providers}` is dropped — that
+ *     PII is held in memory only on `PollarClient`, fetched from
+ *     `/applications/config` after auth.
+ *   - All string fields are length-bounded as defense-in-depth: even though
+ *     JWT/UUID/Stellar-pubkey shapes are bounded by their own grammars,
+ *     bounding here catches hostile or buggy inputs before they hit downstream.
+ *
+ * Storage keys are namespaced per-`apiKeyHash` so swapping API keys can't
+ * cross-contaminate sessions.
+ */
 
-export function isValidSession(value: unknown): value is PollarApplicationConfigContent {
+const SESSION_SUFFIX = ':session';
+const WALLET_TYPE_SUFFIX = ':walletType';
+
+export function sessionStorageKey(apiKeyHash: string): string {
+  return `pollar:${apiKeyHash}${SESSION_SUFFIX}`;
+}
+
+export function walletTypeStorageKey(apiKeyHash: string): string {
+  return `pollar:${apiKeyHash}${WALLET_TYPE_SUFFIX}`;
+}
+
+const MAX_ACCESS_TOKEN = 4096;
+const MAX_REFRESH_TOKEN = 4096;
+const MAX_USER_ID = 64;
+const MAX_CLIENT_SESSION_ID = 64;
+const MAX_STATUS = 64;
+const MAX_WALLET_PUBLIC_KEY = 128;
+const MAX_WALLET_TYPE = 32;
+
+function isBoundedString(v: unknown, max: number, allowEmpty = false): v is string {
+  if (typeof v !== 'string') return false;
+  if (!allowEmpty && v.length === 0) return false;
+  return v.length <= max;
+}
+
+export function isValidSession(value: unknown): value is PollarPersistedSession {
   if (typeof value !== 'object' || value === null) {
     console.warn('[PollarClient:session] Invalid session — value is not an object');
     return false;
   }
-
   const s = value as Record<string, unknown>;
 
-  // clientSessionId: string
-  if (typeof s['clientSessionId'] !== 'string' || s['clientSessionId'] === '') {
-    console.warn('[PollarClient:session] Invalid session — clientSessionId missing or empty');
+  if (!isBoundedString(s['clientSessionId'], MAX_CLIENT_SESSION_ID)) {
+    console.warn('[PollarClient:session] Invalid session — clientSessionId missing/empty/too long');
+    return false;
+  }
+  if (s['userId'] !== null && !isBoundedString(s['userId'], MAX_USER_ID)) {
+    console.warn('[PollarClient:session] Invalid session — userId must be string|null');
+    return false;
+  }
+  if (!isBoundedString(s['status'], MAX_STATUS)) {
+    console.warn('[PollarClient:session] Invalid session — status must be string');
     return false;
   }
 
-  // userId: string | null  (required, explicitly null or string)
-  if (s['userId'] !== null && typeof s['userId'] !== 'string') {
-    console.warn('[PollarClient:session] Invalid session — userId must be string or null, got:', typeof s['userId']);
-    return false;
-  }
-
-  // status: string
-  if (typeof s['status'] !== 'string') {
-    console.warn('[PollarClient:session] Invalid session — status must be string, got:', typeof s['status']);
-    return false;
-  }
-
-  // token: { accessToken: string, refreshToken: string, expiresAt: number }
   const token = s['token'];
   if (typeof token !== 'object' || token === null) {
     console.warn('[PollarClient:session] Invalid session — token missing or not an object');
     return false;
   }
   const t = token as Record<string, unknown>;
-  if (typeof t['accessToken'] !== 'string' || t['accessToken'] === '') {
-    console.warn('[PollarClient:session] Invalid session — token.accessToken missing or empty');
+  if (!isBoundedString(t['accessToken'], MAX_ACCESS_TOKEN)) {
+    console.warn('[PollarClient:session] Invalid session — token.accessToken missing/empty/too long');
     return false;
   }
-  if (typeof t['refreshToken'] !== 'string' || t['refreshToken'] === '') {
-    console.warn('[PollarClient:session] Invalid session — token.refreshToken missing or empty');
+  if (!isBoundedString(t['refreshToken'], MAX_REFRESH_TOKEN)) {
+    console.warn('[PollarClient:session] Invalid session — token.refreshToken missing/empty/too long');
     return false;
   }
   if (typeof t['expiresAt'] !== 'number' || !Number.isFinite(t['expiresAt'])) {
@@ -49,34 +80,29 @@ export function isValidSession(value: unknown): value is PollarApplicationConfig
     return false;
   }
 
-  // user: { id?: string, ready: boolean }
   const user = s['user'];
   if (typeof user !== 'object' || user === null) {
     console.warn('[PollarClient:session] Invalid session — user missing or not an object');
     return false;
   }
   const u = user as Record<string, unknown>;
-  if (u['id'] !== undefined && typeof u['id'] !== 'string') {
-    console.warn('[PollarClient:session] Invalid session — user.id must be string if present, got:', typeof u['id']);
+  if (u['id'] !== undefined && !isBoundedString(u['id'], MAX_USER_ID)) {
+    console.warn('[PollarClient:session] Invalid session — user.id must be string if present');
     return false;
   }
   if (typeof u['ready'] !== 'boolean') {
-    console.warn('[PollarClient:session] Invalid session — user.ready must be boolean, got:', typeof u['ready']);
+    console.warn('[PollarClient:session] Invalid session — user.ready must be boolean');
     return false;
   }
 
-  // wallet: { publicKey: string | null, existsOnStellar?: boolean, createdAt?: number }
   const wallet = s['wallet'];
   if (typeof wallet !== 'object' || wallet === null) {
     console.warn('[PollarClient:session] Invalid session — wallet missing or not an object');
     return false;
   }
   const w = wallet as Record<string, unknown>;
-  if (w['publicKey'] !== null && typeof w['publicKey'] !== 'string') {
-    console.warn(
-      '[PollarClient:session] Invalid session — wallet.publicKey must be string or null, got:',
-      typeof w['publicKey'],
-    );
+  if (w['publicKey'] !== null && !isBoundedString(w['publicKey'], MAX_WALLET_PUBLIC_KEY)) {
+    console.warn('[PollarClient:session] Invalid session — wallet.publicKey must be string|null');
     return false;
   }
   if (w['existsOnStellar'] !== undefined && typeof w['existsOnStellar'] !== 'boolean') {
@@ -88,92 +114,53 @@ export function isValidSession(value: unknown): value is PollarApplicationConfig
     return false;
   }
 
-  // data: { mail, first_name, last_name, avatar: string, providers: {...} }
-  const data = s['data'];
-  if (typeof data !== 'object' || data === null) {
-    console.warn('[PollarClient:session] Invalid session — data missing or not an object');
-    return false;
-  }
-  const d = data as Record<string, unknown>;
-
-  for (const field of ['mail', 'first_name', 'last_name', 'avatar'] as const) {
-    if (typeof d[field] !== 'string') {
-      console.warn(`[PollarClient:session] Invalid session — data.${field} must be string, got:`, typeof d[field]);
-      return false;
-    }
-  }
-
-  // providers: { email: {address:string}|null, google: {id:string}|null, github: {id:string}|null, wallet: {address:string}|null }
-  const providers = d['providers'];
-  if (typeof providers !== 'object' || providers === null) {
-    console.warn('[PollarClient:session] Invalid session — data.providers missing or not an object');
-    return false;
-  }
-  const p = providers as Record<string, unknown>;
-
-  const providerInnerField = { email: 'address', google: 'id', github: 'id', wallet: 'address' } as const;
-
-  for (const [field, innerField] of Object.entries(providerInnerField) as [keyof typeof providerInnerField, string][]) {
-    const v = p[field];
-    if (v === null) continue;
-    if (typeof v !== 'object') {
-      console.warn(`[PollarClient:session] Invalid session — data.providers.${field} must be object or null, got:`, typeof v);
-      return false;
-    }
-    const vObj = v as Record<string, unknown>;
-    if (typeof vObj[innerField] !== 'string' || vObj[innerField] === '') {
-      console.warn(`[PollarClient:session] Invalid session — data.providers.${field}.${innerField} must be a non-empty string`);
-      return false;
-    }
-  }
-
   return true;
 }
 
-export function readStorage(): PollarApplicationConfigContent | null {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    return null;
-  }
+export async function readStorage(storage: Storage, apiKeyHash: string): Promise<PollarPersistedSession | null> {
+  const raw = await storage.get(sessionStorageKey(apiKeyHash));
+  if (!raw) return null;
 
   try {
     const session = JSON.parse(raw) as unknown;
-
     if (!isValidSession(session)) {
-      localStorage.removeItem(STORAGE_KEY);
+      await storage.remove(sessionStorageKey(apiKeyHash));
       console.warn('[PollarClient:session] Stored session is invalid — clearing storage');
       return null;
     }
-
     if (session.token.expiresAt * 1000 < Date.now()) {
-      localStorage.removeItem(STORAGE_KEY);
-      console.warn('[PollarClient:session] Session token has expired — clearing storage');
-      return null;
+      // AT expired — keep the session row so we can attempt /refresh; the
+      // caller's refresh path will clear if refresh itself fails.
+      return session;
     }
-
     return session;
   } catch (error) {
     console.error('[PollarClient:session] Failed to parse session from storage', error);
-    localStorage.removeItem(STORAGE_KEY);
+    await storage.remove(sessionStorageKey(apiKeyHash));
     return null;
   }
 }
 
-export function writeStorage(session: PollarApplicationConfigContent): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-  console.info('[PollarClient:session] Session written to storage');
+export async function writeStorage(
+  storage: Storage,
+  apiKeyHash: string,
+  session: PollarPersistedSession,
+): Promise<void> {
+  await storage.set(sessionStorageKey(apiKeyHash), JSON.stringify(session));
 }
 
-export function removeStorage(): void {
-  localStorage.removeItem(STORAGE_KEY);
-  localStorage.removeItem(WALLET_TYPE_KEY);
-  console.info('[PollarClient:session] Session removed from storage');
+export async function removeStorage(storage: Storage, apiKeyHash: string): Promise<void> {
+  await storage.remove(sessionStorageKey(apiKeyHash));
+  await storage.remove(walletTypeStorageKey(apiKeyHash));
 }
 
-export function writeWalletType(type: string): void {
-  localStorage.setItem(WALLET_TYPE_KEY, type);
+export async function writeWalletType(storage: Storage, apiKeyHash: string, type: string): Promise<void> {
+  if (type.length > MAX_WALLET_TYPE) {
+    throw new Error(`[PollarClient:session] walletType too long: ${type.length} > ${MAX_WALLET_TYPE}`);
+  }
+  await storage.set(walletTypeStorageKey(apiKeyHash), type);
 }
 
-export function readWalletType(): string | null {
-  return localStorage.getItem(WALLET_TYPE_KEY);
+export async function readWalletType(storage: Storage, apiKeyHash: string): Promise<string | null> {
+  return storage.get(walletTypeStorageKey(apiKeyHash));
 }

@@ -5,9 +5,15 @@ import {
   createOnRamp,
   getRampsQuote,
   getRampTransaction,
-  pollRampTransaction
+  pollRampTransaction,
 } from '../api/endpoints/ramps';
+import { buildProof } from '../dpop';
+import { defaultKeyManager } from '../keys/autodetect';
+import type { KeyManager } from '../keys/types';
+import { hashApiKey } from '../lib/api-key-hash';
 import { StellarClient, StellarNetwork } from '../stellar/StellarClient';
+import { defaultStorage } from '../storage/autodetect';
+import type { Storage } from '../storage/types';
 import {
   AUTH_ERROR_CODES,
   AuthState,
@@ -20,6 +26,8 @@ import {
   PollarClientConfig,
   PollarFlowError,
   PollarLoginOptions,
+  PollarPersistedSession,
+  PollarUserProfile,
   RampsOfframpBody,
   RampsOfframpResponse,
   RampsOnrampBody,
@@ -30,9 +38,9 @@ import {
   RampTxStatus,
   TransactionState,
   TxBuildBody,
+  TxBuildContent,
   TxHistoryParams,
   TxHistoryState,
-  TxBuildContent,
   TxSignAndSendBody,
   WalletBalanceState,
 } from '../types';
@@ -40,9 +48,19 @@ import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletType } from '../w
 import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/emailFlow';
 import { loginOAuth } from './auth/oauthFlow';
 import { loginWallet } from './auth/walletFlow';
-import { readStorage, readWalletType, removeStorage, STORAGE_KEY, writeStorage, writeWalletType } from './session';
+import {
+  readStorage,
+  readWalletType,
+  removeStorage,
+  sessionStorageKey,
+  writeStorage,
+  writeWalletType,
+} from './session';
 
 const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+
+/** Header marker so retried requests don't loop on persistent 401s. */
+const RETRIED_HEADER = 'X-Pollar-Retried';
 
 function warnServerSide(method: string): void {
   console.warn(
@@ -52,12 +70,23 @@ function warnServerSide(method: string): void {
 
 export class PollarClient {
   readonly apiKey: string;
+  readonly apiKeyHash: string;
   readonly id: string;
   readonly basePath: string;
 
   private readonly _api: PollarApiClient;
+  private readonly _storage: Storage;
+  private readonly _keyManager: KeyManager;
+  /** Resolves once `keyManager.init()` and the initial session restore complete. */
+  private readonly _initialized: Promise<void>;
 
-  private _session: PollarApplicationConfigContent | null = null;
+  private _session: PollarPersistedSession | null = null;
+  private _profile: PollarUserProfile | null = null;
+  /** Last `DPoP-Nonce` we saw from a server response. Carried into the next proof. */
+  private _dpopNonce: string | null = null;
+  /** Singleton in-flight refresh — concurrent 401s coalesce into one /auth/refresh call. */
+  private _refreshPromise: Promise<void> | null = null;
+  private _storageEventHandler: ((e: StorageEvent) => void) | null = null;
 
   private _transactionState: TransactionState | null = null;
   private _transactionStateListeners = new Set<(state: TransactionState) => void>();
@@ -75,40 +104,200 @@ export class PollarClient {
 
   constructor(config: PollarClientConfig) {
     this.apiKey = config.apiKey;
+    this.apiKeyHash = hashApiKey(config.apiKey);
     this.id = crypto.randomUUID();
     this.basePath = `${config.baseUrl || 'https://sdk.api.pollar.xyz'}/v1`;
+
+    this._storage =
+      config.storage ?? defaultStorage(config.onStorageDegrade ? { onDegrade: config.onStorageDegrade } : undefined);
+    this._keyManager = config.keyManager ?? defaultKeyManager(this._storage, this.apiKeyHash);
+
     this._api = createApiClient(this.basePath);
-    const self = this;
-    this._api.use({
-      onRequest({ request }: { request: Request }) {
-        request.headers.set('x-pollar-api-key', config.apiKey);
-        const accessToken = self._session?.token?.accessToken;
-        if (accessToken) {
-          request.headers.set('Authorization', `Bearer ${accessToken}`);
-        }
-        return request;
-      },
-    });
+    this._wireMiddlewares();
 
     this._networkState = { step: 'connected', network: config.stellarNetwork ?? 'testnet' };
 
     if (!isBrowser) {
       warnServerSide('constructor');
-      this._session = null;
+      this._initialized = Promise.resolve();
       return;
     }
 
     console.info(`[PollarClient] Initialized — endpoint: ${this.basePath}, network: ${this._networkState.network}`);
 
-    this._restoreSession();
+    this._initialized = this._initialize();
 
-    window.addEventListener('storage', (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) {
-        const prev = this._session;
-        console.info(`[PollarClient] Storage event — session ${this._session ? 'updated' : prev ? 'cleared' : 'unchanged'}`);
-        this._restoreSession();
-      }
+    // Cross-tab session sync. Fires only for localStorage-backed storage; for
+    // non-DOM adapters the listener is harmless (events never arrive).
+    if (typeof window !== 'undefined') {
+      const sessionKey = sessionStorageKey(this.apiKeyHash);
+      const handler = (e: StorageEvent): void => {
+        if (e.key === sessionKey) {
+          this._restoreSession().catch((err) => console.error('[PollarClient] Cross-tab restore failed', err));
+        }
+      };
+      window.addEventListener('storage', handler);
+      this._storageEventHandler = handler;
+    }
+  }
+
+  // ─── Lifecycle ────────────────────────────────────────────────────────────
+
+  private async _initialize(): Promise<void> {
+    try {
+      await this._keyManager.init();
+    } catch (err) {
+      console.warn('[PollarClient] KeyManager init failed; DPoP unavailable for this session', err);
+    }
+    await this._restoreSession();
+  }
+
+  /** Detach the cross-tab storage listener and abort any in-flight login. */
+  destroy(): void {
+    if (this._storageEventHandler && typeof window !== 'undefined') {
+      window.removeEventListener('storage', this._storageEventHandler);
+      this._storageEventHandler = null;
+    }
+    this._loginController?.abort();
+    this._loginController = null;
+  }
+
+  // ─── Middlewares (DPoP + auto-refresh) ────────────────────────────────────
+
+  private _wireMiddlewares(): void {
+    const self = this;
+    this._api.use({
+      onRequest: async ({ request }: { request: Request }) => {
+        request.headers.set('x-pollar-api-key', self.apiKey);
+        await self._initialized;
+        if (self._refreshPromise) await self._refreshPromise;
+
+        const accessToken = self._session?.token?.accessToken;
+        if (!accessToken) return request;
+
+        const proof = await self._buildProofForRequest(request, accessToken);
+        if (proof) {
+          request.headers.set('Authorization', `DPoP ${accessToken}`);
+          request.headers.set('DPoP', proof);
+        } else {
+          // DPoP unavailable (HTTP origin / SubtleCrypto missing). Fall back
+          // to Bearer; the server will reject if the AT is DPoP-bound.
+          request.headers.set('Authorization', `Bearer ${accessToken}`);
+        }
+        return request;
+      },
+      onResponse: async ({ request, response }: { request: Request; response: Response }) => {
+        const newNonce = response.headers.get('DPoP-Nonce');
+        if (newNonce) self._dpopNonce = newNonce;
+
+        if (response.status !== 401) return response;
+        if (request.headers.get(RETRIED_HEADER)) return response;
+        // Don't trigger refresh from inside the refresh endpoint itself.
+        if (request.url.includes('/auth/refresh')) return response;
+
+        const wwwAuth = response.headers.get('WWW-Authenticate') ?? '';
+        const isNonceChallenge = wwwAuth.includes('use_dpop_nonce');
+
+        if (!isNonceChallenge) {
+          try {
+            await self.refresh();
+          } catch {
+            return response;
+          }
+        }
+        return self._retryRequest(request);
+      },
     });
+  }
+
+  private async _buildProofForRequest(request: Request, accessToken: string): Promise<string | null> {
+    try {
+      const htu = request.url.split('?')[0]!.split('#')[0]!;
+      return await buildProof(
+        {
+          htm: request.method,
+          htu,
+          accessToken,
+          ...(this._dpopNonce !== null ? { nonce: this._dpopNonce } : {}),
+        },
+        this._keyManager,
+      );
+    } catch (err) {
+      console.warn('[PollarClient] DPoP proof build failed', err);
+      return null;
+    }
+  }
+
+  private async _retryRequest(originalRequest: Request): Promise<Response> {
+    const clone = originalRequest.clone();
+    clone.headers.set(RETRIED_HEADER, '1');
+    const accessToken = this._session?.token?.accessToken;
+    if (accessToken) {
+      const proof = await this._buildProofForRequest(clone, accessToken);
+      if (proof) {
+        clone.headers.set('Authorization', `DPoP ${accessToken}`);
+        clone.headers.set('DPoP', proof);
+      } else {
+        clone.headers.set('Authorization', `Bearer ${accessToken}`);
+      }
+    }
+    return fetch(clone);
+  }
+
+  // ─── Refresh (race-safe singleton) ───────────────────────────────────────
+
+  /**
+   * Coalesce concurrent refresh attempts. The first caller does the work;
+   * everyone else awaits the same promise and sees the new tokens.
+   */
+  refresh(): Promise<void> {
+    if (this._refreshPromise) return this._refreshPromise;
+    this._refreshPromise = this._doRefresh().finally(() => {
+      this._refreshPromise = null;
+    });
+    return this._refreshPromise;
+  }
+
+  private async _doRefresh(): Promise<void> {
+    const refreshToken = this._session?.token?.refreshToken;
+    if (!refreshToken) {
+      await this._clearSession();
+      throw new Error('No refresh token available');
+    }
+
+    // The /auth/refresh endpoint is post-Phase-5; the auto-generated openapi
+    // schema may not yet declare it. Cast through `any` to bypass strict
+    // path validation until `npm run core:update-openapi` is run after the
+    // API rolls out.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const apiAny = this._api as any;
+    const { data, error } = await apiAny.POST('/auth/refresh', { body: { refreshToken } });
+
+    if (error || !data) {
+      await this._clearSession();
+      throw new Error('Refresh failed');
+    }
+    const successData = data as { success?: boolean; content?: { token?: PollarPersistedSession['token'] } };
+    if (!successData.success || !successData.content?.token) {
+      await this._clearSession();
+      throw new Error('Refresh response malformed');
+    }
+
+    const newToken = successData.content.token;
+    if (
+      typeof newToken.accessToken !== 'string' ||
+      typeof newToken.refreshToken !== 'string' ||
+      typeof newToken.expiresAt !== 'number'
+    ) {
+      await this._clearSession();
+      throw new Error('Refresh response token shape invalid');
+    }
+
+    if (this._session) {
+      this._session = { ...this._session, token: newToken };
+      await writeStorage(this._storage, this.apiKeyHash, this._session);
+      console.info('[PollarClient] Tokens refreshed');
+    }
   }
 
   // ─── Auth state ──────────────────────────────────────────────────────────────
@@ -121,6 +310,11 @@ export class PollarClient {
     this._authStateListeners.add(cb);
     cb(this._authState);
     return () => this._authStateListeners.delete(cb);
+  }
+
+  /** PII (email, names, avatar, providers). Held in memory only — never persisted. */
+  getUserProfile(): PollarUserProfile | null {
+    return this._profile;
   }
 
   // ─── Login (unified entry point) ─────────────────────────────────────────
@@ -161,9 +355,7 @@ export class PollarClient {
       warnServerSide('beginEmailLogin');
       return;
     }
-
     const controller = this._newController();
-
     initEmailSession(this._flowDeps(controller.signal)).catch((err) => this._handleFlowError(err));
   }
 
@@ -175,10 +367,8 @@ export class PollarClient {
     if (this._authState.step !== 'entering_email') {
       throw new PollarFlowError(`sendEmailCode() requires step 'entering_email', current step is '${this._authState.step}'`);
     }
-
     const { clientSessionId } = this._authState;
     const signal = this._loginController!.signal;
-
     sendEmailCode(email, clientSessionId, this._flowDeps(signal)).catch((err) => this._handleFlowError(err));
   }
 
@@ -187,7 +377,6 @@ export class PollarClient {
       warnServerSide('verifyEmailCode');
       return;
     }
-
     const isRetryableError =
       this._authState.step === 'error' &&
       this._authState.clientSessionId != null &&
@@ -197,14 +386,12 @@ export class PollarClient {
     if (this._authState.step !== 'entering_code' && !isRetryableError) {
       throw new PollarFlowError(`verifyEmailCode() requires step 'entering_code', current step is '${this._authState.step}'`);
     }
-
     const state = this._authState;
     const clientSessionId =
       state.step === 'entering_code' ? state.clientSessionId : (state as { clientSessionId?: string }).clientSessionId!;
     const email = state.step === 'entering_code' ? state.email : ((state as { email?: string }).email ?? '');
 
     const controller = this._newController();
-
     verifyAndAuthenticate(code, clientSessionId, email, this._flowDeps(controller.signal)).catch((err) =>
       this._handleFlowError(err),
     );
@@ -217,9 +404,7 @@ export class PollarClient {
       warnServerSide('loginWallet');
       return;
     }
-
     const controller = this._newController();
-
     loginWallet(type, this._flowDeps(controller.signal)).catch((err) => this._handleFlowError(err));
   }
 
@@ -239,7 +424,7 @@ export class PollarClient {
       return;
     }
     console.info('[PollarClient] Logout requested');
-    this._clearSession();
+    this._clearSession().catch((err) => console.warn('[PollarClient] Logout cleanup failed', err));
   }
 
   // ─── Network ──────────────────────────────────────────────────────────────
@@ -382,12 +567,13 @@ export class PollarClient {
 
     this._setTransactionState({ step: 'signing', ...stateExtra });
 
-    const accountToSign = isBuiltFlow
-      ? this._session?.wallet?.publicKey
-      : (this._session?.data?.providers?.wallet?.address ?? this._session?.wallet?.publicKey);
+    // For both external + custodial wallets, the public key in `_session.wallet`
+    // IS the address we want to sign for. The previous code branched on
+    // `data.providers.wallet.address` but that's the same value (the wallet
+    // address from login becomes wallet.publicKey).
+    const accountToSign = this._session?.wallet?.publicKey;
 
     if (this._walletAdapter) {
-      // External wallet (Freighter/Albedo): sign client-side, submit directly to Horizon
       try {
         const signOpts = accountToSign
           ? { networkPassphrase: this._networkPassphrase(), accountToSign }
@@ -406,7 +592,6 @@ export class PollarClient {
       return;
     }
 
-    // Custodial wallet (social/email login): Pollar signs and submits server-side
     const body: TxSignAndSendBody = {
       network: this.getNetwork(),
       publicKey: this._session?.wallet?.publicKey ?? '',
@@ -493,14 +678,12 @@ export class PollarClient {
 
   // ─── Private ──────────────────────────────────────────────────────────────
 
-  /** Creates a new AbortController, cancelling any existing flow first. */
   private _newController(): AbortController {
     this._loginController?.abort();
     this._loginController = new AbortController();
     return this._loginController;
   }
 
-  /** Builds the deps object passed to flow functions via bind pattern. */
   private _flowDeps(signal: AbortSignal) {
     return {
       api: this._api,
@@ -508,9 +691,10 @@ export class PollarClient {
       setAuthState: this._setAuthState.bind(this),
       storeSession: this._storeSession.bind(this),
       clearSession: this._clearSession.bind(this),
-      storeWalletAdapter: (adapter: WalletAdapter, type: WalletType) => {
+      getPublicJwk: () => this._keyManager.getPublicJwk(),
+      storeWalletAdapter: async (adapter: WalletAdapter, type: WalletType) => {
         this._walletAdapter = adapter;
-        writeWalletType(type);
+        await writeWalletType(this._storage, this.apiKeyHash, type);
       },
     };
   }
@@ -530,37 +714,59 @@ export class PollarClient {
     });
   }
 
-  private _restoreSession(): void {
-    this._session = readStorage();
+  private async _restoreSession(): Promise<void> {
+    this._session = await readStorage(this._storage, this.apiKeyHash);
     if (this._session) {
       this._authState = { step: 'authenticated', session: this._session };
-      // Re-instantiate external wallet adapter if user logged in with one
-      if (this._session.data?.providers?.wallet?.address) {
-        const storedType = readWalletType();
-        if (storedType === WalletType.FREIGHTER) {
-          this._walletAdapter = new FreighterAdapter();
-        } else if (storedType === WalletType.ALBEDO) {
-          this._walletAdapter = new AlbedoAdapter();
-        }
-      }
+      const storedType = await readWalletType(this._storage, this.apiKeyHash);
+      if (storedType === WalletType.FREIGHTER) this._walletAdapter = new FreighterAdapter();
+      else if (storedType === WalletType.ALBEDO) this._walletAdapter = new AlbedoAdapter();
       console.info('[PollarClient] Session restored from storage');
     } else {
       console.info('[PollarClient] No session in storage');
     }
   }
 
-  private _storeSession(session: PollarApplicationConfigContent): void {
-    console.info(`[PollarClient] Session stored — user: ${session.userId ?? 'anonymous'}`);
-    this._session = session;
-    writeStorage(session);
-    this._setAuthState({ step: 'authenticated', session });
+  private async _storeSession(session: PollarApplicationConfigContent): Promise<void> {
+    // Drop the userId log — leaks user identity to console.
+    console.info('[PollarClient] Session stored');
+
+    const persisted: PollarPersistedSession = {
+      clientSessionId: session.clientSessionId,
+      userId: session.userId ?? null,
+      status: session.status,
+      token: session.token,
+      user: session.user,
+      wallet: session.wallet,
+    };
+    this._session = persisted;
+
+    if (session.data) {
+      this._profile = {
+        mail: session.data.mail,
+        first_name: session.data.first_name,
+        last_name: session.data.last_name,
+        avatar: session.data.avatar,
+        providers: session.data.providers,
+      };
+    }
+
+    await writeStorage(this._storage, this.apiKeyHash, persisted);
+    this._setAuthState({ step: 'authenticated', session: persisted });
   }
 
-  private _clearSession(): void {
+  private async _clearSession(): Promise<void> {
     console.info('[PollarClient] Session cleared');
     this._session = null;
+    this._profile = null;
     this._walletAdapter = null;
-    removeStorage();
+    this._dpopNonce = null;
+    try {
+      await this._keyManager.reset();
+    } catch (err) {
+      console.warn('[PollarClient] KeyManager reset failed during clearSession', err);
+    }
+    await removeStorage(this._storage, this.apiKeyHash);
     this._transactionState = null;
     this._setAuthState({ step: 'idle' });
   }

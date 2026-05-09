@@ -1,14 +1,61 @@
+import type { KeyManager } from './keys/types';
+import type { OnStorageDegrade, Storage } from './storage/types';
 import { pollarPaths, StellarNetwork } from './index';
 import { WalletType } from './wallets';
 
 export type PollarApplicationConfigResponse =
   pollarPaths['/auth/login']['post']['responses'][200]['content']['application/json'];
+/** Full `/auth/login` response shape — used in transit but NOT persisted. */
 export type PollarApplicationConfigContent = PollarApplicationConfigResponse['content'];
+
+/**
+ * What we actually write to `Storage`. Drops the PII subtree (`data.*`)
+ * which is held in memory only on `PollarClient._profile` after auth.
+ */
+export interface PollarPersistedSession {
+  clientSessionId: string;
+  userId: string | null;
+  status: string;
+  token: { accessToken: string; refreshToken: string; expiresAt: number };
+  user: { id?: string; ready: boolean };
+  wallet: { publicKey: string | null; existsOnStellar?: boolean; createdAt?: number };
+}
+
+/** In-memory user profile (kept on `PollarClient`, never persisted). */
+export interface PollarUserProfile {
+  mail: string;
+  first_name: string;
+  last_name: string;
+  avatar: string;
+  providers: {
+    email: { address: string } | null;
+    google: { id: string } | null;
+    github: { id: string } | null;
+    wallet: { address: string } | null;
+  };
+}
 
 export interface PollarClientConfig {
   stellarNetwork?: StellarNetwork;
   baseUrl?: string;
   apiKey: string;
+  /**
+   * Pluggable storage. Defaults to `defaultStorage()` on web (localStorage
+   * with memory fallback). On RN you must inject one of the adapters from
+   * `@pollar/core/adapters/expo` or `@pollar/core/adapters/react-native-keychain`.
+   */
+  storage?: Storage;
+  /**
+   * Pluggable DPoP key manager. Defaults to `defaultKeyManager(storage,
+   * apiKeyHash)`: WebCrypto in browsers, `@noble/curves` in RN.
+   */
+  keyManager?: KeyManager;
+  /**
+   * Notified when persistent storage silently degrades to in-memory mode
+   * (Safari private browsing quota errors, sandboxed iframes, etc.). Useful
+   * for telemetry — the SDK keeps working but sessions won't survive reload.
+   */
+  onStorageDegrade?: OnStorageDegrade;
 }
 
 export type TxBuildBody = NonNullable<pollarPaths['/tx/build']['post']['requestBody']>['content']['application/json'];
@@ -61,7 +108,7 @@ export type AuthState =
   | { step: 'wallet_not_installed'; walletType: WalletType }
   | { step: 'authenticating_wallet' }
   | { step: 'authenticating' }
-  | { step: 'authenticated'; session: PollarApplicationConfigContent }
+  | { step: 'authenticated'; session: PollarPersistedSession }
   | {
       step: 'error';
       previousStep: string;
