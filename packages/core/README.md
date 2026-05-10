@@ -2,6 +2,11 @@
 
 Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction utilities for Stellar-based applications.
 
+> **0.7.0 ships sender-constrained tokens via DPoP (RFC 9449), pluggable storage and key managers, automatic
+refresh-on-401, and removes PII from persisted storage.** This is a breaking change — read
+> the [CHANGELOG](../../CHANGELOG.md) and [SECURITY.md](../../tmp/SECURITY.md) before upgrading. Requires HTTPS and
+`sdk-api` ≥ Phase 5.
+
 ## Installation
 
 ```bash
@@ -12,16 +17,91 @@ pnpm add @pollar/core
 yarn add @pollar/core
 ```
 
+For React Native / Expo, also install one of the storage adapter peer deps:
+
+```bash
+# Expo
+npx expo install expo-secure-store react-native-get-random-values
+
+# Bare React Native
+npm i react-native-keychain react-native-get-random-values
+```
+
 ## Overview
 
 `@pollar/core` provides the `PollarClient` class and utilities to:
 
 - Authenticate users via **Google**, **GitHub**, **Email (OTP)**, or **Stellar wallets** (Freighter, Albedo)
+- Sign every authenticated request with **DPoP** (RFC 9449), making stolen tokens useless to an attacker without the
+  per-session keypair
 - Build and submit Stellar transactions
 - Fetch Stellar account balances
 - React to real-time authentication state changes
 
-## Quick Start
+## Quick Start (web)
+
+```ts
+import { PollarClient } from '@pollar/core';
+
+const client = new PollarClient({ apiKey: 'your-api-key' });
+// Storage and KeyManager autodetect:
+//   storage  → localStorage with in-memory fallback
+//   keypair  → WebCrypto ECDSA P-256, non-extractable, persisted in IndexedDB
+```
+
+## React Native (Expo)
+
+```ts
+// At your app entry — `crypto.getRandomValues` polyfill
+import 'react-native-get-random-values';
+
+import { PollarClient } from '@pollar/core';
+import { createSecureStoreAdapter } from '@pollar/core/adapters/expo';
+
+// `await`: SecureStore is loaded via dynamic import.
+const storage = await createSecureStoreAdapter({
+  // Default: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY
+  // Prevents iCloud Keychain from carrying the key to another device.
+});
+
+const client = new PollarClient({ apiKey: 'your-api-key', storage });
+// KeyManager autodetects → NobleKeyManager (pure-JS @noble/curves p256).
+```
+
+## React Native (`react-native-keychain`)
+
+```ts
+import 'react-native-get-random-values';
+import { PollarClient } from '@pollar/core';
+import { createKeychainAdapter } from '@pollar/core/adapters/react-native-keychain';
+
+const storage = await createKeychainAdapter();
+const client = new PollarClient({ apiKey: 'your-api-key', storage });
+```
+
+## Preserved-on-disk storage shape
+
+0.7.0 persists exactly:
+
+```
+clientSessionId, userId, status,
+token { accessToken, refreshToken, expiresAt },
+user { id?, ready },
+wallet { publicKey, existsOnStellar?, createdAt? }
+```
+
+PII (`mail`, `first_name`, `last_name`, `avatar`, `providers.*`) lives **in memory only** on the `PollarClient` instance
+and is fetched after auth. Reach it via:
+
+```ts
+const profile = client.getUserProfile();
+// { mail, first_name, last_name, avatar, providers } | null
+```
+
+Storage keys are namespaced by `apiKeyHash` (first 8 hex chars of SHA-256 of your API key) so multiple SDK instances on
+the same origin don't cross-contaminate.
+
+## Original (0.6.x style) example
 
 ```ts
 import { PollarClient } from '@pollar/core';
@@ -44,11 +124,11 @@ await client.verifyEmailCode(clientSessionId, '123456');
 
 ### `new PollarClient(config)`
 
-| Option          | Type     | Required | Description                                        |
-| --------------- | -------- | -------- | -------------------------------------------------- |
-| `apiKey`        | `string` | Yes      | Your Pollar API key                                |
-| `baseUrl`       | `string` | No       | Override the default API endpoint                  |
-| `stellarNetwork`| `'mainnet' \| 'testnet'` | No | Target Stellar network (default: `testnet`) |
+| Option           | Type                     | Required | Description                                 |
+|------------------|--------------------------|----------|---------------------------------------------|
+| `apiKey`         | `string`                 | Yes      | Your Pollar API key                         |
+| `baseUrl`        | `string`                 | No       | Override the default API endpoint           |
+| `stellarNetwork` | `'mainnet' \| 'testnet'` | No       | Target Stellar network (default: `testnet`) |
 
 ---
 
@@ -74,7 +154,8 @@ client.login({ provider: 'wallet', type: WalletType.ALBEDO });
 
 #### `client.verifyEmailCode(clientSessionId, code)`
 
-Submits the OTP code for email authentication. Use `clientSessionId` received from the `EMAIL_AUTH_START_SUCCESS` state event.
+Submits the OTP code for email authentication. Use `clientSessionId` received from the `EMAIL_AUTH_START_SUCCESS` state
+event.
 
 #### `client.logout()`
 

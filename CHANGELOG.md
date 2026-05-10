@@ -1,52 +1,224 @@
 # Changelog
 
+## 0.7.0
+
+> **⚠️ BREAKING CHANGE.** This release ships sender-constrained tokens via DPoP (RFC 9449). The persisted session shape,
+> the storage namespace, the `Authorization` scheme, and the `AuthState.session` type all change. Sessions written by
+> 0.6.x are invalidated — every user re-logs in once. Read [`SECURITY.md`](tmp/SECURITY.md) for the threat model.
+
+### Why
+
+The 0.6.x SDK persisted access + refresh tokens and PII (email, names, avatar, providers) in `localStorage`. Any XSS in
+any consumer page meant full account takeover and a 30-day refresh window. 0.7.0 mitigates that by:
+
+1. **Binding tokens to a per-session keypair** (DPoP). A token stolen out of `localStorage` is useless without the
+   corresponding private key — which is non-extractable on web and Keychain/Keystore-backed on native.
+2. **Removing PII from storage entirely** — held in memory only, fetched after auth.
+3. **Rotating refresh tokens single-use** with family revocation on reuse.
+
+We did *not* move the refresh token to an HttpOnly cookie because that requires `SameSite=None; Secure` cross-domain
+cookies, which Safari ITP and Firefox ETP block by default — fatal for an SDK that runs on arbitrary consumer domains.
+
+### Server requirement
+
+This SDK requires `sdk-api` ≥ Phase 5 (DPoP middleware + `cnf.jkt` issuance + `POST /v1/auth/refresh`). Older API
+deployments will reject DPoP-bound requests with `401 SDK_AUTH_DPOP_REQUIRED`. Coordinate the API deploy before bumping
+the SDK in consumers.
+
+### Breaking changes
+
+- **Persisted session shape** — the `data.{mail,first_name,last_name,avatar,providers}` subtree is no longer written to
+  storage. PII now lives in memory on `PollarClient`, accessible via `client.getUserProfile()`. **Old `pollar:session`
+  blobs from 0.6.x are invalid against the new validator and are silently dropped — every user re-logs in once.**
+- **Storage namespace** — keys moved from `pollar:session` and `pollar:walletType` to `pollar:${apiKeyHash}:session` and
+  `pollar:${apiKeyHash}:walletType` so multiple SDK instances on the same origin don't collide.
+- **`AuthState.authenticated.session` type** changed from `PollarApplicationConfigContent` to `PollarPersistedSession`.
+  Code that read `authState.session.data.mail` (or any other `data.*` field) breaks at compile time. Migrate to
+  `client.getUserProfile()`.
+- **`Authorization` scheme** changed from `Bearer <AT>` to `DPoP <AT>` for any token issued with `dpopJwk` in the login
+  request. Tokens issued without `dpopJwk` keep the legacy `Bearer` path (compat hatch during rollout).
+- **HTTPS required** — DPoP needs `SubtleCrypto` and `crypto.randomUUID`, both of which require a secure context. The
+  SDK fails fast on HTTP origins. In React Native, import `react-native-get-random-values` at app entry.
+- **React Native users must inject storage** — `defaultStorage()` only autodetects `localStorage`. RN apps pass
+  `createSecureStoreAdapter()` (Expo) or `createKeychainAdapter()` (`react-native-keychain`).
+
+### `@pollar/core` — new features
+
+- **Pluggable `Storage` adapter.** `defaultStorage()` autodetects `localStorage` on web with in-memory fallback for SSR,
+  private browsing, sandboxed iframes, and quota errors. New sub-path exports for native:
+    - `@pollar/core/adapters/expo` → `createSecureStoreAdapter()` (default
+      `keychainAccessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY` so iCloud Keychain backup can't exfiltrate the key)
+    - `@pollar/core/adapters/react-native-keychain` → `createKeychainAdapter()`
+- **Pluggable `KeyManager`.** Per-session ECDSA P-256 keypair backing every DPoP proof.
+    - `WebCryptoKeyManager` — `subtle.generateKey({extractable: false})`, `CryptoKeyPair` persisted in IndexedDB store
+      `pollar-keys`. Private key bytes never leave the browser's crypto context.
+    - `NobleKeyManager` — `@noble/curves` p256 + `@noble/hashes` sha256. Private scalar (32 bytes) stored through the
+      injected `Storage` adapter.
+    - `defaultKeyManager(storage, apiKeyHash)` — picks WebCrypto if `subtle.generateKey` exists, else Noble.
+- **DPoP proof builder.** `buildProof({htm, htu, accessToken?, nonce?}, keyManager)` produces a compact JWS that
+  consumers can attach to outgoing requests. Cross-validated against `jose` 5.x.
+- **`normalizeHtu(url)`** — RFC 9449 §4.3 + RFC 3986 §6.2 canonicalization (lowercase scheme/host, default port elision,
+  trailing slash preserved, query/fragment/userinfo stripped, IPv6 brackets preserved).
+- **`computeJwkThumbprint(jwk)`** — RFC 7638 thumbprint matching `jose.calculateJwkThumbprint`.
+- **Race-safe `client.refresh()`** — singleton in-flight promise; concurrent 401 retries coalesce into one
+  `/v1/auth/refresh` call.
+- **Auto-refresh on 401.** Request middleware retries once after a successful refresh; second 401 propagates and clears
+  the session.
+- **`DPoP-Nonce` rotation tracking.** Server-issued nonces are captured from response headers and threaded into
+  subsequent proofs; `use_dpop_nonce` challenges trigger an automatic retry.
+- **`PollarClient.destroy()`** — detaches the cross-tab `storage` listener and aborts in-flight logins. Fixes a
+  long-standing memory leak.
+- **`getUserProfile()`** — returns the in-memory `PollarUserProfile` (email, names, avatar, providers). `null` until
+  `/auth/login` completes; never written to storage.
+- **`onStorageDegrade` callback** — notified the first time `localStorage` falls back to in-memory mode, for telemetry.
+- New exports: `Storage`, `KeyManager`, `PublicEcJwk`, `PollarPersistedSession`, `PollarUserProfile`,
+  `OnStorageDegrade`, `BuildProofArgs`.
+
+### `@pollar/core` — fixes
+
+- **Drop `userId` from `[PollarClient] Session stored` log** — leaked user identity to console / DevTools.
+- **Cross-tab `storage` event listener** is now removed in `destroy()`. Previously leaked one closure per `PollarClient`
+  instance.
+- **`signAndSubmitTx` no longer reads `data.providers.wallet.address`** — that field is identical to `wallet.publicKey`
+  for external wallets, and the latter is now the single source of truth.
+
+### `@pollar/react`
+
+- **`PollarClientConfig` extension threads through `PollarProvider`** — `storage`, `keyManager`, and `onStorageDegrade`
+  can be passed via the provider's `config` prop.
+- **`sessionState` type narrowed** — context value's session is now `PollarPersistedSession | null`. Consumers reading
+  `sessionState.data.*` need to migrate to `pollarClient.getUserProfile()`.
+- **`walletAddress` simplified** — for both external and custodial wallets, derived from
+  `sessionState.wallet.publicKey`.
+
+### Internal infra
+
+- New deps in `@pollar/core`: `@noble/curves@~1.9.7`, `@noble/hashes@~1.8.0` (pinned to patch range;
+  supply-chain-conscious — both packages publish npm provenance / sigstore signatures).
+- New optional peer deps: `expo-secure-store >=12`, `react-native-keychain >=8`. Both marked
+  `peerDependenciesMeta.optional=true`; web users never see them.
+- `tsup` build now produces three entries: `dist/index`, `dist/adapters/expo-secure-store`,
+  `dist/adapters/react-native-keychain`. Adapters are dynamic-imported so web bundlers strip the RN deps entirely.
+
+### Migration guide
+
+**Web (most consumers):**
+
+```ts
+// 0.6.x
+import { PollarClient } from '@pollar/core';
+
+const client = new PollarClient({ apiKey });
+
+// 0.7.x — same code; storage and keyManager autodetect on web.
+const client = new PollarClient({ apiKey });
+```
+
+If you read PII off the session, switch to:
+
+```ts
+// before
+const email = pollarClient.session?.data?.mail;
+
+// after
+const email = pollarClient.getUserProfile()?.mail;
+```
+
+**React Native (Expo):**
+
+```ts
+import { PollarClient } from '@pollar/core';
+import { createSecureStoreAdapter } from '@pollar/core/adapters/expo';
+import 'react-native-get-random-values'; // at app entry
+
+const storage = await createSecureStoreAdapter();
+const client = new PollarClient({ apiKey, storage });
+```
+
+**React Native (`react-native-keychain`):**
+
+```ts
+import { createKeychainAdapter } from '@pollar/core/adapters/react-native-keychain';
+
+const storage = await createKeychainAdapter();
+const client = new PollarClient({ apiKey, storage });
+```
+
+### Known limitations
+
+- The in-memory `jti` replay cache is per-process. Multi-pod API deployments need a Redis-backed cache before any
+  meaningful traffic — see `SECURITY.md` § "N-process replay window".
+- Native key material is bytes-in-Keychain, not Secure-Enclave/StrongBox-bound. A device-level compromise (jailbreak /
+  root) can still exfiltrate the key. A hardware-backed `KeyManager` is on the v0.8.0 roadmap.
+- Refresh-token cleanup is not automated — expired rows accumulate in `refresh_tokens`. A scheduled
+  `DELETE FROM refresh_tokens WHERE expires_at < now()` job is recommended; trivial to write but intentionally left to
+  deploy operations to schedule.
+
 ## 0.6.0
 
 ### `@pollar/react`
 
 #### New features
 
-- **New:** `SendModal` — full send flow within a single modal: asset picker (grouped by app-enabled vs. other), amount input with available balance hint, destination address, and inline transaction status (build → sign → success/error) without opening a secondary modal
-- **New:** `ReceiveModal` — displays the connected wallet address as a QR code with copy-to-clipboard support; no external QR dependency required for consumers
-- **New:** `TxStatusView` — shared transaction status component extracted from `TransactionModal` and reused by `SendModal`; renders the full build/sign/success/error lifecycle with XDR toggle, hash copy, and explorer link
-- **New:** `WalletButton` dropdown now includes **Send** and **Receive** actions that open the respective modals directly
-- **New:** Inline transaction spinner in `WalletButton` — a small animated arc appears to the right of the wallet address during in-progress transactions; button width and layout are unaffected
+- **New:** `SendModal` — full send flow within a single modal: asset picker (grouped by app-enabled vs. other), amount
+  input with available balance hint, destination address, and inline transaction status (build → sign → success/error)
+  without opening a secondary modal
+- **New:** `ReceiveModal` — displays the connected wallet address as a QR code with copy-to-clipboard support; no
+  external QR dependency required for consumers
+- **New:** `TxStatusView` — shared transaction status component extracted from `TransactionModal` and reused by
+  `SendModal`; renders the full build/sign/success/error lifecycle with XDR toggle, hash copy, and explorer link
+- **New:** `WalletButton` dropdown now includes **Send** and **Receive** actions that open the respective modals
+  directly
+- **New:** Inline transaction spinner in `WalletButton` — a small animated arc appears to the right of the wallet
+  address during in-progress transactions; button width and layout are unaffected
 - **New:** `TxHistoryModal` auto-fetches transaction history on open (first page, offset 0)
-- **New:** ESLint configuration (`eslint.config.mjs`) with `typescript-eslint` and `eslint-plugin-react-hooks` — covers both TypeScript and React hooks rules across the package
+- **New:** ESLint configuration (`eslint.config.mjs`) with `typescript-eslint` and `eslint-plugin-react-hooks` — covers
+  both TypeScript and React hooks rules across the package
 
 #### Breaking changes — context API renames
 
 The following names exported from `usePollar()` have been renamed for consistency and clarity:
 
-| Before | After |
-|---|---|
-| `transaction` | `tx` |
-| `openTransactionModal` | `openTxModal` |
-| `config` | `appConfig` |
-| `openRampWidget` | `openRampModal` |
-| `refreshBalance` | `refreshWalletBalance` |
+| Before                 | After                  |
+|------------------------|------------------------|
+| `transaction`          | `tx`                   |
+| `openTransactionModal` | `openTxModal`          |
+| `config`               | `appConfig`            |
+| `openRampWidget`       | `openRampModal`        |
+| `refreshBalance`       | `refreshWalletBalance` |
 
 #### Improvements
 
-- **Perf:** `getClient` and `refreshWalletBalance` are now wrapped in `useCallback` with stable deps — consumers can safely include them in `useEffect` dependency arrays without triggering unnecessary re-runs
-- **Perf:** `adapters` prop uses a `useRef` pattern inside the provider — prevents `useMemo` from recomputing the context value when the consumer passes an unstable `adapters` reference
-- **Refactor:** Context value object reorganized by domain (session, auth, transactions, wallet balance, network, KYC, ramp, config) with inline comments
-- **Fix:** `TransactionModal` no longer auto-opens when transaction state changes — call `openTxModal()` explicitly when needed
-- **Fix:** QR code rendering does not require consumers to install any additional package — `qr.js` is bundled and the `react-qr-code` source is vendored internally
+- **Perf:** `getClient` and `refreshWalletBalance` are now wrapped in `useCallback` with stable deps — consumers can
+  safely include them in `useEffect` dependency arrays without triggering unnecessary re-runs
+- **Perf:** `adapters` prop uses a `useRef` pattern inside the provider — prevents `useMemo` from recomputing the
+  context value when the consumer passes an unstable `adapters` reference
+- **Refactor:** Context value object reorganized by domain (session, auth, transactions, wallet balance, network, KYC,
+  ramp, config) with inline comments
+- **Fix:** `TransactionModal` no longer auto-opens when transaction state changes — call `openTxModal()` explicitly when
+  needed
+- **Fix:** QR code rendering does not require consumers to install any additional package — `qr.js` is bundled and the
+  `react-qr-code` source is vendored internally
 
 ## 0.5.3
 
 ### `@pollar/core`
 
-- **New:** `EscrowFn`, `EscrowAdapter`, and `PollarAdapters` types — generic adapter contract for wrapping external signing functions (e.g. Trustless Work SDK)
+- **New:** `EscrowFn`, `EscrowAdapter`, and `PollarAdapters` types — generic adapter contract for wrapping external
+  signing functions (e.g. Trustless Work SDK)
 
 ### `@pollar/react`
 
-- **New:** `adapters` prop on `PollarProvider` — accepts any named set of adapters; adapter functions receive params, return an unsigned XDR, and Pollar handles signing and submission automatically
-- **New:** `createPollarAdapterHook(key)` — factory that generates a fully-typed hook (e.g. `usePollarEscrow`) mirroring the adapter's API with automatic XDR signing built in
-- **New:** Explorer link on each row in `TxHistoryModal` — opens the transaction on `stellar.expert` with the correct network (testnet/mainnet)
-- **Fix:** Unified CSS variables and base class across all modals via `shared.css` — eliminates duplicated style declarations
-- **Fix:** Transaction explorer URL in `TransactionModal` now correctly resolves network from `buildData.summary.network` before falling back to context network
+- **New:** `adapters` prop on `PollarProvider` — accepts any named set of adapters; adapter functions receive params,
+  return an unsigned XDR, and Pollar handles signing and submission automatically
+- **New:** `createPollarAdapterHook(key)` — factory that generates a fully-typed hook (e.g. `usePollarEscrow`) mirroring
+  the adapter's API with automatic XDR signing built in
+- **New:** Explorer link on each row in `TxHistoryModal` — opens the transaction on `stellar.expert` with the correct
+  network (testnet/mainnet)
+- **Fix:** Unified CSS variables and base class across all modals via `shared.css` — eliminates duplicated style
+  declarations
+- **Fix:** Transaction explorer URL in `TransactionModal` now correctly resolves network from
+  `buildData.summary.network` before falling back to context network
 
 ## 0.5.2
 
@@ -58,25 +230,32 @@ The following names exported from `usePollar()` have been renamed for consistenc
 
 ### `@pollar/react`
 
-- **Refactor:** `WalletButton` split into logic and template layers — `WalletButton.tsx` handles state and behavior, `WalletButtonTemplate.tsx` handles rendering only
-- **Refactor:** `WalletBalanceModal` split into logic and template layers — `WalletBalanceModalTemplate.tsx` added as a pure presentational component
+- **Refactor:** `WalletButton` split into logic and template layers — `WalletButton.tsx` handles state and behavior,
+  `WalletButtonTemplate.tsx` handles rendering only
+- **Refactor:** `WalletBalanceModal` split into logic and template layers — `WalletBalanceModalTemplate.tsx` added as a
+  pure presentational component
 - **Refactor:** `TransactionModal` and `TransactionModalTemplate` updated
-- **Fix:** `tsup.config.ts` — replaced `import pkg from './package.json'` with `readFileSync` to resolve `TS2732` error; replaced unsupported `jsx` option with `esbuildOptions`
+- **Fix:** `tsup.config.ts` — replaced `import pkg from './package.json'` with `readFileSync` to resolve `TS2732` error;
+  replaced unsupported `jsx` option with `esbuildOptions`
 - **Fix:** `tsconfig.json` — added `resolveJsonModule: true`
 - **Refactor:** `context.tsx` and `index.ts` updated to export new template components and types
 - **New:** `WalletBalanceModalTemplate`, `WalletButtonTemplate` exported from `@pollar/react`
 
 ### Docs
 
-- **New:** `docs/1 Pollar react.md` — full API reference for `@pollar/react`: `PollarProvider`, `usePollar()`, all modal entry points, components, and template components
-- **New:** `docs/2 Pollar core.md` — full API reference for `@pollar/core`: `PollarClient` constructor, auth flows, transactions, wallet balance, tx history, KYC, ramps, and all exported types
+- **New:** `docs/1 Pollar react.md` — full API reference for `@pollar/react`: `PollarProvider`, `usePollar()`, all modal
+  entry points, components, and template components
+- **New:** `docs/2 Pollar core.md` — full API reference for `@pollar/core`: `PollarClient` constructor, auth flows,
+  transactions, wallet balance, tx history, KYC, ramps, and all exported types
 
 ## 0.5.1
 
 ### `@pollar/core`
 
-- **New:** External wallet support (Freighter, Albedo, etc.) — users can now sign and submit transactions directly from their own wallet without Pollar holding the keys
-- **Refactor:** `signAndSubmitTx()` now handles both custodial (social/email login) and external wallet flows — `signAndSubmitExternalTx()` removed
+- **New:** External wallet support (Freighter, Albedo, etc.) — users can now sign and submit transactions directly from
+  their own wallet without Pollar holding the keys
+- **Refactor:** `signAndSubmitTx()` now handles both custodial (social/email login) and external wallet flows —
+  `signAndSubmitExternalTx()` removed
 - **Fix:** Connecting with an external wallet no longer triggers custodial wallet creation on the backend
 
 ### `@pollar/react`
@@ -88,53 +267,79 @@ The following names exported from `usePollar()` have been renamed for consistenc
 
 ### `@pollar/core`
 
-- **New:** `getKycProviders(country)` — fetches available KYC providers for a given country *(not yet implemented on backend)*
-- **New:** `resolveKyc(providerId, level)` — starts a KYC session or returns `alreadyApproved` if the user is already verified *(not yet implemented on backend)*
-- **New:** `pollKycStatus(providerId, options)` — polls KYC verification result with configurable interval and timeout *(not yet implemented on backend)*
-- **New:** `getRampsQuote(params)` — fetches on/off-ramp quotes from available providers *(not yet implemented on backend)*
-- **New:** `createOnRamp(body)` — initiates an on-ramp transaction and returns payment instructions *(not yet implemented on backend)*
+- **New:** `getKycProviders(country)` — fetches available KYC providers for a given country *(not yet implemented on
+  backend)*
+- **New:** `resolveKyc(providerId, level)` — starts a KYC session or returns `alreadyApproved` if the user is already
+  verified *(not yet implemented on backend)*
+- **New:** `pollKycStatus(providerId, options)` — polls KYC verification result with configurable interval and timeout
+  *(not yet implemented on backend)*
+- **New:** `getRampsQuote(params)` — fetches on/off-ramp quotes from available providers *(not yet implemented on
+  backend)*
+- **New:** `createOnRamp(body)` — initiates an on-ramp transaction and returns payment instructions *(not yet
+  implemented on backend)*
 - **New:** `fetchTxHistory(params)` — fetches paginated transaction history for the authenticated user
 - **New:** `getBalance()` — fetches Stellar account balances via `StellarClient`
-- **New:** Types: `KycProvider`, `KycStatus`, `KycStartResponse`, `RampDirection`, `RampQuote`, `PaymentInstructions`, `RampsOnrampBody`, `TxHistoryRecord`, `TxHistoryState`, `WalletBalanceRecord`, `WalletBalanceContent`
-- **Refactor:** `transaction` and `txHistory` state now managed inside `PollarClient` and exposed via `onStateChange` — consumers no longer need to track these externally
+- **New:** Types: `KycProvider`, `KycStatus`, `KycStartResponse`, `RampDirection`, `RampQuote`, `PaymentInstructions`,
+  `RampsOnrampBody`, `TxHistoryRecord`, `TxHistoryState`, `WalletBalanceRecord`, `WalletBalanceContent`
+- **Refactor:** `transaction` and `txHistory` state now managed inside `PollarClient` and exposed via `onStateChange` —
+  consumers no longer need to track these externally
 - **Refactor:** `helpers.ts` removed; logic inlined into `client.ts`
 
 ### `@pollar/react`
 
-- **New:** `KycModal` — full identity verification flow: provider selection, iframe/form verification, status polling, and result display with `KycStatus` badge *(UI only — backend not yet implemented, uses mock data)*
-- **New:** `RampWidget` — buy/sell crypto UI: direction tabs, amount/currency/country inputs, provider route selection, and payment instructions display *(UI only — backend not yet implemented, uses mock data)*
+- **New:** `KycModal` — full identity verification flow: provider selection, iframe/form verification, status polling,
+  and result display with `KycStatus` badge *(UI only — backend not yet implemented, uses mock data)*
+- **New:** `RampWidget` — buy/sell crypto UI: direction tabs, amount/currency/country inputs, provider route selection,
+  and payment instructions display *(UI only — backend not yet implemented, uses mock data)*
 - **New:** `TxHistoryModal` — paginated transaction history with refresh and prev/next pagination
 - **New:** `WalletBalanceModal` — displays Stellar account balances with refresh support
-- **New:** `shared.css` — single source of truth for shared modal styles: `@keyframes`, `.pollar-overlay`, header layout, close button, refresh button, primary/secondary buttons, spinner, empty/error states, footer, and status banner — eliminates duplicate CSS across all modals
-- **Refactor:** `context.tsx` exposes `txHistory`, `transaction`, `getBalance`, and `walletAddress` directly from the provider — no more redundant state in consuming components
+- **New:** `shared.css` — single source of truth for shared modal styles: `@keyframes`, `.pollar-overlay`, header
+  layout, close button, refresh button, primary/secondary buttons, spinner, empty/error states, footer, and status
+  banner — eliminates duplicate CSS across all modals
+- **Refactor:** `context.tsx` exposes `txHistory`, `transaction`, `getBalance`, and `walletAddress` directly from the
+  provider — no more redundant state in consuming components
 - **Refactor:** All modal CSS files cleaned up to remove duplicates; each modal only defines styles unique to it
-- **Fix:** `PollarModalFooter` and `ModalStatusBanner` now reliably styled in any modal, independent of whether `LoginModal` CSS is loaded
+- **Fix:** `PollarModalFooter` and `ModalStatusBanner` now reliably styled in any modal, independent of whether
+  `LoginModal` CSS is loaded
 
 ## 0.4.5
 
 ### `@pollar/core`
 
-- **Refactor:** Auth flow functions extracted from `client.ts` into `src/client/auth/` folder (`authenticate.ts`, `emailFlow.ts`, `oauthFlow.ts`, `walletFlow.ts`, `deps.ts`)
-- **New:** `AUTH_ERROR_CODES` constant and `AuthErrorCode` type exported from `@pollar/core` — covers `SESSION_CREATE_FAILED`, `EMAIL_SEND_FAILED`, `EMAIL_VERIFY_FAILED`, `EMAIL_CODE_EXPIRED`, `EMAIL_CODE_INVALID`, `AUTH_FAILED`, `WALLET_CONNECT_FAILED`, `WALLET_AUTH_FAILED`, `UNEXPECTED_ERROR`
-- **New:** `AuthState` error step now includes `errorCode: AuthErrorCode` and optional `clientSessionId`/`email` for retryable email code errors
-- **New:** `login(options: PollarLoginOptions)` unified entry point on `PollarClient` — routes to email, OAuth, or wallet flow
+- **Refactor:** Auth flow functions extracted from `client.ts` into `src/client/auth/` folder (`authenticate.ts`,
+  `emailFlow.ts`, `oauthFlow.ts`, `walletFlow.ts`, `deps.ts`)
+- **New:** `AUTH_ERROR_CODES` constant and `AuthErrorCode` type exported from `@pollar/core` — covers
+  `SESSION_CREATE_FAILED`, `EMAIL_SEND_FAILED`, `EMAIL_VERIFY_FAILED`, `EMAIL_CODE_EXPIRED`, `EMAIL_CODE_INVALID`,
+  `AUTH_FAILED`, `WALLET_CONNECT_FAILED`, `WALLET_AUTH_FAILED`, `UNEXPECTED_ERROR`
+- **New:** `AuthState` error step now includes `errorCode: AuthErrorCode` and optional `clientSessionId`/`email` for
+  retryable email code errors
+- **New:** `login(options: PollarLoginOptions)` unified entry point on `PollarClient` — routes to email, OAuth, or
+  wallet flow
 - **Fix:** `cancelLogin()` now always resets auth state to `idle`, making back navigation reliable from any step
-- **Fix:** `verifyEmailCode()` now works from `error` state when `errorCode` is `EMAIL_CODE_INVALID` or `EMAIL_CODE_EXPIRED`, enabling retries without restarting the flow
-- **Fix:** Email code verification correctly extracts error codes from 4xx response bodies (`error.error`) in addition to 200 response bodies
-- **New:** `initOAuthSession()` split from `loginOAuth()` — session creation is now a separate callable step (mirrors `initEmailSession`)
+- **Fix:** `verifyEmailCode()` now works from `error` state when `errorCode` is `EMAIL_CODE_INVALID` or
+  `EMAIL_CODE_EXPIRED`, enabling retries without restarting the flow
+- **Fix:** Email code verification correctly extracts error codes from 4xx response bodies (`error.error`) in addition
+  to 200 response bodies
+- **New:** `initOAuthSession()` split from `loginOAuth()` — session creation is now a separate callable step (mirrors
+  `initEmailSession`)
 
 ### `@pollar/react`
 
-- **Change:** `beginEmailLogin()` no longer called on modal open — session is created on email submit instead, reducing unnecessary API calls
+- **Change:** `beginEmailLogin()` no longer called on modal open — session is created on email submit instead, reducing
+  unnecessary API calls
 - **New:** Back button (←) on the email code input screen — cancels the flow and returns to the main login screen
-- **Fix:** `EMAIL_CODE_INVALID` and `EMAIL_CODE_EXPIRED` errors keep the code input visible so the user can retry without dismissing the modal
+- **Fix:** `EMAIL_CODE_INVALID` and `EMAIL_CODE_EXPIRED` errors keep the code input visible so the user can retry
+  without dismissing the modal
 - **Fix:** Retry button hidden when error is `EMAIL_CODE_INVALID` or `EMAIL_CODE_EXPIRED` (user retries inline)
 - **Fix:** Code input fields are cleared automatically on `EMAIL_CODE_INVALID` so the user can enter a new code
 
 ## 0.4.4
-- Fix OAuth popup blocked on Safari/Brave iOS: `window.open` is now called before any `await` to preserve the user gesture context
+
+- Fix OAuth popup blocked on Safari/Brave iOS: `window.open` is now called before any `await` to preserve the user
+  gesture context
 
 ## 0.4.3
+
 - Authentication via Google, GitHub, Email OTP, Stellar wallets
 - PollarClient with transaction building and submission
 - StellarClient for Horizon queries
@@ -142,9 +347,11 @@ The following names exported from `usePollar()` have been renamed for consistenc
 - Typed event system for state management
 
 ## 0.3.x
+
 - Initial SDK structure and Pollar API integration
 - Basic authentication flows
 
-## 0.2.x  
+## 0.2.x
+
 - Monorepo setup with Turborepo
 - Core package scaffolding

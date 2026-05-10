@@ -3,10 +3,10 @@
 import {
   NetworkState,
   PollarAdapters,
-  PollarApplicationConfigContent,
   PollarClient,
   PollarClientConfig,
   PollarLoginOptions,
+  PollarPersistedSession,
   StellarNetwork,
   TransactionState,
   TxBuildBody,
@@ -96,7 +96,7 @@ interface PollarProviderProps {
 export function PollarProvider({ config, styles: propStyles, adapters, children }: PollarProviderProps) {
   const [pollarClient] = useState<PollarClient>(() => new PollarClient(config));
   const [networkState, setNetworkState] = useState<NetworkState>(() => pollarClient.getNetworkState());
-  const [sessionState, setSessionState] = useState<PollarApplicationConfigContent | null>(null);
+  const [sessionState, setSessionState] = useState<PollarPersistedSession | null>(null);
   const [transaction, setTransaction] = useState<TransactionState>({ step: 'idle' });
   const [txHistory, setTxHistory] = useState<TxHistoryState>({ step: 'idle' });
   const [walletBalance, setWalletBalance] = useState<WalletBalanceState>({ step: 'idle' });
@@ -167,7 +167,10 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
   const adaptersRef = useRef(adapters);
   adaptersRef.current = adapters;
 
-  const walletAddress = sessionState?.data?.providers?.wallet?.address || sessionState?.wallet?.publicKey || '';
+  // PII (incl. providers.wallet.address) lives on `client.getUserProfile()`, not on the
+  // persisted session. For both external and custodial wallets, `wallet.publicKey`
+  // already holds the on-chain address we care about.
+  const walletAddress = sessionState?.wallet?.publicKey || '';
   const getClient = useCallback(() => pollarClient, [pollarClient]);
   const refreshWalletBalance = useCallback(() => pollarClient.refreshBalance(walletAddress), [pollarClient, walletAddress]);
 

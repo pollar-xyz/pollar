@@ -170,7 +170,21 @@ export class PollarClient {
       onRequest: async ({ request }: { request: Request }) => {
         request.headers.set('x-pollar-api-key', self.apiKey);
         await self._initialized;
-        if (self._refreshPromise) await self._refreshPromise;
+        // The refresh endpoint must not wait on its own in-flight refresh —
+        // that would deadlock the singleton. Other requests wait so they
+        // pick up the freshly-rotated token.
+        const isRefresh = request.url.includes('/auth/refresh');
+        if (!isRefresh && self._refreshPromise) await self._refreshPromise;
+
+        if (isRefresh) {
+          // RFC 9449 §5 / §6.1: token-endpoint proofs MUST NOT carry `ath`
+          // and MUST NOT use the access token in the Authorization header.
+          // The DPoP proof alone authenticates the request; the RT goes in
+          // the body and binds via `cnf.jkt`.
+          const refreshProof = await self._buildProofForRequest(request, undefined);
+          if (refreshProof) request.headers.set('DPoP', refreshProof);
+          return request;
+        }
 
         const accessToken = self._session?.token?.accessToken;
         if (!accessToken) return request;
@@ -210,14 +224,14 @@ export class PollarClient {
     });
   }
 
-  private async _buildProofForRequest(request: Request, accessToken: string): Promise<string | null> {
+  private async _buildProofForRequest(request: Request, accessToken: string | undefined): Promise<string | null> {
     try {
       const htu = request.url.split('?')[0]!.split('#')[0]!;
       return await buildProof(
         {
           htm: request.method,
           htu,
-          accessToken,
+          ...(accessToken ? { accessToken } : {}),
           ...(this._dpopNonce !== null ? { nonce: this._dpopNonce } : {}),
         },
         this._keyManager,
