@@ -29,7 +29,7 @@ export const createWalletsAddressRoute = (deps: AdapterDeps) => {
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       deps.config.onError?.(err, { endpoint: `GET /wallets/${userId}/address`, body: null });
-      return c.var.error(ErrorCode.INTERNAL_SERVER_ERROR, 500);
+      return c.var.error(ErrorCode.WALLET_LOOKUP_FAILED, 502, { reason: err.message });
     }
   });
 

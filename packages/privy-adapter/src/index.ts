@@ -46,9 +46,19 @@ export const createPollarPrivyAdapter = (config: PollarPrivyAdapterConfig): Poll
   return {
     async start(): Promise<void> {
       if (server) return;
-      server = serve({
-        fetch: app.fetch,
-        port: resolvedConfig.port,
+      await new Promise<void>((resolve, reject) => {
+        const s = serve(
+          {
+            fetch: app.fetch,
+            port: resolvedConfig.port,
+          },
+          () => resolve(),
+        );
+        s.once('error', (err: Error) => {
+          server = null;
+          reject(err);
+        });
+        server = s;
       });
     },
     async stop(): Promise<void> {

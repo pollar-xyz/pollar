@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
+import type { Transaction } from '@stellar/stellar-sdk';
 import { z } from 'zod';
 import { type AdapterDeps, type AppEnv, ErrorCode, SuccessCode } from '../types';
 import { withTimeout } from '../lib/timeout';
-import { assembleSignedXdr, computeTxHash } from '../stellar';
+import { assembleSignedXdr, parseTx } from '../stellar';
 
 const BodySchema = z.object({
   userId: z.string().min(1),
@@ -25,9 +26,9 @@ export const createWalletsSignRoute = (deps: AdapterDeps) => {
 
     const { userId, walletAddress, txXdr } = parsed;
 
-    let txHash: Buffer;
+    let tx: Transaction;
     try {
-      txHash = computeTxHash(txXdr, deps.config.network);
+      tx = parseTx(txXdr, deps.config.network);
     } catch {
       return c.var.error(ErrorCode.TX_INVALID_SIGNED_XDR, 400);
     }
@@ -51,7 +52,7 @@ export const createWalletsSignRoute = (deps: AdapterDeps) => {
       }
 
       const privy = await deps.getPrivy();
-      const hashHex = '0x' + txHash.toString('hex');
+      const hashHex = '0x' + tx.hash().toString('hex');
 
       const result = await withTimeout(
         privy.wallets().rawSign(walletId, { params: { hash: hashHex } }),
@@ -61,7 +62,7 @@ export const createWalletsSignRoute = (deps: AdapterDeps) => {
       const sigHex = result.signature.startsWith('0x') ? result.signature.slice(2) : result.signature;
       const sigBytes = Buffer.from(sigHex, 'hex');
 
-      const signedTxXdr = assembleSignedXdr(txXdr, deps.config.network, walletAddress, sigBytes);
+      const signedTxXdr = assembleSignedXdr(tx, walletAddress, sigBytes);
 
       deps.config.onTransactionSigned?.(walletAddress);
 
@@ -69,7 +70,7 @@ export const createWalletsSignRoute = (deps: AdapterDeps) => {
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       deps.config.onError?.(err, { endpoint: 'POST /wallets/sign', body: parsed });
-      return c.var.error(ErrorCode.TX_SUBMIT_FAILED, 502, { reason: err.message });
+      return c.var.error(ErrorCode.TX_SIGN_FAILED, 502, { reason: err.message });
     }
   });
 

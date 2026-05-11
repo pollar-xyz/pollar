@@ -27,7 +27,7 @@ export const createPrivyClientFactory = (config: ResolvedAdapterConfig) => {
       return entry.client;
     }
 
-    const client = new PrivyClient({ appId, appSecret });
+    const client = new PrivyClient({ appId, appSecret, timeout: config.requestTimeoutMs });
     entry = { fingerprint, client, expiresAt: now + config.cacheTtlMs };
     return client;
   };

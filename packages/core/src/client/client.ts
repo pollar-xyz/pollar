@@ -5,7 +5,7 @@ import {
   createOnRamp,
   getRampsQuote,
   getRampTransaction,
-  pollRampTransaction,
+  pollRampTransaction
 } from '../api/endpoints/ramps';
 import { buildProof } from '../dpop';
 import { defaultKeyManager } from '../keys/autodetect';
@@ -54,7 +54,7 @@ import {
   removeStorage,
   sessionStorageKey,
   writeStorage,
-  writeWalletType,
+  writeWalletType
 } from './session';
 
 const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
@@ -279,13 +279,7 @@ export class PollarClient {
       throw new Error('No refresh token available');
     }
 
-    // The /auth/refresh endpoint is post-Phase-5; the auto-generated openapi
-    // schema may not yet declare it. Cast through `any` to bypass strict
-    // path validation until `npm run core:update-openapi` is run after the
-    // API rolls out.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const apiAny = this._api as any;
-    const { data, error } = await apiAny.POST('/auth/refresh', { body: { refreshToken } });
+    const { data, error } = await this._api.POST('/auth/refresh', { body: { refreshToken } });
 
     if (error || !data) {
       await this._clearSession();
@@ -572,10 +566,7 @@ export class PollarClient {
 
   async signAndSubmitTx(unsignedXdr: string): Promise<void> {
     const state = this._transactionState;
-    const buildData =
-      state?.step === 'built' ? state.buildData :
-      state?.step === 'error' ? state.buildData :
-      undefined;
+    const buildData = state?.step === 'built' ? state.buildData : state?.step === 'error' ? state.buildData : undefined;
     const isBuiltFlow = !!buildData;
     const stateExtra: { buildData?: TxBuildContent; external?: true } = buildData ? { buildData } : { external: true };
 

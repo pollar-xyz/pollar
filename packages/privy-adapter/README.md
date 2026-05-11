@@ -34,6 +34,8 @@ await adapter.start();
 
 `getCredentials` is async, so any secret manager works.
 
+The secret must be stored as JSON `{"appId": "...", "appSecret": "..."}` — the example below calls `JSON.parse` directly on `SecretString`.
+
 ```ts
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { createPollarPrivyAdapter } from '@pollar/privy-adapter';
@@ -73,6 +75,8 @@ process.on('SIGINT', shutdown);
 
 ```ts
 interface PollarPrivyAdapterConfig {
+  // ── Required ───────────────────────────────────────────────────────────
+
   // Async credential resolver. Called on first request and when the cache expires.
   getCredentials: () => Promise<{ appId: string; appSecret: string }>;
 
@@ -83,13 +87,15 @@ interface PollarPrivyAdapterConfig {
   // Stellar network used to compute transaction hashes.
   network: 'mainnet' | 'testnet';
 
-  // Defaults
+  // ── Optional (with defaults) ──────────────────────────────────────────
+
   port?: number;             // 3001
   cacheTtlMs?: number;       // 5 * 60 * 1000
   requestTimeoutMs?: number; // 10_000
   maxBodyBytes?: number;     // 64 * 1024
 
-  // Observability hooks
+  // ── Observability hooks ───────────────────────────────────────────────
+
   onWalletCreated?: (userId: string, address: string) => void;
   onTransactionSigned?: (walletAddress: string) => void;
   onError?: (error: Error, ctx: { endpoint: string; body: unknown }) => void;
@@ -108,6 +114,10 @@ Responses share the Pollar envelope:
 
 // error
 { "code": "<ERROR_CODE>", "success": false }
+
+// error with extra context (Zod issues or upstream reason)
+{ "code": "VALIDATION_ERROR", "success": false, "issues": { /* ... */ } }
+{ "code": "WALLET_CREATION_FAILED", "success": false, "reason": "Privy API: ..." }
 ```
 
 | Method | Path                          | Body                                          | Success code                       | HTTP |
@@ -124,15 +134,17 @@ Responses share the Pollar envelope:
 
 ### Error codes
 
-| Code                       | HTTP | When                                                |
-| -------------------------- | ---- | --------------------------------------------------- |
-| `FORBIDDEN`                | 401  | Missing or wrong Bearer token                       |
-| `VALIDATION_ERROR`         | 400  | Body schema mismatch / invalid JSON / oversized body|
-| `WALLET_NOT_FOUND`         | 404  | User has no Stellar wallet                          |
-| `WALLET_CREATION_FAILED`   | 502  | Privy upstream error during create                  |
-| `TX_INVALID_SIGNED_XDR`    | 400  | XDR could not be parsed                             |
-| `TX_SUBMIT_FAILED`         | 502  | Privy upstream error during sign                    |
-| `INTERNAL_SERVER_ERROR`    | 500  | Unexpected failure                                  |
+| Code                       | HTTP | When                                                                          |
+| -------------------------- | ---- | ----------------------------------------------------------------------------- |
+| `FORBIDDEN`                | 401  | Missing or wrong Bearer token; response carries `WWW-Authenticate: Bearer …`  |
+| `VALIDATION_ERROR`         | 400  | Body schema mismatch or invalid JSON                                          |
+| `VALIDATION_ERROR`         | 413  | Body exceeded `maxBodyBytes` — response carries `reason: "body too large"`    |
+| `WALLET_NOT_FOUND`         | 404  | User has no Stellar wallet                                                    |
+| `WALLET_CREATION_FAILED`   | 502  | Privy upstream error during create                                            |
+| `WALLET_LOOKUP_FAILED`     | 502  | Privy upstream error during wallet lookup                                     |
+| `TX_INVALID_SIGNED_XDR`    | 400  | XDR could not be parsed, or transaction is a fee-bump (unsupported)           |
+| `TX_SIGN_FAILED`           | 502  | Privy upstream error during sign                                              |
+| `INTERNAL_SERVER_ERROR`    | 500  | Unexpected failure                                                            |
 
 ## Security notes
 
