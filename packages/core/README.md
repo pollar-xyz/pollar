@@ -4,7 +4,7 @@ Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction uti
 
 > **0.7.0 ships sender-constrained tokens via DPoP (RFC 9449), pluggable storage and key managers, automatic
 refresh-on-401, and removes PII from persisted storage.** This is a breaking change — read
-> the [CHANGELOG](../../CHANGELOG.md) and [SECURITY.md](../../tmp/SECURITY.md) before upgrading. Requires HTTPS and
+> the [CHANGELOG](../../CHANGELOG.md) before upgrading. Requires HTTPS and
 `sdk-api` ≥ Phase 5.
 
 ## Installation

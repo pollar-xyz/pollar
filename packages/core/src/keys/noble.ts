@@ -1,6 +1,7 @@
 import { p256 } from '@noble/curves/p256';
-import { sha256 } from '@noble/hashes/sha256';
+import { hashApiKey } from '../lib/api-key-hash';
 import { base64urlDecode, base64urlEncode } from '../lib/base64url';
+import { sha256 } from '../lib/sha256';
 import type { Storage } from '../storage/types';
 import { computeJwkThumbprint } from './thumbprint';
 import type { KeyManager, PublicEcJwk } from './types';
@@ -27,22 +28,30 @@ const STORAGE_KEY_PREFIX = 'pollar:dpop-key:';
 
 export class NobleKeyManager implements KeyManager {
   private readonly storage: Storage;
-  private readonly apiKeyHash: string;
+  private readonly apiKey: string;
+  private apiKeyHash: string | null = null;
   private privateKey: Uint8Array | null = null;
   private publicJwk: PublicEcJwk | null = null;
   private thumbprint: string | null = null;
 
-  constructor(storage: Storage, apiKeyHash: string) {
+  constructor(storage: Storage, apiKey: string) {
     this.storage = storage;
-    this.apiKeyHash = apiKeyHash;
+    this.apiKey = apiKey;
   }
 
   private get storageKey(): string {
+    if (!this.apiKeyHash) {
+      throw new Error('[PollarClient:keys] init() must be called before storage access');
+    }
     return `${STORAGE_KEY_PREFIX}${this.apiKeyHash}`;
   }
 
   async init(): Promise<void> {
     if (this.privateKey) return;
+
+    if (!this.apiKeyHash) {
+      this.apiKeyHash = await hashApiKey(this.apiKey);
+    }
 
     let priv: Uint8Array | null = null;
     try {
@@ -78,12 +87,12 @@ export class NobleKeyManager implements KeyManager {
       x: base64urlEncode(pub.slice(1, 33)),
       y: base64urlEncode(pub.slice(33, 65)),
     };
-    this.thumbprint = computeJwkThumbprint(this.publicJwk);
+    this.thumbprint = await computeJwkThumbprint(this.publicJwk);
   }
 
   async reset(): Promise<void> {
     try {
-      await this.storage.remove(this.storageKey);
+      if (this.apiKeyHash) await this.storage.remove(this.storageKey);
     } catch {
       // Best-effort.
     }
@@ -110,12 +119,12 @@ export class NobleKeyManager implements KeyManager {
     if (!this.privateKey) {
       throw new Error('[PollarClient:keys] init() must be called before sign()');
     }
-    // Two-step: hash with @noble/hashes' sha256, then sign the digest with
+    // Two-step: hash with WebCrypto SHA-256, then sign the digest with
     // `prehash: false`. `p256.sign(msg)` with default prehash uses noble's
     // own internal preprocessing whose output is not bit-equivalent to a
     // simple SHA-256, so we explicitly compute the digest ourselves to
     // match standard JOSE ES256 verification.
-    const digest = sha256(payload);
+    const digest = await sha256(payload);
     const signature = p256.sign(digest, this.privateKey, { prehash: false });
     // 64-byte r||s, exactly the JOSE/IEEE P1363 format JWS ES256 expects.
     return signature.toCompactRawBytes();

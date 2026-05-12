@@ -10,7 +10,7 @@ This repository is managed with [Turborepo](https://turbo.build/repo) and contai
 ## Packages
 
 > **0.7.0 is a breaking change.** Sender-constrained tokens via DPoP, no PII in storage, refresh-token rotation. Read
-> the [CHANGELOG](./CHANGELOG.md) and [SECURITY.md](tmp/SECURITY.md) before upgrading. Requires `sdk-api` ≥ Phase 5.
+> the [CHANGELOG](./CHANGELOG.md) before upgrading. Requires `sdk-api` ≥ Phase 5.
 
 ### [`@pollar/core`](./packages/core)
 

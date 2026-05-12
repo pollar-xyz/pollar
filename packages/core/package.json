@@ -1,12 +1,23 @@
 {
   "name": "@pollar/core",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Core authentication functions for Pollar services",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "react-native": "./dist/index.rn.mjs",
   "exports": {
     ".": {
+      "react-native": {
+        "import": {
+          "types": "./dist/index.rn.d.mts",
+          "default": "./dist/index.rn.mjs"
+        },
+        "require": {
+          "types": "./dist/index.rn.d.ts",
+          "default": "./dist/index.rn.js"
+        }
+      },
       "import": {
         "types": "./dist/index.d.mts",
         "default": "./dist/index.mjs"
@@ -40,7 +51,12 @@
   "files": [
     "dist"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/index.mjs",
+    "./dist/index.js",
+    "./dist/index.rn.mjs",
+    "./dist/index.rn.js"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -56,7 +72,6 @@
   },
   "dependencies": {
     "@noble/curves": "~1.9.7",
-    "@noble/hashes": "~1.8.0",
     "@stellar/freighter-api": "^2.0.0",
     "openapi-fetch": "^0.17.0"
   },

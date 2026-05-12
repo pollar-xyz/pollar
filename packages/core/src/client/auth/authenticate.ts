@@ -14,13 +14,12 @@ export async function authenticate(
 
   await streamUntilFound(api, clientSessionId, (data) => data?.status === 'READY', 200, signal);
 
-  // Pass `dpopJwk` so the server mints DPoP-bound tokens (`cnf.jkt`). The
-  // generated openapi schema may not yet declare the field; cast the body to
-  // bypass the strict type until `npm run core:update-openapi` is run after
-  // the v0.7.0 API rolls out.
+  // Pass `dpopJwk` so the server mints DPoP-bound tokens (`cnf.jkt`).
   const dpopJwk = await deps.getPublicJwk();
-  const body = { clientSessionId, dpopJwk } as unknown as { clientSessionId: string };
-  const { data, error } = await api.POST('/auth/login', { body, signal });
+  const { data, error } = await api.POST('/auth/login', {
+    body: { clientSessionId, dpopJwk },
+    signal,
+  });
 
   if (data?.code === 'SDK_LOGIN_SUCCESS' && isValidSession(data?.content)) {
     if (expectedWallet && data.content.data.providers.wallet?.address !== expectedWallet) {

@@ -1,5 +1,5 @@
-import { sha256 } from '@noble/hashes/sha256';
 import { base64urlEncode } from '../lib/base64url';
+import { sha256 } from '../lib/sha256';
 import type { PublicEcJwk } from './types';
 
 /**
@@ -21,14 +21,14 @@ import type { PublicEcJwk } from './types';
  *   a fresh literal in canonical order to make the order explicit and not
  *   rely on V8's insertion-order semantics.
  */
-export function computeJwkThumbprint(jwk: PublicEcJwk): string {
+export async function computeJwkThumbprint(jwk: PublicEcJwk): Promise<string> {
   if (jwk.kty !== 'EC' || jwk.crv !== 'P-256' || !jwk.x || !jwk.y) {
     throw new Error('[PollarClient:thumbprint] Expected EC P-256 JWK with x and y');
   }
   // Build the canonical string by hand so member order is unambiguous.
   // Lex order of EC required members: 'crv' < 'kty' < 'x' < 'y'.
   const canonical = `{"crv":"${jwk.crv}","kty":"${jwk.kty}","x":"${jwk.x}","y":"${jwk.y}"}`;
-  const digest = sha256(new TextEncoder().encode(canonical));
+  const digest = await sha256(new TextEncoder().encode(canonical));
   return base64urlEncode(digest);
 }
 

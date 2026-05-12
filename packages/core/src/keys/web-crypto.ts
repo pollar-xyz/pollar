@@ -1,3 +1,4 @@
+import { hashApiKey } from '../lib/api-key-hash';
 import { canonicalEcJwk, computeJwkThumbprint } from './thumbprint';
 import type { KeyManager, PublicEcJwk } from './types';
 
@@ -84,22 +85,27 @@ function isCryptoKeyPair(v: unknown): v is CryptoKeyPair {
 }
 
 export class WebCryptoKeyManager implements KeyManager {
-  private readonly apiKeyHash: string;
+  private readonly apiKey: string;
+  private apiKeyHash: string | null = null;
   private keyPair: CryptoKeyPair | null = null;
   private publicJwk: PublicEcJwk | null = null;
   private thumbprint: string | null = null;
 
-  constructor(apiKeyHash: string) {
+  constructor(apiKey: string) {
     if (typeof globalThis.crypto === 'undefined' || !globalThis.crypto.subtle) {
       throw new Error(
         '[PollarClient:keys] SubtleCrypto is unavailable. DPoP requires a secure context (HTTPS or localhost).',
       );
     }
-    this.apiKeyHash = apiKeyHash;
+    this.apiKey = apiKey;
   }
 
   async init(): Promise<void> {
     if (this.keyPair) return;
+
+    if (!this.apiKeyHash) {
+      this.apiKeyHash = await hashApiKey(this.apiKey);
+    }
 
     let pair: CryptoKeyPair | undefined;
     try {
@@ -130,12 +136,12 @@ export class WebCryptoKeyManager implements KeyManager {
     this.keyPair = pair;
     const exported = (await globalThis.crypto.subtle.exportKey('jwk', pair.publicKey)) as JsonWebKey;
     this.publicJwk = canonicalEcJwk(exported);
-    this.thumbprint = computeJwkThumbprint(this.publicJwk);
+    this.thumbprint = await computeJwkThumbprint(this.publicJwk);
   }
 
   async reset(): Promise<void> {
     try {
-      await dbDelete(this.apiKeyHash);
+      if (this.apiKeyHash) await dbDelete(this.apiKeyHash);
     } catch {
       // Best-effort cleanup; if IDB is unavailable there's nothing persisted to clear.
     }

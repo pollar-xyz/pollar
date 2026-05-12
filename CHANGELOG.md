@@ -4,7 +4,8 @@
 
 > **⚠️ BREAKING CHANGE.** This release ships sender-constrained tokens via DPoP (RFC 9449). The persisted session shape,
 > the storage namespace, the `Authorization` scheme, and the `AuthState.session` type all change. Sessions written by
-> 0.6.x are invalidated — every user re-logs in once. Read [`SECURITY.md`](tmp/SECURITY.md) for the threat model.
+> 0.6.x are invalidated — every user re-logs in once. The full threat model and residual-risk write-up will live at
+> [docs.pollar.xyz](https://docs.pollar.xyz).
 
 ### Why
 
@@ -147,7 +148,7 @@ const client = new PollarClient({ apiKey, storage });
 ### Known limitations
 
 - The in-memory `jti` replay cache is per-process. Multi-pod API deployments need a Redis-backed cache before any
-  meaningful traffic — see `SECURITY.md` § "N-process replay window".
+  meaningful traffic — under load with N pods, a captured proof is replayable up to N times within the `iat` window.
 - Native key material is bytes-in-Keychain, not Secure-Enclave/StrongBox-bound. A device-level compromise (jailbreak /
   root) can still exfiltrate the key. A hardware-backed `KeyManager` is on the v0.8.0 roadmap.
 - Refresh-token cleanup is not automated — expired rows accumulate in `refresh_tokens`. A scheduled

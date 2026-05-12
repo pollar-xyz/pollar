@@ -1,5 +1,5 @@
-import { sha256 } from '@noble/hashes/sha256';
 import { base64urlEncode, base64urlEncodeString } from './lib/base64url';
+import { sha256 } from './lib/sha256';
 import type { KeyManager, PublicEcJwk } from './keys/types';
 
 /**
@@ -77,7 +77,7 @@ export async function buildProof(args: BuildProofArgs, keyManager: KeyManager): 
   };
 
   if (args.accessToken !== undefined && args.accessToken !== '') {
-    payload.ath = base64urlEncode(sha256(new TextEncoder().encode(args.accessToken)));
+    payload.ath = base64urlEncode(await sha256(new TextEncoder().encode(args.accessToken)));
   }
   if (args.nonce !== undefined && args.nonce !== '') {
     payload.nonce = args.nonce;

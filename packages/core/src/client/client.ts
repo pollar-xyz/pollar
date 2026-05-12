@@ -8,7 +8,7 @@ import {
   pollRampTransaction
 } from '../api/endpoints/ramps';
 import { buildProof } from '../dpop';
-import { defaultKeyManager } from '../keys/autodetect';
+import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
 import { hashApiKey } from '../lib/api-key-hash';
 import { StellarClient, StellarNetwork } from '../stellar/StellarClient';
@@ -70,7 +70,6 @@ function warnServerSide(method: string): void {
 
 export class PollarClient {
   readonly apiKey: string;
-  readonly apiKeyHash: string;
   readonly id: string;
   readonly basePath: string;
 
@@ -79,6 +78,24 @@ export class PollarClient {
   private readonly _keyManager: KeyManager;
   /** Resolves once `keyManager.init()` and the initial session restore complete. */
   private readonly _initialized: Promise<void>;
+  /**
+   * Per-API-key storage namespace. Computed asynchronously inside
+   * `_initialize()` because SHA-256 lives behind `crypto.subtle.digest`.
+   * Accessing `apiKeyHash` before `await client.ready()` throws.
+   */
+  private _apiKeyHash: string | null = null;
+
+  /**
+   * Short SHA-256-derived namespace for this client's persisted state.
+   * Available after `await client.ready()` (or any awaited method); throws
+   * if read before initialization completes.
+   */
+  get apiKeyHash(): string {
+    if (this._apiKeyHash === null) {
+      throw new Error('[PollarClient] apiKeyHash is not available until client.ready() resolves');
+    }
+    return this._apiKeyHash;
+  }
 
   private _session: PollarPersistedSession | null = null;
   private _profile: PollarUserProfile | null = null;
@@ -104,13 +121,12 @@ export class PollarClient {
 
   constructor(config: PollarClientConfig) {
     this.apiKey = config.apiKey;
-    this.apiKeyHash = hashApiKey(config.apiKey);
     this.id = crypto.randomUUID();
     this.basePath = `${config.baseUrl || 'https://sdk.api.pollar.xyz'}/v1`;
 
     this._storage =
       config.storage ?? defaultStorage(config.onStorageDegrade ? { onDegrade: config.onStorageDegrade } : undefined);
-    this._keyManager = config.keyManager ?? defaultKeyManager(this._storage, this.apiKeyHash);
+    this._keyManager = config.keyManager ?? defaultKeyManager(this._storage, config.apiKey);
 
     this._api = createApiClient(this.basePath);
     this._wireMiddlewares();
@@ -126,11 +142,24 @@ export class PollarClient {
     console.info(`[PollarClient] Initialized — endpoint: ${this.basePath}, network: ${this._networkState.network}`);
 
     this._initialized = this._initialize();
+  }
+
+  /** Awaitable handle for the initial keypair + session restore. */
+  ready(): Promise<void> {
+    return this._initialized;
+  }
+
+  // ─── Lifecycle ────────────────────────────────────────────────────────────
+
+  private async _initialize(): Promise<void> {
+    // Compute the storage namespace first — every subsequent storage op
+    // (including the cross-tab listener below and `_restoreSession`) reads it.
+    this._apiKeyHash = await hashApiKey(this.apiKey);
 
     // Cross-tab session sync. Fires only for localStorage-backed storage; for
     // non-DOM adapters the listener is harmless (events never arrive).
     if (typeof window !== 'undefined') {
-      const sessionKey = sessionStorageKey(this.apiKeyHash);
+      const sessionKey = sessionStorageKey(this._apiKeyHash);
       const handler = (e: StorageEvent): void => {
         if (e.key === sessionKey) {
           this._restoreSession().catch((err) => console.error('[PollarClient] Cross-tab restore failed', err));
@@ -139,11 +168,7 @@ export class PollarClient {
       window.addEventListener('storage', handler);
       this._storageEventHandler = handler;
     }
-  }
 
-  // ─── Lifecycle ────────────────────────────────────────────────────────────
-
-  private async _initialize(): Promise<void> {
     try {
       await this._keyManager.init();
     } catch (err) {
