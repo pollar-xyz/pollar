@@ -90,6 +90,12 @@ export class WebCryptoKeyManager implements KeyManager {
   private keyPair: CryptoKeyPair | null = null;
   private publicJwk: PublicEcJwk | null = null;
   private thumbprint: string | null = null;
+  /**
+   * Cached in-flight init. Lets `init()` be called concurrently (or implicitly
+   * from `getPublicJwk` / `sign`) without doing the work twice. Cleared on
+   * failure so callers can retry, and cleared on `reset()`.
+   */
+  private _initPromise: Promise<void> | null = null;
 
   constructor(apiKey: string) {
     if (typeof globalThis.crypto === 'undefined' || !globalThis.crypto.subtle) {
@@ -100,9 +106,28 @@ export class WebCryptoKeyManager implements KeyManager {
     this.apiKey = apiKey;
   }
 
+  /**
+   * Idempotent and safe under concurrency. The first call kicks off the real
+   * init; subsequent (and concurrent) calls return the same in-flight promise.
+   * Other methods (`getPublicJwk`, `getThumbprint`, `sign`) auto-await this so
+   * the manager is self-healing if `init()` was never explicitly invoked.
+   */
   async init(): Promise<void> {
     if (this.keyPair) return;
+    if (!this._initPromise) {
+      this._initPromise = this._doInit().catch((err) => {
+        // Loud log so init failures don't masquerade as cryptic "publicJwk is
+        // null" downstream errors. Clear the promise so the next call retries
+        // instead of permanently returning a rejected promise.
+        console.error('[PollarClient:keys] WebCryptoKeyManager init failed', err);
+        this._initPromise = null;
+        throw err;
+      });
+    }
+    return this._initPromise;
+  }
 
+  private async _doInit(): Promise<void> {
     if (!this.apiKeyHash) {
       this.apiKeyHash = await hashApiKey(this.apiKey);
     }
@@ -148,26 +173,30 @@ export class WebCryptoKeyManager implements KeyManager {
     this.keyPair = null;
     this.publicJwk = null;
     this.thumbprint = null;
+    this._initPromise = null;
   }
 
   async getPublicJwk(): Promise<PublicEcJwk> {
+    if (!this.publicJwk) await this.init();
     if (!this.publicJwk) {
-      throw new Error('[PollarClient:keys] init() must be called before getPublicJwk()');
+      throw new Error('[PollarClient:keys] Keypair initialization failed; getPublicJwk unavailable');
     }
     // Return a fresh copy so callers cannot mutate our cached state.
     return { kty: this.publicJwk.kty, crv: this.publicJwk.crv, x: this.publicJwk.x, y: this.publicJwk.y };
   }
 
   async getThumbprint(): Promise<string> {
+    if (!this.thumbprint) await this.init();
     if (!this.thumbprint) {
-      throw new Error('[PollarClient:keys] init() must be called before getThumbprint()');
+      throw new Error('[PollarClient:keys] Keypair initialization failed; getThumbprint unavailable');
     }
     return this.thumbprint;
   }
 
   async sign(payload: Uint8Array): Promise<Uint8Array> {
+    if (!this.keyPair) await this.init();
     if (!this.keyPair) {
-      throw new Error('[PollarClient:keys] init() must be called before sign()');
+      throw new Error('[PollarClient:keys] Keypair initialization failed; sign unavailable');
     }
     // Cast through BufferSource: TypeScript 5.7's strict typing distinguishes
     // Uint8Array<ArrayBuffer> from Uint8Array<SharedArrayBuffer>, but every

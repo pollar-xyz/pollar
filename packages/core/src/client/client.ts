@@ -300,18 +300,31 @@ export class PollarClient {
   private async _doRefresh(): Promise<void> {
     const refreshToken = this._session?.token?.refreshToken;
     if (!refreshToken) {
+      console.warn('[PollarClient] Refresh skipped: no refresh token in session');
       await this._clearSession();
       throw new Error('No refresh token available');
     }
 
-    const { data, error } = await this._api.POST('/auth/refresh', { body: { refreshToken } });
+    let data: unknown;
+    let error: unknown;
+    try {
+      const response = await this._api.POST('/auth/refresh', { body: { refreshToken } });
+      data = response.data;
+      error = response.error;
+    } catch (err) {
+      console.error('[PollarClient] /auth/refresh request threw', err);
+      await this._clearSession();
+      throw err;
+    }
 
     if (error || !data) {
+      console.warn('[PollarClient] /auth/refresh returned error', { error });
       await this._clearSession();
       throw new Error('Refresh failed');
     }
     const successData = data as { success?: boolean; content?: { token?: PollarPersistedSession['token'] } };
     if (!successData.success || !successData.content?.token) {
+      console.warn('[PollarClient] /auth/refresh response malformed', successData);
       await this._clearSession();
       throw new Error('Refresh response malformed');
     }
@@ -322,14 +335,22 @@ export class PollarClient {
       typeof newToken.refreshToken !== 'string' ||
       typeof newToken.expiresAt !== 'number'
     ) {
+      console.warn('[PollarClient] /auth/refresh token shape invalid', newToken);
       await this._clearSession();
       throw new Error('Refresh response token shape invalid');
     }
 
     if (this._session) {
-      this._session = { ...this._session, token: newToken };
-      await writeStorage(this._storage, this.apiKeyHash, this._session);
-      console.info('[PollarClient] Tokens refreshed');
+      try {
+        this._session = { ...this._session, token: newToken };
+        await writeStorage(this._storage, this.apiKeyHash, this._session);
+        console.info('[PollarClient] Tokens refreshed');
+      } catch (err) {
+        console.error('[PollarClient] Failed to persist refreshed session', err);
+        // In-memory state is still updated; the session works for this
+        // process but won't survive reload. Don't clear — that'd surprise
+        // the user with a logout for what's essentially a storage hiccup.
+      }
     }
   }
 

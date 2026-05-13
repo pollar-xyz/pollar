@@ -9,6 +9,7 @@
     "dev:push": "npm run build && cd packages/core && yalc publish && cd ../../packages/react && yalc publish && cd ../../packages/privy-adapter && yalc publish",
     "core:publish": "cd packages/core && npm publish --access public",
     "react:publish": "cd packages/react && npm publish --access public",
+    "test:smoke": "node tests/smoke-keys.cjs && node tests/smoke-client.cjs",
     "privy-adapter:publish": "cd packages/privy-adapter && npm publish --access public",
     "core:update-openapi": "curl -k https://sdk.api.local.pollar.xyz/openapi.json -o /tmp/openapi.json && npx openapi-typescript /tmp/openapi.json -o ./packages/core/src/api/schema.d.ts"
   },

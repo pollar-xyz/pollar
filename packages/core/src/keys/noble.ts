@@ -33,6 +33,8 @@ export class NobleKeyManager implements KeyManager {
   private privateKey: Uint8Array | null = null;
   private publicJwk: PublicEcJwk | null = null;
   private thumbprint: string | null = null;
+  /** Cached in-flight init — see `WebCryptoKeyManager` for the rationale. */
+  private _initPromise: Promise<void> | null = null;
 
   constructor(storage: Storage, apiKey: string) {
     this.storage = storage;
@@ -46,9 +48,25 @@ export class NobleKeyManager implements KeyManager {
     return `${STORAGE_KEY_PREFIX}${this.apiKeyHash}`;
   }
 
+  /**
+   * Idempotent and safe under concurrency. Other methods auto-await this so
+   * the manager is self-healing if `init()` was never explicitly invoked.
+   */
   async init(): Promise<void> {
     if (this.privateKey) return;
+    if (!this._initPromise) {
+      this._initPromise = this._doInit().catch((err) => {
+        // Loud log so init failures don't masquerade as cryptic "privateKey is
+        // null" downstream errors. Clear the promise so the next call retries.
+        console.error('[PollarClient:keys] NobleKeyManager init failed', err);
+        this._initPromise = null;
+        throw err;
+      });
+    }
+    return this._initPromise;
+  }
 
+  private async _doInit(): Promise<void> {
     if (!this.apiKeyHash) {
       this.apiKeyHash = await hashApiKey(this.apiKey);
     }
@@ -99,25 +117,29 @@ export class NobleKeyManager implements KeyManager {
     this.privateKey = null;
     this.publicJwk = null;
     this.thumbprint = null;
+    this._initPromise = null;
   }
 
   async getPublicJwk(): Promise<PublicEcJwk> {
+    if (!this.publicJwk) await this.init();
     if (!this.publicJwk) {
-      throw new Error('[PollarClient:keys] init() must be called before getPublicJwk()');
+      throw new Error('[PollarClient:keys] Keypair initialization failed; getPublicJwk unavailable');
     }
     return { kty: this.publicJwk.kty, crv: this.publicJwk.crv, x: this.publicJwk.x, y: this.publicJwk.y };
   }
 
   async getThumbprint(): Promise<string> {
+    if (!this.thumbprint) await this.init();
     if (!this.thumbprint) {
-      throw new Error('[PollarClient:keys] init() must be called before getThumbprint()');
+      throw new Error('[PollarClient:keys] Keypair initialization failed; getThumbprint unavailable');
     }
     return this.thumbprint;
   }
 
   async sign(payload: Uint8Array): Promise<Uint8Array> {
+    if (!this.privateKey) await this.init();
     if (!this.privateKey) {
-      throw new Error('[PollarClient:keys] init() must be called before sign()');
+      throw new Error('[PollarClient:keys] Keypair initialization failed; sign unavailable');
     }
     // Two-step: hash with WebCrypto SHA-256, then sign the digest with
     // `prehash: false`. `p256.sign(msg)` with default prehash uses noble's
