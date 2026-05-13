@@ -1,7 +1,7 @@
 import { PollarApiClient } from '../../api/client';
 import type { PublicEcJwk } from '../../keys/types';
 import { AUTH_ERROR_CODES, AuthState, PollarApplicationConfigContent } from '../../types';
-import { WalletAdapter, WalletType } from '../../wallets';
+import { WalletAdapter, WalletId } from '../../wallets';
 
 export type FlowDeps = {
   api: PollarApiClient;
@@ -9,7 +9,13 @@ export type FlowDeps = {
   setAuthState: (state: AuthState) => void;
   storeSession: (session: PollarApplicationConfigContent) => void | Promise<void>;
   clearSession: () => void | Promise<void>;
-  storeWalletAdapter: (adapter: WalletAdapter, type: WalletType) => void | Promise<void>;
+  /**
+   * Resolves a wallet adapter for the requested id. Uses the consumer's
+   * injected `walletAdapter` resolver when present and falls back to the
+   * built-in Freighter/Albedo adapters otherwise.
+   */
+  resolveWalletAdapter: (id: WalletId) => Promise<WalletAdapter>;
+  storeWalletAdapter: (adapter: WalletAdapter, id: WalletId) => void | Promise<void>;
   /**
    * Returns the public JWK of the SDK's per-session DPoP keypair. Auth
    * completion calls (`/auth/login`) pass it as `dpopJwk` so the server

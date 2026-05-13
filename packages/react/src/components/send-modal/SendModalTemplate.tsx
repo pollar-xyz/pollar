@@ -1,6 +1,6 @@
 'use client';
 
-import { TransactionState, WalletBalanceRecord, WalletType } from '@pollar/core';
+import { TransactionState, WalletBalanceRecord, WalletId } from '@pollar/core';
 import { type CSSProperties } from 'react';
 import { PollarModalFooter } from '../commons';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
@@ -29,7 +29,7 @@ export interface SendModalTemplateProps {
   showXdr: boolean;
   copied: boolean;
   explorerUrl: string | null;
-  walletType?: WalletType | null | undefined;
+  walletType?: WalletId | null | undefined;
   showBack: boolean;
   isInProgress: boolean;
   onClose: () => void;

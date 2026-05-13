@@ -3,6 +3,8 @@ export { AlbedoAdapter } from './AlbedoAdapter';
 export { WalletType } from './types';
 export type {
   WalletAdapter,
+  WalletAdapterResolver,
+  WalletId,
   ConnectWalletResponse,
   SignTransactionOptions,
   SignTransactionResponse,

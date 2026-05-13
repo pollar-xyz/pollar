@@ -44,7 +44,7 @@ import {
   TxSignAndSendBody,
   WalletBalanceState,
 } from '../types';
-import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletType } from '../wallets';
+import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletAdapterResolver, WalletId, WalletType } from '../wallets';
 import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/emailFlow';
 import { loginOAuth } from './auth/oauthFlow';
 import { loginWallet } from './auth/walletFlow';
@@ -117,6 +117,7 @@ export class PollarClient {
   private _networkStateListeners = new Set<(state: NetworkState) => void>();
 
   private _walletAdapter: WalletAdapter | null = null;
+  private readonly _walletAdapterResolver: WalletAdapterResolver | null;
   private _loginController: AbortController | null = null;
 
   constructor(config: PollarClientConfig) {
@@ -127,6 +128,7 @@ export class PollarClient {
     this._storage =
       config.storage ?? defaultStorage(config.onStorageDegrade ? { onDegrade: config.onStorageDegrade } : undefined);
     this._keyManager = config.keyManager ?? defaultKeyManager(this._storage, config.apiKey);
+    this._walletAdapterResolver = config.walletAdapter ?? null;
 
     this._api = createApiClient(this.basePath);
     this._wireMiddlewares();
@@ -453,7 +455,7 @@ export class PollarClient {
 
   // ─── Wallet flow (single call) ────────────────────────────────────────────
 
-  loginWallet(type: WalletType): void {
+  loginWallet(type: WalletId): void {
     if (!isBrowser) {
       warnServerSide('loginWallet');
       return;
@@ -606,7 +608,7 @@ export class PollarClient {
     }
   }
 
-  getWalletType(): WalletType | null {
+  getWalletType(): WalletId | null {
     return this._walletAdapter?.type ?? null;
   }
 
@@ -743,11 +745,29 @@ export class PollarClient {
       storeSession: this._storeSession.bind(this),
       clearSession: this._clearSession.bind(this),
       getPublicJwk: () => this._keyManager.getPublicJwk(),
-      storeWalletAdapter: async (adapter: WalletAdapter, type: WalletType) => {
+      resolveWalletAdapter: (id: WalletId) => this._resolveWalletAdapter(id),
+      storeWalletAdapter: async (adapter: WalletAdapter, id: WalletId) => {
         this._walletAdapter = adapter;
-        await writeWalletType(this._storage, this.apiKeyHash, type);
+        await writeWalletType(this._storage, this.apiKeyHash, id);
       },
     };
+  }
+
+  /**
+   * Resolves a wallet adapter for the requested id. Uses the consumer's
+   * injected `walletAdapter` resolver when present; otherwise falls back to
+   * the built-in `FreighterAdapter` / `AlbedoAdapter`. Throws if the id is
+   * unknown and no resolver is configured.
+   */
+  private async _resolveWalletAdapter(id: WalletId): Promise<WalletAdapter> {
+    if (this._walletAdapterResolver) {
+      return Promise.resolve(this._walletAdapterResolver(id));
+    }
+    if (id === WalletType.FREIGHTER) return new FreighterAdapter();
+    if (id === WalletType.ALBEDO) return new AlbedoAdapter();
+    throw new Error(
+      `[PollarClient] No wallet adapter configured for "${id}". Pass a walletAdapter resolver in PollarClientConfig.`,
+    );
   }
 
   private _handleFlowError(error: unknown): void {
@@ -768,11 +788,23 @@ export class PollarClient {
   private async _restoreSession(): Promise<void> {
     this._session = await readStorage(this._storage, this.apiKeyHash);
     if (this._session) {
-      this._authState = { step: 'authenticated', session: this._session };
       const storedType = await readWalletType(this._storage, this.apiKeyHash);
-      if (storedType === WalletType.FREIGHTER) this._walletAdapter = new FreighterAdapter();
-      else if (storedType === WalletType.ALBEDO) this._walletAdapter = new AlbedoAdapter();
+      if (storedType) {
+        try {
+          this._walletAdapter = await this._resolveWalletAdapter(storedType);
+        } catch (err) {
+          // No resolver knows this id (e.g. user removed the kit-adapter
+          // package). Session stays valid; signing will fall back to the
+          // server-side custodial path until the user reconnects a wallet.
+          console.warn('[PollarClient] Could not restore wallet adapter for stored id', { id: storedType, err });
+        }
+      }
       console.info('[PollarClient] Session restored from storage');
+      // Emit through the setter so listeners that subscribe after
+      // _initialize() resolves still get notified. A direct assignment to
+      // _authState would race past any onAuthStateChange subscription that
+      // hasn't run yet (e.g. PollarProvider's useEffect).
+      this._setAuthState({ step: 'authenticated', session: this._session });
     } else {
       console.info('[PollarClient] No session in storage');
     }

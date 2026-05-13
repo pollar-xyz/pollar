@@ -1,7 +1,7 @@
 import type { KeyManager } from './keys/types';
 import type { OnStorageDegrade, Storage } from './storage/types';
 import { pollarPaths, StellarNetwork } from './index';
-import { WalletType } from './wallets';
+import { WalletAdapterResolver, WalletId } from './wallets';
 
 export type PollarApplicationConfigResponse =
   pollarPaths['/auth/login']['post']['responses'][200]['content']['application/json'];
@@ -56,6 +56,14 @@ export interface PollarClientConfig {
    * for telemetry — the SDK keeps working but sessions won't survive reload.
    */
   onStorageDegrade?: OnStorageDegrade;
+  /**
+   * Resolves a {@link WalletAdapter} for a given wallet id. If omitted, the
+   * SDK falls back to its built-in `FreighterAdapter` / `AlbedoAdapter`,
+   * which only know `WalletType.FREIGHTER` and `WalletType.ALBEDO`. Inject
+   * `@pollar/stellar-wallets-kit-adapter` (or your own resolver) to support
+   * additional wallets without bundling those dependencies into `@pollar/core`.
+   */
+  walletAdapter?: WalletAdapterResolver;
 }
 
 export type TxBuildBody = NonNullable<pollarPaths['/tx/build']['post']['requestBody']>['content']['application/json'];
@@ -70,7 +78,7 @@ export type PollarLoginOptions =
   | { provider: 'google' }
   | { provider: 'github' }
   | { provider: 'email'; email: string }
-  | { provider: 'wallet'; type: WalletType };
+  | { provider: 'wallet'; type: WalletId };
 
 export type TxBuildContent = TxBuildResponse['content'];
 
@@ -104,8 +112,8 @@ export type AuthState =
   | { step: 'entering_code'; clientSessionId: string; email: string }
   | { step: 'verifying_email_code'; clientSessionId: string; email: string }
   | { step: 'opening_oauth'; provider: 'google' | 'github' }
-  | { step: 'connecting_wallet'; walletType: WalletType }
-  | { step: 'wallet_not_installed'; walletType: WalletType }
+  | { step: 'connecting_wallet'; walletType: WalletId }
+  | { step: 'wallet_not_installed'; walletType: WalletId }
   | { step: 'authenticating_wallet' }
   | { step: 'authenticating' }
   | { step: 'authenticated'; session: PollarPersistedSession }

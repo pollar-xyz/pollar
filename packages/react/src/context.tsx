@@ -12,7 +12,7 @@ import {
   TxBuildBody,
   TxHistoryState,
   WalletBalanceState,
-  WalletType,
+  WalletId,
 } from '@pollar/core';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ModalErrorBoundary } from './components/commons';
@@ -57,7 +57,7 @@ interface PollarContextValue {
     options?: TxBuildBody['options'],
   ) => Promise<void>;
   signAndSubmitTx: (unsignedXdr: string) => Promise<void>;
-  walletType: WalletType | null;
+  walletType: WalletId | null;
   // network
   network: StellarNetwork;
   setNetwork: (network: StellarNetwork) => void;
