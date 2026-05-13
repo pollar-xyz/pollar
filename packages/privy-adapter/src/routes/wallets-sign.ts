@@ -1,8 +1,10 @@
 import { Hono } from 'hono';
 import type { Transaction } from '@stellar/stellar-sdk';
+import { NotFoundError } from '@privy-io/node';
 import { z } from 'zod';
 import { type AdapterDeps, type AppEnv, ErrorCode, SuccessCode } from '../types';
 import { withTimeout } from '../lib/timeout';
+import { findStellarWalletInUser } from '../lib/user-mapping';
 import { assembleSignedXdr, parseTx } from '../stellar';
 
 const BodySchema = z.object({
@@ -37,17 +39,30 @@ export const createWalletsSignRoute = (deps: AdapterDeps) => {
       let walletId = deps.walletCache.get(walletAddress);
 
       if (!walletId) {
+        // Cache miss: resolve userId → did:privy: and inspect linked_accounts
+        // to find the matching wallet. We do NOT auto-create here; sign without
+        // a pre-existing wallet must surface as WALLET_NOT_FOUND so the caller
+        // can route through the create flow first.
         const privy = await deps.getPrivy();
-        const list = await withTimeout(
-          privy.wallets().list({ chain_type: 'stellar', user_id: userId }),
-          deps.config.requestTimeoutMs,
-        );
 
-        const match = list.data.find((w) => w.address === walletAddress);
-        if (!match) {
+        let user;
+        try {
+          user = await withTimeout(
+            privy.users().getByCustomAuthID({ custom_user_id: userId }),
+            deps.config.requestTimeoutMs,
+          );
+        } catch (err) {
+          if (err instanceof NotFoundError) {
+            return c.var.error(ErrorCode.WALLET_NOT_FOUND, 404);
+          }
+          throw err;
+        }
+
+        const stellar = findStellarWalletInUser(user);
+        if (!stellar || stellar.address !== walletAddress) {
           return c.var.error(ErrorCode.WALLET_NOT_FOUND, 404);
         }
-        walletId = match.id;
+        walletId = stellar.id;
         deps.walletCache.set(walletAddress, walletId);
       }
 

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { type AdapterDeps, type AppEnv, ErrorCode, SuccessCode } from '../types';
 import { withTimeout } from '../lib/timeout';
+import { findStellarWalletInUser, getOrCreatePrivyUser } from '../lib/user-mapping';
 
 const BodySchema = z.object({
   userId: z.string().min(1),
@@ -25,26 +26,35 @@ export const createWalletsCreateRoute = (deps: AdapterDeps) => {
     try {
       const privy = await deps.getPrivy();
 
-      const existing = await withTimeout(
-        privy.wallets().list({ chain_type: 'stellar', user_id: userId }),
-        deps.config.requestTimeoutMs,
-      );
+      // Privy's API requires owner.user_id to be a did:privy: identifier, not
+      // Pollar's SDK user CUID. We resolve (or create) the Privy user via
+      // custom_auth linked_accounts; users.create returns the wallet inline.
+      const { user, created } = await getOrCreatePrivyUser(privy, userId, {
+        ensureStellarWallet: true,
+        timeoutMs: deps.config.requestTimeoutMs,
+      });
 
-      const existingWallet = existing.data[0];
-      if (existingWallet) {
-        deps.walletCache.set(existingWallet.address, existingWallet.id);
-        return c.var.content(SuccessCode.PRIVY_ADAPTER_WALLET_EXISTS, { address: existingWallet.address });
+      let stellar = findStellarWalletInUser(user);
+      let walletCreated = created && stellar !== null;
+
+      // Existing user with no stellar wallet (pre-stellar account, or wallet
+      // detached). Provision one now, owned by the resolved DID.
+      if (!stellar) {
+        const wallet = await withTimeout(
+          privy.wallets().create({ chain_type: 'stellar', owner: { user_id: user.id } }),
+          deps.config.requestTimeoutMs,
+        );
+        stellar = { id: wallet.id, address: wallet.address };
+        walletCreated = true;
       }
 
-      const wallet = await withTimeout(
-        privy.wallets().create({ chain_type: 'stellar', owner: { user_id: userId } }),
-        deps.config.requestTimeoutMs,
-      );
+      deps.walletCache.set(stellar.address, stellar.id);
 
-      deps.walletCache.set(wallet.address, wallet.id);
-      deps.config.onWalletCreated?.(userId, wallet.address);
-
-      return c.var.content(SuccessCode.PRIVY_ADAPTER_WALLET_CREATED, { address: wallet.address }, 201);
+      if (walletCreated) {
+        deps.config.onWalletCreated?.(userId, stellar.address);
+        return c.var.content(SuccessCode.PRIVY_ADAPTER_WALLET_CREATED, { address: stellar.address }, 201);
+      }
+      return c.var.content(SuccessCode.PRIVY_ADAPTER_WALLET_EXISTS, { address: stellar.address });
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       deps.config.onError?.(err, { endpoint: 'POST /wallets/create', body: parsed });
