@@ -64,6 +64,28 @@ export interface PollarClientConfig {
    * additional wallets without bundling those dependencies into `@pollar/core`.
    */
   walletAdapter?: WalletAdapterResolver;
+  /**
+   * Optional human-friendly label sent at /auth/login time and recorded on
+   * the server-side refresh-token row so the user can identify it in the
+   * "active sessions" UI (e.g. "iPhone — Safari", "Mac — Chrome 126").
+   * If unset, the server-recorded `user_agent` header is the fallback.
+   */
+  deviceLabel?: string;
+}
+
+/**
+ * One row in the active-sessions list (returned by `PollarClient.listSessions()`).
+ * Mirrors the sdk-api `SessionsListContent` schema.
+ */
+export interface SessionInfo {
+  familyId: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  userAgent: string | null;
+  ipHash: string | null;
+  deviceLabel: string | null;
+  current: boolean;
+  expiresAt: string;
 }
 
 export type TxBuildBody = NonNullable<pollarPaths['/tx/build']['post']['requestBody']>['content']['application/json'];

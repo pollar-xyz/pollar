@@ -14,6 +14,14 @@ function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+const MAX_BACKOFF_MS = 5_000;
+
+/**
+ * Poll the session-status SSE stream until `check` returns true.
+ *
+ * On consecutive failures the retry delay doubles up to a 5 s cap; any
+ * received chunk resets it to the floor. The happy path is unchanged.
+ */
 export async function streamUntilFound(
   api: PollarApiClient,
   clientSessionId: string,
@@ -21,6 +29,13 @@ export async function streamUntilFound(
   retryDelayMs = 200,
   signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
+  let backoff = retryDelayMs;
+  const sleep = async (ms: number): Promise<void> => {
+    if (ms <= 0) return;
+    if (signal) await abortableDelay(ms, signal);
+    else await new Promise((r) => setTimeout(r, ms));
+  };
+
   while (true) {
     signal?.throwIfAborted();
 
@@ -37,14 +52,15 @@ export async function streamUntilFound(
     }
 
     if (error || !data) {
-      if (signal) await abortableDelay(retryDelayMs, signal);
-      else await new Promise((r) => setTimeout(r, retryDelayMs));
+      await sleep(backoff);
+      backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
       continue;
     }
 
     const reader = data.getReader();
     const decoder = new TextDecoder();
     let streamDone = false;
+    let sawAnyChunk = false;
 
     try {
       while (true) {
@@ -54,6 +70,7 @@ export async function streamUntilFound(
           streamDone = true;
           break;
         }
+        sawAnyChunk = true;
 
         const chunk = decoder.decode(value);
         for (const message of chunk.split('\n\n').filter(Boolean)) {
@@ -65,7 +82,7 @@ export async function streamUntilFound(
               return parsed;
             }
           } catch {
-            // chunk parcial, ignorar
+            // partial chunk — keep reading
           }
         }
       }
@@ -76,11 +93,12 @@ export async function streamUntilFound(
       reader.releaseLock();
     }
 
-    // stream cerrado sin encontrar el valor → reintenta
-    const delay = streamDone ? retryDelayMs : 0;
-    if (delay) {
-      if (signal) await abortableDelay(delay, signal);
-      else await new Promise((r) => setTimeout(r, delay));
-    }
+    // A connection that delivered real data resets the backoff; a stream
+    // that opened and immediately closed counts as failure.
+    if (sawAnyChunk) backoff = retryDelayMs;
+    else backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
+
+    const delay = streamDone ? backoff : 0;
+    if (delay) await sleep(delay);
   }
 }

@@ -26,6 +26,11 @@ This SDK requires `sdk-api` ≥ Phase 5 (DPoP middleware + `cnf.jkt` issuance + 
 deployments will reject DPoP-bound requests with `401 SDK_AUTH_DPOP_REQUIRED`. Coordinate the API deploy before bumping
 the SDK in consumers.
 
+The session-lifecycle endpoints (`POST /v1/auth/logout`, `GET /v1/auth/sessions`,
+`DELETE /v1/auth/sessions/{familyId}`) and the stripped SSE payload land in the same server release. Earlier `sdk-api`
+deployments return 404 on the new paths; the SDK's `logout()` continues to clear local state even when the server call
+fails.
+
 ### Breaking changes
 
 - **Persisted session shape** — the `data.{mail,first_name,last_name,avatar,providers}` subtree is no longer written to
@@ -42,6 +47,11 @@ the SDK in consumers.
   SDK fails fast on HTTP origins. In React Native, import `react-native-get-random-values` at app entry.
 - **React Native users must inject storage** — `defaultStorage()` only autodetects `localStorage`. RN apps pass
   `createSecureStoreAdapter()` (Expo) or `createKeychainAdapter()` (`react-native-keychain`).
+- **`PollarClient.logout()` returns `Promise<void>`** (was `void`). Existing fire-and-forget call sites keep working,
+  but consumers that want to observe the server-side revocation must now `await` the call.
+- **SSE session-status payload trimmed** — `/auth/session/status/{clientSessionId}` no longer emits `user.id` or
+  `data.*`. Identity data is delivered exclusively through the authenticated `/auth/login` response. Code that read PII
+  from the SSE stream must migrate to `client.getUserProfile()` after login completes.
 
 ### `@pollar/core` — new features
 
@@ -72,8 +82,24 @@ the SDK in consumers.
 - **`getUserProfile()`** — returns the in-memory `PollarUserProfile` (email, names, avatar, providers). `null` until
   `/auth/login` completes; never written to storage.
 - **`onStorageDegrade` callback** — notified the first time `localStorage` falls back to in-memory mode, for telemetry.
+- **Server-side logout.** `PollarClient.logout({ everywhere? })` now calls `POST /v1/auth/logout` to revoke the
+  refresh-token family on the server before clearing local storage. Server revocation is best-effort: a failed POST
+  still clears local state, the orphan refresh token then sits unused until its natural expiry. Pass `everywhere: true`
+  to revoke every active session for the user; the `logoutEverywhere()` shorthand wraps that case.
+- **Sessions list + revoke.** `PollarClient.listSessions()` returns `SessionInfo[]` (one entry per active refresh-token
+  family) and `PollarClient.revokeSession(familyId)` revokes a specific one. Each row carries `familyId`, `createdAt`,
+  `lastUsedAt`, `userAgent`, `ipHash`, `deviceLabel`, `expiresAt`, plus a `current: boolean` flag identifying the local
+  session. Revoking the current family does not immediately clear local state — the next 401 will trigger an automatic
+  refresh, which fails (family revoked) and clears the session.
+- **`PollarClientConfig.deviceLabel`** — optional UI-friendly label sent at `/auth/login` time and recorded on the
+  server-side refresh-token row so the sessions list can show "iPhone — Safari" instead of the raw user agent.
+- **OAuth popup hardening** — `loginOAuth` severs `window.opener` after opening the popup and after each navigation;
+  the popup-blocked fallback uses `noopener,noreferrer`. Cross-origin pages opened by the popup can no longer
+  navigate back into the parent.
+- **Exponential backoff on the session-status SSE stream** — `streamUntilFound` doubles its retry delay on consecutive
+  failures (200 ms → 5 s) and resets the floor on any successful chunk. The happy path is unchanged.
 - New exports: `Storage`, `KeyManager`, `PublicEcJwk`, `PollarPersistedSession`, `PollarUserProfile`,
-  `OnStorageDegrade`, `BuildProofArgs`.
+  `OnStorageDegrade`, `BuildProofArgs`, `SessionInfo`.
 
 ### `@pollar/core` — fixes
 
@@ -150,7 +176,10 @@ const client = new PollarClient({ apiKey, storage });
 - The in-memory `jti` replay cache is per-process. Multi-pod API deployments need a Redis-backed cache before any
   meaningful traffic — under load with N pods, a captured proof is replayable up to N times within the `iat` window.
 - Native key material is bytes-in-Keychain, not Secure-Enclave/StrongBox-bound. A device-level compromise (jailbreak /
-  root) can still exfiltrate the key. A hardware-backed `KeyManager` is on the v0.8.0 roadmap.
+  root) can still exfiltrate the key. A hardware-backed `KeyManager` is on the roadmap for a future release.
+- The in-flight access token survives until its natural TTL (≤10 min for DPoP-bound tokens) after `logout()`. A
+  Redis-backed jti denylist on `sdk-api` would invalidate it instantly; until that's wired up, the refresh-token
+  revocation alone closes the long-tail window.
 - Refresh-token cleanup is not automated — expired rows accumulate in `refresh_tokens`. A scheduled
   `DELETE FROM refresh_tokens WHERE expires_at < now()` job is recommended; trivial to write but intentionally left to
   deploy operations to schedule.

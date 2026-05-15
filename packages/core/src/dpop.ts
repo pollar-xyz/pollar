@@ -16,6 +16,11 @@ import type { KeyManager, PublicEcJwk } from './keys/types';
  * header. The client should re-build the proof with the new nonce and retry.
  * `buildProof` accepts an optional nonce; the SDK client tracks it across
  * requests and feeds it back here.
+ *
+ * The last seen `DPoP-Nonce` is stored verbatim and embedded in the next
+ * proof. The server validates it as an HMAC token, so an attacker who
+ * injects an arbitrary nonce cannot escalate — verification fails and the
+ * server replies with a fresh nonce on the next request.
  */
 
 export interface BuildProofArgs {

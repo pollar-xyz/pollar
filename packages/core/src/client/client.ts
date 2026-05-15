@@ -36,6 +36,7 @@ import {
   RampsQuoteResponse,
   RampsTransactionResponse,
   RampTxStatus,
+  SessionInfo,
   TransactionState,
   TxBuildBody,
   TxBuildContent,
@@ -104,6 +105,9 @@ export class PollarClient {
   /** Singleton in-flight refresh — concurrent 401s coalesce into one /auth/refresh call. */
   private _refreshPromise: Promise<void> | null = null;
   private _storageEventHandler: ((e: StorageEvent) => void) | null = null;
+  /** Optional UI label sent to the server at /auth/login so the sessions UI
+   *  can show a recognizable device name. Set via PollarClientConfig.deviceLabel. */
+  private readonly _deviceLabel: string | undefined;
 
   private _transactionState: TransactionState | null = null;
   private _transactionStateListeners = new Set<(state: TransactionState) => void>();
@@ -129,6 +133,7 @@ export class PollarClient {
       config.storage ?? defaultStorage(config.onStorageDegrade ? { onDegrade: config.onStorageDegrade } : undefined);
     this._keyManager = config.keyManager ?? defaultKeyManager(this._storage, config.apiKey);
     this._walletAdapterResolver = config.walletAdapter ?? null;
+    this._deviceLabel = config.deviceLabel;
 
     this._api = createApiClient(this.basePath);
     this._wireMiddlewares();
@@ -474,13 +479,85 @@ export class PollarClient {
 
   // ─── Logout ───────────────────────────────────────────────────────────────
 
-  logout(): void {
+  /**
+   * Revoke the current session server-side, then clear local storage.
+   *
+   * Server revocation is best-effort: if the POST fails (offline, server
+   * down), local state is wiped regardless. The orphan refresh token then
+   * remains unused until its natural expiry. The in-flight access token
+   * stays valid until its own TTL elapses (≤10 min for DPoP-bound tokens).
+   *
+   * Pass `everywhere: true` to revoke every active session for this user
+   * across all devices.
+   */
+  async logout(options: { everywhere?: boolean } = {}): Promise<void> {
     if (!isBrowser) {
       warnServerSide('logout');
       return;
     }
-    console.info('[PollarClient] Logout requested');
-    this._clearSession().catch((err) => console.warn('[PollarClient] Logout cleanup failed', err));
+    console.info('[PollarClient] Logout requested', { everywhere: !!options.everywhere });
+
+    if (this._session?.token?.accessToken) {
+      try {
+        await this._api.POST('/auth/logout', {
+          body: options.everywhere ? { everywhere: true } : {},
+        });
+      } catch (err) {
+        console.warn('[PollarClient] Server logout failed (continuing with local clear)', err);
+      }
+    }
+
+    try {
+      await this._clearSession();
+    } catch (err) {
+      console.warn('[PollarClient] Local logout cleanup failed', err);
+    }
+  }
+
+  /** Convenience: revoke every active session for this user (all devices). */
+  logoutEverywhere(): Promise<void> {
+    return this.logout({ everywhere: true });
+  }
+
+  /**
+   * List active sessions for the authenticated user. Returns one entry per
+   * refresh-token family with the metadata captured at issuance time. The
+   * `current` flag identifies which entry corresponds to this client.
+   */
+  async listSessions(): Promise<SessionInfo[]> {
+    if (!isBrowser) {
+      warnServerSide('listSessions');
+      return [];
+    }
+    if (!this._session?.token?.accessToken) {
+      throw new Error('[PollarClient] listSessions requires an authenticated session');
+    }
+    const { data, error } = await this._api.GET('/auth/sessions');
+    if (error || !data?.success) {
+      throw new Error('[PollarClient] Failed to list sessions');
+    }
+    return data.content.sessions;
+  }
+
+  /**
+   * Revoke a specific refresh-token family (a single device session). Use
+   * `listSessions` to enumerate the familyIds. Revoking the current session
+   * does NOT clear local state — call `logout()` for that case.
+   */
+  async revokeSession(familyId: string): Promise<void> {
+    if (!isBrowser) {
+      warnServerSide('revokeSession');
+      return;
+    }
+    if (!this._session?.token?.accessToken) {
+      throw new Error('[PollarClient] revokeSession requires an authenticated session');
+    }
+    const { error } = await this._api.DELETE('/auth/sessions/{familyId}', {
+      params: { path: { familyId } },
+    });
+    if (error) {
+      throw new Error('[PollarClient] Failed to revoke session');
+    }
   }
 
   // ─── Network ──────────────────────────────────────────────────────────────
@@ -750,6 +827,7 @@ export class PollarClient {
         this._walletAdapter = adapter;
         await writeWalletType(this._storage, this.apiKeyHash, id);
       },
+      ...(this._deviceLabel ? { deviceLabel: this._deviceLabel } : {}),
     };
   }
 

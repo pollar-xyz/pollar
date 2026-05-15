@@ -41,6 +41,12 @@ export interface LocalStorageAdapterOptions {
  * Why every op (not just the probe): Safari private mode and sandboxed iframes
  * may expose `localStorage` but throw `QuotaExceededError` / `SecurityError`
  * on the first write — a successful probe at construction time isn't enough.
+ *
+ * Tokens persisted here are DPoP-bound to a non-extractable WebCrypto
+ * keypair, so XSS exposure is limited to a signing-oracle attack (the key
+ * itself never leaves the browser's crypto subsystem). Consumers who need
+ * stricter isolation can inject a custom `Storage` adapter — e.g. one that
+ * proxies to an httpOnly cookie on a host origin.
  */
 export function createLocalStorageAdapter(options: LocalStorageAdapterOptions = {}): Storage {
   const fallback = createMemoryAdapter();

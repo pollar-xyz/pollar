@@ -17,7 +17,11 @@ export async function authenticate(
   // Pass `dpopJwk` so the server mints DPoP-bound tokens (`cnf.jkt`).
   const dpopJwk = await deps.getPublicJwk();
   const { data, error } = await api.POST('/auth/login', {
-    body: { clientSessionId, dpopJwk },
+    body: {
+      clientSessionId,
+      dpopJwk,
+      ...(deps.deviceLabel ? { deviceLabel: deps.deviceLabel } : {}),
+    },
     signal,
   });
 

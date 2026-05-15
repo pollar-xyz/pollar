@@ -22,6 +22,11 @@ export type FlowDeps = {
    * can mint DPoP-bound tokens (`cnf.jkt`).
    */
   getPublicJwk: () => Promise<PublicEcJwk>;
+  /**
+   * Optional UI label persisted on the server-side refresh-token row so the
+   * sessions UI can show "iPhone — Safari" instead of a raw user-agent.
+   */
+  deviceLabel?: string;
 };
 
 export async function createAuthSession(deps: FlowDeps): Promise<string | null> {
