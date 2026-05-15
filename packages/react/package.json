@@ -1,6 +1,6 @@
 {
   "name": "@pollar/react",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "React components for Pollar authentication",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -29,6 +29,9 @@
     "dev": "tsup --watch",
     "lint": "tsc --noEmit && eslint src",
     "clean": "rm -rf dist"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "peerDependencies": {
     "@pollar/core": "*",

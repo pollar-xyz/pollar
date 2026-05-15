@@ -607,13 +607,13 @@ const valid = isValidSession(session);
 
 ## Custom Adapters
 
-`PollarAdapters` is a generic record type that maps adapter names to `EscrowAdapter` instances. Adapters allow you to wrap external signing functions (e.g. Trustless Work SDK) and have Pollar handle signing and submission automatically.
+`PollarAdapters` is a generic record type that maps adapter names to `PollarAdapter` instances. Adapters allow you to wrap external signing functions (e.g. Trustless Work SDK) and have Pollar handle signing and submission automatically.
 
 ```typescript
-import type { EscrowFn, EscrowAdapter, PollarAdapters } from '@pollar/core';
+import type { AdapterFn, PollarAdapter, PollarAdapters } from '@pollar/core';
 
-// An EscrowFn receives params and returns an unsigned XDR string
-const createEscrow: EscrowFn<{ amount: string; counterparty: string }> = async (params) => {
+// An AdapterFn receives params and returns an unsigned XDR string
+const createEscrow: AdapterFn<{ amount: string; counterparty: string }> = async (params) => {
   const xdr = await trustlessWork.buildEscrow(params);
   return xdr; // unsigned XDR
 };
@@ -663,8 +663,8 @@ import type {
   RampTxStatus,
   RampDirection,
   PaymentInstructions,
-  EscrowFn,
-  EscrowAdapter,
+  AdapterFn,
+  PollarAdapter,
   PollarAdapters,
   PollarFlowError,
 } from '@pollar/core';

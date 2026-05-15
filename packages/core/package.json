@@ -1,12 +1,23 @@
 {
   "name": "@pollar/core",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Core authentication functions for Pollar services",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "react-native": "./dist/index.rn.mjs",
   "exports": {
     ".": {
+      "react-native": {
+        "import": {
+          "types": "./dist/index.rn.d.mts",
+          "default": "./dist/index.rn.mjs"
+        },
+        "require": {
+          "types": "./dist/index.rn.d.ts",
+          "default": "./dist/index.rn.js"
+        }
+      },
       "import": {
         "types": "./dist/index.d.mts",
         "default": "./dist/index.mjs"
@@ -15,24 +26,65 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       }
+    },
+    "./adapters/expo": {
+      "import": {
+        "types": "./dist/adapters/expo-secure-store.d.mts",
+        "default": "./dist/adapters/expo-secure-store.mjs"
+      },
+      "require": {
+        "types": "./dist/adapters/expo-secure-store.d.ts",
+        "default": "./dist/adapters/expo-secure-store.js"
+      }
+    },
+    "./adapters/react-native-keychain": {
+      "import": {
+        "types": "./dist/adapters/react-native-keychain.d.mts",
+        "default": "./dist/adapters/react-native-keychain.mjs"
+      },
+      "require": {
+        "types": "./dist/adapters/react-native-keychain.d.ts",
+        "default": "./dist/adapters/react-native-keychain.js"
+      }
     }
   },
   "files": [
     "dist"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/index.mjs",
+    "./dist/index.js",
+    "./dist/index.rn.mjs",
+    "./dist/index.rn.js"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "lint": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "devDependencies": {
     "tsup": "^8.3.0",
     "typescript": "^5.7.0"
   },
   "dependencies": {
+    "@noble/curves": "~1.9.7",
     "@stellar/freighter-api": "^2.0.0",
     "openapi-fetch": "^0.17.0"
+  },
+  "peerDependencies": {
+    "expo-secure-store": ">=12",
+    "react-native-keychain": ">=8"
+  },
+  "peerDependenciesMeta": {
+    "expo-secure-store": {
+      "optional": true
+    },
+    "react-native-keychain": {
+      "optional": true
+    }
   }
 }

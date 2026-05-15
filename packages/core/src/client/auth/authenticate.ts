@@ -14,8 +14,14 @@ export async function authenticate(
 
   await streamUntilFound(api, clientSessionId, (data) => data?.status === 'READY', 200, signal);
 
+  // Pass `dpopJwk` so the server mints DPoP-bound tokens (`cnf.jkt`).
+  const dpopJwk = await deps.getPublicJwk();
   const { data, error } = await api.POST('/auth/login', {
-    body: { clientSessionId },
+    body: {
+      clientSessionId,
+      dpopJwk,
+      ...(deps.deviceLabel ? { deviceLabel: deps.deviceLabel } : {}),
+    },
     signal,
   });
 

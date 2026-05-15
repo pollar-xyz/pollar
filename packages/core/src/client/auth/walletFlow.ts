@@ -1,5 +1,5 @@
 import { AUTH_ERROR_CODES } from '../../types';
-import { AlbedoAdapter, FreighterAdapter, WalletType } from '../../wallets';
+import { WalletId } from '../../wallets';
 import { authenticate } from './authenticate';
 import { createAuthSession, FlowDeps } from './deps';
 
@@ -16,7 +16,7 @@ function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   ]);
 }
 
-export async function loginWallet(type: WalletType, deps: FlowDeps): Promise<void> {
+export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void> {
   const { api, signal, setAuthState } = deps;
 
   const clientSessionId = await createAuthSession(deps);
@@ -26,7 +26,7 @@ export async function loginWallet(type: WalletType, deps: FlowDeps): Promise<voi
 
   try {
     setAuthState({ step: 'connecting_wallet', walletType: type });
-    const adapter = type === WalletType.FREIGHTER ? new FreighterAdapter() : new AlbedoAdapter();
+    const adapter = await deps.resolveWalletAdapter(type);
 
     const available = await withSignal(adapter.isAvailable(), signal);
     if (!available) {

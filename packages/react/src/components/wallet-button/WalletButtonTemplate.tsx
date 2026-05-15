@@ -1,6 +1,6 @@
 'use client';
 
-import { WalletType } from '@pollar/core';
+import { WalletId } from '@pollar/core';
 import { LOGO_POLLAR } from '../../constants';
 
 function ButtonLogo() {
@@ -17,7 +17,7 @@ export interface WalletButtonTemplateProps {
   itemColor: string;
   wrapperRef: React.RefObject<HTMLDivElement>;
   isInProgress: boolean;
-  walletType: WalletType | null;
+  walletType: WalletId | null;
   onToggleOpen: () => void;
   onCopy: () => void;
   onWalletBalance: () => void;

@@ -1,14 +1,91 @@
+import type { KeyManager } from './keys/types';
+import type { OnStorageDegrade, Storage } from './storage/types';
 import { pollarPaths, StellarNetwork } from './index';
-import { WalletType } from './wallets';
+import { WalletAdapterResolver, WalletId } from './wallets';
 
 export type PollarApplicationConfigResponse =
   pollarPaths['/auth/login']['post']['responses'][200]['content']['application/json'];
+/** Full `/auth/login` response shape — used in transit but NOT persisted. */
 export type PollarApplicationConfigContent = PollarApplicationConfigResponse['content'];
+
+/**
+ * What we actually write to `Storage`. Drops the PII subtree (`data.*`)
+ * which is held in memory only on `PollarClient._profile` after auth.
+ */
+export interface PollarPersistedSession {
+  clientSessionId: string;
+  userId: string | null;
+  status: string;
+  token: { accessToken: string; refreshToken: string; expiresAt: number };
+  user: { id?: string; ready: boolean };
+  wallet: { publicKey: string | null; existsOnStellar?: boolean; createdAt?: number };
+}
+
+/** In-memory user profile (kept on `PollarClient`, never persisted). */
+export interface PollarUserProfile {
+  mail: string;
+  first_name: string;
+  last_name: string;
+  avatar: string;
+  providers: {
+    email: { address: string } | null;
+    google: { id: string } | null;
+    github: { id: string } | null;
+    wallet: { address: string } | null;
+  };
+}
 
 export interface PollarClientConfig {
   stellarNetwork?: StellarNetwork;
   baseUrl?: string;
   apiKey: string;
+  /**
+   * Pluggable storage. Defaults to `defaultStorage()` on web (localStorage
+   * with memory fallback). On RN you must inject one of the adapters from
+   * `@pollar/core/adapters/expo` or `@pollar/core/adapters/react-native-keychain`.
+   */
+  storage?: Storage;
+  /**
+   * Pluggable DPoP key manager. Defaults to `defaultKeyManager(storage,
+   * apiKeyHash)`: WebCrypto in browsers, `@noble/curves` in RN.
+   */
+  keyManager?: KeyManager;
+  /**
+   * Notified when persistent storage silently degrades to in-memory mode
+   * (Safari private browsing quota errors, sandboxed iframes, etc.). Useful
+   * for telemetry — the SDK keeps working but sessions won't survive reload.
+   */
+  onStorageDegrade?: OnStorageDegrade;
+  /**
+   * Resolves a {@link WalletAdapter} for a given wallet id. If omitted, the
+   * SDK falls back to its built-in `FreighterAdapter` / `AlbedoAdapter`,
+   * which only know `WalletType.FREIGHTER` and `WalletType.ALBEDO`. Inject
+   * `@pollar/stellar-wallets-kit-adapter` (or your own resolver) to support
+   * additional wallets without bundling those dependencies into `@pollar/core`.
+   */
+  walletAdapter?: WalletAdapterResolver;
+  /**
+   * Optional human-friendly label sent at /auth/login time and recorded on
+   * the server-side refresh-token row so the user can identify it in the
+   * "active sessions" UI (e.g. "iPhone — Safari", "Mac — Chrome 126").
+   * If unset, the server-recorded `user_agent` header is the fallback.
+   */
+  deviceLabel?: string;
+}
+
+/**
+ * One row in the active-sessions list (returned by `PollarClient.listSessions()`).
+ * Mirrors the sdk-api `SessionsListContent` schema.
+ */
+export interface SessionInfo {
+  familyId: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  userAgent: string | null;
+  ipHash: string | null;
+  deviceLabel: string | null;
+  current: boolean;
+  expiresAt: string;
 }
 
 export type TxBuildBody = NonNullable<pollarPaths['/tx/build']['post']['requestBody']>['content']['application/json'];
@@ -23,7 +100,7 @@ export type PollarLoginOptions =
   | { provider: 'google' }
   | { provider: 'github' }
   | { provider: 'email'; email: string }
-  | { provider: 'wallet'; type: WalletType };
+  | { provider: 'wallet'; type: WalletId };
 
 export type TxBuildContent = TxBuildResponse['content'];
 
@@ -57,11 +134,11 @@ export type AuthState =
   | { step: 'entering_code'; clientSessionId: string; email: string }
   | { step: 'verifying_email_code'; clientSessionId: string; email: string }
   | { step: 'opening_oauth'; provider: 'google' | 'github' }
-  | { step: 'connecting_wallet'; walletType: WalletType }
-  | { step: 'wallet_not_installed'; walletType: WalletType }
+  | { step: 'connecting_wallet'; walletType: WalletId }
+  | { step: 'wallet_not_installed'; walletType: WalletId }
   | { step: 'authenticating_wallet' }
   | { step: 'authenticating' }
-  | { step: 'authenticated'; session: PollarApplicationConfigContent }
+  | { step: 'authenticated'; session: PollarPersistedSession }
   | {
       step: 'error';
       previousStep: string;
@@ -143,10 +220,10 @@ export type PaymentInstructions = RampsOnrampResponse['paymentInstructions'];
 
 // ─── Adapter types ────────────────────────────────────────────────────────────
 
-export type EscrowFn<TParams = unknown> = (params: TParams) => Promise<{ unsignedTransaction: string }>;
+export type AdapterFn<TParams = unknown> = (params: TParams) => Promise<{ unsignedTransaction: string }>;
 
-export type EscrowAdapter = Record<string, EscrowFn<any>>;
+export type PollarAdapter = Record<string, AdapterFn<any>>;
 
 export interface PollarAdapters {
-  [key: string]: EscrowAdapter;
+  [key: string]: PollarAdapter;
 }

@@ -3,16 +3,16 @@
 import {
   NetworkState,
   PollarAdapters,
-  PollarApplicationConfigContent,
   PollarClient,
   PollarClientConfig,
   PollarLoginOptions,
+  PollarPersistedSession,
   StellarNetwork,
   TransactionState,
   TxBuildBody,
   TxHistoryState,
   WalletBalanceState,
-  WalletType,
+  WalletId,
 } from '@pollar/core';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ModalErrorBoundary } from './components/commons';
@@ -21,6 +21,7 @@ import { LoginModal } from './components/login-modal/LoginModal';
 import { ReceiveModal } from './components/receive-modal/ReceiveModal';
 import { RampWidget } from './components/ramp-widget/RampWidget';
 import { SendModal } from './components/send-modal/SendModal';
+import { SessionsModal } from './components/sessions-modal/SessionsModal';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
@@ -46,6 +47,8 @@ interface PollarContextValue {
   isAuthenticated: boolean;
   login: (options: PollarLoginOptions) => void;
   logout: () => void;
+  /** Open the active-sessions modal. */
+  openSessionsModal: () => void;
   appConfig: PollarConfig;
   styles: PollarStyles;
   // transactions
@@ -57,7 +60,7 @@ interface PollarContextValue {
     options?: TxBuildBody['options'],
   ) => Promise<void>;
   signAndSubmitTx: (unsignedXdr: string) => Promise<void>;
-  walletType: WalletType | null;
+  walletType: WalletId | null;
   // network
   network: StellarNetwork;
   setNetwork: (network: StellarNetwork) => void;
@@ -96,7 +99,7 @@ interface PollarProviderProps {
 export function PollarProvider({ config, styles: propStyles, adapters, children }: PollarProviderProps) {
   const [pollarClient] = useState<PollarClient>(() => new PollarClient(config));
   const [networkState, setNetworkState] = useState<NetworkState>(() => pollarClient.getNetworkState());
-  const [sessionState, setSessionState] = useState<PollarApplicationConfigContent | null>(null);
+  const [sessionState, setSessionState] = useState<PollarPersistedSession | null>(null);
   const [transaction, setTransaction] = useState<TransactionState>({ step: 'idle' });
   const [txHistory, setTxHistory] = useState<TxHistoryState>({ step: 'idle' });
   const [walletBalance, setWalletBalance] = useState<WalletBalanceState>({ step: 'idle' });
@@ -163,11 +166,15 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
   const [walletBalanceModalOpen, setWalletBalanceModalOpen] = useState(false);
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [receiveModalOpen, setReceiveModalOpen] = useState(false);
+  const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
 
   const adaptersRef = useRef(adapters);
   adaptersRef.current = adapters;
 
-  const walletAddress = sessionState?.data?.providers?.wallet?.address || sessionState?.wallet?.publicKey || '';
+  // PII (incl. providers.wallet.address) lives on `client.getUserProfile()`, not on the
+  // persisted session. For both external and custodial wallets, `wallet.publicKey`
+  // already holds the on-chain address we care about.
+  const walletAddress = sessionState?.wallet?.publicKey || '';
   const getClient = useCallback(() => pollarClient, [pollarClient]);
   const refreshWalletBalance = useCallback(() => pollarClient.refreshBalance(walletAddress), [pollarClient, walletAddress]);
 
@@ -199,6 +206,8 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
         // send / receive
         openSendModal: () => setSendModalOpen(true),
         openReceiveModal: () => setReceiveModalOpen(true),
+        // sessions
+        openSessionsModal: () => setSessionsModalOpen(true),
         // network
         network: networkState.step === 'connected' ? networkState.network : 'testnet',
         setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
@@ -263,6 +272,11 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
       {receiveModalOpen && (
         <ModalErrorBoundary onClose={() => setReceiveModalOpen(false)}>
           <ReceiveModal onClose={() => setReceiveModalOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {sessionsModalOpen && (
+        <ModalErrorBoundary onClose={() => setSessionsModalOpen(false)}>
+          <SessionsModal onClose={() => setSessionsModalOpen(false)} />
         </ModalErrorBoundary>
       )}
     </PollarContext.Provider>

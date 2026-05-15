@@ -101,6 +101,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/oidc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Redirect to Authentik OIDC
+         * @description Redirects the user to the Authentik authorization endpoint (PKCE, per-app).
+         */
+        get: operations["getAuthOidc"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/email": {
         parameters: {
             query?: never;
@@ -167,6 +187,59 @@ export interface paths {
          */
         post: operations["postAuthLogin"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate a DPoP-bound refresh token
+         * @description Single-use rotation per RFC 9449 §5. Requires a DPoP proof (no `ath`) bound to the same key as the refresh token (`cnf.jkt`). On reuse outside the 30s grace window, the entire token family is revoked.
+         */
+        post: operations["postAuthRefresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never };
+        get?: never;
+        put?: never;
+        post: operations["postAuthLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/sessions": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never };
+        get: operations["getAuthSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/sessions/{familyId}": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteAuthSessionByFamilyId"];
         options?: never;
         head?: never;
         patch?: never;
@@ -581,28 +654,7 @@ export interface operations {
                     "text/event-stream": {
                         status: string;
                         user: {
-                            id?: string;
                             ready: boolean;
-                        };
-                        data: {
-                            mail: string;
-                            first_name: string;
-                            last_name: string;
-                            avatar: string;
-                            providers: {
-                                email: {
-                                    address: string;
-                                } | null;
-                                google: {
-                                    id: string;
-                                } | null;
-                                github: {
-                                    id: string;
-                                } | null;
-                                wallet: {
-                                    address: string;
-                                } | null;
-                            };
                         };
                     };
                 };
@@ -731,6 +783,66 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    getAuthOidc: {
+        parameters: {
+            query: {
+                api_key: string;
+                client_session_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to Authentik */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1032,6 +1144,15 @@ export interface operations {
             content: {
                 "application/json": {
                     clientSessionId: string;
+                    dpopJwk?: {
+                        /** @constant */
+                        kty: "EC";
+                        /** @constant */
+                        crv: "P-256";
+                        x: string;
+                        y: string;
+                    };
+                    deviceLabel?: string;
                 };
             };
         };
@@ -1084,6 +1205,96 @@ export interface operations {
                                         address: string;
                                     } | null;
                                 };
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    postAuthRefresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    refreshToken: string;
+                };
+            };
+        };
+        responses: {
+            /** @description New token pair issued */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_TOKEN_REFRESHED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            token: {
+                                accessToken: string;
+                                refreshToken: string;
+                                expiresAt: number;
                             };
                         };
                     };
@@ -2343,6 +2554,96 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    postAuthLogout: {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    everywhere?: boolean;
+                };
+            };
+        };
+        responses: {
+            200: {
+                headers: { [name: string]: unknown };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_LOGOUT_SUCCESS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            revoked: number;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    getAuthSessions: {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: { [name: string]: unknown };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_SESSIONS_LIST";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            sessions: {
+                                familyId: string;
+                                createdAt: string;
+                                lastUsedAt: string | null;
+                                userAgent: string | null;
+                                ipHash: string | null;
+                                deviceLabel: string | null;
+                                current: boolean;
+                                expiresAt: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+    };
+    deleteAuthSessionByFamilyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: { familyId: string };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: { [name: string]: unknown };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_SESSION_REVOKED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            revoked: number;
+                        };
+                    };
+                };
+            };
+            404: {
+                headers: { [name: string]: unknown };
                 content: {
                     "application/json": {
                         /** @constant */

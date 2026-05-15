@@ -1,6 +1,6 @@
 'use client';
 
-import { TransactionState, WalletType } from '@pollar/core';
+import { TransactionState, WalletId, WalletType } from '@pollar/core';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
 import { ModalStatusBanner } from '../commons';
 
@@ -18,7 +18,7 @@ export interface TxStatusViewProps {
   showXdr: boolean;
   copied: boolean;
   explorerUrl: string | null;
-  walletType?: WalletType | null | undefined;
+  walletType?: WalletId | null | undefined;
   onSignAndSend: () => void;
   onToggleXdr: () => void;
   onCopyHash: () => void;
