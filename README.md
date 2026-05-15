@@ -35,9 +35,13 @@ Pollar authentication and Stellar transactions into any JavaScript environment.
 - KYC verification flow — provider selection, session start, and status polling *(not yet implemented on backend)*
 - On/off-ramp support — quote fetching and on-ramp initiation *(not yet implemented on backend)*
 - Transaction history — paginated fetch with status tracking
-- Direct wallet adapters (`FreighterAdapter`, `AlbedoAdapter`)
-- `EscrowFn`, `EscrowAdapter`, and `PollarAdapters` types — generic adapter contract for custom signing flows (e.g.
-  Trustless Work SDK)
+- Direct wallet adapters (`FreighterAdapter`, `AlbedoAdapter`) plus a pluggable `walletAdapter` slot
+  (`WalletAdapterResolver`) for external wallet stacks
+- `AdapterFn`, `PollarAdapter`, and `PollarAdapters` types — generic adapter contract for custom signing flows (e.g.
+  Trustless Work SDK). *(Renamed from `EscrowFn` / `EscrowAdapter` in 0.7.0.)*
+- Active-session management — `listSessions()` / `revokeSession(familyId)` / `logoutEverywhere()` against the
+  refresh-token family on the server
+- `getUserProfile()` for in-memory PII access; `destroy()` to tear down the client cleanly
 - Full TypeScript typings, ships with ESM and CJS builds
 
 ```bash
@@ -90,6 +94,8 @@ drop-in authentication in React applications.
 - `<RampWidget>` — buy/sell crypto with route comparison and payment instructions *(UI preview — backend coming soon)*
 - `<TxHistoryModal>` — paginated transaction history viewer with auto-fetch on open and stellar.expert explorer links
 - `<WalletBalanceModal>` — Stellar account balance display
+- `<SessionsModal>` — drop-in active-sessions UI: lists every refresh-token family for the current user, per-row
+  revoke, and a "Sign out everywhere" button (new in 0.7.0)
 - `createPollarAdapterHook(key)` — factory for fully-typed hooks that wrap custom adapters with automatic XDR signing
 - Template components for every modal — pure presentational layer for fully custom UIs
 - Bundled stylesheet (`@pollar/react/styles.css`) with `pollar-` namespaced class names
@@ -101,16 +107,74 @@ npm install @pollar/react @pollar/core
 
 ---
 
+### [`@pollar/privy-adapter`](./packages/privy-adapter)
+
+**Version:** `0.7.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-adapter)
+
+Stateless HTTP sidecar that lets `sdk-api` sign Stellar transactions through your **Privy** server-wallet account
+without your `PRIVY_APP_SECRET` ever leaving your infrastructure. Runs alongside `sdk-api`; Privy is treated as a
+remote signer reached over an authenticated channel.
+
+**Key features:**
+
+- `createPollarPrivyAdapter(config)` — boots a Hono server (default port `3001`) exposing `POST /wallets/create`,
+  `POST /wallets/sign`, `GET /wallets/:userId/address`, and `GET /health`. Returns `{ start, stop }` for lifecycle
+  control
+- Async `getCredentials()` resolver so any secret manager (AWS Secrets Manager, GCP Secret Manager, Vault…) works;
+  cached for 5 min by default and rebuilt automatically on rotation
+- Bearer auth on `/wallets/*` using constant-time comparison (`crypto.timingSafeEqual`)
+- Configurable body-size cap (`maxBodyBytes`, default 64 KiB) and per-request timeout (`requestTimeoutMs`,
+  default 10 s)
+- Per-userId wallet-address LRU cache (1 000 entries, 10 min TTL) — no persistent state
+- Maps Pollar `userId` → Privy DID via `custom_auth` linked accounts so wallets are namespaced per Pollar tenant
+- Discriminated `SuccessCode` / `ErrorCode` enums; optional `onError(error, ctx)` hook for upstream telemetry
+- Node ≥ 20
+
+```bash
+npm install @pollar/privy-adapter
+```
+
+---
+
+### [`@pollar/stellar-wallets-kit-adapter`](./packages/stellar-wallets-kit-adapter)
+
+**Version:** `0.7.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/stellar-wallets-kit-adapter)
+
+Plugs [Stellar Wallets Kit](https://stellarwalletskit.dev) into Pollar as a single wallet adapter, without
+`@pollar/core` having to depend on the kit. One install gives Pollar access to **every wallet module the kit
+supports** — Freighter, Albedo, xBull, Lobstr, Rabet, Hana, Bitget, OneKey, Klever, Fordefi, CactusLink, HotWallet,
+plus Ledger / Trezor / WalletConnect via opt-in.
+
+**Key features:**
+
+- `stellarWalletsKit(options?)` — factory that returns a `WalletAdapterResolver` you hand to
+  `PollarClientConfig.walletAdapter`
+- `StellarWalletsKitAdapter` — direct `WalletAdapter` implementation for use outside `PollarClient`
+- Defaults to 12 zero-setup modules; pass an explicit `modules` list to add Ledger / Trezor / WalletConnect or to
+  trim the bundle
+- One-shot lazy `init` — `StellarWalletsKit.init(...)` runs on the first `loginWallet` call; importing the package
+  has no startup cost
+- Peer deps: `@creit.tech/stellar-wallets-kit@^2.0.0` and `@pollar/core@*` (the kit is **not** bundled)
+
+```bash
+npm install @pollar/stellar-wallets-kit-adapter @creit.tech/stellar-wallets-kit
+```
+
+---
+
 ## Repository Structure
 
 ```
 @pollar/
 ├── packages/
-│   ├── core/          # @pollar/core — framework-agnostic SDK
-│   └── react/         # @pollar/react — React bindings and UI components
-├── docs/              # API reference documentation
-├── turbo.json         # Turborepo pipeline configuration
-└── tsconfig.base.json # Shared TypeScript base configuration
+│   ├── core/                            # @pollar/core — framework-agnostic SDK
+│   ├── react/                           # @pollar/react — React bindings and UI components
+│   ├── privy-adapter/                   # @pollar/privy-adapter — Privy ↔ Stellar HTTP sidecar
+│   └── stellar-wallets-kit-adapter/     # @pollar/stellar-wallets-kit-adapter — Stellar Wallets Kit bridge
+├── docs/                                # API reference documentation
+├── tests/                                # Smoke tests for the built SDK
+├── turbo.json                           # Turborepo pipeline configuration
+└── tsconfig.base.json                   # Shared TypeScript base configuration
 ```
 
 ---
@@ -122,7 +186,7 @@ package manager.
 
 ### Prerequisites
 
-- Node.js >= 18
+- Node.js >= 20 (matches the `engines` floor declared by every published package)
 - pnpm >= 9
 
 ### Install dependencies

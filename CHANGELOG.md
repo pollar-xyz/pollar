@@ -52,6 +52,10 @@ fails.
 - **SSE session-status payload trimmed** — `/auth/session/status/{clientSessionId}` no longer emits `user.id` or
   `data.*`. Identity data is delivered exclusively through the authenticated `/auth/login` response. Code that read PII
   from the SSE stream must migrate to `client.getUserProfile()` after login completes.
+- **Adapter types renamed** — `EscrowFn` → `AdapterFn` and `EscrowAdapter` → `PollarAdapter` in `@pollar/core`. The
+  `PollarAdapters` umbrella type keeps its name but now indexes `PollarAdapter` instead of `EscrowAdapter`. Consumers
+  who imported `EscrowFn` / `EscrowAdapter` (introduced in 0.5.3) must rename their imports. The runtime contract is
+  unchanged — only the type names move — so the migration is mechanical.
 
 ### `@pollar/core` — new features
 
@@ -98,8 +102,16 @@ fails.
   navigate back into the parent.
 - **Exponential backoff on the session-status SSE stream** — `streamUntilFound` doubles its retry delay on consecutive
   failures (200 ms → 5 s) and resets the floor on any successful chunk. The happy path is unchanged.
+- **Pluggable wallet-adapter resolver.** `PollarClientConfig.walletAdapter?: WalletAdapterResolver` lets consumers
+  inject external wallet implementations (Stellar Wallets Kit, custom modules, hardware wallets) without bundling
+  them into `@pollar/core`. The resolver is invoked lazily on connect with the requested wallet id and returns a
+  `WalletAdapter` (sync or `Promise`). When omitted, only the built-in `freighter` / `albedo` adapters are reachable.
+- **New `WalletId` type.** `WalletId = WalletType | (string & {})` widens the accepted wallet identifier from the
+  internal enum to any opaque string id (e.g. `'xbull'`, `'lobstr'`, `'walletconnect'`) used by external adapter
+  packages, while keeping autocomplete on the enum values. `WalletAdapter.type` was widened from `WalletType` to
+  `WalletId` accordingly — relevant only to consumers who implement custom adapters.
 - New exports: `Storage`, `KeyManager`, `PublicEcJwk`, `PollarPersistedSession`, `PollarUserProfile`,
-  `OnStorageDegrade`, `BuildProofArgs`, `SessionInfo`.
+  `OnStorageDegrade`, `BuildProofArgs`, `SessionInfo`, `WalletId`, `WalletAdapterResolver`.
 
 ### `@pollar/core` — fixes
 
@@ -122,10 +134,45 @@ fails.
   the new `openSessionsModal()` action on `usePollar()`. The pure presentational `SessionsModalTemplate` is exported
   for consumers who want to swap the chrome while keeping the wiring.
 
+### `@pollar/privy-adapter` — new package
+
+Stateless HTTP proxy that lets `sdk-api` sign Stellar transactions through a Privy server-wallet account without the
+Privy app secret leaving the integrator's infrastructure. Runs as a sidecar to `sdk-api`; Privy is treated as a remote
+signer reached over an authenticated localhost-style channel rather than a client-side dependency.
+
+- `createPollarPrivyAdapter(config)` boots a Hono server (default port `3001`) exposing
+  `POST /wallets/create`, `POST /wallets/sign`, `GET /wallets/:userId/address`, and `GET /health`. Returns `{ start, stop }`
+  for lifecycle control.
+- Bearer auth via `pollarApiSecret` on every `/wallets/*` route; configurable body-size cap (`maxBodyBytes`, default
+  64 KiB) and per-request timeout (`requestTimeoutMs`, default 10 s).
+- Per-userId wallet-address LRU cache (1 000 entries, 10 min TTL) so repeated sign calls don't hit Privy on the hot path.
+- Maps Pollar `userId` → Privy DID through `custom_auth` linked accounts so wallets are namespaced per Pollar tenant.
+- Stable error envelope: discriminated `SuccessCode` / `ErrorCode` enums (`VALIDATION_ERROR`,
+  `INTERNAL_SERVER_ERROR`, …), shared response middleware, optional `onError(error, ctx)` hook for upstream telemetry.
+- Dependencies: `@privy-io/node`, `@stellar/stellar-sdk@^15`, `hono`, `@hono/node-server`, `lru-cache`, `zod`. Node ≥ 20.
+
+### `@pollar/stellar-wallets-kit-adapter` — new package
+
+Plugs [Stellar Wallets Kit](https://stellarwalletskit.dev) into Pollar so additional wallet modules (xBull, Lobstr,
+Rabet, Albedo, Freighter, Hana, Klever, Bitget, CactusLink, Fordefi, HotWallet, OneKey, and opt-in Ledger / Trezor /
+WalletConnect) become reachable through Pollar's `WalletAdapter` contract without bundling the kit into `@pollar/core`.
+
+- `stellarWalletsKit(options?): WalletAdapterResolver` — factory you hand to `PollarClientConfig.walletAdapter`.
+  Options: `network` (defaults to `Networks.TESTNET`) and `modules` (defaults to the 12 zero-setup modules; pass an
+  explicit list to add Ledger / Trezor / WalletConnect, which need extra wiring).
+- `StellarWalletsKitAdapter` class — direct `WalletAdapter` implementation that delegates `connect` / `signTransaction` /
+  `signAuthEntry` to the kit, calling `setWallet(id)` before each operation so a single `StellarWalletsKit.init(...)`
+  can drive many modules.
+- One-shot lazy `init` — the kit is initialised the first time the resolver is invoked, so importing the package has
+  no startup cost.
+- Peer deps: `@creit.tech/stellar-wallets-kit@^2.0.0` and `@pollar/core@*`. The kit is **not** bundled; consumers bring
+  the version they want.
+
 ### Internal infra
 
-- New deps in `@pollar/core`: `@noble/curves@~1.9.7`, `@noble/hashes@~1.8.0` (pinned to patch range;
-  supply-chain-conscious — both packages publish npm provenance / sigstore signatures).
+- New direct dep in `@pollar/core`: `@noble/curves@~1.9.7` (pinned to patch range; supply-chain-conscious — the
+  package publishes npm provenance / sigstore signatures). `@noble/hashes@1.8.0` is pulled transitively through
+  `@noble/curves` and used by the Noble key-manager / DPoP proof builder.
 - New optional peer deps: `expo-secure-store >=12`, `react-native-keychain >=8`. Both marked
   `peerDependenciesMeta.optional=true`; web users never see them.
 - `tsup` build now produces three entries: `dist/index`, `dist/adapters/expo-secure-store`,
