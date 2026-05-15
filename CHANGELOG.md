@@ -117,6 +117,10 @@ fails.
   `sessionState.data.*` need to migrate to `pollarClient.getUserProfile()`.
 - **`walletAddress` simplified** — for both external and custodial wallets, derived from
   `sessionState.wallet.publicKey`.
+- **New: `SessionsModal`** — drop-in active-sessions UI. Lists every refresh-token family for the current user with
+  device metadata, marks the local session, and offers per-row revoke + a "Sign out everywhere" button. Available via
+  the new `openSessionsModal()` action on `usePollar()`. The pure presentational `SessionsModalTemplate` is exported
+  for consumers who want to swap the chrome while keeping the wiring.
 
 ### Internal infra
 

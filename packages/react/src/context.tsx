@@ -21,6 +21,7 @@ import { LoginModal } from './components/login-modal/LoginModal';
 import { ReceiveModal } from './components/receive-modal/ReceiveModal';
 import { RampWidget } from './components/ramp-widget/RampWidget';
 import { SendModal } from './components/send-modal/SendModal';
+import { SessionsModal } from './components/sessions-modal/SessionsModal';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
@@ -46,6 +47,8 @@ interface PollarContextValue {
   isAuthenticated: boolean;
   login: (options: PollarLoginOptions) => void;
   logout: () => void;
+  /** Open the active-sessions modal. */
+  openSessionsModal: () => void;
   appConfig: PollarConfig;
   styles: PollarStyles;
   // transactions
@@ -163,6 +166,7 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
   const [walletBalanceModalOpen, setWalletBalanceModalOpen] = useState(false);
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [receiveModalOpen, setReceiveModalOpen] = useState(false);
+  const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
 
   const adaptersRef = useRef(adapters);
   adaptersRef.current = adapters;
@@ -202,6 +206,8 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
         // send / receive
         openSendModal: () => setSendModalOpen(true),
         openReceiveModal: () => setReceiveModalOpen(true),
+        // sessions
+        openSessionsModal: () => setSessionsModalOpen(true),
         // network
         network: networkState.step === 'connected' ? networkState.network : 'testnet',
         setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
@@ -266,6 +272,11 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
       {receiveModalOpen && (
         <ModalErrorBoundary onClose={() => setReceiveModalOpen(false)}>
           <ReceiveModal onClose={() => setReceiveModalOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {sessionsModalOpen && (
+        <ModalErrorBoundary onClose={() => setSessionsModalOpen(false)}>
+          <SessionsModal onClose={() => setSessionsModalOpen(false)} />
         </ModalErrorBoundary>
       )}
     </PollarContext.Provider>

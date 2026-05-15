@@ -18,6 +18,7 @@ export { RouteDisplay } from './components/ramp-widget/RouteDisplay';
 export { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 export { SendModal } from './components/send-modal/SendModal';
 export { ReceiveModal } from './components/receive-modal/ReceiveModal';
+export { SessionsModal } from './components/sessions-modal/SessionsModal';
 
 // ─── Templates ────────────────────────────────────────────────────────────────
 export { LoginModalTemplate } from './components/login-modal/LoginModalTemplate';
@@ -36,3 +37,5 @@ export { SendModalTemplate } from './components/send-modal/SendModalTemplate';
 export type { SendModalTemplateProps } from './components/send-modal/SendModalTemplate';
 export { ReceiveModalTemplate } from './components/receive-modal/ReceiveModalTemplate';
 export type { ReceiveModalTemplateProps } from './components/receive-modal/ReceiveModalTemplate';
+export { SessionsModalTemplate } from './components/sessions-modal/SessionsModalTemplate';
+export type { SessionsModalTemplateProps, SessionsState } from './components/sessions-modal/SessionsModalTemplate';
