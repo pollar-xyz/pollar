@@ -16,10 +16,11 @@ import {
 } from '@pollar/core';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ModalErrorBoundary } from './components/commons';
+import { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
 import { KycModal } from './components/kyc-modal/KycModal';
 import { LoginModal } from './components/login-modal/LoginModal';
-import { ReceiveModal } from './components/receive-modal/ReceiveModal';
 import { RampWidget } from './components/ramp-widget/RampWidget';
+import { ReceiveModal } from './components/receive-modal/ReceiveModal';
 import { SendModal } from './components/send-modal/SendModal';
 import { SessionsModal } from './components/sessions-modal/SessionsModal';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
@@ -83,6 +84,8 @@ interface PollarContextValue {
   // send / receive
   openSendModal: () => void;
   openReceiveModal: () => void;
+  // distribution
+  openDistributionRulesModal: () => void;
   // adapters
   adapters?: PollarAdapters;
 }
@@ -167,6 +170,7 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [receiveModalOpen, setReceiveModalOpen] = useState(false);
   const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
+  const [distributionRulesModalOpen, setDistributionRulesModalOpen] = useState(false);
 
   const adaptersRef = useRef(adapters);
   adaptersRef.current = adapters;
@@ -208,6 +212,8 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
         openReceiveModal: () => setReceiveModalOpen(true),
         // sessions
         openSessionsModal: () => setSessionsModalOpen(true),
+        // distribution
+        openDistributionRulesModal: () => setDistributionRulesModalOpen(true),
         // network
         network: networkState.step === 'connected' ? networkState.network : 'testnet',
         setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
@@ -223,7 +229,18 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
         styles,
         adapters: adaptersRef.current,
       }) as PollarContextValue,
-    [walletAddress, pollarClient, getClient, transaction, txHistory, walletBalance, refreshWalletBalance, networkState, remoteConfig, styles],
+    [
+      walletAddress,
+      pollarClient,
+      getClient,
+      transaction,
+      txHistory,
+      walletBalance,
+      refreshWalletBalance,
+      networkState,
+      remoteConfig,
+      styles,
+    ],
   );
 
   return (
@@ -277,6 +294,11 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
       {sessionsModalOpen && (
         <ModalErrorBoundary onClose={() => setSessionsModalOpen(false)}>
           <SessionsModal onClose={() => setSessionsModalOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {distributionRulesModalOpen && (
+        <ModalErrorBoundary onClose={() => setDistributionRulesModalOpen(false)}>
+          <DistributionRulesModal onClose={() => setDistributionRulesModalOpen(false)} />
         </ModalErrorBoundary>
       )}
     </PollarContext.Provider>

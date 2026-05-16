@@ -19,6 +19,7 @@ export { WalletBalanceModal } from './components/wallet-balance-modal/WalletBala
 export { SendModal } from './components/send-modal/SendModal';
 export { ReceiveModal } from './components/receive-modal/ReceiveModal';
 export { SessionsModal } from './components/sessions-modal/SessionsModal';
+export { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
 
 // ─── Templates ────────────────────────────────────────────────────────────────
 export { LoginModalTemplate } from './components/login-modal/LoginModalTemplate';
@@ -39,3 +40,4 @@ export { ReceiveModalTemplate } from './components/receive-modal/ReceiveModalTem
 export type { ReceiveModalTemplateProps } from './components/receive-modal/ReceiveModalTemplate';
 export { SessionsModalTemplate } from './components/sessions-modal/SessionsModalTemplate';
 export type { SessionsModalTemplateProps, SessionsState } from './components/sessions-modal/SessionsModalTemplate';
+export { DistributionRulesModalTemplate } from './components/distribution-rules-modal/DistributionRulesModalTemplate';

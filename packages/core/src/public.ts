@@ -43,3 +43,6 @@ export { getKycStatus, getKycProviders, startKyc, resolveKyc, pollKycStatus } fr
 
 // ─── Ramps endpoints ──────────────────────────────────────────────────────────
 export { getRampsQuote, createOnRamp, createOffRamp, getRampTransaction, pollRampTransaction } from './api/endpoints/ramps';
+
+// ─── Distribution endpoints ───────────────────────────────────────────────────
+export { listDistributionRules, claimDistributionRule } from './api/endpoints/distribution';

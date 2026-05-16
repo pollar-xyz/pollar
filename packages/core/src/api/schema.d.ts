@@ -213,9 +213,18 @@ export interface paths {
         trace?: never;
     };
     "/auth/logout": {
-        parameters: { query?: never; header?: never; path?: never; cookie?: never };
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         get?: never;
         put?: never;
+        /**
+         * Revoke the current session (or all sessions)
+         * @description Server-side logout. Default behavior revokes the refresh-token family bound to the current access token. Pass `{"everywhere":true}` to revoke every active family for the authenticated user (logout from all devices).
+         */
         post: operations["postAuthLogout"];
         delete?: never;
         options?: never;
@@ -224,7 +233,16 @@ export interface paths {
         trace?: never;
     };
     "/auth/sessions": {
-        parameters: { query?: never; header?: never; path?: never; cookie?: never };
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List active sessions for the authenticated user
+         * @description Returns one row per active refresh-token family with the metadata captured at issuance (user agent, hashed IP, optional device label). The session whose `current: true` flag matches the access token in use can be highlighted in the UI.
+         */
         get: operations["getAuthSessions"];
         put?: never;
         post?: never;
@@ -235,11 +253,17 @@ export interface paths {
         trace?: never;
     };
     "/auth/sessions/{familyId}": {
-        parameters: { query?: never; header?: never; path?: never; cookie?: never };
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         get?: never;
         put?: never;
         post?: never;
-        delete: operations["deleteAuthSessionByFamilyId"];
+        /** Revoke a specific session (refresh-token family) */
+        delete: operations["deleteAuthSessionsByFamilyId"];
         options?: never;
         head?: never;
         patch?: never;
@@ -519,6 +543,46 @@ export interface paths {
         get: operations["getRampsTransactionByTxId"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/distribution/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List distribution rules
+         * @description Returns every distribution rule defined for the calling application, each decorated with a `claimable` flag and (when not claimable) a `reason` ErrorCode the SDK can map to a UI message (expired, already claimed in window, exhausted, etc.).
+         */
+        get: operations["getDistributionRules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/distribution/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim a distribution rule
+         * @description Executes a claim against the given rule for the authenticated sdk-user. The server runs the same claimability checks as GET /distribution/rules against fresh counts; only the txHash and amount are returned on success.
+         */
+        post: operations["postDistributionClaim"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1328,6 +1392,159 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    postAuthLogout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    everywhere?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Sessions revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_LOGOUT_SUCCESS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            revoked: number;
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    getAuthSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sessions list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_SESSIONS_LIST";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            sessions: {
+                                familyId: string;
+                                createdAt: string;
+                                lastUsedAt: string | null;
+                                userAgent: string | null;
+                                ipHash: string | null;
+                                deviceLabel: string | null;
+                                current: boolean;
+                                expiresAt: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    deleteAuthSessionsByFamilyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                familyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_SESSION_REVOKED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            revoked: number;
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2564,86 +2781,137 @@ export interface operations {
             };
         };
     };
-    postAuthLogout: {
-        parameters: { query?: never; header?: never; path?: never; cookie?: never };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    everywhere?: boolean;
-                };
-            };
+    getDistributionRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        responses: {
-            200: {
-                headers: { [name: string]: unknown };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_LOGOUT_SUCCESS";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            revoked: number;
-                        };
-                    };
-                };
-            };
-        };
-    };
-    getAuthSessions: {
-        parameters: { query?: never; header?: never; path?: never; cookie?: never };
         requestBody?: never;
         responses: {
+            /** @description List of distribution rules with claimability verdict per rule */
             200: {
-                headers: { [name: string]: unknown };
+                headers: {
+                    [name: string]: unknown;
+                };
                 content: {
                     "application/json": {
                         /** @constant */
-                        code: "SDK_SESSIONS_LIST";
+                        code: "SDK_DISTRIBUTION_RULES_LIST";
                         /** @constant */
                         success: true;
                         content: {
-                            sessions: {
-                                familyId: string;
-                                createdAt: string;
-                                lastUsedAt: string | null;
-                                userAgent: string | null;
-                                ipHash: string | null;
-                                deviceLabel: string | null;
-                                current: boolean;
-                                expiresAt: string;
+                            rules: {
+                                id: string;
+                                name: string;
+                                assetCode: string;
+                                amount: string;
+                                /** @enum {string} */
+                                period: "DAY" | "DAY_CALENDAR" | "WEEK" | "MONTH" | "MONTH_CALENDAR" | "LIFETIME";
+                                validFrom: string | null;
+                                validUntil: string | null;
+                                claimable: boolean;
+                                reason: string | null;
                             }[];
                         };
                     };
                 };
             };
-        };
-    };
-    deleteAuthSessionByFamilyId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: { familyId: string };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: { [name: string]: unknown };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
                 content: {
                     "application/json": {
                         /** @constant */
-                        code: "SDK_SESSION_REVOKED";
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    postDistributionClaim: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    ruleId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Claim succeeded — payment submitted to Stellar */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_DISTRIBUTION_CLAIM_OK";
                         /** @constant */
                         success: true;
                         content: {
-                            revoked: number;
+                            ruleId: string;
+                            assetCode: string;
+                            amount: string;
+                            txHash: string | null;
                         };
                     };
                 };
             };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Rule not found, user has no wallet, or application has no distribution wallet */
             404: {
-                headers: { [name: string]: unknown };
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        error: string;
+                    };
+                };
+            };
+            /** @description Rule not claimable (disabled, expired, exhausted, rate-limited) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
                 content: {
                     "application/json": {
                         /** @constant */

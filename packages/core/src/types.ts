@@ -218,6 +218,26 @@ export type RampTxStatus = RampsTransactionResponse['status'];
 export type RampDirection = RampsTransactionResponse['direction'];
 export type PaymentInstructions = RampsOnrampResponse['paymentInstructions'];
 
+// ─── Distribution types ───────────────────────────────────────────────────────
+
+export type DistributionRule =
+  pollarPaths['/distribution/rules']['get']['responses'][200]['content']['application/json']['content']['rules'][number];
+
+export type RulePeriod = DistributionRule['period'];
+
+export type DistributionClaimBody = NonNullable<
+  pollarPaths['/distribution/claim']['post']['requestBody']
+>['content']['application/json'];
+
+export type DistributionClaimContent =
+  pollarPaths['/distribution/claim']['post']['responses'][200]['content']['application/json']['content'];
+
+export type DistributionRulesState =
+  | { step: 'idle' }
+  | { step: 'loading' }
+  | { step: 'loaded'; rules: DistributionRule[] }
+  | { step: 'error'; message: string };
+
 // ─── Adapter types ────────────────────────────────────────────────────────────
 
 export type AdapterFn<TParams = unknown> = (params: TParams) => Promise<{ unsignedTransaction: string }>;
