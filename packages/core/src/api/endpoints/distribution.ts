@@ -10,7 +10,7 @@ import type { PollarApiClient } from '../client';
 export async function listDistributionRules(api: PollarApiClient): Promise<DistributionRule[]> {
   const { data, error } = await api.GET('/distribution/rules');
   if (!data?.content || error) {
-    throw new Error((error as { error?: string } | undefined)?.error ?? 'Failed to list distribution rules');
+    throw new Error((error as { code?: string; error?: string } | undefined)?.code ?? (error as { code?: string; error?: string } | undefined)?.error ?? 'Failed to list distribution rules');
   }
   return data.content.rules;
 }
@@ -26,7 +26,7 @@ export async function claimDistributionRule(
 ): Promise<DistributionClaimContent> {
   const { data, error } = await api.POST('/distribution/claim', { body });
   if (!data?.content || error) {
-    throw new Error((error as { error?: string } | undefined)?.error ?? 'Failed to claim distribution rule');
+    throw new Error((error as { code?: string; error?: string } | undefined)?.code ?? (error as { code?: string; error?: string } | undefined)?.error ?? 'Failed to claim distribution rule');
   }
   return data.content;
 }

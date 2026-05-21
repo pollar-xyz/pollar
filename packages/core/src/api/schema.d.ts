@@ -666,7 +666,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -679,7 +679,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -692,7 +692,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -754,7 +754,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -767,7 +767,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -780,7 +780,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -793,7 +793,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -828,7 +828,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -841,7 +841,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -854,7 +854,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -867,7 +867,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -901,7 +901,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -914,7 +914,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -927,7 +927,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -977,7 +977,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -990,7 +990,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1003,7 +1003,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1016,7 +1016,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1064,7 +1064,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1077,7 +1077,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1090,7 +1090,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1103,7 +1103,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1152,7 +1152,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1165,7 +1165,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1178,7 +1178,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1191,7 +1191,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1283,7 +1283,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1296,7 +1296,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1309,7 +1309,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1322,7 +1322,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1373,7 +1373,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1386,7 +1386,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1399,7 +1399,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1412,7 +1412,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1459,7 +1459,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1509,7 +1509,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1552,7 +1552,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1565,7 +1565,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1622,7 +1622,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1635,7 +1635,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1648,7 +1648,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1683,7 +1683,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1934,7 +1934,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1947,7 +1947,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -1960,7 +1960,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2014,7 +2014,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2027,7 +2027,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2076,7 +2076,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2089,7 +2089,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2152,7 +2152,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2165,7 +2165,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2223,7 +2223,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2236,7 +2236,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2284,7 +2284,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2297,7 +2297,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2310,7 +2310,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2359,7 +2359,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2372,7 +2372,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2427,7 +2427,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2440,7 +2440,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2453,7 +2453,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2511,7 +2511,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2524,7 +2524,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2586,7 +2586,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2599,7 +2599,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2612,7 +2612,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2671,7 +2671,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2684,7 +2684,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2697,7 +2697,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2749,7 +2749,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2762,7 +2762,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2775,7 +2775,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2827,7 +2827,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2877,7 +2877,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2890,7 +2890,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2903,7 +2903,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
@@ -2916,7 +2916,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: false;
-                        error: string;
+                        code: string;
                     };
                 };
             };
