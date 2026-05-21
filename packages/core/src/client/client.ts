@@ -1,4 +1,5 @@
 import { createApiClient, PollarApiClient } from '../api/client';
+import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
 import {
   createOffRamp,
@@ -17,6 +18,9 @@ import type { Storage } from '../storage/types';
 import {
   AUTH_ERROR_CODES,
   AuthState,
+  DistributionClaimBody,
+  DistributionClaimContent,
+  DistributionRule,
   KycLevel,
   KycStartBody,
   KycStartResponse,
@@ -60,9 +64,6 @@ import {
 
 const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
 
-/** Header marker so retried requests don't loop on persistent 401s. */
-const RETRIED_HEADER = 'X-Pollar-Retried';
-
 function warnServerSide(method: string): void {
   console.warn(
     `[PollarClient] ${method}() called server-side — browser APIs unavailable. Use PollarClient only in Client Components.`,
@@ -102,6 +103,13 @@ export class PollarClient {
   private _profile: PollarUserProfile | null = null;
   /** Last `DPoP-Nonce` we saw from a server response. Carried into the next proof. */
   private _dpopNonce: string | null = null;
+  /**
+   * Snapshot of each in-flight request's body, taken in `onRequest` before
+   * `fetch()` consumes the stream. Needed because `Request.clone()` throws
+   * once the body is disturbed, so the auto-retry path (DPoP nonce challenge
+   * / 401 refresh) must rebuild the request from scratch instead of cloning.
+   */
+  private _requestBodyCache = new WeakMap<Request, ArrayBuffer>();
   /** Singleton in-flight refresh — concurrent 401s coalesce into one /auth/refresh call. */
   private _refreshPromise: Promise<void> | null = null;
   private _storageEventHandler: ((e: StorageEvent) => void) | null = null;
@@ -202,6 +210,15 @@ export class PollarClient {
       onRequest: async ({ request }: { request: Request }) => {
         request.headers.set('x-pollar-api-key', self.apiKey);
         await self._initialized;
+        // Cache the body before fetch() disturbs the stream — retries can't
+        // call request.clone() once the body is consumed.
+        if (request.body !== null) {
+          try {
+            self._requestBodyCache.set(request, await request.clone().arrayBuffer());
+          } catch (err) {
+            console.warn('[PollarClient] Could not snapshot request body for retry', err);
+          }
+        }
         // The refresh endpoint must not wait on its own in-flight refresh —
         // that would deadlock the singleton. Other requests wait so they
         // pick up the freshly-rotated token.
@@ -237,7 +254,6 @@ export class PollarClient {
         if (newNonce) self._dpopNonce = newNonce;
 
         if (response.status !== 401) return response;
-        if (request.headers.get(RETRIED_HEADER)) return response;
         // Don't trigger refresh from inside the refresh endpoint itself.
         if (request.url.includes('/auth/refresh')) return response;
 
@@ -275,19 +291,36 @@ export class PollarClient {
   }
 
   private async _retryRequest(originalRequest: Request): Promise<Response> {
-    const clone = originalRequest.clone();
-    clone.headers.set(RETRIED_HEADER, '1');
+    // Rebuild instead of clone(): the original's body stream was consumed by
+    // the first fetch() and clone() would throw `Request body is already used`.
+    // openapi-fetch runs onResponse a single time per request, so no
+    // RETRIED_HEADER guard is needed — the retry's response is returned to
+    // the caller directly and never re-enters this middleware.
+    const headers = new Headers(originalRequest.headers);
+
     const accessToken = this._session?.token?.accessToken;
     if (accessToken) {
-      const proof = await this._buildProofForRequest(clone, accessToken);
+      const proof = await this._buildProofForRequest(originalRequest, accessToken);
       if (proof) {
-        clone.headers.set('Authorization', `DPoP ${accessToken}`);
-        clone.headers.set('DPoP', proof);
+        headers.set('Authorization', `DPoP ${accessToken}`);
+        headers.set('DPoP', proof);
       } else {
-        clone.headers.set('Authorization', `Bearer ${accessToken}`);
+        headers.set('Authorization', `Bearer ${accessToken}`);
       }
     }
-    return fetch(clone);
+
+    const cachedBody = this._requestBodyCache.get(originalRequest);
+    const retried = new Request(originalRequest.url, {
+      method: originalRequest.method,
+      headers,
+      body: cachedBody ?? null,
+      credentials: originalRequest.credentials,
+      mode: originalRequest.mode,
+      redirect: originalRequest.redirect,
+      referrer: originalRequest.referrer,
+      integrity: originalRequest.integrity,
+    });
+    return fetch(retried);
   }
 
   // ─── Refresh (race-safe singleton) ───────────────────────────────────────
@@ -680,7 +713,8 @@ export class PollarClient {
         const details = (error as { details?: string } | undefined)?.details;
         this._setTransactionState({ step: 'error', ...(details && { details }) });
       }
-    } catch {
+    } catch (err) {
+      console.error('[PollarClient] buildTx failed', err);
       this._setTransactionState({ step: 'error' });
     }
   }
@@ -794,6 +828,16 @@ export class PollarClient {
 
   pollRampTransaction(txId: string, opts?: { intervalMs?: number; timeoutMs?: number }): Promise<RampTxStatus> {
     return pollRampTransaction(this._api, txId, opts);
+  }
+
+  // ─── Distribution ─────────────────────────────────────────────────────────
+
+  listDistributionRules(): Promise<DistributionRule[]> {
+    return listDistributionRules(this._api);
+  }
+
+  claimDistributionRule(body: DistributionClaimBody): Promise<DistributionClaimContent> {
+    return claimDistributionRule(this._api, body);
   }
 
   private _setTxHistoryState(next: TxHistoryState): void {

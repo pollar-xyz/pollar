@@ -1,0 +1,105 @@
+/* ---- Distribution rules modal ---- */
+.pollar-dist-modal {
+    max-width: 460px;
+}
+
+.pollar-dist-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    max-height: 420px;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+}
+
+/* ---- Rule card ---- */
+.pollar-dist-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    background: var(--pollar-input-bg);
+    border: 1px solid var(--pollar-border);
+    border-radius: var(--pollar-card-border-radius, 10px);
+    padding: 0.875rem 1rem;
+}
+
+.pollar-dist-item[data-claimable="false"] {
+    opacity: 0.7;
+}
+
+.pollar-dist-item-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.pollar-dist-item-name {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--pollar-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pollar-dist-item-amount {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: var(--pollar-text);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.pollar-dist-item-asset {
+    font-size: 0.75rem;
+    color: var(--pollar-muted);
+    font-weight: 600;
+    margin-left: 2px;
+}
+
+.pollar-dist-item-meta {
+    font-size: 0.75rem;
+    color: var(--pollar-muted);
+    display: flex;
+    gap: 0.375rem;
+    flex-wrap: wrap;
+}
+
+.pollar-dist-item-action {
+    margin-top: 0.375rem;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.pollar-dist-claim-btn {
+    flex: 0 0 auto;
+    height: 32px;
+    padding: 0 0.875rem;
+    font-size: 0.8125rem;
+}
+
+.pollar-dist-item-status {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.pollar-dist-item-status[data-kind="claimed"] {
+    background: rgba(22, 163, 74, 0.12);
+    color: var(--pollar-success-text, #16a34a);
+}
+
+.pollar-dist-item-status[data-kind="unavailable"] {
+    background: rgba(107, 114, 128, 0.12);
+    color: var(--pollar-muted);
+}
+
+.pollar-dist-item-error {
+    font-size: 0.75rem;
+    color: var(--pollar-error-text, #dc2626);
+}

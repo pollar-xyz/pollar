@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.7.1
+
+Patch release on top of 0.7.0 — adds a distribution-rules surface to `@pollar/core` and
+`@pollar/react`, and fixes the auto-retry path that silently broke for any request with
+a body (POST/PUT/PATCH) once the original `Request.body` stream had been consumed by
+`fetch()`.
+
+### `@pollar/core` — new features
+
+- **Distribution rules.** Two new endpoints on `PollarClient`:
+    - `listDistributionRules(): Promise<DistributionRule[]>` — returns the rules visible
+      to the calling sdk-user, each decorated with `claimable: boolean` and (when not
+      claimable) a `reason` `ErrorCode` the UI maps to a friendly message.
+    - `claimDistributionRule({ ruleId }): Promise<DistributionClaimContent>` — claims a
+      rule for the authenticated user and returns the Stellar tx hash once the payment
+      is submitted.
+- New types: `DistributionRule`, `RulePeriod`, `DistributionClaimBody`,
+  `DistributionClaimContent`, `DistributionRulesState`.
+- OpenAPI schema regenerated against `sdk-api` — adds `/distribution/rules` and
+  `/distribution/claim` paths and refreshes the `409` envelope shape on existing
+  operations.
+
+### `@pollar/core` — fixes
+
+- **Auto-retry on `401` / DPoP nonce challenge now works for POST/PUT/PATCH.** The
+  previous implementation called `originalRequest.clone()` inside `_retryRequest`,
+  which throws `Request body is already used` once `fetch()` has consumed the body
+  stream — meaning every request with a body silently failed to retry after a refresh
+  or a `use_dpop_nonce` challenge. `onRequest` now snapshots the body into a
+  `WeakMap<Request, ArrayBuffer>` *before* `fetch` disturbs it, and `_retryRequest`
+  builds a brand-new `Request` with the cached body, fresh headers, and a fresh DPoP
+  proof. The `X-Pollar-Retried` header guard was dropped — `openapi-fetch` only runs
+  `onResponse` once per request, so it was redundant.
+- `buildTx` no longer swallows its catch silently; the underlying error is logged via
+  `console.error` before the transaction state flips to `error`.
+
+### `@pollar/react` — new features
+
+- **New: `DistributionRulesModal`.** Drop-in UI that lists every distribution rule
+  available to the logged-in user, with a per-row claim button. Handles loading,
+  empty / error states, per-row `claiming` spinner, per-row claim errors, and a
+  "claimed" badge once a claim succeeds. Available via the new
+  `openDistributionRulesModal()` action on `usePollar()`. The pure presentational
+  `DistributionRulesModalTemplate` is exported alongside for consumers who want to swap
+  the chrome while keeping the wiring.
+
+### Internal infra
+
+- New `stellar-wallets-kit-adapter:publish` script in the root `package.json` so the
+  adapter ships through the same `npm publish --access public` path as the other
+  packages.
+- Removed stale top-level `yalc.lock`.
+
 ## 0.7.0
 
 > **⚠️ BREAKING CHANGE.** This release ships sender-constrained tokens via DPoP (RFC 9449). The persisted session shape,

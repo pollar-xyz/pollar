@@ -18,7 +18,7 @@ import type {
  */
 export async function getRampsQuote(api: PollarApiClient, query: RampsQuoteQuery): Promise<RampsQuoteResponse> {
   const { data, error } = await api.GET('/ramps/quote', { params: { query } });
-  if (!data?.content || error) throw new Error((error as any)?.error ?? 'Failed to get ramp quotes');
+  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to get ramp quotes');
   return data.content;
 }
 
@@ -30,7 +30,7 @@ export async function getRampsQuote(api: PollarApiClient, query: RampsQuoteQuery
  */
 export async function createOnRamp(api: PollarApiClient, body: RampsOnrampBody): Promise<RampsOnrampResponse> {
   const { data, error } = await api.POST('/ramps/onramp', { body });
-  if (!data?.content || error) throw new Error((error as any)?.error ?? 'Failed to create onramp');
+  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to create onramp');
   return data.content;
 }
 
@@ -41,7 +41,7 @@ export async function createOnRamp(api: PollarApiClient, body: RampsOnrampBody):
  */
 export async function createOffRamp(api: PollarApiClient, body: RampsOfframpBody): Promise<RampsOfframpResponse> {
   const { data, error } = await api.POST('/ramps/offramp', { body });
-  if (!data?.content || error) throw new Error((error as any)?.error ?? 'Failed to create offramp');
+  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to create offramp');
   return data.content;
 }
 
@@ -51,7 +51,7 @@ export async function createOffRamp(api: PollarApiClient, body: RampsOfframpBody
  */
 export async function getRampTransaction(api: PollarApiClient, txId: string): Promise<RampsTransactionResponse> {
   const { data, error } = await api.GET('/ramps/transaction/{txId}', { params: { path: { txId } } });
-  if (!data?.content || error) throw new Error((error as any)?.error ?? 'Failed to get transaction');
+  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to get transaction');
   return data.content;
 }
 
