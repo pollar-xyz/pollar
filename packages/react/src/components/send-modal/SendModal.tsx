@@ -55,12 +55,20 @@ export function SendModal({ onClose }: SendModalProps) {
         : 'public';
   const explorerUrl = hash ? `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}` : null;
 
-  const isInProgress = transaction.step === 'building' || transaction.step === 'signing';
+  const IN_FLIGHT_STEPS = [
+    'building',
+    'signing',
+    'submitting',
+    'submitted',
+    'signing-submitting',
+    'building-signing-submitting',
+  ] as const;
+  const isInProgress = (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step);
   const showBack =
     step === 'tx' && (transaction.step === 'error' || transaction.step === 'success') && !isInProgress;
 
   const txTitle =
-    transaction.step === 'signing'
+    isInProgress
       ? 'Sending…'
       : transaction.step === 'success'
         ? 'Sent!'
