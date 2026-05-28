@@ -8,7 +8,7 @@ import type { KeyManager } from '../keys/types';
 import { hashApiKey } from '../lib/api-key-hash';
 import { StellarClient, StellarNetwork } from '../stellar/StellarClient';
 import { defaultStorage } from '../storage/autodetect';
-import type { Storage } from '../storage/types';
+import type { OnStorageDegrade, Storage, StorageDegradeReason } from '../storage/types';
 import {
   AUTH_ERROR_CODES,
   AuthState,
@@ -117,6 +117,15 @@ export class PollarClient {
   private _authStateListeners = new Set<(state: AuthState) => void>();
   private _networkState: NetworkState = { step: 'idle' };
   private _networkStateListeners = new Set<(state: NetworkState) => void>();
+  /**
+   * Latched once the storage adapter degrades. We dedupe (the adapter only
+   * fires once anyway) and use it to replay state to late-subscribers — same
+   * pattern as `onAuthStateChange` replaying `_authState` on subscribe.
+   * Only populated when the SDK constructed the default storage adapter; if
+   * the consumer passes `config.storage`, they own degradation notifications.
+   */
+  private _storageDegraded: { reason: StorageDegradeReason; error?: unknown } | null = null;
+  private _storageDegradeListeners = new Set<OnStorageDegrade>();
 
   private _walletAdapter: WalletAdapter | null = null;
   private readonly _walletAdapterResolver: WalletAdapterResolver | null;
@@ -128,7 +137,16 @@ export class PollarClient {
     this.basePath = `${config.baseUrl || 'https://sdk.api.pollar.xyz'}/v1`;
 
     this._storage =
-      config.storage ?? defaultStorage(config.onStorageDegrade ? { onDegrade: config.onStorageDegrade } : undefined);
+      config.storage ??
+      defaultStorage({
+        onDegrade: (reason, error) => {
+          // Forward to the legacy one-shot callback (back-compat) and to any
+          // subscribers added via `client.onStorageDegrade(cb)`. Both fire
+          // exactly once because the underlying adapter dedupes.
+          config.onStorageDegrade?.(reason, error);
+          this._dispatchStorageDegrade(reason, error);
+        },
+      });
     this._keyManager = config.keyManager ?? defaultKeyManager(this._storage, config.apiKey);
     this._walletAdapterResolver = config.walletAdapter ?? null;
     this._deviceLabel = config.deviceLabel;
@@ -420,6 +438,40 @@ export class PollarClient {
     this._authStateListeners.add(cb);
     cb(this._authState);
     return () => this._authStateListeners.delete(cb);
+  }
+
+  /**
+   * Subscribe to persistent-storage degradation (Safari private mode,
+   * sandboxed iframes, quota errors, etc.). The SDK keeps running off
+   * in-memory storage after degrade, but sessions won't survive reload — a
+   * host UI typically wants to show "your session won't be saved" so the
+   * user isn't blindsided after a refresh.
+   *
+   * Fires at most once per client lifetime (the underlying adapter dedupes).
+   * Late subscribers receive the latched state synchronously on subscribe.
+   *
+   * Only fires when the SDK constructs the default storage adapter. If you
+   * pass a custom `config.storage`, wire your own notification path through
+   * that adapter's API — the SDK has no hook into it.
+   */
+  onStorageDegrade(cb: OnStorageDegrade): () => void {
+    this._storageDegradeListeners.add(cb);
+    if (this._storageDegraded) {
+      cb(this._storageDegraded.reason, this._storageDegraded.error);
+    }
+    return () => this._storageDegradeListeners.delete(cb);
+  }
+
+  private _dispatchStorageDegrade(reason: StorageDegradeReason, error?: unknown): void {
+    if (this._storageDegraded) return;
+    this._storageDegraded = { reason, error };
+    for (const cb of this._storageDegradeListeners) {
+      try {
+        cb(reason, error);
+      } catch (err) {
+        console.error('[PollarClient] onStorageDegrade listener threw', err);
+      }
+    }
   }
 
   /** PII (email, names, avatar, providers). Held in memory only — never persisted. */

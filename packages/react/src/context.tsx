@@ -3,6 +3,7 @@
 import {
   BuildOutcome,
   NetworkState,
+  OnStorageDegrade,
   PollarAdapters,
   PollarClient,
   PollarClientConfig,
@@ -128,10 +129,27 @@ interface PollarProviderProps {
     renderWallets?: RenderWalletsSlot;
   };
   adapters?: PollarAdapters;
+  /**
+   * Notified when persistent storage silently degrades to in-memory mode
+   * (Safari private browsing quota errors, sandboxed iframes, etc.). Use this
+   * to surface a UI hint that the session won't survive a reload, log to
+   * telemetry, or fall back to a different storage strategy.
+   *
+   * Fires at most once per provider lifetime; late mounts get the latched
+   * state replayed on subscribe.
+   */
+  onStorageDegrade?: OnStorageDegrade;
   children: ReactNode;
 }
 
-export function PollarProvider({ client, appConfig: appConfigProp, ui, adapters, children }: PollarProviderProps) {
+export function PollarProvider({
+  client,
+  appConfig: appConfigProp,
+  ui,
+  adapters,
+  onStorageDegrade,
+  children,
+}: PollarProviderProps) {
   const [pollarClient] = useState<PollarClient>(() =>
     client instanceof PollarClient ? client : new PollarClient(client),
   );
@@ -159,6 +177,11 @@ export function PollarProvider({ client, appConfig: appConfigProp, ui, adapters,
       setNetworkState(state);
     });
   }, [pollarClient]);
+
+  useEffect(() => {
+    if (!onStorageDegrade) return;
+    return pollarClient.onStorageDegrade(onStorageDegrade);
+  }, [pollarClient, onStorageDegrade]);
 
   useEffect(() => {
     return pollarClient.onAuthStateChange((authState) => {
