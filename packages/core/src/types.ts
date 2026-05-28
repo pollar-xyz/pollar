@@ -65,6 +65,14 @@ export interface PollarClientConfig {
    */
   walletAdapter?: WalletAdapterResolver;
   /**
+   * Maximum time (ms) the SDK waits for a `walletAdapter` resolver to return.
+   * Guards against a broken extension bridge (e.g. Freighter content-script
+   * down) hanging the login flow forever. The resolver only constructs the
+   * adapter object — it does NOT include the user-facing approval step — so
+   * a few seconds is plenty. Defaults to 5000.
+   */
+  walletResolverTimeoutMs?: number;
+  /**
    * Optional human-friendly label sent at /auth/login time and recorded on
    * the server-side refresh-token row so the user can identify it in the
    * "active sessions" UI (e.g. "iPhone — Safari", "Mac — Chrome 126").
@@ -194,6 +202,7 @@ export const AUTH_ERROR_CODES = {
   AUTH_FAILED: 'AUTH_FAILED',
   WALLET_CONNECT_FAILED: 'WALLET_CONNECT_FAILED',
   WALLET_AUTH_FAILED: 'WALLET_AUTH_FAILED',
+  WALLET_RESOLVER_TIMEOUT: 'WALLET_RESOLVER_TIMEOUT',
   UNEXPECTED_ERROR: 'UNEXPECTED_ERROR',
 } as const;
 

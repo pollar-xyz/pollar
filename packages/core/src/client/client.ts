@@ -129,6 +129,7 @@ export class PollarClient {
 
   private _walletAdapter: WalletAdapter | null = null;
   private readonly _walletAdapterResolver: WalletAdapterResolver | null;
+  private readonly _walletResolverTimeoutMs: number;
   private _loginController: AbortController | null = null;
 
   constructor(config: PollarClientConfig) {
@@ -149,6 +150,7 @@ export class PollarClient {
       });
     this._keyManager = config.keyManager ?? defaultKeyManager(this._storage, config.apiKey);
     this._walletAdapterResolver = config.walletAdapter ?? null;
+    this._walletResolverTimeoutMs = config.walletResolverTimeoutMs ?? 5000;
     this._deviceLabel = config.deviceLabel;
 
     this._api = createApiClient(this.basePath);
@@ -1276,7 +1278,27 @@ export class PollarClient {
    */
   private async _resolveWalletAdapter(id: WalletId): Promise<WalletAdapter> {
     if (this._walletAdapterResolver) {
-      return Promise.resolve(this._walletAdapterResolver(id));
+      // Race the resolver against a timeout. A broken extension bridge can
+      // leave `walletAdapterResolver()` pending forever; without this the
+      // entire login flow would hang with no signal to the consumer. The
+      // resolver only constructs the adapter object (not the user-facing
+      // approval), so 5s is generous.
+      const timeoutMs = this._walletResolverTimeoutMs;
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(
+            Object.assign(new Error(`[PollarClient] Wallet adapter resolver for "${id}" timed out after ${timeoutMs}ms`), {
+              code: AUTH_ERROR_CODES.WALLET_RESOLVER_TIMEOUT,
+            }),
+          );
+        }, timeoutMs);
+      });
+      try {
+        return await Promise.race([Promise.resolve(this._walletAdapterResolver(id)), timeoutPromise]);
+      } finally {
+        if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+      }
     }
     if (id === WalletType.FREIGHTER) return new FreighterAdapter();
     if (id === WalletType.ALBEDO) return new AlbedoAdapter();
@@ -1289,6 +1311,19 @@ export class PollarClient {
     if (error instanceof Error && error.name === 'AbortError') {
       console.info('[PollarClient] Login cancelled');
       this._setAuthState({ step: 'idle' });
+      return;
+    }
+    if (
+      error instanceof Error &&
+      (error as { code?: string }).code === AUTH_ERROR_CODES.WALLET_RESOLVER_TIMEOUT
+    ) {
+      console.error('[PollarClient]', error.message);
+      this._setAuthState({
+        step: 'error',
+        previousStep: this._authState.step,
+        message: error.message,
+        errorCode: AUTH_ERROR_CODES.WALLET_RESOLVER_TIMEOUT,
+      });
       return;
     }
     console.error('[PollarClient] Unexpected error in auth flow', error);
