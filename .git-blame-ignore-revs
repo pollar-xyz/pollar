@@ -3,4 +3,10 @@
 # GitHub honors this file automatically in the web UI.
 
 # Whole-repo prettier formatting pass (no behavior change)
-d7a615a66fee3fea9c237e95638c68a08e56379e
+870a7ee213fa156cfbaf98562a67069932b166ff
+
+# Prettier formatting across react package (no behavior change)
+f2517dd0c0bc2ff65528c3855ce61bafc44a7aed
+
+# Prettier formatting across core, adapters, tests, and docs (no behavior change)
+c2c2f31c6934cd9b3748786bb9db336c20f3eef1
