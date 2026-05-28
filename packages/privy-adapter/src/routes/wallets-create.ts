@@ -57,8 +57,10 @@ export const createWalletsCreateRoute = (deps: AdapterDeps) => {
       return c.var.content(SuccessCode.PRIVY_ADAPTER_WALLET_EXISTS, { address: stellar.address });
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
+      // Raw error to `onError` (server-side logs); HTTP response is code-only
+      // so Privy internals don't leak to the caller.
       deps.config.onError?.(err, { endpoint: 'POST /wallets/create', body: parsed });
-      return c.var.error(ErrorCode.WALLET_CREATION_FAILED, 502, { reason: err.message });
+      return c.var.error(ErrorCode.WALLET_CREATION_FAILED, 502);
     }
   });
 

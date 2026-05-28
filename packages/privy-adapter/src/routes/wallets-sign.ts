@@ -81,8 +81,12 @@ export const createWalletsSignRoute = (deps: AdapterDeps) => {
       return c.var.content(SuccessCode.PRIVY_ADAPTER_TX_SIGNED, { signedTxXdr });
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
+      // Raw error goes to the host's `onError` callback for server-side logging
+      // (Privy SDK errors can include user IDs, rate-limit context, internal
+      // identifiers — none of which the caller should see). The HTTP response
+      // is intentionally code-only.
       deps.config.onError?.(err, { endpoint: 'POST /wallets/sign', body: parsed });
-      return c.var.error(ErrorCode.TX_SIGN_FAILED, 502, { reason: err.message });
+      return c.var.error(ErrorCode.TX_SIGN_FAILED, 502);
     }
   });
 

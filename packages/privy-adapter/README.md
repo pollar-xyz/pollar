@@ -1,5 +1,7 @@
 # @pollar/privy-adapter
 
+> **⚠️ Server-side only.** This package starts an HTTP server with `@hono/node-server` and reads `PRIVY_APP_SECRET` / `POLLAR_API_SECRET` from the host environment. Importing it in a browser, React Native, or any other client-side bundle will leak credentials. The bundler will also blow up on `node:crypto` / `@hono/node-server`. If you need a browser-side Privy integration, use the Privy client SDK directly — not this package.
+
 Stateless HTTP proxy that lets Pollar sign Stellar transactions through your Privy account, without your Privy `APP_SECRET` ever leaving your infrastructure.
 
 You install this package in **your own backend**, point Pollar at your adapter's URL, and it brokers each call to Privy on demand. The adapter holds no state, has no database, and exposes a small set of HTTP endpoints authenticated with a single Bearer token issued by Pollar.
