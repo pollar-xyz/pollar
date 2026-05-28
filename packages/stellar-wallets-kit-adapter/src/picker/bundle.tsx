@@ -36,14 +36,14 @@ export interface StellarWalletsKitBundle {
  * ```
  */
 export function createStellarWalletsKitBundle(
-  options: StellarWalletsKitAdapterOptions = {},
+  options: StellarWalletsKitAdapterOptions,
 ): StellarWalletsKitBundle {
   const walletAdapter = stellarWalletsKit(options);
   const renderWallets: RenderWalletsSlot = (slot) => (
     <KitWalletPicker
       onConnect={slot.onConnect}
       authState={slot.authState}
-      {...(options.network !== undefined && { network: options.network })}
+      network={options.network}
       {...(options.modules !== undefined && { modules: options.modules })}
       {...(options.picker !== undefined && { picker: options.picker })}
     />

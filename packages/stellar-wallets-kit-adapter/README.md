@@ -49,7 +49,7 @@ The kit is a global singleton. `stellarWalletsKit(...)` returns a resolver and `
 
 ## Default wallets
 
-Calling `stellarWalletsKit()` with no `modules` argument enables every module that loads without extra configuration:
+Calling `stellarWalletsKit({ network })` with no `modules` argument enables every module that loads without extra configuration:
 
 | Module             | Wallet id (`WalletId`) | Type               |
 | ------------------ | ---------------------- | ------------------ |

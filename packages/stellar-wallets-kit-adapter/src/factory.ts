@@ -36,9 +36,13 @@ export interface KitPickerOptions {
 
 export interface StellarWalletsKitAdapterOptions {
   /**
-   * Stellar network the kit will use for signing. Defaults to `Networks.TESTNET`.
+   * Stellar network the kit will use for signing. Required — there is no
+   * default. The kit is a global singleton, so picking the network silently
+   * for a consumer would risk signing real-looking transactions on the wrong
+   * chain (testnet xdr signed on mainnet, etc.). Pass `Networks.TESTNET` or
+   * `Networks.PUBLIC` explicitly.
    */
-  network?: Networks;
+  network: Networks;
   /**
    * Wallet modules the kit should drive. Defaults to every module that works
    * out of the box (Albedo, Bitget, CactusLink, Fordefi, Freighter, Hana,
@@ -62,6 +66,7 @@ export interface StellarWalletsKitAdapterOptions {
 }
 
 let initialised = false;
+let initNetwork: Networks | null = null;
 
 /** @internal — used by the `/picker` subpath. */
 export function buildDefaultModules(): ModuleInterface[] {
@@ -81,14 +86,35 @@ export function buildDefaultModules(): ModuleInterface[] {
   ];
 }
 
-/** @internal — used by the `/picker` subpath. */
-export function ensureInit(options: StellarWalletsKitAdapterOptions): void {
+/**
+ * @internal — used by the `/picker` subpath.
+ *
+ * Accepts `Partial<...>` because the picker may be mounted in a flow where
+ * `stellarWalletsKit({ network })` has already initialised the kit elsewhere;
+ * in that case the call no-ops and the missing `network` is fine. On the
+ * first-time init path `network` is required and we throw if it's absent.
+ */
+export function ensureInit(options: Partial<StellarWalletsKitAdapterOptions>): void {
   if (initialised) return;
+  if (!options.network) {
+    throw new Error(
+      '[StellarWalletsKit] `network` is required — pass `Networks.TESTNET` or `Networks.PUBLIC` to `stellarWalletsKit({ network })`. The kit is a global singleton, so the network has to be chosen explicitly at init.',
+    );
+  }
   StellarWalletsKit.init({
-    network: options.network ?? Networks.TESTNET,
+    network: options.network,
     modules: options.modules ?? buildDefaultModules(),
   });
+  initNetwork = options.network;
   initialised = true;
+}
+
+/** @internal — used by `StellarWalletsKitAdapter` to reject per-call network overrides that don't match init. */
+export function getInitNetwork(): Networks {
+  if (initNetwork === null) {
+    throw new Error('[StellarWalletsKit] not initialised — call `stellarWalletsKit({ network })` first');
+  }
+  return initNetwork;
 }
 
 /**
@@ -107,7 +133,7 @@ export function ensureInit(options: StellarWalletsKitAdapterOptions): void {
  * });
  * ```
  */
-export function stellarWalletsKit(options: StellarWalletsKitAdapterOptions = {}): WalletAdapterResolver {
+export function stellarWalletsKit(options: StellarWalletsKitAdapterOptions): WalletAdapterResolver {
   return (id: WalletId) => {
     ensureInit(options);
     return new StellarWalletsKitAdapter(id);

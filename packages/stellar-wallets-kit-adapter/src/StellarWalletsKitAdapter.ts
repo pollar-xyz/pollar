@@ -8,6 +8,7 @@ import type {
   WalletAdapter,
   WalletId,
 } from '@pollar/core';
+import { getInitNetwork } from './factory';
 
 /**
  * Wraps Stellar Wallets Kit so it satisfies the `@pollar/core` `WalletAdapter`
@@ -66,9 +67,13 @@ export class StellarWalletsKitAdapter implements WalletAdapter {
   }
 
   async signTransaction(xdr: string, options?: SignTransactionOptions): Promise<SignTransactionResponse> {
+    if (options?.networkPassphrase !== undefined && options.networkPassphrase !== getInitNetwork()) {
+      throw new Error(
+        `[StellarWalletsKit] networkPassphrase override "${options.networkPassphrase}" does not match the network configured at init ("${getInitNetwork()}"). The kit is a global singleton — configure one network at \`stellarWalletsKit({ network })\` and use that for every call.`,
+      );
+    }
     StellarWalletsKit.setWallet(String(this.type));
     const result = await StellarWalletsKit.signTransaction(xdr, {
-      ...(options?.networkPassphrase !== undefined && { networkPassphrase: options.networkPassphrase }),
       ...(options?.accountToSign !== undefined && { address: options.accountToSign }),
     });
     return { signedTxXdr: result.signedTxXdr };
