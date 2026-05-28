@@ -1,5 +1,104 @@
 # Changelog
 
+## 0.8.0
+
+> **⚠️ BREAKING CHANGE.** `<PollarProvider>` props are reshaped: `config` is now
+> `client` (and accepts either a `PollarClient` instance or a `PollarClientConfig`),
+> `styles` moves under `appConfig.styles`, and the remote `/applications/config`
+> fetch is now opt-out by passing `appConfig` (even `{}`). New `ui.renderWallets`
+> slot lets external picker components replace the default Freighter/Albedo list.
+
+### `@pollar/react` — BREAKING
+
+- **`<PollarProvider>` shape**:
+  - `config: PollarClientConfig` → `client: PollarClient | PollarClientConfig`. Pass
+    the config inline (provider constructs the client) or a pre-built `PollarClient`
+    (testing, reusing the client outside React). The client is locked at first render.
+  - `styles?: PollarStyles` → moved under `appConfig.styles`.
+  - New `appConfig?: PollarConfig`. Presence is the opt-out switch for the remote
+    `/applications/config` fetch: if you pass it (even `{}`), no fetch happens and
+    missing fields fall back to the defaults baked into `LoginModalTemplate`. If you
+    don't pass it, the SDK fetches `/applications/config` on mount (current behavior).
+  - New `ui?: { renderWallets?: RenderWalletsSlot }`.
+- **Fetch errors are no longer silenced**. Failures of `getAppConfig()` now log via
+  `console.error('[PollarProvider] getAppConfig failed', err)` instead of swallowing.
+- **Three-level styles merge removed**. The previous
+  `{ ...fetched.styles, ...propStyles, providers: { ...remote, ...local } }` merge is
+  gone. Either pass `appConfig` (no remote) or don't (full remote). No silent overlay.
+
+### `@pollar/react` — new features
+
+- **`renderWallets` slot.** New `ui.renderWallets?: RenderWalletsSlot` prop on
+  `<PollarProvider>`. When provided, replaces the hardcoded Freighter+Albedo buttons
+  in the LoginModal wallet picker. The slot receives `{ onConnect, authState }` and
+  is expected to render a list of wallet buttons that call `onConnect(walletId)` on
+  click. Default behavior is unchanged when the slot is not provided.
+- New public types `RenderWalletsProps`, `RenderWalletsSlot` exported from the
+  package root.
+
+### Migration
+
+```tsx
+// BEFORE (0.7.x)
+<PollarProvider config={{ apiKey, walletAdapter }} styles={{ theme: 'dark' }}>
+
+// AFTER (0.8.0) — common case (no remote-config fetch)
+<PollarProvider
+  client={{ apiKey, walletAdapter }}
+  appConfig={{ styles: { theme: 'dark' } }}
+>
+
+// AFTER (0.8.0) — keep the remote /applications/config fetch
+<PollarProvider client={{ apiKey, walletAdapter }}>
+
+// AFTER (0.8.0) — power user, pre-built client
+const client = new PollarClient({ apiKey, walletAdapter });
+<PollarProvider client={client} appConfig={{ styles: { theme: 'dark' } }}>
+```
+
+### `@pollar/stellar-wallets-kit-adapter` — new features
+
+- **`<KitWalletPicker>` and `createStellarWalletsKitBundle`** on the new
+  `@pollar/stellar-wallets-kit-adapter/picker` subpath. Drop the bundle into
+  `<PollarProvider>`'s new `renderWallets` slot to render the full Stellar
+  Wallets Kit wallet list (Albedo, Bitget, CactusLink, Fordefi, Freighter,
+  Hana, HotWallet, Klever, Lobstr, OneKey, Rabet, xBull, plus any custom
+  modules):
+
+  ```tsx
+  import { createStellarWalletsKitBundle } from '@pollar/stellar-wallets-kit-adapter/picker';
+  import { Networks } from '@creit.tech/stellar-wallets-kit';
+
+  const bundle = createStellarWalletsKitBundle({
+    network: Networks.PUBLIC,
+    picker: { wallets: ['xbull', 'lobstr', 'freighter'] },
+  });
+
+  <PollarProvider
+    client={{ apiKey: '…', walletAdapter: bundle.walletAdapter }}
+    ui={{ renderWallets: bundle.renderWallets }}
+  >
+  ```
+
+- **New `picker?: KitPickerOptions`** on `StellarWalletsKitAdapterOptions`:
+  `wallets` (subset to show), `order` (`'as-given' | 'installed-first' | 'alphabetical'`),
+  `showInstalledOnly`, `labels` (per-id overrides), `layout` (`'grid' | 'list'`),
+  `theme` (`{ accent?, mode? }`). The resolver itself ignores `picker` — only
+  `<KitWalletPicker>` reads it.
+
+- **Wallet availability uses `ISupportedWallet.isAvailable` directly** (the
+  flag the kit already populates from each module's `isAvailable()` probe).
+  No second-pass probing per render.
+
+### `@pollar/stellar-wallets-kit-adapter` — packaging
+
+- React is now an **optional peer dependency**. The root export
+  (`stellarWalletsKit`) stays headless — consumers that only need the
+  `WalletAdapterResolver` continue to work without installing React.
+  Only the `/picker` subpath pulls in `react` / `react-dom` / `@pollar/react`.
+- Bumped to `0.8.0`. Existing `stellarWalletsKit({ network })`-only consumers
+  do not need to change anything.
+
 ## 0.7.2
 
 Adds a per-call outcome API so headless callers can `await` a transaction and

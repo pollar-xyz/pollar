@@ -7,6 +7,8 @@ export type {
   AuthModalProps,
   PollarStyles,
   PollarConfig,
+  RenderWalletsProps,
+  RenderWalletsSlot,
 } from './types';
 export { WalletButton } from './components/wallet-button/WalletButton';
 

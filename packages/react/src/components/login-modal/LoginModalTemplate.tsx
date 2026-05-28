@@ -1,14 +1,46 @@
 'use client';
 
-import { AUTH_ERROR_CODES, AuthState } from '@pollar/core';
+import { AUTH_ERROR_CODES, AuthState, WalletId, WalletType } from '@pollar/core';
 
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 import { type CSSProperties, useState } from 'react';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
+import type { RenderWalletsSlot } from '../../types';
 import { ModalStatusBanner, PollarModalFooter } from '../commons';
 import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
+
+function DefaultFreighterAlbedoButtons({
+  onConnect,
+  isLoading,
+}: {
+  onConnect: (id: WalletId) => void;
+  isLoading: boolean;
+}) {
+  return (
+    <div className="pollar-wallet-list">
+      <button
+        type="button"
+        disabled={isLoading}
+        className="pollar-wallet-list-btn"
+        onClick={() => onConnect(WalletType.FREIGHTER)}
+      >
+        <img src={LOGO_FREIGHTER} alt="Freighter" className="pollar-wallet-list-icon" />
+        <span className="pollar-wallet-list-name">Freighter</span>
+      </button>
+      <button
+        type="button"
+        disabled={isLoading}
+        className="pollar-wallet-list-btn"
+        onClick={() => onConnect(WalletType.ALBEDO)}
+      >
+        <img src={LOGO_ALBEDO} alt="Albedo" className="pollar-wallet-list-icon" />
+        <span className="pollar-wallet-list-name">Albedo</span>
+      </button>
+    </div>
+  );
+}
 
 const AUTH_STATE_MESSAGES: Record<AuthState['step'], string> = {
   idle: '',
@@ -63,8 +95,9 @@ interface LoginModalTemplateProps {
   onEmailChange?: (email: string) => void;
   onEmailSubmit?: () => void;
   onSocialLogin?: (provider: 'google' | 'github') => void;
-  onFreighterConnect?: () => void;
-  onAlbedoConnect?: () => void;
+  onWalletConnect: (id: WalletId) => void;
+  /** Optional override for the wallet picker view. Defaults to a Freighter+Albedo list. */
+  renderWallets?: RenderWalletsSlot;
   authState: AuthState;
   codeInputKey?: number;
   onCodeSubmit?: (code: string) => void;
@@ -85,8 +118,8 @@ export function LoginModalTemplate({
   onEmailChange,
   onEmailSubmit,
   onSocialLogin,
-  onFreighterConnect,
-  onAlbedoConnect,
+  onWalletConnect,
+  renderWallets,
   authState,
   codeInputKey,
   onCodeSubmit,
@@ -178,16 +211,10 @@ export function LoginModalTemplate({
       ) : showWalletPicker ? (
         <>
           <BackButton onClick={() => setShowWalletPicker(false)} />
-          <div className="pollar-wallet-list">
-            <button type="button" disabled={isLoading} className="pollar-wallet-list-btn" onClick={onFreighterConnect}>
-              <img src={LOGO_FREIGHTER} alt="Freighter" className="pollar-wallet-list-icon" />
-              <span className="pollar-wallet-list-name">Freighter</span>
-            </button>
-            <button type="button" disabled={isLoading} className="pollar-wallet-list-btn" onClick={onAlbedoConnect}>
-              <img src={LOGO_ALBEDO} alt="Albedo" className="pollar-wallet-list-icon" />
-              <span className="pollar-wallet-list-name">Albedo</span>
-            </button>
-          </div>
+          {renderWallets
+            ? renderWallets({ onConnect: onWalletConnect, authState })
+            : <DefaultFreighterAlbedoButtons onConnect={onWalletConnect} isLoading={isLoading} />
+          }
         </>
       ) : (
         <>

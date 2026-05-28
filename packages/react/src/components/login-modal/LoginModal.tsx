@@ -1,6 +1,6 @@
 'use client';
 
-import { AUTH_ERROR_CODES, AuthState, WalletType } from '@pollar/core';
+import { AUTH_ERROR_CODES, AuthState, WalletId } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { LoginModalTemplate } from './LoginModalTemplate';
@@ -13,7 +13,7 @@ interface LoginModalProps {
 
 export function LoginModal({ onClose }: LoginModalProps) {
   const [email, setEmail] = useState('');
-  const { getClient, styles, appConfig: config } = usePollar();
+  const { getClient, styles, appConfig: config, renderWallets } = usePollar();
   const [authState, setAuthState] = useState<AuthState>(() => getClient().getAuthState());
   const [codeInputKey, setCodeInputKey] = useState(0);
   const pendingEmail = useRef<string | null>(null);
@@ -55,7 +55,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
     getClient().login({ provider });
   }
 
-  function handleWalletConnect(type: WalletType) {
+  function handleWalletConnect(type: WalletId) {
     getClient().loginWallet(type);
   }
 
@@ -95,8 +95,8 @@ export function LoginModal({ onClose }: LoginModalProps) {
         onEmailChange={setEmail}
         onEmailSubmit={handleEmailSubmit}
         onSocialLogin={handleSocialLogin}
-        onFreighterConnect={() => handleWalletConnect(WalletType.FREIGHTER)}
-        onAlbedoConnect={() => handleWalletConnect(WalletType.ALBEDO)}
+        onWalletConnect={handleWalletConnect}
+        {...(renderWallets !== undefined && { renderWallets })}
         authState={authState}
         codeInputKey={codeInputKey}
         onCodeSubmit={handleVerifyCode}

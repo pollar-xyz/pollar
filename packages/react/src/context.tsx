@@ -29,19 +29,12 @@ import { SessionsModal } from './components/sessions-modal/SessionsModal';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
-import type { PollarConfig, PollarStyles } from './types';
+import type { PollarConfig, PollarStyles, RenderWalletsSlot } from './types';
 
-const emptyResponse = {
-  application: {
-    name: '',
-  },
+const DEFAULT_APP_CONFIG: PollarConfig = {
+  application: { name: '' },
   styles: {},
 };
-
-async function fetchRemoteConfig(client: PollarClient): Promise<PollarConfig> {
-  const content = await client.getAppConfig();
-  return (content as PollarConfig | null) ?? emptyResponse;
-}
 
 interface PollarContextValue {
   walletAddress: string;
@@ -55,6 +48,8 @@ interface PollarContextValue {
   openSessionsModal: () => void;
   appConfig: PollarConfig;
   styles: PollarStyles;
+  /** UI slot for wallet picker (forwarded from provider props). */
+  renderWallets?: RenderWalletsSlot;
   // transactions
   openTxModal: () => void;
   tx: TransactionState;
@@ -111,24 +106,41 @@ interface PollarContextValue {
 const PollarContext = createContext<PollarContextValue | null>(null);
 
 interface PollarProviderProps {
-  config: PollarClientConfig;
-  styles?: PollarStyles;
+  /**
+   * Either a pre-built `PollarClient` instance (useful for testing or for
+   * reusing the same client outside React) or a `PollarClientConfig` that the
+   * provider will use to construct one on mount.
+   *
+   * The client is locked at first render: changing this prop afterwards is
+   * ignored. To swap clients, unmount and remount the provider.
+   */
+  client: PollarClient | PollarClientConfig;
+  /**
+   * Local override of the `/applications/config` response. If provided (even
+   * `{}`), the remote fetch is skipped and missing fields fall back to the
+   * defaults in `LoginModalTemplate`. If `undefined`, the SDK fetches
+   * `/applications/config` on mount.
+   */
+  appConfig?: PollarConfig;
+  /** UI customization slots. */
+  ui?: {
+    /** Replaces the default Freighter/Albedo wallet picker. */
+    renderWallets?: RenderWalletsSlot;
+  };
   adapters?: PollarAdapters;
   children: ReactNode;
 }
 
-export function PollarProvider({ config, styles: propStyles, adapters, children }: PollarProviderProps) {
-  const [pollarClient] = useState<PollarClient>(() => new PollarClient(config));
+export function PollarProvider({ client, appConfig: appConfigProp, ui, adapters, children }: PollarProviderProps) {
+  const [pollarClient] = useState<PollarClient>(() =>
+    client instanceof PollarClient ? client : new PollarClient(client),
+  );
   const [networkState, setNetworkState] = useState<NetworkState>(() => pollarClient.getNetworkState());
   const [sessionState, setSessionState] = useState<PollarPersistedSession | null>(null);
   const [transaction, setTransaction] = useState<TransactionState>({ step: 'idle' });
   const [txHistory, setTxHistory] = useState<TxHistoryState>({ step: 'idle' });
   const [walletBalance, setWalletBalance] = useState<WalletBalanceState>({ step: 'idle' });
-  const [remoteConfig, setRemoteConfig] = useState<PollarConfig>(emptyResponse);
-  const [styles, setStyles] = useState<PollarStyles>(propStyles ?? {});
-
-  const propStylesRef = useRef(propStyles);
-  propStylesRef.current = propStyles;
+  const [resolvedConfig, setResolvedConfig] = useState<PollarConfig>(() => appConfigProp ?? DEFAULT_APP_CONFIG);
 
   useEffect(() => {
     return pollarClient.onTransactionStateChange(setTransaction);
@@ -158,21 +170,24 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
     });
   }, [pollarClient]);
 
+  // Presence of `appConfig` is the opt-out: if the consumer passes it (even
+  // `{}`), we trust them and skip the remote fetch.
   useEffect(() => {
-    const propStyles = propStylesRef.current;
-    fetchRemoteConfig(pollarClient)
+    if (appConfigProp !== undefined) return;
+    let cancelled = false;
+    pollarClient
+      .getAppConfig()
       .then((fetched) => {
-        setRemoteConfig(fetched);
-        setStyles({
-          ...fetched.styles,
-          ...propStyles,
-          providers: { ...fetched.styles?.providers, ...propStyles?.providers },
-        });
+        if (cancelled || !fetched) return;
+        setResolvedConfig(fetched as PollarConfig);
       })
-      .catch(() => {
-        setStyles(propStyles ?? {});
+      .catch((err) => {
+        console.error('[PollarProvider] getAppConfig failed', err);
       });
-  }, [pollarClient]);
+    return () => {
+      cancelled = true;
+    };
+  }, [pollarClient, appConfigProp]);
 
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [transactionModalOpen, setTransactionModalOpen] = useState(false);
@@ -193,6 +208,9 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
   const adaptersRef = useRef(adapters);
   adaptersRef.current = adapters;
 
+  const renderWalletsRef = useRef(ui?.renderWallets);
+  renderWalletsRef.current = ui?.renderWallets;
+
   // PII (incl. providers.wallet.address) lives on `client.getUserProfile()`, not on the
   // persisted session. For both external and custodial wallets, `wallet.publicKey`
   // already holds the on-chain address we care about.
@@ -201,8 +219,9 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
   const refreshWalletBalance = useCallback(() => pollarClient.refreshBalance(walletAddress), [pollarClient, walletAddress]);
 
   const contextValue: PollarContextValue = useMemo(
-    () =>
-      ({
+    () => {
+      const styles: PollarStyles = resolvedConfig.styles ?? {};
+      return ({
         // session
         walletAddress,
         isAuthenticated: !!walletAddress,
@@ -248,10 +267,12 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
         // ramp
         openRampModal: () => setRampModalOpen(true),
         // config
-        appConfig: remoteConfig,
+        appConfig: resolvedConfig,
         styles,
+        renderWallets: renderWalletsRef.current,
         adapters: adaptersRef.current,
-      }) as PollarContextValue,
+      }) as PollarContextValue;
+    },
     [
       walletAddress,
       pollarClient,
@@ -261,8 +282,7 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
       walletBalance,
       refreshWalletBalance,
       networkState,
-      remoteConfig,
-      styles,
+      resolvedConfig,
     ],
   );
 
