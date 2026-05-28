@@ -18,6 +18,7 @@ import type { Storage } from '../storage/types';
 import {
   AUTH_ERROR_CODES,
   AuthState,
+  BuildOutcome,
   DistributionClaimBody,
   DistributionClaimContent,
   DistributionRule,
@@ -41,6 +42,8 @@ import {
   RampsTransactionResponse,
   RampTxStatus,
   SessionInfo,
+  SignOutcome,
+  SubmitOutcome,
   TransactionState,
   TxBuildBody,
   TxBuildContent,
@@ -254,11 +257,19 @@ export class PollarClient {
         if (newNonce) self._dpopNonce = newNonce;
 
         if (response.status !== 401) return response;
-        // Don't trigger refresh from inside the refresh endpoint itself.
-        if (request.url.includes('/auth/refresh')) return response;
 
         const wwwAuth = response.headers.get('WWW-Authenticate') ?? '';
         const isNonceChallenge = wwwAuth.includes('use_dpop_nonce');
+
+        // The refresh endpoint has special handling: don't recursively trigger
+        // refresh from inside itself. But DO honor a nonce challenge — the
+        // fresh `DPoP-Nonce` was already captured above, so a single retry
+        // with the new nonce succeeds. Any other 401 (RT expired, reused,
+        // invalid) propagates to `_doRefresh` which clears the session.
+        if (request.url.includes('/auth/refresh')) {
+          if (isNonceChallenge) return self._retryRequest(request);
+          return response;
+        }
 
         if (!isNonceChallenge) {
           try {
@@ -297,15 +308,27 @@ export class PollarClient {
     // RETRIED_HEADER guard is needed — the retry's response is returned to
     // the caller directly and never re-enters this middleware.
     const headers = new Headers(originalRequest.headers);
+    const isRefresh = originalRequest.url.includes('/auth/refresh');
 
-    const accessToken = this._session?.token?.accessToken;
-    if (accessToken) {
-      const proof = await this._buildProofForRequest(originalRequest, accessToken);
-      if (proof) {
-        headers.set('Authorization', `DPoP ${accessToken}`);
-        headers.set('DPoP', proof);
-      } else {
-        headers.set('Authorization', `Bearer ${accessToken}`);
+    if (isRefresh) {
+      // Token-endpoint proof per RFC 9449 §5 / §6.1: NO `ath`, NO
+      // Authorization header. Mirrors the initial-request branch in
+      // `onRequest`. The DPoP header is rebuilt so it picks up the fresh
+      // server-issued nonce captured in `onResponse`.
+      const proof = await this._buildProofForRequest(originalRequest, undefined);
+      headers.delete('Authorization');
+      if (proof) headers.set('DPoP', proof);
+      else headers.delete('DPoP');
+    } else {
+      const accessToken = this._session?.token?.accessToken;
+      if (accessToken) {
+        const proof = await this._buildProofForRequest(originalRequest, accessToken);
+        if (proof) {
+          headers.set('Authorization', `DPoP ${accessToken}`);
+          headers.set('DPoP', proof);
+        } else {
+          headers.set('Authorization', `Bearer ${accessToken}`);
+        }
       }
     }
 
@@ -686,14 +709,20 @@ export class PollarClient {
 
   // ─── Transactions ─────────────────────────────────────────────────────────
 
+  /**
+   * Builds an unsigned XDR. Drives `_setTransactionState` for modal-style UIs
+   * AND returns a {@link BuildOutcome} so headless callers can `await` and
+   * inspect the result without subscribing to state changes.
+   */
   async buildTx(
     operation: TxBuildBody['operation'],
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
-  ): Promise<void> {
+  ): Promise<BuildOutcome> {
     if (!this._session?.wallet?.publicKey) {
-      this._setTransactionState({ step: 'error', details: 'No wallet connected' });
-      return;
+      const details = 'No wallet connected';
+      this._setTransactionState({ step: 'error', phase: 'building', details });
+      return { status: 'error', details };
     }
 
     const body = {
@@ -709,13 +738,15 @@ export class PollarClient {
       const { data, error } = await this._api.POST('/tx/build', { body });
       if (!error && data?.success && data.content) {
         this._setTransactionState({ step: 'built', buildData: data.content });
-      } else {
-        const details = (error as { details?: string } | undefined)?.details;
-        this._setTransactionState({ step: 'error', ...(details && { details }) });
+        return { status: 'built', buildData: data.content };
       }
+      const details = (error as { details?: string } | undefined)?.details;
+      this._setTransactionState({ step: 'error', phase: 'building', ...(details && { details }) });
+      return { status: 'error', ...(details && { details }) };
     } catch (err) {
       console.error('[PollarClient] buildTx failed', err);
-      this._setTransactionState({ step: 'error' });
+      this._setTransactionState({ step: 'error', phase: 'building' });
+      return { status: 'error' };
     }
   }
 
@@ -723,38 +754,224 @@ export class PollarClient {
     return this._walletAdapter?.type ?? null;
   }
 
-  async signAndSubmitTx(unsignedXdr: string): Promise<void> {
-    const state = this._transactionState;
-    const buildData = state?.step === 'built' ? state.buildData : state?.step === 'error' ? state.buildData : undefined;
-    const isBuiltFlow = !!buildData;
-    const stateExtra: { buildData?: TxBuildContent; external?: true } = buildData ? { buildData } : { external: true };
+  /**
+   * Signs the given unsigned XDR and returns the signed XDR.
+   *
+   * - External wallets: signs locally via the wallet adapter.
+   * - Custodial wallets: posts to `/tx/sign`. The backend signs (through
+   *   wallet-service or the app's customer-managed adapter) and returns the
+   *   signed XDR plus an `idempotencyKey` the caller should echo back to
+   *   `submitTx`.
+   *
+   * Drives `_setTransactionState`: emits `signing` while in flight and
+   * `signed` on success (or `error[phase: 'signing']` on failure). `buildData`
+   * is threaded through if the consumer previously called `buildTx`.
+   */
+  async signTx(unsignedXdr: string): Promise<SignOutcome> {
+    const buildData = this._currentBuildData();
+    this._setTransactionState({ step: 'signing', ...(buildData && { buildData }) });
 
-    this._setTransactionState({ step: 'signing', ...stateExtra });
+    if (this._walletAdapter) {
+      const accountToSign = this._session?.wallet?.publicKey;
+      const signOpts = accountToSign
+        ? { networkPassphrase: this._networkPassphrase(), accountToSign }
+        : { networkPassphrase: this._networkPassphrase() };
+      try {
+        const { signedTxXdr } = await this._walletAdapter.signTransaction(unsignedXdr, signOpts);
+        this._setTransactionState({
+          step: 'signed',
+          signedXdr: signedTxXdr,
+          ...(buildData && { buildData }),
+        });
+        return { status: 'signed', signedXdr: signedTxXdr };
+      } catch (err) {
+        const details = err instanceof Error ? err.message : undefined;
+        this._setTransactionState({
+          step: 'error',
+          phase: 'signing',
+          ...(buildData && { buildData }),
+          ...(details && { details }),
+        });
+        return { status: 'error', ...(details && { details }) };
+      }
+    }
 
-    // For both external + custodial wallets, the public key in `_session.wallet`
-    // IS the address we want to sign for. The previous code branched on
-    // `data.providers.wallet.address` but that's the same value (the wallet
-    // address from login becomes wallet.publicKey).
-    const accountToSign = this._session?.wallet?.publicKey;
+    // Custodial path: backend signs and returns the XDR + idempotencyKey.
+    const publicKey = this._session?.wallet?.publicKey ?? '';
+    try {
+      const { data, error } = await this._api.POST('/tx/sign', {
+        body: { network: this.getNetwork(), publicKey, unsignedXdr },
+      });
+      if (!error && data?.success && data.content?.signedXdr) {
+        const { signedXdr, idempotencyKey } = data.content;
+        this._setTransactionState({
+          step: 'signed',
+          signedXdr,
+          submissionToken: idempotencyKey,
+          ...(buildData && { buildData }),
+        });
+        return { status: 'signed', signedXdr, submissionToken: idempotencyKey };
+      }
+      const details = (error as { details?: string } | undefined)?.details;
+      this._setTransactionState({
+        step: 'error',
+        phase: 'signing',
+        ...(buildData && { buildData }),
+        ...(details && { details }),
+      });
+      return { status: 'error', ...(details && { details }) };
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      this._setTransactionState({
+        step: 'error',
+        phase: 'signing',
+        ...(buildData && { buildData }),
+        ...(details && { details }),
+      });
+      return { status: 'error', ...(details && { details }) };
+    }
+  }
+
+  /**
+   * Submits a signed XDR.
+   *
+   * - External wallets: submits directly to Stellar via the public RPC. No
+   *   backend involvement, lowest latency. Cannot return `pending` — the RPC
+   *   call is synchronous, so the outcome is either `success` or `error`.
+   * - Custodial wallets: submits via `/tx/submit` so the wallet-service
+   *   tracks the tx lifecycle and enforces idempotency. Pass the
+   *   `submissionToken` returned by `signTx` to reuse the same idempotency
+   *   key end-to-end. May return `pending` if the network ack'd but ledger
+   *   confirmation hasn't arrived before the SDK's poll window expires.
+   *
+   * Drives `_setTransactionState`: emits `submitting` while in flight,
+   * `submitted` on Horizon ack (pending), `success` on ledger confirmation,
+   * or `error[phase: 'submitting']` on failure.
+   */
+  async submitTx(signedXdr: string, opts?: { submissionToken?: string }): Promise<SubmitOutcome> {
+    const buildData = this._currentBuildData();
+    const outcomeExtra: { buildData?: TxBuildContent } = buildData ? { buildData } : {};
+    this._setTransactionState({ step: 'submitting', signedXdr, ...(buildData && { buildData }) });
 
     if (this._walletAdapter) {
       try {
-        const signOpts = accountToSign
-          ? { networkPassphrase: this._networkPassphrase(), accountToSign }
-          : { networkPassphrase: this._networkPassphrase() };
-        const { signedTxXdr } = await this._walletAdapter.signTransaction(unsignedXdr, signOpts);
         const stellarClient = new StellarClient(this.getNetwork());
-        const result = await stellarClient.submitTransaction(signedTxXdr);
+        const result = await stellarClient.submitTransaction(signedXdr);
         if (result.success) {
-          this._setTransactionState({ step: 'success', ...stateExtra, hash: result.hash });
-        } else {
-          this._setTransactionState({ step: 'error', ...stateExtra, details: result.errorCode });
+          this._setTransactionState({ step: 'success', hash: result.hash, ...(buildData && { buildData }) });
+          return { status: 'success', hash: result.hash, ...outcomeExtra };
         }
-      } catch {
-        this._setTransactionState({ step: 'error', ...stateExtra });
+        this._setTransactionState({
+          step: 'error',
+          phase: 'submitting',
+          ...(buildData && { buildData }),
+          details: result.errorCode,
+        });
+        return {
+          status: 'error',
+          details: result.errorCode,
+          resultCode: result.errorCode,
+          ...outcomeExtra,
+        };
+      } catch (err) {
+        const details = err instanceof Error ? err.message : undefined;
+        this._setTransactionState({
+          step: 'error',
+          phase: 'submitting',
+          ...(buildData && { buildData }),
+          ...(details && { details }),
+        });
+        return { status: 'error', ...outcomeExtra, ...(details && { details }) };
       }
-      return;
     }
+
+    // Custodial path
+    const publicKey = this._session?.wallet?.publicKey ?? '';
+    try {
+      const { data, error } = await this._api.POST('/tx/submit', {
+        body: {
+          network: this.getNetwork(),
+          publicKey,
+          signedXdr,
+          ...(opts?.submissionToken && { idempotencyKey: opts.submissionToken }),
+        },
+      });
+      if (!error && data?.success && data.content) {
+        const { hash, status: backendStatus, resultCode } = data.content;
+        if (backendStatus === 'SUCCESS') {
+          this._setTransactionState({ step: 'success', hash, ...(buildData && { buildData }) });
+          return { status: 'success', hash, ...outcomeExtra };
+        }
+        if (backendStatus === 'PENDING') {
+          this._setTransactionState({ step: 'submitted', hash, ...(buildData && { buildData }) });
+          return { status: 'pending', hash, ...outcomeExtra };
+        }
+        this._setTransactionState({
+          step: 'error',
+          phase: 'submitting',
+          ...(buildData && { buildData }),
+          ...(resultCode && { details: resultCode }),
+        });
+        return {
+          status: 'error',
+          hash,
+          ...outcomeExtra,
+          ...(resultCode && { details: resultCode, resultCode }),
+        };
+      }
+      const details = (error as { details?: string } | undefined)?.details;
+      this._setTransactionState({
+        step: 'error',
+        phase: 'submitting',
+        ...(buildData && { buildData }),
+        ...(details && { details }),
+      });
+      return { status: 'error', ...outcomeExtra, ...(details && { details }) };
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      this._setTransactionState({
+        step: 'error',
+        phase: 'submitting',
+        ...(buildData && { buildData }),
+        ...(details && { details }),
+      });
+      return { status: 'error', ...outcomeExtra, ...(details && { details }) };
+    }
+  }
+
+  /**
+   * Signs and submits in one logical step. Returns a {@link SubmitOutcome}.
+   *
+   * - **External wallets**: composes `signTx` + `submitTx` client-side. State
+   *   machine sees the full granular sequence `signing → signed → submitting
+   *   → success` because the underlying methods each emit.
+   * - **Custodial wallets**: atomic `/tx/sign-and-send` round-trip. State
+   *   machine emits the compound `signing-submitting` step (the SDK can't
+   *   observe when one phase ends and the next begins inside that single
+   *   backend call) and then transitions to `submitted` (Horizon ack only) or
+   *   `success` (ledger-confirmed), or `error[phase: 'signing-submitting']`.
+   */
+  async signAndSubmitTx(unsignedXdr: string): Promise<SubmitOutcome> {
+    if (this._walletAdapter) {
+      // External — the composed signTx+submitTx already emit the granular
+      // state-machine sequence. We just pass outcomes through.
+      const signed = await this.signTx(unsignedXdr);
+      if (signed.status === 'error') {
+        const buildData = this._currentBuildData();
+        return {
+          status: 'error',
+          ...(buildData && { buildData }),
+          ...(signed.details && { details: signed.details }),
+        };
+      }
+      return this.submitTx(signed.signedXdr);
+    }
+
+    // Custodial — atomic single backend call. Compound state.
+    const buildData = this._currentBuildData();
+    const outcomeExtra: { buildData?: TxBuildContent } = buildData ? { buildData } : {};
+
+    this._setTransactionState({ step: 'signing-submitting', ...(buildData && { buildData }) });
 
     const body: TxSignAndSendBody = {
       network: this.getNetwork(),
@@ -764,14 +981,141 @@ export class PollarClient {
     try {
       const { data, error } = await this._api.POST('/tx/sign-and-send', { body });
       if (!error && data?.success && data.content?.hash) {
-        this._setTransactionState({ step: 'success', ...stateExtra, hash: data.content.hash });
-      } else {
-        const details = (error as { details?: string } | undefined)?.details;
-        this._setTransactionState({ step: 'error', ...stateExtra, ...(details && { details }) });
+        const { hash, status: backendStatus, resultCode } = data.content as {
+          hash: string;
+          status: 'SUCCESS' | 'FAILED' | 'PENDING';
+          resultCode?: string;
+        };
+        if (backendStatus === 'SUCCESS') {
+          this._setTransactionState({ step: 'success', hash, ...(buildData && { buildData }) });
+          return { status: 'success', hash, ...outcomeExtra };
+        }
+        if (backendStatus === 'PENDING') {
+          this._setTransactionState({ step: 'submitted', hash, ...(buildData && { buildData }) });
+          return { status: 'pending', hash, ...outcomeExtra };
+        }
+        // backendStatus === 'FAILED'
+        this._setTransactionState({
+          step: 'error',
+          phase: 'signing-submitting',
+          ...(buildData && { buildData }),
+          ...(resultCode && { details: resultCode }),
+        });
+        return {
+          status: 'error',
+          hash,
+          ...outcomeExtra,
+          ...(resultCode && { details: resultCode, resultCode }),
+        };
       }
-    } catch {
-      this._setTransactionState({ step: 'error', ...stateExtra });
+      const details = (error as { details?: string } | undefined)?.details;
+      this._setTransactionState({
+        step: 'error',
+        phase: 'signing-submitting',
+        ...(buildData && { buildData }),
+        ...(details && { details }),
+      });
+      return { status: 'error', ...outcomeExtra, ...(details && { details }) };
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      this._setTransactionState({
+        step: 'error',
+        phase: 'signing-submitting',
+        ...(buildData && { buildData }),
+        ...(details && { details }),
+      });
+      return { status: 'error', ...outcomeExtra, ...(details && { details }) };
     }
+  }
+
+  /**
+   * One-shot: build → sign → submit, returning the final {@link SubmitOutcome}.
+   *
+   * - **External wallets**: composes `buildTx` + `signAndSubmitTx` client-side.
+   *   State machine sees the full granular sequence (`building → built →
+   *   signing → signed → submitting → success`) because each composed call
+   *   emits its own transitions.
+   * - **Custodial wallets**: single round-trip to `/tx/build-sign-submit`. The
+   *   signed XDR never leaves the backend. State machine emits the compound
+   *   `building-signing-submitting` step (the SDK can't observe individual
+   *   phase boundaries inside one atomic call) and then transitions to
+   *   `submitted` / `success` / `error[phase: 'building-signing-submitting']`.
+   *
+   * If you need granular UI feedback for custodial flows (separate
+   * "Building…", "Signing…", "Submitting…" indicators), call `buildTx`,
+   * `signTx`, and `submitTx` separately instead.
+   */
+  async buildAndSignAndSubmitTx(
+    operation: TxBuildBody['operation'],
+    params: TxBuildBody['params'],
+    options?: TxBuildBody['options'],
+  ): Promise<SubmitOutcome> {
+    if (this._walletAdapter) {
+      const built = await this.buildTx(operation, params, options);
+      if (built.status === 'error') {
+        return { status: 'error', ...(built.details && { details: built.details }) };
+      }
+      return this.signAndSubmitTx(built.buildData.unsignedXdr);
+    }
+
+    // Custodial path — single backend call, compound state-machine step.
+    if (!this._session?.wallet?.publicKey) {
+      this._setTransactionState({ step: 'error', phase: 'building-signing-submitting', details: 'No wallet connected' });
+      return { status: 'error', details: 'No wallet connected' };
+    }
+    this._setTransactionState({ step: 'building-signing-submitting' });
+    try {
+      const { data, error } = await this._api.POST('/tx/build-sign-submit', {
+        body: {
+          network: this.getNetwork(),
+          publicKey: this._session.wallet.publicKey,
+          operation,
+          params,
+          options: options ?? {},
+        } as TxBuildBody & { idempotencyKey?: string },
+      });
+      if (!error && data?.success && data.content) {
+        const { hash, status: backendStatus, resultCode } = data.content;
+        if (backendStatus === 'SUCCESS') {
+          this._setTransactionState({ step: 'success', hash });
+          return { status: 'success', hash };
+        }
+        if (backendStatus === 'PENDING') {
+          this._setTransactionState({ step: 'submitted', hash });
+          return { status: 'pending', hash };
+        }
+        this._setTransactionState({
+          step: 'error',
+          phase: 'building-signing-submitting',
+          ...(resultCode && { details: resultCode }),
+        });
+        return { status: 'error', hash, ...(resultCode && { details: resultCode, resultCode }) };
+      }
+      const details = (error as { details?: string } | undefined)?.details;
+      this._setTransactionState({
+        step: 'error',
+        phase: 'building-signing-submitting',
+        ...(details && { details }),
+      });
+      return { status: 'error', ...(details && { details }) };
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      this._setTransactionState({
+        step: 'error',
+        phase: 'building-signing-submitting',
+        ...(details && { details }),
+      });
+      return { status: 'error', ...(details && { details }) };
+    }
+  }
+
+  /** Alias for {@link buildAndSignAndSubmitTx} — shorter "just do the thing" name. */
+  async runTx(
+    operation: TxBuildBody['operation'],
+    params: TxBuildBody['params'],
+    options?: TxBuildBody['options'],
+  ): Promise<SubmitOutcome> {
+    return this.buildAndSignAndSubmitTx(operation, params, options);
   }
 
   // ─── App config ───────────────────────────────────────────────────────────
@@ -999,5 +1343,18 @@ export class PollarClient {
     this._transactionState = next;
     console.info(`[PollarClient] transaction:${next.step}`);
     for (const cb of this._transactionStateListeners) cb(next);
+  }
+
+  /**
+   * Threads `buildData` through state transitions. When the user has already
+   * called `buildTx`, every subsequent state (signing, signed, submitting,
+   * submitted, success, error) should carry the build summary so modal UIs
+   * can keep showing "Send 5 USDC to G..." through the whole flow.
+   */
+  private _currentBuildData(): TxBuildContent | undefined {
+    const s = this._transactionState;
+    if (!s) return undefined;
+    if ('buildData' in s && s.buildData) return s.buildData;
+    return undefined;
   }
 }

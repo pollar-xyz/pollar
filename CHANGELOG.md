@@ -1,5 +1,94 @@
 # Changelog
 
+## 0.7.2
+
+Adds a per-call outcome API so headless callers can `await` a transaction and
+inspect the result instead of subscribing to `onTransactionStateChange`. Adds
+split `signTx` / `submitTx` for both wallet types, a one-shot atomic path
+for custodial flows, and a richer `TransactionState` vocabulary so modal UIs
+can render every phase honestly (including the previously-elided "submitted
+to network, waiting for ledger" intermediate state). Existing `0.7.x`
+consumers that don't render `TransactionState` themselves keep working
+unchanged.
+
+### `@pollar/core` — new features
+
+- **`buildTx` and `signAndSubmitTx` now return outcomes.** Their return types
+  changed from `Promise<void>` to `Promise<BuildOutcome>` and
+  `Promise<SubmitOutcome>` respectively. The state-machine emissions (used by
+  `TransactionModal`, `SendModal`, and any consumer subscribed to
+  `onTransactionStateChange`) are preserved exactly as before. Callers that
+  previously did `await client.signAndSubmitTx(xdr)` and ignored the resolved
+  value keep working.
+- **`signTx(unsignedXdr)`** and **`submitTx(signedXdr, { submissionToken? })`** —
+  split-flow primitives that return `SignOutcome` / `SubmitOutcome`. External
+  wallets sign locally via the adapter and submit directly to Stellar RPC.
+  Custodial wallets go through new sdk-api endpoints (`/tx/sign`,
+  `/tx/submit`) so the wallet-service tracks the lifecycle and enforces
+  idempotency by `submissionToken` (mapped to `idempotencyKey` server-side).
+- **`buildAndSignAndSubmitTx(operation, params, options?)`** and its alias
+  **`runTx(...)`** — one method that picks the optimal path per wallet type:
+  - External wallets: composes `buildTx + signAndSubmitTx` client-side,
+    preserving `building → signing → success` state-machine transitions.
+  - Custodial wallets: single round-trip to `/tx/build-sign-submit`. The
+    signed XDR never leaves the backend. Skips intermediate state-machine
+    transitions — if you need granular UI feedback, use `buildTx`, `signTx`,
+    `submitTx` separately instead.
+- New result types: `BuildOutcome`, `SignOutcome`, `SubmitOutcome`,
+  `TxSignBody`, `TxSignContent`, `TxSubmitSignedBody`,
+  `TxBuildSignSubmitBody`, `TxBuildSignSubmitContent`. OpenAPI schema
+  regenerated against `sdk-api` — adds `/tx/sign`, `/tx/submit`,
+  `/tx/build-sign-submit` paths.
+
+### `@pollar/react` — new features
+
+- **Context exposes the new methods.** `usePollar()` now returns `signTx`,
+  `submitTx`, `buildAndSignAndSubmitTx`, and `runTx` in addition to the
+  existing `buildTx` / `signAndSubmitTx`. Return types match the core SDK.
+- **`usePollarAdapter` returns outcomes.** `WrappedAdapter<T>` methods now
+  resolve to `Promise<SubmitOutcome>` instead of `Promise<void>`. Adapter
+  callers can inspect `result.status` to branch on `success` / `pending` /
+  `error` without subscribing to the global state.
+
+### `TransactionState` vocabulary
+
+The `TransactionState` discriminated union grew from 6 step values to 11:
+
+**Added**:
+- `signing` (already existed but now emitted by `signTx` directly, not just `signAndSubmitTx`)
+- `signed` — signed XDR in hand, waiting for `submitTx`
+- `submitting` — pushing signed XDR to the network
+- `submitted` — Horizon ack received, ledger confirmation pending (previously misreported as `success`)
+- `signing-submitting` — compound state for `signAndSubmitTx` custodial (atomic `/tx/sign-and-send` round-trip — the SDK can't observe the sign/submit boundary inside)
+- `building-signing-submitting` — compound state for `runTx` / `buildAndSignAndSubmitTx` custodial (atomic `/tx/build-sign-submit` round-trip)
+
+**Changed**:
+- `error` now carries a required `phase: TxErrorPhase` discriminator so modals can offer "retry from this step" and label which phase failed.
+- `external?: true` flag removed from the union — it was an internal discriminator that became unnecessary once `buildData` was threaded through every transition. Custom UIs that read `state.external` should branch on the presence of `state.buildData` instead.
+
+### Migration notes
+
+- **No breaking runtime behavior for 0.5 / 0.6 / 0.7.1 consumers.** Existing
+  `await client.signAndSubmitTx(xdr)` calls keep working — only the resolved
+  value is different (was `void`, is now `SubmitOutcome`), which is fine for
+  callers that ignore it.
+- If you previously annotated `Promise<void>` explicitly somewhere
+  (`const p: Promise<void> = client.signAndSubmitTx(...)`), TypeScript will
+  flag it after upgrading. Drop the annotation or update it to
+  `Promise<SubmitOutcome>`.
+- **If you render `TransactionState` in a custom UI** (not using the built-in
+  `TransactionModal` / `SendModal`): your exhaustive `switch (state.step)`
+  will produce a TypeScript error after upgrading because it doesn't cover
+  the 5 new step values. Add cases for `signed`, `submitting`, `submitted`,
+  `signing-submitting`, `building-signing-submitting` — or add a `default`
+  branch for forward compatibility. At runtime, an unhandled step just
+  means your modal won't render anything for it; no error is thrown.
+- **`state.external` removed.** If you keyed UI off it, switch to
+  `'buildData' in state ? state.buildData : null` (the same buildData
+  threading the SDK uses internally).
+- The built-in `TransactionModal` and `SendModal` already handle every new
+  state — if you use them as-is, no UI changes needed.
+
 ## 0.7.1
 
 Patch release on top of 0.7.0 — adds a distribution-rules surface to `@pollar/core` and

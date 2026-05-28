@@ -1,10 +1,10 @@
 'use client';
 
-import type {  PollarAdapter } from '@pollar/core';
+import type { PollarAdapter, SubmitOutcome } from '@pollar/core';
 import { usePollar } from './context';
 
 type WrappedAdapter<T extends PollarAdapter> = {
-  [K in keyof T]: (params: Parameters<T[K]>[0]) => Promise<void>;
+  [K in keyof T]: (params: Parameters<T[K]>[0]) => Promise<SubmitOutcome>;
 };
 
 export function createPollarAdapterHook<T extends PollarAdapter>(key: string) {
@@ -21,7 +21,7 @@ export function createPollarAdapterHook<T extends PollarAdapter>(key: string) {
         name,
         async (params: Parameters<typeof fn>[0]) => {
           const { unsignedTransaction } = await fn(params);
-          await signAndSubmitTx(unsignedTransaction);
+          return signAndSubmitTx(unsignedTransaction);
         },
       ]),
     ) as WrappedAdapter<T>;

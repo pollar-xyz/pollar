@@ -1,13 +1,16 @@
 'use client';
 
 import {
+  BuildOutcome,
   NetworkState,
   PollarAdapters,
   PollarClient,
   PollarClientConfig,
   PollarLoginOptions,
   PollarPersistedSession,
+  SignOutcome,
   StellarNetwork,
+  SubmitOutcome,
   TransactionState,
   TxBuildBody,
   TxHistoryState,
@@ -59,8 +62,23 @@ interface PollarContextValue {
     operation: TxBuildBody['operation'],
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
-  ) => Promise<void>;
-  signAndSubmitTx: (unsignedXdr: string) => Promise<void>;
+  ) => Promise<BuildOutcome>;
+  signAndSubmitTx: (unsignedXdr: string) => Promise<SubmitOutcome>;
+  /** External-wallet only. Custodial flows should use `signAndSubmitTx`. */
+  signTx: (unsignedXdr: string) => Promise<SignOutcome>;
+  submitTx: (signedXdr: string) => Promise<SubmitOutcome>;
+  /** One-shot: build → sign → submit. Drives the same TransactionState flow as the split calls. */
+  buildAndSignAndSubmitTx: (
+    operation: TxBuildBody['operation'],
+    params: TxBuildBody['params'],
+    options?: TxBuildBody['options'],
+  ) => Promise<SubmitOutcome>;
+  /** Alias of `buildAndSignAndSubmitTx`. */
+  runTx: (
+    operation: TxBuildBody['operation'],
+    params: TxBuildBody['params'],
+    options?: TxBuildBody['options'],
+  ) => Promise<SubmitOutcome>;
   walletType: WalletId | null;
   // network
   network: StellarNetwork;
@@ -199,6 +217,11 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
         tx: transaction,
         buildTx: (operation, params, options) => pollarClient.buildTx(operation, params, options),
         signAndSubmitTx: (unsignedXdr: string) => pollarClient.signAndSubmitTx(unsignedXdr),
+        signTx: (unsignedXdr: string) => pollarClient.signTx(unsignedXdr),
+        submitTx: (signedXdr: string) => pollarClient.submitTx(signedXdr),
+        buildAndSignAndSubmitTx: (operation, params, options) =>
+          pollarClient.buildAndSignAndSubmitTx(operation, params, options),
+        runTx: (operation, params, options) => pollarClient.runTx(operation, params, options),
         openTxModal: () => setTransactionModalOpen(true),
         // tx history
         txHistory,

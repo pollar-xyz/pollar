@@ -96,6 +96,23 @@ export type TxSignAndSendBody = NonNullable<
 >['content']['application/json'];
 export type TxSignSendResponse = pollarPaths['/tx/sign-and-send']['post']['responses'][200]['content']['application/json'];
 
+// ─── Split flow (new in v0.7.2) ───────────────────────────────────────────────
+
+export type TxSignBody = NonNullable<pollarPaths['/tx/sign']['post']['requestBody']>['content']['application/json'];
+export type TxSignResponse = pollarPaths['/tx/sign']['post']['responses'][200]['content']['application/json'];
+export type TxSignContent = TxSignResponse['content'];
+
+export type TxSubmitSignedBody = NonNullable<
+  pollarPaths['/tx/submit']['post']['requestBody']
+>['content']['application/json'];
+
+export type TxBuildSignSubmitBody = NonNullable<
+  pollarPaths['/tx/build-sign-submit']['post']['requestBody']
+>['content']['application/json'];
+export type TxBuildSignSubmitResponse =
+  pollarPaths['/tx/build-sign-submit']['post']['responses'][200]['content']['application/json'];
+export type TxBuildSignSubmitContent = TxBuildSignSubmitResponse['content'];
+
 export type PollarLoginOptions =
   | { provider: 'google' }
   | { provider: 'github' }
@@ -104,13 +121,78 @@ export type PollarLoginOptions =
 
 export type TxBuildContent = TxBuildResponse['content'];
 
+/**
+ * Phases the SDK can be in across the build → sign → submit lifecycle.
+ *
+ * **Granular** steps (`building`, `signing`, `submitting`) are emitted when
+ * the SDK can directly observe that phase — i.e. when each is a separate
+ * client-driven call (`buildTx`, `signTx`, `submitTx`, external-wallet
+ * `signAndSubmitTx`).
+ *
+ * **Compound** steps (`signing-submitting`, `building-signing-submitting`)
+ * are emitted when multiple phases collapse into a single opaque backend
+ * round-trip (`signAndSubmitTx` custodial → `/tx/sign-and-send`, and `runTx`
+ * / `buildAndSignAndSubmitTx` custodial → `/tx/build-sign-submit`). The SDK
+ * can't see when one phase ends and the next begins inside that request, so
+ * it honestly reports a single fused state instead of fabricating
+ * transitions.
+ *
+ * **Terminal states** (`success`, `error`) and the post-Horizon-ack pending
+ * state (`submitted`) are shared across all paths.
+ *
+ * On `error`, the `phase` discriminator tells the consumer *where* the
+ * failure happened so modal UIs can offer "retry from this step" buttons.
+ */
 export type TransactionState =
   | { step: 'idle' }
+  // ─── Granular phases (observable per-call) ────────────────────────────
   | { step: 'building' }
   | { step: 'built'; buildData: TxBuildContent }
-  | { step: 'signing'; buildData?: TxBuildContent; external?: true }
-  | { step: 'success'; buildData?: TxBuildContent; hash: string; external?: true }
-  | { step: 'error'; details?: string; buildData?: TxBuildContent; external?: true };
+  | { step: 'signing'; buildData?: TxBuildContent }
+  | { step: 'signed'; buildData?: TxBuildContent; signedXdr: string; submissionToken?: string }
+  | { step: 'submitting'; buildData?: TxBuildContent; signedXdr?: string }
+  // ─── Compound phases (custodial-only — backend swallows the boundaries) ──
+  | { step: 'signing-submitting'; buildData?: TxBuildContent }
+  | { step: 'building-signing-submitting' }
+  // ─── Post-Horizon-ack, pre-ledger-confirm (shared) ────────────────────
+  | { step: 'submitted'; buildData?: TxBuildContent; hash: string }
+  // ─── Terminal success (shared) ────────────────────────────────────────
+  | { step: 'success'; buildData?: TxBuildContent; hash: string }
+  // ─── Terminal failure with phase context ──────────────────────────────
+  | { step: 'error'; phase: TxErrorPhase; details?: string; buildData?: TxBuildContent; signedXdr?: string };
+
+/**
+ * Identifies which phase failed when `TransactionState.step === 'error'`.
+ * Compound phase names (`signing-submitting`, `building-signing-submitting`)
+ * appear here when the failure happened inside an atomic backend call where
+ * the SDK can't isolate the failing sub-phase.
+ */
+export type TxErrorPhase =
+  | 'building'
+  | 'signing'
+  | 'submitting'
+  | 'signing-submitting'
+  | 'building-signing-submitting';
+
+/**
+ * Per-call outcomes returned by `buildTx`, `signTx`, `submitTx`,
+ * `signAndSubmitTx`, and `buildAndSignAndSubmitTx`. These are additive to
+ * `TransactionState` — the same operations still drive the state machine for
+ * modal-style UIs, but headless callers can `await` the method and inspect
+ * the returned outcome directly instead of subscribing to state changes.
+ */
+export type BuildOutcome =
+  | { status: 'built'; buildData: TxBuildContent }
+  | { status: 'error'; details?: string };
+
+export type SignOutcome =
+  | { status: 'signed'; signedXdr: string; submissionToken?: string; expiresAt?: number }
+  | { status: 'error'; details?: string };
+
+export type SubmitOutcome =
+  | { status: 'success'; hash: string; buildData?: TxBuildContent }
+  | { status: 'pending'; hash: string; buildData?: TxBuildContent }
+  | { status: 'error'; hash?: string; details?: string; resultCode?: string; buildData?: TxBuildContent };
 
 export const AUTH_ERROR_CODES = {
   SESSION_CREATE_FAILED: 'SESSION_CREATE_FAILED',

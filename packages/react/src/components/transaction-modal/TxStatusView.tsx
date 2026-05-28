@@ -8,10 +8,36 @@ const STATUS_MESSAGES: Record<TransactionState['step'], string> = {
   idle: '',
   building: 'Building transaction…',
   built: 'Ready to sign and send',
-  signing: 'Signing and sending transaction…',
+  signing: 'Signing transaction…',
+  signed: 'Signed — ready to submit',
+  submitting: 'Submitting transaction…',
+  submitted: 'Submitted — waiting for confirmation…',
+  'signing-submitting': 'Signing and submitting transaction…',
+  'building-signing-submitting': 'Processing transaction…',
   success: 'Transaction sent successfully',
   error: 'Transaction failed',
 };
+
+/** Step values that represent in-flight work (spinner / non-cancellable UI). */
+const IN_FLIGHT_STEPS = new Set<TransactionState['step']>([
+  'building',
+  'signing',
+  'submitting',
+  'submitted',
+  'signing-submitting',
+  'building-signing-submitting',
+]);
+
+/** Step values that should show the build summary (preview / details panel). */
+const SHOW_DETAILS_STEPS = new Set<TransactionState['step']>([
+  'built',
+  'signing',
+  'signed',
+  'submitting',
+  'submitted',
+  'signing-submitting',
+  'success',
+]);
 
 export interface TxStatusViewProps {
   transaction: TransactionState;
@@ -43,10 +69,10 @@ export function TxStatusView({
   const errorDetails = transaction.step === 'error' ? (transaction.details ?? null) : null;
 
   const isBuilt = transaction.step === 'built';
-  const isSigning = transaction.step === 'signing';
+  const isInFlight = IN_FLIGHT_STEPS.has(transaction.step);
   const isSuccess = transaction.step === 'success';
   const isError = transaction.step === 'error';
-  const showDetails = buildData !== null && (isBuilt || isSigning || isSuccess);
+  const showDetails = buildData !== null && SHOW_DETAILS_STEPS.has(transaction.step);
 
   const walletImg =
     walletType === WalletType.FREIGHTER
@@ -118,14 +144,14 @@ export function TxStatusView({
         </button>
       )}
 
-      {(isSigning || isSuccess || isError) && (
+      {(isInFlight || isSuccess || isError) && (
         <div className="pollar-tx-wallet-spinner">
           <div className="pollar-tx-spinner-ring">
             <svg
               viewBox="0 0 88 88"
               width="88"
               height="88"
-              className={`pollar-tx-spinner-svg${isSigning ? ' pollar-tx-spinner-rotating' : ''}`}
+              className={`pollar-tx-spinner-svg${isInFlight ? ' pollar-tx-spinner-rotating' : ''}`}
               aria-hidden
             >
               <circle cx="44" cy="44" r="36" fill="none" stroke="var(--pollar-border)" strokeWidth="3" />
@@ -139,9 +165,9 @@ export function TxStatusView({
                 }
                 strokeWidth="3"
                 strokeLinecap="round"
-                strokeDasharray={isSigning ? '169.6 56.6' : '999 0'}
+                strokeDasharray={isInFlight ? '169.6 56.6' : '999 0'}
                 transform="rotate(-90 44 44)"
-                style={{ transition: isSigning ? 'none' : 'stroke 400ms, stroke-dasharray 400ms' }}
+                style={{ transition: isInFlight ? 'none' : 'stroke 400ms, stroke-dasharray 400ms' }}
               />
             </svg>
             <div className="pollar-tx-wallet-icon">
@@ -149,7 +175,7 @@ export function TxStatusView({
             </div>
           </div>
 
-          {isSigning && (
+          {isInFlight && (
             <p className="pollar-tx-spinner-label">
               {walletType === WalletType.FREIGHTER
                 ? 'Waiting for Freighter…'
@@ -234,7 +260,7 @@ export function TxStatusView({
 
       <ModalStatusBanner
         message={STATUS_MESSAGES[transaction.step]}
-        status={isError ? 'ERROR' : isSigning || transaction.step === 'building' ? 'LOADING' : isSuccess ? 'SUCCESS' : 'NONE'}
+        status={isError ? 'ERROR' : isInFlight ? 'LOADING' : isSuccess ? 'SUCCESS' : 'NONE'}
       />
     </>
   );
