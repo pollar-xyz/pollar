@@ -195,6 +195,12 @@ export class PollarClient {
   // ─── Middlewares (DPoP + auto-refresh) ────────────────────────────────────
 
   private _wireMiddlewares(): void {
+    // Aliasing `this` is deliberate: every middleware callback below is an
+    // arrow function so `this` would resolve correctly, but the file reads
+    // significantly easier with one stable name across ~150 lines of
+    // request/response/refresh interleaving. Don't refactor without
+    // re-running the smoke tests for refresh coalescing + DPoP nonce flow.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     this._api.use({
       onRequest: async ({ request }: { request: Request }) => {

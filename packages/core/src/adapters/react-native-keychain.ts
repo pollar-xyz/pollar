@@ -58,7 +58,7 @@ export interface KeychainAdapterOptions {
 
 async function loadKeychain(): Promise<KeychainApi> {
   try {
-    // @ts-ignore -- optional peer dep; not present when the SDK is built or
+    // @ts-expect-error -- optional peer dep; not present when the SDK is built or
     // when the SDK runs on web. Resolved at runtime in React Native apps.
     const mod = await import('react-native-keychain');
     return mod as unknown as KeychainApi;

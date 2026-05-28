@@ -48,7 +48,7 @@ export interface SecureStoreAdapterOptions {
 
 async function loadSecureStore(): Promise<SecureStoreApi> {
   try {
-    // @ts-ignore -- optional peer dep; not present when the SDK is built or
+    // @ts-expect-error -- optional peer dep; not present when the SDK is built or
     // when the SDK runs on web. Resolved at runtime in Expo / RN apps.
     const mod = await import('expo-secure-store');
     return mod as unknown as SecureStoreApi;
