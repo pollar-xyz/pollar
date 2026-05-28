@@ -290,6 +290,18 @@ export class PollarClient {
           } catch {
             return response;
           }
+          // Token-expired retries (post-refresh) are only safe for idempotent
+          // methods. POST/PUT/DELETE/PATCH might have already executed
+          // server-side before auth was rejected — replaying could duplicate
+          // effects (double-create a transaction, etc.). The original 401
+          // bubbles up so the caller decides; the access token is now fresh,
+          // so a manual retry by the caller will succeed. Nonce-challenge
+          // 401s don't go through this branch (server didn't process the
+          // request), so any method retries safely above.
+          const method = request.method.toUpperCase();
+          if (method !== 'GET' && method !== 'HEAD') {
+            return response;
+          }
         }
         return self._retryRequest(request);
       },
