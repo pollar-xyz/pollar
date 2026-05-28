@@ -27,11 +27,7 @@ import { PollarProvider } from '@pollar/react';
 import '@pollar/react/styles.css';
 
 export default function App({ children }: { children: React.ReactNode }) {
-  return (
-    <PollarProvider config={{ apiKey: 'your-api-key' }}>
-      {children}
-    </PollarProvider>
-  );
+  return <PollarProvider config={{ apiKey: 'your-api-key' }}>{children}</PollarProvider>;
 }
 ```
 
@@ -42,11 +38,7 @@ export function Profile() {
   const { isAuthenticated, walletAddress, login, logout, getClient } = usePollar();
 
   if (!isAuthenticated) {
-    return (
-      <button onClick={() => login({ provider: 'google' })}>
-        Sign in with Google
-      </button>
-    );
+    return <button onClick={() => login({ provider: 'google' })}>Sign in with Google</button>;
   }
 
   // PII (email, name, avatar, providers) lives in memory only — fetch it from the client.
@@ -72,27 +64,35 @@ Context provider that initialises the Pollar client and makes it available to ch
 <PollarProvider
   config={{
     apiKey: 'your-api-key',
-    baseUrl: 'https://sdk.api.pollar.xyz',  // optional
-    stellarNetwork: 'testnet',              // optional, default: 'testnet'
+    baseUrl: 'https://sdk.api.pollar.xyz', // optional
+    stellarNetwork: 'testnet', // optional, default: 'testnet'
     // 0.7.0 options threaded straight through to PollarClient:
-    storage,                                // optional, RN apps inject this
-    keyManager,                             // optional, autodetects on web
-    walletAdapter,                          // optional, external wallet stack
-    deviceLabel: 'iPhone — Safari',         // optional, shown in SessionsModal
-    onStorageDegrade,                       // optional, telemetry hook
+    storage, // optional, RN apps inject this
+    keyManager, // optional, autodetects on web
+    walletAdapter, // optional, external wallet stack
+    deviceLabel: 'iPhone — Safari', // optional, shown in SessionsModal
+    onStorageDegrade, // optional, telemetry hook
   }}
-  styles={{ /* optional style overrides */ }}
-  adapters={{ /* optional named adapter set */ }}
+  styles={
+    {
+      /* optional style overrides */
+    }
+  }
+  adapters={
+    {
+      /* optional named adapter set */
+    }
+  }
 >
   {children}
 </PollarProvider>
 ```
 
-| Prop       | Type                | Required | Description                                                                |
-| ---------- | ------------------- | -------- | -------------------------------------------------------------------------- |
-| `config`   | `PollarClientConfig`| Yes      | Configuration passed verbatim to `PollarClient`                            |
-| `styles`   | `PollarStyles`      | No       | Per-app style overrides; merged on top of `appConfig.styles` from the API   |
-| `adapters` | `PollarAdapters`    | No       | Named set of `PollarAdapter` objects (e.g. Trustless Work). See below       |
+| Prop       | Type                 | Required | Description                                                               |
+| ---------- | -------------------- | -------- | ------------------------------------------------------------------------- |
+| `config`   | `PollarClientConfig` | Yes      | Configuration passed verbatim to `PollarClient`                           |
+| `styles`   | `PollarStyles`       | No       | Per-app style overrides; merged on top of `appConfig.styles` from the API |
+| `adapters` | `PollarAdapters`     | No       | Named set of `PollarAdapter` objects (e.g. Trustless Work). See below     |
 
 ---
 
@@ -104,56 +104,56 @@ needed.
 ```ts
 const {
   // Session
-  isAuthenticated,        // boolean — true when a wallet public key is present
-  walletAddress,          // string — '' until authenticated
-  walletType,             // WalletId | null
+  isAuthenticated, // boolean — true when a wallet public key is present
+  walletAddress, // string — '' until authenticated
+  walletType, // WalletId | null
 
   // Client escape hatch
-  getClient,              // () => PollarClient — for getUserProfile(), listSessions(), …
+  getClient, // () => PollarClient — for getUserProfile(), listSessions(), …
 
   // Auth
-  login,                  // (options: PollarLoginOptions) => void
-  logout,                 // () => void  (fire-and-forget; await getClient().logout() if you need the promise)
-  openLoginModal,         // () => void
+  login, // (options: PollarLoginOptions) => void
+  logout, // () => void  (fire-and-forget; await getClient().logout() if you need the promise)
+  openLoginModal, // () => void
 
   // Sessions (new in 0.7.0)
-  openSessionsModal,      // () => void
+  openSessionsModal, // () => void
 
   // Transactions
-  tx,                     // TransactionState
-  buildTx,                // (operation, params, options?) => Promise<void>
-  signAndSubmitTx,        // (unsignedXdr: string) => Promise<void>
-  openTxModal,            // () => void
+  tx, // TransactionState
+  buildTx, // (operation, params, options?) => Promise<void>
+  signAndSubmitTx, // (unsignedXdr: string) => Promise<void>
+  openTxModal, // () => void
 
   // Transaction history
-  txHistory,              // TxHistoryState
-  openTxHistoryModal,     // () => void
+  txHistory, // TxHistoryState
+  openTxHistoryModal, // () => void
 
   // Wallet balance
-  walletBalance,          // WalletBalanceState
-  refreshWalletBalance,   // () => Promise<void>
+  walletBalance, // WalletBalanceState
+  refreshWalletBalance, // () => Promise<void>
   openWalletBalanceModal, // () => void
 
   // Send / Receive
-  openSendModal,          // () => void
-  openReceiveModal,       // () => void
+  openSendModal, // () => void
+  openReceiveModal, // () => void
 
   // Network
-  network,                // StellarNetwork — 'mainnet' | 'testnet'
-  setNetwork,             // (network: StellarNetwork) => void
+  network, // StellarNetwork — 'mainnet' | 'testnet'
+  setNetwork, // (network: StellarNetwork) => void
 
   // KYC (UI ready — backend coming soon)
-  openKycModal,           // (options?: { country?, level?, onApproved? }) => void
+  openKycModal, // (options?: { country?, level?, onApproved? }) => void
 
   // Ramp (UI ready — backend coming soon)
-  openRampModal,          // () => void
+  openRampModal, // () => void
 
   // App config / styles served by the Pollar API
-  appConfig,              // PollarConfig
-  styles,                 // PollarStyles
+  appConfig, // PollarConfig
+  styles, // PollarStyles
 
   // Adapters (from PollarProvider props)
-  adapters,               // PollarAdapters | undefined
+  adapters, // PollarAdapters | undefined
 } = usePollar();
 ```
 
@@ -187,16 +187,16 @@ login({ provider: 'wallet', type: 'lobstr' });
 Every modal mounts itself when its `openXModal()` action is called. You don't need to render these directly — they're
 already wired inside `<PollarProvider>` — but they're exported in case you want to mount them yourself.
 
-| Component                 | Purpose                                                                                                       |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `<WalletButton>`          | Drop-in button. Opens login when signed out; signed in, shows the wallet address with a dropdown (Send, Receive, balance, history, sign out). Inline arc spinner during in-progress transactions |
-| `<SendModal>`             | Full send flow: asset picker, amount, destination, inline build → sign → success/error                         |
-| `<ReceiveModal>`          | Wallet address as QR code with copy-to-clipboard (no external QR dependency required)                          |
-| `<TxHistoryModal>`        | Paginated transaction history with auto-fetch on open and stellar.expert explorer links                        |
-| `<WalletBalanceModal>`    | Stellar account balances with refresh button                                                                   |
-| `<SessionsModal>`         | **New in 0.7.0.** Lists every active refresh-token family for the current user with device metadata, marks the local session, per-row revoke, and a "Sign out everywhere" button |
-| `<KycModal>`              | Identity verification flow — provider selection + status polling *(UI preview — backend coming soon)*          |
-| `<RampWidget>`            | Buy/sell crypto — direction tabs, route comparison, payment instructions *(UI preview — backend coming soon)*  |
+| Component              | Purpose                                                                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `<WalletButton>`       | Drop-in button. Opens login when signed out; signed in, shows the wallet address with a dropdown (Send, Receive, balance, history, sign out). Inline arc spinner during in-progress transactions |
+| `<SendModal>`          | Full send flow: asset picker, amount, destination, inline build → sign → success/error                                                                                                           |
+| `<ReceiveModal>`       | Wallet address as QR code with copy-to-clipboard (no external QR dependency required)                                                                                                            |
+| `<TxHistoryModal>`     | Paginated transaction history with auto-fetch on open and stellar.expert explorer links                                                                                                          |
+| `<WalletBalanceModal>` | Stellar account balances with refresh button                                                                                                                                                     |
+| `<SessionsModal>`      | **New in 0.7.0.** Lists every active refresh-token family for the current user with device metadata, marks the local session, per-row revoke, and a "Sign out everywhere" button                 |
+| `<KycModal>`           | Identity verification flow — provider selection + status polling _(UI preview — backend coming soon)_                                                                                            |
+| `<RampWidget>`         | Buy/sell crypto — direction tabs, route comparison, payment instructions _(UI preview — backend coming soon)_                                                                                    |
 
 ```tsx
 import { WalletButton } from '@pollar/react';
@@ -213,18 +213,18 @@ export function Header() {
 Every modal ships a pure presentational "template" companion — same name with a `Template` suffix. Use these when you
 want to swap the chrome but keep the data wiring from `usePollar()`.
 
-| Wrapper                | Template                       |
-| ---------------------- | ------------------------------ |
-| `<WalletButton>`       | `<WalletButtonTemplate>`       |
-| *(internal LoginModal)*| `<LoginModalTemplate>`         |
-| `<SendModal>`          | `<SendModalTemplate>`          |
-| `<ReceiveModal>`       | `<ReceiveModalTemplate>`       |
-| `<TransactionModal>`   | `<TransactionModalTemplate>`   |
-| `<TxHistoryModal>`     | `<TxHistoryModalTemplate>`     |
-| `<WalletBalanceModal>` | `<WalletBalanceModalTemplate>` |
-| `<KycModal>`           | `<KycModalTemplate>`           |
-| `<RampWidget>`         | `<RampWidgetTemplate>`         |
-| `<SessionsModal>`      | `<SessionsModalTemplate>`      |
+| Wrapper                 | Template                       |
+| ----------------------- | ------------------------------ |
+| `<WalletButton>`        | `<WalletButtonTemplate>`       |
+| _(internal LoginModal)_ | `<LoginModalTemplate>`         |
+| `<SendModal>`           | `<SendModalTemplate>`          |
+| `<ReceiveModal>`        | `<ReceiveModalTemplate>`       |
+| `<TransactionModal>`    | `<TransactionModalTemplate>`   |
+| `<TxHistoryModal>`      | `<TxHistoryModalTemplate>`     |
+| `<WalletBalanceModal>`  | `<WalletBalanceModalTemplate>` |
+| `<KycModal>`            | `<KycModalTemplate>`           |
+| `<RampWidget>`          | `<RampWidgetTemplate>`         |
+| `<SessionsModal>`       | `<SessionsModalTemplate>`      |
 
 `<TxStatusView>` is the shared status component (build → sign → success/error) reused by `TransactionModal` and
 `SendModal`; it's exported on its own for consumers that want to embed the lifecycle elsewhere.
@@ -241,12 +241,12 @@ import type { PollarAdapter } from '@pollar/core';
 
 const trustlessWork: PollarAdapter = {
   initialize: async (params) => ({ unsignedTransaction: '…' }),
-  release:    async (params) => ({ unsignedTransaction: '…' }),
+  release: async (params) => ({ unsignedTransaction: '…' }),
 };
 
 <PollarProvider config={{ apiKey }} adapters={{ trustlessWork }}>
   …
-</PollarProvider>
+</PollarProvider>;
 ```
 
 > **Renamed in 0.7.0** — `EscrowFn` → `AdapterFn` and `EscrowAdapter` → `PollarAdapter`. Runtime contract is
@@ -263,7 +263,9 @@ const useTrustlessWork = createPollarAdapterHook<typeof trustlessWork>('trustles
 
 function MyComponent() {
   const tw = useTrustlessWork();
-  await tw.initialize({ /* … */ });  // unsigned XDR is built, signed, and submitted automatically
+  await tw.initialize({
+    /* … */
+  }); // unsigned XDR is built, signed, and submitted automatically
 }
 ```
 
@@ -285,7 +287,7 @@ import { Networks } from '@creit.tech/stellar-wallets-kit';
   }}
 >
   {children}
-</PollarProvider>
+</PollarProvider>;
 ```
 
 Then any `login({ provider: 'wallet', type: '<kit wallet id>' })` is routed through the kit.

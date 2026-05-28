@@ -27,17 +27,7 @@ interface QRCodeSvgProps extends SVGProps<SVGSVGElement> {
 }
 
 const QRCodeSvg = forwardRef<SVGSVGElement, QRCodeSvgProps>(function QRCodeSvg(
-  {
-    bgColor,
-    bgD,
-    fgD,
-    fgColor,
-    size,
-    title,
-    viewBoxSize,
-    xmlns = 'http://www.w3.org/2000/svg',
-    ...props
-  },
+  { bgColor, bgD, fgD, fgColor, size, title, viewBoxSize, xmlns = 'http://www.w3.org/2000/svg', ...props },
   ref,
 ) {
   return (
@@ -87,11 +77,15 @@ export const QRCode = forwardRef<SVGSVGElement, QRCodeProps>(function QRCode(
       {...props}
       bgColor={bgColor}
       bgD={cells
-        .map((row, rowIndex) => row.map((cell, cellIndex) => (!cell ? `M ${cellIndex} ${rowIndex} l 1 0 0 1 -1 0 Z` : '')).join(' '))
+        .map((row, rowIndex) =>
+          row.map((cell, cellIndex) => (!cell ? `M ${cellIndex} ${rowIndex} l 1 0 0 1 -1 0 Z` : '')).join(' '),
+        )
         .join(' ')}
       fgColor={fgColor}
       fgD={cells
-        .map((row, rowIndex) => row.map((cell, cellIndex) => (cell ? `M ${cellIndex} ${rowIndex} l 1 0 0 1 -1 0 Z` : '')).join(' '))
+        .map((row, rowIndex) =>
+          row.map((cell, cellIndex) => (cell ? `M ${cellIndex} ${rowIndex} l 1 0 0 1 -1 0 Z` : '')).join(' '),
+        )
         .join(' ')}
       ref={ref}
       size={size}

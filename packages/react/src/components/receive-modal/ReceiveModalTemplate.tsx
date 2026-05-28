@@ -64,12 +64,7 @@ export function ReceiveModalTemplate({
       {walletAddress ? (
         <>
           <div className="pollar-receive-qr">
-            <QRCode
-              value={walletAddress}
-              size={180}
-              fgColor={isDark ? '#ffffff' : '#111827'}
-              bgColor="transparent"
-            />
+            <QRCode value={walletAddress} size={180} fgColor={isDark ? '#ffffff' : '#111827'} bgColor="transparent" />
           </div>
 
           <p className="pollar-receive-instructions">

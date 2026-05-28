@@ -17,10 +17,13 @@ export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const [offset, setOffset] = useState(0);
 
-  const load = useCallback((nextOffset: number) => {
-    setOffset(nextOffset);
-    void getClient().fetchTxHistory({ limit: PAGE_SIZE, offset: nextOffset });
-  }, [getClient]);
+  const load = useCallback(
+    (nextOffset: number) => {
+      setOffset(nextOffset);
+      void getClient().fetchTxHistory({ limit: PAGE_SIZE, offset: nextOffset });
+    },
+    [getClient],
+  );
 
   useEffect(() => {
     load(0);

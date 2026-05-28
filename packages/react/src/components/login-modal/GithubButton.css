@@ -19,7 +19,9 @@
   outline: none;
   overflow: hidden;
   padding: 0 1rem;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
   white-space: nowrap;
   width: 100%;
   user-select: none;
@@ -40,7 +42,7 @@
 .github-button:not(:disabled):hover {
   border-color: var(--pollar-accent);
   color: var(--pollar-accent);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 .github-button:not(:disabled):active {

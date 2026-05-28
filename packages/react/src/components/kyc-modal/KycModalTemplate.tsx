@@ -70,9 +70,17 @@ export function KycModalTemplate({
 
       {step === 'select_provider' && (
         <div className="pollar-kyc-providers">
-          {providers.length === 0 && <p style={{ color: 'var(--pollar-muted)', textAlign: 'center' }}>No providers available for your country.</p>}
+          {providers.length === 0 && (
+            <p style={{ color: 'var(--pollar-muted)', textAlign: 'center' }}>No providers available for your country.</p>
+          )}
           {providers.map((p) => (
-            <button key={p.id} type="button" className="pollar-kyc-provider-btn" disabled={isLoading} onClick={() => onSelectProvider(p)}>
+            <button
+              key={p.id}
+              type="button"
+              className="pollar-kyc-provider-btn"
+              disabled={isLoading}
+              onClick={() => onSelectProvider(p)}
+            >
               <span className="pollar-kyc-provider-name">{p.name}</span>
               <span className="pollar-kyc-provider-flow">{p.flow}</span>
             </button>
@@ -120,7 +128,9 @@ export function KycModalTemplate({
           <span className="pollar-kyc-result-icon">{kycStatus === 'approved' ? '✅' : '❌'}</span>
           <KycStatusBadge status={kycStatus} />
           <p className="pollar-kyc-result-text">
-            {kycStatus === 'approved' ? 'Your identity has been verified successfully.' : 'Verification was not approved. Please try again.'}
+            {kycStatus === 'approved'
+              ? 'Your identity has been verified successfully.'
+              : 'Verification was not approved. Please try again.'}
           </p>
           <div className="pollar-modal-actions">
             <button type="button" className="pollar-btn-primary" onClick={onClose}>

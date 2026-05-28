@@ -75,18 +75,9 @@ export function TxStatusView({
   const showDetails = buildData !== null && SHOW_DETAILS_STEPS.has(transaction.step);
 
   const walletImg =
-    walletType === WalletType.FREIGHTER
-      ? LOGO_FREIGHTER
-      : walletType === WalletType.ALBEDO
-        ? LOGO_ALBEDO
-        : LOGO_POLLAR;
+    walletType === WalletType.FREIGHTER ? LOGO_FREIGHTER : walletType === WalletType.ALBEDO ? LOGO_ALBEDO : LOGO_POLLAR;
 
-  const walletAlt =
-    walletType === WalletType.FREIGHTER
-      ? 'Freighter'
-      : walletType === WalletType.ALBEDO
-        ? 'Albedo'
-        : 'Pollar';
+  const walletAlt = walletType === WalletType.FREIGHTER ? 'Freighter' : walletType === WalletType.ALBEDO ? 'Albedo' : 'Pollar';
 
   return (
     <>

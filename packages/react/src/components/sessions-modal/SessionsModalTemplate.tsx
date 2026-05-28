@@ -135,13 +135,7 @@ export function SessionsModalTemplate({
               aria-hidden
             >
               <path d="M11.5 6.5a5 5 0 11-1.5-3.536" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              <path
-                d="M10 1v3h-3"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+              <path d="M10 1v3h-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             Refresh
           </button>
@@ -157,9 +151,7 @@ export function SessionsModalTemplate({
         {state.step === 'idle' && <div className="pollar-modal-empty">Loading…</div>}
         {isLoading && <div className="pollar-modal-empty">Loading…</div>}
         {state.step === 'error' && <div className="pollar-modal-empty">{state.message}</div>}
-        {state.step === 'loaded' && sessions.length === 0 && (
-          <div className="pollar-modal-empty">No active sessions.</div>
-        )}
+        {state.step === 'loaded' && sessions.length === 0 && <div className="pollar-modal-empty">No active sessions.</div>}
         {sessions.map((s) => {
           const isRevoking = revokingFamilyId === s.familyId;
           return (

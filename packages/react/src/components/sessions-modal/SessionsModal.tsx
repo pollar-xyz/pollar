@@ -19,7 +19,12 @@ export function SessionsModal({ onClose }: SessionsModalProps) {
   const [signingOutEverywhere, setSigningOutEverywhere] = useState(false);
 
   const mountedRef = useRef(true);
-  useEffect(() => () => { mountedRef.current = false; }, []);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
 
   // Auto-close on logout (logoutEverywhere from this modal, or eventual
   // 401-on-current-family-revoke). The provider clears session state when
@@ -60,9 +65,7 @@ export function SessionsModal({ onClose }: SessionsModalProps) {
         await load();
       } catch {
         if (!mountedRef.current) return;
-        setState((prev) =>
-          prev.step === 'loaded' ? { step: 'error', message: 'Failed to revoke session' } : prev,
-        );
+        setState((prev) => (prev.step === 'loaded' ? { step: 'error', message: 'Failed to revoke session' } : prev));
       } finally {
         if (mountedRef.current) setRevokingFamilyId(null);
       }

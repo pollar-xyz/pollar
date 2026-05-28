@@ -126,14 +126,21 @@ export function LoginModalTemplate({
     authState.step === 'error' &&
     (authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_EXPIRED ||
       authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_INVALID);
-  const awaitingEmailCode =
-    authState.step === 'entering_code' || authState.step === 'verifying_email_code' || isEmailCodeError;
-  const statusMessage =
-    authState.step === 'error' ? authState.message : AUTH_STATE_MESSAGES[authState.step];
+  const awaitingEmailCode = authState.step === 'entering_code' || authState.step === 'verifying_email_code' || isEmailCodeError;
+  const statusMessage = authState.step === 'error' ? authState.message : AUTH_STATE_MESSAGES[authState.step];
 
   const BackButton = ({ onClick }: { onClick: () => void }) => (
     <button type="button" className="pollar-back-btn" onClick={onClick} aria-label="Back">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M15 19l-7-7 7-7" />
       </svg>
     </button>
@@ -142,7 +149,16 @@ export function LoginModalTemplate({
   return (
     <div className="pollar-modal-card pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
       <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label="Close">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M18 6L6 18M6 6l12 12" />
         </svg>
       </button>
@@ -157,27 +173,17 @@ export function LoginModalTemplate({
       {awaitingEmailCode ? (
         <>
           <BackButton onClick={onBack} />
-          <EmailCodeInput key={codeInputKey} email={email} onSubmit={onCodeSubmit ?? (() => { })} />
+          <EmailCodeInput key={codeInputKey} email={email} onSubmit={onCodeSubmit ?? (() => {})} />
         </>
       ) : showWalletPicker ? (
         <>
           <BackButton onClick={() => setShowWalletPicker(false)} />
           <div className="pollar-wallet-list">
-            <button
-              type="button"
-              disabled={isLoading}
-              className="pollar-wallet-list-btn"
-              onClick={onFreighterConnect}
-            >
+            <button type="button" disabled={isLoading} className="pollar-wallet-list-btn" onClick={onFreighterConnect}>
               <img src={LOGO_FREIGHTER} alt="Freighter" className="pollar-wallet-list-icon" />
               <span className="pollar-wallet-list-name">Freighter</span>
             </button>
-            <button
-              type="button"
-              disabled={isLoading}
-              className="pollar-wallet-list-btn"
-              onClick={onAlbedoConnect}
-            >
+            <button type="button" disabled={isLoading} className="pollar-wallet-list-btn" onClick={onAlbedoConnect}>
               <img src={LOGO_ALBEDO} alt="Albedo" className="pollar-wallet-list-icon" />
               <span className="pollar-wallet-list-name">Albedo</span>
             </button>
@@ -196,7 +202,13 @@ export function LoginModalTemplate({
                 onChange={(e) => onEmailChange?.(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && onEmailSubmit?.()}
               />
-              <button type="button" disabled={isLoading || !email} className="pollar-btn-primary" style={{ marginTop: '0.75rem', width: '100%' }} onClick={onEmailSubmit}>
+              <button
+                type="button"
+                disabled={isLoading || !email}
+                className="pollar-btn-primary"
+                style={{ marginTop: '0.75rem', width: '100%' }}
+                onClick={onEmailSubmit}
+              >
                 Submit
               </button>
             </div>
@@ -230,7 +242,16 @@ export function LoginModalTemplate({
                 className="pollar-wallet-entry-btn"
                 onClick={() => setShowWalletPicker(true)}
               >
-                <svg width="18" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="18"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                 </svg>
                 Wallet

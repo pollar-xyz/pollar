@@ -21,9 +21,7 @@ function BalanceItem({ record }: { record: WalletBalanceRecord }) {
       <span className="pollar-bal-asset">{record.code}</span>
       <div className="pollar-bal-amounts">
         <span className="pollar-bal-amount">{formatBalance(record.balance)}</span>
-        {balanceDiffers && (
-          <span className="pollar-bal-available">{formatBalance(record.available)} available</span>
-        )}
+        {balanceDiffers && <span className="pollar-bal-available">{formatBalance(record.available)} available</span>}
       </div>
     </div>
   );
@@ -96,23 +94,15 @@ export function WalletBalanceModalTemplate({
         </div>
       </div>
 
-      {walletAddress && (
-        <div className="pollar-bal-address">{cropAddress(walletAddress)}</div>
-      )}
+      {walletAddress && <div className="pollar-bal-address">{cropAddress(walletAddress)}</div>}
 
       {isLoading && <div className="pollar-modal-empty">Loading…</div>}
 
-      {walletBalance.step === 'error' && (
-        <div className="pollar-modal-error">{walletBalance.message}</div>
-      )}
+      {walletBalance.step === 'error' && <div className="pollar-modal-error">{walletBalance.message}</div>}
 
-      {data && !data.exists && (
-        <div className="pollar-modal-empty">Account not found on {data.network}.</div>
-      )}
+      {data && !data.exists && <div className="pollar-modal-empty">Account not found on {data.network}.</div>}
 
-      {data?.exists && data.balances.length === 0 && (
-        <div className="pollar-modal-empty">No balances found.</div>
-      )}
+      {data?.exists && data.balances.length === 0 && <div className="pollar-modal-empty">No balances found.</div>}
 
       {data?.exists && data.balances.length > 0 && (
         <div className="pollar-bal-list">

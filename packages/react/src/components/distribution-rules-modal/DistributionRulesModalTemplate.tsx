@@ -87,18 +87,17 @@ function RuleCard({
       </div>
       <div className="pollar-dist-item-action">
         {isClaimed ? (
-          <span className="pollar-dist-item-status" data-kind="claimed">Claimed</span>
+          <span className="pollar-dist-item-status" data-kind="claimed">
+            Claimed
+          </span>
         ) : effectivelyClaimable ? (
-          <button
-            type="button"
-            className="pollar-btn-primary pollar-dist-claim-btn"
-            onClick={onClaim}
-            disabled={isClaiming}
-          >
+          <button type="button" className="pollar-btn-primary pollar-dist-claim-btn" onClick={onClaim} disabled={isClaiming}>
             {isClaiming ? 'Claiming…' : 'Claim'}
           </button>
         ) : (
-          <span className="pollar-dist-item-status" data-kind="unavailable">{reasonLabel(rule.reason)}</span>
+          <span className="pollar-dist-item-status" data-kind="unavailable">
+            {reasonLabel(rule.reason)}
+          </span>
         )}
       </div>
       {errorMessage && <div className="pollar-dist-item-error">{errorMessage}</div>}

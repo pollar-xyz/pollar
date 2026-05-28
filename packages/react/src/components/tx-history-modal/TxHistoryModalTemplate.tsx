@@ -67,11 +67,16 @@ export function TxHistoryModalTemplate({
   const showPagination = txHistory.step === 'loaded' && total > PAGE_SIZE;
 
   return (
-    <div className="pollar-modal-card pollar-hist-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
+    <div
+      className="pollar-modal-card pollar-hist-modal"
+      data-theme={theme}
+      style={cssVars}
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="pollar-modal-header">
         <h2 className="pollar-modal-title">Transaction History</h2>
         <div className="pollar-modal-header-actions">
-            <button className="pollar-modal-refresh-btn" onClick={onRefresh} disabled={isLoading}>
+          <button className="pollar-modal-refresh-btn" onClick={onRefresh} disabled={isLoading}>
             <svg
               className={`pollar-modal-refresh-icon${isLoading ? ' spinning' : ''}`}
               width="13"
@@ -80,12 +85,7 @@ export function TxHistoryModalTemplate({
               fill="none"
               aria-hidden
             >
-              <path
-                d="M11.5 6.5a5 5 0 11-1.5-3.536"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
+              <path d="M11.5 6.5a5 5 0 11-1.5-3.536" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               <path d="M10 1v3h-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             Refresh
@@ -99,18 +99,10 @@ export function TxHistoryModalTemplate({
       </div>
 
       <div className="pollar-hist-list">
-        {txHistory.step === 'idle' && (
-          <div className="pollar-modal-empty">Click Refresh to load transactions.</div>
-        )}
-        {isLoading && (
-          <div className="pollar-modal-empty">Loading…</div>
-        )}
-        {txHistory.step === 'error' && (
-          <div className="pollar-modal-empty">{txHistory.message}</div>
-        )}
-        {txHistory.step === 'loaded' && records.length === 0 && (
-          <div className="pollar-modal-empty">No transactions yet.</div>
-        )}
+        {txHistory.step === 'idle' && <div className="pollar-modal-empty">Click Refresh to load transactions.</div>}
+        {isLoading && <div className="pollar-modal-empty">Loading…</div>}
+        {txHistory.step === 'error' && <div className="pollar-modal-empty">{txHistory.message}</div>}
+        {txHistory.step === 'loaded' && records.length === 0 && <div className="pollar-modal-empty">No transactions yet.</div>}
         {records.map((record) => {
           const explorerUrl = `https://stellar.expert/explorer/${record.network === 'testnet' ? 'testnet' : 'public'}/tx/${record.hash}`;
           return (
@@ -122,10 +114,27 @@ export function TxHistoryModalTemplate({
                 {record.feeXlm && <span>· {record.feeXlm} XLM</span>}
                 <span>· {formatDate(record.createdAt)}</span>
                 <span>·</span>
-                <a className="pollar-hist-item-explorer" href={explorerUrl} target="_blank" rel="noopener noreferrer" aria-label="View on Stellar Explorer">
+                <a
+                  className="pollar-hist-item-explorer"
+                  href={explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="View on Stellar Explorer"
+                >
                   <svg width="11" height="11" viewBox="0 0 13 13" fill="none" aria-hidden>
-                    <path d="M5 2H2a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                    <path d="M8 1h4m0 0v4m0-4L6 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <path
+                      d="M5 2H2a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V8"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M8 1h4m0 0v4m0-4L6 7"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                   Explorer
                 </a>

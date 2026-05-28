@@ -55,12 +55,7 @@ export function TransactionModalTemplate({
   } as React.CSSProperties;
 
   return (
-    <div
-      className="pollar-modal-card pollar-tx-modal"
-      data-theme={theme}
-      style={cssVars}
-      onClick={(e) => e.stopPropagation()}
-    >
+    <div className="pollar-modal-card pollar-tx-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
       <div className="pollar-modal-header">
         <h2 className="pollar-modal-title">Transaction</h2>
       </div>

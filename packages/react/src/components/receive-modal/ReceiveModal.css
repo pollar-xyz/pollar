@@ -60,7 +60,9 @@
   font-weight: 500;
   color: var(--pollar-muted);
   cursor: pointer;
-  transition: color 150ms, background 150ms;
+  transition:
+    color 150ms,
+    background 150ms;
 }
 
 .pollar-receive-copy-btn:hover {

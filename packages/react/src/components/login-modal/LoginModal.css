@@ -1,334 +1,342 @@
 /* ---- Modal card ---- */
 .pollar-modal {
-    max-width: 460px;
+  max-width: 460px;
 }
 
 /* ---- Header ---- */
 .pollar-header {
-    margin-bottom: 1.75rem;
-    text-align: center;
+  margin-bottom: 1.75rem;
+  text-align: center;
 }
 
 .pollar-logo-wrap {
-    margin-bottom: 1rem;
-    display: flex;
-    justify-content: center;
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: center;
 }
 
 .pollar-logo {
-    height: 4rem;
-    width: 4rem;
-    object-fit: contain;
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+  height: 4rem;
+  width: 4rem;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
 }
 
 .pollar-title {
-    margin: 0 0 0.5rem;
-    font-size: var(--pollar-modal-heading-size, 1.375rem);
-    font-weight: 700;
-    color: var(--pollar-text);
+  margin: 0 0 0.5rem;
+  font-size: var(--pollar-modal-heading-size, 1.375rem);
+  font-weight: 700;
+  color: var(--pollar-text);
 }
 
 .pollar-subtitle {
-    margin: 0;
-    font-size: var(--pollar-modal-subtitle-size, 0.9rem);
-    color: var(--pollar-muted);
+  margin: 0;
+  font-size: var(--pollar-modal-subtitle-size, 0.9rem);
+  color: var(--pollar-muted);
 }
 
 /* ---- Error ---- */
 .pollar-error {
-    margin: 0 0 1rem;
-    padding: 10px 14px;
-    border-radius: 8px;
-    background-color: var(--pollar-error-bg);
-    border: 1px solid var(--pollar-error-border);
-    color: var(--pollar-error-text);
-    font-size: 13px;
-    line-height: 1.4;
+  margin: 0 0 1rem;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background-color: var(--pollar-error-bg);
+  border: 1px solid var(--pollar-error-border);
+  color: var(--pollar-error-text);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 /* ---- Email ---- */
 .pollar-email-section {
-    margin-bottom: 1rem;
+  margin-bottom: 1rem;
 }
 
 .pollar-email-input {
-    width: 100%;
-    height: var(--pollar-input-height, 44px);
-    padding: 0 1rem;
-    border-radius: var(--pollar-input-border-radius, 0.5rem);
-    border: 1px solid var(--pollar-border);
-    background-color: var(--pollar-input-bg);
-    font-size: 1rem;
-    color: var(--pollar-text);
-    outline: none;
-    box-sizing: border-box;
+  width: 100%;
+  height: var(--pollar-input-height, 44px);
+  padding: 0 1rem;
+  border-radius: var(--pollar-input-border-radius, 0.5rem);
+  border: 1px solid var(--pollar-border);
+  background-color: var(--pollar-input-bg);
+  font-size: 1rem;
+  color: var(--pollar-text);
+  outline: none;
+  box-sizing: border-box;
 }
 
-.pollar-email-input::placeholder { color: var(--pollar-muted); }
-.pollar-email-input:focus { box-shadow: 0 0 0 2px var(--pollar-accent); border-color: transparent; }
-.pollar-email-input:disabled { opacity: 0.5; cursor: not-allowed; }
+.pollar-email-input::placeholder {
+  color: var(--pollar-muted);
+}
+.pollar-email-input:focus {
+  box-shadow: 0 0 0 2px var(--pollar-accent);
+  border-color: transparent;
+}
+.pollar-email-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 /* ---- Divider ---- */
 .pollar-divider {
-    position: relative;
-    margin: 1.25rem 0;
+  position: relative;
+  margin: 1.25rem 0;
 }
 
 .pollar-divider-line {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    pointer-events: none;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
 }
 
 .pollar-divider-line::after {
-    content: '';
-    width: 100%;
-    border-top: 1px solid var(--pollar-border);
+  content: '';
+  width: 100%;
+  border-top: 1px solid var(--pollar-border);
 }
 
 .pollar-divider-label {
-    position: relative;
-    display: flex;
-    justify-content: center;
-    font-size: 0.875rem;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  font-size: 0.875rem;
 }
 
 .pollar-divider-text {
-    padding: 0 1rem;
-    font-weight: 500;
-    color: var(--pollar-muted);
-    background-color: var(--pollar-bg);
+  padding: 0 1rem;
+  font-weight: 500;
+  color: var(--pollar-muted);
+  background-color: var(--pollar-bg);
 }
 
 /* ---- Social ---- */
 .pollar-social-list {
-    margin-bottom: .625rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.625rem;
+  margin-bottom: 0.625rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
 }
 
 .pollar-social-btn {
-    display: flex;
-    width: 100%;
-    height: var(--pollar-buttons-height, 44px);
-    align-items: center;
-    justify-content: center;
-    gap: 0.75rem;
-    border-radius: var(--pollar-buttons-border-radius, 0.5rem);
-    border: 1px solid var(--pollar-border);
-    background-color: var(--pollar-input-bg);
-    padding: 0 1rem;
-    cursor: pointer;
-    transition: all 0.15s;
-    box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  height: var(--pollar-buttons-height, 44px);
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  border-radius: var(--pollar-buttons-border-radius, 0.5rem);
+  border: 1px solid var(--pollar-border);
+  background-color: var(--pollar-input-bg);
+  padding: 0 1rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-sizing: border-box;
 }
 
 .pollar-social-btn:hover:not(:disabled) {
-    transform: scale(1.01);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transform: scale(1.01);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .pollar-social-btn:active:not(:disabled) {
-    transform: scale(0.99);
+  transform: scale(0.99);
 }
 
 .pollar-social-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .pollar-social-btn-text {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--pollar-text);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--pollar-text);
 }
 
 /* ---- Wallets ---- */
 .pollar-wallet-section {
-    display: flex;
-    flex-direction: column;
-    gap: 0.625rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
 }
 
 .pollar-wallet-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
 }
 
 .pollar-wallet-list-btn {
-    display: flex;
-    width: 100%;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.75rem 0.75rem;
-    border-radius: var(--pollar-buttons-border-radius, 0.5rem);
-    border: 1px solid transparent;
-    background-color: transparent;
-    color: var(--pollar-text);
-    cursor: pointer;
-    transition: all 0.15s;
-    box-sizing: border-box;
-    text-align: left;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0.75rem;
+  border-radius: var(--pollar-buttons-border-radius, 0.5rem);
+  border: 1px solid transparent;
+  background-color: transparent;
+  color: var(--pollar-text);
+  cursor: pointer;
+  transition: all 0.15s;
+  box-sizing: border-box;
+  text-align: left;
 }
 
 .pollar-wallet-list-btn:hover:not(:disabled) {
-    background-color: var(--pollar-input-bg);
-    border-color: var(--pollar-accent);
-    color: var(--pollar-accent);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  background-color: var(--pollar-input-bg);
+  border-color: var(--pollar-accent);
+  color: var(--pollar-accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 .pollar-wallet-list-btn:active:not(:disabled) {
-    transform: scale(0.99);
+  transform: scale(0.99);
 }
 
 .pollar-wallet-list-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .pollar-wallet-list-icon {
-    width: 2.75rem;
-    height: 2.75rem;
-    border-radius: 0.625rem;
-    flex-shrink: 0;
-    object-fit: contain;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.625rem;
+  flex-shrink: 0;
+  object-fit: contain;
 }
 
 .pollar-wallet-list-name {
-    font-size: 1rem;
-    font-weight: 500;
+  font-size: 1rem;
+  font-weight: 500;
 }
 
 .pollar-wallet-label {
-    margin: 0;
-    font-size: 0.6875rem;
-    font-weight: 500;
-    text-align: center;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--pollar-muted);
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--pollar-muted);
 }
 
 .pollar-wallet-btn {
-    display: flex;
-    width: 100%;
-    height: var(--pollar-buttons-height, 44px);
-    align-items: center;
-    justify-content: center;
-    gap: 0.75rem;
-    border-radius: var(--pollar-buttons-border-radius, 0.5rem);
-    border: 1px solid var(--pollar-border);
-    background-color: var(--pollar-input-bg);
-    color: var(--pollar-text);
-    padding: 0 1rem;
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-    box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  height: var(--pollar-buttons-height, 44px);
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  border-radius: var(--pollar-buttons-border-radius, 0.5rem);
+  border: 1px solid var(--pollar-border);
+  background-color: var(--pollar-input-bg);
+  color: var(--pollar-text);
+  padding: 0 1rem;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-sizing: border-box;
 }
 
 .pollar-wallet-btn:hover:not(:disabled) {
-    transform: scale(1.01);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transform: scale(1.01);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .pollar-wallet-btn:active:not(:disabled) {
-    transform: scale(0.99);
+  transform: scale(0.99);
 }
 
 .pollar-wallet-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .pollar-wallet-entry-btn {
-    display: flex;
-    width: 100%;
-    height: var(--pollar-buttons-height, 44px);
-    align-items: center;
-    justify-content: center;
-    gap: 0.625rem;
-    border-radius: var(--pollar-buttons-border-radius, 0.5rem);
-    border: 1px solid var(--pollar-border);
-    background-color: var(--pollar-input-bg);
-    color: var(--pollar-text);
-    padding: 0 1rem;
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-    box-sizing: border-box;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  display: flex;
+  width: 100%;
+  height: var(--pollar-buttons-height, 44px);
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  border-radius: var(--pollar-buttons-border-radius, 0.5rem);
+  border: 1px solid var(--pollar-border);
+  background-color: var(--pollar-input-bg);
+  color: var(--pollar-text);
+  padding: 0 1rem;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .pollar-wallet-entry-btn:hover:not(:disabled) {
-    border-color: var(--pollar-accent);
-    color: var(--pollar-accent);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  border-color: var(--pollar-accent);
+  color: var(--pollar-accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 .pollar-wallet-entry-btn:active:not(:disabled) {
-    transform: scale(0.99);
+  transform: scale(0.99);
 }
 
 .pollar-wallet-entry-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .pollar-wallet-icon {
-    width: 1.125rem;
-    height: 1.125rem;
-    flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
 }
 
 /* ---- Code input ---- */
 .pollar-code-section {
-    margin-bottom: 1rem;
+  margin-bottom: 1rem;
 }
 
 .pollar-code-label {
-    margin: 0 0 1rem;
-    font-size: 0.875rem;
-    color: var(--pollar-muted);
-    text-align: center;
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: var(--pollar-muted);
+  text-align: center;
 }
 
 .pollar-code-inputs {
-    display: flex;
-    gap: 0.5rem;
-    justify-content: center;
-    margin-bottom: 0.75rem;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-bottom: 0.75rem;
 }
 
 .pollar-code-input {
-    width: 2.75rem;
-    height: 3rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--pollar-border);
-    background-color: var(--pollar-input-bg);
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--pollar-text);
-    text-align: center;
-    outline: none;
-    box-sizing: border-box;
+  width: 2.75rem;
+  height: 3rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--pollar-border);
+  background-color: var(--pollar-input-bg);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--pollar-text);
+  text-align: center;
+  outline: none;
+  box-sizing: border-box;
 }
 
 .pollar-code-input:focus {
-    box-shadow: 0 0 0 2px var(--pollar-accent);
-    border-color: transparent;
+  box-shadow: 0 0 0 2px var(--pollar-accent);
+  border-color: transparent;
 }
 
 .pollar-code-input:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  opacity: 0.5;
+  cursor: not-allowed;
 }

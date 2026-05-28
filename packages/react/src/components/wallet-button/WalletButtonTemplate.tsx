@@ -72,14 +72,7 @@ export function WalletButtonTemplate({
       >
         <span className="wallet-btn-label">{cropWallet(walletAddress)}</span>
         {isInProgress ? (
-          <svg
-            className="wallet-btn-spinner"
-            viewBox="0 0 12 12"
-            width="12"
-            height="12"
-            fill="none"
-            aria-hidden
-          >
+          <svg className="wallet-btn-spinner" viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden>
             <circle cx="6" cy="6" r="4.5" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" />
             <circle
               cx="6"
@@ -111,7 +104,16 @@ export function WalletButtonTemplate({
         <div className="wallet-dropdown" style={{ backgroundColor: dropdownBg, borderColor: dropdownBorder }}>
           {/* Send */}
           <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onSend}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <line x1="22" y1="2" x2="11" y2="13" />
               <polygon points="22 2 15 22 11 13 2 9 22 2" />
             </svg>
@@ -120,7 +122,16 @@ export function WalletButtonTemplate({
 
           {/* Receive */}
           <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onReceive}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <polyline points="8 17 12 21 16 17" />
               <line x1="12" y1="12" x2="12" y2="21" />
               <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29" />
@@ -132,7 +143,16 @@ export function WalletButtonTemplate({
 
           {/* Copy address */}
           <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onCopy}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <rect x="9" y="9" width="13" height="13" rx="2" />
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
             </svg>
@@ -141,7 +161,16 @@ export function WalletButtonTemplate({
 
           {/* Wallet balance */}
           <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onWalletBalance}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
               <circle cx="16" cy="12" r="2" />
               <path d="M22 8H12" />
@@ -151,7 +180,16 @@ export function WalletButtonTemplate({
 
           {/* Transaction history */}
           <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onTxHistory}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14,2 14,8 20,8" />
               <line x1="16" y1="13" x2="8" y2="13" />
@@ -165,7 +203,16 @@ export function WalletButtonTemplate({
 
           {/* Logout */}
           <button className="wallet-dropdown-item danger" onClick={onLogout}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <polyline points="16,17 21,12 16,7" />
               <line x1="21" y1="12" x2="9" y2="12" />

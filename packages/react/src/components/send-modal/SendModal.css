@@ -53,12 +53,7 @@
 .pollar-send-skeleton {
   height: var(--pollar-input-height, 44px);
   border-radius: var(--pollar-input-border-radius, 0.5rem);
-  background: linear-gradient(
-    90deg,
-    var(--pollar-input-bg) 25%,
-    var(--pollar-border) 50%,
-    var(--pollar-input-bg) 75%
-  );
+  background: linear-gradient(90deg, var(--pollar-input-bg) 25%, var(--pollar-border) 50%, var(--pollar-input-bg) 75%);
   background-size: 200% 100%;
   animation: pollar-pulse 1.4s ease-in-out infinite;
 }

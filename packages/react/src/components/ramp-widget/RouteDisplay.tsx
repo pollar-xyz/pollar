@@ -31,9 +31,7 @@ export function RouteDisplay({ quote, onSelect }: RouteDisplayProps) {
         </span>
       </div>
       <div className="pollar-ramp-route-right">
-        <span className="pollar-ramp-route-fee">
-          {quote.fee}% fee
-        </span>
+        <span className="pollar-ramp-route-fee">{quote.fee}% fee</span>
         {quote.recommended && <span className="pollar-ramp-route-badge">Best rate</span>}
       </div>
     </div>

@@ -1,277 +1,281 @@
 /* ---- Transaction modal ---- */
 .pollar-tx-modal {
-    max-width: 420px;
+  max-width: 420px;
 }
 
 /* ---- Wallet spinner ---- */
 @keyframes pollar-tx-spin {
-    to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .pollar-tx-wallet-spinner {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.875rem;
-    padding: 1.25rem 0 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 1.25rem 0 0.5rem;
 }
 
 .pollar-tx-spinner-ring {
-    position: relative;
-    width: 88px;
-    height: 88px;
-    flex-shrink: 0;
+  position: relative;
+  width: 88px;
+  height: 88px;
+  flex-shrink: 0;
 }
 
 .pollar-tx-spinner-svg {
-    position: absolute;
-    inset: 0;
-    width: 88px;
-    height: 88px;
+  position: absolute;
+  inset: 0;
+  width: 88px;
+  height: 88px;
 }
 
 .pollar-tx-spinner-rotating {
-    animation: pollar-tx-spin 1.1s linear infinite;
-    transform-origin: center;
+  animation: pollar-tx-spin 1.1s linear infinite;
+  transform-origin: center;
 }
 
 .pollar-tx-wallet-icon {
-    position: absolute;
-    inset: 14px;
-    border-radius: 10px;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  position: absolute;
+  inset: 14px;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .pollar-tx-wallet-img {
-    width: 40px;
-    height: 40px;
-    object-fit: contain;
-    border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  border-radius: 10px;
 }
 
 .pollar-tx-spinner-label {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--pollar-muted);
-    margin: 0;
-    text-align: center;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--pollar-muted);
+  margin: 0;
+  text-align: center;
 }
 
 .pollar-tx-retry-btn {
-    width: 100%;
+  width: 100%;
 }
 
 /* ---- Summary card ---- */
 .pollar-tx-summary {
-    background: var(--pollar-input-bg);
-    border: 1px solid var(--pollar-border);
-    border-radius: var(--pollar-card-border-radius, 10px);
-    padding: 1rem 1.25rem;
-    margin-bottom: 1rem;
+  background: var(--pollar-input-bg);
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius, 10px);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
 }
 
 .pollar-tx-summary-title {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--pollar-muted);
-    margin: 0 0 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--pollar-muted);
+  margin: 0 0 0.625rem;
 }
 
 .pollar-tx-summary-lines {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.375rem;
-    overflow-x: auto;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  overflow-x: auto;
 }
 
 .pollar-tx-summary-line {
-    font-size: 0.875rem;
-    font-family: monospace;
-    white-space: nowrap;
-    color: var(--pollar-text);
+  font-size: 0.875rem;
+  font-family: monospace;
+  white-space: nowrap;
+  color: var(--pollar-text);
 }
 
 /* ---- Meta row (network / fee) ---- */
 .pollar-tx-meta {
-    display: flex;
-    gap: 0.75rem;
-    margin-bottom: 1.25rem;
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
 }
 
 .pollar-tx-meta-item {
-    flex: 1;
-    background: var(--pollar-input-bg);
-    border: 1px solid var(--pollar-border);
-    border-radius: var(--pollar-card-border-radius, 10px);
-    padding: 0.625rem 0.875rem;
+  flex: 1;
+  background: var(--pollar-input-bg);
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius, 10px);
+  padding: 0.625rem 0.875rem;
 }
 
 .pollar-tx-meta-label {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--pollar-muted);
-    display: block;
-    margin-bottom: 0.125rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--pollar-muted);
+  display: block;
+  margin-bottom: 0.125rem;
 }
 
 .pollar-tx-meta-value {
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--pollar-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--pollar-text);
 }
 
 /* ---- Result (success hash) ---- */
 .pollar-tx-result {
-    background: var(--pollar-input-bg);
-    border: 1px solid var(--pollar-border);
-    border-radius: var(--pollar-card-border-radius, 10px);
-    padding: 0.75rem 1rem;
-    margin-bottom: 1rem;
-    word-break: break-all;
+  background: var(--pollar-input-bg);
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius, 10px);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  word-break: break-all;
 }
 
 .pollar-tx-result-label {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--pollar-muted);
-    display: block;
-    margin-bottom: 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--pollar-muted);
+  display: block;
+  margin-bottom: 0.25rem;
 }
 
 .pollar-tx-result-hash {
-    font-size: 0.8125rem;
-    font-family: monospace;
-    color: var(--pollar-text);
+  font-size: 0.8125rem;
+  font-family: monospace;
+  color: var(--pollar-text);
 }
 
 .pollar-tx-result-actions {
-    display: flex;
-    gap: 0.5rem;
-    margin-top: 0.625rem;
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.625rem;
 }
 
 .pollar-tx-result-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0.375rem 0.75rem;
-    border-radius: var(--pollar-buttons-border-radius, 6px);
-    border: 1px solid var(--pollar-border);
-    background: none;
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--pollar-muted);
-    cursor: pointer;
-    text-decoration: none;
-    transition: color 150ms, background 150ms;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: var(--pollar-buttons-border-radius, 6px);
+  border: 1px solid var(--pollar-border);
+  background: none;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--pollar-muted);
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    color 150ms,
+    background 150ms;
 }
 
 .pollar-tx-result-btn:hover {
-    color: var(--pollar-text);
-    background: var(--pollar-input-bg);
+  color: var(--pollar-text);
+  background: var(--pollar-input-bg);
 }
 
 /* ---- Sign button (extends .pollar-btn-primary) ---- */
 .pollar-tx-sign-btn {
-    width: 100%;
-    font-weight: 600;
+  width: 100%;
+  font-weight: 600;
 }
 
 /* ---- Status banner ---- */
 .pollar-tx-status {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.8125rem;
-    padding: 0.5rem 0;
-    min-height: 1.75rem;
-    color: var(--pollar-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  padding: 0.5rem 0;
+  min-height: 1.75rem;
+  color: var(--pollar-muted);
 }
 
-.pollar-tx-status[data-kind="ERROR"] {
-    color: var(--pollar-error-text, #dc2626);
+.pollar-tx-status[data-kind='ERROR'] {
+  color: var(--pollar-error-text, #dc2626);
 }
 
-.pollar-tx-status[data-kind="SUCCESS"] {
-    color: var(--pollar-success-text, #16a34a);
+.pollar-tx-status[data-kind='SUCCESS'] {
+  color: var(--pollar-success-text, #16a34a);
 }
 
 /* ---- XDR toggle ---- */
 .pollar-tx-xdr {
-    margin-bottom: 1rem;
+  margin-bottom: 1rem;
 }
 
 .pollar-tx-xdr-toggle {
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--pollar-muted);
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    transition: color 150ms;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--pollar-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  transition: color 150ms;
 }
 
 .pollar-tx-xdr-toggle:hover {
-    color: var(--pollar-text);
+  color: var(--pollar-text);
 }
 
 .pollar-tx-xdr-content {
-    margin: 0.5rem 0 0;
-    padding: 0.75rem;
-    background: var(--pollar-input-bg);
-    border: 1px solid var(--pollar-border);
-    border-radius: var(--pollar-card-border-radius, 10px);
-    font-family: monospace;
-    font-size: 0.6875rem;
-    color: var(--pollar-text);
-    overflow-x: auto;
-    white-space: pre;
-    word-break: normal;
-    max-height: 120px;
-    overflow-y: auto;
+  margin: 0.5rem 0 0;
+  padding: 0.75rem;
+  background: var(--pollar-input-bg);
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius, 10px);
+  font-family: monospace;
+  font-size: 0.6875rem;
+  color: var(--pollar-text);
+  overflow-x: auto;
+  white-space: pre;
+  word-break: normal;
+  max-height: 120px;
+  overflow-y: auto;
 }
 
 /* ---- Error details ---- */
 .pollar-tx-error-details {
-    margin-bottom: 1rem;
+  margin-bottom: 1rem;
 }
 
 .pollar-tx-error-details-label {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--pollar-error-text);
-    margin: 0 0 0.375rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--pollar-error-text);
+  margin: 0 0 0.375rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .pollar-tx-error-details-content {
-    margin: 0;
-    padding: 0.75rem;
-    background: var(--pollar-input-bg);
-    border: 1px solid var(--pollar-border);
-    border-radius: var(--pollar-card-border-radius, 10px);
-    font-family: monospace;
-    font-size: 0.6875rem;
-    color: var(--pollar-error-text);
-    white-space: pre-wrap;
-    word-break: break-word;
-    max-height: 160px;
-    overflow-y: auto;
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--pollar-input-bg);
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius, 10px);
+  font-family: monospace;
+  font-size: 0.6875rem;
+  color: var(--pollar-error-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow-y: auto;
 }

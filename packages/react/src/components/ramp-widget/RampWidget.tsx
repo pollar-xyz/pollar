@@ -1,11 +1,6 @@
 'use client';
 
-import {
-  type PaymentInstructions,
-  type RampDirection,
-  type RampQuote,
-  type RampsOnrampBody,
-} from '@pollar/core';
+import { type PaymentInstructions, type RampDirection, type RampQuote, type RampsOnrampBody } from '@pollar/core';
 import { useState } from 'react';
 import { usePollar } from '../../context';
 import type { RampStep } from './RampWidgetTemplate';
@@ -20,18 +15,80 @@ interface RampWidgetProps {
 // ─── Mock data — used until backend implements /ramps/quote and /ramps/onramp ──
 
 const MOCK_DEFAULT_QUOTES: RampQuote[] = [
-  { quoteId: 'meld-default', provider: 'Meld', fee: 1.2, feeCurrency: 'USD', rate: 1, rail: 'ACH', protocol: 'REST', estimatedTime: '~20 min', recommended: true },
+  {
+    quoteId: 'meld-default',
+    provider: 'Meld',
+    fee: 1.2,
+    feeCurrency: 'USD',
+    rate: 1,
+    rail: 'ACH',
+    protocol: 'REST',
+    estimatedTime: '~20 min',
+    recommended: true,
+  },
 ];
 
 const MOCK_QUOTES: Partial<Record<string, RampQuote[]>> & { DEFAULT: RampQuote[] } = {
   MX: [
-    { quoteId: 'etherfuse-mx', provider: 'Etherfuse', fee: 0.5, feeCurrency: 'MXN', rate: 17.2, rail: 'SPEI', protocol: 'SEP-24', estimatedTime: '~10 min', recommended: true },
-    { quoteId: 'alfredpay-mx', provider: 'AlfredPay', fee: 0.8, feeCurrency: 'MXN', rate: 17.1, rail: 'SPEI', protocol: 'REST', estimatedTime: '~15 min', recommended: false },
+    {
+      quoteId: 'etherfuse-mx',
+      provider: 'Etherfuse',
+      fee: 0.5,
+      feeCurrency: 'MXN',
+      rate: 17.2,
+      rail: 'SPEI',
+      protocol: 'SEP-24',
+      estimatedTime: '~10 min',
+      recommended: true,
+    },
+    {
+      quoteId: 'alfredpay-mx',
+      provider: 'AlfredPay',
+      fee: 0.8,
+      feeCurrency: 'MXN',
+      rate: 17.1,
+      rail: 'SPEI',
+      protocol: 'REST',
+      estimatedTime: '~15 min',
+      recommended: false,
+    },
   ],
-  BR: [{ quoteId: 'abroad-br', provider: 'Abroad', fee: 0.6, feeCurrency: 'BRL', rate: 5.1, rail: 'PIX', protocol: 'REST', estimatedTime: '~5 min', recommended: true }],
+  BR: [
+    {
+      quoteId: 'abroad-br',
+      provider: 'Abroad',
+      fee: 0.6,
+      feeCurrency: 'BRL',
+      rate: 5.1,
+      rail: 'PIX',
+      protocol: 'REST',
+      estimatedTime: '~5 min',
+      recommended: true,
+    },
+  ],
   CO: [
-    { quoteId: 'abroad-co', provider: 'Abroad', fee: 0.7, feeCurrency: 'COP', rate: 4100, rail: 'PSE', protocol: 'REST', estimatedTime: '~10 min', recommended: true },
-    { quoteId: 'koywe-co', provider: 'Koywe', fee: 0.9, feeCurrency: 'COP', rate: 4095, rail: 'PSE', protocol: 'REST', estimatedTime: '~15 min', recommended: false },
+    {
+      quoteId: 'abroad-co',
+      provider: 'Abroad',
+      fee: 0.7,
+      feeCurrency: 'COP',
+      rate: 4100,
+      rail: 'PSE',
+      protocol: 'REST',
+      estimatedTime: '~10 min',
+      recommended: true,
+    },
+    {
+      quoteId: 'koywe-co',
+      provider: 'Koywe',
+      fee: 0.9,
+      feeCurrency: 'COP',
+      rate: 4095,
+      rail: 'PSE',
+      protocol: 'REST',
+      estimatedTime: '~15 min',
+      recommended: false,
+    },
   ],
   DEFAULT: MOCK_DEFAULT_QUOTES,
 };

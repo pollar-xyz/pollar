@@ -105,10 +105,20 @@ export function RampWidgetTemplate({
       {step === 'input' && (
         <>
           <div className="pollar-ramp-tabs">
-            <button type="button" className="pollar-ramp-tab" data-active={direction === 'onramp'} onClick={() => onDirectionChange('onramp')}>
+            <button
+              type="button"
+              className="pollar-ramp-tab"
+              data-active={direction === 'onramp'}
+              onClick={() => onDirectionChange('onramp')}
+            >
               Buy
             </button>
-            <button type="button" className="pollar-ramp-tab" data-active={direction === 'offramp'} onClick={() => onDirectionChange('offramp')}>
+            <button
+              type="button"
+              className="pollar-ramp-tab"
+              data-active={direction === 'offramp'}
+              onClick={() => onDirectionChange('offramp')}
+            >
               Sell
             </button>
           </div>
@@ -199,7 +209,11 @@ export function RampWidgetTemplate({
 
           <div className="pollar-ramp-payment-field">
             <span className="pollar-ramp-payment-label">
-              {paymentInstructions.type === 'CLABE' ? 'CLABE number' : paymentInstructions.type === 'PIX' ? 'PIX key' : 'Account number'}
+              {paymentInstructions.type === 'CLABE'
+                ? 'CLABE number'
+                : paymentInstructions.type === 'PIX'
+                  ? 'PIX key'
+                  : 'Account number'}
             </span>
             <div className="pollar-ramp-payment-value">
               <code>{paymentInstructions.value}</code>

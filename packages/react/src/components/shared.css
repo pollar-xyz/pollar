@@ -6,8 +6,13 @@
 }
 
 @keyframes pollar-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 /* ─── Overlay ─────────────────────────────────────────────────────────────────── */
@@ -48,9 +53,17 @@
   box-sizing: border-box;
 }
 
-.pollar-input::placeholder { color: var(--pollar-muted); }
-.pollar-input:focus { box-shadow: 0 0 0 2px var(--pollar-accent); border-color: transparent; }
-.pollar-input:disabled { opacity: 0.5; cursor: not-allowed; }
+.pollar-input::placeholder {
+  color: var(--pollar-muted);
+}
+.pollar-input:focus {
+  box-shadow: 0 0 0 2px var(--pollar-accent);
+  border-color: transparent;
+}
+.pollar-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 /* ─── Modal header (title left, actions right) ────────────────────────────────── */
 .pollar-modal-header {
@@ -88,7 +101,10 @@
   background-color: transparent;
   color: var(--pollar-muted);
   cursor: pointer;
-  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+  transition:
+    background-color 0.15s,
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .pollar-close-btn:hover,
@@ -125,7 +141,9 @@
   border-radius: 6px;
   font-size: 0.75rem;
   font-weight: 500;
-  transition: color 150ms, background 150ms;
+  transition:
+    color 150ms,
+    background 150ms;
 }
 
 .pollar-modal-refresh-btn:hover:not(:disabled) {
@@ -167,8 +185,13 @@
   gap: 0.5rem;
 }
 
-.pollar-btn-primary:hover:not(:disabled) { opacity: 0.9; }
-.pollar-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.pollar-btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+.pollar-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 /* ─── Secondary button ────────────────────────────────────────────────────────── */
 .pollar-btn-secondary {
@@ -184,7 +207,10 @@
   transition: all 0.15s;
 }
 
-.pollar-btn-secondary:hover:not(:disabled) { color: var(--pollar-text); border-color: var(--pollar-text); }
+.pollar-btn-secondary:hover:not(:disabled) {
+  color: var(--pollar-text);
+  border-color: var(--pollar-text);
+}
 
 /* ─── Spinner ─────────────────────────────────────────────────────────────────── */
 .pollar-spinner {
@@ -283,7 +309,15 @@
   opacity: 1;
 }
 
-.pollar-status[data-kind='ERROR']   { color: #ef4444; }
-.pollar-status[data-kind='SUCCESS'] { color: #10b981; }
-.pollar-status[data-kind='LOADING'] { color: var(--pollar-accent); }
-.pollar-status[data-kind='LOADING'] svg { animation: pollar-spin 1s linear infinite; }
+.pollar-status[data-kind='ERROR'] {
+  color: #ef4444;
+}
+.pollar-status[data-kind='SUCCESS'] {
+  color: #10b981;
+}
+.pollar-status[data-kind='LOADING'] {
+  color: var(--pollar-accent);
+}
+.pollar-status[data-kind='LOADING'] svg {
+  animation: pollar-spin 1s linear infinite;
+}

@@ -21,8 +21,16 @@ function assetParam(record: WalletBalanceRecord) {
 }
 
 export function SendModal({ onClose }: SendModalProps) {
-  const { walletBalance, refreshWalletBalance, buildTx, signAndSubmitTx, tx: transaction, walletType, network, styles } =
-    usePollar();
+  const {
+    walletBalance,
+    refreshWalletBalance,
+    buildTx,
+    signAndSubmitTx,
+    tx: transaction,
+    walletType,
+    network,
+    styles,
+  } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
 
   const [step, setStep] = useState<'form' | 'tx'>('form');
@@ -64,17 +72,15 @@ export function SendModal({ onClose }: SendModalProps) {
     'building-signing-submitting',
   ] as const;
   const isInProgress = (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step);
-  const showBack =
-    step === 'tx' && (transaction.step === 'error' || transaction.step === 'success') && !isInProgress;
+  const showBack = step === 'tx' && (transaction.step === 'error' || transaction.step === 'success') && !isInProgress;
 
-  const txTitle =
-    isInProgress
-      ? 'Sending…'
-      : transaction.step === 'success'
-        ? 'Sent!'
-        : transaction.step === 'error'
-          ? 'Send failed'
-          : 'Confirm Send';
+  const txTitle = isInProgress
+    ? 'Sending…'
+    : transaction.step === 'success'
+      ? 'Sent!'
+      : transaction.step === 'error'
+        ? 'Send failed'
+        : 'Confirm Send';
 
   async function handleSubmit() {
     setFormError('');
