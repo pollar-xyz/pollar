@@ -7,6 +7,8 @@ import { LoginModalTemplate } from './LoginModalTemplate';
 import '../shared.css';
 import './LoginModal.css';
 
+type TimeoutHandle = ReturnType<typeof setTimeout>;
+
 interface LoginModalProps {
   onClose: () => void;
 }

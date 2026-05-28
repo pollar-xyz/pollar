@@ -6,7 +6,7 @@ import { buildProof } from '../dpop';
 import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
 import { hashApiKey } from '../lib/api-key-hash';
-import { StellarClient, StellarNetwork } from '../stellar/StellarClient';
+import { StellarNetwork } from '../stellar/StellarClient';
 import { defaultStorage } from '../storage/autodetect';
 import type { OnStorageDegrade, Storage, StorageDegradeReason } from '../storage/types';
 import {
@@ -892,16 +892,18 @@ export class PollarClient {
   }
 
   /**
-   * Submits a signed XDR.
+   * Submits a signed XDR via `/tx/submit` regardless of wallet type
+   * (custodial or external). Routing through sdk-api gives us:
+   *   - End-to-end tx_records persistence with full phase lifecycle so the
+   *     developer dashboard can show every tx (both custodial and external
+   *     wallet flows) at `/apps/:id/monitor/transactions`.
+   *   - Idempotency tracking via `submissionToken` (returned by `signTx`).
+   *   - A single response shape (SUCCESS / PENDING / FAILED) shared by both
+   *     flows — previously external wallets could only return SUCCESS or
+   *     error since the direct-to-Horizon path was synchronous.
    *
-   * - External wallets: submits directly to Stellar via the public RPC. No
-   *   backend involvement, lowest latency. Cannot return `pending` — the RPC
-   *   call is synchronous, so the outcome is either `success` or `error`.
-   * - Custodial wallets: submits via `/tx/submit` so the wallet-service
-   *   tracks the tx lifecycle and enforces idempotency. Pass the
-   *   `submissionToken` returned by `signTx` to reuse the same idempotency
-   *   key end-to-end. May return `pending` if the network ack'd but ledger
-   *   confirmation hasn't arrived before the SDK's poll window expires.
+   * The extra hop adds ~50–150 ms vs. the legacy direct-Horizon path; the
+   * persistence + observability win is worth it.
    *
    * Drives `_setTransactionState`: emits `submitting` while in flight,
    * `submitted` on Horizon ack (pending), `success` on ledger confirmation,
@@ -912,39 +914,6 @@ export class PollarClient {
     const outcomeExtra: { buildData?: TxBuildContent } = buildData ? { buildData } : {};
     this._setTransactionState({ step: 'submitting', signedXdr, ...(buildData && { buildData }) });
 
-    if (this._walletAdapter) {
-      try {
-        const stellarClient = new StellarClient(this.getNetwork());
-        const result = await stellarClient.submitTransaction(signedXdr);
-        if (result.success) {
-          this._setTransactionState({ step: 'success', hash: result.hash, ...(buildData && { buildData }) });
-          return { status: 'success', hash: result.hash, ...outcomeExtra };
-        }
-        this._setTransactionState({
-          step: 'error',
-          phase: 'submitting',
-          ...(buildData && { buildData }),
-          details: result.errorCode,
-        });
-        return {
-          status: 'error',
-          details: result.errorCode,
-          resultCode: result.errorCode,
-          ...outcomeExtra,
-        };
-      } catch (err) {
-        const details = err instanceof Error ? err.message : undefined;
-        this._setTransactionState({
-          step: 'error',
-          phase: 'submitting',
-          ...(buildData && { buildData }),
-          ...(details && { details }),
-        });
-        return { status: 'error', ...outcomeExtra, ...(details && { details }) };
-      }
-    }
-
-    // Custodial path
     const publicKey = this._session?.wallet?.publicKey ?? '';
     try {
       const { data, error } = await this._api.POST('/tx/submit', {
