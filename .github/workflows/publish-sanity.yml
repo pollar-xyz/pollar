@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   check:
-    name: publint + arethetypeswrong (${{ matrix.package }})
+    name: publint (${{ matrix.package }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -41,6 +41,8 @@ jobs:
       - name: publint
         run: npx -y publint ${{ matrix.package }}
 
-      - name: Are the types wrong
-        working-directory: ${{ matrix.package }}
-        run: npx -y @arethetypeswrong/cli@latest --pack
+      # @arethetypeswrong/cli was previously run here but is currently broken
+      # across all tested versions (0.12 → 0.18) due to an upstream tarball
+      # extraction bug in createPackage.js — `data[0].filename` throws because
+      # fflate's streaming gunzip callback overwrites instead of concatenating.
+      # Re-enable when upstream ships a fix.
