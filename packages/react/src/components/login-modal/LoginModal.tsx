@@ -22,9 +22,10 @@ export function LoginModal({ onClose }: LoginModalProps) {
 
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const autoCloseTimer = useRef<TimeoutHandle | null>(null);
 
   useEffect(() => {
-    return getClient().onAuthStateChange((next) => {
+    const unsubscribe = getClient().onAuthStateChange((next) => {
       setAuthState(next);
       if (next.step === 'entering_email' && pendingEmail.current) {
         getClient().sendEmailCode(pendingEmail.current);
@@ -34,9 +35,19 @@ export function LoginModal({ onClose }: LoginModalProps) {
         setCodeInputKey((k) => k + 1);
       }
       if (next.step === 'authenticated') {
-        setTimeout(onCloseRef.current, 1000);
+        autoCloseTimer.current = setTimeout(() => {
+          autoCloseTimer.current = null;
+          onCloseRef.current();
+        }, 1000);
       }
     });
+    return () => {
+      unsubscribe();
+      if (autoCloseTimer.current !== null) {
+        clearTimeout(autoCloseTimer.current);
+        autoCloseTimer.current = null;
+      }
+    };
   }, [getClient]);
 
   const { theme = 'light', accentColor = '#005DB4', logoUrl, emailEnabled, embeddedWallets, providers } = styles;

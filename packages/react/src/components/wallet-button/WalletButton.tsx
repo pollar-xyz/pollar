@@ -21,6 +21,7 @@ export function WalletButton() {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInProgress = transaction.step === 'building' || transaction.step === 'signing';
 
   const { theme = 'light', accentColor = '#005DB4' } = styles;
@@ -39,11 +40,22 @@ export function WalletButton() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(
+    () => () => {
+      if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
+    },
+    [],
+  );
+
   async function handleCopy() {
     if (!walletAddress) return;
     await navigator.clipboard.writeText(walletAddress);
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => {
+      copyTimerRef.current = null;
+      setCopied(false);
+    }, 1500);
   }
 
   function handleLogout() {

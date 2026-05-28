@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import '../shared.css';
 import './ReceiveModal.css';
@@ -14,12 +14,24 @@ export function ReceiveModal({ onClose }: ReceiveModalProps) {
   const { walletAddress, styles } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
+    },
+    [],
+  );
 
   function handleCopy() {
     if (!walletAddress) return;
     navigator.clipboard.writeText(walletAddress).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => {
+        copyTimerRef.current = null;
+        setCopied(false);
+      }, 2000);
     });
   }
 

@@ -37,6 +37,31 @@ const DEFAULT_APP_CONFIG: PollarConfig = {
   styles: {},
 };
 
+/**
+ * Compares the fields of a persisted session that actually drive UI re-renders.
+ * Replaces a per-listener `JSON.stringify(...) !== JSON.stringify(...)` call —
+ * cheaper, allocation-free, and explicit about what counts as "changed".
+ *
+ * If a field is added to `PollarPersistedSession` that consumers read through
+ * context, list it here too.
+ */
+function sessionsEqual(
+  a: PollarPersistedSession | null,
+  b: PollarPersistedSession | null,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.clientSessionId === b.clientSessionId &&
+    a.userId === b.userId &&
+    a.status === b.status &&
+    a.token?.accessToken === b.token?.accessToken &&
+    a.token?.refreshToken === b.token?.refreshToken &&
+    a.token?.expiresAt === b.token?.expiresAt &&
+    a.wallet?.publicKey === b.wallet?.publicKey
+  );
+}
+
 interface PollarContextValue {
   walletAddress: string;
   getClient: () => PollarClient;
@@ -186,7 +211,7 @@ export function PollarProvider({
   useEffect(() => {
     return pollarClient.onAuthStateChange((authState) => {
       if (authState.step === 'authenticated') {
-        setSessionState((prev) => (JSON.stringify(prev) !== JSON.stringify(authState.session) ? authState.session : prev));
+        setSessionState((prev) => (sessionsEqual(prev, authState.session) ? prev : authState.session));
       } else if (authState.step === 'idle') {
         setSessionState(null);
       }
