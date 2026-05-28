@@ -29,11 +29,11 @@ jobs:
       - name: Format check
         run: npx prettier --check .
 
-      - name: Lint
-        run: npm run lint
-
       - name: Build
         run: npm run build
+
+      - name: Lint
+        run: npm run lint
 
       - name: Smoke tests
         run: npm run test:smoke

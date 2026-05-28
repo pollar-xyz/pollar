@@ -10,6 +10,7 @@
       "persistent": true
     },
     "lint": {
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "clean": {
