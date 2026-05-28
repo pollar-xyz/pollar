@@ -95,7 +95,17 @@ export function buildDefaultModules(): ModuleInterface[] {
  * first-time init path `network` is required and we throw if it's absent.
  */
 export function ensureInit(options: Partial<StellarWalletsKitAdapterOptions>): void {
-  if (initialised) return;
+  if (initialised) {
+    // The kit is a global singleton — a second call with a different network
+    // would be silently ignored. Warn so the developer notices the
+    // misconfiguration instead of debugging wrong-chain signatures later.
+    if (options.network && options.network !== initNetwork) {
+      console.warn(
+        `[StellarWalletsKit] Already initialised with network "${initNetwork}". Ignoring attempted reconfiguration to "${options.network}". The kit is a global singleton — reload the page to change networks.`,
+      );
+    }
+    return;
+  }
   if (!options.network) {
     throw new Error(
       '[StellarWalletsKit] `network` is required — pass `Networks.TESTNET` or `Networks.PUBLIC` to `stellarWalletsKit({ network })`. The kit is a global singleton, so the network has to be chosen explicitly at init.',
