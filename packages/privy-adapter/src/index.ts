@@ -2,13 +2,7 @@ import { serve } from '@hono/node-server';
 import { LRUCache } from 'lru-cache';
 import { createApp } from './server';
 import { createPrivyClientFactory } from './privy';
-import type {
-  AdapterDeps,
-  PollarPrivyAdapter,
-  PollarPrivyAdapterConfig,
-  ResolvedAdapterConfig,
-  WalletCache,
-} from './types';
+import type { AdapterDeps, PollarPrivyAdapter, PollarPrivyAdapterConfig, ResolvedAdapterConfig, WalletCache } from './types';
 
 const DEFAULT_PORT = 3001;
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;

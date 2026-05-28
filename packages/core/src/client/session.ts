@@ -141,11 +141,7 @@ export async function readStorage(storage: Storage, apiKeyHash: string): Promise
   }
 }
 
-export async function writeStorage(
-  storage: Storage,
-  apiKeyHash: string,
-  session: PollarPersistedSession,
-): Promise<void> {
+export async function writeStorage(storage: Storage, apiKeyHash: string, session: PollarPersistedSession): Promise<void> {
   await storage.set(sessionStorageKey(apiKeyHash), JSON.stringify(session));
 }
 

@@ -44,7 +44,9 @@ function waitForAlbedoResult(): Promise<Record<string, string>> {
 
       clearTimeout(timeout);
       const result: Record<string, string> = {};
-      params.forEach((value, key) => { result[key] = value; });
+      params.forEach((value, key) => {
+        result[key] = value;
+      });
       window.history.replaceState({}, document.title, window.location.pathname);
       resolve(result);
     };

@@ -17,10 +17,7 @@ export const getOrCreatePrivyUser = async (
   options: { ensureStellarWallet: boolean; timeoutMs: number },
 ): Promise<PrivyUserResolution> => {
   try {
-    const user = await withTimeout(
-      privy.users().getByCustomAuthID({ custom_user_id: customUserId }),
-      options.timeoutMs,
-    );
+    const user = await withTimeout(privy.users().getByCustomAuthID({ custom_user_id: customUserId }), options.timeoutMs);
     return { user, created: false };
   } catch (err) {
     if (!(err instanceof NotFoundError)) throw err;
@@ -38,10 +35,7 @@ export const getOrCreatePrivyUser = async (
   } catch (err) {
     // Lost a race against a concurrent create — the user exists now.
     if (err instanceof ConflictError) {
-      const user = await withTimeout(
-        privy.users().getByCustomAuthID({ custom_user_id: customUserId }),
-        options.timeoutMs,
-      );
+      const user = await withTimeout(privy.users().getByCustomAuthID({ custom_user_id: customUserId }), options.timeoutMs);
       return { user, created: false };
     }
     throw err;

@@ -55,6 +55,7 @@ unchanged.
 The `TransactionState` discriminated union grew from 6 step values to 11:
 
 **Added**:
+
 - `signing` (already existed but now emitted by `signTx` directly, not just `signAndSubmitTx`)
 - `signed` — signed XDR in hand, waiting for `submitTx`
 - `submitting` — pushing signed XDR to the network
@@ -63,6 +64,7 @@ The `TransactionState` discriminated union grew from 6 step values to 11:
 - `building-signing-submitting` — compound state for `runTx` / `buildAndSignAndSubmitTx` custodial (atomic `/tx/build-sign-submit` round-trip)
 
 **Changed**:
+
 - `error` now carries a required `phase: TxErrorPhase` discriminator so modals can offer "retry from this step" and label which phase failed.
 - `external?: true` flag removed from the union — it was an internal discriminator that became unnecessary once `buildData` was threaded through every transition. Custom UIs that read `state.external` should branch on the presence of `state.buildData` instead.
 
@@ -99,12 +101,12 @@ a body (POST/PUT/PATCH) once the original `Request.body` stream had been consume
 ### `@pollar/core` — new features
 
 - **Distribution rules.** Two new endpoints on `PollarClient`:
-    - `listDistributionRules(): Promise<DistributionRule[]>` — returns the rules visible
-      to the calling sdk-user, each decorated with `claimable: boolean` and (when not
-      claimable) a `reason` `ErrorCode` the UI maps to a friendly message.
-    - `claimDistributionRule({ ruleId }): Promise<DistributionClaimContent>` — claims a
-      rule for the authenticated user and returns the Stellar tx hash once the payment
-      is submitted.
+  - `listDistributionRules(): Promise<DistributionRule[]>` — returns the rules visible
+    to the calling sdk-user, each decorated with `claimable: boolean` and (when not
+    claimable) a `reason` `ErrorCode` the UI maps to a friendly message.
+  - `claimDistributionRule({ ruleId }): Promise<DistributionClaimContent>` — claims a
+    rule for the authenticated user and returns the Stellar tx hash once the payment
+    is submitted.
 - New types: `DistributionRule`, `RulePeriod`, `DistributionClaimBody`,
   `DistributionClaimContent`, `DistributionRulesState`.
 - OpenAPI schema regenerated against `sdk-api` — adds `/distribution/rules` and
@@ -118,7 +120,7 @@ a body (POST/PUT/PATCH) once the original `Request.body` stream had been consume
   which throws `Request body is already used` once `fetch()` has consumed the body
   stream — meaning every request with a body silently failed to retry after a refresh
   or a `use_dpop_nonce` challenge. `onRequest` now snapshots the body into a
-  `WeakMap<Request, ArrayBuffer>` *before* `fetch` disturbs it, and `_retryRequest`
+  `WeakMap<Request, ArrayBuffer>` _before_ `fetch` disturbs it, and `_retryRequest`
   builds a brand-new `Request` with the cached body, fresh headers, and a fresh DPoP
   proof. The `X-Pollar-Retried` header guard was dropped — `openapi-fetch` only runs
   `onResponse` once per request, so it was redundant.
@@ -159,7 +161,7 @@ any consumer page meant full account takeover and a 30-day refresh window. 0.7.0
 2. **Removing PII from storage entirely** — held in memory only, fetched after auth.
 3. **Rotating refresh tokens single-use** with family revocation on reuse.
 
-We did *not* move the refresh token to an HttpOnly cookie because that requires `SameSite=None; Secure` cross-domain
+We did _not_ move the refresh token to an HttpOnly cookie because that requires `SameSite=None; Secure` cross-domain
 cookies, which Safari ITP and Firefox ETP block by default — fatal for an SDK that runs on arbitrary consumer domains.
 
 ### Server requirement
@@ -203,15 +205,15 @@ fails.
 
 - **Pluggable `Storage` adapter.** `defaultStorage()` autodetects `localStorage` on web with in-memory fallback for SSR,
   private browsing, sandboxed iframes, and quota errors. New sub-path exports for native:
-    - `@pollar/core/adapters/expo` → `createSecureStoreAdapter()` (default
-      `keychainAccessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY` so iCloud Keychain backup can't exfiltrate the key)
-    - `@pollar/core/adapters/react-native-keychain` → `createKeychainAdapter()`
+  - `@pollar/core/adapters/expo` → `createSecureStoreAdapter()` (default
+    `keychainAccessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY` so iCloud Keychain backup can't exfiltrate the key)
+  - `@pollar/core/adapters/react-native-keychain` → `createKeychainAdapter()`
 - **Pluggable `KeyManager`.** Per-session ECDSA P-256 keypair backing every DPoP proof.
-    - `WebCryptoKeyManager` — `subtle.generateKey({extractable: false})`, `CryptoKeyPair` persisted in IndexedDB store
-      `pollar-keys`. Private key bytes never leave the browser's crypto context.
-    - `NobleKeyManager` — `@noble/curves` p256 + `@noble/hashes` sha256. Private scalar (32 bytes) stored through the
-      injected `Storage` adapter.
-    - `defaultKeyManager(storage, apiKeyHash)` — picks WebCrypto if `subtle.generateKey` exists, else Noble.
+  - `WebCryptoKeyManager` — `subtle.generateKey({extractable: false})`, `CryptoKeyPair` persisted in IndexedDB store
+    `pollar-keys`. Private key bytes never leave the browser's crypto context.
+  - `NobleKeyManager` — `@noble/curves` p256 + `@noble/hashes` sha256. Private scalar (32 bytes) stored through the
+    injected `Storage` adapter.
+  - `defaultKeyManager(storage, apiKeyHash)` — picks WebCrypto if `subtle.generateKey` exists, else Noble.
 - **DPoP proof builder.** `buildProof({htm, htu, accessToken?, nonce?}, keyManager)` produces a compact JWS that
   consumers can attach to outgoing requests. Cross-validated against `jose` 5.x.
 - **`normalizeHtu(url)`** — RFC 9449 §4.3 + RFC 3986 §6.2 canonicalization (lowercase scheme/host, default port elision,
@@ -403,7 +405,7 @@ const client = new PollarClient({ apiKey, storage });
 The following names exported from `usePollar()` have been renamed for consistency and clarity:
 
 | Before                 | After                  |
-|------------------------|------------------------|
+| ---------------------- | ---------------------- |
 | `transaction`          | `tx`                   |
 | `openTransactionModal` | `openTxModal`          |
 | `config`               | `appConfig`            |
@@ -490,16 +492,16 @@ The following names exported from `usePollar()` have been renamed for consistenc
 
 ### `@pollar/core`
 
-- **New:** `getKycProviders(country)` — fetches available KYC providers for a given country *(not yet implemented on
-  backend)*
+- **New:** `getKycProviders(country)` — fetches available KYC providers for a given country _(not yet implemented on
+  backend)_
 - **New:** `resolveKyc(providerId, level)` — starts a KYC session or returns `alreadyApproved` if the user is already
-  verified *(not yet implemented on backend)*
+  verified _(not yet implemented on backend)_
 - **New:** `pollKycStatus(providerId, options)` — polls KYC verification result with configurable interval and timeout
-  *(not yet implemented on backend)*
-- **New:** `getRampsQuote(params)` — fetches on/off-ramp quotes from available providers *(not yet implemented on
-  backend)*
-- **New:** `createOnRamp(body)` — initiates an on-ramp transaction and returns payment instructions *(not yet
-  implemented on backend)*
+  _(not yet implemented on backend)_
+- **New:** `getRampsQuote(params)` — fetches on/off-ramp quotes from available providers _(not yet implemented on
+  backend)_
+- **New:** `createOnRamp(body)` — initiates an on-ramp transaction and returns payment instructions _(not yet
+  implemented on backend)_
 - **New:** `fetchTxHistory(params)` — fetches paginated transaction history for the authenticated user
 - **New:** `getBalance()` — fetches Stellar account balances via `StellarClient`
 - **New:** Types: `KycProvider`, `KycStatus`, `KycStartResponse`, `RampDirection`, `RampQuote`, `PaymentInstructions`,
@@ -511,9 +513,9 @@ The following names exported from `usePollar()` have been renamed for consistenc
 ### `@pollar/react`
 
 - **New:** `KycModal` — full identity verification flow: provider selection, iframe/form verification, status polling,
-  and result display with `KycStatus` badge *(UI only — backend not yet implemented, uses mock data)*
+  and result display with `KycStatus` badge _(UI only — backend not yet implemented, uses mock data)_
 - **New:** `RampWidget` — buy/sell crypto UI: direction tabs, amount/currency/country inputs, provider route selection,
-  and payment instructions display *(UI only — backend not yet implemented, uses mock data)*
+  and payment instructions display _(UI only — backend not yet implemented, uses mock data)_
 - **New:** `TxHistoryModal` — paginated transaction history with refresh and prev/next pagination
 - **New:** `WalletBalanceModal` — displays Stellar account balances with refresh support
 - **New:** `shared.css` — single source of truth for shared modal styles: `@keyframes`, `.pollar-overlay`, header

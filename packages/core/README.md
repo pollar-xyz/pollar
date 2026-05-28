@@ -3,9 +3,9 @@
 Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction utilities for Stellar-based applications.
 
 > **0.7.0 ships sender-constrained tokens via DPoP (RFC 9449), pluggable storage and key managers, automatic
-refresh-on-401, and removes PII from persisted storage.** This is a breaking change — read
+> refresh-on-401, and removes PII from persisted storage.** This is a breaking change — read
 > the [CHANGELOG](../../CHANGELOG.md) before upgrading. Requires HTTPS and
-`sdk-api` ≥ Phase 5.
+> `sdk-api` ≥ Phase 5.
 
 ## Installation
 
@@ -123,7 +123,7 @@ client.login({ provider: 'email', email: 'user@example.com' });
 client.verifyEmailCode('123456');
 
 // After success
-const profile = client.getUserProfile();   // PII (memory-only)
+const profile = client.getUserProfile(); // PII (memory-only)
 const sessions = await client.listSessions();
 ```
 
@@ -131,16 +131,16 @@ const sessions = await client.listSessions();
 
 ### `new PollarClient(config)`
 
-| Option             | Type                     | Required | Description                                                                                              |
-|--------------------|--------------------------|----------|----------------------------------------------------------------------------------------------------------|
-| `apiKey`           | `string`                 | Yes      | Your Pollar API key                                                                                      |
-| `baseUrl`          | `string`                 | No       | Override the default API endpoint                                                                        |
-| `stellarNetwork`   | `'mainnet' \| 'testnet'` | No       | Target Stellar network (default: `testnet`)                                                              |
-| `storage`          | `Storage`                | No       | Pluggable storage adapter. Web autodetects `localStorage` with in-memory fallback; RN must inject one    |
-| `keyManager`       | `KeyManager`             | No       | Pluggable DPoP key manager. Web picks `WebCryptoKeyManager`; otherwise `NobleKeyManager`                  |
+| Option             | Type                     | Required | Description                                                                                                 |
+| ------------------ | ------------------------ | -------- | ----------------------------------------------------------------------------------------------------------- |
+| `apiKey`           | `string`                 | Yes      | Your Pollar API key                                                                                         |
+| `baseUrl`          | `string`                 | No       | Override the default API endpoint                                                                           |
+| `stellarNetwork`   | `'mainnet' \| 'testnet'` | No       | Target Stellar network (default: `testnet`)                                                                 |
+| `storage`          | `Storage`                | No       | Pluggable storage adapter. Web autodetects `localStorage` with in-memory fallback; RN must inject one       |
+| `keyManager`       | `KeyManager`             | No       | Pluggable DPoP key manager. Web picks `WebCryptoKeyManager`; otherwise `NobleKeyManager`                    |
 | `walletAdapter`    | `WalletAdapterResolver`  | No       | External wallet stack (e.g. Stellar Wallets Kit). Falls back to built-in `FreighterAdapter`/`AlbedoAdapter` |
-| `deviceLabel`      | `string`                 | No       | UI-friendly device label sent at `/auth/login` time and shown in `listSessions()` rows                   |
-| `onStorageDegrade` | `OnStorageDegrade`       | No       | Notified the first time `localStorage` falls back to in-memory mode (SSR, private browsing, quota, …)    |
+| `deviceLabel`      | `string`                 | No       | UI-friendly device label sent at `/auth/login` time and shown in `listSessions()` rows                      |
+| `onStorageDegrade` | `OnStorageDegrade`       | No       | Notified the first time `localStorage` falls back to in-memory mode (SSR, private browsing, quota, …)       |
 
 ---
 
@@ -183,8 +183,8 @@ Server-side revokes the refresh-token family via `POST /v1/auth/logout`, then cl
 keypair. Server revocation is best-effort: a failed POST still clears local state.
 
 ```ts
-await client.logout();                       // sign out this device
-await client.logout({ everywhere: true });   // revoke every active session for this user
+await client.logout(); // sign out this device
+await client.logout({ everywhere: true }); // revoke every active session for this user
 ```
 
 > Returns `Promise<void>` (was `void` pre-0.7.0). Existing fire-and-forget call sites keep working, but `await` it if
@@ -282,10 +282,18 @@ const unsubAuth = client.onAuthStateChange((state) => {
   // state.errorCode — AuthErrorCode (when step === 'error')
 });
 
-const unsubTx       = client.onTransactionStateChange((s) => { /* build → sign → submit */ });
-const unsubHistory  = client.onTxHistoryStateChange((s) => { /* paginated rows */ });
-const unsubBalance  = client.onWalletBalanceStateChange((s) => { /* balances */ });
-const unsubNetwork  = client.onNetworkStateChange((s) => { /* mainnet / testnet */ });
+const unsubTx = client.onTransactionStateChange((s) => {
+  /* build → sign → submit */
+});
+const unsubHistory = client.onTxHistoryStateChange((s) => {
+  /* paginated rows */
+});
+const unsubBalance = client.onWalletBalanceStateChange((s) => {
+  /* balances */
+});
+const unsubNetwork = client.onNetworkStateChange((s) => {
+  /* mainnet / testnet */
+});
 
 unsubAuth();
 ```
@@ -378,7 +386,7 @@ import type { AdapterFn, PollarAdapter, PollarAdapters } from '@pollar/core';
 
 const trustlessWork: PollarAdapter = {
   initialize: (async (params) => ({ unsignedTransaction: '...' })) satisfies AdapterFn,
-  release:    (async (params) => ({ unsignedTransaction: '...' })) satisfies AdapterFn,
+  release: (async (params) => ({ unsignedTransaction: '...' })) satisfies AdapterFn,
 };
 
 const adapters: PollarAdapters = { trustlessWork };

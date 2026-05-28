@@ -54,8 +54,14 @@ function check(label, ok, extra) {
   {
     const km = new sdk.NobleKeyManager(sdk.createMemoryAdapter(), 'pk_test_concurrent');
     const results = await Promise.all(Array.from({ length: 10 }, () => km.getPublicJwk()));
-    check('all 10 calls returned a JWK', results.every((j) => j.kty === 'EC'));
-    check('  all JWKs identical (single keypair generated)', results.every((j) => j.x === results[0].x));
+    check(
+      'all 10 calls returned a JWK',
+      results.every((j) => j.kty === 'EC'),
+    );
+    check(
+      '  all JWKs identical (single keypair generated)',
+      results.every((j) => j.x === results[0].x),
+    );
   }
 
   console.log('\n── 4. reset() clears state; next call generates fresh keypair ');

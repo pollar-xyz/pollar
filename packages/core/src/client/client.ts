@@ -1,13 +1,7 @@
 import { createApiClient, PollarApiClient } from '../api/client';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
-import {
-  createOffRamp,
-  createOnRamp,
-  getRampsQuote,
-  getRampTransaction,
-  pollRampTransaction
-} from '../api/endpoints/ramps';
+import { createOffRamp, createOnRamp, getRampsQuote, getRampTransaction, pollRampTransaction } from '../api/endpoints/ramps';
 import { buildProof } from '../dpop';
 import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
@@ -56,14 +50,7 @@ import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletAdapterResolver, 
 import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/emailFlow';
 import { loginOAuth } from './auth/oauthFlow';
 import { loginWallet } from './auth/walletFlow';
-import {
-  readStorage,
-  readWalletType,
-  removeStorage,
-  sessionStorageKey,
-  writeStorage,
-  writeWalletType
-} from './session';
+import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
 
 const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
 
@@ -981,7 +968,11 @@ export class PollarClient {
     try {
       const { data, error } = await this._api.POST('/tx/sign-and-send', { body });
       if (!error && data?.success && data.content?.hash) {
-        const { hash, status: backendStatus, resultCode } = data.content as {
+        const {
+          hash,
+          status: backendStatus,
+          resultCode,
+        } = data.content as {
           hash: string;
           status: 'SUCCESS' | 'FAILED' | 'PENDING';
           resultCode?: string;

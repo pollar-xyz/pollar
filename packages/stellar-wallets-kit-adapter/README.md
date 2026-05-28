@@ -42,7 +42,7 @@ import { Networks } from '@creit.tech/stellar-wallets-kit';
   }}
 >
   {/* your app */}
-</PollarProvider>
+</PollarProvider>;
 ```
 
 The kit is a global singleton. `stellarWalletsKit(...)` returns a resolver and `StellarWalletsKit.init(...)` is called once on the first `loginWallet` call.
@@ -51,20 +51,20 @@ The kit is a global singleton. `stellarWalletsKit(...)` returns a resolver and `
 
 Calling `stellarWalletsKit()` with no `modules` argument enables every module that loads without extra configuration:
 
-| Module          | Wallet id (`WalletId`) | Type                 |
-| --------------- | ---------------------- | -------------------- |
-| `AlbedoModule`  | `albedo`               | Web                  |
-| `BitgetModule`  | `bitget`               | Browser extension    |
-| `CactusLinkModule` | `cactuslink`        | Browser extension    |
-| `FordefiModule` | `fordefi`              | Browser extension    |
-| `FreighterModule` | `freighter`          | Browser extension    |
-| `HanaModule`    | `hana`                 | Browser extension    |
-| `HotWalletModule` | `hotwallet`          | Mobile / deep link   |
-| `KleverModule`  | `klever`               | Browser extension    |
-| `LobstrModule`  | `lobstr`               | Mobile / deep link   |
-| `OneKeyModule`  | `onekey`               | Browser extension    |
-| `RabetModule`   | `rabet`                | Browser extension    |
-| `xBullModule`   | `xbull`                | Browser extension    |
+| Module             | Wallet id (`WalletId`) | Type               |
+| ------------------ | ---------------------- | ------------------ |
+| `AlbedoModule`     | `albedo`               | Web                |
+| `BitgetModule`     | `bitget`               | Browser extension  |
+| `CactusLinkModule` | `cactuslink`           | Browser extension  |
+| `FordefiModule`    | `fordefi`              | Browser extension  |
+| `FreighterModule`  | `freighter`            | Browser extension  |
+| `HanaModule`       | `hana`                 | Browser extension  |
+| `HotWalletModule`  | `hotwallet`            | Mobile / deep link |
+| `KleverModule`     | `klever`               | Browser extension  |
+| `LobstrModule`     | `lobstr`               | Mobile / deep link |
+| `OneKeyModule`     | `onekey`               | Browser extension  |
+| `RabetModule`      | `rabet`                | Browser extension  |
+| `xBullModule`      | `xbull`                | Browser extension  |
 
 > **Why not Ledger / Trezor / WalletConnect by default?** Ledger needs a `Buffer` polyfill in the host app (loading it unconditionally would crash bundles that don't ship one). Trezor and WalletConnect require constructor parameters (Trezor manifest, WalletConnect project id). All three stay opt-in.
 
@@ -130,14 +130,14 @@ type WalletAdapterResolver = (id: WalletId) => WalletAdapter | Promise<WalletAda
 
 The adapter implements `WalletAdapter` from `@pollar/core`:
 
-| `WalletAdapter` method       | Kit call                                        |
-| ---------------------------- | ----------------------------------------------- |
-| `isAvailable()`              | `StellarWalletsKit.setWallet(id)`               |
-| `connect()`                  | `setWallet(id)` → `fetchAddress()`              |
-| `disconnect()`               | `StellarWalletsKit.disconnect()`                |
-| `getPublicKey()`             | `StellarWalletsKit.getAddress()`                |
-| `signTransaction(xdr, opts)` | `setWallet(id)` → `signTransaction(xdr, opts)`  |
-| `signAuthEntry(xdr, opts)`   | `setWallet(id)` → `signAuthEntry(xdr, opts)`    |
+| `WalletAdapter` method       | Kit call                                       |
+| ---------------------------- | ---------------------------------------------- |
+| `isAvailable()`              | `StellarWalletsKit.setWallet(id)`              |
+| `connect()`                  | `setWallet(id)` → `fetchAddress()`             |
+| `disconnect()`               | `StellarWalletsKit.disconnect()`               |
+| `getPublicKey()`             | `StellarWalletsKit.getAddress()`               |
+| `signTransaction(xdr, opts)` | `setWallet(id)` → `signTransaction(xdr, opts)` |
+| `signAuthEntry(xdr, opts)`   | `setWallet(id)` → `signAuthEntry(xdr, opts)`   |
 
 `setWallet` is called before every operation so a single `StellarWalletsKit.init({ modules })` covers many wallets — `PollarClient` resolves a fresh adapter instance per `WalletId`, and the kit routes to the correct module under the hood.
 

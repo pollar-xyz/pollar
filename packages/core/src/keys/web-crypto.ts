@@ -99,9 +99,7 @@ export class WebCryptoKeyManager implements KeyManager {
 
   constructor(apiKey: string) {
     if (typeof globalThis.crypto === 'undefined' || !globalThis.crypto.subtle) {
-      throw new Error(
-        '[PollarClient:keys] SubtleCrypto is unavailable. DPoP requires a secure context (HTTPS or localhost).',
-      );
+      throw new Error('[PollarClient:keys] SubtleCrypto is unavailable. DPoP requires a secure context (HTTPS or localhost).');
     }
     this.apiKey = apiKey;
   }

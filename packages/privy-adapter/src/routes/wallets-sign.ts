@@ -47,10 +47,7 @@ export const createWalletsSignRoute = (deps: AdapterDeps) => {
 
         let user;
         try {
-          user = await withTimeout(
-            privy.users().getByCustomAuthID({ custom_user_id: userId }),
-            deps.config.requestTimeoutMs,
-          );
+          user = await withTimeout(privy.users().getByCustomAuthID({ custom_user_id: userId }), deps.config.requestTimeoutMs);
         } catch (err) {
           if (err instanceof NotFoundError) {
             return c.var.error(ErrorCode.WALLET_NOT_FOUND, 404);

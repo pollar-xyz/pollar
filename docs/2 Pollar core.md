@@ -20,11 +20,11 @@ const pollar = new PollarClient({
 
 **Constructor options:**
 
-| Option           | Type             | Default                          | Description                                                                |
-|------------------|------------------|----------------------------------|----------------------------------------------------------------------------|
-| `apiKey`         | `string`         | —                                | **Required.** Your Pollar publishable key.                                 |
-| `stellarNetwork` | `StellarNetwork` | `'testnet'`                      | Target Stellar network: `'testnet'` or `'mainnet'`.                        |
-| `baseUrl`        | `string`         | `'https://sdk.api.pollar.xyz'`   | Override the Pollar API base URL. Useful for self-hosted deployments.      |
+| Option           | Type             | Default                        | Description                                                           |
+| ---------------- | ---------------- | ------------------------------ | --------------------------------------------------------------------- |
+| `apiKey`         | `string`         | —                              | **Required.** Your Pollar publishable key.                            |
+| `stellarNetwork` | `StellarNetwork` | `'testnet'`                    | Target Stellar network: `'testnet'` or `'mainnet'`.                   |
+| `baseUrl`        | `string`         | `'https://sdk.api.pollar.xyz'` | Override the Pollar API base URL. Useful for self-hosted deployments. |
 
 ---
 
@@ -51,11 +51,11 @@ pollar.login({ provider: 'wallet', type: WalletType.FREIGHTER });
 pollar.login({ provider: 'wallet', type: WalletType.ALBEDO });
 ```
 
-| Option     | Type                                                     | Description                                   |
-|------------|----------------------------------------------------------|-----------------------------------------------|
-| `provider` | `'google' \| 'github' \| 'email' \| 'wallet'`           | Authentication provider.                      |
-| `email`    | `string`                                                 | Required when `provider` is `'email'`.        |
-| `type`     | `WalletType`                                             | Required when `provider` is `'wallet'`.       |
+| Option     | Type                                          | Description                             |
+| ---------- | --------------------------------------------- | --------------------------------------- |
+| `provider` | `'google' \| 'github' \| 'email' \| 'wallet'` | Authentication provider.                |
+| `email`    | `string`                                      | Required when `provider` is `'email'`.  |
+| `type`     | `WalletType`                                  | Required when `provider` is `'wallet'`. |
 
 ---
 
@@ -100,8 +100,8 @@ pollar.loginWallet(WalletType.FREIGHTER);
 pollar.loginWallet(WalletType.ALBEDO);
 ```
 
-| Parameter | Type         | Description                          |
-|-----------|--------------|--------------------------------------|
+| Parameter | Type         | Description                                    |
+| --------- | ------------ | ---------------------------------------------- |
 | `type`    | `WalletType` | `WalletType.FREIGHTER` or `WalletType.ALBEDO`. |
 
 ---
@@ -157,21 +157,21 @@ unsubscribe();
 
 **`AuthState` steps:**
 
-| Step                    | Description                                              |
-|-------------------------|----------------------------------------------------------|
-| `idle`                  | No active session or flow.                               |
-| `creating_session`      | Creating a client session on the server.                 |
-| `entering_email`        | Waiting for the user to provide their email address.     |
-| `sending_email`         | Sending the OTP code to the user's email.                |
-| `entering_code`         | Waiting for the user to enter the OTP code.              |
-| `verifying_email_code`  | Verifying the submitted OTP code.                        |
-| `opening_oauth`         | Opening the OAuth provider window.                       |
-| `connecting_wallet`     | Connecting to the external wallet extension.             |
-| `wallet_not_installed`  | The requested wallet extension is not installed.         |
-| `authenticating_wallet` | Authenticating with the connected wallet.                |
-| `authenticating`        | Finalizing authentication with the Pollar server.        |
-| `authenticated`         | User is authenticated. `session` is available.           |
-| `error`                 | An error occurred. `message` and `errorCode` are set.    |
+| Step                    | Description                                           |
+| ----------------------- | ----------------------------------------------------- |
+| `idle`                  | No active session or flow.                            |
+| `creating_session`      | Creating a client session on the server.              |
+| `entering_email`        | Waiting for the user to provide their email address.  |
+| `sending_email`         | Sending the OTP code to the user's email.             |
+| `entering_code`         | Waiting for the user to enter the OTP code.           |
+| `verifying_email_code`  | Verifying the submitted OTP code.                     |
+| `opening_oauth`         | Opening the OAuth provider window.                    |
+| `connecting_wallet`     | Connecting to the external wallet extension.          |
+| `wallet_not_installed`  | The requested wallet extension is not installed.      |
+| `authenticating_wallet` | Authenticating with the connected wallet.             |
+| `authenticating`        | Finalizing authentication with the Pollar server.     |
+| `authenticated`         | User is authenticated. `session` is available.        |
+| `error`                 | An error occurred. `message` and `errorCode` are set. |
 
 ---
 
@@ -227,11 +227,11 @@ await pollar.buildTx('payment', {
 });
 ```
 
-| Parameter   | Type              | Description                              |
-|-------------|-------------------|------------------------------------------|
-| `operation` | `string`          | Stellar operation type (e.g. `payment`). |
-| `params`    | `object`          | Operation-specific parameters.           |
-| `options`   | `object`          | Optional build-time overrides.           |
+| Parameter   | Type     | Description                              |
+| ----------- | -------- | ---------------------------------------- |
+| `operation` | `string` | Stellar operation type (e.g. `payment`). |
+| `params`    | `object` | Operation-specific parameters.           |
+| `options`   | `object` | Optional build-time overrides.           |
 
 ---
 
@@ -276,7 +276,7 @@ const unsubscribe = pollar.onTransactionStateChange((state) => {
 **`TransactionState` steps:**
 
 | Step       | Description                                              |
-|------------|----------------------------------------------------------|
+| ---------- | -------------------------------------------------------- |
 | `idle`     | No transaction in progress.                              |
 | `building` | Building the transaction on the server.                  |
 | `built`    | Transaction built. `buildData.unsignedXdr` is available. |
@@ -340,12 +340,12 @@ await pollar.fetchTxHistory({
 });
 ```
 
-| Option   | Type     | Default | Description                                                        |
-|----------|----------|---------|--------------------------------------------------------------------|
-| `limit`  | `number` | —       | Number of records to return.                                       |
-| `cursor` | `string` | —       | Pagination cursor from a previous response.                        |
+| Option   | Type     | Default | Description                                                                  |
+| -------- | -------- | ------- | ---------------------------------------------------------------------------- |
+| `limit`  | `number` | —       | Number of records to return.                                                 |
+| `cursor` | `string` | —       | Pagination cursor from a previous response.                                  |
 | `type`   | `string` | —       | Filter by transaction type: `payment`, `activation`, `trustline`, `receive`. |
-| `asset`  | `string` | —       | Filter by asset code.                                              |
+| `asset`  | `string` | —       | Filter by asset code.                                                        |
 
 ---
 
@@ -437,10 +437,10 @@ const finalStatus = await pollar.pollKycStatus('provider_id', {
 });
 ```
 
-| Option       | Type     | Description                               |
-|--------------|----------|-------------------------------------------|
-| `intervalMs` | `number` | Polling interval in milliseconds.         |
-| `timeoutMs`  | `number` | Maximum wait time before throwing.        |
+| Option       | Type     | Description                        |
+| ------------ | -------- | ---------------------------------- |
+| `intervalMs` | `number` | Polling interval in milliseconds.  |
+| `timeoutMs`  | `number` | Maximum wait time before throwing. |
 
 **`KycStatus` values:** `'none'` · `'pending'` · `'approved'` · `'rejected'`
 
@@ -511,7 +511,7 @@ const finalStatus = await pollar.pollRampTransaction('tx_id', {
 ```
 
 | Option       | Type     | Description                        |
-|--------------|----------|------------------------------------|
+| ------------ | -------- | ---------------------------------- |
 | `intervalMs` | `number` | Polling interval in milliseconds.  |
 | `timeoutMs`  | `number` | Maximum wait time before throwing. |
 
@@ -535,15 +535,15 @@ const config = await pollar.getAppConfig();
 
 ### `WalletAdapter` interface
 
-| Method                              | Returns                          | Description                                         |
-|-------------------------------------|----------------------------------|-----------------------------------------------------|
-| `type`                              | `WalletType`                     | Wallet type identifier.                             |
-| `isAvailable()`                     | `Promise<boolean>`               | Whether the wallet extension is installed.          |
-| `connect()`                         | `Promise<ConnectWalletResponse>` | Connects the wallet and returns the public key.     |
-| `disconnect()`                      | `Promise<void>`                  | Disconnects the wallet.                             |
-| `getPublicKey()`                    | `Promise<string \| null>`        | Returns the current public key, or null.            |
-| `signTransaction(xdr, options?)`    | `Promise<SignTransactionResponse>`| Signs a transaction XDR.                           |
-| `signAuthEntry(entryXdr, options?)` | `Promise<SignAuthEntryResponse>` | Signs a Soroban auth entry.                         |
+| Method                              | Returns                            | Description                                     |
+| ----------------------------------- | ---------------------------------- | ----------------------------------------------- |
+| `type`                              | `WalletType`                       | Wallet type identifier.                         |
+| `isAvailable()`                     | `Promise<boolean>`                 | Whether the wallet extension is installed.      |
+| `connect()`                         | `Promise<ConnectWalletResponse>`   | Connects the wallet and returns the public key. |
+| `disconnect()`                      | `Promise<void>`                    | Disconnects the wallet.                         |
+| `getPublicKey()`                    | `Promise<string \| null>`          | Returns the current public key, or null.        |
+| `signTransaction(xdr, options?)`    | `Promise<SignTransactionResponse>` | Signs a transaction XDR.                        |
+| `signAuthEntry(entryXdr, options?)` | `Promise<SignAuthEntryResponse>`   | Signs a Soroban auth entry.                     |
 
 ### `FreighterAdapter`
 
@@ -588,7 +588,7 @@ if (result.success) {
 **Constructor options:**
 
 | Option    | Type             | Description                                                    |
-|-----------|------------------|----------------------------------------------------------------|
+| --------- | ---------------- | -------------------------------------------------------------- |
 | `network` | `StellarNetwork` | `'testnet'` or `'mainnet'`. Also accepts a custom Horizon URL. |
 
 ---

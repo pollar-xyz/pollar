@@ -3,11 +3,7 @@ import { isValidSession } from '../session';
 import { streamUntilFound } from '../stream';
 import { FlowDeps } from './deps';
 
-export async function authenticate(
-  clientSessionId: string,
-  deps: FlowDeps,
-  expectedWallet?: string,
-): Promise<void> {
+export async function authenticate(clientSessionId: string, deps: FlowDeps, expectedWallet?: string): Promise<void> {
   const { api, signal, setAuthState, storeSession, clearSession } = deps;
 
   setAuthState({ step: 'authenticating' });

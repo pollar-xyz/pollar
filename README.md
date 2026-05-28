@@ -32,13 +32,13 @@ Pollar authentication and Stellar transactions into any JavaScript environment.
 - Stellar transaction building and submission through the Pollar API
 - Real-time state management with a typed event system (`onAuthStateChange`)
 - `StellarClient` for querying account balances via Horizon
-- KYC verification flow — provider selection, session start, and status polling *(not yet implemented on backend)*
-- On/off-ramp support — quote fetching and on-ramp initiation *(not yet implemented on backend)*
+- KYC verification flow — provider selection, session start, and status polling _(not yet implemented on backend)_
+- On/off-ramp support — quote fetching and on-ramp initiation _(not yet implemented on backend)_
 - Transaction history — paginated fetch with status tracking
 - Direct wallet adapters (`FreighterAdapter`, `AlbedoAdapter`) plus a pluggable `walletAdapter` slot
   (`WalletAdapterResolver`) for external wallet stacks
 - `AdapterFn`, `PollarAdapter`, and `PollarAdapters` types — generic adapter contract for custom signing flows (e.g.
-  Trustless Work SDK). *(Renamed from `EscrowFn` / `EscrowAdapter` in 0.7.0.)*
+  Trustless Work SDK). _(Renamed from `EscrowFn` / `EscrowAdapter` in 0.7.0.)_
 - Active-session management — `listSessions()` / `revokeSession(familyId)` / `logoutEverywhere()` against the
   refresh-token family on the server
 - `getUserProfile()` for in-memory PII access; `destroy()` to tear down the client cleanly
@@ -89,9 +89,9 @@ drop-in authentication in React applications.
   transaction status (build → sign → success/error)
 - `<ReceiveModal>` — displays the connected wallet address as a QR code with copy-to-clipboard; no external QR
   dependency required
-- `<KycModal>` — identity verification flow with provider selection and status polling *(UI preview — backend coming
-  soon)*
-- `<RampWidget>` — buy/sell crypto with route comparison and payment instructions *(UI preview — backend coming soon)*
+- `<KycModal>` — identity verification flow with provider selection and status polling _(UI preview — backend coming
+  soon)_
+- `<RampWidget>` — buy/sell crypto with route comparison and payment instructions _(UI preview — backend coming soon)_
 - `<TxHistoryModal>` — paginated transaction history viewer with auto-fetch on open and stellar.expert explorer links
 - `<WalletBalanceModal>` — Stellar account balance display
 - `<SessionsModal>` — drop-in active-sessions UI: lists every refresh-token family for the current user, per-row

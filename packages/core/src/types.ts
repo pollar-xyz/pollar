@@ -1,6 +1,6 @@
+import { pollarPaths, StellarNetwork } from './index';
 import type { KeyManager } from './keys/types';
 import type { OnStorageDegrade, Storage } from './storage/types';
-import { pollarPaths, StellarNetwork } from './index';
 import { WalletAdapterResolver, WalletId } from './wallets';
 
 export type PollarApplicationConfigResponse =
@@ -102,9 +102,7 @@ export type TxSignBody = NonNullable<pollarPaths['/tx/sign']['post']['requestBod
 export type TxSignResponse = pollarPaths['/tx/sign']['post']['responses'][200]['content']['application/json'];
 export type TxSignContent = TxSignResponse['content'];
 
-export type TxSubmitSignedBody = NonNullable<
-  pollarPaths['/tx/submit']['post']['requestBody']
->['content']['application/json'];
+export type TxSubmitSignedBody = NonNullable<pollarPaths['/tx/submit']['post']['requestBody']>['content']['application/json'];
 
 export type TxBuildSignSubmitBody = NonNullable<
   pollarPaths['/tx/build-sign-submit']['post']['requestBody']
@@ -167,12 +165,7 @@ export type TransactionState =
  * appear here when the failure happened inside an atomic backend call where
  * the SDK can't isolate the failing sub-phase.
  */
-export type TxErrorPhase =
-  | 'building'
-  | 'signing'
-  | 'submitting'
-  | 'signing-submitting'
-  | 'building-signing-submitting';
+export type TxErrorPhase = 'building' | 'signing' | 'submitting' | 'signing-submitting' | 'building-signing-submitting';
 
 /**
  * Per-call outcomes returned by `buildTx`, `signTx`, `submitTx`,
@@ -181,9 +174,7 @@ export type TxErrorPhase =
  * modal-style UIs, but headless callers can `await` the method and inspect
  * the returned outcome directly instead of subscribing to state changes.
  */
-export type BuildOutcome =
-  | { status: 'built'; buildData: TxBuildContent }
-  | { status: 'error'; details?: string };
+export type BuildOutcome = { status: 'built'; buildData: TxBuildContent } | { status: 'error'; details?: string };
 
 export type SignOutcome =
   | { status: 'signed'; signedXdr: string; submissionToken?: string; expiresAt?: number }
@@ -259,8 +250,7 @@ export type TxHistoryRecord =
 
 export type TxHistoryParams = NonNullable<pollarPaths['/tx/history']['get']['parameters']['query']>;
 
-export type TxHistoryContent =
-  pollarPaths['/tx/history']['get']['responses'][200]['content']['application/json']['content'];
+export type TxHistoryContent = pollarPaths['/tx/history']['get']['responses'][200]['content']['application/json']['content'];
 
 export type TxHistoryState =
   | { step: 'idle' }

@@ -1,8 +1,7 @@
 import { FeeBumpTransaction, Keypair, Networks, Transaction, TransactionBuilder, xdr } from '@stellar/stellar-sdk';
 import type { StellarNetwork } from './types';
 
-const passphraseFor = (network: StellarNetwork): string =>
-  network === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
+const passphraseFor = (network: StellarNetwork): string => (network === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET);
 
 export const parseTx = (txXdr: string, network: StellarNetwork): Transaction => {
   const tx = TransactionBuilder.fromXDR(txXdr, passphraseFor(network));

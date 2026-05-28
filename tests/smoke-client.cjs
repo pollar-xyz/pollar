@@ -60,13 +60,16 @@ function check(label, ok, extra) {
   await storage.set(
     sessionKey,
     JSON.stringify({
-      clientSessionId: 'cs', userId: 'u', status: 'CONSUMED',
+      clientSessionId: 'cs',
+      userId: 'u',
+      status: 'CONSUMED',
       token: {
         accessToken: 'AT',
         refreshToken: 'RT',
         expiresAt: Math.floor(Date.now() / 1000) + 600,
       },
-      user: { ready: true }, wallet: { publicKey: null },
+      user: { ready: true },
+      wallet: { publicKey: null },
     }),
   );
 
@@ -99,7 +102,9 @@ function check(label, ok, extra) {
 
   console.log('── 1. Construction + ready() ─────────────────────────────────');
   const client = new sdk.PollarClient({
-    apiKey, storage, baseUrl: 'https://x.test',
+    apiKey,
+    storage,
+    baseUrl: 'https://x.test',
   });
   await client.ready();
   check('client.ready() resolves', true);
@@ -157,7 +162,9 @@ function check(label, ok, extra) {
 
   console.log('\n── 9. apiKeyHash getter throws before ready() ────────────────');
   const client2 = new sdk.PollarClient({
-    apiKey: 'other', storage: sdk.createMemoryAdapter(), baseUrl: 'https://x.test',
+    apiKey: 'other',
+    storage: sdk.createMemoryAdapter(),
+    baseUrl: 'https://x.test',
   });
   let threw = false;
   try {

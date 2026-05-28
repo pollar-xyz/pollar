@@ -59,7 +59,9 @@ The credentials are cached for 5 minutes by default. If `getCredentials` returns
 ## Graceful shutdown
 
 ```ts
-const adapter = createPollarPrivyAdapter({ /* ... */ });
+const adapter = createPollarPrivyAdapter({
+  /* ... */
+});
 await adapter.start();
 
 const shutdown = async () => {
@@ -89,10 +91,10 @@ interface PollarPrivyAdapterConfig {
 
   // ── Optional (with defaults) ──────────────────────────────────────────
 
-  port?: number;             // 3001
-  cacheTtlMs?: number;       // 5 * 60 * 1000
+  port?: number; // 3001
+  cacheTtlMs?: number; // 5 * 60 * 1000
   requestTimeoutMs?: number; // 10_000
-  maxBodyBytes?: number;     // 64 * 1024
+  maxBodyBytes?: number; // 64 * 1024
 
   // ── Observability hooks ───────────────────────────────────────────────
 
@@ -120,13 +122,13 @@ Responses share the Pollar envelope:
 { "code": "WALLET_CREATION_FAILED", "success": false, "reason": "Privy API: ..." }
 ```
 
-| Method | Path                          | Body                                          | Success code                       | HTTP |
-| ------ | ----------------------------- | --------------------------------------------- | ---------------------------------- | ---- |
-| GET    | `/health`                     | —                                             | `PRIVY_ADAPTER_HEALTH_OK`          | 200  |
-| POST   | `/wallets/create`             | `{ userId }`                                  | `PRIVY_ADAPTER_WALLET_CREATED`     | 201  |
-| POST   | `/wallets/create` (existing)  | `{ userId }`                                  | `PRIVY_ADAPTER_WALLET_EXISTS`      | 200  |
-| POST   | `/wallets/sign`               | `{ userId, walletAddress, txXdr }`            | `PRIVY_ADAPTER_TX_SIGNED`          | 200  |
-| GET    | `/wallets/:userId/address`    | —                                             | `PRIVY_ADAPTER_WALLET_ADDRESS`     | 200  |
+| Method | Path                         | Body                               | Success code                   | HTTP |
+| ------ | ---------------------------- | ---------------------------------- | ------------------------------ | ---- |
+| GET    | `/health`                    | —                                  | `PRIVY_ADAPTER_HEALTH_OK`      | 200  |
+| POST   | `/wallets/create`            | `{ userId }`                       | `PRIVY_ADAPTER_WALLET_CREATED` | 201  |
+| POST   | `/wallets/create` (existing) | `{ userId }`                       | `PRIVY_ADAPTER_WALLET_EXISTS`  | 200  |
+| POST   | `/wallets/sign`              | `{ userId, walletAddress, txXdr }` | `PRIVY_ADAPTER_TX_SIGNED`      | 200  |
+| GET    | `/wallets/:userId/address`   | —                                  | `PRIVY_ADAPTER_WALLET_ADDRESS` | 200  |
 
 `/wallets/create` is idempotent: if the user already has a Stellar wallet, the existing address is returned with code `PRIVY_ADAPTER_WALLET_EXISTS`.
 
@@ -134,17 +136,17 @@ Responses share the Pollar envelope:
 
 ### Error codes
 
-| Code                       | HTTP | When                                                                          |
-| -------------------------- | ---- | ----------------------------------------------------------------------------- |
-| `FORBIDDEN`                | 401  | Missing or wrong Bearer token; response carries `WWW-Authenticate: Bearer …`  |
-| `VALIDATION_ERROR`         | 400  | Body schema mismatch or invalid JSON                                          |
-| `VALIDATION_ERROR`         | 413  | Body exceeded `maxBodyBytes` — response carries `reason: "body too large"`    |
-| `WALLET_NOT_FOUND`         | 404  | User has no Stellar wallet                                                    |
-| `WALLET_CREATION_FAILED`   | 502  | Privy upstream error during create                                            |
-| `WALLET_LOOKUP_FAILED`     | 502  | Privy upstream error during wallet lookup                                     |
-| `TX_INVALID_SIGNED_XDR`    | 400  | XDR could not be parsed, or transaction is a fee-bump (unsupported)           |
-| `TX_SIGN_FAILED`           | 502  | Privy upstream error during sign                                              |
-| `INTERNAL_SERVER_ERROR`    | 500  | Unexpected failure                                                            |
+| Code                     | HTTP | When                                                                         |
+| ------------------------ | ---- | ---------------------------------------------------------------------------- |
+| `FORBIDDEN`              | 401  | Missing or wrong Bearer token; response carries `WWW-Authenticate: Bearer …` |
+| `VALIDATION_ERROR`       | 400  | Body schema mismatch or invalid JSON                                         |
+| `VALIDATION_ERROR`       | 413  | Body exceeded `maxBodyBytes` — response carries `reason: "body too large"`   |
+| `WALLET_NOT_FOUND`       | 404  | User has no Stellar wallet                                                   |
+| `WALLET_CREATION_FAILED` | 502  | Privy upstream error during create                                           |
+| `WALLET_LOOKUP_FAILED`   | 502  | Privy upstream error during wallet lookup                                    |
+| `TX_INVALID_SIGNED_XDR`  | 400  | XDR could not be parsed, or transaction is a fee-bump (unsupported)          |
+| `TX_SIGN_FAILED`         | 502  | Privy upstream error during sign                                             |
+| `INTERNAL_SERVER_ERROR`  | 500  | Unexpected failure                                                           |
 
 ## Security notes
 
