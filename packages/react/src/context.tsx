@@ -17,7 +17,7 @@ import {
   WalletBalanceState,
   WalletId,
 } from '@pollar/core';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { ModalErrorBoundary } from './components/commons';
 import { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
 import { KycModal } from './components/kyc-modal/KycModal';
@@ -205,18 +205,14 @@ export function PollarProvider({ client, appConfig: appConfigProp, ui, adapters,
   const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
   const [distributionRulesModalOpen, setDistributionRulesModalOpen] = useState(false);
 
-  const adaptersRef = useRef(adapters);
-  adaptersRef.current = adapters;
-
-  const renderWalletsRef = useRef(ui?.renderWallets);
-  renderWalletsRef.current = ui?.renderWallets;
-
   // PII (incl. providers.wallet.address) lives on `client.getUserProfile()`, not on the
   // persisted session. For both external and custodial wallets, `wallet.publicKey`
   // already holds the on-chain address we care about.
   const walletAddress = sessionState?.wallet?.publicKey || '';
   const getClient = useCallback(() => pollarClient, [pollarClient]);
   const refreshWalletBalance = useCallback(() => pollarClient.refreshBalance(walletAddress), [pollarClient, walletAddress]);
+
+  const renderWallets = ui?.renderWallets;
 
   const contextValue: PollarContextValue = useMemo(
     () => {
@@ -269,8 +265,8 @@ export function PollarProvider({ client, appConfig: appConfigProp, ui, adapters,
         // config
         appConfig: resolvedConfig,
         styles,
-        renderWallets: renderWalletsRef.current,
-        adapters: adaptersRef.current,
+        renderWallets,
+        adapters,
       }) as PollarContextValue;
     },
     [
@@ -283,6 +279,8 @@ export function PollarProvider({ client, appConfig: appConfigProp, ui, adapters,
       refreshWalletBalance,
       networkState,
       resolvedConfig,
+      adapters,
+      renderWallets,
     ],
   );
 
