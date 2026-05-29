@@ -89,7 +89,7 @@ interface LoginModalTemplateProps {
   onEmailChange?: (email: string) => void;
   onEmailSubmit?: () => void;
   onSocialLogin?: (provider: 'google' | 'github') => void;
-  onWalletConnect: (id: WalletId) => void;
+  onWalletConnect?: (id: WalletId) => void;
   /** Optional override for the wallet picker view. Defaults to a Freighter+Albedo list. */
   renderWallets?: RenderWalletsSlot;
   authState: AuthState;
@@ -206,9 +206,9 @@ export function LoginModalTemplate({
         <>
           <BackButton onClick={() => setShowWalletPicker(false)} />
           {renderWallets ? (
-            renderWallets({ onConnect: onWalletConnect, authState })
+            renderWallets({ onConnect: onWalletConnect ?? (() => {}), authState })
           ) : (
-            <DefaultFreighterAlbedoButtons onConnect={onWalletConnect} isLoading={isLoading} />
+            <DefaultFreighterAlbedoButtons onConnect={onWalletConnect ?? (() => {})} isLoading={isLoading} />
           )}
         </>
       ) : (
