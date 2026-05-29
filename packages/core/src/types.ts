@@ -1,6 +1,7 @@
 import { pollarPaths, StellarNetwork } from './index';
 import type { KeyManager } from './keys/types';
 import type { OnStorageDegrade, Storage } from './storage/types';
+import type { VisibilityProvider } from './visibility/types';
 import { WalletAdapterResolver, WalletId } from './wallets';
 
 export type PollarApplicationConfigResponse =
@@ -79,6 +80,25 @@ export interface PollarClientConfig {
    * If unset, the server-recorded `user_agent` header is the fallback.
    */
   deviceLabel?: string;
+  /**
+   * Foreground-detection signal for the silent-refresh scheduler. When the
+   * app is hidden / backgrounded, scheduled refreshes are skipped (saves
+   * network + sidesteps browser/RN background timer throttling); they run
+   * the moment visibility comes back. Defaults to a web provider in the
+   * browser (`visibilitychange` + BFCache + focus) and a noop elsewhere.
+   * React Native consumers should inject an `AppState`-backed provider —
+   * see TODO on `VisibilityProvider`.
+   */
+  visibilityProvider?: VisibilityProvider;
+  /**
+   * If set, the silent-refresh scheduler stops issuing proactive refreshes
+   * after this many milliseconds of no client-side HTTP activity. The
+   * session is not cleared — the next user action triggers a request that
+   * either reuses a still-valid access token or hits 401 → reactive
+   * refresh (transparent if the RT is still valid). Defaults to
+   * `undefined` = refresh forever as long as the app is visible.
+   */
+  maxIdleMs?: number;
 }
 
 /**

@@ -9,6 +9,8 @@ import { hashApiKey } from '../lib/api-key-hash';
 import { StellarNetwork } from '../stellar/StellarClient';
 import { defaultStorage } from '../storage/autodetect';
 import type { OnStorageDegrade, Storage, StorageDegradeReason } from '../storage/types';
+import { defaultVisibilityProvider } from '../visibility/autodetect';
+import type { VisibilityProvider } from '../visibility/types';
 import {
   AUTH_ERROR_CODES,
   AuthState,
@@ -53,6 +55,9 @@ import { loginWallet } from './auth/walletFlow';
 import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
 
 const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+
+/** Renew the access token this many seconds before its `exp` to absorb clock skew + signing latency. */
+const REFRESH_SKEW_SECONDS = 60;
 
 function warnServerSide(method: string): void {
   console.warn(
@@ -106,6 +111,13 @@ export class PollarClient {
   /** Optional UI label sent to the server at /auth/login so the sessions UI
    *  can show a recognizable device name. Set via PollarClientConfig.deviceLabel. */
   private readonly _deviceLabel: string | undefined;
+  private readonly _visibilityProvider: VisibilityProvider;
+  private readonly _maxIdleMs: number | undefined;
+  /** Updated by the request middleware. Read by the silent-refresh scheduler
+   *  to skip proactive refreshes after `maxIdleMs` of no HTTP activity. */
+  private _lastRequestAt: number = Date.now();
+  private _refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private _visibilityUnsubscribe: (() => void) | null = null;
 
   private _transactionState: TransactionState | null = null;
   private _transactionStateListeners = new Set<(state: TransactionState) => void>();
@@ -152,6 +164,8 @@ export class PollarClient {
     this._walletAdapterResolver = config.walletAdapter ?? null;
     this._walletResolverTimeoutMs = config.walletResolverTimeoutMs ?? 5000;
     this._deviceLabel = config.deviceLabel;
+    this._visibilityProvider = config.visibilityProvider ?? defaultVisibilityProvider();
+    this._maxIdleMs = config.maxIdleMs;
 
     this._api = createApiClient(this.basePath);
     this._wireMiddlewares();
@@ -200,6 +214,13 @@ export class PollarClient {
       console.warn('[PollarClient] KeyManager init failed; DPoP unavailable for this session', err);
     }
     await this._restoreSession();
+
+    // Wire after restore so the first scheduled refresh — if any — is set up
+    // by `_restoreSession` itself, and the visibility listener only fires
+    // re-checks for transitions that happen from this point forward.
+    this._visibilityUnsubscribe = this._visibilityProvider.onChange((visible) => {
+      if (visible) void this._maybeProactiveRefresh();
+    });
   }
 
   /** Detach the cross-tab storage listener and abort any in-flight login. */
@@ -210,6 +231,11 @@ export class PollarClient {
     }
     this._loginController?.abort();
     this._loginController = null;
+    this._clearRefreshTimer();
+    if (this._visibilityUnsubscribe) {
+      this._visibilityUnsubscribe();
+      this._visibilityUnsubscribe = null;
+    }
   }
 
   // ─── Middlewares (DPoP + auto-refresh) ────────────────────────────────────
@@ -225,6 +251,7 @@ export class PollarClient {
     this._api.use({
       onRequest: async ({ request }: { request: Request }) => {
         request.headers.set('x-pollar-api-key', self.apiKey);
+        self._lastRequestAt = Date.now();
         await self._initialized;
         // Cache the body before fetch() disturbs the stream — retries can't
         // call request.clone() once the body is consumed.
@@ -439,6 +466,69 @@ export class PollarClient {
         // process but won't survive reload. Don't clear — that'd surprise
         // the user with a logout for what's essentially a storage hiccup.
       }
+      this._scheduleNextRefresh();
+    }
+  }
+
+  // ─── Silent refresh scheduler ────────────────────────────────────────────────
+
+  /**
+   * Arm a single setTimeout to fire shortly before the current access token
+   * expires. Idempotent — clearing any previous timer first. Safe to call
+   * from any session-write site (initial login, restore-from-storage, after
+   * a successful rotation). No-op if there's no session in memory.
+   *
+   * Browser/RN background-tab throttling makes long-running setTimeouts
+   * unreliable on their own; the `visibilitychange` listener compensates by
+   * re-invoking `_maybeProactiveRefresh` whenever the app comes back to the
+   * foreground, catching any timer that fired late or never fired at all.
+   */
+  private _scheduleNextRefresh(): void {
+    this._clearRefreshTimer();
+    const expiresAt = this._session?.token?.expiresAt;
+    if (typeof expiresAt !== 'number') return;
+    const dueInMs = Math.max(0, (expiresAt - Math.floor(Date.now() / 1000) - REFRESH_SKEW_SECONDS) * 1000);
+    this._refreshTimer = setTimeout(() => {
+      void this._maybeProactiveRefresh();
+    }, dueInMs);
+  }
+
+  /**
+   * Decide whether to actually run a refresh right now. Called both from the
+   * scheduler timer and from the visibility-change listener.
+   *
+   * Skip if:
+   *   - no session / no RT (nothing to refresh)
+   *   - app is hidden — wait for the visibility listener to re-trigger us
+   *   - `maxIdleMs` configured and no client request since that window — let
+   *     the next reactive 401-refresh handle it whenever the user comes back
+   *   - the AT still has more than `REFRESH_SKEW_SECONDS` of life — reschedule
+   *
+   * Otherwise call `refresh()`, which uses the existing in-flight singleton
+   * so we never collide with a reactive 401-triggered refresh. On failure,
+   * `_doRefresh` already calls `_clearSession`, so auth-state listeners see
+   * `step:'idle'` — no extra event dispatch needed here.
+   */
+  private async _maybeProactiveRefresh(): Promise<void> {
+    if (!this._session?.token?.refreshToken) return;
+    if (!this._visibilityProvider.isVisible()) return;
+    if (this._maxIdleMs !== undefined && Date.now() - this._lastRequestAt > this._maxIdleMs) return;
+    const expiresAt = this._session.token.expiresAt;
+    if (Math.floor(Date.now() / 1000) < expiresAt - REFRESH_SKEW_SECONDS) {
+      this._scheduleNextRefresh();
+      return;
+    }
+    try {
+      await this.refresh();
+    } catch (err) {
+      console.warn('[PollarClient] Proactive refresh failed; session cleared', err);
+    }
+  }
+
+  private _clearRefreshTimer(): void {
+    if (this._refreshTimer !== null) {
+      clearTimeout(this._refreshTimer);
+      this._refreshTimer = null;
     }
   }
 
@@ -1336,6 +1426,7 @@ export class PollarClient {
       // _authState would race past any onAuthStateChange subscription that
       // hasn't run yet (e.g. PollarProvider's useEffect).
       this._setAuthState({ step: 'authenticated', session: this._session });
+      this._scheduleNextRefresh();
     } else {
       console.info('[PollarClient] No session in storage');
     }
@@ -1367,10 +1458,12 @@ export class PollarClient {
 
     await writeStorage(this._storage, this.apiKeyHash, persisted);
     this._setAuthState({ step: 'authenticated', session: persisted });
+    this._scheduleNextRefresh();
   }
 
   private async _clearSession(): Promise<void> {
     console.info('[PollarClient] Session cleared');
+    this._clearRefreshTimer();
     this._session = null;
     this._profile = null;
     this._walletAdapter = null;
