@@ -2,10 +2,17 @@
 
 Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction utilities for Stellar-based applications.
 
-> **0.7.0 ships sender-constrained tokens via DPoP (RFC 9449), pluggable storage and key managers, automatic
-> refresh-on-401, and removes PII from persisted storage.** This is a breaking change — read
-> the [CHANGELOG](../../CHANGELOG.md) before upgrading. Requires HTTPS and
-> `sdk-api` ≥ Phase 5.
+> **0.8.0** routes every `submitTx` (custodial **and** external wallets) through
+> `/tx/submit` so the dashboard sees every transaction and idempotency is
+> tracked end-to-end. Adds proactive token refresh with a visibility-aware
+> scheduler, an `onStorageDegrade` telemetry hook, and a timeout around the
+> wallet adapter resolver. External-wallet callers may now observe `pending`
+> outcomes where they only ever got `success` / `error` before. Read the
+> [CHANGELOG](../../CHANGELOG.md) before upgrading.
+>
+> **0.7.0** ships sender-constrained tokens via DPoP (RFC 9449), pluggable
+> storage and key managers, automatic refresh-on-401, and removes PII from
+> persisted storage. Requires HTTPS and `sdk-api` ≥ Phase 5.
 
 ## Installation
 

@@ -2,11 +2,19 @@
 
 ## 0.8.0
 
-> **⚠️ BREAKING CHANGE.** `<PollarProvider>` props are reshaped: `config` is now
-> `client` (and accepts either a `PollarClient` instance or a `PollarClientConfig`),
-> `styles` moves under `appConfig.styles`, and the remote `/applications/config`
-> fetch is now opt-out by passing `appConfig` (even `{}`). New `ui.renderWallets`
-> slot lets external picker components replace the default Freighter/Albedo list.
+> **⚠️ BREAKING CHANGES.**
+>
+> - `<PollarProvider>` props are reshaped: `config` is now `client` (and accepts
+>   either a `PollarClient` instance or a `PollarClientConfig`), `styles` moves
+>   under `appConfig.styles`, and the remote `/applications/config` fetch is now
+>   opt-out by passing `appConfig` (even `{}`). New `ui.renderWallets` slot lets
+>   external picker components replace the default Freighter/Albedo list.
+> - `@pollar/stellar-wallets-kit-adapter` now **requires** `network` — the
+>   `Networks.TESTNET` default is gone. Per-call `networkPassphrase` overrides
+>   are rejected if they don't match init.
+> - `@pollar/core` external-wallet `submitTx` no longer hits Horizon directly —
+>   all submissions route through `/tx/submit`. The same call may now resolve to
+>   `pending` instead of `success` / `error` (previously synchronous-only).
 
 ### `@pollar/react` — BREAKING
 
@@ -56,6 +64,27 @@ const client = new PollarClient({ apiKey, walletAdapter });
 <PollarProvider client={client} appConfig={{ styles: { theme: 'dark' } }}>
 ```
 
+### `@pollar/react` — fixes
+
+- **Provider props are read directly in the context value** instead of via a
+  stale ref — `<PollarProvider>` now updates without remounting when callers
+  swap `adapters` / `ui` references between renders.
+- **Timers cleared on unmount** in `<PollarProvider>` and the session change
+  effect uses explicit equality so identical sessions don't trigger spurious
+  re-renders.
+
+### `@pollar/stellar-wallets-kit-adapter` — BREAKING
+
+- **`network` is now required** on `StellarWalletsKitAdapterOptions` (and on
+  `createStellarWalletsKitBundle`). The previous `Networks.TESTNET` default is
+  gone — `ensureInit` throws if `network` is missing on first init. The kit is
+  a global singleton so picking the network silently would risk signing
+  real-looking transactions on the wrong chain. Pass `Networks.TESTNET` or
+  `Networks.PUBLIC` explicitly.
+- **Per-call `networkPassphrase` overrides are rejected** when they don't match
+  the init network. `signTransaction()` / `signAuthEntry()` throw instead of
+  silently signing on the wrong chain.
+
 ### `@pollar/stellar-wallets-kit-adapter` — new features
 
 - **`<KitWalletPicker>` and `createStellarWalletsKitBundle`** on the new
@@ -90,6 +119,12 @@ const client = new PollarClient({ apiKey, walletAdapter });
   flag the kit already populates from each module's `isAvailable()` probe).
   No second-pass probing per render.
 
+### `@pollar/stellar-wallets-kit-adapter` — fixes
+
+- **Second-init network mismatch is now flagged.** Calling
+  `stellarWalletsKit({ network })` a second time with a different network logs
+  a clear warning instead of silently keeping the first init's network.
+
 ### `@pollar/stellar-wallets-kit-adapter` — packaging
 
 - React is now an **optional peer dependency**. The root export
@@ -97,7 +132,66 @@ const client = new PollarClient({ apiKey, walletAdapter });
   `WalletAdapterResolver` continue to work without installing React.
   Only the `/picker` subpath pulls in `react` / `react-dom` / `@pollar/react`.
 - Bumped to `0.8.0`. Existing `stellarWalletsKit({ network })`-only consumers
-  do not need to change anything.
+  do not need to change anything beyond making the `network` argument
+  explicit if they were relying on the testnet default.
+
+### `@pollar/core` — BREAKING (behavior)
+
+- **`submitTx` always routes through `/tx/submit`.** External wallets no longer
+  submit directly to the public RPC; both custodial and external paths now go
+  through sdk-api. Wins:
+  - end-to-end `tx_records` persistence with full phase lifecycle so the
+    developer dashboard can show every tx at
+    `/apps/:id/monitor/transactions`,
+  - idempotency tracking via `submissionToken` (returned by `signTx`),
+  - one response shape (`SUCCESS` / `PENDING` / `FAILED`) shared by both
+    flows. External-wallet callers may now observe `pending` where they
+    previously only ever got `success` or `error`.
+
+  Cost: ~50–150 ms extra latency vs. the legacy direct-Horizon path.
+
+### `@pollar/core` — new features
+
+- **Proactive token refresh with a visibility-aware scheduler.** Tokens are
+  refreshed before they expire instead of on the first 401. The scheduler
+  pauses when the tab is hidden and resumes when it becomes visible again, so
+  background tabs don't churn refreshes.
+- **`onStorageDegrade` subscription** — opt-in telemetry hook on
+  `PollarClientConfig` (mirrored on `<PollarProvider>` config). Fires when the
+  client falls back from secure storage (e.g. IndexedDB → in-memory) so apps
+  can surface the degradation to users / dashboards.
+- **Wallet adapter resolver timeout.** `PollarClient` now times out
+  `walletAdapter(id)` resolutions so a stuck resolver can't hang the login
+  flow indefinitely. The timeout produces a regular auth error that flows
+  through the existing error surface.
+
+### `@pollar/core` — fixes
+
+- **Only idempotent methods retry after a post-refresh 401.** The auto-retry
+  path previously re-ran any method that returned 401 after a token refresh;
+  it now restricts retries to idempotent verbs (`GET`, `HEAD`, `OPTIONS`,
+  `PUT`, `DELETE`) so POST/PATCH calls aren't accidentally double-applied
+  server-side.
+- **Login abort signal threaded through the wallet resolver.** Cancelling a
+  login now also cancels the wallet adapter resolution, instead of leaving
+  the resolver running until completion.
+
+### `@pollar/privy-adapter` — fixes
+
+- **Self-heal wallet cache on stale entries.** If a cached wallet id no longer
+  exists at Privy, the adapter clears the entry and recreates it on the next
+  sign instead of repeatedly hitting Privy with a 404.
+- **Per-`userId` mutex on `POST /wallets/create`.** Concurrent wallet-creation
+  requests for the same user are serialised so the burst doesn't create
+  duplicate wallets at Privy.
+- **`PrivyClient` construction is coalesced.** Multiple concurrent first calls
+  share one client init instead of racing N parallel constructions.
+- **Raw error messages dropped from HTTP responses.** Errors from Privy and
+  internal stack traces are replaced with a generic message; the full error
+  still goes to the server logs. Package marked `"private": false` but
+  **server-side only** — importing in a browser bundle leaks credentials.
+- **`@privy-io/node` pinned to `~0.18.0`** to avoid surprise 0.19+ behaviour
+  changes mid-release.
 
 ## 0.7.2
 

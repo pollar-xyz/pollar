@@ -3,8 +3,13 @@
 React bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI, transaction modals, and hooks for
 Stellar-based applications.
 
-> **0.7.0 is a breaking change.** The context's session is now `PollarPersistedSession | null` and PII has moved to
-> `client.getUserProfile()`. Read the [CHANGELOG](../../CHANGELOG.md) before upgrading.
+> **0.8.0 reshapes `<PollarProvider>` props (breaking).** `config` → `client`
+> (now accepts a `PollarClient` instance or a `PollarClientConfig`); `styles`
+> moves under `appConfig.styles`; new `appConfig` prop is the opt-out switch
+> for the remote `/applications/config` fetch (pass it — even `{}` — to skip
+> the fetch); new `ui.renderWallets` slot replaces the default Freighter/Albedo
+> picker. Read the [CHANGELOG](../../CHANGELOG.md) and
+> [UPGRADE.md](../../UPGRADE.md) before upgrading.
 
 ## Installation
 
@@ -27,7 +32,7 @@ import { PollarProvider } from '@pollar/react';
 import '@pollar/react/styles.css';
 
 export default function App({ children }: { children: React.ReactNode }) {
-  return <PollarProvider config={{ apiKey: 'your-api-key' }}>{children}</PollarProvider>;
+  return <PollarProvider client={{ apiKey: 'your-api-key' }}>{children}</PollarProvider>;
 }
 ```
 
@@ -62,22 +67,28 @@ Context provider that initialises the Pollar client and makes it available to ch
 
 ```tsx
 <PollarProvider
-  config={{
+  client={{
     apiKey: 'your-api-key',
     baseUrl: 'https://sdk.api.pollar.xyz', // optional
     stellarNetwork: 'testnet', // optional, default: 'testnet'
-    // 0.7.0 options threaded straight through to PollarClient:
     storage, // optional, RN apps inject this
     keyManager, // optional, autodetects on web
     walletAdapter, // optional, external wallet stack
     deviceLabel: 'iPhone — Safari', // optional, shown in SessionsModal
     onStorageDegrade, // optional, telemetry hook
   }}
-  styles={
-    {
+  // Optional: pass `appConfig` (even `{}`) to skip the remote
+  // `/applications/config` fetch and use local-only styles/branding.
+  appConfig={{
+    styles: {
       /* optional style overrides */
-    }
-  }
+    },
+  }}
+  ui={{
+    // Optional: replace the default Freighter/Albedo wallet picker.
+    // See "External wallet stacks" below for a kit-powered example.
+    renderWallets: undefined,
+  }}
   adapters={
     {
       /* optional named adapter set */
@@ -88,11 +99,18 @@ Context provider that initialises the Pollar client and makes it available to ch
 </PollarProvider>
 ```
 
-| Prop       | Type                 | Required | Description                                                               |
-| ---------- | -------------------- | -------- | ------------------------------------------------------------------------- |
-| `config`   | `PollarClientConfig` | Yes      | Configuration passed verbatim to `PollarClient`                           |
-| `styles`   | `PollarStyles`       | No       | Per-app style overrides; merged on top of `appConfig.styles` from the API |
-| `adapters` | `PollarAdapters`     | No       | Named set of `PollarAdapter` objects (e.g. Trustless Work). See below     |
+| Prop        | Type                                | Required | Description                                                                                                                                                                                              |
+| ----------- | ----------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client`    | `PollarClient \| PollarClientConfig` | Yes      | Either a pre-built `PollarClient` (testing, reuse outside React) or a `PollarClientConfig` the provider will construct one from. **Locked at first render** — swapping after mount is ignored            |
+| `appConfig` | `PollarConfig`                       | No       | Local override of `/applications/config`. **Presence is the opt-out switch**: pass it (even `{}`) and the remote fetch is skipped. Omit it to keep the existing remote-fetch-on-mount behaviour          |
+| `ui`        | `{ renderWallets?: RenderWalletsSlot }` | No    | UI customisation slots. `renderWallets` replaces the default Freighter/Albedo buttons in `LoginModal`'s wallet picker. Receives `{ onConnect, authState }` and is expected to call `onConnect(walletId)` |
+| `adapters`  | `PollarAdapters`                     | No       | Named set of `PollarAdapter` objects (e.g. Trustless Work). See below                                                                                                                                    |
+
+> **Renamed in 0.8.0** — `config` → `client`, `styles` → `appConfig.styles`.
+> If you were passing `styles={{ ... }}` directly, move it to
+> `appConfig={{ styles: { ... } }}` (which also opts you out of the remote
+> `/applications/config` fetch). See [UPGRADE.md](../../UPGRADE.md) for the
+> full migration matrix.
 
 ---
 
@@ -244,7 +262,7 @@ const trustlessWork: PollarAdapter = {
   release: async (params) => ({ unsignedTransaction: '…' }),
 };
 
-<PollarProvider config={{ apiKey }} adapters={{ trustlessWork }}>
+<PollarProvider client={{ apiKey }} adapters={{ trustlessWork }}>
   …
 </PollarProvider>;
 ```
@@ -273,7 +291,9 @@ function MyComponent() {
 
 ### External wallet stacks (Stellar Wallets Kit, …)
 
-Pass a `WalletAdapterResolver` to `config.walletAdapter` so Pollar can reach wallets that live outside `@pollar/core`:
+Pass a `WalletAdapterResolver` to `client.walletAdapter` so Pollar can reach
+wallets that live outside `@pollar/core`. The signing path alone (no UI
+changes):
 
 ```tsx
 import { PollarProvider } from '@pollar/react';
@@ -281,7 +301,7 @@ import { stellarWalletsKit } from '@pollar/stellar-wallets-kit-adapter';
 import { Networks } from '@creit.tech/stellar-wallets-kit';
 
 <PollarProvider
-  config={{
+  client={{
     apiKey: 'your-api-key',
     walletAdapter: stellarWalletsKit({ network: Networks.PUBLIC }),
   }}
@@ -290,7 +310,49 @@ import { Networks } from '@creit.tech/stellar-wallets-kit';
 </PollarProvider>;
 ```
 
-Then any `login({ provider: 'wallet', type: '<kit wallet id>' })` is routed through the kit.
+Then any `login({ provider: 'wallet', type: '<kit wallet id>' })` is routed
+through the kit. The built-in `LoginModal` still shows only Freighter / Albedo
+unless you also wire `ui.renderWallets` (next section).
+
+#### Showing every kit wallet in `LoginModal`
+
+The `ui.renderWallets` slot replaces the hardcoded Freighter+Albedo buttons.
+`@pollar/stellar-wallets-kit-adapter/picker` ships a bundle that builds both
+halves (signing + picker UI) from a single options object — drop both into
+`<PollarProvider>` and the kit's full wallet list (xBull, Lobstr, Rabet, …)
+renders in `LoginModal`:
+
+```tsx
+import { PollarProvider } from '@pollar/react';
+import { createStellarWalletsKitBundle } from '@pollar/stellar-wallets-kit-adapter/picker';
+import { Networks } from '@creit.tech/stellar-wallets-kit';
+
+const bundle = createStellarWalletsKitBundle({
+  network: Networks.PUBLIC,
+  picker: { wallets: ['xbull', 'lobstr', 'freighter'] }, // subset, optional
+});
+
+<PollarProvider
+  client={{ apiKey: 'your-api-key', walletAdapter: bundle.walletAdapter }}
+  ui={{ renderWallets: bundle.renderWallets }}
+>
+  {children}
+</PollarProvider>;
+```
+
+If you only want a custom picker (no kit), `renderWallets` is just a function
+of `{ onConnect, authState }` — return whatever JSX you want and call
+`onConnect(walletId)` when the user picks a wallet:
+
+```tsx
+ui={{
+  renderWallets: ({ onConnect, authState }) => (
+    <button disabled={authState.step !== 'idle'} onClick={() => onConnect('xbull')}>
+      xBull
+    </button>
+  ),
+}}
+```
 
 ---
 
@@ -318,6 +380,10 @@ import type {
   AuthModalProps,
   PollarConfig,
   PollarStyles,
+
+  // 0.8.0 — wallet picker slot
+  RenderWalletsProps,
+  RenderWalletsSlot,
 
   // Template props
   SendModalTemplateProps,
