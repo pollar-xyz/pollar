@@ -1,0 +1,15 @@
+# Build output
+**/dist/**
+.turbo/
+tmp/
+
+# Generated
+packages/core/src/api/schema.d.ts
+
+# Lockfiles
+package-lock.json
+**/pnpm-lock.yaml
+**/yarn.lock
+
+# Dependencies
+node_modules/

@@ -11,6 +11,7 @@
       "persistent": true
     },
     "lint": {
+      "dependsOn": ["^build"],
       "inputs": ["src/**", "tsconfig.json", "eslint.config.js", "eslint.config.mjs", "package.json"],
       "outputs": []
     },
