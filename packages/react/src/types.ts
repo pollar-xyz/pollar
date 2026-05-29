@@ -1,4 +1,11 @@
-import { AuthState, PollarApplicationConfigContent, PollarClientConfig, PollarLoginOptions, WalletId, pollarPaths } from '@pollar/core';
+import {
+  AuthState,
+  PollarApplicationConfigContent,
+  PollarClientConfig,
+  PollarLoginOptions,
+  WalletId,
+  pollarPaths,
+} from '@pollar/core';
 import type { ReactNode } from 'react';
 
 type ConfigResponse = pollarPaths['/applications/config']['get']['responses'][200]['content']['application/json'];

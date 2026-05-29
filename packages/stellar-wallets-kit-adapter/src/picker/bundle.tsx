@@ -35,9 +35,7 @@ export interface StellarWalletsKitBundle {
  * />
  * ```
  */
-export function createStellarWalletsKitBundle(
-  options: StellarWalletsKitAdapterOptions,
-): StellarWalletsKitBundle {
+export function createStellarWalletsKitBundle(options: StellarWalletsKitAdapterOptions): StellarWalletsKitBundle {
   const walletAdapter = stellarWalletsKit(options);
   const renderWallets: RenderWalletsSlot = (slot) => (
     <KitWalletPicker

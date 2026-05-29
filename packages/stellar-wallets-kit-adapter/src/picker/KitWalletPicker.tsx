@@ -1,11 +1,6 @@
 'use client';
 
-import {
-  type ISupportedWallet,
-  type ModuleInterface,
-  type Networks,
-  StellarWalletsKit,
-} from '@creit.tech/stellar-wallets-kit';
+import { type ISupportedWallet, type ModuleInterface, type Networks, StellarWalletsKit } from '@creit.tech/stellar-wallets-kit';
 import type { RenderWalletsProps } from '@pollar/react';
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { ensureInit, type KitPickerOptions } from '../factory';
@@ -16,19 +11,9 @@ export interface KitWalletPickerProps extends RenderWalletsProps {
   picker?: KitPickerOptions;
 }
 
-const CONNECTING_STEPS = new Set([
-  'connecting_wallet',
-  'authenticating_wallet',
-  'authenticating',
-]);
+const CONNECTING_STEPS = new Set(['connecting_wallet', 'authenticating_wallet', 'authenticating']);
 
-export function KitWalletPicker({
-  onConnect,
-  authState,
-  network,
-  modules,
-  picker = {},
-}: KitWalletPickerProps) {
+export function KitWalletPicker({ onConnect, authState, network, modules, picker = {} }: KitWalletPickerProps) {
   const [wallets, setWallets] = useState<ISupportedWallet[] | null>(null);
   const warnedRef = useRef<Set<string>>(new Set());
 
@@ -54,12 +39,7 @@ export function KitWalletPicker({
 
   const filtered = useMemo(() => {
     if (!wallets) return null;
-    const {
-      wallets: allowedIds,
-      order = 'as-given',
-      showInstalledOnly = false,
-      labels,
-    } = picker;
+    const { wallets: allowedIds, order = 'as-given', showInstalledOnly = false, labels } = picker;
 
     const byId = new Map(wallets.map((w) => [w.id, w]));
     let result: ISupportedWallet[];
@@ -73,9 +53,7 @@ export function KitWalletPicker({
           result.push(w);
         } else if (!warnedRef.current.has(id)) {
           warnedRef.current.add(id);
-          console.warn(
-            `[KitWalletPicker] wallet id "${id}" not present in the active kit modules — skipped`,
-          );
+          console.warn(`[KitWalletPicker] wallet id "${id}" not present in the active kit modules — skipped`);
         }
       }
     } else {
@@ -146,17 +124,9 @@ export function KitWalletPicker({
             style={buttonStyle(layout, disabled)}
             title={!w.isAvailable && !picker.showInstalledOnly ? `${label} not detected` : label}
           >
-            <img
-              src={w.icon}
-              alt=""
-              width={32}
-              height={32}
-              style={{ borderRadius: 6, opacity: w.isAvailable ? 1 : 0.5 }}
-            />
+            <img src={w.icon} alt="" width={32} height={32} style={{ borderRadius: 6, opacity: w.isAvailable ? 1 : 0.5 }} />
             <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>{label}</span>
-            {!w.isAvailable && (
-              <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>not installed</span>
-            )}
+            {!w.isAvailable && <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>not installed</span>}
           </button>
         );
       })}

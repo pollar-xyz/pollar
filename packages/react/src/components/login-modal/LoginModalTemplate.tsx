@@ -11,13 +11,7 @@ import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
 
-function DefaultFreighterAlbedoButtons({
-  onConnect,
-  isLoading,
-}: {
-  onConnect: (id: WalletId) => void;
-  isLoading: boolean;
-}) {
+function DefaultFreighterAlbedoButtons({ onConnect, isLoading }: { onConnect: (id: WalletId) => void; isLoading: boolean }) {
   return (
     <div className="pollar-wallet-list">
       <button
@@ -211,10 +205,11 @@ export function LoginModalTemplate({
       ) : showWalletPicker ? (
         <>
           <BackButton onClick={() => setShowWalletPicker(false)} />
-          {renderWallets
-            ? renderWallets({ onConnect: onWalletConnect, authState })
-            : <DefaultFreighterAlbedoButtons onConnect={onWalletConnect} isLoading={isLoading} />
-          }
+          {renderWallets ? (
+            renderWallets({ onConnect: onWalletConnect, authState })
+          ) : (
+            <DefaultFreighterAlbedoButtons onConnect={onWalletConnect} isLoading={isLoading} />
+          )}
         </>
       ) : (
         <>

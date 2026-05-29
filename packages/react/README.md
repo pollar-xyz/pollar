@@ -99,12 +99,12 @@ Context provider that initialises the Pollar client and makes it available to ch
 </PollarProvider>
 ```
 
-| Prop        | Type                                | Required | Description                                                                                                                                                                                              |
-| ----------- | ----------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `client`    | `PollarClient \| PollarClientConfig` | Yes      | Either a pre-built `PollarClient` (testing, reuse outside React) or a `PollarClientConfig` the provider will construct one from. **Locked at first render** — swapping after mount is ignored            |
-| `appConfig` | `PollarConfig`                       | No       | Local override of `/applications/config`. **Presence is the opt-out switch**: pass it (even `{}`) and the remote fetch is skipped. Omit it to keep the existing remote-fetch-on-mount behaviour          |
-| `ui`        | `{ renderWallets?: RenderWalletsSlot }` | No    | UI customisation slots. `renderWallets` replaces the default Freighter/Albedo buttons in `LoginModal`'s wallet picker. Receives `{ onConnect, authState }` and is expected to call `onConnect(walletId)` |
-| `adapters`  | `PollarAdapters`                     | No       | Named set of `PollarAdapter` objects (e.g. Trustless Work). See below                                                                                                                                    |
+| Prop        | Type                                    | Required | Description                                                                                                                                                                                              |
+| ----------- | --------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client`    | `PollarClient \| PollarClientConfig`    | Yes      | Either a pre-built `PollarClient` (testing, reuse outside React) or a `PollarClientConfig` the provider will construct one from. **Locked at first render** — swapping after mount is ignored            |
+| `appConfig` | `PollarConfig`                          | No       | Local override of `/applications/config`. **Presence is the opt-out switch**: pass it (even `{}`) and the remote fetch is skipped. Omit it to keep the existing remote-fetch-on-mount behaviour          |
+| `ui`        | `{ renderWallets?: RenderWalletsSlot }` | No       | UI customisation slots. `renderWallets` replaces the default Freighter/Albedo buttons in `LoginModal`'s wallet picker. Receives `{ onConnect, authState }` and is expected to call `onConnect(walletId)` |
+| `adapters`  | `PollarAdapters`                        | No       | Named set of `PollarAdapter` objects (e.g. Trustless Work). See below                                                                                                                                    |
 
 > **Renamed in 0.8.0** — `config` → `client`, `styles` → `appConfig.styles`.
 > If you were passing `styles={{ ... }}` directly, move it to

@@ -1384,10 +1384,7 @@ export class PollarClient {
       this._setAuthState({ step: 'idle' });
       return;
     }
-    if (
-      error instanceof Error &&
-      (error as { code?: string }).code === AUTH_ERROR_CODES.WALLET_RESOLVER_TIMEOUT
-    ) {
+    if (error instanceof Error && (error as { code?: string }).code === AUTH_ERROR_CODES.WALLET_RESOLVER_TIMEOUT) {
       console.error('[PollarClient]', error.message);
       this._setAuthState({
         step: 'error',

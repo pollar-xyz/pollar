@@ -16,8 +16,7 @@ import type { VisibilityProvider } from './types';
  * dispatched state — listeners only see real transitions.
  */
 export function createWebVisibilityProvider(): VisibilityProvider {
-  const isVisibleNow = (): boolean =>
-    typeof document === 'undefined' || document.visibilityState === 'visible';
+  const isVisibleNow = (): boolean => typeof document === 'undefined' || document.visibilityState === 'visible';
 
   return {
     isVisible: isVisibleNow,

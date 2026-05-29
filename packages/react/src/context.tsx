@@ -45,10 +45,7 @@ const DEFAULT_APP_CONFIG: PollarConfig = {
  * If a field is added to `PollarPersistedSession` that consumers read through
  * context, list it here too.
  */
-function sessionsEqual(
-  a: PollarPersistedSession | null,
-  b: PollarPersistedSession | null,
-): boolean {
+function sessionsEqual(a: PollarPersistedSession | null, b: PollarPersistedSession | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
   return (
@@ -175,9 +172,7 @@ export function PollarProvider({
   onStorageDegrade,
   children,
 }: PollarProviderProps) {
-  const [pollarClient] = useState<PollarClient>(() =>
-    client instanceof PollarClient ? client : new PollarClient(client),
-  );
+  const [pollarClient] = useState<PollarClient>(() => (client instanceof PollarClient ? client : new PollarClient(client)));
   const [networkState, setNetworkState] = useState<NetworkState>(() => pollarClient.getNetworkState());
   const [sessionState, setSessionState] = useState<PollarPersistedSession | null>(null);
   const [transaction, setTransaction] = useState<TransactionState>({ step: 'idle' });
@@ -262,75 +257,71 @@ export function PollarProvider({
 
   const renderWallets = ui?.renderWallets;
 
-  const contextValue: PollarContextValue = useMemo(
-    () => {
-      const styles: PollarStyles = resolvedConfig.styles ?? {};
-      return ({
-        // session
-        walletAddress,
-        isAuthenticated: !!walletAddress,
-        walletType: pollarClient.getWalletType(),
-        // client
-        getClient,
-        // auth
-        login: (options: PollarLoginOptions) => pollarClient.login(options),
-        logout: () => pollarClient.logout(),
-        openLoginModal: () => setLoginModalOpen(true),
-        // transactions
-        tx: transaction,
-        buildTx: (operation, params, options) => pollarClient.buildTx(operation, params, options),
-        signAndSubmitTx: (unsignedXdr: string) => pollarClient.signAndSubmitTx(unsignedXdr),
-        signTx: (unsignedXdr: string) => pollarClient.signTx(unsignedXdr),
-        submitTx: (signedXdr: string) => pollarClient.submitTx(signedXdr),
-        buildAndSignAndSubmitTx: (operation, params, options) =>
-          pollarClient.buildAndSignAndSubmitTx(operation, params, options),
-        runTx: (operation, params, options) => pollarClient.runTx(operation, params, options),
-        openTxModal: () => setTransactionModalOpen(true),
-        // tx history
-        txHistory,
-        openTxHistoryModal: () => setTxHistoryModalOpen(true),
-        // wallet balance
-        walletBalance,
-        refreshWalletBalance,
-        openWalletBalanceModal: () => setWalletBalanceModalOpen(true),
-        // send / receive
-        openSendModal: () => setSendModalOpen(true),
-        openReceiveModal: () => setReceiveModalOpen(true),
-        // sessions
-        openSessionsModal: () => setSessionsModalOpen(true),
-        // distribution
-        openDistributionRulesModal: () => setDistributionRulesModalOpen(true),
-        // network
-        network: networkState.step === 'connected' ? networkState.network : 'testnet',
-        setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
-        // kyc
-        openKycModal: (options = {}) => {
-          setKycModalOptions(options);
-          setKycModalOpen(true);
-        },
-        // ramp
-        openRampModal: () => setRampModalOpen(true),
-        // config
-        appConfig: resolvedConfig,
-        styles,
-        renderWallets,
-        adapters,
-      }) as PollarContextValue;
-    },
-    [
+  const contextValue: PollarContextValue = useMemo(() => {
+    const styles: PollarStyles = resolvedConfig.styles ?? {};
+    return {
+      // session
       walletAddress,
-      pollarClient,
+      isAuthenticated: !!walletAddress,
+      walletType: pollarClient.getWalletType(),
+      // client
       getClient,
-      transaction,
+      // auth
+      login: (options: PollarLoginOptions) => pollarClient.login(options),
+      logout: () => pollarClient.logout(),
+      openLoginModal: () => setLoginModalOpen(true),
+      // transactions
+      tx: transaction,
+      buildTx: (operation, params, options) => pollarClient.buildTx(operation, params, options),
+      signAndSubmitTx: (unsignedXdr: string) => pollarClient.signAndSubmitTx(unsignedXdr),
+      signTx: (unsignedXdr: string) => pollarClient.signTx(unsignedXdr),
+      submitTx: (signedXdr: string) => pollarClient.submitTx(signedXdr),
+      buildAndSignAndSubmitTx: (operation, params, options) => pollarClient.buildAndSignAndSubmitTx(operation, params, options),
+      runTx: (operation, params, options) => pollarClient.runTx(operation, params, options),
+      openTxModal: () => setTransactionModalOpen(true),
+      // tx history
       txHistory,
+      openTxHistoryModal: () => setTxHistoryModalOpen(true),
+      // wallet balance
       walletBalance,
       refreshWalletBalance,
-      networkState,
-      resolvedConfig,
-      adapters,
+      openWalletBalanceModal: () => setWalletBalanceModalOpen(true),
+      // send / receive
+      openSendModal: () => setSendModalOpen(true),
+      openReceiveModal: () => setReceiveModalOpen(true),
+      // sessions
+      openSessionsModal: () => setSessionsModalOpen(true),
+      // distribution
+      openDistributionRulesModal: () => setDistributionRulesModalOpen(true),
+      // network
+      network: networkState.step === 'connected' ? networkState.network : 'testnet',
+      setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
+      // kyc
+      openKycModal: (options = {}) => {
+        setKycModalOptions(options);
+        setKycModalOpen(true);
+      },
+      // ramp
+      openRampModal: () => setRampModalOpen(true),
+      // config
+      appConfig: resolvedConfig,
+      styles,
       renderWallets,
-    ],
-  );
+      adapters,
+    } as PollarContextValue;
+  }, [
+    walletAddress,
+    pollarClient,
+    getClient,
+    transaction,
+    txHistory,
+    walletBalance,
+    refreshWalletBalance,
+    networkState,
+    resolvedConfig,
+    adapters,
+    renderWallets,
+  ]);
 
   return (
     <PollarContext.Provider value={contextValue}>
