@@ -380,7 +380,7 @@ export interface paths {
         put?: never;
         /**
          * Submit a pre-signed XDR
-         * @description Submit step of the split build/sign/submit flow. Accepts a signed XDR produced by /tx/sign or by an external-wallet adapter. Goes through wallet-service /v1/tx/submit so the submission is policy-validated and idempotency-tracked.
+         * @description Submit step of the split build/sign/submit flow. Accepts a signed XDR produced by /tx/sign or signed client-side by an external wallet (Freighter/Albedo/SWK). Routing is custody-aware: EXTERNAL (user-controlled) wallets and adapter-signed wallets are broadcast directly via Soroban RPC, since wallet-service holds no record of them; custodial wallets go through wallet-service /v1/tx/submit so the submission is policy-validated and idempotency-tracked. The EXTERNAL signal is per-user, so apps mixing social login and wallet login submit each user correctly. All paths return the same PENDING | SUCCESS | FAILED outcome.
          */
         post: operations["postTxSubmit"];
         delete?: never;
