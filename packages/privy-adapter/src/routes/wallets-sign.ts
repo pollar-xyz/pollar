@@ -66,10 +66,23 @@ export const createWalletsSignRoute = (deps: AdapterDeps) => {
       const privy = await deps.getPrivy();
       const hashHex = '0x' + tx.hash().toString('hex');
 
-      const result = await withTimeout(
-        privy.wallets().rawSign(walletId, { params: { hash: hashHex } }),
-        deps.config.requestTimeoutMs,
-      );
+      let result;
+      try {
+        result = await withTimeout(
+          privy.wallets().rawSign(walletId, { params: { hash: hashHex } }),
+          deps.config.requestTimeoutMs,
+        );
+      } catch (err) {
+        // Cache may have a stale walletId (wallet detached / deleted on
+        // Privy side between resolution and now). Evict so the next request
+        // re-resolves from Privy — this request still fails, but we don't
+        // keep returning errors for the same stale entry until TTL expires.
+        if (err instanceof NotFoundError) {
+          deps.walletCache.delete(walletAddress);
+          return c.var.error(ErrorCode.WALLET_NOT_FOUND, 404);
+        }
+        throw err;
+      }
 
       const sigHex = result.signature.startsWith('0x') ? result.signature.slice(2) : result.signature;
       const sigBytes = Buffer.from(sigHex, 'hex');
@@ -81,8 +94,12 @@ export const createWalletsSignRoute = (deps: AdapterDeps) => {
       return c.var.content(SuccessCode.PRIVY_ADAPTER_TX_SIGNED, { signedTxXdr });
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
+      // Raw error goes to the host's `onError` callback for server-side logging
+      // (Privy SDK errors can include user IDs, rate-limit context, internal
+      // identifiers — none of which the caller should see). The HTTP response
+      // is intentionally code-only.
       deps.config.onError?.(err, { endpoint: 'POST /wallets/sign', body: parsed });
-      return c.var.error(ErrorCode.TX_SIGN_FAILED, 502, { reason: err.message });
+      return c.var.error(ErrorCode.TX_SIGN_FAILED, 502);
     }
   });
 

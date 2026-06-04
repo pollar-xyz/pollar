@@ -26,7 +26,12 @@ export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void>
 
   try {
     setAuthState({ step: 'connecting_wallet', walletType: type });
-    const adapter = await deps.resolveWalletAdapter(type);
+    // Wrap the resolver in `withSignal` so `cancelLogin()` exits the await
+    // even if the consumer's resolver is hung (broken extension bridge,
+    // network call, etc). The resolver itself may keep running in the
+    // background — the 5s `walletResolverTimeoutMs` in `_resolveWalletAdapter`
+    // bounds that — but the flow won't block waiting for it.
+    const adapter = await withSignal(deps.resolveWalletAdapter(type), signal);
 
     const available = await withSignal(adapter.isAvailable(), signal);
     if (!available) {

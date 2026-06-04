@@ -1,7 +1,7 @@
 'use client';
 
 import { WalletBalanceRecord } from '@pollar/core';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import '../shared.css';
 import '../transaction-modal/TransactionModal.css';
@@ -40,10 +40,18 @@ export function SendModal({ onClose }: SendModalProps) {
   const [showXdr, setShowXdr] = useState(false);
   const [copied, setCopied] = useState(false);
   const [formError, setFormError] = useState('');
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     void refreshWalletBalance();
   }, [refreshWalletBalance]);
+
+  useEffect(
+    () => () => {
+      if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
+    },
+    [],
+  );
 
   const balanceData = walletBalance.step === 'loaded' ? walletBalance.data : null;
   const allAssets = balanceData?.balances ?? [];
@@ -116,7 +124,11 @@ export function SendModal({ onClose }: SendModalProps) {
     if (!hash) return;
     navigator.clipboard.writeText(hash).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => {
+        copyTimerRef.current = null;
+        setCopied(false);
+      }, 2000);
     });
   }
 

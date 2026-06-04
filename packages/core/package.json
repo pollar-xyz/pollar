@@ -1,6 +1,6 @@
 {
   "name": "@pollar/core",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "description": "Core authentication functions for Pollar services",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -60,15 +60,18 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && eslint src",
     "clean": "rm -rf dist"
   },
   "engines": {
     "node": ">=20"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
     "tsup": "^8.3.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.58.1"
   },
   "dependencies": {
     "@noble/curves": "~1.9.7",

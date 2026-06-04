@@ -1,7 +1,10 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: {
+    index: 'src/index.ts',
+    picker: 'src/picker/index.ts',
+  },
   format: ['cjs', 'esm'],
   dts: true,
   splitting: false,
@@ -9,5 +12,8 @@ export default defineConfig({
   clean: true,
   treeshake: true,
   target: 'es2020',
-  external: ['@pollar/core', '@creit.tech/stellar-wallets-kit'],
+  external: ['@pollar/core', '@creit.tech/stellar-wallets-kit', 'react', 'react-dom', '@pollar/react'],
+  esbuildOptions(opts) {
+    opts.jsx = 'automatic';
+  },
 });

@@ -8,6 +8,7 @@ import type {
   WalletAdapter,
   WalletId,
 } from '@pollar/core';
+import { getInitNetwork } from './factory';
 
 /**
  * Wraps Stellar Wallets Kit so it satisfies the `@pollar/core` `WalletAdapter`
@@ -24,14 +25,17 @@ export class StellarWalletsKitAdapter implements WalletAdapter {
   }
 
   async isAvailable(): Promise<boolean> {
+    // `refreshSupportedWallets()` probes every module's own `isAvailable()`
+    // hook (modules promise <1000ms per the kit contract) and returns a
+    // static snapshot. This avoids the old false-positive where we always
+    // claimed availability and let `connect()` fail later — the picker / UI
+    // can now short-circuit on `wallet_not_installed` immediately.
     try {
-      StellarWalletsKit.setWallet(String(this.type));
-      // The kit doesn't expose a top-level `isAvailable`; once the module is
-      // selected, attempting an address fetch is the cheapest probe — but it
-      // can pop UI on some wallets. Return true and let `connect()` surface
-      // the real availability error if any.
-      return true;
-    } catch {
+      const supported = await StellarWalletsKit.refreshSupportedWallets();
+      const wallet = supported.find((w) => w.id === String(this.type));
+      return wallet?.isAvailable ?? false;
+    } catch (err) {
+      console.warn(`[StellarWalletsKit] isAvailable probe failed for "${this.type}"`, err);
       return false;
     }
   }
@@ -66,9 +70,13 @@ export class StellarWalletsKitAdapter implements WalletAdapter {
   }
 
   async signTransaction(xdr: string, options?: SignTransactionOptions): Promise<SignTransactionResponse> {
+    if (options?.networkPassphrase !== undefined && options.networkPassphrase !== getInitNetwork()) {
+      throw new Error(
+        `[StellarWalletsKit] networkPassphrase override "${options.networkPassphrase}" does not match the network configured at init ("${getInitNetwork()}"). The kit is a global singleton — configure one network at \`stellarWalletsKit({ network })\` and use that for every call.`,
+      );
+    }
     StellarWalletsKit.setWallet(String(this.type));
     const result = await StellarWalletsKit.signTransaction(xdr, {
-      ...(options?.networkPassphrase !== undefined && { networkPassphrase: options.networkPassphrase }),
       ...(options?.accountToSign !== undefined && { address: options.accountToSign }),
     });
     return { signedTxXdr: result.signedTxXdr };

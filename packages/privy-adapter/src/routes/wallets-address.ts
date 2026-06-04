@@ -28,8 +28,9 @@ export const createWalletsAddressRoute = (deps: AdapterDeps) => {
       return c.var.content(SuccessCode.PRIVY_ADAPTER_WALLET_ADDRESS, { address: wallet.address });
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
+      // Raw error to `onError` (server-side logs); HTTP response is code-only.
       deps.config.onError?.(err, { endpoint: `GET /wallets/${userId}/address`, body: null });
-      return c.var.error(ErrorCode.WALLET_LOOKUP_FAILED, 502, { reason: err.message });
+      return c.var.error(ErrorCode.WALLET_LOOKUP_FAILED, 502);
     }
   });
 

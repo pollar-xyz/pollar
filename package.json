@@ -1,12 +1,12 @@
 {
   "name": "polar-auth-monorepo",
-  "version": "0.6.2",
+  "version": "0.8.0",
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
     "lint": "turbo lint",
     "clean": "turbo clean",
-    "dev:push": "npm run build && cd packages/core && yalc publish && cd ../../packages/react && yalc publish && cd ../../packages/privy-adapter && yalc publish && cd ../../packages/stellar-wallets-kit-adapter && yalc publish",
+    "dev:push": "npm run build && for pkg in core react privy-adapter stellar-wallets-kit-adapter; do (cd packages/$pkg && yalc publish) || exit 1; done",
     "core:publish": "cd packages/core && npm publish --access public",
     "privy-adapter:publish": "cd packages/privy-adapter && npm publish --access public",
     "react:publish": "cd packages/react && npm publish --access public",
@@ -23,7 +23,7 @@
     "packages/*"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "packageManager": "npm@10.9.4"
 }

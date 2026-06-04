@@ -12,7 +12,10 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
 
   // Pass `dpopJwk` so the server mints DPoP-bound tokens (`cnf.jkt`).
   const dpopJwk = await deps.getPublicJwk();
-  const { data, error } = await api.POST('/auth/login', {
+  // HTTP-level `error` is not handled here; the `else` branch below catches
+  // both "request failed" (data === undefined) and "request OK but body
+  // wasn't a valid session" via the same generic path.
+  const { data } = await api.POST('/auth/login', {
     body: {
       clientSessionId,
       dpopJwk,

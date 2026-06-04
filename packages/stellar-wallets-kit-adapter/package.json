@@ -1,6 +1,6 @@
 {
   "name": "@pollar/stellar-wallets-kit-adapter",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "description": "Stellar Wallets Kit adapter for @pollar/core — plug additional wallet modules (xBull, Lobstr, WalletConnect, hardware wallets…) into Pollar without bundling them into @pollar/core.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -14,6 +14,16 @@
       "require": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      }
+    },
+    "./picker": {
+      "import": {
+        "types": "./dist/picker.d.mts",
+        "default": "./dist/picker.mjs"
+      },
+      "require": {
+        "types": "./dist/picker.d.ts",
+        "default": "./dist/picker.js"
       }
     }
   },
@@ -32,7 +42,21 @@
   },
   "peerDependencies": {
     "@creit.tech/stellar-wallets-kit": "^2.0.0",
-    "@pollar/core": "*"
+    "@pollar/core": "*",
+    "@pollar/react": "^0.8.0",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@pollar/react": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@pollar/core": "*"
@@ -40,7 +64,10 @@
   "devDependencies": {
     "@creit.tech/stellar-wallets-kit": "^2.2.0",
     "@eslint/js": "^9.39.4",
+    "@pollar/react": "*",
+    "@types/react": "^18.0.0",
     "eslint": "^9.39.4",
+    "react": "^18.0.0",
     "tsup": "^8.3.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.58.1"

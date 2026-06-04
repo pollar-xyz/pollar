@@ -1,6 +1,7 @@
 import { pollarPaths, StellarNetwork } from './index';
 import type { KeyManager } from './keys/types';
 import type { OnStorageDegrade, Storage } from './storage/types';
+import type { VisibilityProvider } from './visibility/types';
 import { WalletAdapterResolver, WalletId } from './wallets';
 
 export type PollarApplicationConfigResponse =
@@ -65,12 +66,39 @@ export interface PollarClientConfig {
    */
   walletAdapter?: WalletAdapterResolver;
   /**
+   * Maximum time (ms) the SDK waits for a `walletAdapter` resolver to return.
+   * Guards against a broken extension bridge (e.g. Freighter content-script
+   * down) hanging the login flow forever. The resolver only constructs the
+   * adapter object — it does NOT include the user-facing approval step — so
+   * a few seconds is plenty. Defaults to 5000.
+   */
+  walletResolverTimeoutMs?: number;
+  /**
    * Optional human-friendly label sent at /auth/login time and recorded on
    * the server-side refresh-token row so the user can identify it in the
    * "active sessions" UI (e.g. "iPhone — Safari", "Mac — Chrome 126").
    * If unset, the server-recorded `user_agent` header is the fallback.
    */
   deviceLabel?: string;
+  /**
+   * Foreground-detection signal for the silent-refresh scheduler. When the
+   * app is hidden / backgrounded, scheduled refreshes are skipped (saves
+   * network + sidesteps browser/RN background timer throttling); they run
+   * the moment visibility comes back. Defaults to a web provider in the
+   * browser (`visibilitychange` + BFCache + focus) and a noop elsewhere.
+   * React Native consumers should inject an `AppState`-backed provider —
+   * see TODO on `VisibilityProvider`.
+   */
+  visibilityProvider?: VisibilityProvider;
+  /**
+   * If set, the silent-refresh scheduler stops issuing proactive refreshes
+   * after this many milliseconds of no client-side HTTP activity. The
+   * session is not cleared — the next user action triggers a request that
+   * either reuses a still-valid access token or hits 401 → reactive
+   * refresh (transparent if the RT is still valid). Defaults to
+   * `undefined` = refresh forever as long as the app is visible.
+   */
+  maxIdleMs?: number;
 }
 
 /**
@@ -194,6 +222,7 @@ export const AUTH_ERROR_CODES = {
   AUTH_FAILED: 'AUTH_FAILED',
   WALLET_CONNECT_FAILED: 'WALLET_CONNECT_FAILED',
   WALLET_AUTH_FAILED: 'WALLET_AUTH_FAILED',
+  WALLET_RESOLVER_TIMEOUT: 'WALLET_RESOLVER_TIMEOUT',
   UNEXPECTED_ERROR: 'UNEXPECTED_ERROR',
 } as const;
 

@@ -1,6 +1,6 @@
 {
   "name": "@pollar/privy-adapter",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "description": "Stateless HTTP proxy that lets Pollar sign Stellar transactions through your Privy account, without your Privy app secret leaving your infrastructure.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",
-    "@privy-io/node": "^0.18.0",
+    "@privy-io/node": "~0.18.0",
     "@stellar/stellar-sdk": "^15.0.0",
     "hono": "^4.12.3",
     "lru-cache": "^11.0.2",

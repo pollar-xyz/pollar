@@ -1,11 +1,13 @@
 'use client';
 
-import { AUTH_ERROR_CODES, AuthState, WalletType } from '@pollar/core';
+import { AUTH_ERROR_CODES, AuthState, WalletId } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { LoginModalTemplate } from './LoginModalTemplate';
 import '../shared.css';
 import './LoginModal.css';
+
+type TimeoutHandle = ReturnType<typeof setTimeout>;
 
 interface LoginModalProps {
   onClose: () => void;
@@ -13,16 +15,17 @@ interface LoginModalProps {
 
 export function LoginModal({ onClose }: LoginModalProps) {
   const [email, setEmail] = useState('');
-  const { getClient, styles, appConfig: config } = usePollar();
+  const { getClient, styles, appConfig: config, renderWallets } = usePollar();
   const [authState, setAuthState] = useState<AuthState>(() => getClient().getAuthState());
   const [codeInputKey, setCodeInputKey] = useState(0);
   const pendingEmail = useRef<string | null>(null);
 
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const autoCloseTimer = useRef<TimeoutHandle | null>(null);
 
   useEffect(() => {
-    return getClient().onAuthStateChange((next) => {
+    const unsubscribe = getClient().onAuthStateChange((next) => {
       setAuthState(next);
       if (next.step === 'entering_email' && pendingEmail.current) {
         getClient().sendEmailCode(pendingEmail.current);
@@ -32,9 +35,19 @@ export function LoginModal({ onClose }: LoginModalProps) {
         setCodeInputKey((k) => k + 1);
       }
       if (next.step === 'authenticated') {
-        setTimeout(onCloseRef.current, 1000);
+        autoCloseTimer.current = setTimeout(() => {
+          autoCloseTimer.current = null;
+          onCloseRef.current();
+        }, 1000);
       }
     });
+    return () => {
+      unsubscribe();
+      if (autoCloseTimer.current !== null) {
+        clearTimeout(autoCloseTimer.current);
+        autoCloseTimer.current = null;
+      }
+    };
   }, [getClient]);
 
   const { theme = 'light', accentColor = '#005DB4', logoUrl, emailEnabled, embeddedWallets, providers } = styles;
@@ -55,7 +68,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
     getClient().login({ provider });
   }
 
-  function handleWalletConnect(type: WalletType) {
+  function handleWalletConnect(type: WalletId) {
     getClient().loginWallet(type);
   }
 
@@ -95,8 +108,8 @@ export function LoginModal({ onClose }: LoginModalProps) {
         onEmailChange={setEmail}
         onEmailSubmit={handleEmailSubmit}
         onSocialLogin={handleSocialLogin}
-        onFreighterConnect={() => handleWalletConnect(WalletType.FREIGHTER)}
-        onAlbedoConnect={() => handleWalletConnect(WalletType.ALBEDO)}
+        onWalletConnect={handleWalletConnect}
+        {...(renderWallets !== undefined && { renderWallets })}
         authState={authState}
         codeInputKey={codeInputKey}
         onCodeSubmit={handleVerifyCode}

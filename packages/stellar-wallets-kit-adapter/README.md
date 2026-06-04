@@ -36,7 +36,7 @@ import { stellarWalletsKit } from '@pollar/stellar-wallets-kit-adapter';
 import { Networks } from '@creit.tech/stellar-wallets-kit';
 
 <PollarProvider
-  config={{
+  client={{
     apiKey: 'your-api-key',
     walletAdapter: stellarWalletsKit({ network: Networks.TESTNET }),
   }}
@@ -45,11 +45,21 @@ import { Networks } from '@creit.tech/stellar-wallets-kit';
 </PollarProvider>;
 ```
 
+This wires the **signing path** but the built-in `LoginModal` still shows
+only Freighter / Albedo. To render the kit's full wallet list (xBull, Lobstr,
+Rabet, …) inside `LoginModal`, also pass the picker — see
+[Wallet picker UI (`/picker`)](#wallet-picker-ui-picker) below.
+
 The kit is a global singleton. `stellarWalletsKit(...)` returns a resolver and `StellarWalletsKit.init(...)` is called once on the first `loginWallet` call.
+
+> **0.8.0** — `network` is **required**. The previous `Networks.TESTNET`
+> default was removed because the kit is a global singleton, and silently
+> picking testnet for the consumer risked signing real-looking transactions
+> on the wrong chain. Pass `Networks.TESTNET` or `Networks.PUBLIC` explicitly.
 
 ## Default wallets
 
-Calling `stellarWalletsKit()` with no `modules` argument enables every module that loads without extra configuration:
+Calling `stellarWalletsKit({ network })` with no `modules` argument enables every module that loads without extra configuration:
 
 | Module             | Wallet id (`WalletId`) | Type               |
 | ------------------ | ---------------------- | ------------------ |
@@ -106,8 +116,12 @@ Trimming the default list (e.g. only Freighter + Albedo for a SEP-43 dapp) works
 
 ```ts
 interface StellarWalletsKitAdapterOptions {
-  /** Stellar network used for signing. Defaults to `Networks.TESTNET`. */
-  network?: Networks;
+  /**
+   * Stellar network used for signing. **Required** as of 0.8.0 — the kit is a
+   * global singleton, so the network must be chosen explicitly to avoid
+   * cross-chain signing accidents.
+   */
+  network: Networks;
 
   /**
    * Wallet modules the kit can drive. Defaults to every module that works
@@ -115,6 +129,28 @@ interface StellarWalletsKitAdapterOptions {
    * replaces the default — include modules you want explicitly.
    */
   modules?: ModuleInterface[];
+
+  /**
+   * Picker-specific options. Only consumed by `<KitWalletPicker>` /
+   * `createStellarWalletsKitBundle` (the `/picker` subpath). The resolver
+   * itself ignores them.
+   */
+  picker?: KitPickerOptions;
+}
+
+interface KitPickerOptions {
+  /** Subset of wallet ids to show. Defaults to every wallet the kit reports. */
+  wallets?: string[];
+  /** Render order. Default `'as-given'` (the kit's own order). */
+  order?: 'as-given' | 'installed-first' | 'alphabetical';
+  /** Hide wallets whose `isAvailable` is false. Default `false`. */
+  showInstalledOnly?: boolean;
+  /** Per-wallet label overrides. Key = wallet id. */
+  labels?: Record<string, string>;
+  /** Visual layout. Default `'grid'`. */
+  layout?: 'grid' | 'list';
+  /** Theme passthrough — applied as CSS custom properties on the picker root. */
+  theme?: { accent?: string; mode?: 'light' | 'dark' };
 }
 ```
 
@@ -140,6 +176,71 @@ The adapter implements `WalletAdapter` from `@pollar/core`:
 | `signAuthEntry(xdr, opts)`   | `setWallet(id)` → `signAuthEntry(xdr, opts)`   |
 
 `setWallet` is called before every operation so a single `StellarWalletsKit.init({ modules })` covers many wallets — `PollarClient` resolves a fresh adapter instance per `WalletId`, and the kit routes to the correct module under the hood.
+
+## Wallet picker UI (`/picker`)
+
+The `/picker` subpath ships a React component that renders the kit's full
+wallet list inside Pollar's `LoginModal`. It plugs into the
+`ui.renderWallets` slot on `<PollarProvider>` (new in `@pollar/react@0.8.0`).
+
+> **React is an optional peer dep.** Only the `/picker` subpath pulls in
+> `react` / `react-dom` / `@pollar/react`. Headless consumers of
+> `stellarWalletsKit({ network })` keep working with zero React in the bundle.
+
+### Bundle helper
+
+`createStellarWalletsKitBundle` builds both halves of the integration
+(signing resolver + picker slot) from a single options object, so the picker
+can only show wallets that signing actually supports:
+
+```tsx
+import { PollarProvider } from '@pollar/react';
+import { createStellarWalletsKitBundle } from '@pollar/stellar-wallets-kit-adapter/picker';
+import { Networks } from '@creit.tech/stellar-wallets-kit';
+
+const bundle = createStellarWalletsKitBundle({
+  network: Networks.PUBLIC,
+  // Optional — subset, order, layout, theme, labels: see `KitPickerOptions`
+  picker: { wallets: ['xbull', 'lobstr', 'freighter'], layout: 'list' },
+});
+
+<PollarProvider
+  client={{ apiKey: 'your-api-key', walletAdapter: bundle.walletAdapter }}
+  ui={{ renderWallets: bundle.renderWallets }}
+>
+  {/* your app */}
+</PollarProvider>;
+```
+
+### Picker component directly
+
+If you already build the `walletAdapter` yourself (e.g. composing a custom
+resolver), use `<KitWalletPicker>` directly inside a `renderWallets` slot:
+
+```tsx
+import { KitWalletPicker } from '@pollar/stellar-wallets-kit-adapter/picker';
+import { Networks } from '@creit.tech/stellar-wallets-kit';
+
+<PollarProvider
+  client={{ apiKey: '…', walletAdapter: myResolver }}
+  ui={{
+    renderWallets: ({ onConnect, authState }) => (
+      <KitWalletPicker
+        onConnect={onConnect}
+        authState={authState}
+        network={Networks.PUBLIC}
+        picker={{ wallets: ['xbull', 'lobstr'], showInstalledOnly: true }}
+      />
+    ),
+  }}
+>
+  {children}
+</PollarProvider>;
+```
+
+`<KitWalletPicker>` will lazily call `ensureInit({ network, modules })` on
+mount, so it works whether or not `stellarWalletsKit(...)` has already been
+called elsewhere — both share the same kit singleton.
 
 ## Direct adapter access
 

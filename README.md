@@ -181,42 +181,42 @@ npm install @pollar/stellar-wallets-kit-adapter @creit.tech/stellar-wallets-kit
 
 ## Development
 
-This monorepo uses [Turborepo](https://turbo.build/repo) for task orchestration and [pnpm](https://pnpm.io) as the
-package manager.
+This monorepo uses [Turborepo](https://turbo.build/repo) for task orchestration and [npm](https://docs.npmjs.com/cli/v10)
+workspaces as the package manager (pinned via `packageManager` in the root `package.json`).
 
 ### Prerequisites
 
 - Node.js >= 20 (matches the `engines` floor declared by every published package)
-- pnpm >= 9
+- npm >= 10
 
 ### Install dependencies
 
 ```bash
-pnpm install
+npm install
 ```
 
 ### Build all packages
 
 ```bash
-pnpm build
+npm run build
 ```
 
 ### Build in watch mode
 
 ```bash
-pnpm dev
+npm run dev
 ```
 
 ### Type-check all packages
 
 ```bash
-pnpm lint
+npm run lint
 ```
 
 ### Clean build artifacts
 
 ```bash
-pnpm clean
+npm run clean
 ```
 
 ---
