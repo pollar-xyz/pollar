@@ -46,6 +46,16 @@
         "types": "./dist/adapters/react-native-keychain.d.ts",
         "default": "./dist/adapters/react-native-keychain.js"
       }
+    },
+    "./adapters/react-native-appstate": {
+      "import": {
+        "types": "./dist/adapters/react-native-appstate.d.mts",
+        "default": "./dist/adapters/react-native-appstate.mjs"
+      },
+      "require": {
+        "types": "./dist/adapters/react-native-appstate.d.ts",
+        "default": "./dist/adapters/react-native-appstate.js"
+      }
     }
   },
   "files": [

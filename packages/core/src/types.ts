@@ -99,6 +99,49 @@ export interface PollarClientConfig {
    * `undefined` = refresh forever as long as the app is visible.
    */
   maxIdleMs?: number;
+  /**
+   * Strategy for opening the hosted OAuth URL during
+   * `login({ provider: 'google' | 'github' })`. Defaults to a browser popup
+   * on web. React Native consumers MUST provide one (typically wrapping
+   * `expo-web-browser`'s `openAuthSessionAsync`), since `window.open` does
+   * not exist there. The SDK still drives the rest of the flow by polling the
+   * auth-session status, so the opener only needs to surface the URL — it does
+   * NOT need to capture the redirect payload.
+   */
+  openAuthUrl?: AuthUrlOpener;
+  /**
+   * Value sent to the backend as `redirect_uri` for hosted OAuth (where the
+   * provider returns the user afterwards). Defaults to `window.location.origin`
+   * on web. On React Native set this to your app's deep link / scheme — the
+   * same URL you pass to `WebBrowser.openAuthSessionAsync`.
+   */
+  oauthRedirectUri?: string;
+}
+
+/**
+ * Strategy for opening the hosted OAuth URL. The SDK mints the per-login auth
+ * session lazily inside `getUrl()` (call it once; the first call creates the
+ * `clientSessionId` and returns the full URL, or `null` if session creation
+ * failed). Open the resolved URL however the platform allows — a popup on web,
+ * `WebBrowser.openAuthSessionAsync(url, redirectUri)` on React Native — and
+ * resolve once the user-facing browser step is done or dismissed. You do NOT
+ * need to capture the redirect payload: the SDK polls the auth-session status
+ * until the backend marks it READY.
+ */
+export type AuthUrlOpener = (ctx: AuthOpenContext) => void | Promise<void>;
+
+export interface AuthOpenContext {
+  provider: 'google' | 'github';
+  /**
+   * Mints the auth session (once) and returns the full hosted-OAuth URL, or
+   * `null` if session creation failed. On web, call it AFTER reserving the
+   * popup window so popup blockers (which only honor `window.open` inside the
+   * original user-gesture tick) don't swallow it.
+   */
+  getUrl: () => Promise<string | null>;
+  /** The redirect target passed to the backend as `redirect_uri`. */
+  redirectUri: string;
+  signal: AbortSignal;
 }
 
 /**

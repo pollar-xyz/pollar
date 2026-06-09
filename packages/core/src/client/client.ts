@@ -14,6 +14,7 @@ import type { VisibilityProvider } from '../visibility/types';
 import {
   AUTH_ERROR_CODES,
   AuthState,
+  AuthUrlOpener,
   BuildOutcome,
   DistributionClaimBody,
   DistributionClaimContent,
@@ -50,11 +51,20 @@ import {
 } from '../types';
 import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletAdapterResolver, WalletId, WalletType } from '../wallets';
 import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/emailFlow';
-import { loginOAuth } from './auth/oauthFlow';
+import { defaultWebOAuthOpener, loginOAuth } from './auth/oauthFlow';
 import { loginWallet } from './auth/walletFlow';
 import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
 
 const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+/** React Native runtime: `navigator.product === 'ReactNative'` (set by the RN runtime). */
+const isReactNative = typeof navigator !== 'undefined' && (navigator as { product?: string }).product === 'ReactNative';
+/**
+ * True wherever the SDK can persist state and do crypto — browser OR React
+ * Native. False only in true server-side renders (Node/SSR) where there is no
+ * client runtime. Gates everything that previously keyed off `isBrowser`; that
+ * check alone wrongly treated RN (no `localStorage`) as server-side.
+ */
+const isClientRuntime = isBrowser || isReactNative;
 
 /** Renew the access token this many seconds before its `exp` to absorb clock skew + signing latency. */
 const REFRESH_SKEW_SECONDS = 60;
@@ -143,6 +153,10 @@ export class PollarClient {
   private readonly _walletAdapterResolver: WalletAdapterResolver | null;
   private readonly _walletResolverTimeoutMs: number;
   private _loginController: AbortController | null = null;
+  /** Platform strategy for opening the hosted-OAuth URL (popup on web; injected on RN). */
+  private readonly _openAuthUrl: AuthUrlOpener;
+  /** `redirect_uri` sent to the backend for hosted OAuth. */
+  private readonly _oauthRedirectUri: string;
 
   constructor(config: PollarClientConfig) {
     this.apiKey = config.apiKey;
@@ -166,13 +180,15 @@ export class PollarClient {
     this._deviceLabel = config.deviceLabel;
     this._visibilityProvider = config.visibilityProvider ?? defaultVisibilityProvider();
     this._maxIdleMs = config.maxIdleMs;
+    this._openAuthUrl = config.openAuthUrl ?? defaultWebOAuthOpener;
+    this._oauthRedirectUri = config.oauthRedirectUri ?? (isBrowser ? window.location.origin : '');
 
     this._api = createApiClient(this.basePath);
     this._wireMiddlewares();
 
     this._networkState = { step: 'connected', network: config.stellarNetwork ?? 'testnet' };
 
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('constructor');
       this._initialized = Promise.resolve();
       return;
@@ -195,9 +211,10 @@ export class PollarClient {
     // (including the cross-tab listener below and `_restoreSession`) reads it.
     this._apiKeyHash = await hashApiKey(this.apiKey);
 
-    // Cross-tab session sync. Fires only for localStorage-backed storage; for
-    // non-DOM adapters the listener is harmless (events never arrive).
-    if (typeof window !== 'undefined') {
+    // Cross-tab session sync. Browser-only — the `storage` event is a DOM
+    // feature with no React Native equivalent (each RN process owns its
+    // SecureStore/Keychain), so we gate on `isBrowser`, not `isClientRuntime`.
+    if (isBrowser) {
       const sessionKey = sessionStorageKey(this._apiKeyHash);
       const handler = (e: StorageEvent): void => {
         if (e.key === sessionKey) {
@@ -225,7 +242,7 @@ export class PollarClient {
 
   /** Detach the cross-tab storage listener and abort any in-flight login. */
   destroy(): void {
-    if (this._storageEventHandler && typeof window !== 'undefined') {
+    if (this._storageEventHandler && isBrowser) {
       window.removeEventListener('storage', this._storageEventHandler);
       this._storageEventHandler = null;
     }
@@ -586,7 +603,7 @@ export class PollarClient {
   // ─── Login (unified entry point) ─────────────────────────────────────────
 
   login(options: PollarLoginOptions): void {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('login');
       return;
     }
@@ -598,6 +615,8 @@ export class PollarClient {
           ...deps,
           basePath: this.basePath,
           apiKey: this.apiKey,
+          openAuthUrl: this._openAuthUrl,
+          redirectUri: this._oauthRedirectUri,
         }).catch((err) => this._handleFlowError(err));
       } else if (options.provider === 'email') {
         const { email } = options;
@@ -617,7 +636,7 @@ export class PollarClient {
   // ─── Email OTP flow (3 steps) ─────────────────────────────────────────────
 
   beginEmailLogin(): void {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('beginEmailLogin');
       return;
     }
@@ -626,7 +645,7 @@ export class PollarClient {
   }
 
   sendEmailCode(email: string): void {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('sendEmailCode');
       return;
     }
@@ -639,7 +658,7 @@ export class PollarClient {
   }
 
   verifyEmailCode(code: string): void {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('verifyEmailCode');
       return;
     }
@@ -666,7 +685,7 @@ export class PollarClient {
   // ─── Wallet flow (single call) ────────────────────────────────────────────
 
   loginWallet(type: WalletId): void {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('loginWallet');
       return;
     }
@@ -696,7 +715,7 @@ export class PollarClient {
    * across all devices.
    */
   async logout(options: { everywhere?: boolean } = {}): Promise<void> {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('logout');
       return;
     }
@@ -730,7 +749,7 @@ export class PollarClient {
    * `current` flag identifies which entry corresponds to this client.
    */
   async listSessions(): Promise<SessionInfo[]> {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('listSessions');
       return [];
     }
@@ -750,7 +769,7 @@ export class PollarClient {
    * does NOT clear local state — call `logout()` for that case.
    */
   async revokeSession(familyId: string): Promise<void> {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('revokeSession');
       return;
     }
