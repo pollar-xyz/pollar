@@ -5,6 +5,16 @@ import { WalletAdapter, WalletId } from '../../wallets';
 
 export type FlowDeps = {
   api: PollarApiClient;
+  /** API origin + version prefix (e.g. `https://sdk.api.pollar.xyz/v1`). Used to
+   *  build the non-streaming status-poll URL on runtimes without fetch streaming. */
+  basePath: string;
+  /**
+   * Whether the runtime supports `fetch` response-body streaming (web). When
+   * `true` the SDK consumes the SSE status stream; when `false` (React Native,
+   * whose `fetch` exposes no `response.body.getReader()`) it polls the
+   * non-streaming `/auth/session/status/{id}/poll` endpoint instead.
+   */
+  useStreaming: boolean;
   signal: AbortSignal;
   setAuthState: (state: AuthState) => void;
   storeSession: (session: PollarApplicationConfigContent) => void | Promise<void>;

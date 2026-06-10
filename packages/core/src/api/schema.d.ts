@@ -61,6 +61,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/session/status/{clientSessionId}/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Poll client session status (non-streaming)
+         * @description One-shot JSON variant of the SSE status stream, for clients without fetch response-body streaming (React Native). Returns the current `{status, user.ready}` immediately. Poll until `status` reaches a ready/consumed state.
+         */
+        get: operations["getAuthSessionStatusByClientSessionIdPoll"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/google": {
         parameters: {
             query?: never;
@@ -825,6 +845,65 @@ export interface operations {
             };
         };
     };
+    getAuthSessionStatusByClientSessionIdPoll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clientSessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current session status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_SESSION_STATUS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            status: string;
+                            user: {
+                                ready: boolean;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Gone (expired) */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+        };
+    };
     getAuthGoogle: {
         parameters: {
             query: {
@@ -1120,6 +1199,19 @@ export interface operations {
                     };
                 };
             };
+            /** @description Gone (expired) */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
         };
     };
     postAuthEmailVerifyCode: {
@@ -1196,6 +1288,19 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Gone (expired) */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1284,6 +1389,19 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Gone (expired) */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1426,6 +1544,19 @@ export interface operations {
                     };
                 };
             };
+            /** @description Gone (expired) */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
         };
     };
     postAuthRefresh: {
@@ -1505,6 +1636,19 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Gone (expired) */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };

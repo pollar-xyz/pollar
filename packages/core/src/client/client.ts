@@ -6,6 +6,7 @@ import { buildProof } from '../dpop';
 import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
 import { hashApiKey } from '../lib/api-key-hash';
+import { randomUUID } from '../lib/random-uuid';
 import { StellarNetwork } from '../stellar/StellarClient';
 import { defaultStorage } from '../storage/autodetect';
 import type { OnStorageDegrade, Storage, StorageDegradeReason } from '../storage/types';
@@ -160,7 +161,7 @@ export class PollarClient {
 
   constructor(config: PollarClientConfig) {
     this.apiKey = config.apiKey;
-    this.id = crypto.randomUUID();
+    this.id = randomUUID();
     this.basePath = `${config.baseUrl || 'https://sdk.api.pollar.xyz'}/v1`;
 
     this._storage =
@@ -1346,6 +1347,11 @@ export class PollarClient {
   private _flowDeps(signal: AbortSignal) {
     return {
       api: this._api,
+      basePath: this.basePath,
+      // SSE status streaming works on web; React Native's `fetch` has no
+      // readable `response.body`, so those clients poll the non-streaming
+      // status endpoint instead. `isBrowser` is false in RN and SSR alike.
+      useStreaming: isBrowser,
       signal,
       setAuthState: this._setAuthState.bind(this),
       storeSession: this._storeSession.bind(this),

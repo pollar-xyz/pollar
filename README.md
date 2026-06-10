@@ -9,12 +9,17 @@ This repository is managed with [Turborepo](https://turbo.build/repo) and contai
 
 ## Packages
 
-> **0.7.0 is a breaking change.** Sender-constrained tokens via DPoP, no PII in storage, refresh-token rotation. Read
-> the [CHANGELOG](./CHANGELOG.md) before upgrading. Requires `sdk-api` ≥ Phase 5.
+> **0.8.x is a breaking change** (introduced in 0.8.0). `<PollarProvider>` props are reshaped (`config` → `client`,
+> `styles` → `appConfig.styles`), every `submitTx` routes through `/tx/submit`, and `@pollar/stellar-wallets-kit-adapter`
+> now requires an explicit `network`. **0.8.1** adds React Native / Expo runtime support to `@pollar/core` and an
+> operation allowlist to `@pollar/privy-adapter`. Read the [CHANGELOG](./CHANGELOG.md) before upgrading. Requires
+> `sdk-api` ≥ Phase 5.
+>
+> 0.7.0 remains the DPoP baseline — sender-constrained tokens (RFC 9449), no PII in storage, refresh-token rotation.
 
 ### [`@pollar/core`](./packages/core)
 
-**Version:** `0.7.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/core)
+**Version:** `0.8.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/core)
 
 Framework-agnostic TypeScript SDK. Provides the `PollarClient` class and all lower-level utilities needed to integrate
 Pollar authentication and Stellar transactions into any JavaScript environment.
@@ -73,7 +78,7 @@ const client = new PollarClient({ apiKey: 'pk_...', storage });
 
 ### [`@pollar/react`](./packages/react)
 
-**Version:** `0.7.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react)
+**Version:** `0.8.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react)
 
 React bindings built on top of `@pollar/core`. Provides a context provider, hook, and pre-built UI components for
 drop-in authentication in React applications.
@@ -109,7 +114,7 @@ npm install @pollar/react @pollar/core
 
 ### [`@pollar/privy-adapter`](./packages/privy-adapter)
 
-**Version:** `0.7.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-adapter)
+**Version:** `0.8.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-adapter)
 
 Stateless HTTP sidecar that lets `sdk-api` sign Stellar transactions through your **Privy** server-wallet account
 without your `PRIVY_APP_SECRET` ever leaving your infrastructure. Runs alongside `sdk-api`; Privy is treated as a
@@ -128,6 +133,8 @@ remote signer reached over an authenticated channel.
 - Per-userId wallet-address LRU cache (1 000 entries, 10 min TTL) — no persistent state
 - Maps Pollar `userId` → Privy DID via `custom_auth` linked accounts so wallets are namespaced per Pollar tenant
 - Discriminated `SuccessCode` / `ErrorCode` enums; optional `onError(error, ctx)` hook for upstream telemetry
+- **Operation allowlist** (new in 0.8.1) — optional `allowedOperations` / `restrictToTrustlines` cap what `/wallets/sign`
+  will sign; disallowed transactions are rejected with `TX_OPERATION_NOT_ALLOWED` (403) before any Privy round-trip
 - Node ≥ 20
 
 ```bash
@@ -138,7 +145,7 @@ npm install @pollar/privy-adapter
 
 ### [`@pollar/stellar-wallets-kit-adapter`](./packages/stellar-wallets-kit-adapter)
 
-**Version:** `0.7.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/stellar-wallets-kit-adapter)
+**Version:** `0.8.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/stellar-wallets-kit-adapter)
 
 Plugs [Stellar Wallets Kit](https://stellarwalletskit.dev) into Pollar as a single wallet adapter, without
 `@pollar/core` having to depend on the kit. One install gives Pollar access to **every wallet module the kit

@@ -247,6 +247,9 @@ want to swap the chrome but keep the data wiring from `usePollar()`.
 `<TxStatusView>` is the shared status component (build → sign → success/error) reused by `TransactionModal` and
 `SendModal`; it's exported on its own for consumers that want to embed the lifecycle elsewhere.
 
+> **0.8.1** — `onWalletConnect` is now **optional** on `<LoginModalTemplate>` (defaults to a no-op). If you drive the
+> wallet picker entirely through `ui.renderWallets`, you no longer have to pass a handler you don't use.
+
 ---
 
 ### Custom adapters

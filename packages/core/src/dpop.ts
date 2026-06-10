@@ -1,4 +1,5 @@
 import { base64urlEncode, base64urlEncodeString } from './lib/base64url';
+import { randomUUID } from './lib/random-uuid';
 import { sha256 } from './lib/sha256';
 import type { KeyManager, PublicEcJwk } from './keys/types';
 
@@ -75,7 +76,7 @@ export async function buildProof(args: BuildProofArgs, keyManager: KeyManager): 
   };
 
   const payload: ProofPayload = {
-    jti: generateJti(),
+    jti: randomUUID(),
     htm: args.htm.toUpperCase(),
     htu: normalizeHtu(args.htu),
     iat: Math.floor(Date.now() / 1000),
@@ -131,30 +132,4 @@ export function normalizeHtu(rawUrl: string): string {
   }
   const portPart = port ? `:${port}` : '';
   return `${scheme}//${host}${portPart}${url.pathname}`;
-}
-
-/**
- * Generate a UUIDv4 for use as the `jti` claim. Prefers the secure-context
- * `crypto.randomUUID` when available; falls back to a manual v4 build via
- * `crypto.getRandomValues` for environments where `randomUUID` is missing
- * (older RN, insecure HTTP origins).
- */
-function generateJti(): string {
-  const c = globalThis.crypto;
-  if (c && typeof c.randomUUID === 'function') {
-    return c.randomUUID();
-  }
-  if (c && typeof c.getRandomValues === 'function') {
-    const bytes = new Uint8Array(16);
-    c.getRandomValues(bytes);
-    bytes[6] = ((bytes[6] as number) & 0x0f) | 0x40; // version 4
-    bytes[8] = ((bytes[8] as number) & 0x3f) | 0x80; // RFC 4122 variant
-    const hex: string[] = [];
-    for (let i = 0; i < 16; i++) hex.push((bytes[i] as number).toString(16).padStart(2, '0'));
-    return `${hex.slice(0, 4).join('')}-${hex.slice(4, 6).join('')}-${hex.slice(6, 8).join('')}-${hex.slice(8, 10).join('')}-${hex.slice(10, 16).join('')}`;
-  }
-  throw new Error(
-    '[PollarClient:dpop] No secure random source available (crypto.randomUUID / crypto.getRandomValues). ' +
-      'DPoP requires a secure context (HTTPS) or, in React Native, the `react-native-get-random-values` polyfill.',
-  );
 }

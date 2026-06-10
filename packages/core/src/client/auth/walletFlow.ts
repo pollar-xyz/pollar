@@ -1,3 +1,4 @@
+import { abortError } from '../../lib/abort';
 import { AUTH_ERROR_CODES } from '../../types';
 import { WalletId } from '../../wallets';
 import { authenticate } from './authenticate';
@@ -8,10 +9,10 @@ function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
     promise,
     new Promise<never>((_, reject) => {
       if (signal.aborted) {
-        reject(new DOMException('Aborted', 'AbortError'));
+        reject(abortError());
         return;
       }
-      signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+      signal.addEventListener('abort', () => reject(abortError()), { once: true });
     }),
   ]);
 }

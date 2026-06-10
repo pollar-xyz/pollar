@@ -27,11 +27,37 @@ yarn add @pollar/core
 For React Native / Expo, also install one of the storage adapter peer deps:
 
 ```bash
-# Expo
+# Expo (react-native-quick-crypto is a native module → requires a dev build, not Expo Go)
 npx expo install expo-secure-store react-native-get-random-values
+npm i react-native-quick-crypto react-native-polyfill-globals
 
 # Bare React Native
-npm i react-native-keychain react-native-get-random-values
+npm i react-native-keychain react-native-get-random-values react-native-quick-crypto react-native-polyfill-globals
+```
+
+> **React Native runtime requirements.** The SDK builds a DPoP proof (RFC 9449) for **every** authenticated request.
+> That path uses four standard Web primitives that React Native / Hermes does **not** all ship by default. Register
+> them at the very top of your entry file, **before** any `@pollar/core` import. If any is missing, DPoP proof
+> construction fails and **no authenticated request works** — the SDK is not at fault, the runtime is.
+>
+> | Primitive | Used by | Polyfill |
+> | --- | --- | --- |
+> | `crypto.getRandomValues` | keypair generation (`NobleKeyManager`), DPoP `jti` | [`react-native-get-random-values`](https://github.com/LinusU/react-native-get-random-values) |
+> | `crypto.subtle.digest('SHA-256')` | `sha256` → API-key namespace, DPoP `ath`, `NobleKeyManager.sign()` | [`react-native-quick-crypto`](https://github.com/margelo/react-native-quick-crypto) ≥ 0.7 (native module → Expo **dev build**, not Expo Go) |
+> | `TextEncoder` / `TextDecoder` | DPoP proof encoding, base64url, JWK thumbprint | bundled in [`react-native-polyfill-globals`](https://github.com/acostalima/react-native-polyfill-globals) (or `text-encoding`) |
+> | `URL` (spec-compliant) | DPoP `htu` normalization (`new URL(request.url)` on every proof) | bundled in `react-native-polyfill-globals` (or [`react-native-url-polyfill`](https://github.com/charpeni/react-native-url-polyfill)) |
+>
+> `react-native-polyfill-globals/auto` is the pragmatic one-liner — it installs `TextEncoder`/`TextDecoder` **and**
+> `URL` together (plus base64 / fetch-streaming you don't strictly need). The SDK does **not** rely on `fetch` response
+> streaming on React Native: it polls the non-streaming `/auth/session/status/{id}/poll` endpoint instead, so you do
+> **not** need a fetch-streaming polyfill for auth — but you still need TextEncoder + URL from that same package.
+
+Entry-file setup (e.g. `index.js`), **before importing `@pollar/core`**:
+
+```ts
+import 'react-native-get-random-values'; // crypto.getRandomValues
+import 'react-native-polyfill-globals/auto'; // TextEncoder/TextDecoder + URL
+import 'react-native-quick-crypto'; // crypto.subtle.digest — register its global per the package's setup docs
 ```
 
 ## Overview
@@ -59,8 +85,10 @@ const client = new PollarClient({ apiKey: 'your-api-key' });
 ## React Native (Expo)
 
 ```ts
-// At your app entry — `crypto.getRandomValues` polyfill
-import 'react-native-get-random-values';
+// At your app entry, BEFORE importing @pollar/core — runtime polyfills (see table above):
+import 'react-native-get-random-values'; // crypto.getRandomValues
+import 'react-native-polyfill-globals/auto'; // TextEncoder/TextDecoder + URL
+import 'react-native-quick-crypto'; // crypto.subtle.digest — register its global per the package's setup docs
 
 import { PollarClient } from '@pollar/core';
 import { createSecureStoreAdapter } from '@pollar/core/adapters/expo';
@@ -78,13 +106,96 @@ const client = new PollarClient({ apiKey: 'your-api-key', storage });
 ## React Native (`react-native-keychain`)
 
 ```ts
-import 'react-native-get-random-values';
+import 'react-native-get-random-values'; // crypto.getRandomValues
+import 'react-native-polyfill-globals/auto'; // TextEncoder/TextDecoder + URL
+import 'react-native-quick-crypto'; // crypto.subtle.digest — register its global per the package's setup docs
 import { PollarClient } from '@pollar/core';
 import { createKeychainAdapter } from '@pollar/core/adapters/react-native-keychain';
 
 const storage = await createKeychainAdapter();
 const client = new PollarClient({ apiKey: 'your-api-key', storage });
 ```
+
+## Framework integration
+
+`@pollar/core` is framework-agnostic: `PollarClient` is a plain class and the `on*StateChange` methods are
+callback subscriptions. To render reactively, bridge those callbacks into your framework's state primitive. The
+client instance should be a singleton (module scope, context, or DI) — never recreate it on every render.
+
+### React / Next.js
+
+`useSyncExternalStore` is the idiomatic bridge. In Next.js, only instantiate in Client Components (`'use client'`)
+— server-side, the SDK degrades to a no-op and warns.
+
+```tsx
+'use client';
+import { useSyncExternalStore } from 'react';
+import { PollarClient, type AuthState } from '@pollar/core';
+
+const client = new PollarClient({ apiKey: 'pk_...' }); // module scope = one instance
+
+export function useAuthState(): AuthState {
+  return useSyncExternalStore(
+    (cb) => client.onAuthStateChange(cb), // returns the unsubscribe fn
+    () => client.getAuthState(), // client snapshot
+    () => client.getAuthState(), // server snapshot (idle)
+  );
+}
+
+// const auth = useAuthState(); // re-renders on every auth transition
+```
+
+### Angular
+
+The SDK's callbacks fire **outside Angular's zone**, so wrap state updates in `NgZone.run()` (or use signals) or the
+view won't update. Expose the client through a service.
+
+```ts
+import { Injectable, NgZone, signal } from '@angular/core';
+import { PollarClient, type AuthState } from '@pollar/core';
+
+@Injectable({ providedIn: 'root' })
+export class PollarService {
+  private client = new PollarClient({ apiKey: 'pk_...' });
+  readonly authState = signal<AuthState>(this.client.getAuthState());
+
+  constructor(private zone: NgZone) {
+    this.client.onAuthStateChange((state) => {
+      this.zone.run(() => this.authState.set(state)); // re-enter Angular's zone
+    });
+  }
+
+  login = (email: string) => this.client.login({ provider: 'email', email });
+}
+```
+
+### Vue 3
+
+Assign the callback payload into a `ref` (or `shallowRef`) inside `onMounted`; unsubscribe in `onUnmounted`.
+
+```ts
+import { ref, shallowRef, onMounted, onUnmounted } from 'vue';
+import { PollarClient, type AuthState } from '@pollar/core';
+
+const client = new PollarClient({ apiKey: 'pk_...' });
+
+export function useAuth() {
+  const authState = shallowRef<AuthState>(client.getAuthState());
+  let unsub = () => {
+  };
+  onMounted(() => {
+    unsub = client.onAuthStateChange((s) => (authState.value = s)); // ref assign = reactive
+  });
+  onUnmounted(() => unsub());
+  return { authState, login: client.login.bind(client) };
+}
+```
+
+### React Native
+
+Same as React (`useSyncExternalStore`), plus the entry-file polyfills and injected adapters shown in the
+React Native sections above. OAuth and external-wallet logins require `openAuthUrl` / `walletAdapter` to be injected
+(the built-in popup/extension adapters are web-only).
 
 ## Preserved-on-disk storage shape
 
@@ -139,7 +250,7 @@ const sessions = await client.listSessions();
 ### `new PollarClient(config)`
 
 | Option             | Type                     | Required | Description                                                                                                 |
-| ------------------ | ------------------------ | -------- | ----------------------------------------------------------------------------------------------------------- |
+|--------------------|--------------------------|----------|-------------------------------------------------------------------------------------------------------------|
 | `apiKey`           | `string`                 | Yes      | Your Pollar API key                                                                                         |
 | `baseUrl`          | `string`                 | No       | Override the default API endpoint                                                                           |
 | `stellarNetwork`   | `'mainnet' \| 'testnet'` | No       | Target Stellar network (default: `testnet`)                                                                 |
@@ -167,6 +278,7 @@ client.login({ provider: 'email', email: 'user@example.com' });
 
 // Stellar wallet
 import { WalletType } from '@pollar/core';
+
 client.login({ provider: 'wallet', type: WalletType.FREIGHTER });
 client.login({ provider: 'wallet', type: WalletType.ALBEDO });
 ```

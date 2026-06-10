@@ -2,6 +2,49 @@
 
 ## 0.8.1
 
+### `@pollar/core` — new features
+
+- **React Native / Expo runtime support.** The DPoP path no longer assumes a
+  browser-grade runtime, so the SDK now boots on React Native / Hermes once the
+  documented polyfills are registered. Three pieces:
+  - **`randomUUID()` with a fallback.** Prefers the secure-context
+    `crypto.randomUUID`, and falls back to a manual RFC 4122 v4 build via
+    `crypto.getRandomValues` for environments where `randomUUID` is missing
+    (older RN/Hermes where `react-native-get-random-values` provides
+    `getRandomValues` but not `randomUUID`, and insecure HTTP origins). Throws
+    only when no secure random source exists at all.
+  - **Runtime-agnostic abort helpers.** `abortError()` builds an `AbortError`
+    via the native `DOMException` when present and falls back to a plain `Error`
+    tagged `name = 'AbortError'` on Hermes (where `DOMException` is not a
+    global). `throwIfAborted(signal)` replaces `signal.throwIfAborted()`, which
+    is absent on older RN `AbortSignal` polyfills. The
+    `error.name === 'AbortError'` contract the rest of the SDK relies on is
+    preserved everywhere.
+  - **Non-streaming session-status fallback.** A new `waitForSessionReady`
+    transport picks the SSE stream on web and one-shot polling of
+    `/auth/session/status/{id}/poll` (`pollUntilFound`) on React Native — whose
+    `fetch` exposes no readable `response.body` — so login completes without a
+    streaming body. Backoff and abort semantics match the SSE path.
+
+- **Terminal session-status handling.** A login session that is invalid or
+  expired now resets the flow to an `error` state instead of waiting forever.
+  Both transports surface `SessionStatusError` (`INVALID_CLIENT_SESSION_ID` /
+  `EXPIRED_CLIENT_ID`, from SSE `error` events or 404/410 on the poll endpoint),
+  which the auth flow maps to two new `AUTH_ERROR_CODES`: **`SESSION_EXPIRED`**
+  and **`SESSION_INVALID`**. Applies to web and React Native alike.
+- The README gains a full **React Native runtime requirements** section listing
+  the four Web primitives the DPoP proof needs (`crypto.getRandomValues`,
+  `crypto.subtle.digest`, `TextEncoder`/`TextDecoder`, spec-compliant `URL`) and
+  the polyfills that provide them (`react-native-get-random-values`,
+  `react-native-quick-crypto`, `react-native-polyfill-globals`).
+
+### `@pollar/react` — fixes
+
+- **`onWalletConnect` is now optional on `<LoginModalTemplate>`.** The prop
+  changed from required to `onWalletConnect?: (id: WalletId) => void` and
+  defaults to a no-op. Consumers that drive the wallet picker entirely through
+  `ui.renderWallets` no longer have to thread a handler they don't use.
+
 ### `@pollar/privy-adapter` — new features
 
 - **Operation allowlist.** The adapter signs through Privy `rawSign`, so only the
