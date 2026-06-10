@@ -17,7 +17,7 @@ export const createApp = (deps: AdapterDeps): Hono<AppEnv> => {
     '*',
     bodyLimit({
       maxSize: deps.config.maxBodyBytes,
-      onError: (c) => c.json({ code: ErrorCode.VALIDATION_ERROR, success: false, reason: 'body too large' }, 413),
+      onError: (c) => c.var.error(ErrorCode.VALIDATION_ERROR, 413, { reason: 'body too large' }),
     }),
   );
 
@@ -32,7 +32,7 @@ export const createApp = (deps: AdapterDeps): Hono<AppEnv> => {
 
   app.onError((error, c) => {
     deps.config.onError?.(error, { endpoint: c.req.path, body: null });
-    return c.json({ code: ErrorCode.INTERNAL_SERVER_ERROR, success: false }, 500);
+    return c.var.error(ErrorCode.INTERNAL_SERVER_ERROR, 500);
   });
 
   return app;
