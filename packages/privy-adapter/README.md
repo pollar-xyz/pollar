@@ -98,6 +98,24 @@ interface PollarPrivyAdapterConfig {
   requestTimeoutMs?: number; // 10_000
   maxBodyBytes?: number; // 64 * 1024
 
+  // ── Operation allowlist (optional) ────────────────────────────────────
+
+  // Restricts which Stellar operations the adapter will sign. Because signing
+  // goes through Privy `rawSign` (only the transaction *hash* reaches Privy),
+  // the adapter is the only place per-operation policy can be enforced.
+
+  // Explicit allowlist of stellar-sdk operation type names. `undefined` (the
+  // default) means no restriction — the legacy behavior, any non-fee-bump tx
+  // is signed. A transaction containing any operation outside the list is
+  // rejected with `TX_OPERATION_NOT_ALLOWED` (403).
+  allowedOperations?: string[]; // undefined
+
+  // Shortcut for trustline-only adapters. When `true`, the trustline preset
+  // — `['changeTrust', 'beginSponsoringFutureReserves',
+  // 'endSponsoringFutureReserves']` — is added to the allowlist AND the
+  // transaction is additionally required to contain at least one `changeTrust`.
+  restrictToTrustlines?: boolean; // false
+
   // ── Observability hooks ───────────────────────────────────────────────
 
   onWalletCreated?: (userId: string, address: string) => void;
@@ -105,6 +123,27 @@ interface PollarPrivyAdapterConfig {
   onError?: (error: Error, ctx: { endpoint: string; body: unknown }) => void;
 }
 ```
+
+### Restricting signable operations
+
+By default the adapter signs any non-fee-bump transaction. To lock it down to trustline management — the common case for a Pollar deployment — use `restrictToTrustlines`:
+
+```ts
+const adapter = createPollarPrivyAdapter({
+  // ...credentials, network, etc.
+  restrictToTrustlines: true,
+});
+```
+
+This allows `changeTrust` and the optional reserve-sponsorship sandwich (`beginSponsoringFutureReserves` / `endSponsoringFutureReserves`), and additionally **requires** at least one `changeTrust`. Anything else — a `payment`, a `manageData`, a `changeTrust` mixed with a `payment` — is rejected with `TX_OPERATION_NOT_ALLOWED` (403) before any Privy round-trip.
+
+For a custom set, use `allowedOperations` with stellar-sdk operation type names:
+
+```ts
+allowedOperations: ['changeTrust', 'payment'];
+```
+
+**Precedence.** If both are set, the effective allowlist is the **union** of `allowedOperations` and the trustline preset, and the `restrictToTrustlines` "at least one `changeTrust`" requirement still applies. If neither is set, there is no restriction (legacy behavior).
 
 ## Endpoints
 
@@ -138,17 +177,18 @@ Responses share the Pollar envelope:
 
 ### Error codes
 
-| Code                     | HTTP | When                                                                         |
-| ------------------------ | ---- | ---------------------------------------------------------------------------- |
-| `FORBIDDEN`              | 401  | Missing or wrong Bearer token; response carries `WWW-Authenticate: Bearer …` |
-| `VALIDATION_ERROR`       | 400  | Body schema mismatch or invalid JSON                                         |
-| `VALIDATION_ERROR`       | 413  | Body exceeded `maxBodyBytes` — response carries `reason: "body too large"`   |
-| `WALLET_NOT_FOUND`       | 404  | User has no Stellar wallet                                                   |
-| `WALLET_CREATION_FAILED` | 502  | Privy upstream error during create                                           |
-| `WALLET_LOOKUP_FAILED`   | 502  | Privy upstream error during wallet lookup                                    |
-| `TX_INVALID_SIGNED_XDR`  | 400  | XDR could not be parsed, or transaction is a fee-bump (unsupported)          |
-| `TX_SIGN_FAILED`         | 502  | Privy upstream error during sign                                             |
-| `INTERNAL_SERVER_ERROR`  | 500  | Unexpected failure                                                           |
+| Code                       | HTTP | When                                                                                                                                                  |
+| -------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FORBIDDEN`                | 401  | Missing or wrong Bearer token; response carries `WWW-Authenticate: Bearer …`                                                                          |
+| `VALIDATION_ERROR`         | 400  | Body schema mismatch or invalid JSON                                                                                                                  |
+| `VALIDATION_ERROR`         | 413  | Body exceeded `maxBodyBytes` — response carries `reason: "body too large"`                                                                            |
+| `WALLET_NOT_FOUND`         | 404  | User has no Stellar wallet                                                                                                                            |
+| `WALLET_CREATION_FAILED`   | 502  | Privy upstream error during create                                                                                                                    |
+| `WALLET_LOOKUP_FAILED`     | 502  | Privy upstream error during wallet lookup                                                                                                             |
+| `TX_INVALID_SIGNED_XDR`    | 400  | XDR could not be parsed, or transaction is a fee-bump (unsupported)                                                                                   |
+| `TX_OPERATION_NOT_ALLOWED` | 403  | Transaction contains an operation outside the allowlist (or is missing a `changeTrust` while `restrictToTrustlines` is on); response carries `reason` |
+| `TX_SIGN_FAILED`           | 502  | Privy upstream error during sign                                                                                                                      |
+| `INTERNAL_SERVER_ERROR`    | 500  | Unexpected failure                                                                                                                                    |
 
 ## Security notes
 

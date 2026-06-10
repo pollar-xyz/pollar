@@ -1,6 +1,6 @@
 {
   "name": "@pollar/privy-adapter",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Stateless HTTP proxy that lets Pollar sign Stellar transactions through your Privy account, without your Privy app secret leaving your infrastructure.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -25,6 +25,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "lint": "tsc --noEmit && eslint src",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"test/*.test.ts\"",
     "clean": "rm -rf dist"
   },
   "engines": {

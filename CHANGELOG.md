@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.8.1
+
+### `@pollar/privy-adapter` — new features
+
+- **Operation allowlist.** The adapter signs through Privy `rawSign`, so only the
+  transaction _hash_ ever reaches Privy and Privy cannot enforce per-operation
+  policy — the adapter is the only place that can. Two new optional, fully
+  backward-compatible config fields let you cap what `/wallets/sign` will sign:
+  - `allowedOperations?: string[]` — explicit allowlist of stellar-sdk operation
+    type names (e.g. `['changeTrust', 'payment']`). `undefined` (default) keeps the
+    legacy behavior: any non-fee-bump transaction is signed.
+  - `restrictToTrustlines?: boolean` — shortcut that allows the trustline preset
+    (`changeTrust` + the `beginSponsoringFutureReserves` / `endSponsoringFutureReserves`
+    sandwich) **and** additionally requires at least one `changeTrust`. When both
+    fields are set, the effective allowlist is the union of the two and the
+    changeTrust requirement still applies.
+
+  Validation runs after the transaction is parsed and before any Privy round-trip,
+  so a disallowed transaction never reaches signing. The existing fee-bump
+  rejection is unchanged.
+
+- **New error code `TX_OPERATION_NOT_ALLOWED` (HTTP 403).** Returned when a
+  transaction contains an operation outside the allowlist, or is missing a
+  `changeTrust` while `restrictToTrustlines` is on. The response carries a `reason`
+  naming the offending operation: `{ "code": "TX_OPERATION_NOT_ALLOWED", "success": false, "reason": "..." }`.
+
 ## 0.8.0
 
 > **⚠️ BREAKING CHANGES.**
