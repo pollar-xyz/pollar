@@ -285,7 +285,16 @@ export type AuthState =
   | { step: 'wallet_not_installed'; walletType: WalletId }
   | { step: 'authenticating_wallet' }
   | { step: 'authenticating' }
-  | { step: 'authenticated'; session: PollarPersistedSession }
+  | {
+      step: 'authenticated';
+      session: PollarPersistedSession;
+      /**
+       * `false` while the session is restored optimistically from storage and
+       * not yet revalidated with the server; `true` after a fresh login/refresh
+       * or a successful `/auth/session/resume`. Gate sensitive actions on this.
+       */
+      verified: boolean;
+    }
   | {
       step: 'error';
       previousStep: string;

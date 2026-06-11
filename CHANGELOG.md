@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.8.3
+
+### `@pollar/core` — new features
+
+- **Session resume on cold start — sessions are revalidated and the profile is
+  repopulated after a reload/reopen.** Until now, `_restoreSession()` rehydrated
+  the session entirely from storage and went straight to `authenticated` without
+  telling the server, so (1) a session revoked elsewhere (logout on another
+  device, family revoked) still showed as `authenticated` until the next request
+  401'd, and (2) `getUserProfile()` returned `null` after a cold reload because
+  PII lives in memory only and was never re-fetched. On restore the client now
+  fires `GET /auth/session/resume` in the background (non-blocking — startup
+  never waits on it):
+  - **200** → the in-memory profile is repopulated (`getUserProfile()` stops
+    being `null`) and the session is marked `verified`.
+  - **revoked family / 401** → the existing refresh-on-401 path clears the
+    session, so the client converges to `idle` instead of showing a stale
+    `authenticated`.
+  - **offline / network error** → the session is **not** cleared; it stays
+    optimistic and is revalidated on the next `visibilitychange` or request.
+  Resume goes through the normal authed client, so it coalesces with any
+  in-flight refresh and (being a GET) is auto-retried after a token refresh. The
+  endpoint never rotates the refresh token or creates a new family.
+- **`AuthState.authenticated` now carries `verified: boolean`** — `false` while
+  a restored session is still optimistic (pre-revalidation), `true` after a
+  fresh login/refresh or a successful resume. Gate sensitive actions on it.
+
+### `@pollar/react` — new features
+
+- **`usePollar().verified`** exposes the new `verified` flag so apps can gate
+  sensitive actions (e.g. signing) until the cold-start session is confirmed.
+
 ## 0.8.2
 
 ### `@pollar/core` — new features

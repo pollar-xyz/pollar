@@ -65,6 +65,12 @@ interface PollarContextValue {
   openLoginModal: () => void;
 
   isAuthenticated: boolean;
+  /**
+   * `true` once the server has confirmed the session (login / refresh /
+   * `/auth/session/resume`). `false` while a cold-start session is still
+   * optimistic — gate sensitive actions (e.g. signing) on this.
+   */
+  verified: boolean;
   login: (options: PollarLoginOptions) => void;
   logout: () => void;
   /** Open the active-sessions modal. */
@@ -175,6 +181,10 @@ export function PollarProvider({
   const [pollarClient] = useState<PollarClient>(() => (client instanceof PollarClient ? client : new PollarClient(client)));
   const [networkState, setNetworkState] = useState<NetworkState>(() => pollarClient.getNetworkState());
   const [sessionState, setSessionState] = useState<PollarPersistedSession | null>(null);
+  // `true` once the server has confirmed the restored session (via login,
+  // refresh, or `/auth/session/resume`). Use it to gate sensitive actions
+  // while a cold-start session is still optimistic.
+  const [verified, setVerified] = useState(false);
   const [transaction, setTransaction] = useState<TransactionState>({ step: 'idle' });
   const [txHistory, setTxHistory] = useState<TxHistoryState>({ step: 'idle' });
   const [walletBalance, setWalletBalance] = useState<WalletBalanceState>({ step: 'idle' });
@@ -207,8 +217,13 @@ export function PollarProvider({
     return pollarClient.onAuthStateChange((authState) => {
       if (authState.step === 'authenticated') {
         setSessionState((prev) => (sessionsEqual(prev, authState.session) ? prev : authState.session));
+        // The session object is identical between the optimistic restore and
+        // the post-resume confirmation, so `verified` is tracked separately —
+        // otherwise the sessionsEqual short-circuit would swallow the flip.
+        setVerified(authState.verified);
       } else if (authState.step === 'idle') {
         setSessionState(null);
+        setVerified(false);
       }
     });
   }, [pollarClient]);
@@ -263,6 +278,7 @@ export function PollarProvider({
       // session
       walletAddress,
       isAuthenticated: !!walletAddress,
+      verified,
       walletType: pollarClient.getWalletType(),
       // client
       getClient,
@@ -311,6 +327,7 @@ export function PollarProvider({
     } as PollarContextValue;
   }, [
     walletAddress,
+    verified,
     pollarClient,
     getClient,
     transaction,

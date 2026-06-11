@@ -155,6 +155,8 @@ export class PollarClient {
   private readonly _walletAdapterResolver: WalletAdapterResolver | null;
   private readonly _walletResolverTimeoutMs: number;
   private _loginController: AbortController | null = null;
+  /** Aborts an in-flight `/auth/session/resume` on destroy() or re-trigger. */
+  private _resumeController: AbortController | null = null;
   /** Platform strategy for opening the hosted-OAuth URL (popup on web; injected on RN). */
   private readonly _openAuthUrl: AuthUrlOpener;
   /** `redirect_uri` sent to the backend for hosted OAuth. */
@@ -197,7 +199,7 @@ export class PollarClient {
     }
 
     console.info(
-      `[PollarClient] Initialized v${POLLAR_CORE_VERSION} — endpoint: ${this.basePath}, network: ${this._networkState.network}`,
+      `[PollarClient] Initialized v${POLLAR_CORE_VERSION} [DIAG-jwk build] — endpoint: ${this.basePath}, network: ${this._networkState.network}`,
     );
 
     this._initialized = this._initialize();
@@ -240,7 +242,13 @@ export class PollarClient {
     // by `_restoreSession` itself, and the visibility listener only fires
     // re-checks for transitions that happen from this point forward.
     this._visibilityUnsubscribe = this._visibilityProvider.onChange((visible) => {
-      if (visible) void this._maybeProactiveRefresh();
+      if (!visible) return;
+      void this._maybeProactiveRefresh();
+      // B5: if the session is still optimistic (e.g. the startup resume failed
+      // offline), retry validation now that the app is foreground again.
+      if (this._authState.step === 'authenticated' && !this._authState.verified) {
+        void this._resume();
+      }
     });
   }
 
@@ -252,6 +260,8 @@ export class PollarClient {
     }
     this._loginController?.abort();
     this._loginController = null;
+    this._resumeController?.abort();
+    this._resumeController = null;
     this._clearRefreshTimer();
     if (this._visibilityUnsubscribe) {
       this._visibilityUnsubscribe();
@@ -1450,10 +1460,53 @@ export class PollarClient {
       // _initialize() resolves still get notified. A direct assignment to
       // _authState would race past any onAuthStateChange subscription that
       // hasn't run yet (e.g. PollarProvider's useEffect).
-      this._setAuthState({ step: 'authenticated', session: this._session });
+      // Optimistic: storage is trusted enough to show `authenticated`, but the
+      // server hasn't confirmed the session is still alive (it may have been
+      // revoked elsewhere), so `verified: false`.
+      this._setAuthState({ step: 'authenticated', session: this._session, verified: false });
       this._scheduleNextRefresh();
+      // Fire-and-forget: revalidate + repopulate the profile in the background.
+      // Deliberately NOT awaited so `_initialized` resolves immediately and the
+      // UI never blocks on a network round-trip at startup.
+      void this._resume();
     } else {
       console.info('[PollarClient] No session in storage');
+    }
+  }
+
+  /**
+   * Validate the restored session against the server and repopulate the
+   * in-memory profile (PII is never persisted, so it's null after a cold
+   * reload). Goes through the normal authed client, so it coalesces with any
+   * in-flight refresh (onRequest awaits `_refreshPromise`) and, being a GET,
+   * is auto-retried after a 401-triggered refresh.
+   *
+   * - 200          → store profile, mark the session `verified`.
+   * - 401          → the refresh-on-401 path already ran; if the family was
+   *                  revoked, refresh failed and `_clearSession()` took us to
+   *                  idle. Nothing to do here — don't double-handle.
+   * - network error → stay optimistic (do NOT log out); revalidated later on
+   *                  `visibilitychange` or first use.
+   */
+  private async _resume(): Promise<void> {
+    if (!this._session) return;
+    this._resumeController?.abort();
+    const controller = new AbortController();
+    this._resumeController = controller;
+    try {
+      const { data, error } = await this._api.GET('/auth/session/resume', { signal: controller.signal });
+      if (error || !data) return;
+      const content = (data as { content?: PollarUserProfile }).content;
+      if (!content || !this._session) return;
+      this._profile = { ...content };
+      this._setAuthState({ step: 'authenticated', session: this._session, verified: true });
+    } catch (err) {
+      if ((err as { name?: string })?.name === 'AbortError') return;
+      // Network failure — keep the optimistic (unverified) session and retry
+      // when the app next becomes visible or on the next authed request.
+      console.warn('[PollarClient] resume failed (network); will retry', err);
+    } finally {
+      if (this._resumeController === controller) this._resumeController = null;
     }
   }
 
@@ -1482,7 +1535,9 @@ export class PollarClient {
     }
 
     await writeStorage(this._storage, this.apiKeyHash, persisted);
-    this._setAuthState({ step: 'authenticated', session: persisted });
+    // Fresh login/refresh response came straight from the server, so the
+    // session is already server-validated → `verified: true`.
+    this._setAuthState({ step: 'authenticated', session: persisted, verified: true });
     this._scheduleNextRefresh();
   }
 

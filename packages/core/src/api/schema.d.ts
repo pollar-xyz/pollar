@@ -272,6 +272,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/session/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Validate the current session and return the user profile
+         * @description DPoP-bound resume/validate + touch. Confirms the refresh-token family is still active, returns the same profile shape as login `data` (mail, names, avatar, providers), and records the return (last_used_at + UA/IP-hash). Does NOT rotate the refresh token or create a new family. A revoked/expired family returns 401 so the client can converge to a logged-out state.
+         */
+        get: operations["getAuthSessionResume"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/sessions/{familyId}": {
         parameters: {
             query?: never;
@@ -1740,6 +1760,64 @@ export interface operations {
                                 current: boolean;
                                 expiresAt: string;
                             }[];
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+        };
+    };
+    getAuthSessionResume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session valid; profile returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_SESSION_RESUMED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            mail: string;
+                            first_name: string;
+                            last_name: string;
+                            avatar: string;
+                            providers: {
+                                email: {
+                                    address: string;
+                                } | null;
+                                google: {
+                                    id: string;
+                                } | null;
+                                github: {
+                                    id: string;
+                                } | null;
+                                wallet: {
+                                    address: string;
+                                } | null;
+                            };
                         };
                     };
                 };
