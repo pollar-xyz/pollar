@@ -35,14 +35,21 @@ export async function computeJwkThumbprint(jwk: PublicEcJwk): Promise<string> {
 /**
  * Normalize a base64 string to unpadded base64url. Web Crypto's
  * `exportKey('jwk')` is spec'd to return base64url, but some React Native
- * `crypto.subtle` polyfills emit standard base64 (`+`/`/`) and/or `=` padding.
- * Those characters are invalid in a JWK member: RFC 7638 thumbprinting and
- * servers that validate `x`/`y` as base64url (`^[A-Za-z0-9_-]+$`) reject them,
- * and the `cnf.jkt` thumbprint silently diverges from the server's. Real
- * browsers already return base64url, so this is a no-op there.
+ * `crypto.subtle` polyfills diverge: standard base64 (`+`/`/`), `=` padding,
+ * or — in the case of `react-native-quick-crypto` — a stray `.` in the
+ * padding position (observed: `"…dy_c."`). Any of those characters is invalid
+ * in a JWK member: RFC 7638 thumbprinting and servers that validate `x`/`y`
+ * as base64url (`^[A-Za-z0-9_-]+$`) reject them, and the `cnf.jkt` thumbprint
+ * silently diverges from the server's. Real browsers already return base64url,
+ * so this is a no-op there.
+ *
+ * We map `+`/`/` to their url-safe equivalents, then strip every remaining
+ * character outside the base64url alphabet (`=` padding, `.`, whitespace).
+ * Valid base64url never contains those, so a global strip can't corrupt a
+ * well-formed value.
  */
 function toBase64url(value: string): string {
-  return value.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return value.replace(/\+/g, '-').replace(/\//g, '_').replace(/[^A-Za-z0-9_-]/g, '');
 }
 
 /**

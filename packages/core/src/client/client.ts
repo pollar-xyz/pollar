@@ -199,7 +199,7 @@ export class PollarClient {
     }
 
     console.info(
-      `[PollarClient] Initialized v${POLLAR_CORE_VERSION} [DIAG-jwk build] — endpoint: ${this.basePath}, network: ${this._networkState.network}`,
+      `[PollarClient] Initialized v${POLLAR_CORE_VERSION} — endpoint: ${this.basePath}, network: ${this._networkState.network}`,
     );
 
     this._initialized = this._initialize();
