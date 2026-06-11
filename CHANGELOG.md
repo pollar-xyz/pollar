@@ -2,6 +2,16 @@
 
 ## 0.8.2
 
+### `@pollar/core` — new features
+
+- **`POLLAR_CORE_VERSION` export + version in the init log.** The package version
+  is injected at build time (tsup `define`) and exported as
+  `POLLAR_CORE_VERSION` (e.g. `'0.8.2'`, `'dev'` when running unbundled). The
+  `PollarClient` startup log now includes it:
+  `[PollarClient] Initialized v0.8.2 — endpoint: …, network: …`. Named per
+  package so it won't collide with a future `POLLAR_REACT_VERSION`, letting apps
+  report both in one diagnostics line.
+
 ### `@pollar/core` — fixes
 
 - **SHA-256 no longer requires `crypto.subtle` — React Native runs in Expo Go.**
