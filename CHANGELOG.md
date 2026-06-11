@@ -4,6 +4,20 @@
 
 ### `@pollar/core` — fixes
 
+- **SHA-256 no longer requires `crypto.subtle` — React Native runs in Expo Go.**
+  `sha256` ran on `crypto.subtle.digest('SHA-256')`, which is absent on
+  React Native / Hermes unless `react-native-quick-crypto` (a native module that
+  forces an Expo **dev build**) is installed. Since SHA-256 is on the hot path
+  (DPoP `ath`, API-key namespace hashing, JWK thumbprints, `NobleKeyManager`),
+  nothing worked on Expo Go. `sha256` now runs on pure-JS
+  [`@noble/hashes`](https://github.com/paulmillr/noble-hashes) (`@noble/hashes/sha2`),
+  already present via `@noble/curves`, now a direct dependency. The function keeps
+  its `async` signature, so call sites are unchanged. `react-native-quick-crypto`
+  becomes optional — install it only to upgrade to non-extractable WebCrypto keys.
+- **Drop deprecated `@noble/curves/p256` import.** `NobleKeyManager` imported
+  `p256` from `@noble/curves/p256`, deprecated in `@noble/curves` 1.9.x
+  (TS6385). Switched to the supported `@noble/curves/nist` entry; the `p256`
+  object and its API are identical.
 - **Expo SecureStore storage adapter no longer throws on the SDK's namespaced
   keys.** `createSecureStoreAdapter()` passed keys straight to
   `expo-secure-store`, but SecureStore only accepts keys matching

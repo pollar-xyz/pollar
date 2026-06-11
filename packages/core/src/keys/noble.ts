@@ -1,4 +1,4 @@
-import { p256 } from '@noble/curves/p256';
+import { p256 } from '@noble/curves/nist';
 import { hashApiKey } from '../lib/api-key-hash';
 import { base64urlDecode, base64urlEncode } from '../lib/base64url';
 import { sha256 } from '../lib/sha256';

@@ -27,25 +27,34 @@ yarn add @pollar/core
 For React Native / Expo, also install one of the storage adapter peer deps:
 
 ```bash
-# Expo (react-native-quick-crypto is a native module → requires a dev build, not Expo Go)
+# Expo (works in Expo Go — no native module required)
 npx expo install expo-secure-store react-native-get-random-values
-npm i react-native-quick-crypto react-native-polyfill-globals
+npm i react-native-polyfill-globals
 
 # Bare React Native
-npm i react-native-keychain react-native-get-random-values react-native-quick-crypto react-native-polyfill-globals
+npm i react-native-keychain react-native-get-random-values react-native-polyfill-globals
 ```
 
+> **`react-native-quick-crypto` is optional.** SHA-256 and the ECDSA P-256 keypair now run on pure-JS
+> [`@noble/hashes`](https://github.com/paulmillr/noble-hashes) / [`@noble/curves`](https://github.com/paulmillr/noble-curves)
+> (`NobleKeyManager`), so the SDK no longer needs `crypto.subtle` on React Native — it runs in Expo Go. Installing
+> `react-native-quick-crypto` (a native module → Expo **dev build**, not Expo Go) is only a security upgrade: when
+> `crypto.subtle` is present the SDK uses `WebCryptoKeyManager`, whose private key is **non-extractable**. With Noble
+> the private scalar is held in JS and persisted through the storage adapter. Both produce valid DPoP proofs.
+
 > **React Native runtime requirements.** The SDK builds a DPoP proof (RFC 9449) for **every** authenticated request.
-> That path uses four standard Web primitives that React Native / Hermes does **not** all ship by default. Register
+> That path uses three standard Web primitives that React Native / Hermes does **not** all ship by default. Register
 > them at the very top of your entry file, **before** any `@pollar/core` import. If any is missing, DPoP proof
 > construction fails and **no authenticated request works** — the SDK is not at fault, the runtime is.
 >
-> | Primitive | Used by | Polyfill |
-> | --- | --- | --- |
-> | `crypto.getRandomValues` | keypair generation (`NobleKeyManager`), DPoP `jti` | [`react-native-get-random-values`](https://github.com/LinusU/react-native-get-random-values) |
-> | `crypto.subtle.digest('SHA-256')` | `sha256` → API-key namespace, DPoP `ath`, `NobleKeyManager.sign()` | [`react-native-quick-crypto`](https://github.com/margelo/react-native-quick-crypto) ≥ 0.7 (native module → Expo **dev build**, not Expo Go) |
-> | `TextEncoder` / `TextDecoder` | DPoP proof encoding, base64url, JWK thumbprint | bundled in [`react-native-polyfill-globals`](https://github.com/acostalima/react-native-polyfill-globals) (or `text-encoding`) |
-> | `URL` (spec-compliant) | DPoP `htu` normalization (`new URL(request.url)` on every proof) | bundled in `react-native-polyfill-globals` (or [`react-native-url-polyfill`](https://github.com/charpeni/react-native-url-polyfill)) |
+> | Primitive                     | Used by                                                          | Polyfill                                                                                                                             |
+> | ----------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+> | `crypto.getRandomValues`      | keypair generation (`NobleKeyManager`), DPoP `jti`               | [`react-native-get-random-values`](https://github.com/LinusU/react-native-get-random-values)                                         |
+> | `TextEncoder` / `TextDecoder` | DPoP proof encoding, base64url, JWK thumbprint                   | bundled in [`react-native-polyfill-globals`](https://github.com/acostalima/react-native-polyfill-globals) (or `text-encoding`)       |
+> | `URL` (spec-compliant)        | DPoP `htu` normalization (`new URL(request.url)` on every proof) | bundled in `react-native-polyfill-globals` (or [`react-native-url-polyfill`](https://github.com/charpeni/react-native-url-polyfill)) |
+>
+> SHA-256 no longer needs `crypto.subtle.digest` — it runs on `@noble/hashes`, so no `react-native-quick-crypto` is
+> required (see the note above).
 >
 > `react-native-polyfill-globals/auto` is the pragmatic one-liner — it installs `TextEncoder`/`TextDecoder` **and**
 > `URL` together (plus base64 / fetch-streaming you don't strictly need). The SDK does **not** rely on `fetch` response
@@ -57,7 +66,7 @@ Entry-file setup (e.g. `index.js`), **before importing `@pollar/core`**:
 ```ts
 import 'react-native-get-random-values'; // crypto.getRandomValues
 import 'react-native-polyfill-globals/auto'; // TextEncoder/TextDecoder + URL
-import 'react-native-quick-crypto'; // crypto.subtle.digest — register its global per the package's setup docs
+// Optional: import 'react-native-quick-crypto' to upgrade to non-extractable WebCrypto keys (needs an Expo dev build).
 ```
 
 ## Overview
@@ -88,7 +97,7 @@ const client = new PollarClient({ apiKey: 'your-api-key' });
 // At your app entry, BEFORE importing @pollar/core — runtime polyfills (see table above):
 import 'react-native-get-random-values'; // crypto.getRandomValues
 import 'react-native-polyfill-globals/auto'; // TextEncoder/TextDecoder + URL
-import 'react-native-quick-crypto'; // crypto.subtle.digest — register its global per the package's setup docs
+// Optional: import 'react-native-quick-crypto' to upgrade to non-extractable WebCrypto keys (needs an Expo dev build).
 
 import { PollarClient } from '@pollar/core';
 import { createSecureStoreAdapter } from '@pollar/core/adapters/expo';
@@ -108,7 +117,7 @@ const client = new PollarClient({ apiKey: 'your-api-key', storage });
 ```ts
 import 'react-native-get-random-values'; // crypto.getRandomValues
 import 'react-native-polyfill-globals/auto'; // TextEncoder/TextDecoder + URL
-import 'react-native-quick-crypto'; // crypto.subtle.digest — register its global per the package's setup docs
+// Optional: import 'react-native-quick-crypto' to upgrade to non-extractable WebCrypto keys (needs an Expo dev build).
 import { PollarClient } from '@pollar/core';
 import { createKeychainAdapter } from '@pollar/core/adapters/react-native-keychain';
 
@@ -181,8 +190,7 @@ const client = new PollarClient({ apiKey: 'pk_...' });
 
 export function useAuth() {
   const authState = shallowRef<AuthState>(client.getAuthState());
-  let unsub = () => {
-  };
+  let unsub = () => {};
   onMounted(() => {
     unsub = client.onAuthStateChange((s) => (authState.value = s)); // ref assign = reactive
   });
@@ -250,7 +258,7 @@ const sessions = await client.listSessions();
 ### `new PollarClient(config)`
 
 | Option             | Type                     | Required | Description                                                                                                 |
-|--------------------|--------------------------|----------|-------------------------------------------------------------------------------------------------------------|
+| ------------------ | ------------------------ | -------- | ----------------------------------------------------------------------------------------------------------- |
 | `apiKey`           | `string`                 | Yes      | Your Pollar API key                                                                                         |
 | `baseUrl`          | `string`                 | No       | Override the default API endpoint                                                                           |
 | `stellarNetwork`   | `'mainnet' \| 'testnet'` | No       | Target Stellar network (default: `testnet`)                                                                 |
