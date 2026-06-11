@@ -37,6 +37,19 @@ type SecureStoreApi = {
  */
 export const SECURE_STORE_MAX_VALUE_BYTES = 4096;
 
+/**
+ * Map a logical storage key onto one Expo SecureStore accepts. SecureStore keys
+ * must match `[A-Za-z0-9._-]`, but the SDK namespaces its keys with `:`
+ * (`pollar:<apiKeyHash>:session`, `pollar:dpop-key:<apiKeyHash>`, …), which
+ * SecureStore rejects with an `Invalid key` error. Replace every disallowed
+ * character with `_`. The transform is deterministic and collision-free for the
+ * SDK's fixed key templates — their only variable segment is a hex hash — so a
+ * given logical key always resolves to the same SecureStore key.
+ */
+export function sanitizeKey(key: string): string {
+  return key.replace(/[^A-Za-z0-9._-]/g, '_');
+}
+
 export interface SecureStoreAdapterOptions {
   /**
    * Override the iOS Keychain accessibility class. Defaults to
@@ -92,7 +105,7 @@ export async function createSecureStoreAdapter(options: SecureStoreAdapterOption
 
   return {
     async get(key) {
-      return SecureStore.getItemAsync(key);
+      return SecureStore.getItemAsync(sanitizeKey(key));
     },
     async set(key, value) {
       const size = utf8ByteLength(value);
@@ -101,10 +114,14 @@ export async function createSecureStoreAdapter(options: SecureStoreAdapterOption
           `[PollarClient:storage] Value for "${key}" is ${size} bytes, exceeds SecureStore limit ${SECURE_STORE_MAX_VALUE_BYTES}`,
         );
       }
-      await SecureStore.setItemAsync(key, value, accessible !== undefined ? { keychainAccessible: accessible } : undefined);
+      await SecureStore.setItemAsync(
+        sanitizeKey(key),
+        value,
+        accessible !== undefined ? { keychainAccessible: accessible } : undefined,
+      );
     },
     async remove(key) {
-      await SecureStore.deleteItemAsync(key);
+      await SecureStore.deleteItemAsync(sanitizeKey(key));
     },
   };
 }

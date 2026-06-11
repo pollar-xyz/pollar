@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.2
+
+### `@pollar/core` — fixes
+
+- **Expo SecureStore storage adapter no longer throws on the SDK's namespaced
+  keys.** `createSecureStoreAdapter()` passed keys straight to
+  `expo-secure-store`, but SecureStore only accepts keys matching
+  `[A-Za-z0-9._-]` while the SDK namespaces its keys with `:`
+  (`pollar:<apiKeyHash>:session`, `pollar:<apiKeyHash>:walletType`,
+  `pollar:dpop-key:<apiKeyHash>`). Every read/write failed with an
+  `Invalid key` error on React Native / Expo. The adapter now sanitizes each
+  key (disallowed characters → `_`) before calling SecureStore. The transform
+  is deterministic and collision-free for the SDK's fixed key templates. No
+  migration needed — the adapter never persisted anything under the rejected
+  keys. The `react-native-keychain` adapter was unaffected (Keychain `service`
+  names allow `:`).
+
 ## 0.8.1
 
 ### `@pollar/core` — new features
