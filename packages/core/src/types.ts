@@ -116,7 +116,27 @@ export interface PollarClientConfig {
    * same URL you pass to `WebBrowser.openAuthSessionAsync`.
    */
   oauthRedirectUri?: string;
+  /**
+   * The passkey (WebAuthn) ceremony for "Smart Wallet" login, injected by the
+   * runtime layer (`@pollar/react` implements it with `@simplewebauthn/browser`).
+   * `@pollar/core` stays runtime-agnostic and never touches `navigator.credentials`
+   * directly. Required to use `loginSmartWallet()`. Browser-only for now;
+   * React Native needs a native passkey provider.
+   */
+  passkey?: PasskeyCeremony;
 }
+
+/**
+ * Runs the device WebAuthn ceremony for a server-issued challenge and returns
+ * the result to forward to the backend: a registration response for a new user
+ * (`create()`) or an authentication assertion for a returning one (`get()`).
+ * The implementation decides which (e.g. try `get()` first, fall back to
+ * `create()`). `response` is the browser's PublicKeyCredential serialized to
+ * JSON — forwarded verbatim to `/auth/passkey/{register,login}`.
+ */
+export type PasskeyCeremony = (ctx: {
+  challenge: string;
+}) => Promise<{ kind: 'login'; response: unknown } | { kind: 'register'; response: unknown }>;
 
 /**
  * Strategy for opening the hosted OAuth URL. The SDK mints the per-login auth
@@ -268,6 +288,7 @@ export const AUTH_ERROR_CODES = {
   WALLET_CONNECT_FAILED: 'WALLET_CONNECT_FAILED',
   WALLET_AUTH_FAILED: 'WALLET_AUTH_FAILED',
   WALLET_RESOLVER_TIMEOUT: 'WALLET_RESOLVER_TIMEOUT',
+  PASSKEY_FAILED: 'PASSKEY_FAILED',
   UNEXPECTED_ERROR: 'UNEXPECTED_ERROR',
 } as const;
 
@@ -284,6 +305,10 @@ export type AuthState =
   | { step: 'connecting_wallet'; walletType: WalletId }
   | { step: 'wallet_not_installed'; walletType: WalletId }
   | { step: 'authenticating_wallet' }
+  // Passkey (Smart Wallet) login: device ceremony, then (new user) the
+  // sponsored on-chain deploy of the C-address.
+  | { step: 'creating_passkey' }
+  | { step: 'deploying_smart_account' }
   | { step: 'authenticating' }
   | {
       step: 'authenticated';

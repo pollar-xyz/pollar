@@ -26,6 +26,7 @@ import {
   KycStartResponse,
   KycStatus,
   NetworkState,
+  PasskeyCeremony,
   PollarApplicationConfigContent,
   PollarClientConfig,
   PollarFlowError,
@@ -54,6 +55,7 @@ import {
 import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletAdapterResolver, WalletId, WalletType } from '../wallets';
 import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/emailFlow';
 import { defaultWebOAuthOpener, loginOAuth } from './auth/oauthFlow';
+import { loginSmartWallet } from './auth/passkeyFlow';
 import { loginWallet } from './auth/walletFlow';
 import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
 
@@ -154,6 +156,7 @@ export class PollarClient {
   private _walletAdapter: WalletAdapter | null = null;
   private readonly _walletAdapterResolver: WalletAdapterResolver | null;
   private readonly _walletResolverTimeoutMs: number;
+  private readonly _passkey: PasskeyCeremony | null;
   private _loginController: AbortController | null = null;
   /** Aborts an in-flight `/auth/session/resume` on destroy() or re-trigger. */
   private _resumeController: AbortController | null = null;
@@ -181,6 +184,7 @@ export class PollarClient {
     this._keyManager = config.keyManager ?? defaultKeyManager(this._storage, config.apiKey);
     this._walletAdapterResolver = config.walletAdapter ?? null;
     this._walletResolverTimeoutMs = config.walletResolverTimeoutMs ?? 5000;
+    this._passkey = config.passkey ?? null;
     this._deviceLabel = config.deviceLabel;
     this._visibilityProvider = config.visibilityProvider ?? defaultVisibilityProvider();
     this._maxIdleMs = config.maxIdleMs;
@@ -705,6 +709,20 @@ export class PollarClient {
     }
     const controller = this._newController();
     loginWallet(type, this._flowDeps(controller.signal)).catch((err) => this._handleFlowError(err));
+  }
+
+  /**
+   * "Smart Wallet" login: runs the passkey (WebAuthn) ceremony and, for a new
+   * user, creates a sponsored smart-account C-address. Requires the `passkey`
+   * ceremony to be configured (e.g. via `@pollar/react`).
+   */
+  loginSmartWallet(): void {
+    if (!isClientRuntime) {
+      warnServerSide('loginSmartWallet');
+      return;
+    }
+    const controller = this._newController();
+    loginSmartWallet(this._flowDeps(controller.signal)).catch((err) => this._handleFlowError(err));
   }
 
   // ─── Cancel ───────────────────────────────────────────────────────────────
@@ -1375,6 +1393,7 @@ export class PollarClient {
         this._walletAdapter = adapter;
         await writeWalletType(this._storage, this.apiKeyHash, id);
       },
+      ...(this._passkey ? { passkey: this._passkey } : {}),
       ...(this._deviceLabel ? { deviceLabel: this._deviceLabel } : {}),
     };
   }

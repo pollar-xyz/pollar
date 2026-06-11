@@ -47,6 +47,8 @@ const AUTH_STATE_MESSAGES: Record<AuthState['step'], string> = {
   connecting_wallet: 'Connecting wallet…',
   wallet_not_installed: 'Wallet not installed',
   authenticating_wallet: 'Signing in with wallet…',
+  creating_passkey: 'Waiting for passkey…',
+  deploying_smart_account: 'Creating your wallet…',
   authenticating: 'Authenticating…',
   authenticated: 'Welcome!',
   error: '',
@@ -60,6 +62,8 @@ function authStateToStatus(step: AuthState['step']): StateStatus {
     'opening_oauth',
     'connecting_wallet',
     'authenticating_wallet',
+    'creating_passkey',
+    'deploying_smart_account',
     'authenticating',
   ];
   const success: AuthState['step'][] = ['authenticated', 'entering_code'];
@@ -77,6 +81,7 @@ interface LoginModalTemplateProps {
   logoUrl: string | null;
   emailEnabled: boolean;
   embeddedWallets: boolean;
+  smartWallet: boolean;
   providers: {
     google: boolean;
     discord: boolean;
@@ -90,6 +95,7 @@ interface LoginModalTemplateProps {
   onEmailSubmit?: () => void;
   onSocialLogin?: (provider: 'google' | 'github') => void;
   onWalletConnect?: (id: WalletId) => void;
+  onSmartWallet?: () => void;
   /** Optional override for the wallet picker view. Defaults to a Freighter+Albedo list. */
   renderWallets?: RenderWalletsSlot;
   authState: AuthState;
@@ -106,6 +112,7 @@ export function LoginModalTemplate({
   logoUrl,
   emailEnabled,
   embeddedWallets,
+  smartWallet,
   providers,
   appName,
   email = '',
@@ -113,6 +120,7 @@ export function LoginModalTemplate({
   onEmailSubmit,
   onSocialLogin,
   onWalletConnect,
+  onSmartWallet,
   renderWallets,
   authState,
   codeInputKey,
@@ -277,6 +285,31 @@ export function LoginModalTemplate({
                   <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                 </svg>
                 Wallet
+              </button>
+            </div>
+          )}
+
+          {smartWallet && (
+            <div className="pollar-wallet-section">
+              <button
+                type="button"
+                disabled={isLoading}
+                className="pollar-wallet-entry-btn"
+                onClick={onSmartWallet}
+              >
+                <svg
+                  width="18"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+                Smart Wallet
               </button>
             </div>
           )}

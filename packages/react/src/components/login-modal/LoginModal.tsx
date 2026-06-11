@@ -51,6 +51,9 @@ export function LoginModal({ onClose }: LoginModalProps) {
   }, [getClient]);
 
   const { theme = 'light', accentColor = '#005DB4', logoUrl, emailEnabled, embeddedWallets, providers } = styles;
+  // `smartWallet` isn't in the server-driven styles type yet — read it
+  // defensively and default to shown (web). A dashboard toggle is a follow-up.
+  const smartWallet = (styles as { smartWallet?: boolean }).smartWallet ?? true;
 
   function handleClose() {
     setEmail('');
@@ -70,6 +73,10 @@ export function LoginModal({ onClose }: LoginModalProps) {
 
   function handleWalletConnect(type: WalletId) {
     getClient().loginWallet(type);
+  }
+
+  function handleSmartWallet() {
+    getClient().loginSmartWallet();
   }
 
   function handleVerifyCode(code: string) {
@@ -96,6 +103,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
         logoUrl={logoUrl ?? null}
         emailEnabled={!!emailEnabled}
         embeddedWallets={!!embeddedWallets}
+        smartWallet={smartWallet}
         providers={{
           google: !!providers?.google,
           discord: !!providers?.discord,
@@ -109,6 +117,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
         onEmailSubmit={handleEmailSubmit}
         onSocialLogin={handleSocialLogin}
         onWalletConnect={handleWalletConnect}
+        onSmartWallet={handleSmartWallet}
         {...(renderWallets !== undefined && { renderWallets })}
         authState={authState}
         codeInputKey={codeInputKey}

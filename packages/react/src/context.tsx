@@ -30,6 +30,7 @@ import { SessionsModal } from './components/sessions-modal/SessionsModal';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
+import { browserPasskeyCeremony } from './lib/passkey-ceremony';
 import type { PollarConfig, PollarStyles, RenderWalletsSlot } from './types';
 
 const DEFAULT_APP_CONFIG: PollarConfig = {
@@ -178,7 +179,13 @@ export function PollarProvider({
   onStorageDegrade,
   children,
 }: PollarProviderProps) {
-  const [pollarClient] = useState<PollarClient>(() => (client instanceof PollarClient ? client : new PollarClient(client)));
+  // When the consumer passes a config (not a ready client), inject the browser
+  // passkey ceremony so `loginSmartWallet()` works out of the box on web. The
+  // consumer can override it (e.g. a React Native native provider) via
+  // `client.passkey`.
+  const [pollarClient] = useState<PollarClient>(() =>
+    client instanceof PollarClient ? client : new PollarClient({ passkey: browserPasskeyCeremony, ...client }),
+  );
   const [networkState, setNetworkState] = useState<NetworkState>(() => pollarClient.getNetworkState());
   const [sessionState, setSessionState] = useState<PollarPersistedSession | null>(null);
   // `true` once the server has confirmed the restored session (via login,

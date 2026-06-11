@@ -1,6 +1,6 @@
 import { PollarApiClient } from '../../api/client';
 import type { PublicEcJwk } from '../../keys/types';
-import { AUTH_ERROR_CODES, AuthState, PollarApplicationConfigContent } from '../../types';
+import { AUTH_ERROR_CODES, AuthState, PasskeyCeremony, PollarApplicationConfigContent } from '../../types';
 import { WalletAdapter, WalletId } from '../../wallets';
 
 export type FlowDeps = {
@@ -26,6 +26,11 @@ export type FlowDeps = {
    */
   resolveWalletAdapter: (id: WalletId) => Promise<WalletAdapter>;
   storeWalletAdapter: (adapter: WalletAdapter, id: WalletId) => void | Promise<void>;
+  /**
+   * The passkey (WebAuthn) ceremony for `loginSmartWallet()`, injected from the
+   * client config. Undefined when the consumer didn't configure passkey support.
+   */
+  passkey?: PasskeyCeremony;
   /**
    * Returns the public JWK of the SDK's per-session DPoP keypair. Auth
    * completion calls (`/auth/login`) pass it as `dpopJwk` so the server

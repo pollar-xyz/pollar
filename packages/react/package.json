@@ -40,6 +40,7 @@
   },
   "dependencies": {
     "@pollar/core": "*",
+    "@simplewebauthn/browser": "^13.3.0",
     "qr.js": "^0.0.0"
   },
   "devDependencies": {
