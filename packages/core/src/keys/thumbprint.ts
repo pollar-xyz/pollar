@@ -33,13 +33,28 @@ export async function computeJwkThumbprint(jwk: PublicEcJwk): Promise<string> {
 }
 
 /**
- * Strip a JWK to only the four required EC public members. Useful when the
- * input came from `crypto.subtle.exportKey('jwk', publicKey)` which adds
- * `ext` / `key_ops`. Returns a fresh object — never mutates input.
+ * Normalize a base64 string to unpadded base64url. Web Crypto's
+ * `exportKey('jwk')` is spec'd to return base64url, but some React Native
+ * `crypto.subtle` polyfills emit standard base64 (`+`/`/`) and/or `=` padding.
+ * Those characters are invalid in a JWK member: RFC 7638 thumbprinting and
+ * servers that validate `x`/`y` as base64url (`^[A-Za-z0-9_-]+$`) reject them,
+ * and the `cnf.jkt` thumbprint silently diverges from the server's. Real
+ * browsers already return base64url, so this is a no-op there.
+ */
+function toBase64url(value: string): string {
+  return value.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * Strip a JWK to only the four required EC public members and normalize the
+ * coordinates to unpadded base64url. Useful when the input came from
+ * `crypto.subtle.exportKey('jwk', publicKey)` which adds `ext` / `key_ops`
+ * (and, under some RN polyfills, non-base64url coordinates). Returns a fresh
+ * object — never mutates input.
  */
 export function canonicalEcJwk(jwk: { kty?: string; crv?: string; x?: string; y?: string }): PublicEcJwk {
   if (jwk.kty !== 'EC' || jwk.crv !== 'P-256' || typeof jwk.x !== 'string' || typeof jwk.y !== 'string') {
     throw new Error('[PollarClient:thumbprint] Source JWK is not an EC P-256 public key');
   }
-  return { kty: 'EC', crv: 'P-256', x: jwk.x, y: jwk.y };
+  return { kty: 'EC', crv: 'P-256', x: toBase64url(jwk.x), y: toBase64url(jwk.y) };
 }
