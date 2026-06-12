@@ -11,6 +11,30 @@ import type {
   SignAuthEntryResponse,
 } from './types';
 
+/** Albedo's own network vocabulary (it only understands these two values). */
+type AlbedoNetwork = 'public' | 'testnet';
+
+const PUBLIC_PASSPHRASE = 'Public Global Stellar Network ; September 2015';
+const TESTNET_PASSPHRASE = 'Test SDF Network ; September 2015';
+
+/**
+ * Resolve the Albedo network for a signing call. Prefers the per-call options
+ * the SDK passes (`networkPassphrase`, then `network`) so the signature is
+ * produced on the network configured on `PollarClient`; falls back to the
+ * network the adapter was constructed with when options carry nothing.
+ */
+function albedoNetwork(options: SignTransactionOptions | undefined, fallback: AlbedoNetwork): AlbedoNetwork {
+  switch (options?.networkPassphrase) {
+    case PUBLIC_PASSPHRASE:
+      return 'public';
+    case TESTNET_PASSPHRASE:
+      return 'testnet';
+  }
+  if (options?.network === 'public' || options?.network === 'mainnet') return 'public';
+  if (options?.network === 'testnet') return 'testnet';
+  return fallback;
+}
+
 function openAlbedoPopup(url: string): Window {
   const popup = window.open(url, 'albedo', 'width=420,height=720,resizable=yes,scrollbars=yes');
   if (!popup) {
@@ -59,6 +83,13 @@ function waitForAlbedoResult(): Promise<Record<string, string>> {
 export class AlbedoAdapter implements WalletAdapter {
   readonly type = WalletType.ALBEDO;
 
+  /**
+   * Network used for `connect` and `signAuthEntry` (which carry no per-call
+   * network) and as the fallback for `signTransaction`. Defaults to `'testnet'`
+   * to preserve the previous behavior when constructed with no argument.
+   */
+  constructor(private readonly network: AlbedoNetwork = 'testnet') {}
+
   async isAvailable(): Promise<boolean> {
     return typeof window !== 'undefined';
   }
@@ -67,7 +98,7 @@ export class AlbedoAdapter implements WalletAdapter {
     const url = new URL('https://albedo.link');
     url.searchParams.set('intent', 'public-key');
     url.searchParams.set('app_name', 'Pollar');
-    url.searchParams.set('network', 'testnet');
+    url.searchParams.set('network', this.network);
     url.searchParams.set('callback', `${window.location.origin}/albedo-callback`);
     url.searchParams.set('origin', window.location.origin);
 
@@ -91,12 +122,12 @@ export class AlbedoAdapter implements WalletAdapter {
     throw new Error('Albedo does not expose network');
   }
 
-  async signTransaction(xdr: string, _options?: SignTransactionOptions): Promise<SignTransactionResponse> {
+  async signTransaction(xdr: string, options?: SignTransactionOptions): Promise<SignTransactionResponse> {
     const url = new URL('https://albedo.link');
     url.searchParams.set('intent', 'tx');
     url.searchParams.set('xdr', xdr);
     url.searchParams.set('app_name', 'Pollar');
-    url.searchParams.set('network', 'testnet');
+    url.searchParams.set('network', albedoNetwork(options, this.network));
     url.searchParams.set('callback', window.location.href);
     url.searchParams.set('origin', window.location.origin);
 
@@ -112,7 +143,7 @@ export class AlbedoAdapter implements WalletAdapter {
     url.searchParams.set('intent', 'sign-auth-entry');
     url.searchParams.set('xdr', entryXdr);
     url.searchParams.set('app_name', 'Pollar');
-    url.searchParams.set('network', 'testnet');
+    url.searchParams.set('network', this.network);
     url.searchParams.set('callback', window.location.href);
     url.searchParams.set('origin', window.location.origin);
 
