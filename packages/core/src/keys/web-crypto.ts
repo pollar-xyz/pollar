@@ -1,3 +1,4 @@
+import { base64urlEncode } from '../lib/base64url';
 import { hashApiKey } from '../lib/api-key-hash';
 import { canonicalEcJwk, computeJwkThumbprint } from './thumbprint';
 import type { KeyManager, PublicEcJwk } from './types';
@@ -157,9 +158,42 @@ export class WebCryptoKeyManager implements KeyManager {
     }
 
     this.keyPair = pair;
-    const exported = (await globalThis.crypto.subtle.exportKey('jwk', pair.publicKey)) as JsonWebKey;
-    this.publicJwk = canonicalEcJwk(exported);
+    this.publicJwk = await this._exportPublicJwk(pair.publicKey);
     this.thumbprint = await computeJwkThumbprint(this.publicJwk);
+  }
+
+  /**
+   * Derive the public JWK from a `CryptoKey`. Prefers the `'raw'` export (the
+   * 65-byte uncompressed point `0x04 || X(32) || Y(32)`) and base64url-encodes
+   * the coordinates ourselves — that sidesteps polyfills whose `exportKey('jwk')`
+   * emits non-base64url `x`/`y` (standard base64, `=` padding, or — as seen with
+   * `react-native-quick-crypto` — a stray `.`). Real browsers and most polyfills
+   * support `'raw'` for public EC keys.
+   *
+   * Falls back to the `'jwk'` export (normalized via `canonicalEcJwk`) if `'raw'`
+   * is unsupported or returns an unexpected shape, so this can't regress on a
+   * runtime that only implements the JWK path. Both routes yield identical
+   * coordinate bytes, so the `cnf.jkt` thumbprint is unchanged either way.
+   */
+  private async _exportPublicJwk(publicKey: CryptoKey): Promise<PublicEcJwk> {
+    try {
+      const raw = new Uint8Array(await globalThis.crypto.subtle.exportKey('raw', publicKey));
+      // Uncompressed P-256 point: 65 bytes, leading 0x04 tag.
+      if (raw.length !== 65 || raw[0] !== 0x04) {
+        throw new Error(`[PollarClient:keys] Unexpected raw EC point (len=${raw.length}, tag=${raw[0]})`);
+      }
+      return {
+        kty: 'EC',
+        crv: 'P-256',
+        x: base64urlEncode(raw.slice(1, 33)),
+        y: base64urlEncode(raw.slice(33, 65)),
+      };
+    } catch {
+      // 'raw' unsupported (or odd) on this runtime — fall back to the JWK export
+      // and normalize its coordinates to unpadded base64url.
+      const jwk = (await globalThis.crypto.subtle.exportKey('jwk', publicKey)) as JsonWebKey;
+      return canonicalEcJwk(jwk);
+    }
   }
 
   async reset(): Promise<void> {

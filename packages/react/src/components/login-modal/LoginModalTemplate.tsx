@@ -81,7 +81,9 @@ interface LoginModalTemplateProps {
   logoUrl: string | null;
   emailEnabled: boolean;
   embeddedWallets: boolean;
-  smartWallet: boolean;
+  /** Show the "Smart Wallet" (passkey) option. Optional & defaults to off so
+   *  adding it isn't a breaking change for existing template consumers. */
+  smartWallet?: boolean;
   providers: {
     google: boolean;
     discord: boolean;
@@ -112,7 +114,7 @@ export function LoginModalTemplate({
   logoUrl,
   emailEnabled,
   embeddedWallets,
-  smartWallet,
+  smartWallet = false,
   providers,
   appName,
   email = '',
