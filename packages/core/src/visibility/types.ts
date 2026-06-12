@@ -11,19 +11,12 @@
  * the cases where `visibilitychange` lags). Default for non-browser
  * environments is a noop that always reports "visible".
  *
- * TODO(@pollar/react-native): when the dedicated RN package ships, it will
- * export an `AppState`-backed provider. Until then, RN consumers can wire
- * one inline:
+ * React Native: import the shipped `AppState`-backed provider and pass it via
+ * `PollarClientConfig.visibilityProvider`:
  *
- *   import { AppState } from 'react-native';
- *   const rnVisibility = {
- *     isVisible: () => AppState.currentState === 'active',
- *     onChange: (cb) => {
- *       const sub = AppState.addEventListener('change', (s) => cb(s === 'active'));
- *       return () => sub.remove();
- *     },
- *   };
- *   new PollarClient({ apiKey, visibilityProvider: rnVisibility });
+ *   import { createAppStateVisibilityProvider } from '@pollar/core/adapters/react-native-appstate';
+ *   const visibilityProvider = await createAppStateVisibilityProvider();
+ *   new PollarClient({ apiKey, visibilityProvider });
  */
 export interface VisibilityProvider {
   isVisible(): boolean;

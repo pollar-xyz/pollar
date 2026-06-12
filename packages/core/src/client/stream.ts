@@ -70,7 +70,7 @@ export async function streamUntilFound(
       }));
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') throw e;
-      console.warn(e);
+      console.warn('[PollarClient:stream] session-status request failed; will retry', e);
     }
 
     if (error || !data) {
@@ -116,7 +116,7 @@ export async function streamUntilFound(
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') throw e;
       if (e instanceof SessionStatusError) throw e;
-      console.warn(e);
+      console.warn('[PollarClient:stream] session-status stream read failed; will retry', e);
     } finally {
       reader.releaseLock();
     }
@@ -177,7 +177,7 @@ export async function pollUntilFound(
       envelope = (await response.json().catch(() => null)) as StatusPollEnvelope | null;
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') throw e;
-      console.warn(e);
+      console.warn('[PollarClient:stream] session-status poll failed; will retry', e);
     }
 
     // Terminal: the session is gone (404 / INVALID) or expired (410 / EXPIRED).

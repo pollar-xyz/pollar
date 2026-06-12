@@ -6,8 +6,9 @@ import { sha256 } from './sha256';
  * dev tools, long enough that two distinct keys collide with probability
  * ≈ 1/2^32 (acceptable for namespacing; not for security).
  *
- * Async because the underlying SHA-256 primitive is WebCrypto's
- * `crypto.subtle.digest`. Compute once during client initialization and cache.
+ * Async only to match the `sha256` wrapper's signature — the underlying
+ * `@noble/hashes` digest is synchronous. Compute once during client
+ * initialization and cache.
  */
 export async function hashApiKey(apiKey: string): Promise<string> {
   const digest = await sha256(new TextEncoder().encode(apiKey));

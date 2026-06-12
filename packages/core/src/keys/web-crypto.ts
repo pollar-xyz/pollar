@@ -30,7 +30,7 @@ function openDb(): Promise<IDBDatabase> {
       return;
     }
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onerror = (): void => reject(req.error ?? new Error('IDB open failed'));
+    req.onerror = (): void => reject(req.error ?? new Error('[PollarClient:keys] IDB open failed'));
     req.onsuccess = (): void => resolve(req.result);
     req.onupgradeneeded = (): void => {
       const db = req.result;
@@ -44,7 +44,7 @@ function openDb(): Promise<IDBDatabase> {
 function awaitTx<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     req.onsuccess = (): void => resolve(req.result);
-    req.onerror = (): void => reject(req.error ?? new Error('IDB request failed'));
+    req.onerror = (): void => reject(req.error ?? new Error('[PollarClient:keys] IDB request failed'));
   });
 }
 
