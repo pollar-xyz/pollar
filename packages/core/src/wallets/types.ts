@@ -17,7 +17,6 @@ export type WalletId = WalletType | (string & {});
 
 export interface ConnectWalletResponse {
   address: string;
-  publicKey: string;
 }
 
 export interface SignTransactionOptions {

@@ -47,7 +47,7 @@ export class StellarWalletsKitAdapter implements WalletAdapter {
       throw new Error(`[StellarWalletsKit] Empty address returned for wallet "${this.type}"`);
     }
     this._address = address;
-    return { address, publicKey: address };
+    return { address };
   }
 
   async disconnect(): Promise<void> {

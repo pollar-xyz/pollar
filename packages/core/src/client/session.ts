@@ -96,8 +96,10 @@ export function isValidSession(value: unknown): value is PollarPersistedSession 
   }
 
   // The wallet object is always present; `type` discriminates custodial (G),
-  // smart/passkey (C), and external wallets. `publicKey` holds the address for
-  // all types, with `address` as an explicit alias.
+  // smart/passkey (C), and external wallets. `address` is the on-chain address
+  // for all types. (Sessions persisted by older SDKs carry a legacy `publicKey`
+  // alias — `readStorage` backfills `address` from it before validation, so the
+  // field is tolerated here but no longer required.)
   const wallet = s['wallet'];
   if (typeof wallet !== 'object' || wallet === null) {
     console.warn('[PollarClient:session] Invalid session — wallet missing or not an object');
@@ -108,12 +110,8 @@ export function isValidSession(value: unknown): value is PollarPersistedSession 
     console.warn('[PollarClient:session] Invalid session — wallet.type must be custodial|smart|external');
     return false;
   }
-  if (w['publicKey'] !== null && !isBoundedString(w['publicKey'], MAX_WALLET_PUBLIC_KEY)) {
-    console.warn('[PollarClient:session] Invalid session — wallet.publicKey must be string|null');
-    return false;
-  }
-  if (w['address'] !== undefined && w['address'] !== null && !isBoundedString(w['address'], MAX_WALLET_PUBLIC_KEY)) {
-    console.warn('[PollarClient:session] Invalid session — wallet.address must be string|null if present');
+  if (w['address'] !== null && !isBoundedString(w['address'], MAX_WALLET_PUBLIC_KEY)) {
+    console.warn('[PollarClient:session] Invalid session — wallet.address must be string|null');
     return false;
   }
   if (w['existsOnStellar'] !== undefined && typeof w['existsOnStellar'] !== 'boolean') {
@@ -138,6 +136,15 @@ export async function readStorage(storage: Storage, apiKeyHash: string): Promise
 
   try {
     const session = JSON.parse(raw) as unknown;
+    // Migrate sessions persisted by older SDKs (≤0.8.x), which stored the wallet
+    // address under the legacy `publicKey` key. Backfill `address` so they pass
+    // validation and survive the upgrade instead of forcing a re-login.
+    if (typeof session === 'object' && session !== null) {
+      const w = (session as { wallet?: Record<string, unknown> }).wallet;
+      if (w && w['address'] == null && typeof w['publicKey'] === 'string') {
+        w['address'] = w['publicKey'];
+      }
+    }
     if (!isValidSession(session)) {
       await storage.remove(sessionStorageKey(apiKeyHash));
       console.warn('[PollarClient:session] Stored session is invalid — clearing storage');

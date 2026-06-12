@@ -1,5 +1,84 @@
 # Changelog
 
+## 0.9.0
+
+> **⚠️ BREAKING CHANGES (SDK packages only — the SDK API stays backward-compatible).**
+>
+> - The session wallet drops the legacy `publicKey` alias. `session.wallet`
+>   now exposes **only `address`** (it always held the same value). Read
+>   `session.wallet.address` instead of `session.wallet.publicKey`.
+> - The wallet-adapter `ConnectWalletResponse` is now `{ address }` only —
+>   `publicKey` is gone. Affects authors implementing a custom `WalletAdapter`.
+> - The `sdk-api` `/v1/auth/login` response is **unchanged** and still emits
+>   both `publicKey` and `address`, so SDKs ≤0.8.x keep working.
+> - `sdk-api` `/tx/*` now accept **either `address` (preferred) or `publicKey`
+>   (legacy)** in the request body — `address` wins when both are sent. Old SDKs
+>   that send `publicKey` keep working; `@pollar/core` 0.9.0 sends `address`.
+>   ⚠️ **Deploy ordering:** ship the `sdk-api` change before/with `@pollar/core`
+>   0.9.0, since that core sends `address` and needs a backend that accepts it.
+> - Apps consuming `@pollar/react`'s `usePollar().walletAddress` need **no
+>   changes** — the field is resolved internally.
+
+### `@pollar/core` — BREAKING
+
+- **`PollarPersistedSession.wallet.publicKey` removed.** The persisted session
+  wallet is now `{ type, address, existsOnStellar?, createdAt?, linkedAt?,
+  network?, deployTxHash? }`. `address` is the on-chain address for every type
+  (G-address custodial, C-address smart/passkey, connected pubkey external).
+- **`ConnectWalletResponse` is now `{ address: string }`.** The duplicate
+  `publicKey` field is gone; the built-in `FreighterAdapter` / `AlbedoAdapter`
+  and any custom adapter must return `address` only.
+
+### `@pollar/core` — internal
+
+- **Sessions persisted by older SDKs (≤0.8.x) are migrated transparently.**
+  `readStorage` backfills `address` from the legacy `publicKey` key before
+  validation, so existing users are **not** forced to re-log in on upgrade.
+- **`/tx/*` request bodies now send `address`** (was `publicKey`). The backend
+  accepts both for backward compat (see the `sdk-api` note above), so this is
+  transparent once the matching backend is deployed.
+- Removed a dead `smart` local in `_runSmartTx` (assigned, never read).
+
+### `@pollar/react` — BREAKING
+
+- **`walletAddress` now derives from `session.wallet.address`** instead of
+  `session.wallet.publicKey`. The public `usePollar().walletAddress` value is
+  identical — no consumer change needed. The internal session-equality check
+  compares `wallet.address`.
+
+### `@pollar/stellar-wallets-kit-adapter` — BREAKING
+
+- **`connect()` returns `{ address }` only** (matches the new
+  `ConnectWalletResponse`). Requires `@pollar/core@^0.9.0` /
+  `@pollar/react@^0.9.0` (peer ranges pinned).
+
+### Migration
+
+```ts
+// Reading the wallet address off the auth state (core, headless):
+client.onAuthStateChange((s) => {
+  if (s.step !== 'authenticated') return;
+  // BEFORE (≤0.8.x): s.session.wallet.publicKey
+  // AFTER  (0.9.0):  s.session.wallet.address
+  const addr = s.session.wallet.address;
+});
+```
+
+Custom `WalletAdapter` authors:
+
+```ts
+// BEFORE
+async connect(): Promise<ConnectWalletResponse> {
+  return { address: pubkey, publicKey: pubkey };
+}
+// AFTER
+async connect(): Promise<ConnectWalletResponse> {
+  return { address: pubkey };
+}
+```
+
+`@pollar/react` consumers using `usePollar().walletAddress`: **no change**.
+
 ## 0.8.3
 
 ### `@pollar/core` — new features

@@ -2435,7 +2435,8 @@ export interface operations {
                 "application/json": {
                     /** @enum {string} */
                     network: "testnet" | "mainnet";
-                    publicKey: string;
+                    publicKey?: string;
+                    address?: string;
                     options?: {
                         timeoutSec?: number;
                         memo?: {
@@ -2655,7 +2656,6 @@ export interface operations {
                                 network: string;
                                 fee: string;
                             };
-                            /** Present only for smart-account (C-address) builds. */
                             smart?: {
                                 digest: string;
                                 entryXdr: string;
@@ -2719,7 +2719,8 @@ export interface operations {
                 "application/json": {
                     /** @enum {string} */
                     network: "testnet" | "mainnet";
-                    publicKey: string;
+                    publicKey?: string;
+                    address?: string;
                     unsignedXdr: string;
                 };
             };
@@ -2812,7 +2813,8 @@ export interface operations {
                 "application/json": {
                     /** @enum {string} */
                     network: "testnet" | "mainnet";
-                    publicKey: string;
+                    publicKey?: string;
+                    address?: string;
                     unsignedXdr: string;
                     idempotencyKey?: string;
                 };
@@ -2903,9 +2905,9 @@ export interface operations {
                 "application/json": {
                     /** @enum {string} */
                     network: "testnet" | "mainnet";
-                    publicKey: string;
+                    publicKey?: string;
+                    address?: string;
                     signedXdr?: string;
-                    /** Smart-account (C-address) flow: prepared entry + func + passkey assertion. */
                     smart?: {
                         entryXdr: string;
                         funcXdr: string;
@@ -2994,7 +2996,8 @@ export interface operations {
                 "application/json": {
                     /** @enum {string} */
                     network: "testnet" | "mainnet";
-                    publicKey: string;
+                    publicKey?: string;
+                    address?: string;
                     options?: {
                         timeoutSec?: number;
                         memo?: {

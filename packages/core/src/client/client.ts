@@ -951,7 +951,7 @@ export class PollarClient {
    * `walletBalanceState`. For an arbitrary wallet, use {@link getWalletBalance}.
    */
   async refreshBalance(): Promise<void> {
-    if (!this._session?.wallet?.publicKey) {
+    if (!this._session?.wallet?.address) {
       this._setWalletBalanceState({ step: 'error', message: 'No wallet connected' });
       return;
     }
@@ -1003,7 +1003,7 @@ export class PollarClient {
    * session. Drives `enabledAssetsState`; mirrors {@link refreshBalance}.
    */
   async refreshAssets(): Promise<void> {
-    if (!this._session?.wallet?.publicKey) {
+    if (!this._session?.wallet?.address) {
       this._setEnabledAssetsState({ step: 'error', message: 'No wallet connected' });
       return;
     }
@@ -1032,7 +1032,7 @@ export class PollarClient {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ): Promise<BuildOutcome> {
-    if (!this._session?.wallet?.publicKey) {
+    if (!this._session?.wallet?.address) {
       const details = 'No wallet connected';
       this._setTransactionState({ step: 'error', phase: 'building', details });
       return { status: 'error', details };
@@ -1040,7 +1040,7 @@ export class PollarClient {
 
     const body = {
       network: this.getNetwork(),
-      publicKey: this._session.wallet.publicKey,
+      address: this._session.wallet.address,
       operation,
       params,
       options: options ?? {},
@@ -1085,7 +1085,7 @@ export class PollarClient {
     this._setTransactionState({ step: 'signing', ...(buildData && { buildData }) });
 
     if (this._walletAdapter) {
-      const accountToSign = this._session?.wallet?.publicKey;
+      const accountToSign = this._session?.wallet?.address;
       const signOpts = accountToSign
         ? { networkPassphrase: this._networkPassphrase(), accountToSign }
         : { networkPassphrase: this._networkPassphrase() };
@@ -1110,10 +1110,10 @@ export class PollarClient {
     }
 
     // Custodial path: backend signs and returns the XDR + idempotencyKey.
-    const publicKey = this._session?.wallet?.publicKey ?? '';
+    const address = this._session?.wallet?.address ?? '';
     try {
       const { data, error } = await this._api.POST('/tx/sign', {
-        body: { network: this.getNetwork(), publicKey, unsignedXdr },
+        body: { network: this.getNetwork(), address, unsignedXdr },
       });
       if (!error && data?.success && data.content?.signedXdr) {
         const { signedXdr, idempotencyKey } = data.content;
@@ -1168,12 +1168,12 @@ export class PollarClient {
     const outcomeExtra: { buildData?: TxBuildContent } = buildData ? { buildData } : {};
     this._setTransactionState({ step: 'submitting', signedXdr, ...(buildData && { buildData }) });
 
-    const publicKey = this._session?.wallet?.publicKey ?? '';
+    const address = this._session?.wallet?.address ?? '';
     try {
       const { data, error } = await this._api.POST('/tx/submit', {
         body: {
           network: this.getNetwork(),
-          publicKey,
+          address,
           signedXdr,
           ...(opts?.submissionToken && { idempotencyKey: opts.submissionToken }),
         },
@@ -1274,7 +1274,7 @@ export class PollarClient {
 
     const body: TxSignAndSendBody = {
       network: this.getNetwork(),
-      publicKey: this._session?.wallet?.publicKey ?? '',
+      address: this._session?.wallet?.address ?? '',
       unsignedXdr,
     };
     try {
@@ -1371,7 +1371,7 @@ export class PollarClient {
     }
 
     // Custodial path — single backend call, compound state-machine step.
-    if (!this._session?.wallet?.publicKey) {
+    if (!this._session?.wallet?.address) {
       this._setTransactionState({ step: 'error', phase: 'building-signing-submitting', details: 'No wallet connected' });
       return { status: 'error', details: 'No wallet connected' };
     }
@@ -1380,7 +1380,7 @@ export class PollarClient {
       const { data, error } = await this._api.POST('/tx/build-sign-submit', {
         body: {
           network: this.getNetwork(),
-          publicKey: this._session.wallet.publicKey,
+          address: this._session.wallet.address,
           operation,
           params,
           options: options ?? {},
@@ -1442,8 +1442,8 @@ export class PollarClient {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ): Promise<SubmitOutcome> {
-    const publicKey = this._session?.wallet?.publicKey;
-    if (!publicKey) {
+    const address = this._session?.wallet?.address;
+    if (!address) {
       this._setTransactionState({ step: 'error', phase: 'building', details: 'No wallet connected' });
       return { status: 'error', details: 'No wallet connected' };
     }
@@ -1456,11 +1456,10 @@ export class PollarClient {
     // 1. Build (prepare) — returns the auth digest to sign, not an unsigned XDR.
     this._setTransactionState({ step: 'building' });
     let buildData: TxBuildContent;
-    let smart: NonNullable<TxBuildContent['smart']>;
     try {
       const body = {
         network: this.getNetwork(),
-        publicKey,
+        address,
         operation,
         params,
         options: options ?? {},
@@ -1472,7 +1471,6 @@ export class PollarClient {
         return { status: 'error', details };
       }
       buildData = data.content;
-      smart = data.content.smart;
     } catch (err) {
       const details = err instanceof Error ? err.message : undefined;
       this._setTransactionState({ step: 'error', phase: 'building', ...(details && { details }) });
@@ -1489,9 +1487,9 @@ export class PollarClient {
    * (split flow, when a smart build is already on the state machine).
    */
   private async _signSubmitSmart(buildData: TxBuildContent): Promise<SubmitOutcome> {
-    const publicKey = this._session?.wallet?.publicKey;
+    const address = this._session?.wallet?.address;
     const smart = buildData.smart;
-    if (!publicKey || !smart) {
+    if (!address || !smart) {
       const details = 'no prepared smart transaction';
       this._setTransactionState({ step: 'error', phase: 'signing', buildData, details });
       return { status: 'error', buildData, details };
@@ -1520,7 +1518,7 @@ export class PollarClient {
       const { data, error } = await this._api.POST('/tx/submit', {
         body: {
           network: this.getNetwork(),
-          publicKey,
+          address,
           smart: { entryXdr: smart.entryXdr, funcXdr: smart.funcXdr, assertion },
         },
       });
@@ -1803,13 +1801,24 @@ export class PollarClient {
   private async _storeSession(session: PollarApplicationConfigContent): Promise<void> {
     console.info('[PollarClient] Session stored');
 
+    const w = session.wallet;
     const persisted: PollarPersistedSession = {
       clientSessionId: session.clientSessionId,
       userId: session.userId ?? null,
       status: session.status,
       token: session.token,
       user: session.user,
-      wallet: session.wallet,
+      // The wire response still carries the legacy `publicKey` alias (kept for
+      // older SDKs); the persisted session standardizes on `address` only.
+      wallet: {
+        type: w.type,
+        address: w.address ?? w.publicKey ?? null,
+        ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
+        ...(w.createdAt !== undefined ? { createdAt: w.createdAt } : {}),
+        ...(w.linkedAt !== undefined ? { linkedAt: w.linkedAt } : {}),
+        ...(w.network !== undefined ? { network: w.network } : {}),
+        ...(w.deployTxHash !== undefined ? { deployTxHash: w.deployTxHash } : {}),
+      },
     };
     this._session = persisted;
 

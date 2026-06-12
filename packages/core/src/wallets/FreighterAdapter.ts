@@ -48,7 +48,7 @@ export class FreighterAdapter implements WalletAdapter {
       throw new Error('Failed to get user information from Freighter');
     }
 
-    return { address: userInfo.publicKey, publicKey: userInfo.publicKey };
+    return { address: userInfo.publicKey };
   }
 
   async disconnect(): Promise<void> {

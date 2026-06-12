@@ -40,13 +40,13 @@ export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void>
       return;
     }
 
-    const { publicKey } = await withSignal(adapter.connect(), signal);
-    connectedWallet = publicKey;
+    const { address } = await withSignal(adapter.connect(), signal);
+    connectedWallet = address;
     deps.storeWalletAdapter(adapter, type);
     setAuthState({ step: 'authenticating_wallet' });
 
     const { data: walletData, error: walletError } = await api.POST('/auth/wallet', {
-      body: { clientSessionId, walletAddress: publicKey },
+      body: { clientSessionId, walletAddress: address },
       signal,
     });
 

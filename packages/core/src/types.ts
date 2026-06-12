@@ -23,10 +23,10 @@ export interface PollarPersistedSession {
   //   - 'custodial' → platform-managed Stellar account (G-address)
   //   - 'smart'     → Soroban smart-account / passkey (C-address)
   //   - 'external'  → user-connected wallet (Freighter/Albedo)
-  // `publicKey` holds the address for every type; `address` is an explicit alias.
+  // `address` is the on-chain address for every type (G-address for custodial,
+  // C-address for smart/passkey, the connected pubkey for external).
   wallet: {
     type: 'custodial' | 'smart' | 'external';
-    publicKey: string | null;
     address: string | null;
     existsOnStellar?: boolean;
     // On-chain creation time (smart = deploy; custodial = keypair creation).

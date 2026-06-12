@@ -78,7 +78,7 @@ export class AlbedoAdapter implements WalletAdapter {
       throw new Error('Albedo connection rejected');
     }
 
-    return { address: result.pubkey, publicKey: result.pubkey };
+    return { address: result.pubkey };
   }
 
   async disconnect(): Promise<void> {}

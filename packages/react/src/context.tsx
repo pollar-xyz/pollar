@@ -57,7 +57,7 @@ function sessionsEqual(a: PollarPersistedSession | null, b: PollarPersistedSessi
     a.token?.accessToken === b.token?.accessToken &&
     a.token?.refreshToken === b.token?.refreshToken &&
     a.token?.expiresAt === b.token?.expiresAt &&
-    a.wallet?.publicKey === b.wallet?.publicKey
+    a.wallet?.address === b.wallet?.address
   );
 }
 
@@ -281,9 +281,9 @@ export function PollarProvider({
   const [distributionRulesModalOpen, setDistributionRulesModalOpen] = useState(false);
 
   // PII (incl. providers.wallet.address) lives on `client.getUserProfile()`, not on the
-  // persisted session. For both external and custodial wallets, `wallet.publicKey`
-  // already holds the on-chain address we care about.
-  const walletAddress = sessionState?.wallet?.publicKey || '';
+  // persisted session. For every wallet type, `wallet.address` holds the on-chain
+  // address we care about.
+  const walletAddress = sessionState?.wallet?.address || '';
   const getClient = useCallback(() => pollarClient, [pollarClient]);
   // refreshBalance resolves the own wallet server-side from the session;
   // walletAddress stays in deps so the callback re-binds when the wallet changes.
