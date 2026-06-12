@@ -1,9 +1,18 @@
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 
+import type { PollarLogger } from '@pollar/core';
 import { Component, type ReactNode } from 'react';
 import { LOGO_POLLAR } from '../constants';
 
 declare const __POLLAR_VERSION__: string;
+
+// Module-level sink for the error boundary (a class component, so it can't read
+// React context inside `componentDidCatch`). `PollarProvider` points this at the
+// client's level-gated logger on mount; defaults to `console` until then.
+let _modalLog: PollarLogger = console;
+export function setModalErrorLogger(logger: PollarLogger): void {
+  _modalLog = logger;
+}
 
 interface ModalErrorBoundaryState {
   crashed: boolean;
@@ -17,7 +26,7 @@ export class ModalErrorBoundary extends Component<{ children: ReactNode; onClose
   }
 
   componentDidCatch(error: unknown) {
-    console.error('[PollarProvider] Modal crashed:', error);
+    _modalLog.error('[PollarProvider] Modal crashed:', error);
   }
 
   render() {

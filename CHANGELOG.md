@@ -39,6 +39,30 @@
   transparent once the matching backend is deployed.
 - Removed a dead `smart` local in `_runSmartTx` (assigned, never read).
 
+### Configurable logging — new features (all SDK packages)
+
+- **`logLevel` + `logger` on `PollarClientConfig`.** A new `LogLevel`
+  (`silent` < `error` < `warn` < `info` < `debug`, default **`info`**) filters
+  SDK logging, and an optional `logger?: PollarLogger` routes logs to a custom
+  sink (pino, Sentry breadcrumbs, a test spy…) instead of `console`. Exported
+  `createLogger(level, sink?)` and the `LogLevel` / `PollarLogger` types from
+  `@pollar/core`. `PollarClient.getLogger()` exposes the configured logger so
+  the runtime layer reuses the same level + sink.
+- **State-transition chatter is now `debug`.** The per-transition
+  `auth:…` / `transaction:…` / `network:…` logs, the session-status retry
+  warnings, and "Login cancelled" moved from `info` to `debug`, so the default
+  `info` console is much quieter without losing lifecycle logs (Initialized,
+  Session stored/restored/cleared, Tokens refreshed). Per-field session
+  validation detail dropped to `debug` too.
+- **No more double-logged key-manager init failures.** `NobleKeyManager` /
+  `WebCryptoKeyManager` no longer `console.error` on init failure — the error
+  already propagates to `PollarClient`, which logs it once through the
+  configured logger.
+- **`@pollar/stellar-wallets-kit-adapter`** gains `logLevel` / `logger` on
+  `StellarWalletsKitAdapterOptions` (set once at init — the kit is a global
+  singleton). **`@pollar/react`** routes the provider's logs and the modal
+  error boundary through the client's logger via `PollarClient.getLogger()`.
+
 ### `@pollar/react` — BREAKING
 
 - **`walletAddress` now derives from `session.wallet.address`** instead of

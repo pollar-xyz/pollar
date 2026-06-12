@@ -1,3 +1,4 @@
+import type { PollarLogger } from '../lib/logger';
 import type { OnStorageDegrade, Storage, StorageDegradeReason } from './types';
 
 const LOG_PREFIX = '[PollarClient:storage]';
@@ -31,6 +32,11 @@ export interface LocalStorageAdapterOptions {
    * in-memory fallback (e.g. quota exceeded, throwing `localStorage`).
    */
   onDegrade?: OnStorageDegrade;
+  /**
+   * Logger for the one-shot degrade warning. Defaults to the global `console`;
+   * `PollarClient` passes its level-gated logger so `logLevel` applies here too.
+   */
+  logger?: PollarLogger;
 }
 
 /**
@@ -55,7 +61,7 @@ export function createLocalStorageAdapter(options: LocalStorageAdapterOptions = 
   function degrade(reason: StorageDegradeReason, error?: unknown): void {
     if (degraded) return;
     degraded = true;
-    console.warn(`${LOG_PREFIX} localStorage unavailable (${reason}); degrading to in-memory storage`);
+    (options.logger ?? console).warn(`${LOG_PREFIX} localStorage unavailable (${reason}); degrading to in-memory storage`);
     options.onDegrade?.(reason, error);
   }
 

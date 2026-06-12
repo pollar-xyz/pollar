@@ -58,9 +58,9 @@ export class NobleKeyManager implements KeyManager {
     if (this.privateKey) return;
     if (!this._initPromise) {
       this._initPromise = this._doInit().catch((err) => {
-        // Loud log so init failures don't masquerade as cryptic "privateKey is
-        // null" downstream errors. Clear the promise so the next call retries.
-        console.error('[PollarClient:keys] NobleKeyManager init failed', err);
+        // Clear the promise so the next call retries. The error propagates to
+        // the caller — `PollarClient` logs it through its configured logger, so
+        // we don't double-log (raw, ungated) here.
         this._initPromise = null;
         throw err;
       });

@@ -4,7 +4,7 @@ import { SessionStatusError, waitForSessionReady } from '../stream';
 import { FlowDeps } from './deps';
 
 export async function authenticate(clientSessionId: string, deps: FlowDeps, expectedWallet?: string): Promise<void> {
-  const { api, basePath, useStreaming, signal, setAuthState, storeSession, clearSession } = deps;
+  const { api, logger, basePath, useStreaming, signal, setAuthState, storeSession, clearSession } = deps;
 
   setAuthState({ step: 'authenticating' });
 
@@ -16,6 +16,7 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
       check: (data) => data?.status === 'READY',
       useStreaming,
       signal,
+      logger,
     });
   } catch (err) {
     // Terminal session-status condition (invalid / expired). Reset to an error
@@ -50,7 +51,7 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
     signal,
   });
 
-  if (data?.code === 'SDK_LOGIN_SUCCESS' && isValidSession(data?.content)) {
+  if (data?.code === 'SDK_LOGIN_SUCCESS' && isValidSession(data?.content, logger)) {
     if (expectedWallet && data.content.data.providers.wallet?.address !== expectedWallet) {
       setAuthState({
         step: 'error',

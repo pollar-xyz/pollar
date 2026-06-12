@@ -1,5 +1,6 @@
 import { PollarApiClient } from '../api/client';
 import { abortError, throwIfAborted } from '../lib/abort';
+import type { PollarLogger } from '../lib/logger';
 
 /** Terminal session-status conditions, surfaced identically by the SSE stream
  *  (as `error` events) and the poll endpoint (as 404 / 410). When either occurs
@@ -50,6 +51,7 @@ export async function streamUntilFound(
   check: (data: Record<string, unknown>) => boolean,
   retryDelayMs = 200,
   signal?: AbortSignal,
+  logger: PollarLogger = console,
 ): Promise<Record<string, unknown>> {
   let backoff = retryDelayMs;
   const sleep = async (ms: number): Promise<void> => {
@@ -70,7 +72,7 @@ export async function streamUntilFound(
       }));
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') throw e;
-      console.warn('[PollarClient:stream] session-status request failed; will retry', e);
+      logger.debug('[PollarClient:stream] session-status request failed; will retry', e);
     }
 
     if (error || !data) {
@@ -116,7 +118,7 @@ export async function streamUntilFound(
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') throw e;
       if (e instanceof SessionStatusError) throw e;
-      console.warn('[PollarClient:stream] session-status stream read failed; will retry', e);
+      logger.debug('[PollarClient:stream] session-status stream read failed; will retry', e);
     } finally {
       reader.releaseLock();
     }
@@ -157,6 +159,7 @@ export async function pollUntilFound(
   check: (data: Record<string, unknown>) => boolean,
   intervalMs = 500,
   signal?: AbortSignal,
+  logger: PollarLogger = console,
 ): Promise<Record<string, unknown>> {
   const url = `${baseUrl}/auth/session/status/${encodeURIComponent(clientSessionId)}/poll`;
   let backoff = intervalMs;
@@ -177,7 +180,7 @@ export async function pollUntilFound(
       envelope = (await response.json().catch(() => null)) as StatusPollEnvelope | null;
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') throw e;
-      console.warn('[PollarClient:stream] session-status poll failed; will retry', e);
+      logger.debug('[PollarClient:stream] session-status poll failed; will retry', e);
     }
 
     // Terminal: the session is gone (404 / INVALID) or expired (410 / EXPIRED).
@@ -216,9 +219,10 @@ export function waitForSessionReady(args: {
   useStreaming: boolean;
   retryDelayMs?: number;
   signal?: AbortSignal;
+  logger?: PollarLogger;
 }): Promise<Record<string, unknown>> {
-  const { api, baseUrl, clientSessionId, check, useStreaming, retryDelayMs, signal } = args;
+  const { api, baseUrl, clientSessionId, check, useStreaming, retryDelayMs, signal, logger = console } = args;
   return useStreaming
-    ? streamUntilFound(api, clientSessionId, check, retryDelayMs ?? 200, signal)
-    : pollUntilFound(baseUrl, clientSessionId, check, retryDelayMs ?? 500, signal);
+    ? streamUntilFound(api, clientSessionId, check, retryDelayMs ?? 200, signal, logger)
+    : pollUntilFound(baseUrl, clientSessionId, check, retryDelayMs ?? 500, signal, logger);
 }

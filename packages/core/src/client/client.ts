@@ -6,6 +6,7 @@ import { buildProof } from '../dpop';
 import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
 import { hashApiKey } from '../lib/api-key-hash';
+import { createLogger, type PollarLogger } from '../lib/logger';
 import { randomUUID } from '../lib/random-uuid';
 import { StellarNetwork } from '../stellar/StellarClient';
 import { defaultStorage } from '../storage/autodetect';
@@ -78,6 +79,8 @@ const isClientRuntime = isBrowser || isReactNative;
 const REFRESH_SKEW_SECONDS = 60;
 
 function warnServerSide(method: string): void {
+  // Module-level (no client instance / logger yet) — and a misuse warning the
+  // developer should always see, so it stays on the raw console.
   console.warn(
     `[PollarClient] ${method}() called server-side — browser APIs unavailable. Use PollarClient only in Client Components.`,
   );
@@ -89,6 +92,7 @@ export class PollarClient {
   readonly basePath: string;
 
   private readonly _api: PollarApiClient;
+  private readonly _log: PollarLogger;
   private readonly _storage: Storage;
   private readonly _keyManager: KeyManager;
   /** Resolves once `keyManager.init()` and the initial session restore complete. */
@@ -178,10 +182,12 @@ export class PollarClient {
     this.apiKey = config.apiKey;
     this.id = randomUUID();
     this.basePath = `${config.baseUrl || 'https://sdk.api.pollar.xyz'}/v1`;
+    this._log = createLogger(config.logLevel ?? 'info', config.logger);
 
     this._storage =
       config.storage ??
       defaultStorage({
+        logger: this._log,
         onDegrade: (reason, error) => {
           // Forward to the legacy one-shot callback (back-compat) and to any
           // subscribers added via `client.onStorageDegrade(cb)`. Both fire
@@ -212,7 +218,7 @@ export class PollarClient {
       return;
     }
 
-    console.info(
+    this._log.info(
       `[PollarClient] Initialized v${POLLAR_CORE_VERSION} — endpoint: ${this.basePath}, network: ${this._networkState.network}`,
     );
 
@@ -238,7 +244,7 @@ export class PollarClient {
       const sessionKey = sessionStorageKey(this._apiKeyHash);
       const handler = (e: StorageEvent): void => {
         if (e.key === sessionKey) {
-          this._restoreSession().catch((err) => console.error('[PollarClient] Cross-tab restore failed', err));
+          this._restoreSession().catch((err) => this._log.error('[PollarClient] Cross-tab restore failed', err));
         }
       };
       window.addEventListener('storage', handler);
@@ -248,7 +254,7 @@ export class PollarClient {
     try {
       await this._keyManager.init();
     } catch (err) {
-      console.warn('[PollarClient] KeyManager init failed; DPoP unavailable for this session', err);
+      this._log.warn('[PollarClient] KeyManager init failed; DPoP unavailable for this session', err);
     }
     await this._restoreSession();
 
@@ -310,7 +316,7 @@ export class PollarClient {
           try {
             self._requestBodyCache.set(request, await request.clone().arrayBuffer());
           } catch (err) {
-            console.warn('[PollarClient] Could not snapshot request body for retry', err);
+            this._log.warn('[PollarClient] Could not snapshot request body for retry', err);
           }
         }
         // The refresh endpoint must not wait on its own in-flight refresh —
@@ -399,7 +405,7 @@ export class PollarClient {
         this._keyManager,
       );
     } catch (err) {
-      console.warn('[PollarClient] DPoP proof build failed', err);
+      this._log.warn('[PollarClient] DPoP proof build failed', err);
       return null;
     }
   }
@@ -472,7 +478,7 @@ export class PollarClient {
   private async _doRefresh(): Promise<void> {
     const refreshToken = this._session?.token?.refreshToken;
     if (!refreshToken) {
-      console.warn('[PollarClient] Refresh skipped: no refresh token in session');
+      this._log.warn('[PollarClient] Refresh skipped: no refresh token in session');
       await this._clearSession();
       throw new Error('No refresh token available');
     }
@@ -484,13 +490,13 @@ export class PollarClient {
       data = response.data;
       error = response.error;
     } catch (err) {
-      console.error('[PollarClient] /auth/refresh request threw', err);
+      this._log.error('[PollarClient] /auth/refresh request threw', err);
       await this._clearSession();
       throw err;
     }
 
     if (error || !data) {
-      console.error('[PollarClient] /auth/refresh returned error', { error });
+      this._log.error('[PollarClient] /auth/refresh returned error', { error });
       await this._clearSession();
       throw new Error('Refresh failed');
     }
@@ -498,7 +504,7 @@ export class PollarClient {
     if (!successData.success || !successData.content?.token) {
       // Don't log `successData` — its `content.token` would write access/refresh
       // tokens to the console. Log only the non-sensitive shape.
-      console.error('[PollarClient] /auth/refresh response malformed', {
+      this._log.error('[PollarClient] /auth/refresh response malformed', {
         success: successData.success,
         hasToken: !!successData.content?.token,
       });
@@ -513,7 +519,7 @@ export class PollarClient {
       typeof newToken.expiresAt !== 'number'
     ) {
       // Log the field TYPES, never the token values themselves.
-      console.error('[PollarClient] /auth/refresh token shape invalid', {
+      this._log.error('[PollarClient] /auth/refresh token shape invalid', {
         accessToken: typeof newToken.accessToken,
         refreshToken: typeof newToken.refreshToken,
         expiresAt: typeof newToken.expiresAt,
@@ -526,9 +532,9 @@ export class PollarClient {
       try {
         this._session = { ...this._session, token: newToken };
         await writeStorage(this._storage, this.apiKeyHash, this._session);
-        console.info('[PollarClient] Tokens refreshed');
+        this._log.info('[PollarClient] Tokens refreshed');
       } catch (err) {
-        console.error('[PollarClient] Failed to persist refreshed session', err);
+        this._log.error('[PollarClient] Failed to persist refreshed session', err);
         // In-memory state is still updated; the session works for this
         // process but won't survive reload. Don't clear — that'd surprise
         // the user with a logout for what's essentially a storage hiccup.
@@ -588,7 +594,7 @@ export class PollarClient {
     try {
       await this.refresh();
     } catch (err) {
-      console.warn('[PollarClient] Proactive refresh failed; session cleared', err);
+      this._log.warn('[PollarClient] Proactive refresh failed; session cleared', err);
     }
   }
 
@@ -640,7 +646,7 @@ export class PollarClient {
       try {
         cb(reason, error);
       } catch (err) {
-        console.error('[PollarClient] onStorageDegrade listener threw', err);
+        this._log.error('[PollarClient] onStorageDegrade listener threw', err);
       }
     }
   }
@@ -783,7 +789,7 @@ export class PollarClient {
       warnServerSide('logout');
       return;
     }
-    console.info('[PollarClient] Logout requested', { everywhere: !!options.everywhere });
+    this._log.info('[PollarClient] Logout requested', { everywhere: !!options.everywhere });
 
     if (this._session?.token?.accessToken) {
       try {
@@ -791,14 +797,14 @@ export class PollarClient {
           body: options.everywhere ? { everywhere: true } : {},
         });
       } catch (err) {
-        console.warn('[PollarClient] Server logout failed (continuing with local clear)', err);
+        this._log.warn('[PollarClient] Server logout failed (continuing with local clear)', err);
       }
     }
 
     try {
       await this._clearSession();
     } catch (err) {
-      console.warn('[PollarClient] Local logout cleanup failed', err);
+      this._log.warn('[PollarClient] Local logout cleanup failed', err);
     }
   }
 
@@ -882,6 +888,15 @@ export class PollarClient {
 
   getNetworkState(): NetworkState {
     return this._networkState;
+  }
+
+  /**
+   * The client's level-gated logger (built from `logLevel` / `logger`). Exposed
+   * so the runtime layer (`@pollar/react`) can route its own logs through the
+   * same level and sink instead of calling `console` directly.
+   */
+  getLogger(): PollarLogger {
+    return this._log;
   }
 
   setNetwork(network: StellarNetwork): void {
@@ -1057,7 +1072,7 @@ export class PollarClient {
       this._setTransactionState({ step: 'error', phase: 'building', ...(details && { details }) });
       return { status: 'error', ...(details && { details }) };
     } catch (err) {
-      console.error('[PollarClient] buildTx failed', err);
+      this._log.error('[PollarClient] buildTx failed', err);
       this._setTransactionState({ step: 'error', phase: 'building' });
       return { status: 'error' };
     }
@@ -1647,6 +1662,7 @@ export class PollarClient {
   private _flowDeps(signal: AbortSignal) {
     return {
       api: this._api,
+      logger: this._log,
       basePath: this.basePath,
       // SSE status streaming works on web; React Native's `fetch` has no
       // readable `response.body`, so those clients poll the non-streaming
@@ -1706,12 +1722,12 @@ export class PollarClient {
 
   private _handleFlowError(error: unknown): void {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.info('[PollarClient] Login cancelled');
+      this._log.debug('[PollarClient] Login cancelled');
       this._setAuthState({ step: 'idle' });
       return;
     }
     if (error instanceof Error && (error as { code?: string }).code === AUTH_ERROR_CODES.WALLET_RESOLVER_TIMEOUT) {
-      console.error('[PollarClient]', error.message);
+      this._log.error('[PollarClient]', error.message);
       this._setAuthState({
         step: 'error',
         previousStep: this._authState.step,
@@ -1720,7 +1736,7 @@ export class PollarClient {
       });
       return;
     }
-    console.error('[PollarClient] Unexpected error in auth flow', error);
+    this._log.error('[PollarClient] Unexpected error in auth flow', error);
     this._setAuthState({
       step: 'error',
       previousStep: this._authState.step,
@@ -1730,7 +1746,7 @@ export class PollarClient {
   }
 
   private async _restoreSession(): Promise<void> {
-    this._session = await readStorage(this._storage, this.apiKeyHash);
+    this._session = await readStorage(this._storage, this.apiKeyHash, this._log);
     if (this._session) {
       const storedType = await readWalletType(this._storage, this.apiKeyHash);
       if (storedType) {
@@ -1740,10 +1756,10 @@ export class PollarClient {
           // No resolver knows this id (e.g. user removed the kit-adapter
           // package). Session stays valid; signing will fall back to the
           // server-side custodial path until the user reconnects a wallet.
-          console.warn('[PollarClient] Could not restore wallet adapter for stored id', { id: storedType, err });
+          this._log.warn('[PollarClient] Could not restore wallet adapter for stored id', { id: storedType, err });
         }
       }
-      console.info('[PollarClient] Session restored from storage');
+      this._log.info('[PollarClient] Session restored from storage');
       // Emit through the setter so listeners that subscribe after
       // _initialize() resolves still get notified. A direct assignment to
       // _authState would race past any onAuthStateChange subscription that
@@ -1758,7 +1774,7 @@ export class PollarClient {
       // UI never blocks on a network round-trip at startup.
       void this._resume();
     } else {
-      console.info('[PollarClient] No session in storage');
+      this._log.info('[PollarClient] No session in storage');
     }
   }
 
@@ -1792,14 +1808,14 @@ export class PollarClient {
       if ((err as { name?: string })?.name === 'AbortError') return;
       // Network failure — keep the optimistic (unverified) session and retry
       // when the app next becomes visible or on the next authed request.
-      console.warn('[PollarClient] resume failed (network); will retry', err);
+      this._log.warn('[PollarClient] resume failed (network); will retry', err);
     } finally {
       if (this._resumeController === controller) this._resumeController = null;
     }
   }
 
   private async _storeSession(session: PollarApplicationConfigContent): Promise<void> {
-    console.info('[PollarClient] Session stored');
+    this._log.info('[PollarClient] Session stored');
 
     const w = session.wallet;
     const persisted: PollarPersistedSession = {
@@ -1840,7 +1856,7 @@ export class PollarClient {
   }
 
   private async _clearSession(): Promise<void> {
-    console.info('[PollarClient] Session cleared');
+    this._log.info('[PollarClient] Session cleared');
     this._clearRefreshTimer();
     this._session = null;
     this._profile = null;
@@ -1849,7 +1865,7 @@ export class PollarClient {
     try {
       await this._keyManager.reset();
     } catch (err) {
-      console.warn('[PollarClient] KeyManager reset failed during clearSession', err);
+      this._log.warn('[PollarClient] KeyManager reset failed during clearSession', err);
     }
     await removeStorage(this._storage, this.apiKeyHash);
     this._transactionState = null;
@@ -1865,19 +1881,19 @@ export class PollarClient {
   private _setNetworkState(next: NetworkState): void {
     this._networkState = next;
     const label = next.step === 'connected' ? next.network : next.step;
-    console.info(`[PollarClient] network:${label}`);
+    this._log.debug(`[PollarClient] network:${label}`);
     for (const cb of this._networkStateListeners) cb(next);
   }
 
   private _setAuthState(next: AuthState): void {
     this._authState = next;
-    console.info(`[PollarClient] auth:${next.step}`);
+    this._log.debug(`[PollarClient] auth:${next.step}`);
     for (const cb of this._authStateListeners) cb(next);
   }
 
   private _setTransactionState(next: TransactionState): void {
     this._transactionState = next;
-    console.info(`[PollarClient] transaction:${next.step}`);
+    this._log.debug(`[PollarClient] transaction:${next.step}`);
     for (const cb of this._transactionStateListeners) cb(next);
   }
 

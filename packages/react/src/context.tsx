@@ -21,7 +21,7 @@ import {
   WalletId,
 } from '@pollar/core';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { ModalErrorBoundary } from './components/commons';
+import { ModalErrorBoundary, setModalErrorLogger } from './components/commons';
 import { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
 import { EnabledAssetsModal } from './components/enabled-assets-modal/EnabledAssetsModal';
 import { KycModal } from './components/kyc-modal/KycModal';
@@ -264,6 +264,12 @@ export function PollarProvider({
 
   // Presence of `appConfig` is the opt-out: if the consumer passes it (even
   // `{}`), we trust them and skip the remote fetch.
+  // Route the modal error boundary's logs through the client's level-gated
+  // logger (it's a class component that can't read context directly).
+  useEffect(() => {
+    setModalErrorLogger(pollarClient.getLogger());
+  }, [pollarClient]);
+
   useEffect(() => {
     if (appConfigProp !== undefined) return;
     let cancelled = false;
@@ -274,7 +280,7 @@ export function PollarProvider({
         setResolvedConfig(fetched as PollarConfig);
       })
       .catch((err) => {
-        console.error('[PollarProvider] getAppConfig failed', err);
+        pollarClient.getLogger().error('[PollarProvider] getAppConfig failed', err);
       });
     return () => {
       cancelled = true;

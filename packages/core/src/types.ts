@@ -1,5 +1,6 @@
 import { pollarPaths, StellarNetwork } from './index';
 import type { KeyManager } from './keys/types';
+import type { LogLevel, PollarLogger } from './lib/logger';
 import type { OnStorageDegrade, Storage } from './storage/types';
 import type { VisibilityProvider } from './visibility/types';
 import { WalletAdapterResolver, WalletId } from './wallets';
@@ -68,6 +69,19 @@ export interface PollarClientConfig {
    * apiKey)`: WebCrypto in browsers, `@noble/curves` in RN.
    */
   keyManager?: KeyManager;
+  /**
+   * Minimum severity the SDK logs. `silent` disables all SDK logging; the rest
+   * emit that level and everything more important (`error` < `warn` < `info` <
+   * `debug`). State-transition chatter (auth/tx/network) is at `debug`.
+   * Defaults to `'info'`.
+   */
+  logLevel?: LogLevel;
+  /**
+   * Sink the SDK writes logs to. Defaults to the global `console`. Inject your
+   * own (pino, Sentry breadcrumbs, a test spy…) to route SDK logs anywhere.
+   * Filtering by `logLevel` still applies on top of whatever you pass.
+   */
+  logger?: PollarLogger;
   /**
    * Notified when persistent storage silently degrades to in-memory mode
    * (Safari private browsing quota errors, sandboxed iframes, etc.). Useful

@@ -115,10 +115,10 @@ export class WebCryptoKeyManager implements KeyManager {
     if (this.keyPair) return;
     if (!this._initPromise) {
       this._initPromise = this._doInit().catch((err) => {
-        // Loud log so init failures don't masquerade as cryptic "publicJwk is
-        // null" downstream errors. Clear the promise so the next call retries
-        // instead of permanently returning a rejected promise.
-        console.error('[PollarClient:keys] WebCryptoKeyManager init failed', err);
+        // Clear the promise so the next call retries instead of permanently
+        // returning a rejected promise. The error propagates to the caller —
+        // `PollarClient` logs it through its configured logger, so we don't
+        // double-log (raw, ungated) here.
         this._initPromise = null;
         throw err;
       });

@@ -205,6 +205,41 @@ Same as React (`useSyncExternalStore`), plus the entry-file polyfills and inject
 React Native sections above. OAuth and external-wallet logins require `openAuthUrl` / `walletAdapter` to be injected
 (the built-in popup/extension adapters are web-only).
 
+## Logging
+
+The SDK logs through a level-gated logger. Configure it on `PollarClient`:
+
+```ts
+const client = new PollarClient({
+  apiKey: 'pk_...',
+  logLevel: 'warn', // 'silent' | 'error' | 'warn' | 'info' | 'debug' (default 'info')
+});
+```
+
+Levels are ordered `silent` < `error` < `warn` < `info` < `debug`; setting one emits that level and every more
+important one. `silent` disables all SDK logging. State-transition chatter (`auth:…`, `transaction:…`, `network:…`)
+and retry warnings live at `debug`, so the default `info` keeps the console quiet while still showing lifecycle events
+(Initialized, Session stored/restored, Tokens refreshed) and all warnings/errors.
+
+Route logs to your own sink (pino, Sentry breadcrumbs, a test spy…) with `logger` — filtering by `logLevel` still
+applies on top:
+
+```ts
+import { PollarClient, type PollarLogger } from '@pollar/core';
+
+const sink: PollarLogger = {
+  error: (...a) => myLogger.error(...a),
+  warn: (...a) => myLogger.warn(...a),
+  info: (...a) => myLogger.info(...a),
+  debug: (...a) => myLogger.debug(...a),
+};
+
+const client = new PollarClient({ apiKey: 'pk_...', logLevel: 'debug', logger: sink });
+```
+
+`client.getLogger()` returns the configured logger (used internally by `@pollar/react` so its own logs honor the same
+level + sink). `@pollar/stellar-wallets-kit-adapter` accepts the same `logLevel` / `logger` on its options.
+
 ## Preserved-on-disk storage shape
 
 0.7.0 persists exactly:
