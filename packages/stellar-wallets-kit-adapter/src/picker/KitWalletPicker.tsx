@@ -45,7 +45,8 @@ export function KitWalletPicker({ onConnect, authState, network, modules, picker
     let result: ISupportedWallet[];
 
     if (allowedIds && allowedIds.length > 0) {
-      // Honor `as-given` order from the allowedIds; warn once for unknowns.
+      // Build the base list in `allowedIds` order; warn once per unknown id.
+      // A later `order` setting may re-sort this list.
       result = [];
       for (const id of allowedIds) {
         const w = byId.get(id);

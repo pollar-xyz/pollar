@@ -17,7 +17,7 @@ export class ModalErrorBoundary extends Component<{ children: ReactNode; onClose
   }
 
   componentDidCatch(error: unknown) {
-    console.error('[Pollar] Modal crashed:', error);
+    console.error('[PollarProvider] Modal crashed:', error);
   }
 
   render() {

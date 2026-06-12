@@ -1,11 +1,4 @@
-import {
-  AuthState,
-  PollarApplicationConfigContent,
-  PollarClientConfig,
-  PollarLoginOptions,
-  WalletId,
-  pollarPaths,
-} from '@pollar/core';
+import { AuthState, WalletId, pollarPaths } from '@pollar/core';
 import type { ReactNode } from 'react';
 
 type ConfigResponse = pollarPaths['/applications/config']['get']['responses'][200]['content']['application/json'];
@@ -31,19 +24,6 @@ export interface RenderWalletsProps {
  * with whatever the slot returns (typically a kit-powered wallet grid).
  */
 export type RenderWalletsSlot = (props: RenderWalletsProps) => ReactNode;
-
-export interface AuthProviderProps {
-  config: PollarClientConfig;
-  children: React.ReactNode;
-}
-
-export interface AuthContextValue {
-  session: PollarApplicationConfigContent | null;
-  isLoading: boolean;
-  isAuthenticated: boolean;
-  login: (options: PollarLoginOptions) => void;
-  logout: () => Promise<void>;
-}
 
 export interface LoginButtonProps {
   onSuccess?: () => void;

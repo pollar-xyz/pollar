@@ -28,7 +28,7 @@ const IN_FLIGHT_STEPS = new Set<TransactionState['step']>([
   'building-signing-submitting',
 ]);
 
-/** Step values that should show the build summary (preview / details panel). */
+/** Step values that should show the transaction details panel. */
 const SHOW_DETAILS_STEPS = new Set<TransactionState['step']>([
   'built',
   'signing',
