@@ -52,7 +52,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
 
   const { theme = 'light', accentColor = '#005DB4', logoUrl, emailEnabled, embeddedWallets, providers } = styles;
   // `smartWallet` isn't in the server-driven styles type yet — read it
-  // defensively and default to shown (web). A dashboard toggle is a follow-up.
+  // defensively and default to shown (web).
   const smartWallet = (styles as { smartWallet?: boolean }).smartWallet ?? true;
 
   function handleClose() {

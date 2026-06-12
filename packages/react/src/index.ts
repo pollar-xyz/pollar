@@ -1,8 +1,6 @@
 export { PollarProvider, usePollar } from './context';
 export { createPollarAdapterHook } from './usePollarAdapter';
 export type {
-  AuthProviderProps,
-  AuthContextValue,
   LoginButtonProps,
   AuthModalProps,
   PollarStyles,
@@ -11,6 +9,7 @@ export type {
   RenderWalletsSlot,
 } from './types';
 export { WalletButton } from './components/wallet-button/WalletButton';
+export { WalletButtonTemplate, type WalletButtonTemplateProps } from './components/wallet-button/WalletButtonTemplate';
 
 // ─── Modals ───────────────────────────────────────────────────────────────────
 export { KycModal } from './components/kyc-modal/KycModal';

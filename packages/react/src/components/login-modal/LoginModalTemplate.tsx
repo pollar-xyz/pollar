@@ -266,53 +266,53 @@ export function LoginModalTemplate({
             </div>
           )}
 
-          {embeddedWallets && (
+          {(embeddedWallets || smartWallet) && (
             <div className="pollar-wallet-section">
-              <button
-                type="button"
-                disabled={isLoading}
-                className="pollar-wallet-entry-btn"
-                onClick={() => setShowWalletPicker(true)}
-              >
-                <svg
-                  width="18"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              {embeddedWallets && (
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  className="pollar-wallet-entry-btn"
+                  onClick={() => setShowWalletPicker(true)}
                 >
-                  <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                </svg>
-                Wallet
-              </button>
-            </div>
-          )}
+                  <svg
+                    width="18"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  Wallet
+                </button>
+              )}
 
-          {smartWallet && (
-            <div className="pollar-wallet-section">
-              <button
-                type="button"
-                disabled={isLoading}
-                className="pollar-wallet-entry-btn"
-                onClick={onSmartWallet}
-              >
-                <svg
-                  width="18"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              {smartWallet && (
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  className="pollar-wallet-entry-btn"
+                  onClick={onSmartWallet}
                 >
-                  <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                </svg>
-                Smart Wallet
-              </button>
+                  <svg
+                    width="18"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M16 8V6a4 4 0 00-8 0v2M5 8h14a1 1 0 011 1v10a1 1 0 01-1 1H5a1 1 0 01-1-1V9a1 1 0 011-1zm7 5v2" />
+                  </svg>
+                  Smart Wallet
+                </button>
+              )}
             </div>
           )}
         </>

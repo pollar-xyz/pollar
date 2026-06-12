@@ -1890,9 +1890,15 @@ export interface operations {
                                 ready: boolean;
                             };
                             wallet: {
+                                /** @enum {string} */
+                                type: "custodial" | "smart" | "external";
                                 publicKey: string | null;
+                                address: string | null;
                                 existsOnStellar?: boolean;
                                 createdAt?: number;
+                                linkedAt?: number;
+                                network?: string;
+                                deployTxHash?: string | null;
                             };
                             data: {
                                 mail: string;
@@ -2640,7 +2646,7 @@ export interface operations {
                         /** @constant */
                         success: true;
                         content: {
-                            unsignedXdr: string;
+                            unsignedXdr?: string;
                             networkPassphrase: string;
                             estimatedFee: string;
                             summary: {
@@ -2648,6 +2654,13 @@ export interface operations {
                                 lines: string[];
                                 network: string;
                                 fee: string;
+                            };
+                            /** Present only for smart-account (C-address) builds. */
+                            smart?: {
+                                digest: string;
+                                entryXdr: string;
+                                funcXdr: string;
+                                credentialId: string;
                             };
                         };
                     };
@@ -2891,7 +2904,17 @@ export interface operations {
                     /** @enum {string} */
                     network: "testnet" | "mainnet";
                     publicKey: string;
-                    signedXdr: string;
+                    signedXdr?: string;
+                    /** Smart-account (C-address) flow: prepared entry + func + passkey assertion. */
+                    smart?: {
+                        entryXdr: string;
+                        funcXdr: string;
+                        assertion: {
+                            authenticatorData: string;
+                            clientDataJSON: string;
+                            signature: string;
+                        };
+                    };
                     idempotencyKey?: string;
                 };
             };

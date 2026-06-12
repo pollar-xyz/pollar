@@ -20,10 +20,10 @@ function randomUserId(): string {
  * credential it falls through to `create()` (new user → the server then
  * deploys the C-address).
  *
- * Known M1 tradeoff: WebAuthn surfaces "no credential" and "user cancelled" as
+ * Known tradeoff: WebAuthn surfaces "no credential" and "user cancelled" as
  * the same `NotAllowedError`, so cancelling the login prompt falls through to
- * registration and would create a new wallet. An explicit "create another
- * wallet" action is the post-MVP refinement.
+ * registration and would create a new wallet. A dedicated "create another
+ * wallet" action would disambiguate the two.
  *
  * rpId = the current page's hostname (the customer app's domain), which is what
  * the passkey is bound to — the anti-phishing guarantee.

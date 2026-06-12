@@ -125,7 +125,7 @@ interface PollarContextValue {
   // tx history
   txHistory: TxHistoryState;
   openTxHistoryModal: () => void;
-  // wallet balance
+  // wallet balance modal
   openWalletBalanceModal: () => void;
   // send / receive
   openSendModal: () => void;
@@ -283,7 +283,7 @@ export function PollarProvider({
   // already holds the on-chain address we care about.
   const walletAddress = sessionState?.wallet?.publicKey || '';
   const getClient = useCallback(() => pollarClient, [pollarClient]);
-  // refreshBalance now resolves the own wallet server-side from the session;
+  // refreshBalance resolves the own wallet server-side from the session;
   // walletAddress stays in deps so the callback re-binds when the wallet changes.
   const refreshWalletBalance = useCallback(() => pollarClient.refreshBalance(), [pollarClient, walletAddress]);
 

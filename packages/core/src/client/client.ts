@@ -27,6 +27,7 @@ import {
   KycStatus,
   NetworkState,
   PasskeyCeremony,
+  PasskeySigner,
   PollarApplicationConfigContent,
   PollarClientConfig,
   PollarFlowError,
@@ -164,6 +165,7 @@ export class PollarClient {
   private readonly _walletAdapterResolver: WalletAdapterResolver | null;
   private readonly _walletResolverTimeoutMs: number;
   private readonly _passkey: PasskeyCeremony | null;
+  private readonly _passkeySign: PasskeySigner | null;
   private _loginController: AbortController | null = null;
   /** Aborts an in-flight `/auth/session/resume` on destroy() or re-trigger. */
   private _resumeController: AbortController | null = null;
@@ -192,6 +194,7 @@ export class PollarClient {
     this._walletAdapterResolver = config.walletAdapter ?? null;
     this._walletResolverTimeoutMs = config.walletResolverTimeoutMs ?? 5000;
     this._passkey = config.passkey ?? null;
+    this._passkeySign = config.passkeySign ?? null;
     this._deviceLabel = config.deviceLabel;
     this._visibilityProvider = config.visibilityProvider ?? defaultVisibilityProvider();
     this._maxIdleMs = config.maxIdleMs;
@@ -487,13 +490,18 @@ export class PollarClient {
     }
 
     if (error || !data) {
-      console.warn('[PollarClient] /auth/refresh returned error', { error });
+      console.error('[PollarClient] /auth/refresh returned error', { error });
       await this._clearSession();
       throw new Error('Refresh failed');
     }
     const successData = data as { success?: boolean; content?: { token?: PollarPersistedSession['token'] } };
     if (!successData.success || !successData.content?.token) {
-      console.warn('[PollarClient] /auth/refresh response malformed', successData);
+      // Don't log `successData` — its `content.token` would write access/refresh
+      // tokens to the console. Log only the non-sensitive shape.
+      console.error('[PollarClient] /auth/refresh response malformed', {
+        success: successData.success,
+        hasToken: !!successData.content?.token,
+      });
       await this._clearSession();
       throw new Error('Refresh response malformed');
     }
@@ -504,7 +512,12 @@ export class PollarClient {
       typeof newToken.refreshToken !== 'string' ||
       typeof newToken.expiresAt !== 'number'
     ) {
-      console.warn('[PollarClient] /auth/refresh token shape invalid', newToken);
+      // Log the field TYPES, never the token values themselves.
+      console.error('[PollarClient] /auth/refresh token shape invalid', {
+        accessToken: typeof newToken.accessToken,
+        refreshToken: typeof newToken.refreshToken,
+        expiresAt: typeof newToken.expiresAt,
+      });
       await this._clearSession();
       throw new Error('Refresh response token shape invalid');
     }
@@ -1323,10 +1336,19 @@ export class PollarClient {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ): Promise<SubmitOutcome> {
+    // Smart wallet (passkey / C-address): build (prepare) → sign the auth digest
+    // with the passkey → submit. The signed entry is assembled server-side.
+    if (this._session?.wallet?.type === 'smart') {
+      return this._runSmartTx(operation, params, options);
+    }
+
     if (this._walletAdapter) {
       const built = await this.buildTx(operation, params, options);
       if (built.status === 'error') {
         return { status: 'error', ...(built.details && { details: built.details }) };
+      }
+      if (!built.buildData.unsignedXdr) {
+        return { status: 'error', details: 'build returned no unsigned transaction' };
       }
       return this.signAndSubmitTx(built.buildData.unsignedXdr);
     }
@@ -1389,6 +1411,106 @@ export class PollarClient {
     options?: TxBuildBody['options'],
   ): Promise<SubmitOutcome> {
     return this.buildAndSignAndSubmitTx(operation, params, options);
+  }
+
+  /**
+   * Smart-wallet (passkey / C-address) transaction: build (server prepares the
+   * SAC transfer + returns the auth digest) → sign the digest with the passkey
+   * → submit (server assembles the signed auth entry and broadcasts; the
+   * sponsor pays the fee). State machine: building → built → signing →
+   * submitting → success.
+   */
+  private async _runSmartTx(
+    operation: TxBuildBody['operation'],
+    params: TxBuildBody['params'],
+    options?: TxBuildBody['options'],
+  ): Promise<SubmitOutcome> {
+    const publicKey = this._session?.wallet?.publicKey;
+    if (!publicKey) {
+      this._setTransactionState({ step: 'error', phase: 'building', details: 'No wallet connected' });
+      return { status: 'error', details: 'No wallet connected' };
+    }
+    if (!this._passkeySign) {
+      const details = 'Passkey signer not configured';
+      this._setTransactionState({ step: 'error', phase: 'signing', details });
+      return { status: 'error', details };
+    }
+
+    // 1. Build (prepare) — returns the auth digest to sign, not an unsigned XDR.
+    this._setTransactionState({ step: 'building' });
+    let buildData: TxBuildContent;
+    let smart: NonNullable<TxBuildContent['smart']>;
+    try {
+      const body = {
+        network: this.getNetwork(),
+        publicKey,
+        operation,
+        params,
+        options: options ?? {},
+      } as TxBuildBody;
+      const { data, error } = await this._api.POST('/tx/build', { body });
+      if (error || !data?.success || !data.content?.smart) {
+        const details = (error as { details?: string } | undefined)?.details ?? 'Failed to build transaction';
+        this._setTransactionState({ step: 'error', phase: 'building', details });
+        return { status: 'error', details };
+      }
+      buildData = data.content;
+      smart = data.content.smart;
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      this._setTransactionState({ step: 'error', phase: 'building', ...(details && { details }) });
+      return { status: 'error', ...(details && { details }) };
+    }
+    this._setTransactionState({ step: 'built', buildData });
+
+    // 2. Sign the auth digest with the passkey (biometric prompt).
+    this._setTransactionState({ step: 'signing', buildData });
+    let assertion: Awaited<ReturnType<PasskeySigner>>;
+    try {
+      assertion = await this._passkeySign({ credentialId: smart.credentialId, challenge: smart.digest });
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      this._setTransactionState({ step: 'error', phase: 'signing', buildData, ...(details && { details }) });
+      return { status: 'error', buildData, ...(details && { details }) };
+    }
+
+    // 3. Submit — server assembles the signed auth entry and broadcasts.
+    this._setTransactionState({ step: 'submitting', buildData });
+    const outcomeExtra: { buildData: TxBuildContent } = { buildData };
+    try {
+      const { data, error } = await this._api.POST('/tx/submit', {
+        body: {
+          network: this.getNetwork(),
+          publicKey,
+          smart: { entryXdr: smart.entryXdr, funcXdr: smart.funcXdr, assertion },
+        },
+      });
+      if (!error && data?.success && data.content) {
+        const { hash, status: backendStatus, resultCode } = data.content;
+        if (backendStatus === 'SUCCESS') {
+          this._setTransactionState({ step: 'success', hash, buildData });
+          return { status: 'success', hash, ...outcomeExtra };
+        }
+        if (backendStatus === 'PENDING') {
+          this._setTransactionState({ step: 'submitted', hash, buildData });
+          return { status: 'pending', hash, ...outcomeExtra };
+        }
+        this._setTransactionState({
+          step: 'error',
+          phase: 'submitting',
+          buildData,
+          ...(resultCode && { details: resultCode }),
+        });
+        return { status: 'error', hash, ...outcomeExtra, ...(resultCode && { details: resultCode, resultCode }) };
+      }
+      const details = (error as { details?: string } | undefined)?.details;
+      this._setTransactionState({ step: 'error', phase: 'submitting', buildData, ...(details && { details }) });
+      return { status: 'error', ...outcomeExtra, ...(details && { details }) };
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      this._setTransactionState({ step: 'error', phase: 'submitting', buildData, ...(details && { details }) });
+      return { status: 'error', ...outcomeExtra, ...(details && { details }) };
+    }
   }
 
   // ─── App config ───────────────────────────────────────────────────────────
@@ -1539,7 +1661,7 @@ export class PollarClient {
       }
     }
     if (id === WalletType.FREIGHTER) return new FreighterAdapter();
-    if (id === WalletType.ALBEDO) return new AlbedoAdapter();
+    if (id === WalletType.ALBEDO) return new AlbedoAdapter(this.getNetwork() === 'mainnet' ? 'public' : 'testnet');
     throw new Error(
       `[PollarClient] No wallet adapter configured for "${id}". Pass a walletAdapter resolver in PollarClientConfig.`,
     );
@@ -1640,7 +1762,6 @@ export class PollarClient {
   }
 
   private async _storeSession(session: PollarApplicationConfigContent): Promise<void> {
-    // Drop the userId log — leaks user identity to console.
     console.info('[PollarClient] Session stored');
 
     const persisted: PollarPersistedSession = {

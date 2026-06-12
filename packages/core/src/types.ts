@@ -19,7 +19,24 @@ export interface PollarPersistedSession {
   status: string;
   token: { accessToken: string; refreshToken: string; expiresAt: number };
   user: { id?: string; ready: boolean };
-  wallet: { publicKey: string | null; existsOnStellar?: boolean; createdAt?: number };
+  // The user's on-chain wallet, discriminated by `type`:
+  //   - 'custodial' → platform-managed Stellar account (G-address)
+  //   - 'smart'     → Soroban smart-account / passkey (C-address)
+  //   - 'external'  → user-connected wallet (Freighter/Albedo)
+  // `publicKey` holds the address for every type; `address` is an explicit alias.
+  wallet: {
+    type: 'custodial' | 'smart' | 'external';
+    publicKey: string | null;
+    address: string | null;
+    existsOnStellar?: boolean;
+    // On-chain creation time (smart = deploy; custodial = keypair creation).
+    createdAt?: number;
+    // When the wallet was first linked to Pollar (our DB record), not on-chain
+    // creation. Used for external wallets.
+    linkedAt?: number;
+    network?: string;
+    deployTxHash?: string | null;
+  };
 }
 
 /** In-memory user profile (kept on `PollarClient`, never persisted). */
@@ -48,7 +65,7 @@ export interface PollarClientConfig {
   storage?: Storage;
   /**
    * Pluggable DPoP key manager. Defaults to `defaultKeyManager(storage,
-   * apiKeyHash)`: WebCrypto in browsers, `@noble/curves` in RN.
+   * apiKey)`: WebCrypto in browsers, `@noble/curves` in RN.
    */
   keyManager?: KeyManager;
   /**
@@ -87,7 +104,8 @@ export interface PollarClientConfig {
    * the moment visibility comes back. Defaults to a web provider in the
    * browser (`visibilitychange` + BFCache + focus) and a noop elsewhere.
    * React Native consumers should inject an `AppState`-backed provider —
-   * see TODO on `VisibilityProvider`.
+   * use `createAppStateVisibilityProvider` from
+   * `@pollar/core/adapters/react-native-appstate`.
    */
   visibilityProvider?: VisibilityProvider;
   /**
@@ -124,6 +142,12 @@ export interface PollarClientConfig {
    * React Native needs a native passkey provider.
    */
   passkey?: PasskeyCeremony;
+  /**
+   * Signs smart-account (C-address) transactions with the user's passkey.
+   * Required to send from a smart wallet. Injected by `@pollar/react`;
+   * browser-only for now.
+   */
+  passkeySign?: PasskeySigner;
 }
 
 /**
@@ -137,6 +161,20 @@ export interface PollarClientConfig {
 export type PasskeyCeremony = (ctx: {
   challenge: string;
 }) => Promise<{ kind: 'login'; response: unknown } | { kind: 'register'; response: unknown }>;
+
+/**
+ * Signs a smart-account transaction's auth digest with the user's passkey
+ * (a WebAuthn `get()` whose challenge is the raw digest). Returns the PUBLIC
+ * assertion fields (base64url) for the server to assemble into the Soroban auth
+ * entry — no secret leaves the device. Injected by the runtime layer
+ * (`@pollar/react`); `@pollar/core` never touches `navigator.credentials`.
+ */
+export type PasskeySigner = (ctx: {
+  /** base64url WebAuthn credential id to sign with. */
+  credentialId: string;
+  /** hex-encoded auth digest to use as the WebAuthn challenge. */
+  challenge: string;
+}) => Promise<{ authenticatorData: string; clientDataJSON: string; signature: string }>;
 
 /**
  * Strategy for opening the hosted OAuth URL. The SDK mints the per-login auth
