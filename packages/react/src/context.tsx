@@ -2,6 +2,7 @@
 
 import {
   BuildOutcome,
+  EnabledAssetsState,
   NetworkState,
   OnStorageDegrade,
   PollarAdapters,
@@ -22,6 +23,7 @@ import {
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { ModalErrorBoundary } from './components/commons';
 import { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
+import { EnabledAssetsModal } from './components/enabled-assets-modal/EnabledAssetsModal';
 import { KycModal } from './components/kyc-modal/KycModal';
 import { LoginModal } from './components/login-modal/LoginModal';
 import { RampWidget } from './components/ramp-widget/RampWidget';
@@ -114,6 +116,16 @@ interface PollarContextValue {
   // wallet balance
   walletBalance: WalletBalanceState;
   refreshWalletBalance: () => Promise<void>;
+  // enabled assets
+  /**
+   * The application's dashboard-enabled assets paired with the authenticated
+   * wallet's on-chain trustline state (`trustlineEstablished` per asset). Driven
+   * by {@link refreshAssets}; mirrors {@link walletBalance}.
+   */
+  enabledAssets: EnabledAssetsState;
+  refreshAssets: () => Promise<void>;
+  /** Open the enabled-assets / trustline-state modal. */
+  openEnabledAssetsModal: () => void;
   // kyc
   openKycModal: (options?: {
     country?: string;
@@ -201,6 +213,7 @@ export function PollarProvider({
   const [txHistory, setTxHistory] = useState<TxHistoryState>({ step: 'idle' });
   const [sessions, setSessions] = useState<SessionsState>({ step: 'idle' });
   const [walletBalance, setWalletBalance] = useState<WalletBalanceState>({ step: 'idle' });
+  const [enabledAssets, setEnabledAssets] = useState<EnabledAssetsState>({ step: 'idle' });
   const [resolvedConfig, setResolvedConfig] = useState<PollarConfig>(() => appConfigProp ?? DEFAULT_APP_CONFIG);
 
   useEffect(() => {
@@ -217,6 +230,10 @@ export function PollarProvider({
 
   useEffect(() => {
     return pollarClient.onWalletBalanceStateChange(setWalletBalance);
+  }, [pollarClient]);
+
+  useEffect(() => {
+    return pollarClient.onEnabledAssetsStateChange(setEnabledAssets);
   }, [pollarClient]);
 
   useEffect(() => {
@@ -275,6 +292,7 @@ export function PollarProvider({
   const [rampModalOpen, setRampModalOpen] = useState(false);
   const [txHistoryModalOpen, setTxHistoryModalOpen] = useState(false);
   const [walletBalanceModalOpen, setWalletBalanceModalOpen] = useState(false);
+  const [enabledAssetsModalOpen, setEnabledAssetsModalOpen] = useState(false);
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [receiveModalOpen, setReceiveModalOpen] = useState(false);
   const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
@@ -288,6 +306,9 @@ export function PollarProvider({
   // refreshBalance resolves the own wallet server-side from the session;
   // walletAddress stays in deps so the callback re-binds when the wallet changes.
   const refreshWalletBalance = useCallback(() => pollarClient.refreshBalance(), [pollarClient, walletAddress]);
+  // refreshAssets resolves the own wallet server-side from the session;
+  // walletAddress stays in deps so the callback re-binds when the wallet changes.
+  const refreshAssets = useCallback(() => pollarClient.refreshAssets(), [pollarClient, walletAddress]);
 
   const renderWallets = ui?.renderWallets;
 
@@ -321,6 +342,10 @@ export function PollarProvider({
       walletBalance,
       refreshWalletBalance,
       openWalletBalanceModal: () => setWalletBalanceModalOpen(true),
+      // enabled assets
+      enabledAssets,
+      refreshAssets,
+      openEnabledAssetsModal: () => setEnabledAssetsModalOpen(true),
       // send / receive
       openSendModal: () => setSendModalOpen(true),
       openReceiveModal: () => setReceiveModalOpen(true),
@@ -355,6 +380,8 @@ export function PollarProvider({
     sessions,
     walletBalance,
     refreshWalletBalance,
+    enabledAssets,
+    refreshAssets,
     networkState,
     resolvedConfig,
     adapters,
@@ -397,6 +424,11 @@ export function PollarProvider({
       {walletBalanceModalOpen && (
         <ModalErrorBoundary onClose={() => setWalletBalanceModalOpen(false)}>
           <WalletBalanceModal onClose={() => setWalletBalanceModalOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {enabledAssetsModalOpen && (
+        <ModalErrorBoundary onClose={() => setEnabledAssetsModalOpen(false)}>
+          <EnabledAssetsModal onClose={() => setEnabledAssetsModalOpen(false)} />
         </ModalErrorBoundary>
       )}
       {sendModalOpen && (
