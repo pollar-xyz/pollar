@@ -179,6 +179,18 @@ export interface SessionInfo {
   expiresAt: string;
 }
 
+/**
+ * Observable state for the active-sessions list. Lives on the client (like
+ * {@link TxHistoryState} / {@link WalletBalanceState}) so UI layers can
+ * subscribe via `onSessionsStateChange` and stay pure readers instead of
+ * holding the loading state locally.
+ */
+export type SessionsState =
+  | { step: 'idle' }
+  | { step: 'loading' }
+  | { step: 'loaded'; sessions: SessionInfo[] }
+  | { step: 'error'; message: string };
+
 export type TxBuildBody = NonNullable<pollarPaths['/tx/build']['post']['requestBody']>['content']['application/json'];
 export type TxBuildResponse = pollarPaths['/tx/build']['post']['responses'][200]['content']['application/json'];
 
@@ -349,6 +361,18 @@ export type WalletBalanceState =
   | { step: 'idle' }
   | { step: 'loading' }
   | { step: 'loaded'; data: WalletBalanceContent }
+  | { step: 'error'; message: string };
+
+// ─── Enabled-asset types ──────────────────────────────────────────────────────
+
+export type WalletAssetsContent =
+  pollarPaths['/wallet/assets']['get']['responses'][200]['content']['application/json']['content'];
+export type EnabledAssetRecord = WalletAssetsContent['assets'][number];
+
+export type EnabledAssetsState =
+  | { step: 'idle' }
+  | { step: 'loading' }
+  | { step: 'loaded'; data: WalletAssetsContent }
   | { step: 'error'; message: string };
 
 // ─── Tx history types ─────────────────────────────────────────────────────────

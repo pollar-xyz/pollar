@@ -9,6 +9,7 @@ import {
   PollarClientConfig,
   PollarLoginOptions,
   PollarPersistedSession,
+  SessionsState,
   SignOutcome,
   StellarNetwork,
   SubmitOutcome,
@@ -74,6 +75,8 @@ interface PollarContextValue {
   verified: boolean;
   login: (options: PollarLoginOptions) => void;
   logout: () => void;
+  // sessions
+  sessions: SessionsState;
   /** Open the active-sessions modal. */
   openSessionsModal: () => void;
   appConfig: PollarConfig;
@@ -194,6 +197,7 @@ export function PollarProvider({
   const [verified, setVerified] = useState(false);
   const [transaction, setTransaction] = useState<TransactionState>({ step: 'idle' });
   const [txHistory, setTxHistory] = useState<TxHistoryState>({ step: 'idle' });
+  const [sessions, setSessions] = useState<SessionsState>({ step: 'idle' });
   const [walletBalance, setWalletBalance] = useState<WalletBalanceState>({ step: 'idle' });
   const [resolvedConfig, setResolvedConfig] = useState<PollarConfig>(() => appConfigProp ?? DEFAULT_APP_CONFIG);
 
@@ -203,6 +207,10 @@ export function PollarProvider({
 
   useEffect(() => {
     return pollarClient.onTxHistoryStateChange(setTxHistory);
+  }, [pollarClient]);
+
+  useEffect(() => {
+    return pollarClient.onSessionsStateChange(setSessions);
   }, [pollarClient]);
 
   useEffect(() => {
@@ -275,7 +283,9 @@ export function PollarProvider({
   // already holds the on-chain address we care about.
   const walletAddress = sessionState?.wallet?.publicKey || '';
   const getClient = useCallback(() => pollarClient, [pollarClient]);
-  const refreshWalletBalance = useCallback(() => pollarClient.refreshBalance(walletAddress), [pollarClient, walletAddress]);
+  // refreshBalance now resolves the own wallet server-side from the session;
+  // walletAddress stays in deps so the callback re-binds when the wallet changes.
+  const refreshWalletBalance = useCallback(() => pollarClient.refreshBalance(), [pollarClient, walletAddress]);
 
   const renderWallets = ui?.renderWallets;
 
@@ -313,6 +323,7 @@ export function PollarProvider({
       openSendModal: () => setSendModalOpen(true),
       openReceiveModal: () => setReceiveModalOpen(true),
       // sessions
+      sessions,
       openSessionsModal: () => setSessionsModalOpen(true),
       // distribution
       openDistributionRulesModal: () => setDistributionRulesModalOpen(true),
@@ -339,6 +350,7 @@ export function PollarProvider({
     getClient,
     transaction,
     txHistory,
+    sessions,
     walletBalance,
     refreshWalletBalance,
     networkState,

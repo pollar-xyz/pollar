@@ -597,10 +597,50 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get wallet balances
-         * @description Returns XLM and configured asset balances for a Stellar account using Soroban RPC (no Horizon). The asset list is derived from the application's enabled assets. "available" reflects the spendable amount after minimum reserve (XLM) and selling liabilities.
+         * Get my wallet balances
+         * @description Returns XLM and the application's enabled-asset balances for the authenticated user's wallet using Soroban RPC (no Horizon). The wallet and network are derived from the session — no parameters required. "available" reflects the spendable amount after minimum reserve (XLM) and selling liabilities.
          */
         get: operations["getWalletBalance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/wallet/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get my enabled assets
+         * @description Returns the application's dashboard-enabled assets paired with the authenticated wallet's on-chain trustline state (code, type, issuer, name, trustlineEstablished, limit). No balances. Native XLM is always included with trustlineEstablished=true. Lets the SDK know which trustlines the wallet still needs to add. The wallet and network are derived from the session — no parameters required.
+         */
+        get: operations["getWalletAssets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/wallet/{publicKey}/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get any wallet balances
+         * @description Returns the real on-chain balances of any Stellar account on the requested network, enumerated via Horizon. Not scoped to the application — every established trustline (native included) is returned.
+         */
+        get: operations["getWalletByPublicKeyBalance"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3531,12 +3571,147 @@ export interface operations {
     };
     getWalletBalance: {
         parameters: {
-            query: {
-                network: "testnet" | "mainnet";
-                publicKey: string;
-            };
+            query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account balances */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_WALLET_BALANCE";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            publicKey: string;
+                            /** @enum {string} */
+                            network: "testnet" | "mainnet";
+                            exists: boolean;
+                            balances: {
+                                /** @enum {string} */
+                                type: "native" | "credit_alphanum4" | "credit_alphanum12";
+                                code: string;
+                                issuer?: string;
+                                balance: string;
+                                available: string;
+                                limit?: string;
+                                enabledInApp: boolean;
+                                trustlineRemoved: boolean;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+        };
+    };
+    getWalletAssets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enabled assets with trustline state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_WALLET_ASSETS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            publicKey: string;
+                            /** @enum {string} */
+                            network: "testnet" | "mainnet";
+                            exists: boolean;
+                            assets: {
+                                /** @enum {string} */
+                                type: "native" | "credit_alphanum4" | "credit_alphanum12";
+                                code: string;
+                                issuer?: string;
+                                name?: string;
+                                trustlineEstablished: boolean;
+                                limit?: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+        };
+    };
+    getWalletByPublicKeyBalance: {
+        parameters: {
+            query: {
+                network: "testnet" | "mainnet";
+            };
+            header?: never;
+            path: {
+                publicKey: string;
+            };
             cookie?: never;
         };
         requestBody?: never;

@@ -42,6 +42,7 @@ import {
   RampsTransactionResponse,
   RampTxStatus,
   SessionInfo,
+  SessionsState,
   SignOutcome,
   SubmitOutcome,
   TransactionState,
@@ -50,6 +51,8 @@ import {
   TxHistoryParams,
   TxHistoryState,
   TxSignAndSendBody,
+  EnabledAssetsState,
+  WalletBalanceContent,
   WalletBalanceState,
 } from '../types';
 import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletAdapterResolver, WalletId, WalletType } from '../wallets';
@@ -137,8 +140,12 @@ export class PollarClient {
   private _transactionStateListeners = new Set<(state: TransactionState) => void>();
   private _txHistoryState: TxHistoryState = { step: 'idle' };
   private _txHistoryStateListeners = new Set<(state: TxHistoryState) => void>();
+  private _sessionsState: SessionsState = { step: 'idle' };
+  private _sessionsStateListeners = new Set<(state: SessionsState) => void>();
   private _walletBalanceState: WalletBalanceState = { step: 'idle' };
   private _walletBalanceStateListeners = new Set<(state: WalletBalanceState) => void>();
+  private _enabledAssetsState: EnabledAssetsState = { step: 'idle' };
+  private _enabledAssetsStateListeners = new Set<(state: EnabledAssetsState) => void>();
   private _authState: AuthState = { step: 'idle' };
   private _authStateListeners = new Set<(state: AuthState) => void>();
   private _networkState: NetworkState = { step: 'idle' };
@@ -807,6 +814,32 @@ export class PollarClient {
     return data.content.sessions;
   }
 
+  getSessionsState(): SessionsState {
+    return this._sessionsState;
+  }
+
+  onSessionsStateChange(cb: (state: SessionsState) => void): () => void {
+    this._sessionsStateListeners.add(cb);
+    cb(this._sessionsState);
+    return () => this._sessionsStateListeners.delete(cb);
+  }
+
+  /**
+   * Fire-and-forget variant of {@link listSessions} that drives the observable
+   * `SessionsState` store instead of returning the array. UI layers subscribe
+   * via `onSessionsStateChange` and stay pure readers — mirrors `fetchTxHistory`.
+   */
+  async fetchSessions(): Promise<void> {
+    this._setSessionsState({ step: 'loading' });
+    try {
+      const sessions = await this.listSessions();
+      this._setSessionsState({ step: 'loaded', sessions });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load sessions';
+      this._setSessionsState({ step: 'error', message });
+    }
+  }
+
   /**
    * Revoke a specific refresh-token family (a single device session). Use
    * `listSessions` to enumerate the familyIds. Revoking the current session
@@ -899,16 +932,19 @@ export class PollarClient {
     return () => this._walletBalanceStateListeners.delete(cb);
   }
 
-  async refreshBalance(publicKey?: string): Promise<void> {
-    const pk = publicKey ?? this._session?.wallet?.publicKey;
-    if (!pk) {
+  /**
+   * Refreshes the balances of the authenticated user's OWN wallet. The wallet
+   * and network are resolved server-side from the session — no arguments. Drives
+   * `walletBalanceState`. For an arbitrary wallet, use {@link getWalletBalance}.
+   */
+  async refreshBalance(): Promise<void> {
+    if (!this._session?.wallet?.publicKey) {
       this._setWalletBalanceState({ step: 'error', message: 'No wallet connected' });
       return;
     }
     this._setWalletBalanceState({ step: 'loading' });
     try {
-      const network = this.getNetwork();
-      const { data, error } = await this._api.GET('/wallet/balance', { params: { query: { publicKey: pk, network } } });
+      const { data, error } = await this._api.GET('/wallet/balance');
       if (!error && data?.success && data.content) {
         this._setWalletBalanceState({ step: 'loaded', data: data.content });
       } else {
@@ -916,6 +952,58 @@ export class PollarClient {
       }
     } catch {
       this._setWalletBalanceState({ step: 'error', message: 'Failed to load balance' });
+    }
+  }
+
+  /**
+   * General-purpose balance lookup for ANY wallet on ANY network — not scoped
+   * to this application. Enumerates the account's real on-chain holdings via
+   * Horizon (server-side) and returns the data directly (no reactive state).
+   * `network` defaults to the client's current network.
+   */
+  async getWalletBalance(publicKey: string, network?: StellarNetwork): Promise<WalletBalanceContent> {
+    const { data, error } = await this._api.GET('/wallet/{publicKey}/balance', {
+      params: { path: { publicKey }, query: { network: network ?? this.getNetwork() } },
+    });
+    if (error || !data?.success || !data.content) {
+      throw new Error('[PollarClient] Failed to load wallet balance');
+    }
+    return data.content;
+  }
+
+  // ─── Enabled assets ───────────────────────────────────────────────────────
+
+  getEnabledAssetsState(): EnabledAssetsState {
+    return this._enabledAssetsState;
+  }
+
+  onEnabledAssetsStateChange(cb: (state: EnabledAssetsState) => void): () => void {
+    this._enabledAssetsStateListeners.add(cb);
+    cb(this._enabledAssetsState);
+    return () => this._enabledAssetsStateListeners.delete(cb);
+  }
+
+  /**
+   * Loads the application's enabled assets paired with the authenticated
+   * wallet's on-chain trustline state — so the SDK knows which trustlines still
+   * need to be added. Wallet and network are resolved server-side from the
+   * session. Drives `enabledAssetsState`; mirrors {@link refreshBalance}.
+   */
+  async refreshAssets(): Promise<void> {
+    if (!this._session?.wallet?.publicKey) {
+      this._setEnabledAssetsState({ step: 'error', message: 'No wallet connected' });
+      return;
+    }
+    this._setEnabledAssetsState({ step: 'loading' });
+    try {
+      const { data, error } = await this._api.GET('/wallet/assets');
+      if (!error && data?.success && data.content) {
+        this._setEnabledAssetsState({ step: 'loaded', data: data.content });
+      } else {
+        this._setEnabledAssetsState({ step: 'error', message: 'Failed to load assets' });
+      }
+    } catch {
+      this._setEnabledAssetsState({ step: 'error', message: 'Failed to load assets' });
     }
   }
 
@@ -1374,9 +1462,19 @@ export class PollarClient {
     for (const cb of this._txHistoryStateListeners) cb(next);
   }
 
+  private _setSessionsState(next: SessionsState): void {
+    this._sessionsState = next;
+    for (const cb of this._sessionsStateListeners) cb(next);
+  }
+
   private _setWalletBalanceState(next: WalletBalanceState): void {
     this._walletBalanceState = next;
     for (const cb of this._walletBalanceStateListeners) cb(next);
+  }
+
+  private _setEnabledAssetsState(next: EnabledAssetsState): void {
+    this._enabledAssetsState = next;
+    for (const cb of this._enabledAssetsStateListeners) cb(next);
   }
 
   // ─── Private ──────────────────────────────────────────────────────────────
