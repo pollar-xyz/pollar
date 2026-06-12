@@ -31,7 +31,7 @@ import { SessionsModal } from './components/sessions-modal/SessionsModal';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
-import { browserPasskeyCeremony } from './lib/passkey-ceremony';
+import { browserPasskeyCeremony, browserPasskeySigner } from './lib/passkey-ceremony';
 import type { PollarConfig, PollarStyles, RenderWalletsSlot } from './types';
 
 const DEFAULT_APP_CONFIG: PollarConfig = {
@@ -91,7 +91,7 @@ interface PollarContextValue {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ) => Promise<BuildOutcome>;
-  signAndSubmitTx: (unsignedXdr: string) => Promise<SubmitOutcome>;
+  signAndSubmitTx: (unsignedXdr?: string) => Promise<SubmitOutcome>;
   /** External-wallet only. Custodial flows should use `signAndSubmitTx`. */
   signTx: (unsignedXdr: string) => Promise<SignOutcome>;
   submitTx: (signedXdr: string) => Promise<SubmitOutcome>;
@@ -187,7 +187,9 @@ export function PollarProvider({
   // consumer can override it (e.g. a React Native native provider) via
   // `client.passkey`.
   const [pollarClient] = useState<PollarClient>(() =>
-    client instanceof PollarClient ? client : new PollarClient({ passkey: browserPasskeyCeremony, ...client }),
+    client instanceof PollarClient
+      ? client
+      : new PollarClient({ passkey: browserPasskeyCeremony, passkeySign: browserPasskeySigner, ...client }),
   );
   const [networkState, setNetworkState] = useState<NetworkState>(() => pollarClient.getNetworkState());
   const [sessionState, setSessionState] = useState<PollarPersistedSession | null>(null);
@@ -306,7 +308,7 @@ export function PollarProvider({
       // transactions
       tx: transaction,
       buildTx: (operation, params, options) => pollarClient.buildTx(operation, params, options),
-      signAndSubmitTx: (unsignedXdr: string) => pollarClient.signAndSubmitTx(unsignedXdr),
+      signAndSubmitTx: (unsignedXdr?: string) => pollarClient.signAndSubmitTx(unsignedXdr),
       signTx: (unsignedXdr: string) => pollarClient.signTx(unsignedXdr),
       submitTx: (signedXdr: string) => pollarClient.submitTx(signedXdr),
       buildAndSignAndSubmitTx: (operation, params, options) => pollarClient.buildAndSignAndSubmitTx(operation, params, options),

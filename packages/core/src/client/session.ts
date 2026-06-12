@@ -95,14 +95,25 @@ export function isValidSession(value: unknown): value is PollarPersistedSession 
     return false;
   }
 
+  // The wallet object is always present; `type` discriminates custodial (G),
+  // smart/passkey (C), and external wallets. `publicKey` holds the address for
+  // all types, with `address` as an explicit alias.
   const wallet = s['wallet'];
   if (typeof wallet !== 'object' || wallet === null) {
     console.warn('[PollarClient:session] Invalid session — wallet missing or not an object');
     return false;
   }
   const w = wallet as Record<string, unknown>;
+  if (w['type'] !== 'custodial' && w['type'] !== 'smart' && w['type'] !== 'external') {
+    console.warn('[PollarClient:session] Invalid session — wallet.type must be custodial|smart|external');
+    return false;
+  }
   if (w['publicKey'] !== null && !isBoundedString(w['publicKey'], MAX_WALLET_PUBLIC_KEY)) {
     console.warn('[PollarClient:session] Invalid session — wallet.publicKey must be string|null');
+    return false;
+  }
+  if (w['address'] !== undefined && w['address'] !== null && !isBoundedString(w['address'], MAX_WALLET_PUBLIC_KEY)) {
+    console.warn('[PollarClient:session] Invalid session — wallet.address must be string|null if present');
     return false;
   }
   if (w['existsOnStellar'] !== undefined && typeof w['existsOnStellar'] !== 'boolean') {
@@ -111,6 +122,10 @@ export function isValidSession(value: unknown): value is PollarPersistedSession 
   }
   if (w['createdAt'] !== undefined && (typeof w['createdAt'] !== 'number' || !Number.isFinite(w['createdAt']))) {
     console.warn('[PollarClient:session] Invalid session — wallet.createdAt must be a finite number if present');
+    return false;
+  }
+  if (w['linkedAt'] !== undefined && (typeof w['linkedAt'] !== 'number' || !Number.isFinite(w['linkedAt']))) {
+    console.warn('[PollarClient:session] Invalid session — wallet.linkedAt must be a finite number if present');
     return false;
   }
 

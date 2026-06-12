@@ -1233,7 +1233,24 @@ export class PollarClient {
    *   backend call) and then transitions to `submitted` (Horizon ack only) or
    *   `success` (ledger-confirmed), or `error[phase: 'signing-submitting']`.
    */
-  async signAndSubmitTx(unsignedXdr: string): Promise<SubmitOutcome> {
+  async signAndSubmitTx(unsignedXdr?: string): Promise<SubmitOutcome> {
+    // Smart wallet: there is no unsigned XDR — sign the prepared auth digest
+    // with the passkey and submit, using the build already on the state machine.
+    if (this._session?.wallet?.type === 'smart') {
+      const buildData = this._currentBuildData();
+      if (!buildData?.smart) {
+        const details = 'no prepared smart transaction; call buildTx first';
+        this._setTransactionState({ step: 'error', phase: 'signing', details });
+        return { status: 'error', details };
+      }
+      return this._signSubmitSmart(buildData);
+    }
+
+    if (!unsignedXdr) {
+      this._setTransactionState({ step: 'error', phase: 'signing', details: 'missing unsigned transaction' });
+      return { status: 'error', details: 'missing unsigned transaction' };
+    }
+
     if (this._walletAdapter) {
       // External — the composed signTx+submitTx already emit the granular
       // state-machine sequence. We just pass outcomes through.
@@ -1462,6 +1479,28 @@ export class PollarClient {
       return { status: 'error', ...(details && { details }) };
     }
     this._setTransactionState({ step: 'built', buildData });
+
+    return this._signSubmitSmart(buildData);
+  }
+
+  /**
+   * Steps 2–3 of the smart-wallet flow: sign the prepared auth digest with the
+   * passkey, then submit. Shared by `_runSmartTx` (atomic) and `signAndSubmitTx`
+   * (split flow, when a smart build is already on the state machine).
+   */
+  private async _signSubmitSmart(buildData: TxBuildContent): Promise<SubmitOutcome> {
+    const publicKey = this._session?.wallet?.publicKey;
+    const smart = buildData.smart;
+    if (!publicKey || !smart) {
+      const details = 'no prepared smart transaction';
+      this._setTransactionState({ step: 'error', phase: 'signing', buildData, details });
+      return { status: 'error', buildData, details };
+    }
+    if (!this._passkeySign) {
+      const details = 'Passkey signer not configured';
+      this._setTransactionState({ step: 'error', phase: 'signing', buildData, details });
+      return { status: 'error', buildData, details };
+    }
 
     // 2. Sign the auth digest with the passkey (biometric prompt).
     this._setTransactionState({ step: 'signing', buildData });
