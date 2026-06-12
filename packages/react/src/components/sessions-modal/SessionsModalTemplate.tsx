@@ -1,14 +1,10 @@
 'use client';
 
-import type { SessionInfo } from '@pollar/core';
+import type { SessionInfo, SessionsState } from '@pollar/core';
 import { type CSSProperties } from 'react';
 import { PollarModalFooter } from '../commons';
 
-export type SessionsState =
-  | { step: 'idle' }
-  | { step: 'loading' }
-  | { step: 'loaded'; sessions: SessionInfo[] }
-  | { step: 'error'; message: string };
+export type { SessionsState };
 
 export interface SessionsModalTemplateProps {
   theme: string;
