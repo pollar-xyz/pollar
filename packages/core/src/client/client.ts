@@ -289,8 +289,14 @@ export class PollarClient {
         self._lastRequestAt = Date.now();
         await self._initialized;
         // Cache the body before fetch() disturbs the stream — retries can't
-        // call request.clone() once the body is consumed.
-        if (request.body !== null) {
+        // call request.clone() once the body is consumed. Guard on the method:
+        // GET/HEAD carry no body, and in RN's fetch polyfill `request.body` is
+        // `undefined` (not `null`) for them, so a bare `!== null` check would
+        // snapshot an empty ArrayBuffer and later make a GET retry throw
+        // "Body not allowed for GET or HEAD requests".
+        const cacheMethod = request.method.toUpperCase();
+        const cacheBodyAllowed = cacheMethod !== 'GET' && cacheMethod !== 'HEAD';
+        if (cacheBodyAllowed && request.body != null) {
           try {
             self._requestBodyCache.set(request, await request.clone().arrayBuffer());
           } catch (err) {
@@ -419,7 +425,13 @@ export class PollarClient {
       }
     }
 
-    const cachedBody = this._requestBodyCache.get(originalRequest);
+    // Never attach a body to a GET/HEAD retry — the Fetch API (and RN's
+    // polyfill) throws "Body not allowed for GET or HEAD requests". This is
+    // the retry that the `/auth/session/resume` GET hits after a DPoP nonce
+    // challenge.
+    const retryMethod = originalRequest.method.toUpperCase();
+    const retryBodyAllowed = retryMethod !== 'GET' && retryMethod !== 'HEAD';
+    const cachedBody = retryBodyAllowed ? this._requestBodyCache.get(originalRequest) : undefined;
     const retried = new Request(originalRequest.url, {
       method: originalRequest.method,
       headers,
