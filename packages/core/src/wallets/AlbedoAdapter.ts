@@ -45,7 +45,13 @@ function openAlbedoPopup(url: string): Window {
 
 function waitForAlbedoPopup(): Promise<Record<string, string>> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Albedo response timeout')), 2 * 60 * 1000);
+    const timeout = setTimeout(() => {
+      // Detach before rejecting — otherwise the listener leaks for the page
+      // lifetime and a late/duplicate ALBEDO_RESULT could resolve an
+      // already-timed-out promise (and accumulate across retries).
+      window.removeEventListener('message', handler);
+      reject(new Error('Albedo response timeout'));
+    }, 2 * 60 * 1000);
 
     function handler(event: MessageEvent) {
       if (event.origin !== window.location.origin || event.data?.type !== 'ALBEDO_RESULT') return;
@@ -55,28 +61,6 @@ function waitForAlbedoPopup(): Promise<Record<string, string>> {
     }
 
     window.addEventListener('message', handler);
-  });
-}
-
-function waitForAlbedoResult(): Promise<Record<string, string>> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Albedo response timeout')), 2 * 60 * 1000);
-
-    const parseResult = () => {
-      const params = new URLSearchParams(window.location.search);
-      if (!params.has('pubkey') && !params.has('signed_envelope_xdr') && !params.has('signed_xdr')) return;
-
-      clearTimeout(timeout);
-      const result: Record<string, string> = {};
-      params.forEach((value, key) => {
-        result[key] = value;
-      });
-      window.history.replaceState({}, document.title, window.location.pathname);
-      resolve(result);
-    };
-
-    parseResult();
-    window.addEventListener('popstate', parseResult);
   });
 }
 
@@ -128,11 +112,14 @@ export class AlbedoAdapter implements WalletAdapter {
     url.searchParams.set('xdr', xdr);
     url.searchParams.set('app_name', 'Pollar');
     url.searchParams.set('network', albedoNetwork(options, this.network));
-    url.searchParams.set('callback', window.location.href);
+    url.searchParams.set('callback', `${window.location.origin}/albedo-callback`);
     url.searchParams.set('origin', window.location.origin);
 
-    window.location.href = url.toString();
-    const result = await waitForAlbedoResult();
+    // Popup + postMessage (same flow as `connect`). A top-level
+    // `window.location.href` redirect would unload this document, destroying
+    // the realm the returned promise lives in — it would never resolve.
+    openAlbedoPopup(url.toString());
+    const result = await waitForAlbedoPopup();
 
     if (!result.signed_envelope_xdr) throw new Error('Albedo signing rejected');
     return { signedTxXdr: result.signed_envelope_xdr };
@@ -144,11 +131,13 @@ export class AlbedoAdapter implements WalletAdapter {
     url.searchParams.set('xdr', entryXdr);
     url.searchParams.set('app_name', 'Pollar');
     url.searchParams.set('network', this.network);
-    url.searchParams.set('callback', window.location.href);
+    url.searchParams.set('callback', `${window.location.origin}/albedo-callback`);
     url.searchParams.set('origin', window.location.origin);
 
-    window.location.href = url.toString();
-    const result = await waitForAlbedoResult();
+    // Popup + postMessage (see `signTransaction` — a redirect would unload the
+    // page before the awaited promise could settle).
+    openAlbedoPopup(url.toString());
+    const result = await waitForAlbedoPopup();
 
     if (!result.signed_xdr) throw new Error('Albedo auth entry signing rejected');
     return { signedAuthEntry: result.signed_xdr };

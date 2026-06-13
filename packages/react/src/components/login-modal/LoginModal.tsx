@@ -35,6 +35,12 @@ export function LoginModal({ onClose }: LoginModalProps) {
         setCodeInputKey((k) => k + 1);
       }
       if (next.step === 'authenticated') {
+        // Clear any timer already pending — if `authenticated` fires more than
+        // once, overwriting the handle would orphan the previous timeout
+        // (cleanup only tracks the latest).
+        if (autoCloseTimer.current !== null) {
+          clearTimeout(autoCloseTimer.current);
+        }
         autoCloseTimer.current = setTimeout(() => {
           autoCloseTimer.current = null;
           onCloseRef.current();

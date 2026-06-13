@@ -205,7 +205,10 @@ export class PollarClient {
     this._visibilityProvider = config.visibilityProvider ?? defaultVisibilityProvider();
     this._maxIdleMs = config.maxIdleMs;
     this._openAuthUrl = config.openAuthUrl ?? defaultWebOAuthOpener;
-    this._oauthRedirectUri = config.oauthRedirectUri ?? (isBrowser ? window.location.origin : '');
+    // `window.location` can be absent even when `isBrowser` is true (some
+    // webview/SSR shims expose a partial `window`); read it defensively so the
+    // constructor never throws on a missing `.origin`.
+    this._oauthRedirectUri = config.oauthRedirectUri ?? (isBrowser ? (window.location?.origin ?? '') : '');
 
     this._api = createApiClient(this.basePath);
     this._wireMiddlewares();
@@ -1775,6 +1778,14 @@ export class PollarClient {
       void this._resume();
     } else {
       this._log.info('[PollarClient] No session in storage');
+      // Another tab (or this one) wiped the session key. If we were
+      // authenticated, propagate the logout: tear down in-memory state, the
+      // refresh timer and DPoP keys, and emit `idle`. Guarded so the cold-start
+      // call (step already `idle`) is a no-op and we never recurse — the
+      // `removeStorage` inside `_clearSession` targets an already-removed key.
+      if (this._authState.step !== 'idle') {
+        await this._clearSession();
+      }
     }
   }
 

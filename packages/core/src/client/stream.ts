@@ -83,17 +83,13 @@ export async function streamUntilFound(
 
     const reader = data.getReader();
     const decoder = new TextDecoder();
-    let streamDone = false;
     let sawAnyChunk = false;
 
     try {
       while (true) {
         throwIfAborted(signal);
         const { done, value } = await reader.read();
-        if (done) {
-          streamDone = true;
-          break;
-        }
+        if (done) break;
         sawAnyChunk = true;
 
         const chunk = decoder.decode(value);
@@ -128,8 +124,12 @@ export async function streamUntilFound(
     if (sawAnyChunk) backoff = retryDelayMs;
     else backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
 
-    const delay = streamDone ? backoff : 0;
-    if (delay) await sleep(delay);
+    // Always wait the computed backoff before reconnecting. A data-bearing
+    // close already reset it to the floor (retryDelayMs), so the happy-path
+    // reconnect stays snappy; the failure paths — including a mid-stream read
+    // error caught above — now back off instead of spinning in a tight
+    // reconnect loop that hammers the server.
+    await sleep(backoff);
   }
 }
 

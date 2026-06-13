@@ -52,17 +52,21 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
   });
 
   if (data?.code === 'SDK_LOGIN_SUCCESS' && isValidSession(data?.content, logger)) {
-    if (expectedWallet && data.content.data.providers.wallet?.address !== expectedWallet) {
+    // `isValidSession` doesn't validate the `data` (PII) subtree, so reach into
+    // it defensively — a contract-drifted response missing `data`/`providers`
+    // should surface as a clean wallet-mismatch error, not a raw TypeError.
+    const sessionWallet = data.content.data?.providers?.wallet?.address;
+    if (expectedWallet && sessionWallet !== expectedWallet) {
       setAuthState({
         step: 'error',
         previousStep: 'authenticating',
         message: 'Wallet mismatch: session wallet does not match connected wallet',
         errorCode: AUTH_ERROR_CODES.WALLET_AUTH_FAILED,
       });
-      clearSession();
+      await clearSession();
       return;
     }
-    storeSession(data.content);
+    await storeSession(data.content);
   } else {
     setAuthState({
       step: 'error',
@@ -70,6 +74,6 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
       message: 'Failed to load session',
       errorCode: AUTH_ERROR_CODES.AUTH_FAILED,
     });
-    clearSession();
+    await clearSession();
   }
 }
