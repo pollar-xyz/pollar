@@ -1837,8 +1837,11 @@ export class PollarClient {
       user: session.user,
       // The wire response still carries the legacy `publicKey` alias (kept for
       // older SDKs); the persisted session standardizes on `address` only.
+      // The wire also still emits the legacy type `'custodial'` (unchanged for
+      // SDKs ≤0.8.x); we remap it to `'internal'` here so the SDK surface and
+      // persisted session speak one vocabulary while the wire stays compatible.
       wallet: {
-        type: w.type,
+        type: w.type === 'custodial' ? 'internal' : w.type,
         address: w.address ?? w.publicKey ?? null,
         ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
         ...(w.createdAt !== undefined ? { createdAt: w.createdAt } : {}),

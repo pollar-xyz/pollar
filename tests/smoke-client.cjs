@@ -84,9 +84,9 @@ async function waitFor(cond, timeoutMs = 1000) {
         expiresAt: Math.floor(Date.now() / 1000) + 600,
       },
       user: { ready: true },
-      // `wallet.type` (custodial|smart|external) is required by isValidSession;
+      // `wallet.type` (internal|smart|external) is required by isValidSession;
       // the legacy `publicKey`-only shape is no longer accepted.
-      wallet: { type: 'custodial', address: null },
+      wallet: { type: 'internal', address: null },
     }),
   );
 

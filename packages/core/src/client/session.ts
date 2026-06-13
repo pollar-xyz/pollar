@@ -96,8 +96,11 @@ export function isValidSession(value: unknown, logger: PollarLogger = console): 
     return false;
   }
 
-  // The wallet object is always present; `type` discriminates custodial (G),
-  // smart/passkey (C), and external wallets. `address` is the on-chain address
+  // The wallet object is always present; `type` discriminates internal (G,
+  // platform-custodied), smart/passkey (C), and external wallets. (The wire
+  // sends 'custodial' for the internal case; it's remapped to 'internal' before
+  // this validation runs — on fresh login in `_storeSession`, and for legacy
+  // persisted sessions in `readStorage`.) `address` is the on-chain address
   // for all types. (Sessions persisted by older SDKs carry a legacy `publicKey`
   // alias — `readStorage` backfills `address` from it before validation, so the
   // field is tolerated here but no longer required.)
@@ -107,8 +110,8 @@ export function isValidSession(value: unknown, logger: PollarLogger = console): 
     return false;
   }
   const w = wallet as Record<string, unknown>;
-  if (w['type'] !== 'custodial' && w['type'] !== 'smart' && w['type'] !== 'external') {
-    logger.debug('[PollarClient:session] Invalid session — wallet.type must be custodial|smart|external');
+  if (w['type'] !== 'internal' && w['type'] !== 'smart' && w['type'] !== 'external') {
+    logger.debug('[PollarClient:session] Invalid session — wallet.type must be internal|smart|external');
     return false;
   }
   if (w['address'] !== null && !isBoundedString(w['address'], MAX_WALLET_PUBLIC_KEY)) {
@@ -141,13 +144,18 @@ export async function readStorage(
 
   try {
     const session = JSON.parse(raw) as unknown;
-    // Migrate sessions persisted by older SDKs (≤0.8.x), which stored the wallet
-    // address under the legacy `publicKey` key. Backfill `address` so they pass
-    // validation and survive the upgrade instead of forcing a re-login.
+    // Migrate sessions persisted by older SDKs (≤0.8.x): they stored the wallet
+    // address under the legacy `publicKey` key, and persisted the wire type
+    // `'custodial'` (now remapped to `'internal'` at the client boundary).
+    // Backfill `address` and remap the type so they pass validation and survive
+    // the upgrade instead of forcing a re-login.
     if (typeof session === 'object' && session !== null) {
       const w = (session as { wallet?: Record<string, unknown> }).wallet;
       if (w && w['address'] == null && typeof w['publicKey'] === 'string') {
         w['address'] = w['publicKey'];
+      }
+      if (w && w['type'] === 'custodial') {
+        w['type'] = 'internal';
       }
     }
     if (!isValidSession(session, logger)) {

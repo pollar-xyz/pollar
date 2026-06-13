@@ -4,6 +4,13 @@
 
 > **⚠️ BREAKING CHANGES (SDK packages only — the SDK API stays backward-compatible).**
 >
+> - **`session.wallet.type` value `'custodial'` → `'internal'`** in `@pollar/core`.
+>   The developer-facing union is now `'internal' | 'smart' | 'external'` (aligns
+>   with the DB `SdkUserWalletSource.INTERNAL`). Apps branching on
+>   `wallet.type === 'custodial'` must switch to `'internal'`. **The wire is
+>   unchanged**: `sdk-api` still emits `'custodial'`, and `@pollar/core` ≥0.9.0
+>   remaps it to `'internal'` at the client boundary — so SDKs ≤0.8.x keep
+>   working and no coordinated backend deploy is required.
 > - The session wallet drops the legacy `publicKey` alias. `session.wallet`
 >   now exposes **only `address`** (it always held the same value). Read
 >   `session.wallet.address` instead of `session.wallet.publicKey`.
@@ -21,10 +28,18 @@
 
 ### `@pollar/core` — BREAKING
 
+- **`wallet.type` `'custodial'` → `'internal'`.** `PollarPersistedSession.wallet.type`
+  and the `isValidSession` check now use `'internal' | 'smart' | 'external'`.
+  Code branching on `'custodial'` must switch to `'internal'`. The change is
+  **SDK-only**: the `sdk-api` wire still emits `'custodial'`, and core remaps it
+  to `'internal'` in `_storeSession` (fresh login) and `readStorage` (legacy
+  persisted sessions). The DB enum stays `SdkUserWalletSource.INTERNAL` — no
+  migration. This keeps clients ≤0.8.x working while the SDK surface and the DB
+  speak one vocabulary.
 - **`PollarPersistedSession.wallet.publicKey` removed.** The persisted session
   wallet is now `{ type, address, existsOnStellar?, createdAt?, linkedAt?,
   network?, deployTxHash? }`. `address` is the on-chain address for every type
-  (G-address custodial, C-address smart/passkey, connected pubkey external).
+  (G-address internal, C-address smart/passkey, connected pubkey external).
 - **`ConnectWalletResponse` is now `{ address: string }`.** The duplicate
   `publicKey` field is gone; the built-in `FreighterAdapter` / `AlbedoAdapter`
   and any custom adapter must return `address` only.
@@ -32,8 +47,9 @@
 ### `@pollar/core` — internal
 
 - **Sessions persisted by older SDKs (≤0.8.x) are migrated transparently.**
-  `readStorage` backfills `address` from the legacy `publicKey` key before
-  validation, so existing users are **not** forced to re-log in on upgrade.
+  `readStorage` backfills `address` from the legacy `publicKey` key and remaps
+  `type: 'custodial'` → `'internal'` before validation, so existing users are
+  **not** forced to re-log in on upgrade.
 - **`/tx/*` request bodies now send `address`** (was `publicKey`). The backend
   accepts both for backward compat (see the `sdk-api` note above), so this is
   transparent once the matching backend is deployed.

@@ -21,16 +21,16 @@ export interface PollarPersistedSession {
   token: { accessToken: string; refreshToken: string; expiresAt: number };
   user: { id?: string; ready: boolean };
   // The user's on-chain wallet, discriminated by `type`:
-  //   - 'custodial' → platform-managed Stellar account (G-address)
-  //   - 'smart'     → Soroban smart-account / passkey (C-address)
-  //   - 'external'  → user-connected wallet (Freighter/Albedo)
-  // `address` is the on-chain address for every type (G-address for custodial,
+  //   - 'internal' → platform-managed (custodial) Stellar account (G-address)
+  //   - 'smart'    → Soroban smart-account / passkey (C-address)
+  //   - 'external' → user-connected wallet (Freighter/Albedo)
+  // `address` is the on-chain address for every type (G-address for internal,
   // C-address for smart/passkey, the connected pubkey for external).
   wallet: {
-    type: 'custodial' | 'smart' | 'external';
+    type: 'internal' | 'smart' | 'external';
     address: string | null;
     existsOnStellar?: boolean;
-    // On-chain creation time (smart = deploy; custodial = keypair creation).
+    // On-chain creation time (smart = deploy; internal = keypair creation).
     createdAt?: number;
     // When the wallet was first linked to Pollar (our DB record), not on-chain
     // creation. Used for external wallets.
