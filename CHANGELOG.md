@@ -44,6 +44,18 @@
   `publicKey` field is gone; the built-in `FreighterAdapter` / `AlbedoAdapter`
   and any custom adapter must return `address` only.
 
+### `@pollar/core` — fixes
+
+- **`0.9.0-rc.4` — fixed login clearing the session on every custodial login.**
+  `authenticate()` validates the raw `/auth/login` wire response with
+  `isValidSession()` **before** `_storeSession` remaps `custodial → internal`.
+  In `rc.3` the guard only accepted `internal | smart | external`, so the wire
+  value `'custodial'` failed validation, sending the flow down the error branch
+  → `clearSession()` (`[PollarClient] Session cleared`) on every email/OAuth
+  login. The guard now also tolerates `'custodial'` as the transitional wire
+  alias for `'internal'`; callers still remap it before it reaches app code, so
+  the persisted/SDK surface vocabulary is unchanged.
+
 ### `@pollar/core` — internal
 
 - **Sessions persisted by older SDKs (≤0.8.x) are migrated transparently.**

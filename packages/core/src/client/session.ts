@@ -97,20 +97,25 @@ export function isValidSession(value: unknown, logger: PollarLogger = console): 
   }
 
   // The wallet object is always present; `type` discriminates internal (G,
-  // platform-custodied), smart/passkey (C), and external wallets. (The wire
-  // sends 'custodial' for the internal case; it's remapped to 'internal' before
-  // this validation runs — on fresh login in `_storeSession`, and for legacy
-  // persisted sessions in `readStorage`.) `address` is the on-chain address
-  // for all types. (Sessions persisted by older SDKs carry a legacy `publicKey`
+  // platform-custodied), smart/passkey (C), and external wallets. `address` is
+  // the on-chain address for all types.
+  //
+  // This guard runs against BOTH the persisted shape (vocabulary `internal`)
+  // and the raw `/auth/login` wire response (vocabulary `custodial`) — the login
+  // flow validates the wire body here *before* `_storeSession` remaps
+  // `custodial → internal`. So we tolerate `'custodial'` as the transitional
+  // wire alias for `'internal'`; callers remap it (`_storeSession` on fresh
+  // login, `readStorage` for legacy persisted sessions) before it reaches app
+  // code. (Sessions persisted by older SDKs also carry a legacy `publicKey`
   // alias — `readStorage` backfills `address` from it before validation, so the
-  // field is tolerated here but no longer required.)
+  // field is tolerated but no longer required.)
   const wallet = s['wallet'];
   if (typeof wallet !== 'object' || wallet === null) {
     logger.debug('[PollarClient:session] Invalid session — wallet missing or not an object');
     return false;
   }
   const w = wallet as Record<string, unknown>;
-  if (w['type'] !== 'internal' && w['type'] !== 'smart' && w['type'] !== 'external') {
+  if (w['type'] !== 'internal' && w['type'] !== 'smart' && w['type'] !== 'external' && w['type'] !== 'custodial') {
     logger.debug('[PollarClient:session] Invalid session — wallet.type must be internal|smart|external');
     return false;
   }
