@@ -97,7 +97,10 @@ interface LoginModalTemplateProps {
   onEmailSubmit?: () => void;
   onSocialLogin?: (provider: 'google' | 'github') => void;
   onWalletConnect?: (id: WalletId) => void;
-  onSmartWallet?: () => void;
+  /** Log in with an existing passkey (returning user). */
+  onLoginSmartWallet?: () => void;
+  /** Create a new passkey + smart wallet (new user). */
+  onCreateSmartWallet?: () => void;
   /** Optional override for the wallet picker view. Defaults to a Freighter+Albedo list. */
   renderWallets?: RenderWalletsSlot;
   authState: AuthState;
@@ -122,7 +125,8 @@ export function LoginModalTemplate({
   onEmailSubmit,
   onSocialLogin,
   onWalletConnect,
-  onSmartWallet,
+  onLoginSmartWallet,
+  onCreateSmartWallet,
   renderWallets,
   authState,
   codeInputKey,
@@ -132,6 +136,7 @@ export function LoginModalTemplate({
   onRetry,
 }: LoginModalTemplateProps) {
   const [showWalletPicker, setShowWalletPicker] = useState(false);
+  const [showPasskeyChooser, setShowPasskeyChooser] = useState(false);
 
   const isDark = theme === 'dark';
   const enabledSocial = Object.entries(providers).filter(([, enabled]) => enabled);
@@ -221,6 +226,29 @@ export function LoginModalTemplate({
             <DefaultFreighterAlbedoButtons onConnect={onWalletConnect ?? (() => {})} isLoading={isLoading} />
           )}
         </>
+      ) : showPasskeyChooser ? (
+        <>
+          <BackButton onClick={() => setShowPasskeyChooser(false)} />
+          <div className="pollar-wallet-section">
+            <button
+              type="button"
+              disabled={isLoading}
+              className="pollar-btn-primary"
+              style={{ width: '100%' }}
+              onClick={onCreateSmartWallet}
+            >
+              Create a new wallet
+            </button>
+            <button
+              type="button"
+              disabled={isLoading}
+              className="pollar-wallet-entry-btn"
+              onClick={onLoginSmartWallet}
+            >
+              Log in with an existing wallet
+            </button>
+          </div>
+        </>
       ) : (
         <>
           {emailEnabled && (
@@ -296,7 +324,7 @@ export function LoginModalTemplate({
                   type="button"
                   disabled={isLoading}
                   className="pollar-wallet-entry-btn"
-                  onClick={onSmartWallet}
+                  onClick={() => setShowPasskeyChooser(true)}
                 >
                   <svg
                     width="18"

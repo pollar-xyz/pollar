@@ -2335,6 +2335,7 @@ export interface operations {
                                 logoUrl?: string;
                                 emailEnabled?: boolean;
                                 embeddedWallets?: boolean;
+                                smartWallet?: boolean;
                                 providers?: {
                                     google?: boolean;
                                     discord?: boolean;

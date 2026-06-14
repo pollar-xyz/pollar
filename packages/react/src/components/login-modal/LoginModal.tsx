@@ -56,10 +56,10 @@ export function LoginModal({ onClose }: LoginModalProps) {
     };
   }, [getClient]);
 
-  const { theme = 'light', accentColor = '#005DB4', logoUrl, emailEnabled, embeddedWallets, providers } = styles;
-  // `smartWallet` isn't in the server-driven styles type yet — read it
-  // defensively and default to shown (web).
-  const smartWallet = (styles as { smartWallet?: boolean }).smartWallet ?? true;
+  const { theme = 'light', accentColor = '#005DB4', logoUrl, emailEnabled, embeddedWallets, smartWallet, providers } = styles;
+  // Opt-in: the Smart Wallet (passkey) option only shows when the dashboard
+  // explicitly enables it. Absent → hidden.
+  const smartWalletEnabled = smartWallet ?? false;
 
   function handleClose() {
     setEmail('');
@@ -81,8 +81,12 @@ export function LoginModal({ onClose }: LoginModalProps) {
     getClient().loginWallet(type);
   }
 
-  function handleSmartWallet() {
+  function handleLoginSmartWallet() {
     getClient().loginSmartWallet();
+  }
+
+  function handleCreateSmartWallet() {
+    getClient().createSmartWallet();
   }
 
   function handleVerifyCode(code: string) {
@@ -109,7 +113,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
         logoUrl={logoUrl ?? null}
         emailEnabled={!!emailEnabled}
         embeddedWallets={!!embeddedWallets}
-        smartWallet={smartWallet}
+        smartWallet={smartWalletEnabled}
         providers={{
           google: !!providers?.google,
           discord: !!providers?.discord,
@@ -123,7 +127,8 @@ export function LoginModal({ onClose }: LoginModalProps) {
         onEmailSubmit={handleEmailSubmit}
         onSocialLogin={handleSocialLogin}
         onWalletConnect={handleWalletConnect}
-        onSmartWallet={handleSmartWallet}
+        onLoginSmartWallet={handleLoginSmartWallet}
+        onCreateSmartWallet={handleCreateSmartWallet}
         {...(renderWallets !== undefined && { renderWallets })}
         authState={authState}
         codeInputKey={codeInputKey}

@@ -60,7 +60,7 @@ import {
 import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletAdapterResolver, WalletId, WalletType } from '../wallets';
 import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/emailFlow';
 import { defaultWebOAuthOpener, loginOAuth } from './auth/oauthFlow';
-import { loginSmartWallet } from './auth/passkeyFlow';
+import { smartWalletFlow } from './auth/passkeyFlow';
 import { loginWallet } from './auth/walletFlow';
 import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
 
@@ -753,9 +753,10 @@ export class PollarClient {
   }
 
   /**
-   * "Smart Wallet" login: runs the passkey (WebAuthn) ceremony and, for a new
-   * user, creates a sponsored smart-account C-address. Requires the `passkey`
-   * ceremony to be configured (e.g. via `@pollar/react`).
+   * "Smart Wallet" login: runs the passkey (WebAuthn) `get()` ceremony for a
+   * returning user and signs them in. Use {@link createSmartWallet} for a new
+   * user. Requires the `passkey` ceremony to be configured (e.g. via
+   * `@pollar/react`).
    */
   loginSmartWallet(): void {
     if (!isClientRuntime) {
@@ -763,7 +764,22 @@ export class PollarClient {
       return;
     }
     const controller = this._newController();
-    loginSmartWallet(this._flowDeps(controller.signal)).catch((err) => this._handleFlowError(err));
+    smartWalletFlow(this._flowDeps(controller.signal), 'login').catch((err) => this._handleFlowError(err));
+  }
+
+  /**
+   * "Smart Wallet" registration: runs the passkey (WebAuthn) `create()` ceremony
+   * for a new user and deploys a sponsored smart-account C-address. Use
+   * {@link loginSmartWallet} for a returning user. Requires the `passkey`
+   * ceremony to be configured (e.g. via `@pollar/react`).
+   */
+  createSmartWallet(): void {
+    if (!isClientRuntime) {
+      warnServerSide('createSmartWallet');
+      return;
+    }
+    const controller = this._newController();
+    smartWalletFlow(this._flowDeps(controller.signal), 'register').catch((err) => this._handleFlowError(err));
   }
 
   // ─── Cancel ───────────────────────────────────────────────────────────────

@@ -22,31 +22,29 @@ function randomUserId(): string {
 }
 
 /**
- * Browser passkey ceremony for `loginSmartWallet()`.
+ * Browser passkey ceremony for the smart-wallet flow.
  *
- * Autodetect: try `get()` first (returning user — the OS shows the account
- * picker for discoverable credentials on this domain). If there's no usable
- * credential it falls through to `create()` (new user → the server then
- * deploys the C-address).
- *
- * Known tradeoff: WebAuthn surfaces "no credential" and "user cancelled" as
- * the same `NotAllowedError`, so cancelling the login prompt falls through to
- * registration and would create a new wallet. A dedicated "create another
- * wallet" action would disambiguate the two.
+ * `mode` is set explicitly by the caller's button, so there's no ambiguous
+ * autodetect:
+ *   - `'login'`    → `get()` only (returning user — the OS shows the account
+ *                    picker for discoverable credentials on this domain). A
+ *                    failure here is surfaced as-is; it never falls through to
+ *                    registration, so cancelling the prompt can't accidentally
+ *                    create a second wallet.
+ *   - `'register'` → `create()` only (new user → the server deploys the
+ *                    C-address).
  *
  * rpId = the current page's hostname (the customer app's domain), which is what
  * the passkey is bound to — the anti-phishing guarantee.
  */
-export const browserPasskeyCeremony: PasskeyCeremony = async ({ challenge }) => {
+export const browserPasskeyCeremony: PasskeyCeremony = async ({ challenge, mode }) => {
   const rpId = window.location.hostname;
 
-  try {
+  if (mode === 'login') {
     const response = await startAuthentication({
       optionsJSON: { challenge, rpId, userVerification: 'required' },
     });
     return { kind: 'login', response };
-  } catch {
-    // No usable credential (or the user opted out) → register a new passkey.
   }
 
   const userId = randomUserId();

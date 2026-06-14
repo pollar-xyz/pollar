@@ -1,19 +1,21 @@
-import { AUTH_ERROR_CODES } from '../../types';
+import { AUTH_ERROR_CODES, PasskeyMode } from '../../types';
 import { authenticate } from './authenticate';
 import { createAuthSession, FlowDeps } from './deps';
 
 /**
- * "Smart Wallet" login via passkey (WebAuthn).
+ * "Smart Wallet" auth via passkey (WebAuthn).
+ *
+ * `mode` is chosen by the caller's button: `'login'` for a returning user
+ * (`/auth/passkey/login`) and `'register'` for a brand-new wallet
+ * (`/auth/passkey/register`, which also deploys the C-address server-side).
  *
  * 1. Create the auth session.
  * 2. Ask the server for a challenge bound to that session.
- * 3. Run the device ceremony (injected `deps.passkey`) — returns either a
- *    `login` assertion (returning user) or a `register` response (new user).
- * 4. Post it to `/auth/passkey/login` or `/auth/passkey/register`; the register
- *    path also deploys the C-address server-side (sponsored).
+ * 3. Run the device ceremony (injected `deps.passkey`) in `mode`.
+ * 4. Post the result to the matching endpoint.
  * 5. Hand off to `authenticate()` for the READY → `/auth/login` token exchange.
  */
-export async function loginSmartWallet(deps: FlowDeps): Promise<void> {
+export async function smartWalletFlow(deps: FlowDeps, mode: PasskeyMode): Promise<void> {
   const { api, signal, setAuthState, passkey } = deps;
 
   if (!passkey) {
@@ -42,7 +44,7 @@ export async function loginSmartWallet(deps: FlowDeps): Promise<void> {
 
     // 2. Device ceremony (Touch ID / biometric) — runtime-injected.
     setAuthState({ step: 'creating_passkey' });
-    const ceremony = await passkey({ challenge });
+    const ceremony = await passkey({ challenge, mode });
     // openapi-fetch types the WebAuthn payload as a loose object; the browser
     // PublicKeyCredential JSON satisfies it.
     const response = ceremony.response as { [key: string]: unknown };

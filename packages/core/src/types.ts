@@ -168,12 +168,18 @@ export interface PollarClientConfig {
  * Runs the device WebAuthn ceremony for a server-issued challenge and returns
  * the result to forward to the backend: a registration response for a new user
  * (`create()`) or an authentication assertion for a returning one (`get()`).
- * The implementation decides which (e.g. try `get()` first, fall back to
- * `create()`). `response` is the browser's PublicKeyCredential serialized to
- * JSON — forwarded verbatim to `/auth/passkey/{register,login}`.
+ * `mode` tells the ceremony which to run: `'login'` runs `get()` only (returning
+ * user) and `'register'` runs `create()` only (new wallet) — the caller picks via
+ * the "Log in" / "Create wallet" buttons, so there's no ambiguous autodetect that
+ * could create a wallet when the user merely cancelled a login prompt. `response`
+ * is the browser's PublicKeyCredential serialized to JSON — forwarded verbatim to
+ * `/auth/passkey/{register,login}`.
  */
+export type PasskeyMode = 'login' | 'register';
+
 export type PasskeyCeremony = (ctx: {
   challenge: string;
+  mode: PasskeyMode;
 }) => Promise<{ kind: 'login'; response: unknown } | { kind: 'register'; response: unknown }>;
 
 /**
