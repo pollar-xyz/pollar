@@ -47,6 +47,7 @@ import {
   SessionsState,
   SignOutcome,
   SubmitOutcome,
+  TrustlineOutcome,
   TransactionState,
   TxBuildBody,
   TxBuildContent,
@@ -1052,6 +1053,68 @@ export class PollarClient {
     } catch {
       this._setEnabledAssetsState({ step: 'error', message: 'Failed to load assets' });
     }
+  }
+
+  /**
+   * Establishes (omit `limit`) or removes (`limit: '0'`) a trustline for an asset.
+   *
+   * Routing mirrors how the platform pays for the reserve:
+   *  - **Sponsored custodial** (`opts.sponsored` true, internal wallet) → the
+   *    server orchestrates a sponsored `changeTrust`: the app's wallets cover the
+   *    0.5 XLM reserve and the fee, so the user pays nothing. Pass the asset's
+   *    `sponsored` flag (from {@link refreshAssets}) straight through.
+   *  - **Self-paid** (external/adapter wallet, sponsorship disabled, or a custom
+   *    asset not configured in the app) → a plain `change_trust` transaction the
+   *    user's own wallet signs and pays for, via {@link runTx}.
+   *
+   * Does not refresh on its own — callers should `refreshAssets()` afterwards.
+   */
+  async setTrustline(
+    asset: { code: string; issuer: string },
+    opts?: { limit?: string; sponsored?: boolean },
+  ): Promise<TrustlineOutcome> {
+    const limit = opts?.limit;
+    const walletType = this._session?.wallet?.type;
+
+    if (!this._session?.wallet?.address) {
+      return { status: 'error', details: 'No wallet connected' };
+    }
+    if (walletType === 'smart') {
+      // Passkey C-addresses hold SAC tokens — they don't use classic trustlines.
+      return { status: 'error', details: 'Trustlines do not apply to smart wallets' };
+    }
+
+    // Sponsored custodial path: the platform co-signs and the app pays. Only an
+    // app-configured asset on an internal (custodial) wallet qualifies — the
+    // backend re-checks and 400s otherwise.
+    if (opts?.sponsored && !this._walletAdapter && walletType === 'internal') {
+      try {
+        const { data, error } = await this._api.POST('/wallet/assets/trustline', {
+          body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
+        });
+        if (!error && data?.success) {
+          if (data.content) this._setEnabledAssetsState({ step: 'loaded', data: data.content });
+          return { status: 'success' };
+        }
+        const details = (error as { details?: string; code?: string } | undefined)?.details ?? (error as { code?: string } | undefined)?.code;
+        return { status: 'error', ...(details && { details }) };
+      } catch (err) {
+        const details = err instanceof Error ? err.message : undefined;
+        return { status: 'error', ...(details && { details }) };
+      }
+    }
+
+    // Self-paid path: the user's own wallet signs and covers the reserve + fee.
+    // The backend's change_trust schema is a discriminated union on `type`, so
+    // derive it from the code length (1–4 → alphanum4, 5–12 → alphanum12).
+    return this.runTx('change_trust', {
+      asset: {
+        type: asset.code.length <= 4 ? 'credit_alphanum4' : 'credit_alphanum12',
+        code: asset.code,
+        issuer: asset.issuer,
+      },
+      ...(limit !== undefined && { limit }),
+    } as TxBuildBody['params']);
   }
 
   // ─── Transactions ─────────────────────────────────────────────────────────

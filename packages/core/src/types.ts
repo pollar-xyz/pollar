@@ -346,6 +346,17 @@ export type SubmitOutcome =
   | { status: 'pending'; hash: string; buildData?: TxBuildContent }
   | { status: 'error'; hash?: string; details?: string; resultCode?: string; buildData?: TxBuildContent };
 
+/**
+ * Result of {@link PollarClient.setTrustline}. Like {@link SubmitOutcome} but the
+ * `hash` is optional: the sponsored, server-orchestrated path completes without
+ * surfacing a transaction hash to the client, whereas the self-paid path returns
+ * the underlying submit outcome (hash included).
+ */
+export type TrustlineOutcome =
+  | { status: 'success'; hash?: string }
+  | { status: 'pending'; hash?: string }
+  | { status: 'error'; details?: string };
+
 export const AUTH_ERROR_CODES = {
   SESSION_CREATE_FAILED: 'SESSION_CREATE_FAILED',
   SESSION_EXPIRED: 'SESSION_EXPIRED',

@@ -14,6 +14,7 @@ import {
   SignOutcome,
   StellarNetwork,
   SubmitOutcome,
+  TrustlineOutcome,
   TransactionState,
   TxBuildBody,
   TxHistoryState,
@@ -124,6 +125,13 @@ interface PollarContextValue {
    */
   enabledAssets: EnabledAssetsState;
   refreshAssets: () => Promise<void>;
+  /**
+   * Establishes (omit `limit`) or removes (`limit: '0'`) a trustline for an
+   * asset. Pass the asset's `sponsored` flag so the app covers the reserve + fee
+   * when eligible; otherwise the user's own wallet pays. Mirrors
+   * {@link PollarClient.setTrustline}.
+   */
+  setTrustline: (asset: { code: string; issuer: string }, opts?: { limit?: string; sponsored?: boolean }) => Promise<TrustlineOutcome>;
   /** Open the enabled-assets / trustline-state modal. */
   openEnabledAssetsModal: () => void;
   // kyc
@@ -351,6 +359,7 @@ export function PollarProvider({
       // enabled assets
       enabledAssets,
       refreshAssets,
+      setTrustline: (asset, opts) => pollarClient.setTrustline(asset, opts),
       openEnabledAssetsModal: () => setEnabledAssetsModalOpen(true),
       // send / receive
       openSendModal: () => setSendModalOpen(true),

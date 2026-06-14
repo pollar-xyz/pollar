@@ -629,6 +629,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/wallet/assets/trustline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enable or remove a trustline for an enabled asset
+         * @description Establishes (no limit) or removes (limit '0') a trustline on the authenticated user's custodial wallet for an asset configured in the application, sponsored by the app. Returns the refreshed enabled-asset list. Only valid for the sponsored custodial path; custom assets, adapter-managed wallets, and apps with trustline sponsoring disabled must sign a change_trust transaction client-side instead.
+         */
+        post: operations["postWalletAssetsTrustline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/wallet/{publicKey}/balance": {
         parameters: {
             query?: never;
@@ -3697,6 +3717,8 @@ export interface operations {
                                 name?: string;
                                 trustlineEstablished: boolean;
                                 limit?: string;
+                                enabledInApp: boolean;
+                                sponsored?: boolean;
                             }[];
                         };
                     };
@@ -3717,6 +3739,95 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+        };
+    };
+    postWalletAssetsTrustline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    code: string;
+                    issuer: string;
+                    limit?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Trustline updated; refreshed enabled assets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_WALLET_TRUSTLINE";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            publicKey: string;
+                            /** @enum {string} */
+                            network: "testnet" | "mainnet";
+                            exists: boolean;
+                            assets: {
+                                /** @enum {string} */
+                                type: "native" | "credit_alphanum4" | "credit_alphanum12";
+                                code: string;
+                                issuer?: string;
+                                name?: string;
+                                trustlineEstablished: boolean;
+                                limit?: string;
+                                enabledInApp: boolean;
+                                sponsored?: boolean;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
