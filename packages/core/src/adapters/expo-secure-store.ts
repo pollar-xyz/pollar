@@ -70,7 +70,7 @@ async function loadSecureStore(): Promise<SecureStoreApi> {
       `[PollarClient:storage] Failed to load 'expo-secure-store'. ` +
       `Install it in your Expo app: \`npx expo install expo-secure-store\`. ` +
       `Original error: ${error instanceof Error ? error.message : String(error)}`;
-    throw new Error(message);
+    throw new Error(message, { cause: error });
   }
 }
 

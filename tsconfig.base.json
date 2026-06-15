@@ -7,7 +7,7 @@
     "moduleResolution": "bundler",
     "module": "ESNext",
     "target": "ES2020",
-    "lib": ["ES2020", "DOM"],
+    "lib": ["ES2020", "ES2022.Error", "DOM"],
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,

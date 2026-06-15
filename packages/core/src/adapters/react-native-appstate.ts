@@ -44,7 +44,7 @@ async function loadAppState(): Promise<AppStateApi> {
       `[PollarClient:visibility] Failed to load 'react-native' AppState. ` +
       `This adapter only runs inside a React Native app. ` +
       `Original error: ${error instanceof Error ? error.message : String(error)}`;
-    throw new Error(message);
+    throw new Error(message, { cause: error });
   }
 }
 

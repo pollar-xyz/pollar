@@ -617,8 +617,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get my enabled assets
-         * @description Returns the application's dashboard-enabled assets paired with the authenticated wallet's on-chain trustline state (code, type, issuer, name, trustlineEstablished, limit). No balances. Native XLM is always included with trustlineEstablished=true. Lets the SDK know which trustlines the wallet still needs to add. The wallet and network are derived from the session — no parameters required.
+         * Get my trustlines
+         * @description Returns every trustline the authenticated wallet holds on-chain — the application's configured assets AND any the user added on their own — plus the app-enabled assets the wallet has not established a trustline for yet. Each asset carries enabledInApp (tag which belong to the app), trustlineEstablished, limit, and sponsored (app assets only). No balances. Native XLM is always included first. Trustlines are enumerated via Horizon. The wallet and network are derived from the session — no parameters required.
          */
         get: operations["getWalletAssets"];
         put?: never;
@@ -640,7 +640,7 @@ export interface paths {
         put?: never;
         /**
          * Enable or remove a trustline for an enabled asset
-         * @description Establishes (no limit) or removes (limit '0') a trustline on the authenticated user's custodial wallet for an asset configured in the application, sponsored by the app. Returns the refreshed enabled-asset list. Only valid for the sponsored custodial path; custom assets, adapter-managed wallets, and apps with trustline sponsoring disabled must sign a change_trust transaction client-side instead.
+         * @description Establishes (no limit) or removes (limit '0') a trustline on the authenticated user's custodial wallet for an asset configured in the application, sponsored by the app (the reserve and fee are paid by the app wallets). Returns the refreshed enabled-asset list. Only valid for the sponsored custodial path — custom assets, adapter-managed wallets, and apps with trustline sponsoring disabled must sign a change_trust transaction client-side instead and will get a 400 here. The wallet and network are derived from the session.
          */
         post: operations["postWalletAssetsTrustline"];
         delete?: never;
