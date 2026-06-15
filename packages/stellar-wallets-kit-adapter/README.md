@@ -52,6 +52,11 @@ Rabet, …) inside `LoginModal`, also pass the picker — see
 
 The kit is a global singleton. `stellarWalletsKit(...)` returns a resolver and `StellarWalletsKit.init(...)` is called once on the first `loginWallet` call.
 
+> **0.9.0** — `connect()` resolves to `{ address }` only (the duplicate
+> `publicKey` field is gone, matching the new `ConnectWalletResponse`). Requires
+> `@pollar/core@^0.9.0` / `@pollar/react@^0.9.0`. Adds `logLevel` / `logger`
+> options (set once at init — the kit is a global singleton).
+>
 > **0.8.0** — `network` is **required**. The previous `Networks.TESTNET`
 > default was removed because the kit is a global singleton, and silently
 > picking testnet for the consumer risked signing real-looking transactions
@@ -254,7 +259,7 @@ import { StellarWalletsKitAdapter } from '@pollar/stellar-wallets-kit-adapter';
 StellarWalletsKit.init({ network: Networks.PUBLIC, modules: [new FreighterModule()] });
 
 const adapter = new StellarWalletsKitAdapter('freighter');
-const { publicKey } = await adapter.connect();
+const { address } = await adapter.connect();
 ```
 
 ## Writing a custom resolver

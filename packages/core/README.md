@@ -2,6 +2,15 @@
 
 Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction utilities for Stellar-based applications.
 
+> **0.9.0 (breaking — SDK surface only)** the session wallet drops the legacy
+> `publicKey` alias and exposes only `address`; read `session.wallet.address`.
+> `wallet.type` `'custodial'` is now surfaced as `'internal'`
+> (`'internal' | 'smart' | 'external'`), and `ConnectWalletResponse` is
+> `{ address }` only. The `sdk-api` wire is **unchanged** (still emits
+> `'custodial'` + `publicKey`), so SDKs ≤0.8.x keep working and sessions written
+> by older SDKs are migrated transparently on read. Read the
+> [CHANGELOG](../../CHANGELOG.md) before upgrading.
+>
 > **0.8.0** routes every `submitTx` (custodial **and** external wallets) through
 > `/tx/submit` so the dashboard sees every transaction and idempotency is
 > tracked end-to-end. Adds proactive token refresh with a visibility-aware
@@ -242,14 +251,19 @@ level + sink). `@pollar/stellar-wallets-kit-adapter` accepts the same `logLevel`
 
 ## Preserved-on-disk storage shape
 
-0.7.0 persists exactly:
+As of 0.9.0 the session persists exactly:
 
 ```
 clientSessionId, userId, status,
 token { accessToken, refreshToken, expiresAt },
 user { id?, ready },
-wallet { publicKey, existsOnStellar?, createdAt? }
+wallet { type, address, existsOnStellar?, createdAt?, linkedAt?, network?, deployTxHash? }
 ```
+
+> **0.9.0** — the persisted wallet drops the legacy `publicKey` alias and exposes
+> only `address` (G-address for `internal`, C-address for `smart`, the connected
+> pubkey for `external`). Sessions written by ≤0.8.x are migrated transparently
+> on read (`publicKey` → `address`, `type: 'custodial'` → `'internal'`).
 
 PII (`mail`, `first_name`, `last_name`, `avatar`, `providers.*`) lives **in memory only** on the `PollarClient` instance
 and is fetched after auth. Reach it via:
@@ -509,7 +523,7 @@ import { FreighterAdapter, AlbedoAdapter } from '@pollar/core';
 const adapter = new FreighterAdapter();
 const available = await adapter.isAvailable();
 if (available) {
-  const { publicKey } = await adapter.connect();
+  const { address } = await adapter.connect();
 }
 ```
 

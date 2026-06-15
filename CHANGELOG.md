@@ -46,15 +46,13 @@
 
 ### `@pollar/core` — fixes
 
-- **`0.9.0-rc.4` — fixed login clearing the session on every custodial login.**
+- **Login no longer clears the session on every custodial (email/OAuth) login.**
   `authenticate()` validates the raw `/auth/login` wire response with
-  `isValidSession()` **before** `_storeSession` remaps `custodial → internal`.
-  In `rc.3` the guard only accepted `internal | smart | external`, so the wire
-  value `'custodial'` failed validation, sending the flow down the error branch
-  → `clearSession()` (`[PollarClient] Session cleared`) on every email/OAuth
-  login. The guard now also tolerates `'custodial'` as the transitional wire
-  alias for `'internal'`; callers still remap it before it reaches app code, so
-  the persisted/SDK surface vocabulary is unchanged.
+  `isValidSession()` **before** `_storeSession` remaps `custodial → internal`,
+  so the transitional wire value `'custodial'` is tolerated at the guard and the
+  flow no longer falls through to the error branch → `clearSession()`
+  (`[PollarClient] Session cleared`). Callers still remap it before it reaches
+  app code, so the persisted/SDK surface vocabulary is unchanged.
 
 ### `@pollar/core` — internal
 
@@ -103,6 +101,12 @@
 - **`connect()` returns `{ address }` only** (matches the new
   `ConnectWalletResponse`). Requires `@pollar/core@^0.9.0` /
   `@pollar/react@^0.9.0` (peer ranges pinned).
+
+### `@pollar/privy-adapter` — release alignment
+
+- **Version bump to `0.9.0` only — no functional changes.** Republished so all
+  `@pollar/*` packages share a single `0.9.0` release line. The adapter API,
+  config fields, and error envelope are identical to `0.8.1`.
 
 ### Migration
 

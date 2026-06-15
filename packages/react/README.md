@@ -3,6 +3,11 @@
 React bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI, transaction modals, and hooks for
 Stellar-based applications.
 
+> **0.9.0** requires `@pollar/core@^0.9.0`. `usePollar().walletAddress` is
+> unchanged (now derived from `session.wallet.address` internally — no consumer
+> change), and provider/modal logs route through the client's configured
+> `logLevel` / `logger`. Read the [CHANGELOG](../../CHANGELOG.md) before upgrading.
+>
 > **0.8.0 reshapes `<PollarProvider>` props (breaking).** `config` → `client`
 > (now accepts a `PollarClient` instance or a `PollarClientConfig`); `styles`
 > moves under `appConfig.styles`; new `appConfig` prop is the opt-out switch
