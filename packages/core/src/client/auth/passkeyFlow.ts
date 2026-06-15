@@ -1,6 +1,7 @@
 import { AUTH_ERROR_CODES, PasskeyMode } from '../../types';
 import { authenticate } from './authenticate';
 import { createAuthSession, FlowDeps } from './deps';
+import { extractErrorCode, resolveAuthError } from './errorMessages';
 
 /**
  * "Smart Wallet" auth via passkey (WebAuthn).
@@ -33,13 +34,13 @@ export async function smartWalletFlow(deps: FlowDeps, mode: PasskeyMode): Promis
 
   try {
     // 1. Server challenge.
-    const { data: challengeData } = await api.POST('/auth/passkey/challenge', {
+    const { data: challengeData, error: challengeError } = await api.POST('/auth/passkey/challenge', {
       body: { clientSessionId },
       signal,
     });
     const challenge = challengeData?.content?.challenge;
     if (!challengeData?.success || !challenge) {
-      return failPasskey(setAuthState, 'Failed to start passkey');
+      return failPasskey(setAuthState, extractErrorCode(challengeError, challengeData), 'Failed to start passkey');
     }
 
     // 2. Device ceremony (Touch ID / biometric) — runtime-injected.
@@ -52,26 +53,33 @@ export async function smartWalletFlow(deps: FlowDeps, mode: PasskeyMode): Promis
     // 3. New user → register (deploys the C-address); returning → login.
     if (ceremony.kind === 'register') {
       setAuthState({ step: 'deploying_smart_account' });
-      const { data } = await api.POST('/auth/passkey/register', {
+      const { data, error } = await api.POST('/auth/passkey/register', {
         body: { clientSessionId, response },
         signal,
       });
-      if (!data?.success) return failPasskey(setAuthState, 'Passkey registration failed');
+      // Map the backend code (e.g. SPONSOR_NOT_FUNDED) to a friendly message
+      // via the catalog; unknown codes keep the generic fallback.
+      if (!data?.success) {
+        return failPasskey(setAuthState, extractErrorCode(error, data), 'Passkey registration failed');
+      }
     } else {
-      const { data } = await api.POST('/auth/passkey/login', {
+      const { data, error } = await api.POST('/auth/passkey/login', {
         body: { clientSessionId, response },
         signal,
       });
-      if (!data?.success) return failPasskey(setAuthState, 'Passkey authentication failed');
+      if (!data?.success) {
+        return failPasskey(setAuthState, extractErrorCode(error, data), 'Passkey authentication failed');
+      }
     }
   } catch {
-    return failPasskey(setAuthState, 'Passkey login failed');
+    return failPasskey(setAuthState, undefined, 'Passkey login failed');
   }
 
   // 4. Session is READY → exchange for DPoP-bound tokens.
   await authenticate(clientSessionId, deps);
 }
 
-function failPasskey(setAuthState: FlowDeps['setAuthState'], message: string): void {
-  setAuthState({ step: 'error', previousStep: 'creating_passkey', message, errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED });
+function failPasskey(setAuthState: FlowDeps['setAuthState'], code: string | undefined, fallbackMessage: string): void {
+  const { message, errorCode } = resolveAuthError(code, fallbackMessage);
+  setAuthState({ step: 'error', previousStep: 'creating_passkey', message, errorCode });
 }
