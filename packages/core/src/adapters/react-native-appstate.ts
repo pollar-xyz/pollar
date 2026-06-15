@@ -33,7 +33,8 @@ async function loadAppState(): Promise<AppStateApi> {
     // @ts-expect-error -- optional peer dep; resolved at runtime in RN apps,
     // absent when the SDK is built or run on web/Node.
     const mod = await import('react-native');
-    const AppState = (mod as { AppState?: AppStateApi }).AppState ?? (mod as { default?: { AppState?: AppStateApi } }).default?.AppState;
+    const AppState =
+      (mod as { AppState?: AppStateApi }).AppState ?? (mod as { default?: { AppState?: AppStateApi } }).default?.AppState;
     if (!AppState) {
       throw new Error("'react-native' loaded but exposes no AppState export");
     }

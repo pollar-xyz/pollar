@@ -113,7 +113,12 @@ export function EnabledAssetsModalTemplate({
   const busy = busyKey !== null;
 
   return (
-    <div className="pollar-modal-card pollar-asset-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
+    <div
+      className="pollar-modal-card pollar-asset-modal"
+      data-theme={theme}
+      style={cssVars}
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="pollar-modal-header">
         <h2 className="pollar-modal-title">Trustlines</h2>
         <div className="pollar-modal-header-actions">
@@ -214,7 +219,12 @@ export function CustomTrustlineModalTemplate({
   };
 
   return (
-    <div className="pollar-modal-card pollar-asset-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
+    <div
+      className="pollar-modal-card pollar-asset-modal"
+      data-theme={theme}
+      style={cssVars}
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="pollar-modal-header">
         <div className="pollar-modal-header-actions">
           <button className="pollar-modal-back" onClick={onBack} disabled={busy} aria-label="Back">

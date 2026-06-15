@@ -131,7 +131,10 @@ interface PollarContextValue {
    * when eligible; otherwise the user's own wallet pays. Mirrors
    * {@link PollarClient.setTrustline}.
    */
-  setTrustline: (asset: { code: string; issuer: string }, opts?: { limit?: string; sponsored?: boolean }) => Promise<TrustlineOutcome>;
+  setTrustline: (
+    asset: { code: string; issuer: string },
+    opts?: { limit?: string; sponsored?: boolean },
+  ) => Promise<TrustlineOutcome>;
   /** Open the enabled-assets / trustline-state modal. */
   openEnabledAssetsModal: () => void;
   // kyc

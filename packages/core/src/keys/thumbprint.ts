@@ -49,7 +49,10 @@ export async function computeJwkThumbprint(jwk: PublicEcJwk): Promise<string> {
  * well-formed value.
  */
 function toBase64url(value: string): string {
-  return value.replace(/\+/g, '-').replace(/\//g, '_').replace(/[^A-Za-z0-9_-]/g, '');
+  return value
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/[^A-Za-z0-9_-]/g, '');
 }
 
 /**

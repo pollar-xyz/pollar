@@ -45,13 +45,16 @@ function openAlbedoPopup(url: string): Window {
 
 function waitForAlbedoPopup(): Promise<Record<string, string>> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      // Detach before rejecting — otherwise the listener leaks for the page
-      // lifetime and a late/duplicate ALBEDO_RESULT could resolve an
-      // already-timed-out promise (and accumulate across retries).
-      window.removeEventListener('message', handler);
-      reject(new Error('Albedo response timeout'));
-    }, 2 * 60 * 1000);
+    const timeout = setTimeout(
+      () => {
+        // Detach before rejecting — otherwise the listener leaks for the page
+        // lifetime and a late/duplicate ALBEDO_RESULT could resolve an
+        // already-timed-out promise (and accumulate across retries).
+        window.removeEventListener('message', handler);
+        reject(new Error('Albedo response timeout'));
+      },
+      2 * 60 * 1000,
+    );
 
     function handler(event: MessageEvent) {
       if (event.origin !== window.location.origin || event.data?.type !== 'ALBEDO_RESULT') return;

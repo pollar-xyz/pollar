@@ -38,7 +38,7 @@
   speak one vocabulary.
 - **`PollarPersistedSession.wallet.publicKey` removed.** The persisted session
   wallet is now `{ type, address, existsOnStellar?, createdAt?, linkedAt?,
-  network?, deployTxHash? }`. `address` is the on-chain address for every type
+network?, deployTxHash? }`. `address` is the on-chain address for every type
   (G-address internal, C-address smart/passkey, connected pubkey external).
 - **`ConnectWalletResponse` is now `{ address: string }`.** The duplicate
   `publicKey` field is gone; the built-in `FreighterAdapter` / `AlbedoAdapter`
@@ -155,9 +155,9 @@ async connect(): Promise<ConnectWalletResponse> {
     `authenticated`.
   - **offline / network error** → the session is **not** cleared; it stays
     optimistic and is revalidated on the next `visibilitychange` or request.
-  Resume goes through the normal authed client, so it coalesces with any
-  in-flight refresh and (being a GET) is auto-retried after a token refresh. The
-  endpoint never rotates the refresh token or creates a new family.
+    Resume goes through the normal authed client, so it coalesces with any
+    in-flight refresh and (being a GET) is auto-retried after a token refresh. The
+    endpoint never rotates the refresh token or creates a new family.
 - **`AuthState.authenticated` now carries `verified: boolean`** — `false` while
   a restored session is still optimistic (pre-revalidation), `true` after a
   fresh login/refresh or a successful resume. Gate sensitive actions on it.

@@ -1096,7 +1096,8 @@ export class PollarClient {
           if (data.content) this._setEnabledAssetsState({ step: 'loaded', data: data.content });
           return { status: 'success' };
         }
-        const details = (error as { details?: string; code?: string } | undefined)?.details ?? (error as { code?: string } | undefined)?.code;
+        const details =
+          (error as { details?: string; code?: string } | undefined)?.details ?? (error as { code?: string } | undefined)?.code;
         return { status: 'error', ...(details && { details }) };
       } catch (err) {
         const details = err instanceof Error ? err.message : undefined;
