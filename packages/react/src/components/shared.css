@@ -167,9 +167,15 @@
   margin-top: 1rem;
 }
 
+/* In a button row the primary grows to fill/share the available width. Scoped
+ * here (rather than on the base class) so the button keeps its 44px height when
+ * used inside a flex-column — a bare `flex: 1` collapses it to text height. */
+.pollar-modal-actions .pollar-btn-primary {
+  flex: 1;
+}
+
 /* ─── Primary button ──────────────────────────────────────────────────────────── */
 .pollar-btn-primary {
-  flex: 1;
   height: var(--pollar-buttons-height, 44px);
   border: none;
   border-radius: var(--pollar-buttons-border-radius, 0.5rem);

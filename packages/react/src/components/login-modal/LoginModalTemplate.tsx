@@ -230,21 +230,10 @@ export function LoginModalTemplate({
         <>
           <BackButton onClick={() => setShowPasskeyChooser(false)} />
           <div className="pollar-wallet-section">
-            <button
-              type="button"
-              disabled={isLoading}
-              className="pollar-btn-primary"
-              style={{ width: '100%' }}
-              onClick={onCreateSmartWallet}
-            >
+            <button type="button" disabled={isLoading} className="pollar-btn-primary" onClick={onCreateSmartWallet}>
               Create a new wallet
             </button>
-            <button
-              type="button"
-              disabled={isLoading}
-              className="pollar-wallet-entry-btn"
-              onClick={onLoginSmartWallet}
-            >
+            <button type="button" disabled={isLoading} className="pollar-wallet-entry-btn" onClick={onLoginSmartWallet}>
               Log in with an existing wallet
             </button>
           </div>
@@ -266,7 +255,7 @@ export function LoginModalTemplate({
                 type="button"
                 disabled={isLoading || !email}
                 className="pollar-btn-primary"
-                style={{ marginTop: '0.75rem', width: '100%' }}
+                style={{ marginTop: '0.75rem' }}
                 onClick={onEmailSubmit}
               >
                 Submit
