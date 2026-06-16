@@ -2,6 +2,7 @@ import { AUTH_ERROR_CODES, PasskeyMode } from '../../types';
 import { authenticate } from './authenticate';
 import { createAuthSession, FlowDeps } from './deps';
 import { extractErrorCode, resolveAuthError } from './errorMessages';
+import { logApiError } from './logging';
 
 /**
  * "Smart Wallet" auth via passkey (WebAuthn).
@@ -17,9 +18,10 @@ import { extractErrorCode, resolveAuthError } from './errorMessages';
  * 5. Hand off to `authenticate()` for the READY → `/auth/login` token exchange.
  */
 export async function smartWalletFlow(deps: FlowDeps, mode: PasskeyMode): Promise<void> {
-  const { api, signal, setAuthState, passkey } = deps;
+  const { api, logger, signal, setAuthState, passkey } = deps;
 
   if (!passkey) {
+    logger.error('[PollarClient:auth] passkey ceremony not configured');
     setAuthState({
       step: 'error',
       previousStep: 'creating_session',
@@ -34,12 +36,16 @@ export async function smartWalletFlow(deps: FlowDeps, mode: PasskeyMode): Promis
 
   try {
     // 1. Server challenge.
+    const challengeBody = { clientSessionId };
     const { data: challengeData, error: challengeError } = await api.POST('/auth/passkey/challenge', {
-      body: { clientSessionId },
+      body: challengeBody,
       signal,
     });
     const challenge = challengeData?.content?.challenge;
     if (!challengeData?.success || !challenge) {
+      // HTTP-level errors are logged by the central middleware; only log the
+      // 2xx-with-no-success case here.
+      if (!challengeError) logApiError(logger, 'POST /auth/passkey/challenge', { body: challengeBody, data: challengeData });
       return failPasskey(setAuthState, extractErrorCode(challengeError, challengeData), 'Failed to start passkey');
     }
 
@@ -53,25 +59,24 @@ export async function smartWalletFlow(deps: FlowDeps, mode: PasskeyMode): Promis
     // 3. New user → register (deploys the C-address); returning → login.
     if (ceremony.kind === 'register') {
       setAuthState({ step: 'deploying_smart_account' });
-      const { data, error } = await api.POST('/auth/passkey/register', {
-        body: { clientSessionId, response },
-        signal,
-      });
+      const body = { clientSessionId, response };
+      const { data, error } = await api.POST('/auth/passkey/register', { body, signal });
       // Map the backend code (e.g. SPONSOR_NOT_FUNDED) to a friendly message
       // via the catalog; unknown codes keep the generic fallback.
       if (!data?.success) {
+        if (!error) logApiError(logger, 'POST /auth/passkey/register', { body, data });
         return failPasskey(setAuthState, extractErrorCode(error, data), 'Passkey registration failed');
       }
     } else {
-      const { data, error } = await api.POST('/auth/passkey/login', {
-        body: { clientSessionId, response },
-        signal,
-      });
+      const body = { clientSessionId, response };
+      const { data, error } = await api.POST('/auth/passkey/login', { body, signal });
       if (!data?.success) {
+        if (!error) logApiError(logger, 'POST /auth/passkey/login', { body, data });
         return failPasskey(setAuthState, extractErrorCode(error, data), 'Passkey authentication failed');
       }
     }
-  } catch {
+  } catch (err) {
+    logApiError(logger, 'passkey ceremony', { error: err });
     return failPasskey(setAuthState, undefined, 'Passkey login failed');
   }
 

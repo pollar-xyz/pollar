@@ -3,6 +3,7 @@ import type { PublicEcJwk } from '../../keys/types';
 import type { PollarLogger } from '../../lib/logger';
 import { AUTH_ERROR_CODES, AuthState, PasskeyCeremony, PollarApplicationConfigContent } from '../../types';
 import { WalletAdapter, WalletId } from '../../wallets';
+import { logApiError } from './logging';
 
 export type FlowDeps = {
   api: PollarApiClient;
@@ -48,13 +49,16 @@ export type FlowDeps = {
 };
 
 export async function createAuthSession(deps: FlowDeps): Promise<string | null> {
-  const { api, signal, setAuthState } = deps;
+  const { api, logger, signal, setAuthState } = deps;
 
   setAuthState({ step: 'creating_session' });
 
   const { data, error } = await api.POST('/auth/session', { signal });
 
   if (error || !data?.success) {
+    // HTTP-level errors are logged by the central middleware; only log the
+    // 2xx-with-no-success case here.
+    if (!error) logApiError(logger, 'POST /auth/session', { data });
     setAuthState({
       step: 'error',
       previousStep: 'creating_session',

@@ -7,6 +7,7 @@ import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
 import { hashApiKey } from '../lib/api-key-hash';
 import { createLogger, type PollarLogger } from '../lib/logger';
+import { redactBody } from '../lib/logging';
 import { randomUUID } from '../lib/random-uuid';
 import { StellarNetwork } from '../stellar/StellarClient';
 import { defaultStorage } from '../storage/autodetect';
@@ -357,7 +358,7 @@ export class PollarClient {
         const newNonce = response.headers.get('DPoP-Nonce');
         if (newNonce) self._dpopNonce = newNonce;
 
-        if (response.status !== 401) return response;
+        if (response.status !== 401) return self._logHttp(request, response);
 
         const wwwAuth = response.headers.get('WWW-Authenticate') ?? '';
         const isNonceChallenge = wwwAuth.includes('use_dpop_nonce');
@@ -368,15 +369,15 @@ export class PollarClient {
         // with the new nonce succeeds. Any other 401 (RT expired, reused,
         // invalid) propagates to `_doRefresh` which clears the session.
         if (request.url.includes('/auth/refresh')) {
-          if (isNonceChallenge) return self._retryRequest(request);
-          return response;
+          if (isNonceChallenge) return self._logHttp(request, await self._retryRequest(request));
+          return self._logHttp(request, response);
         }
 
         if (!isNonceChallenge) {
           try {
             await self.refresh();
           } catch {
-            return response;
+            return self._logHttp(request, response);
           }
           // Token-expired retries (post-refresh) are only safe for idempotent
           // methods. POST/PUT/DELETE/PATCH might have already executed
@@ -388,12 +389,68 @@ export class PollarClient {
           // request), so any method retries safely above.
           const method = request.method.toUpperCase();
           if (method !== 'GET' && method !== 'HEAD') {
-            return response;
+            return self._logHttp(request, response);
           }
         }
-        return self._retryRequest(request);
+        return self._logHttp(request, await self._retryRequest(request));
       },
     });
+  }
+
+  /**
+   * Logs the final outcome of an SDK API call exactly once: successes (`2xx`) at
+   * `debug` (method + path + status, no body), failures (`4xx`/`5xx`) at `error`
+   * with the redacted request body and the response error body. Returns the
+   * response so it can be chained at the middleware's return points. The error
+   * body is read off a synchronous `clone()` so it never disturbs the body the
+   * caller consumes.
+   */
+  private _logHttp(request: Request, response: Response): Response {
+    const path = this._httpPath(request.url);
+    const label = `[PollarClient:http] ${request.method.toUpperCase()} ${path} ${response.status}`;
+    if (response.ok) {
+      this._log.debug(label);
+    } else {
+      void this._logHttpError(label, request, response.clone());
+    }
+    return response;
+  }
+
+  /** Reads the redacted request body + JSON response body and logs at `error`. */
+  private async _logHttpError(label: string, request: Request, response: Response): Promise<void> {
+    let requestBody: unknown;
+    const cached = this._requestBodyCache.get(request);
+    if (cached) {
+      try {
+        requestBody = redactBody(JSON.parse(new TextDecoder().decode(cached)));
+      } catch {
+        // Non-JSON / unparseable body — omit it rather than log raw bytes.
+      }
+    }
+
+    let responseBody: unknown;
+    if ((response.headers.get('content-type') ?? '').includes('application/json')) {
+      try {
+        responseBody = await response.json();
+      } catch {
+        // Body already consumed or not valid JSON — omit it.
+      }
+    }
+
+    this._log.error(label, {
+      ...(requestBody !== undefined ? { requestBody } : {}),
+      ...(responseBody !== undefined ? { responseBody } : {}),
+    });
+  }
+
+  /** Strips origin + `/v1` version prefix from a request URL for compact logs. */
+  private _httpPath(url: string): string {
+    try {
+      const { pathname } = new URL(url);
+      return pathname.startsWith('/v1/') ? pathname.slice(3) : pathname;
+    } catch {
+      return url;
+    }
   }
 
   private async _buildProofForRequest(request: Request, accessToken: string | undefined): Promise<string | null> {

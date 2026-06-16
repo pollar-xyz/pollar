@@ -3,6 +3,7 @@ import { AUTH_ERROR_CODES } from '../../types';
 import { WalletId } from '../../wallets';
 import { authenticate } from './authenticate';
 import { createAuthSession, FlowDeps } from './deps';
+import { logApiError } from './logging';
 
 function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   return Promise.race([
@@ -18,7 +19,7 @@ function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 }
 
 export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void> {
-  const { api, signal, setAuthState } = deps;
+  const { api, logger, signal, setAuthState } = deps;
 
   const clientSessionId = await createAuthSession(deps);
   if (!clientSessionId) return;
@@ -45,12 +46,11 @@ export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void>
     deps.storeWalletAdapter(adapter, type);
     setAuthState({ step: 'authenticating_wallet' });
 
-    const { data: walletData, error: walletError } = await api.POST('/auth/wallet', {
-      body: { clientSessionId, walletAddress: address },
-      signal,
-    });
+    const body = { clientSessionId, walletAddress: address };
+    const { data: walletData, error: walletError } = await api.POST('/auth/wallet', { body, signal });
 
     if (walletError || !walletData?.success) {
+      if (!walletError) logApiError(logger, 'POST /auth/wallet', { body, data: walletData });
       setAuthState({
         step: 'error',
         previousStep: 'authenticating_wallet',
@@ -59,7 +59,8 @@ export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void>
       });
       return;
     }
-  } catch {
+  } catch (err) {
+    logApiError(logger, 'wallet connect', { error: err });
     setAuthState({
       step: 'error',
       previousStep: 'connecting_wallet',

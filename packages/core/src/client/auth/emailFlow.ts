@@ -1,6 +1,7 @@
 import { AUTH_ERROR_CODES } from '../../types';
 import { authenticate } from './authenticate';
 import { createAuthSession, FlowDeps } from './deps';
+import { logApiError } from './logging';
 
 export async function initEmailSession(deps: FlowDeps): Promise<void> {
   const clientSessionId = await createAuthSession(deps);
@@ -9,16 +10,15 @@ export async function initEmailSession(deps: FlowDeps): Promise<void> {
 }
 
 export async function sendEmailCode(email: string, clientSessionId: string, deps: FlowDeps): Promise<void> {
-  const { api, signal, setAuthState } = deps;
+  const { api, logger, signal, setAuthState } = deps;
 
   setAuthState({ step: 'sending_email', email });
 
-  const { data, error } = await api.POST('/auth/email', {
-    body: { clientSessionId, email },
-    signal,
-  });
+  const body = { clientSessionId, email };
+  const { data, error } = await api.POST('/auth/email', { body, signal });
 
   if (error || !data?.success) {
+    if (!error) logApiError(logger, 'POST /auth/email', { body, data });
     setAuthState({
       step: 'error',
       previousStep: 'sending_email',
@@ -37,14 +37,12 @@ export async function verifyAndAuthenticate(
   email: string,
   deps: FlowDeps,
 ): Promise<void> {
-  const { api, signal, setAuthState } = deps;
+  const { api, logger, signal, setAuthState } = deps;
 
   setAuthState({ step: 'verifying_email_code', clientSessionId, email });
 
-  const { data, error } = await api.POST('/auth/email/verify-code', {
-    body: { clientSessionId, code },
-    signal,
-  });
+  const body = { clientSessionId, code };
+  const { data, error } = await api.POST('/auth/email/verify-code', { body, signal });
 
   if (data?.code === 'SDK_EMAIL_CODE_VERIFIED') {
     await authenticate(clientSessionId, deps);
@@ -56,6 +54,7 @@ export async function verifyAndAuthenticate(
     (error as unknown as { error?: string } | undefined)?.error ?? (data as unknown as { code?: string } | undefined)?.code;
 
   if (errCode === 'SDK_EMAIL_CODE_EXPIRED') {
+    if (!error) logApiError(logger, 'POST /auth/email/verify-code', { body, data });
     setAuthState({
       step: 'error',
       previousStep: 'verifying_email_code',
@@ -68,6 +67,7 @@ export async function verifyAndAuthenticate(
   }
 
   if (errCode === 'INVALID_EMAIL_CODE' || errCode === 'SDK_EMAIL_CODE_INVALID') {
+    if (!error) logApiError(logger, 'POST /auth/email/verify-code', { body, data });
     setAuthState({
       step: 'error',
       previousStep: 'verifying_email_code',
@@ -79,6 +79,7 @@ export async function verifyAndAuthenticate(
     return;
   }
 
+  if (!error) logApiError(logger, 'POST /auth/email/verify-code', { body, data });
   setAuthState({
     step: 'error',
     previousStep: 'verifying_email_code',
