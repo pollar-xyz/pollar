@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.9.1-rc.0
+
+> Release candidate. Published under the `next` dist-tag (`npm i @pollar/core@next`).
+> No breaking changes since `0.9.0`.
+
+### `@pollar/core` — features
+
+- **All SDK API calls are now logged** — successful requests at `debug`, errors at
+  `error` — to aid integration debugging.
+- **Backend error codes are mapped to friendly auth messages** so failed logins
+  surface human-readable reasons instead of raw codes.
+
+### `@pollar/core` — fixes
+
+- **Native adapter load failures now attach a `cause`**, preserving the original
+  error when an Expo / React Native secure-storage adapter fails to load.
+
+### Internal
+
+- Upgraded tooling to TypeScript 6, ESLint 10, and `eslint-plugin-react-hooks` 7,
+  plus safe minor dependency bumps.
+- Applied Prettier formatting across `core` and `react`.
+
 ## 0.9.0
 
 > **⚠️ BREAKING CHANGES (SDK packages only — the SDK API stays backward-compatible).**
