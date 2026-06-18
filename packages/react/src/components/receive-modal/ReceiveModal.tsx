@@ -11,7 +11,8 @@ interface ReceiveModalProps {
 }
 
 export function ReceiveModal({ onClose }: ReceiveModalProps) {
-  const { walletAddress, styles } = usePollar();
+  const { wallet, styles } = usePollar();
+  const walletAddress = wallet?.address ?? '';
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

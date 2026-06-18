@@ -11,7 +11,10 @@ interface TransactionModalProps {
 }
 
 export function TransactionModal({ onClose }: TransactionModalProps) {
-  const { getClient, styles, tx: transaction, network, walletType } = usePollar();
+  const { getClient, styles, tx: transaction, network, wallet } = usePollar();
+  // External-wallet signing-adapter id (freighter/albedo) drives the wallet logo;
+  // null for custodial/smart, which fall back to the Pollar logo.
+  const walletType = wallet?.custody === 'external' ? wallet.provider : null;
   const { theme = 'light', accentColor = '#005DB4' } = styles;
 
   const [showXdr, setShowXdr] = useState(false);

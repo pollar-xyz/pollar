@@ -27,10 +27,13 @@ export function SendModal({ onClose }: SendModalProps) {
     buildTx,
     signAndSubmitTx,
     tx: transaction,
-    walletType,
+    wallet,
     network,
     styles,
   } = usePollar();
+  // External-wallet signing-adapter id (freighter/albedo) drives the wallet logo;
+  // null for custodial/smart, which fall back to the Pollar logo.
+  const walletType = wallet?.custody === 'external' ? wallet.provider : null;
   const { theme = 'light', accentColor = '#005DB4' } = styles;
 
   const [step, setStep] = useState<'form' | 'tx'>('form');

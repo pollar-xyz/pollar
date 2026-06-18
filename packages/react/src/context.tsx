@@ -19,7 +19,7 @@ import {
   TxBuildBody,
   TxHistoryState,
   WalletBalanceState,
-  WalletId,
+  WalletInfo,
 } from '@pollar/core';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { ModalErrorBoundary, setModalErrorLogger } from './components/commons';
@@ -65,7 +65,14 @@ function sessionsEqual(a: PollarPersistedSession | null, b: PollarPersistedSessi
 }
 
 interface PollarContextValue {
-  walletAddress: string;
+  /**
+   * The authenticated user's wallet as a discriminated union over `custody`
+   * (`internal` | `smart` | `external`), or `null` when unauthenticated. Every
+   * field is meaningful for any login method — `custody` is always present and
+   * strictly determines the shape of `provider`. Use `wallet.address` for the
+   * on-chain address and `wallet.provider` for the wallet/login provider.
+   */
+  wallet: WalletInfo | null;
   getClient: () => PollarClient;
   openLoginModal: () => void;
 
@@ -110,7 +117,6 @@ interface PollarContextValue {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ) => Promise<SubmitOutcome>;
-  walletType: WalletId | null;
   // network
   network: StellarNetwork;
   setNetwork: (network: StellarNetwork) => void;
@@ -335,10 +341,9 @@ export function PollarProvider({
     const styles: PollarStyles = resolvedConfig.styles ?? {};
     return {
       // session
-      walletAddress,
+      wallet: pollarClient.getWallet(),
       isAuthenticated: !!walletAddress,
       verified,
-      walletType: pollarClient.getWalletType(),
       // client
       getClient,
       // auth

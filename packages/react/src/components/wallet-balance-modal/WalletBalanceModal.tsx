@@ -11,7 +11,8 @@ interface WalletBalanceModalProps {
 }
 
 export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
-  const { walletBalance, refreshWalletBalance, walletAddress, styles } = usePollar();
+  const { walletBalance, refreshWalletBalance, wallet, styles } = usePollar();
+  const walletAddress = wallet?.address ?? '';
   const { theme = 'light', accentColor = '#005DB4' } = styles;
 
   useEffect(() => {

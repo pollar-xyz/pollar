@@ -8,7 +8,7 @@ import './WalletButton.css';
 export function WalletButton() {
   const {
     getClient,
-    walletAddress,
+    wallet,
     styles,
     openLoginModal,
     openTxHistoryModal,
@@ -20,8 +20,11 @@ export function WalletButton() {
     openRampModal,
     openDistributionRulesModal,
     tx: transaction,
-    walletType,
   } = usePollar();
+  const walletAddress = wallet?.address ?? '';
+  // External-wallet signing-adapter id (freighter/albedo) drives the wallet logo;
+  // null for custodial/smart, which fall back to the Pollar logo.
+  const walletType = wallet?.custody === 'external' ? wallet.provider : null;
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
