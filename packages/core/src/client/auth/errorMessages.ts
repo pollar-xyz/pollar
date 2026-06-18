@@ -61,6 +61,10 @@ const CATALOG: Record<string, ResolvedAuthError> = {
     message: 'Not enough XLM to cover the network fee. Add more XLM to your wallet and try again.',
     errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED,
   },
+  TX_CONTRACT_FAILED: {
+    message: 'The contract rejected this operation. Check the operation is allowed right now and try again.',
+    errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED,
+  },
   TX_DESTINATION_NOT_FOUND: {
     message: "The destination account doesn't exist on the network yet.",
     errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED,
