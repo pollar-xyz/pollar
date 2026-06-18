@@ -1,7 +1,13 @@
 import { createApiClient, PollarApiClient } from '../api/client';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
-import { createOffRamp, createOnRamp, getRampsQuote, getRampTransaction, pollRampTransaction } from '../api/endpoints/ramps';
+import {
+  createOffRamp,
+  createOnRamp,
+  getRampsQuote,
+  getRampTransaction,
+  pollRampTransaction
+} from '../api/endpoints/ramps';
 import { buildProof } from '../dpop';
 import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
@@ -12,17 +18,16 @@ import { randomUUID } from '../lib/random-uuid';
 import { StellarNetwork } from '../stellar/StellarClient';
 import { defaultStorage } from '../storage/autodetect';
 import type { OnStorageDegrade, Storage, StorageDegradeReason } from '../storage/types';
-import { POLLAR_CORE_VERSION } from '../version';
-import { defaultVisibilityProvider } from '../visibility/autodetect';
-import type { VisibilityProvider } from '../visibility/types';
 import {
   AUTH_ERROR_CODES,
+  AuthProviderContext,
   AuthState,
   AuthUrlOpener,
   BuildOutcome,
   DistributionClaimBody,
   DistributionClaimContent,
   DistributionRule,
+  EnabledAssetsState,
   KycLevel,
   KycStartBody,
   KycStartResponse,
@@ -31,6 +36,8 @@ import {
   PasskeyCeremony,
   PasskeySigner,
   PollarApplicationConfigContent,
+  PollarAuthMethod,
+  PollarAuthProvider,
   PollarClientConfig,
   PollarFlowError,
   PollarLoginOptions,
@@ -48,23 +55,43 @@ import {
   SessionsState,
   SignOutcome,
   SubmitOutcome,
-  TrustlineOutcome,
   TransactionState,
+  TrustlineOutcome,
   TxBuildBody,
   TxBuildContent,
   TxHistoryParams,
   TxHistoryState,
   TxSignAndSendBody,
-  EnabledAssetsState,
   WalletBalanceContent,
   WalletBalanceState,
+  WalletInfo,
 } from '../types';
-import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletAdapterResolver, WalletId, WalletType } from '../wallets';
+import { POLLAR_CORE_VERSION } from '../version';
+import { defaultVisibilityProvider } from '../visibility/autodetect';
+import type { VisibilityProvider } from '../visibility/types';
+import {
+  AlbedoAdapter,
+  FreighterAdapter,
+  WalletAdapter,
+  WalletAdapterResolver,
+  WalletId,
+  WalletType
+} from '../wallets';
+import { authenticate } from './auth/authenticate';
+import { createAuthSession } from './auth/deps';
 import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/emailFlow';
 import { defaultWebOAuthOpener, loginOAuth } from './auth/oauthFlow';
 import { smartWalletFlow } from './auth/passkeyFlow';
+import { emailProvider, oauthProvider } from './auth/providers';
 import { loginWallet } from './auth/walletFlow';
-import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
+import {
+  readStorage,
+  readWalletType,
+  removeStorage,
+  sessionStorageKey,
+  writeStorage,
+  writeWalletType
+} from './session';
 
 const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
 /** React Native runtime: `navigator.product === 'ReactNative'` (set by the RN runtime). */
@@ -179,6 +206,13 @@ export class PollarClient {
   private readonly _openAuthUrl: AuthUrlOpener;
   /** `redirect_uri` sent to the backend for hosted OAuth. */
   private readonly _oauthRedirectUri: string;
+  /**
+   * Registry of pluggable login strategies, keyed by provider id. Seeded with
+   * the built-ins (`google`, `github`, `email`) and then any `config.providers`
+   * (which can override a built-in by reusing its id). `wallet` is deliberately
+   * absent — it keeps its own dedicated flow. See {@link PollarAuthProvider}.
+   */
+  private readonly _providers = new Map<string, PollarAuthProvider>();
 
   constructor(config: PollarClientConfig) {
     this.apiKey = config.apiKey;
@@ -211,6 +245,14 @@ export class PollarClient {
     // webview/SSR shims expose a partial `window`); read it defensively so the
     // constructor never throws on a missing `.origin`.
     this._oauthRedirectUri = config.oauthRedirectUri ?? (isBrowser ? (window.location?.origin ?? '') : '');
+
+    // Seed built-in providers first, then let custom ones override by id.
+    for (const provider of [oauthProvider('google'), oauthProvider('github'), emailProvider()]) {
+      this._providers.set(provider.id, provider);
+    }
+    for (const provider of config.providers ?? []) {
+      this._providers.set(provider.id, provider);
+    }
 
     this._api = createApiClient(this.basePath);
     this._wireMiddlewares();
@@ -724,30 +766,48 @@ export class PollarClient {
       warnServerSide('login');
       return;
     }
-    if (options.provider === 'google' || options.provider === 'github' || options.provider === 'email') {
-      const controller = this._newController();
-      const deps = this._flowDeps(controller.signal);
-      if (options.provider === 'google' || options.provider === 'github') {
-        loginOAuth(options.provider, {
-          ...deps,
-          basePath: this.basePath,
-          apiKey: this.apiKey,
-          openAuthUrl: this._openAuthUrl,
-          redirectUri: this._oauthRedirectUri,
-        }).catch((err) => this._handleFlowError(err));
-      } else if (options.provider === 'email') {
-        const { email } = options;
-        initEmailSession(deps)
-          .then(() => {
-            if (this._authState.step === 'entering_email') {
-              return sendEmailCode(email, this._authState.clientSessionId, deps);
-            }
-          })
-          .catch((err) => this._handleFlowError(err));
-      }
-    } else if (options.provider === 'wallet') {
+    // Wallet stays a dedicated flow: it yields a persistent `WalletAdapter`
+    // (reused for signing long after login) and needs the wallet-adapter
+    // resolver — both orthogonal to the generic auth-provider abstraction.
+    if (options.provider === 'wallet') {
       this.loginWallet(options.type);
+      return;
     }
+
+    const provider = this._providers.get(options.provider);
+    if (!provider?.login) {
+      this._setAuthState({
+        step: 'error',
+        previousStep: this._authState.step,
+        message: `No auth provider registered for '${options.provider}'`,
+        errorCode: AUTH_ERROR_CODES.AUTH_FAILED,
+      });
+      return;
+    }
+
+    const controller = this._newController();
+    provider.login(this._providerContext(controller.signal), options).catch((err) => this._handleFlowError(err));
+  }
+
+  /**
+   * Invoke a named secondary step on a registered provider (e.g. email's
+   * `sendCode` / `verifyCode`, or a custom provider's multi-step continuation).
+   * Reuses the in-flight login `AbortController` when one exists so the step
+   * stays cancellable via `cancelLogin()`; otherwise starts a fresh one. The
+   * built-in email steps also have dedicated typed methods
+   * ({@link sendEmailCode} / {@link verifyEmailCode}) — prefer those for email.
+   */
+  providerAction(provider: string, action: string, payload?: unknown): void {
+    if (!isClientRuntime) {
+      warnServerSide('providerAction');
+      return;
+    }
+    const fn = this._providers.get(provider)?.actions?.[action];
+    if (!fn) {
+      throw new PollarFlowError(`Auth provider '${provider}' has no action '${action}'`);
+    }
+    const signal = this._loginController?.signal ?? this._newController().signal;
+    fn(this._providerContext(signal), payload).catch((err) => this._handleFlowError(err));
   }
 
   // ─── Email OTP flow (3 steps) ─────────────────────────────────────────────
@@ -758,7 +818,7 @@ export class PollarClient {
       return;
     }
     const controller = this._newController();
-    initEmailSession(this._flowDeps(controller.signal)).catch((err) => this._handleFlowError(err));
+    initEmailSession(this._providerContext(controller.signal)).catch((err) => this._handleFlowError(err));
   }
 
   sendEmailCode(email: string): void {
@@ -771,7 +831,7 @@ export class PollarClient {
     }
     const { clientSessionId } = this._authState;
     const signal = this._loginController!.signal;
-    sendEmailCode(email, clientSessionId, this._flowDeps(signal)).catch((err) => this._handleFlowError(err));
+    sendEmailCode(email, clientSessionId, this._providerContext(signal)).catch((err) => this._handleFlowError(err));
   }
 
   verifyEmailCode(code: string): void {
@@ -794,7 +854,7 @@ export class PollarClient {
     const email = state.step === 'entering_code' ? state.email : ((state as { email?: string }).email ?? '');
 
     const controller = this._newController();
-    verifyAndAuthenticate(code, clientSessionId, email, this._flowDeps(controller.signal)).catch((err) =>
+    verifyAndAuthenticate(code, clientSessionId, email, this._providerContext(controller.signal)).catch((err) =>
       this._handleFlowError(err),
     );
   }
@@ -1220,6 +1280,30 @@ export class PollarClient {
 
   getWalletType(): WalletId | null {
     return this._walletAdapter?.type ?? null;
+  }
+
+  /**
+   * The authenticated user's wallet as a {@link WalletInfo} discriminated union,
+   * or `null` when there's no session (or the session carries no address yet).
+   *
+   * `custody` strictly determines `provider` (the mapping is 1:1 and fixed at
+   * account creation server-side): `external` reports the connected adapter id
+   * (`getWalletType()`), `smart` is always `'passkey'`, and `internal` reports
+   * the login method the backend recorded (`null` for pre-provider sessions).
+   */
+  getWallet(): WalletInfo | null {
+    const w = this._session?.wallet;
+    if (!w || !w.address) return null;
+    switch (w.type) {
+      case 'external':
+        return { custody: 'external', address: w.address, provider: this._walletAdapter?.type ?? null };
+      case 'smart':
+        return { custody: 'smart', address: w.address, provider: 'passkey' };
+      case 'internal':
+        return { custody: 'internal', address: w.address, provider: (w.provider as PollarAuthMethod | undefined) ?? null };
+      default:
+        return null;
+    }
   }
 
   /**
@@ -1799,6 +1883,77 @@ export class PollarClient {
     return this._loginController;
   }
 
+  /**
+   * Build the {@link AuthProviderContext} facade for one login attempt. Wraps
+   * the internal `FlowDeps` so providers get only the curated primitives —
+   * `createSession`, `authenticate`, `exchangeExternalToken`, `startHostedOAuth`
+   * — while storage / wallet-adapter / key-manager internals stay private. All
+   * legs share the same `signal`, so `cancelLogin()` aborts the whole chain.
+   */
+  private _providerContext(signal: AbortSignal): AuthProviderContext {
+    const deps = this._flowDeps(signal);
+    return {
+      signal,
+      api: this._api,
+      basePath: this.basePath,
+      apiKey: this.apiKey,
+      logger: this._log,
+      setAuthState: this._setAuthState.bind(this),
+      createSession: () => createAuthSession(deps),
+      authenticate: (clientSessionId: string) => authenticate(clientSessionId, deps),
+      exchangeExternalToken: (clientSessionId, body) => this._exchangeExternalToken(clientSessionId, body, signal),
+      startHostedOAuth: (provider) =>
+        loginOAuth(provider, {
+          ...deps,
+          basePath: this.basePath,
+          apiKey: this.apiKey,
+          openAuthUrl: this._openAuthUrl,
+          redirectUri: this._oauthRedirectUri,
+        }),
+    };
+  }
+
+  /**
+   * Generic external-provider exchange leg (`POST /auth/external`). Custom
+   * providers call this (via the context) after their own SDK has authenticated
+   * the user, passing whatever proof the backend expects. On success the session
+   * is marked READY server-side and the provider should then call
+   * `ctx.authenticate(clientSessionId)`. Returns `false` (and sets an error
+   * state) on failure.
+   *
+   * NOTE: `/auth/external` is not yet in the generated OpenAPI `paths`, so the
+   * call is made through a typed escape hatch. Once the backend ships the
+   * endpoint and the schema is regenerated, drop the cast and call `api.POST`
+   * directly.
+   */
+  private async _exchangeExternalToken(
+    clientSessionId: string,
+    body: Record<string, unknown>,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    const postExternal = this._api.POST as unknown as (
+      path: string,
+      init: { body: Record<string, unknown>; signal: AbortSignal },
+    ) => Promise<{ data?: { success?: boolean }; error?: unknown }>;
+
+    const { data, error } = await postExternal('/auth/external', {
+      body: { clientSessionId, ...body },
+      signal,
+    });
+
+    if (error || !data?.success) {
+      this._log.error('[PollarClient] External provider authentication failed', { error });
+      this._setAuthState({
+        step: 'error',
+        previousStep: this._authState.step,
+        message: 'External provider authentication failed',
+        errorCode: AUTH_ERROR_CODES.EXTERNAL_AUTH_FAILED,
+      });
+      return false;
+    }
+    return true;
+  }
+
   private _flowDeps(signal: AbortSignal) {
     return {
       api: this._api,
@@ -1966,6 +2121,9 @@ export class PollarClient {
     this._log.info('[PollarClient] Session stored');
 
     const w = session.wallet;
+    // `provider` (the login method) was added to the wire after the generated
+    // OpenAPI types were last cut, so read it defensively until they're regen'd.
+    const wireProvider = (w as { provider?: string }).provider;
     const persisted: PollarPersistedSession = {
       clientSessionId: session.clientSessionId,
       userId: session.userId ?? null,
@@ -1979,6 +2137,7 @@ export class PollarClient {
       // persisted session speak one vocabulary while the wire stays compatible.
       wallet: {
         type: w.type === 'custodial' ? 'internal' : w.type,
+        ...(wireProvider ? { provider: wireProvider } : {}),
         address: w.address ?? w.publicKey ?? null,
         ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
         ...(w.createdAt !== undefined ? { createdAt: w.createdAt } : {}),

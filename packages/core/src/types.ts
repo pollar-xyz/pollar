@@ -1,4 +1,5 @@
 import { pollarPaths, StellarNetwork } from './index';
+import type { PollarApiClient } from './api/client';
 import type { KeyManager } from './keys/types';
 import type { LogLevel, PollarLogger } from './lib/logger';
 import type { OnStorageDegrade, Storage } from './storage/types';
@@ -28,6 +29,14 @@ export interface PollarPersistedSession {
   // C-address for smart/passkey, the connected pubkey for external).
   wallet: {
     type: 'internal' | 'smart' | 'external';
+    // The login method, 1:1 with `type` (fixed at account creation server-side):
+    //   internal → 'email' | 'google' | 'github' | 'oidc'
+    //   smart    → 'passkey'
+    //   external → 'wallet'
+    // Optional: sessions minted by sdk-api < this change won't carry it. For
+    // external wallets the specific on-chain adapter id (freighter/albedo) is
+    // exposed separately via `getWallet().provider`, not here.
+    provider?: string;
     address: string | null;
     existsOnStellar?: boolean;
     // On-chain creation time (smart = deploy; internal = keypair creation).
@@ -39,6 +48,32 @@ export interface PollarPersistedSession {
     deployTxHash?: string | null;
   };
 }
+
+/**
+ * Custodial login methods — the providers that map to an `internal` wallet.
+ * Mirrors the backend `AuthProvider` enum minus passkey (→ smart) and
+ * wallet/external (→ external).
+ */
+export type PollarAuthMethod = 'email' | 'google' | 'github' | 'oidc';
+
+/**
+ * The authenticated user's wallet, as a discriminated union over `custody`.
+ * Every authenticated session has exactly one wallet whose custody is fixed at
+ * account creation, so `custody` strictly determines the shape of `provider`:
+ *
+ *   - `internal` (platform-custodied G-address) → `provider` is the login
+ *     method, or `null` if the session predates provider tracking server-side.
+ *   - `smart` (passkey Soroban C-address) → `provider` is always `'passkey'`.
+ *   - `external` (user-connected wallet) → `provider` is the on-chain adapter
+ *     id (`'freighter'`, `'albedo'`, …), or `null` when no adapter is resolved
+ *     (e.g. a restored session whose adapter could not be re-attached).
+ *
+ * Obtained via {@link PollarClient.getWallet}.
+ */
+export type WalletInfo =
+  | { custody: 'internal'; address: string; provider: PollarAuthMethod | null }
+  | { custody: 'smart'; address: string; provider: 'passkey' }
+  | { custody: 'external'; address: string; provider: WalletId | null };
 
 /** In-memory user profile (kept on `PollarClient`, never persisted). */
 export interface PollarUserProfile {
@@ -148,6 +183,16 @@ export interface PollarClientConfig {
    * same URL you pass to `WebBrowser.openAuthSessionAsync`.
    */
   oauthRedirectUri?: string;
+  /**
+   * Custom auth providers (e.g. Privy, Magic). Each is a {@link PollarAuthProvider}
+   * registered by its `id`; `login({ provider: id })` then dispatches to it.
+   * Registered AFTER the built-ins, so an entry whose `id` matches a built-in
+   * (`'google'`, `'github'`, `'email'`) overrides it. Does NOT affect `wallet`,
+   * which keeps its own dedicated flow. Custom providers typically authenticate
+   * with their own SDK and then call `ctx.exchangeExternalToken(...)`, which the
+   * backend validates via `POST /auth/external`.
+   */
+  providers?: PollarAuthProvider[];
   /**
    * The passkey (WebAuthn) ceremony for "Smart Wallet" login, injected by the
    * runtime layer (`@pollar/react` implements it with `@simplewebauthn/browser`).
@@ -272,11 +317,71 @@ export type TxBuildSignSubmitResponse =
   pollarPaths['/tx/build-sign-submit']['post']['responses'][200]['content']['application/json'];
 export type TxBuildSignSubmitContent = TxBuildSignSubmitResponse['content'];
 
+/**
+ * Discriminated union of every login the SDK understands. Intentionally
+ * **closed**: each custom provider you add (and wire up server-side via
+ * `POST /auth/external`) gets its own member here so `login()` stays fully
+ * typed and `switch (options.provider)` stays exhaustive. To add one, append a
+ * line — e.g. `| { provider: 'privy'; loginMethod?: 'email' | 'sms' }` — and
+ * register a matching {@link PollarAuthProvider} via `PollarClientConfig.providers`.
+ */
 export type PollarLoginOptions =
   | { provider: 'google' }
   | { provider: 'github' }
   | { provider: 'email'; email: string }
   | { provider: 'wallet'; type: WalletId };
+
+/**
+ * Curated, stable facade handed to every {@link PollarAuthProvider}. It exposes
+ * only the primitives a login strategy needs — the shared backbone
+ * (`createSession` → drive the session READY → `authenticate`) plus a couple of
+ * ready-made legs — and deliberately keeps `PollarClient` internals (storage,
+ * wallet-adapter resolution, DPoP key manager) private. This is the public
+ * contract a third-party provider (e.g. Privy) builds against.
+ */
+export interface AuthProviderContext {
+  /** Aborts when the host calls `cancelLogin()` (or a new login supersedes this one). */
+  readonly signal: AbortSignal;
+  /** Typed `openapi-fetch` client, already wired with DPoP + refresh middleware. */
+  readonly api: PollarApiClient;
+  /** API origin + version prefix (e.g. `https://sdk.api.pollar.xyz/v1`). */
+  readonly basePath: string;
+  readonly apiKey: string;
+  readonly logger: PollarLogger;
+  /** Drive the SDK's auth state machine (the host's `onAuthStateChange` mirrors it). */
+  setAuthState(state: AuthState): void;
+  /** `POST /auth/session` → `clientSessionId` (null on failure; error state already set). */
+  createSession(): Promise<string | null>;
+  /** Poll the session to READY, then `POST /auth/login` and persist the session. The shared backbone. */
+  authenticate(clientSessionId: string): Promise<void>;
+  /**
+   * Generic external-provider leg: `POST /auth/external` with `{ clientSessionId, ...body }`.
+   * Use after your provider's own SDK has authenticated the user — pass whatever
+   * proof the backend expects (token, signature, …). Returns `false` and sets an
+   * error state on failure. (Requires the backend `/auth/external` endpoint.)
+   */
+  exchangeExternalToken(clientSessionId: string, body: Record<string, unknown>): Promise<boolean>;
+  /** Built-in hosted-OAuth dance (popup on web, in-app browser on RN). Backs the google/github providers. */
+  startHostedOAuth(provider: 'google' | 'github'): Promise<void>;
+}
+
+/**
+ * A pluggable login strategy. Built-ins (`google`, `github`, `email`) ship as
+ * these; custom ones (Privy, Magic, …) are injected via
+ * `PollarClientConfig.providers`. Note: `wallet` is intentionally NOT a provider
+ * — it yields a persistent `WalletAdapter` reused for signing, a concern
+ * orthogonal to login, so it keeps its own dedicated `loginWallet()` flow.
+ *
+ * - `login` handles the one-shot entry point (`client.login({ provider: id })`).
+ * - `actions` exposes extra named steps for multi-step flows (e.g. email's
+ *   send-code / verify-code), invoked via `client.providerAction(id, action, payload)`.
+ */
+export interface PollarAuthProvider {
+  /** Matches `PollarLoginOptions.provider` and the key in `providerAction`. */
+  readonly id: string;
+  login?(ctx: AuthProviderContext, options: PollarLoginOptions): Promise<void>;
+  actions?: Record<string, (ctx: AuthProviderContext, payload?: unknown) => Promise<void>>;
+}
 
 export type TxBuildContent = TxBuildResponse['content'];
 
@@ -369,6 +474,7 @@ export const AUTH_ERROR_CODES = {
   WALLET_CONNECT_FAILED: 'WALLET_CONNECT_FAILED',
   WALLET_AUTH_FAILED: 'WALLET_AUTH_FAILED',
   WALLET_RESOLVER_TIMEOUT: 'WALLET_RESOLVER_TIMEOUT',
+  EXTERNAL_AUTH_FAILED: 'EXTERNAL_AUTH_FAILED',
   PASSKEY_FAILED: 'PASSKEY_FAILED',
   UNEXPECTED_ERROR: 'UNEXPECTED_ERROR',
 } as const;

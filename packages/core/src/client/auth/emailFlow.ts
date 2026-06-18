@@ -1,16 +1,21 @@
-import { AUTH_ERROR_CODES } from '../../types';
-import { authenticate } from './authenticate';
-import { createAuthSession, FlowDeps } from './deps';
+import { AUTH_ERROR_CODES, AuthProviderContext } from '../../types';
 import { logApiError } from './logging';
 
-export async function initEmailSession(deps: FlowDeps): Promise<void> {
-  const clientSessionId = await createAuthSession(deps);
-  if (!clientSessionId) return;
-  deps.setAuthState({ step: 'entering_email', clientSessionId });
+/**
+ * Mint an auth session and move to the email-entry step. Returns the
+ * `clientSessionId` so a one-shot caller can chain straight into
+ * {@link sendEmailCode}; returns `null` if session creation failed (the error
+ * state is already set by `ctx.createSession()`).
+ */
+export async function initEmailSession(ctx: AuthProviderContext): Promise<string | null> {
+  const clientSessionId = await ctx.createSession();
+  if (!clientSessionId) return null;
+  ctx.setAuthState({ step: 'entering_email', clientSessionId });
+  return clientSessionId;
 }
 
-export async function sendEmailCode(email: string, clientSessionId: string, deps: FlowDeps): Promise<void> {
-  const { api, logger, signal, setAuthState } = deps;
+export async function sendEmailCode(email: string, clientSessionId: string, ctx: AuthProviderContext): Promise<void> {
+  const { api, logger, signal, setAuthState } = ctx;
 
   setAuthState({ step: 'sending_email', email });
 
@@ -35,9 +40,9 @@ export async function verifyAndAuthenticate(
   code: string,
   clientSessionId: string,
   email: string,
-  deps: FlowDeps,
+  ctx: AuthProviderContext,
 ): Promise<void> {
-  const { api, logger, signal, setAuthState } = deps;
+  const { api, logger, signal, setAuthState } = ctx;
 
   setAuthState({ step: 'verifying_email_code', clientSessionId, email });
 
@@ -45,7 +50,7 @@ export async function verifyAndAuthenticate(
   const { data, error } = await api.POST('/auth/email/verify-code', { body, signal });
 
   if (data?.code === 'SDK_EMAIL_CODE_VERIFIED') {
-    await authenticate(clientSessionId, deps);
+    await ctx.authenticate(clientSessionId);
     return;
   }
 
