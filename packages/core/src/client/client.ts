@@ -2,13 +2,7 @@ import { createApiClient, PollarApiClient } from '../api/client';
 import type { paths } from '../api/schema';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
-import {
-  createOffRamp,
-  createOnRamp,
-  getRampsQuote,
-  getRampTransaction,
-  pollRampTransaction
-} from '../api/endpoints/ramps';
+import { createOffRamp, createOnRamp, getRampsQuote, getRampTransaction, pollRampTransaction } from '../api/endpoints/ramps';
 import { buildProof } from '../dpop';
 import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
@@ -54,6 +48,7 @@ import {
   RampTxStatus,
   SessionInfo,
   SessionsState,
+  SignAuthEntryOutcome,
   SignOutcome,
   SubmitOutcome,
   TransactionState,
@@ -70,14 +65,7 @@ import {
 import { POLLAR_CORE_VERSION } from '../version';
 import { defaultVisibilityProvider } from '../visibility/autodetect';
 import type { VisibilityProvider } from '../visibility/types';
-import {
-  AlbedoAdapter,
-  FreighterAdapter,
-  WalletAdapter,
-  WalletAdapterResolver,
-  WalletId,
-  WalletType
-} from '../wallets';
+import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletAdapterResolver, WalletId, WalletType } from '../wallets';
 import { authenticate } from './auth/authenticate';
 import { createAuthSession } from './auth/deps';
 import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/emailFlow';
@@ -85,14 +73,7 @@ import { defaultWebOAuthOpener, loginOAuth } from './auth/oauthFlow';
 import { smartWalletFlow } from './auth/passkeyFlow';
 import { emailProvider, oauthProvider } from './auth/providers';
 import { loginWallet, requestWalletChallenge } from './auth/walletFlow';
-import {
-  readStorage,
-  readWalletType,
-  removeStorage,
-  sessionStorageKey,
-  writeStorage,
-  writeWalletType
-} from './session';
+import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
 
 /** Request body for the external-provider auth leg (`POST /auth/external`). */
 type ExternalAuthBody = NonNullable<paths['/auth/external']['post']['requestBody']>['content']['application/json'];
@@ -1384,6 +1365,58 @@ export class PollarClient {
         ...(buildData && { buildData }),
         ...(details && { details }),
       });
+      return { status: 'error', ...(details && { details }) };
+    }
+  }
+
+  /**
+   * Sign a single Soroban authorization entry (`SorobanAuthorizationEntry`).
+   *
+   * Use this when a contract is the transaction source (e.g. it sponsors the
+   * gas and swaps the fee out of the user's token) and only needs the user's
+   * address-credentials authorization, not a full signed envelope. The signed
+   * entry is returned as base64 XDR for the caller to compose into its tx.
+   *
+   * - External wallets (Freighter/Albedo) sign the entry via the provider.
+   * - Custodial wallets are signed by the backend, which FIRST validates the
+   *   entry's invocation tree against the app's contract/function allowlist and
+   *   caps the validity window — entries touching a non-allowlisted contract or
+   *   function, or expiring too far ahead, are rejected.
+   *
+   * @param entryXdr base64 XDR of the unsigned `SorobanAuthorizationEntry`.
+   * @param options.validUntilLedger absolute ledger the signature expires at
+   *   (computed from the network's latest ledger). Ignored on the external-wallet
+   *   path, where the provider sets its own expiration.
+   */
+  async signAuthEntry(entryXdr: string, options: { validUntilLedger: number }): Promise<SignAuthEntryOutcome> {
+    // External adapter: the provider signs the entry directly.
+    if (this._walletAdapter) {
+      const accountToSign = this._session?.wallet?.address;
+      try {
+        const { signedAuthEntry } = await this._walletAdapter.signAuthEntry(
+          entryXdr,
+          accountToSign ? { accountToSign } : undefined,
+        );
+        return { status: 'signed', signedAuthEntry };
+      } catch (err) {
+        const details = err instanceof Error ? err.message : undefined;
+        return { status: 'error', ...(details && { details }) };
+      }
+    }
+
+    // Custodial path: backend enforces the app's auth-entry policy, then signs.
+    const address = this._session?.wallet?.address ?? '';
+    try {
+      const { data, error } = await this._api.POST('/tx/sign-auth-entry', {
+        body: { network: this.getNetwork(), address, entryXdr, validUntilLedger: options.validUntilLedger },
+      });
+      if (!error && data?.success && data.content?.signedAuthEntry) {
+        return { status: 'signed', signedAuthEntry: data.content.signedAuthEntry };
+      }
+      const details = (error as { details?: string } | undefined)?.details;
+      return { status: 'error', ...(details && { details }) };
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
       return { status: 'error', ...(details && { details }) };
     }
   }

@@ -455,6 +455,15 @@ export type SignOutcome =
   | { status: 'signed'; signedXdr: string; submissionToken?: string; expiresAt?: number }
   | { status: 'error'; details?: string };
 
+/**
+ * Result of {@link PollarClient.signAuthEntry}. `signedAuthEntry` is the base64
+ * XDR of the signed `SorobanAuthorizationEntry`, ready to be composed into the
+ * caller's transaction envelope (e.g. by a contract that sponsors the gas).
+ */
+export type SignAuthEntryOutcome =
+  | { status: 'signed'; signedAuthEntry: string }
+  | { status: 'error'; details?: string };
+
 export type SubmitOutcome =
   | { status: 'success'; hash: string; buildData?: TxBuildContent }
   | { status: 'pending'; hash: string; buildData?: TxBuildContent }

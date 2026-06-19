@@ -512,6 +512,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tx/sign-auth-entry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign a Soroban authorization entry (custodial)
+         * @description Signs a single SorobanAuthorizationEntry with the user's custodial key. sdk-api enforces the app's per-contract/function allowlist and a short validity-ledger window before signing.
+         */
+        post: operations["postTxSignAuthEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tx/submit": {
         parameters: {
             query?: never;
@@ -3137,6 +3157,98 @@ export interface operations {
                 };
             };
             /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Signing error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+        };
+    };
+    postTxSignAuthEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    network: "testnet" | "mainnet";
+                    publicKey?: string;
+                    address?: string;
+                    entryXdr: string;
+                    /** Absolute ledger the signature expires at. */
+                    validUntilLedger: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Base64 XDR of the signed auth entry */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_TX_AUTH_ENTRY_SIGNED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            signedAuthEntry: string;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Policy denial (contract/function not allowlisted, expiration too long) */
             403: {
                 headers: {
                     [name: string]: unknown;
