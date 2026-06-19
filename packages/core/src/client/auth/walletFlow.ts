@@ -4,6 +4,7 @@ import { WalletId } from '../../wallets';
 import { authenticate } from './authenticate';
 import { createAuthSession, FlowDeps } from './deps';
 import { logApiError } from './logging';
+import { isValidSep10Challenge } from './sep10-challenge';
 
 function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   return Promise.race([
@@ -76,6 +77,20 @@ export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void>
         step: 'error',
         previousStep: 'signing_wallet_challenge',
         message: 'Failed to obtain wallet challenge',
+        errorCode: AUTH_ERROR_CODES.WALLET_AUTH_FAILED,
+      });
+      return;
+    }
+    // Defense-in-depth before signing: refuse anything that isn't a real SEP-10
+    // challenge (e.g. a live, submittable tx with sequence != 0 slipped in by a
+    // compromised/MITM'd challenge endpoint). The authoritative check is still
+    // server-side; this just blocks the worst case before the user signs.
+    if (!isValidSep10Challenge(challengeXdr)) {
+      logApiError(logger, 'SEP-10 challenge validation', { error: 'unexpected challenge structure (sequence != 0?)' });
+      setAuthState({
+        step: 'error',
+        previousStep: 'signing_wallet_challenge',
+        message: 'Invalid wallet challenge',
         errorCode: AUTH_ERROR_CODES.WALLET_AUTH_FAILED,
       });
       return;

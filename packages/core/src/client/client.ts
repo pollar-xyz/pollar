@@ -68,6 +68,7 @@ import type { VisibilityProvider } from '../visibility/types';
 import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletAdapterResolver, WalletId, WalletType } from '../wallets';
 import { authenticate } from './auth/authenticate';
 import { createAuthSession } from './auth/deps';
+import { resolveAuthError } from './auth/errorMessages';
 import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/emailFlow';
 import { defaultWebOAuthOpener, loginOAuth } from './auth/oauthFlow';
 import { smartWalletFlow } from './auth/passkeyFlow';
@@ -1349,14 +1350,16 @@ export class PollarClient {
         });
         return { status: 'signed', signedXdr, submissionToken: idempotencyKey };
       }
-      const details = (error as { details?: string } | undefined)?.details;
+      const { details, code, message } = this._resolveTxApiError(error);
       this._setTransactionState({
         step: 'error',
         phase: 'signing',
         ...(buildData && { buildData }),
         ...(details && { details }),
+        ...(code && { code }),
+        ...(message && { message }),
       });
-      return { status: 'error', ...(details && { details }) };
+      return { status: 'error', ...(details && { details }), ...(code && { code }), ...(message && { message }) };
     } catch (err) {
       const details = err instanceof Error ? err.message : undefined;
       this._setTransactionState({
@@ -1439,6 +1442,22 @@ export class PollarClient {
    * `submitted` on Horizon ack (pending), `success` on ledger confirmation,
    * or `error[phase: 'submitting']` on failure.
    */
+  /**
+   * Normalize a backend API error into { details, code, message }. `code` is the
+   * precise backend ErrorCode (e.g. `TX_FEE_LIMIT_EXCEEDED`) for programmatic
+   * handling; `message` is a friendly string from the error catalog; `details`
+   * is the raw diagnostic. Lets tx flows surface a typed reason instead of an
+   * opaque details string.
+   */
+  private _resolveTxApiError(error: unknown): { details?: string; code?: string; message?: string } {
+    const e = error as { details?: string; code?: string; message?: string } | undefined;
+    const details = e?.details ?? e?.message;
+    const code = e?.code;
+    if (!code) return details ? { details } : {};
+    const { message } = resolveAuthError(code, details ?? code);
+    return { code, message, ...(details && { details }) };
+  }
+
   async submitTx(signedXdr: string, opts?: { submissionToken?: string }): Promise<SubmitOutcome> {
     const buildData = this._currentBuildData();
     const outcomeExtra: { buildData?: TxBuildContent } = buildData ? { buildData } : {};
@@ -1477,14 +1496,22 @@ export class PollarClient {
           ...(resultCode && { details: resultCode, resultCode }),
         };
       }
-      const details = (error as { details?: string } | undefined)?.details;
+      const { details, code, message } = this._resolveTxApiError(error);
       this._setTransactionState({
         step: 'error',
         phase: 'submitting',
         ...(buildData && { buildData }),
         ...(details && { details }),
+        ...(code && { code }),
+        ...(message && { message }),
       });
-      return { status: 'error', ...outcomeExtra, ...(details && { details }) };
+      return {
+        status: 'error',
+        ...outcomeExtra,
+        ...(details && { details }),
+        ...(code && { code }),
+        ...(message && { message }),
+      };
     } catch (err) {
       const details = err instanceof Error ? err.message : undefined;
       this._setTransactionState({
@@ -1587,14 +1614,22 @@ export class PollarClient {
           ...(resultCode && { details: resultCode, resultCode }),
         };
       }
-      const details = (error as { details?: string } | undefined)?.details;
+      const { details, code, message } = this._resolveTxApiError(error);
       this._setTransactionState({
         step: 'error',
         phase: 'signing-submitting',
         ...(buildData && { buildData }),
         ...(details && { details }),
+        ...(code && { code }),
+        ...(message && { message }),
       });
-      return { status: 'error', ...outcomeExtra, ...(details && { details }) };
+      return {
+        status: 'error',
+        ...outcomeExtra,
+        ...(details && { details }),
+        ...(code && { code }),
+        ...(message && { message }),
+      };
     } catch (err) {
       const details = err instanceof Error ? err.message : undefined;
       this._setTransactionState({
@@ -1679,13 +1714,15 @@ export class PollarClient {
         });
         return { status: 'error', hash, ...(resultCode && { details: resultCode, resultCode }) };
       }
-      const details = (error as { details?: string } | undefined)?.details;
+      const { details, code, message } = this._resolveTxApiError(error);
       this._setTransactionState({
         step: 'error',
         phase: 'building-signing-submitting',
         ...(details && { details }),
+        ...(code && { code }),
+        ...(message && { message }),
       });
-      return { status: 'error', ...(details && { details }) };
+      return { status: 'error', ...(details && { details }), ...(code && { code }), ...(message && { message }) };
     } catch (err) {
       const details = err instanceof Error ? err.message : undefined;
       this._setTransactionState({
@@ -1816,9 +1853,22 @@ export class PollarClient {
         });
         return { status: 'error', hash, ...outcomeExtra, ...(resultCode && { details: resultCode, resultCode }) };
       }
-      const details = (error as { details?: string } | undefined)?.details;
-      this._setTransactionState({ step: 'error', phase: 'submitting', buildData, ...(details && { details }) });
-      return { status: 'error', ...outcomeExtra, ...(details && { details }) };
+      const { details, code, message } = this._resolveTxApiError(error);
+      this._setTransactionState({
+        step: 'error',
+        phase: 'submitting',
+        buildData,
+        ...(details && { details }),
+        ...(code && { code }),
+        ...(message && { message }),
+      });
+      return {
+        status: 'error',
+        ...outcomeExtra,
+        ...(details && { details }),
+        ...(code && { code }),
+        ...(message && { message }),
+      };
     } catch (err) {
       const details = err instanceof Error ? err.message : undefined;
       this._setTransactionState({ step: 'error', phase: 'submitting', buildData, ...(details && { details }) });

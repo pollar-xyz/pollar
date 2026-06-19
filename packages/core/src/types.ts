@@ -432,7 +432,15 @@ export type TransactionState =
   // ─── Terminal success (shared) ────────────────────────────────────────
   | { step: 'success'; buildData?: TxBuildContent; hash: string }
   // ─── Terminal failure with phase context ──────────────────────────────
-  | { step: 'error'; phase: TxErrorPhase; details?: string; buildData?: TxBuildContent; signedXdr?: string };
+  | {
+      step: 'error';
+      phase: TxErrorPhase;
+      details?: string;
+      code?: string;
+      message?: string;
+      buildData?: TxBuildContent;
+      signedXdr?: string;
+    };
 
 /**
  * Identifies which phase failed when `TransactionState.step === 'error'`.
@@ -453,21 +461,27 @@ export type BuildOutcome = { status: 'built'; buildData: TxBuildContent } | { st
 
 export type SignOutcome =
   | { status: 'signed'; signedXdr: string; submissionToken?: string; expiresAt?: number }
-  | { status: 'error'; details?: string };
+  | { status: 'error'; details?: string; code?: string; message?: string };
 
 /**
  * Result of {@link PollarClient.signAuthEntry}. `signedAuthEntry` is the base64
  * XDR of the signed `SorobanAuthorizationEntry`, ready to be composed into the
  * caller's transaction envelope (e.g. by a contract that sponsors the gas).
  */
-export type SignAuthEntryOutcome =
-  | { status: 'signed'; signedAuthEntry: string }
-  | { status: 'error'; details?: string };
+export type SignAuthEntryOutcome = { status: 'signed'; signedAuthEntry: string } | { status: 'error'; details?: string };
 
 export type SubmitOutcome =
   | { status: 'success'; hash: string; buildData?: TxBuildContent }
   | { status: 'pending'; hash: string; buildData?: TxBuildContent }
-  | { status: 'error'; hash?: string; details?: string; resultCode?: string; buildData?: TxBuildContent };
+  | {
+      status: 'error';
+      hash?: string;
+      details?: string;
+      resultCode?: string;
+      code?: string;
+      message?: string;
+      buildData?: TxBuildContent;
+    };
 
 /**
  * Result of {@link PollarClient.setTrustline}. Like {@link SubmitOutcome} but the
@@ -494,6 +508,9 @@ export const AUTH_ERROR_CODES = {
   WALLET_RESOLVER_TIMEOUT: 'WALLET_RESOLVER_TIMEOUT',
   EXTERNAL_AUTH_FAILED: 'EXTERNAL_AUTH_FAILED',
   PASSKEY_FAILED: 'PASSKEY_FAILED',
+  // Generic bucket for on-chain transaction failures; the precise reason is the
+  // backend `code` (e.g. TX_FEE_LIMIT_EXCEEDED) carried alongside on the outcome.
+  TX_FAILED: 'TX_FAILED',
   UNEXPECTED_ERROR: 'UNEXPECTED_ERROR',
 } as const;
 

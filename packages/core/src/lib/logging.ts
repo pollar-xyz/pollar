@@ -3,7 +3,19 @@
  * sink in the clear. Their values are replaced with `'[redacted]'` while the key
  * itself is kept, so logs still show the request *shape* for debugging.
  */
-export const SENSITIVE_BODY_KEYS = new Set(['email', 'code', 'walletAddress', 'dpopJwk', 'response', 'refreshToken']);
+export const SENSITIVE_BODY_KEYS = new Set([
+  'email',
+  'code',
+  'walletAddress',
+  'dpopJwk',
+  'response',
+  'refreshToken',
+  // SEP-10 challenge envelopes: a counter-signed challenge is a live, replayable
+  // auth credential — never log it in the clear.
+  'signedChallengeXdr',
+  'challengeXdr',
+  'signedTxXdr',
+]);
 
 /**
  * Returns a shallow copy of an API request body with sensitive values masked.
