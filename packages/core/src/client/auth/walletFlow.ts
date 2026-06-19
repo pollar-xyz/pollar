@@ -18,6 +18,27 @@ function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   ]);
 }
 
+/**
+ * Request a SEP-10 challenge transaction (XDR) for `walletAddress`, bound to the
+ * client session. The wallet counter-signs it to prove key control. Returns
+ * `null` on failure. Shared by the built-in wallet flow and custom providers
+ * (via `AuthProviderContext.requestChallenge`).
+ */
+export async function requestWalletChallenge(
+  clientSessionId: string,
+  walletAddress: string,
+  deps: FlowDeps,
+): Promise<string | null> {
+  const { api, logger, signal } = deps;
+  const body = { clientSessionId, walletAddress };
+  const { data, error } = await api.POST('/auth/wallet/challenge', { body, signal });
+  if (error || !data?.success) {
+    if (!error) logApiError(logger, 'POST /auth/wallet/challenge', { body, data });
+    return null;
+  }
+  return data.content.challengeXdr;
+}
+
 export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void> {
   const { api, logger, signal, setAuthState } = deps;
 
@@ -44,9 +65,29 @@ export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void>
     const { address } = await withSignal(adapter.connect(), signal);
     connectedWallet = address;
     deps.storeWalletAdapter(adapter, type);
+
+    // SEP-10 challenge-response: prove control of the wallet key. Get a
+    // server-signed challenge tx, have the wallet counter-sign it, and send the
+    // signed XDR to /auth/wallet.
+    setAuthState({ step: 'signing_wallet_challenge', walletType: type });
+    const challengeXdr = await requestWalletChallenge(clientSessionId, address, deps);
+    if (!challengeXdr) {
+      setAuthState({
+        step: 'error',
+        previousStep: 'signing_wallet_challenge',
+        message: 'Failed to obtain wallet challenge',
+        errorCode: AUTH_ERROR_CODES.WALLET_AUTH_FAILED,
+      });
+      return;
+    }
+    const { signedTxXdr } = await withSignal(
+      adapter.signTransaction(challengeXdr, { networkPassphrase: deps.networkPassphrase }),
+      signal,
+    );
+
     setAuthState({ step: 'authenticating_wallet' });
 
-    const body = { clientSessionId, walletAddress: address };
+    const body = { clientSessionId, walletAddress: address, signedChallengeXdr: signedTxXdr };
     const { data: walletData, error: walletError } = await api.POST('/auth/wallet', { body, signal });
 
     if (walletError || !walletData?.success) {

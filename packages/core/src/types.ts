@@ -355,10 +355,19 @@ export interface AuthProviderContext {
   /** Poll the session to READY, then `POST /auth/login` and persist the session. The shared backbone. */
   authenticate(clientSessionId: string): Promise<void>;
   /**
-   * Generic external-provider leg: `POST /auth/external` with `{ clientSessionId, ...body }`.
-   * Use after your provider's own SDK has authenticated the user — pass whatever
-   * proof the backend expects (token, signature, …). Returns `false` and sets an
-   * error state on failure. (Requires the backend `/auth/external` endpoint.)
+   * `POST /auth/wallet/challenge` → the server-signed SEP-10 challenge transaction
+   * (XDR) the wallet must counter-sign to prove key control. Sign it with your
+   * provider's Stellar signer (e.g. Privy), then pass the result to
+   * {@link exchangeExternalToken} as `signedChallengeXdr`. Returns `null` on
+   * failure. Bind the network you sign on to the app's network.
+   */
+  requestChallenge(clientSessionId: string, walletAddress: string): Promise<string | null>;
+  /**
+   * External-provider leg: `POST /auth/external` with `{ clientSessionId, ...body }`.
+   * The backend proves wallet control via SEP-10, so `body` must carry
+   * `{ provider, walletAddress, signedChallengeXdr }` (the challenge from
+   * {@link requestChallenge}, counter-signed by the wallet). Returns `false` and
+   * sets an error state on failure.
    */
   exchangeExternalToken(clientSessionId: string, body: Record<string, unknown>): Promise<boolean>;
   /** Built-in hosted-OAuth dance (popup on web, in-app browser on RN). Backs the google/github providers. */
@@ -490,6 +499,8 @@ export type AuthState =
   | { step: 'verifying_email_code'; clientSessionId: string; email: string }
   | { step: 'opening_oauth'; provider: 'google' | 'github' }
   | { step: 'connecting_wallet'; walletType: WalletId }
+  // SEP-10: the wallet is counter-signing the server challenge to prove key control.
+  | { step: 'signing_wallet_challenge'; walletType: WalletId }
   | { step: 'wallet_not_installed'; walletType: WalletId }
   | { step: 'authenticating_wallet' }
   // Passkey (Smart Wallet) login: device ceremony, then (new user) the

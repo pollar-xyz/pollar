@@ -13,6 +13,12 @@ export type FlowDeps = {
    *  build the non-streaming status-poll URL on runtimes without fetch streaming. */
   basePath: string;
   /**
+   * Stellar network passphrase for the app's network. Used to sign the SEP-10
+   * wallet challenge transaction on the correct network (the backend builds the
+   * challenge with the matching passphrase).
+   */
+  networkPassphrase: string;
+  /**
    * Whether the runtime supports `fetch` response-body streaming (web). When
    * `true` the SDK consumes the SSE status stream; when `false` (React Native,
    * whose `fetch` exposes no `response.body.getReader()`) it polls the

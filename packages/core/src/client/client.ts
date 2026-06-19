@@ -1,4 +1,5 @@
 import { createApiClient, PollarApiClient } from '../api/client';
+import type { paths } from '../api/schema';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
 import {
@@ -83,7 +84,7 @@ import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/e
 import { defaultWebOAuthOpener, loginOAuth } from './auth/oauthFlow';
 import { smartWalletFlow } from './auth/passkeyFlow';
 import { emailProvider, oauthProvider } from './auth/providers';
-import { loginWallet } from './auth/walletFlow';
+import { loginWallet, requestWalletChallenge } from './auth/walletFlow';
 import {
   readStorage,
   readWalletType,
@@ -92,6 +93,9 @@ import {
   writeStorage,
   writeWalletType
 } from './session';
+
+/** Request body for the external-provider auth leg (`POST /auth/external`). */
+type ExternalAuthBody = NonNullable<paths['/auth/external']['post']['requestBody']>['content']['application/json'];
 
 const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
 /** React Native runtime: `navigator.product === 'ReactNative'` (set by the RN runtime). */
@@ -1901,6 +1905,8 @@ export class PollarClient {
       setAuthState: this._setAuthState.bind(this),
       createSession: () => createAuthSession(deps),
       authenticate: (clientSessionId: string) => authenticate(clientSessionId, deps),
+      requestChallenge: (clientSessionId: string, walletAddress: string) =>
+        requestWalletChallenge(clientSessionId, walletAddress, deps),
       exchangeExternalToken: (clientSessionId, body) => this._exchangeExternalToken(clientSessionId, body, signal),
       startHostedOAuth: (provider) =>
         loginOAuth(provider, {
@@ -1916,28 +1922,19 @@ export class PollarClient {
   /**
    * Generic external-provider exchange leg (`POST /auth/external`). Custom
    * providers call this (via the context) after their own SDK has authenticated
-   * the user, passing whatever proof the backend expects. On success the session
+   * the user and the wallet has counter-signed the SEP-10 challenge
+   * (`{ provider, walletAddress, signedChallengeXdr }`). On success the session
    * is marked READY server-side and the provider should then call
    * `ctx.authenticate(clientSessionId)`. Returns `false` (and sets an error
    * state) on failure.
-   *
-   * NOTE: `/auth/external` is not yet in the generated OpenAPI `paths`, so the
-   * call is made through a typed escape hatch. Once the backend ships the
-   * endpoint and the schema is regenerated, drop the cast and call `api.POST`
-   * directly.
    */
   private async _exchangeExternalToken(
     clientSessionId: string,
     body: Record<string, unknown>,
     signal: AbortSignal,
   ): Promise<boolean> {
-    const postExternal = this._api.POST as unknown as (
-      path: string,
-      init: { body: Record<string, unknown>; signal: AbortSignal },
-    ) => Promise<{ data?: { success?: boolean }; error?: unknown }>;
-
-    const { data, error } = await postExternal('/auth/external', {
-      body: { clientSessionId, ...body },
+    const { data, error } = await this._api.POST('/auth/external', {
+      body: { clientSessionId, ...body } as ExternalAuthBody,
       signal,
     });
 
@@ -1959,6 +1956,7 @@ export class PollarClient {
       api: this._api,
       logger: this._log,
       basePath: this.basePath,
+      networkPassphrase: this._networkPassphrase(),
       // SSE status streaming works on web; React Native's `fetch` has no
       // readable `response.body`, so those clients poll the non-streaming
       // status endpoint instead. `isBrowser` is false in RN and SSR alike.

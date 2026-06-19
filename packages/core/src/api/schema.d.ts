@@ -175,6 +175,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/wallet/challenge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue a SEP-10 wallet challenge
+         * @description Returns a server-signed SEP-10 challenge transaction (XDR) bound to the client session. The wallet counter-signs it to prove key control, then posts it to /auth/wallet (or /auth/external).
+         */
+        post: operations["postAuthWalletChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/wallet": {
         parameters: {
             query?: never;
@@ -184,8 +204,31 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Authenticate with a Stellar wallet */
+        /**
+         * Authenticate with a Stellar wallet
+         * @description Verifies the SEP-10 counter-signed challenge (from /auth/wallet/challenge) and sets the session ready. During rollout an unsigned legacy request is still accepted unless SDK_WALLET_REQUIRE_SIGNATURE is enabled.
+         */
         post: operations["postAuthWallet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/external": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Authenticate via a custom external provider
+         * @description For custom login providers (Privy, Magic, …) that authenticate the user client-side and surface a Stellar wallet. Control is proven with the same SEP-10 counter-signed challenge (from /auth/wallet/challenge); Pollar needs nothing of the provider itself.
+         */
+        post: operations["postAuthExternal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1454,6 +1497,107 @@ export interface operations {
             };
         };
     };
+    postAuthWalletChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    clientSessionId: string;
+                    walletAddress: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Challenge issued */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_WALLET_CHALLENGE_CREATED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            clientSessionId: string;
+                            challengeXdr: string;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Gone (expired) */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+        };
+    };
     postAuthWallet: {
         parameters: {
             query?: never;
@@ -1466,6 +1610,7 @@ export interface operations {
                 "application/json": {
                     clientSessionId: string;
                     walletAddress: string;
+                    signedChallengeXdr?: string;
                 };
             };
         };
@@ -1484,6 +1629,110 @@ export interface operations {
                         content: {
                             clientSessionId: string;
                             walletAddress: string;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+            /** @description Gone (expired) */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                    };
+                };
+            };
+        };
+    };
+    postAuthExternal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    clientSessionId: string;
+                    provider: string;
+                    walletAddress: string;
+                    signedChallengeXdr: string;
+                };
+            };
+        };
+        responses: {
+            /** @description External provider authenticated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_EXTERNAL_AUTHENTICATED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            clientSessionId: string;
+                            walletAddress: string;
+                            provider: string;
                         };
                     };
                 };
@@ -1912,6 +2161,7 @@ export interface operations {
                             wallet: {
                                 /** @enum {string} */
                                 type: "custodial" | "smart" | "external";
+                                provider?: string;
                                 publicKey: string | null;
                                 address: string | null;
                                 existsOnStellar?: boolean;
