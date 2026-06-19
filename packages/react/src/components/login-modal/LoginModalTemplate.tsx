@@ -1,6 +1,7 @@
 'use client';
 
 import { AUTH_ERROR_CODES, AuthState, WalletId, WalletType } from '@pollar/core';
+import type { CustomLoginProvider } from '../../types';
 
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 import { type CSSProperties, useState } from 'react';
@@ -45,6 +46,7 @@ const AUTH_STATE_MESSAGES: Record<AuthState['step'], string> = {
   verifying_email_code: 'Verifying…',
   opening_oauth: 'Redirecting…',
   connecting_wallet: 'Connecting wallet…',
+  signing_wallet_challenge: 'Confirm in your wallet…',
   wallet_not_installed: 'Wallet not installed',
   authenticating_wallet: 'Signing in with wallet…',
   creating_passkey: 'Waiting for passkey…',
@@ -61,6 +63,7 @@ function authStateToStatus(step: AuthState['step']): StateStatus {
     'verifying_email_code',
     'opening_oauth',
     'connecting_wallet',
+    'signing_wallet_challenge',
     'authenticating_wallet',
     'creating_passkey',
     'deploying_smart_account',
@@ -91,11 +94,15 @@ interface LoginModalTemplateProps {
     github: boolean;
     apple: boolean;
   };
+  /** Custom login provider buttons (e.g. Privy). Each calls `onCustomLogin(id)`. */
+  customProviders?: CustomLoginProvider[];
   appName: string;
   email?: string;
   onEmailChange?: (email: string) => void;
   onEmailSubmit?: () => void;
   onSocialLogin?: (provider: 'google' | 'github') => void;
+  /** Triggers a custom provider login by id (wraps `client.login({ provider: id })`). */
+  onCustomLogin?: (id: string) => void;
   onWalletConnect?: (id: WalletId) => void;
   /** Log in with an existing passkey (returning user). */
   onLoginSmartWallet?: () => void;
@@ -119,11 +126,13 @@ export function LoginModalTemplate({
   embeddedWallets,
   smartWallet = false,
   providers,
+  customProviders = [],
   appName,
   email = '',
   onEmailChange,
   onEmailSubmit,
   onSocialLogin,
+  onCustomLogin,
   onWalletConnect,
   onLoginSmartWallet,
   onCreateSmartWallet,
@@ -263,7 +272,7 @@ export function LoginModalTemplate({
             </div>
           )}
 
-          {emailEnabled && enabledSocial.length > 0 && (
+          {emailEnabled && (enabledSocial.length > 0 || customProviders.length > 0) && (
             <div className="pollar-divider">
               <div className="pollar-divider-line" />
               <div className="pollar-divider-label">
@@ -280,6 +289,23 @@ export function LoginModalTemplate({
               {enabledSocial.some(([key]) => key === 'github') && (
                 <GithubButton disabled={isLoading} onClick={() => onSocialLogin?.('github')} />
               )}
+            </div>
+          )}
+
+          {customProviders.length > 0 && (
+            <div className="pollar-social-list">
+              {customProviders.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={isLoading}
+                  className="pollar-wallet-entry-btn"
+                  onClick={() => onCustomLogin?.(p.id)}
+                >
+                  {p.iconUrl && <img src={p.iconUrl} alt="" className="pollar-wallet-list-icon" />}
+                  {p.label}
+                </button>
+              ))}
             </div>
           )}
 
