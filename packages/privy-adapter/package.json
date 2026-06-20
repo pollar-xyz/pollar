@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",
-    "@privy-io/node": "~0.18.0",
+    "@privy-io/node": "~0.22.0",
     "@stellar/stellar-sdk": "^15.1.0",
     "hono": "^4.12.25",
     "lru-cache": "^11.5.1",
