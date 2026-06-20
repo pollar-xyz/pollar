@@ -74,12 +74,15 @@ function delay(ms, signal) {
   });
 }
 
-async function apiKeyHashOf(apiKey) {
+// Current namespace width is 16 bytes / 32 hex (see lib/api-key-hash.ts).
+async function hashOf(apiKey, bytes) {
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(apiKey));
-  return Array.from(new Uint8Array(digest).slice(0, 4))
+  return Array.from(new Uint8Array(digest).slice(0, bytes))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 }
+const apiKeyHashOf = (apiKey) => hashOf(apiKey, 16);
+const legacyApiKeyHashOf = (apiKey) => hashOf(apiKey, 4); // pre-0.10 width
 
 function freshSession(accessToken = 'AT', expiresInSec = 600) {
   return JSON.stringify({
@@ -291,6 +294,29 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     check('  picked up the rotated token', client.getAuthState().session.token.accessToken === 'ROTATED_AT');
     const resumeCalls = mock.calls.filter((c) => c.url.includes('/auth/session/resume'));
     check('  no redundant /auth/session/resume fired', resumeCalls.length === 0, resumeCalls.length);
+    client.destroy();
+  }
+
+  // ── H. legacy 8-hex session is NOT restored on upgrade (intentional logout) ─
+  console.log('\n── H. legacy 8-hex session is not restored (clean re-login) ──');
+  {
+    mock.calls = [];
+    const apiKey = 'pk_race_H';
+    const storage = sdk.createMemoryAdapter();
+    const legacyHash = await legacyApiKeyHashOf(apiKey);
+    const newHash = await apiKeyHashOf(apiKey);
+    check('hash widened (legacy 8 hex vs new 32 hex)', legacyHash.length === 8 && newHash.length === 32);
+
+    // Seed a session ONLY under the pre-0.10 (8-hex) key — i.e. a user who was
+    // logged in on an older SDK. The widened namespace must NOT pick it up: the
+    // upgrade intentionally forces a one-time re-login (no migration).
+    await storage.set(`pollar:${legacyHash}:session`, freshSession('LEGACY_AT'));
+
+    const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+    await client.ready();
+
+    check('legacy session is NOT restored (user must re-login)', client.getAuthState().step === 'idle', client.getAuthState().step);
+    check('  no session written under the new namespace yet', (await storage.get(`pollar:${newHash}:session`)) === null);
     client.destroy();
   }
 
