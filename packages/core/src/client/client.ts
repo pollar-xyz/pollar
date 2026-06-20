@@ -6,7 +6,7 @@ import { createOffRamp, createOnRamp, getRampsQuote, getRampTransaction, pollRam
 import { buildProof } from '../dpop';
 import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
-import { hashApiKey, legacyHashApiKey } from '../lib/api-key-hash';
+import { hashApiKey } from '../lib/api-key-hash';
 import { createLogger, type PollarLogger } from '../lib/logger';
 import { redactBody } from '../lib/logging';
 import { randomUUID } from '../lib/random-uuid';
@@ -74,15 +74,7 @@ import { defaultWebOAuthOpener, loginOAuth } from './auth/oauthFlow';
 import { smartWalletFlow } from './auth/passkeyFlow';
 import { emailProvider, oauthProvider } from './auth/providers';
 import { loginWallet, requestWalletChallenge } from './auth/walletFlow';
-import {
-  migrateLegacyStorage,
-  readStorage,
-  readWalletType,
-  removeStorage,
-  sessionStorageKey,
-  writeStorage,
-  writeWalletType,
-} from './session';
+import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
 
 /** Request body for the external-provider auth leg (`POST /auth/external`). */
 type ExternalAuthBody = NonNullable<paths['/auth/external']['post']['requestBody']>['content']['application/json'];
@@ -331,16 +323,6 @@ export class PollarClient {
     // Compute the storage namespace first — every subsequent storage op
     // (including the cross-tab listener below and `_restoreSession`) reads it.
     this._apiKeyHash = await hashApiKey(this.apiKey);
-
-    // One-time migration from the pre-0.10 8-hex namespace to the wider hash,
-    // so existing sessions aren't orphaned (which would look like a logout) when
-    // the hash width changed. Runs before keyManager.init() (which migrates the
-    // matching DPoP key) and before _restoreSession() reads the session.
-    try {
-      await migrateLegacyStorage(this._storage, this._apiKeyHash, await legacyHashApiKey(this.apiKey));
-    } catch (err) {
-      this._log.warn('[PollarClient] Legacy storage migration failed', err);
-    }
 
     // Cross-tab session sync. Browser-only — the `storage` event is a DOM
     // feature with no React Native equivalent (each RN process owns its

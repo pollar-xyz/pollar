@@ -1,5 +1,5 @@
 import { p256 } from '@noble/curves/nist';
-import { hashApiKey, legacyHashApiKey } from '../lib/api-key-hash';
+import { hashApiKey } from '../lib/api-key-hash';
 import { base64urlDecode, base64urlEncode } from '../lib/base64url';
 import { sha256 } from '../lib/sha256';
 import type { Storage } from '../storage/types';
@@ -82,31 +82,6 @@ export class NobleKeyManager implements KeyManager {
       }
     } catch {
       priv = null;
-    }
-
-    // Migration: adopt a key written under the pre-0.10 8-hex namespace and
-    // rewrite it under the wider one. Keeping the SAME private key is essential
-    // — the restored session's tokens are DPoP-bound to its thumbprint (cnf.jkt),
-    // so generating a fresh key here would invalidate every proof and force a
-    // re-login, defeating the storage migration.
-    if (!priv) {
-      try {
-        const legacyHash = await legacyHashApiKey(this.apiKey);
-        if (legacyHash !== this.apiKeyHash) {
-          const legacyKey = `${STORAGE_KEY_PREFIX}${legacyHash}`;
-          const legacyStored = await this.storage.get(legacyKey);
-          if (legacyStored) {
-            const decoded = base64urlDecode(legacyStored);
-            if (decoded.length === 32) {
-              priv = decoded;
-              await this.storage.set(this.storageKey, legacyStored);
-              await this.storage.remove(legacyKey);
-            }
-          }
-        }
-      } catch {
-        // Migration is best-effort; fall through to generating a fresh key.
-      }
     }
 
     if (!priv) {
