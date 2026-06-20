@@ -144,6 +144,18 @@ export class PollarClient {
   private _requestBodyCache = new WeakMap<Request, ArrayBuffer>();
   /** Singleton in-flight refresh — concurrent 401s coalesce into one /auth/refresh call. */
   private _refreshPromise: Promise<void> | null = null;
+  /**
+   * Bumped on every session teardown/replacement (`_clearSession`,
+   * `_storeSession`). An in-flight refresh or resume captures the value before
+   * its network round-trip and re-checks it before writing storage / emitting /
+   * arming a timer; a mismatch means the session was logged out or replaced
+   * mid-flight, so the stale result is discarded. Without this, a refresh that
+   * resolves just after a logout silently re-persists the revoked session and
+   * re-arms the refresh timer.
+   */
+  private _sessionGeneration = 0;
+  /** Set by `destroy()`; short-circuits timer re-arming and any post-teardown work. */
+  private _destroyed = false;
   private _storageEventHandler: ((e: StorageEvent) => void) | null = null;
   /** Optional UI label sent to the server at /auth/login so the sessions UI
    *  can show a recognizable device name. Set via PollarClientConfig.deviceLabel. */
@@ -307,6 +319,10 @@ export class PollarClient {
 
   /** Detach the cross-tab storage listener and abort any in-flight login. */
   destroy(): void {
+    // Latch first so anything still in flight (a refresh resolving, a queued
+    // proactive-refresh timer callback) sees a destroyed client and bails
+    // instead of re-arming a timer or writing state after teardown.
+    this._destroyed = true;
     if (this._storageEventHandler && isBrowser) {
       window.removeEventListener('storage', this._storageEventHandler);
       this._storageEventHandler = null;
@@ -320,6 +336,16 @@ export class PollarClient {
       this._visibilityUnsubscribe();
       this._visibilityUnsubscribe = null;
     }
+    // Drop subscribers so the host's forgotten listeners aren't retained for
+    // the client's GC lifetime.
+    this._authStateListeners.clear();
+    this._transactionStateListeners.clear();
+    this._txHistoryStateListeners.clear();
+    this._sessionsStateListeners.clear();
+    this._walletBalanceStateListeners.clear();
+    this._enabledAssetsStateListeners.clear();
+    this._networkStateListeners.clear();
+    this._storageDegradeListeners.clear();
   }
 
   // ─── Middlewares (DPoP + auto-refresh) ────────────────────────────────────
@@ -361,7 +387,12 @@ export class PollarClient {
         // that would deadlock the singleton. Other requests wait so they
         // pick up the freshly-rotated token.
         const isRefresh = request.url.includes('/auth/refresh');
-        if (!isRefresh && self._refreshPromise) await self._refreshPromise;
+        // Swallow the refresh outcome: this request only needs to wait until the
+        // rotation settles, then proceed with whatever token is current. If the
+        // refresh REJECTED, that's the refreshing caller's problem — an
+        // unrelated request must not inherit/re-throw it (and a bare `await`
+        // would surface it as an unhandled rejection here).
+        if (!isRefresh && self._refreshPromise) await self._refreshPromise.catch(() => {});
 
         if (isRefresh) {
           // RFC 9449 §5 / §6.1: token-endpoint proofs MUST NOT carry `ath`
@@ -551,6 +582,10 @@ export class PollarClient {
       redirect: originalRequest.redirect,
       referrer: originalRequest.referrer,
       integrity: originalRequest.integrity,
+      // Preserve cancellation: the original may carry an AbortSignal (e.g. the
+      // `/auth/session/resume` GET, which `destroy()` aborts). Without this the
+      // retried fetch would ignore aborts and could write state after teardown.
+      signal: originalRequest.signal,
     });
     return fetch(retried);
   }
@@ -562,6 +597,7 @@ export class PollarClient {
    * everyone else awaits the same promise and sees the new tokens.
    */
   refresh(): Promise<void> {
+    if (this._destroyed) return Promise.resolve();
     if (this._refreshPromise) return this._refreshPromise;
     this._refreshPromise = this._doRefresh().finally(() => {
       this._refreshPromise = null;
@@ -570,6 +606,11 @@ export class PollarClient {
   }
 
   private async _doRefresh(): Promise<void> {
+    // Snapshot the session identity before the network round-trip. If a logout
+    // or a fresh login lands while `/auth/refresh` is in flight, the generation
+    // changes and we discard the rotated token below instead of resurrecting a
+    // revoked session or clobbering a newer one.
+    const gen = this._sessionGeneration;
     const refreshToken = this._session?.token?.refreshToken;
     if (!refreshToken) {
       this._log.warn('[PollarClient] Refresh skipped: no refresh token in session');
@@ -622,29 +663,39 @@ export class PollarClient {
       throw new Error('Refresh response token shape invalid');
     }
 
-    if (this._session) {
-      try {
-        this._session = { ...this._session, token: newToken };
-        await writeStorage(this._storage, this.apiKeyHash, this._session);
-        this._log.info('[PollarClient] Tokens refreshed');
-      } catch (err) {
-        this._log.error('[PollarClient] Failed to persist refreshed session', err);
-        // In-memory state is still updated; the session works for this
-        // process but won't survive reload. Don't clear — that'd surprise
-        // the user with a logout for what's essentially a storage hiccup.
-      }
-      // Emit the rotated session so getAuthState()/onAuthStateChange consumers
-      // observe the fresh token. The SDK's own requests read `_session`
-      // directly and already see the rotation, but external readers (e.g. code
-      // that forwards the access token to a customer backend, or a
-      // `getFreshAccessToken` helper that awaits an onAuthStateChange emission)
-      // only see `_authState` — without this they keep handing out the stale,
-      // now-expired token. Preserve `step`/`verified`; only swap the session.
-      if (this._authState.step === 'authenticated') {
-        this._setAuthState({ ...this._authState, session: this._session });
-      }
-      this._scheduleNextRefresh();
+    // Discard the result if the session was torn down or replaced (logout / new
+    // login), or the client was destroyed, while the request was in flight —
+    // writing it back would undo a logout or re-arm a timer post-teardown.
+    if (this._destroyed || this._sessionGeneration !== gen || !this._session) {
+      this._log.info('[PollarClient] Refresh result discarded: session changed during refresh');
+      return;
     }
+
+    this._session = { ...this._session, token: newToken };
+    try {
+      await writeStorage(this._storage, this.apiKeyHash, this._session);
+      this._log.info('[PollarClient] Tokens refreshed');
+    } catch (err) {
+      this._log.error('[PollarClient] Failed to persist refreshed session', err);
+      // In-memory state is still updated; the session works for this
+      // process but won't survive reload. Don't clear — that'd surprise
+      // the user with a logout for what's essentially a storage hiccup.
+    }
+
+    // Re-check after the awaited write — a logout could have landed during it.
+    if (this._destroyed || this._sessionGeneration !== gen) return;
+
+    // Emit the rotated session so getAuthState()/onAuthStateChange consumers
+    // observe the fresh token. The SDK's own requests read `_session`
+    // directly and already see the rotation, but external readers (e.g. code
+    // that forwards the access token to a customer backend, or a
+    // `getFreshAccessToken` helper that awaits an onAuthStateChange emission)
+    // only see `_authState` — without this they keep handing out the stale,
+    // now-expired token. Preserve `step`/`verified`; only swap the session.
+    if (this._authState.step === 'authenticated') {
+      this._setAuthState({ ...this._authState, session: this._session });
+    }
+    this._scheduleNextRefresh();
   }
 
   // ─── Silent refresh scheduler ────────────────────────────────────────────────
@@ -662,9 +713,17 @@ export class PollarClient {
    */
   private _scheduleNextRefresh(): void {
     this._clearRefreshTimer();
+    if (this._destroyed) return;
     const expiresAt = this._session?.token?.expiresAt;
     if (typeof expiresAt !== 'number') return;
-    const dueInMs = Math.max(0, (expiresAt - Math.floor(Date.now() / 1000) - REFRESH_SKEW_SECONDS) * 1000);
+    // Clamp to the 32-bit setTimeout ceiling: a delay past ~24.8 days overflows
+    // and fires immediately, which a bogus/huge `expiresAt` would turn into a
+    // tight reschedule loop. Real AT TTLs are minutes, so this only guards bad data.
+    const MAX_TIMEOUT_MS = 2_147_483_647;
+    const dueInMs = Math.min(
+      MAX_TIMEOUT_MS,
+      Math.max(0, (expiresAt - Math.floor(Date.now() / 1000) - REFRESH_SKEW_SECONDS) * 1000),
+    );
     this._refreshTimer = setTimeout(() => {
       void this._maybeProactiveRefresh();
     }, dueInMs);
@@ -687,6 +746,7 @@ export class PollarClient {
    * `step:'idle'` — no extra event dispatch needed here.
    */
   private async _maybeProactiveRefresh(): Promise<void> {
+    if (this._destroyed) return;
     if (!this._session?.token?.refreshToken) return;
     if (!this._visibilityProvider.isVisible()) return;
     if (this._maxIdleMs !== undefined && Date.now() - this._lastRequestAt > this._maxIdleMs) return;
@@ -712,7 +772,22 @@ export class PollarClient {
   // ─── Auth state ──────────────────────────────────────────────────────────────
 
   getAuthState(): AuthState {
-    return this._authState;
+    // Return a copy so a caller can't mutate the live `_authState` / `_session`
+    // — which the SDK's own request middleware reads (`_session.token.accessToken`)
+    // and the next writeStorage() serializes — through the returned object.
+    // Clone the nested `token`/`wallet` too: a shallow session copy still shares
+    // those object refs, so `getAuthState().session.token.accessToken = …` would
+    // otherwise corrupt the token the SDK signs with.
+    const s = this._authState;
+    if (s.step !== 'authenticated') return { ...s };
+    return {
+      ...s,
+      session: {
+        ...s.session,
+        token: { ...s.session.token },
+        wallet: { ...s.session.wallet },
+      },
+    };
   }
 
   onAuthStateChange(cb: (state: AuthState) => void): () => void {
@@ -2193,6 +2268,7 @@ export class PollarClient {
    */
   private async _resume(): Promise<void> {
     if (!this._session) return;
+    const gen = this._sessionGeneration;
     this._resumeController?.abort();
     const controller = new AbortController();
     this._resumeController = controller;
@@ -2200,7 +2276,10 @@ export class PollarClient {
       const { data, error } = await this._api.GET('/auth/session/resume', { signal: controller.signal });
       if (error || !data) return;
       const content = (data as { content?: PollarUserProfile }).content;
-      if (!content || !this._session) return;
+      // Bail if the session was cleared/replaced (logout / refresh / new login)
+      // or the client destroyed while resume was in flight — otherwise we'd
+      // re-emit `authenticated` over a logged-out or superseded session.
+      if (!content || !this._session || this._destroyed || this._sessionGeneration !== gen) return;
       this._profile = { ...content };
       this._setAuthState({ step: 'authenticated', session: this._session, verified: true });
     } catch (err) {
@@ -2242,6 +2321,9 @@ export class PollarClient {
         ...(w.deployTxHash !== undefined ? { deployTxHash: w.deployTxHash } : {}),
       },
     };
+    // A fresh login replaces the session: invalidate any refresh/resume still
+    // in flight against the previous one.
+    this._sessionGeneration++;
     this._session = persisted;
 
     if (session.data) {
@@ -2263,6 +2345,13 @@ export class PollarClient {
 
   private async _clearSession(): Promise<void> {
     this._log.info('[PollarClient] Session cleared');
+    // Invalidate any in-flight refresh/resume so a result that lands after this
+    // clear (e.g. a refresh racing a logout) is discarded instead of
+    // resurrecting the session, and abort the resume so it can't re-emit
+    // `authenticated` after we go `idle`.
+    this._sessionGeneration++;
+    this._resumeController?.abort();
+    this._resumeController = null;
     this._clearRefreshTimer();
     this._session = null;
     this._profile = null;
