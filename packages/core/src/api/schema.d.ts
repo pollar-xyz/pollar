@@ -523,7 +523,7 @@ export interface paths {
         put?: never;
         /**
          * Sign a Soroban authorization entry (custodial)
-         * @description Signs a single SorobanAuthorizationEntry with the user's custodial key. sdk-api enforces the app's per-contract/function allowlist and a short validity-ledger window before signing.
+         * @description Signs a single SorobanAuthorizationEntry with the user's custodial key. Use when a developer's own contract is the transaction source (it sponsors the gas) and only needs the user's address-credentials authorization, not a full signed envelope. sdk-api enforces the app's per-contract/function allowlist and a short validity-ledger window BEFORE signing — an entry touching any contract or function not allowlisted, or with too long an expiration, is rejected. External (user-controlled) wallets sign auth entries client-side and do not call this endpoint.
          */
         post: operations["postTxSignAuthEntry"];
         delete?: never;
@@ -990,6 +990,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1003,6 +1005,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1016,6 +1020,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1089,6 +1095,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1102,6 +1110,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1137,6 +1147,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1150,6 +1162,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1163,6 +1177,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1176,6 +1192,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1211,6 +1229,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1224,6 +1244,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1237,6 +1259,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1250,6 +1274,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1284,6 +1310,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1297,6 +1325,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1310,6 +1340,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1360,6 +1392,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1373,6 +1407,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1386,6 +1422,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1399,6 +1437,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1412,6 +1452,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1460,6 +1502,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1473,6 +1517,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1486,6 +1532,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1499,6 +1547,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1512,6 +1562,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1561,6 +1613,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1574,6 +1628,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1587,6 +1643,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1600,6 +1658,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1613,6 +1673,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1663,6 +1725,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1676,6 +1740,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1689,6 +1755,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1702,6 +1770,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1715,6 +1785,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1767,6 +1839,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1780,6 +1854,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1793,6 +1869,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1806,6 +1884,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1819,6 +1899,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1867,6 +1949,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1880,6 +1964,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1893,6 +1979,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1906,6 +1994,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1919,6 +2009,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1970,6 +2062,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1983,6 +2077,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1996,6 +2092,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2009,6 +2107,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2022,6 +2122,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2073,6 +2175,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2086,6 +2190,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2099,6 +2205,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2112,6 +2220,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2125,6 +2235,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2224,6 +2336,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2237,6 +2351,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2250,6 +2366,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2263,6 +2381,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2276,6 +2396,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2327,6 +2449,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2340,6 +2464,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2353,6 +2479,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2366,6 +2494,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2379,6 +2509,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2426,6 +2558,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2476,6 +2610,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2534,6 +2670,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2577,6 +2715,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2590,6 +2730,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2648,6 +2790,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2661,6 +2805,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2674,6 +2820,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2709,6 +2857,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2967,6 +3117,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2980,6 +3132,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2993,6 +3147,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3048,6 +3204,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3061,6 +3219,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3074,6 +3234,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3087,6 +3249,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3140,6 +3304,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3153,6 +3319,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3166,6 +3334,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3179,6 +3349,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3199,7 +3371,6 @@ export interface operations {
                     publicKey?: string;
                     address?: string;
                     entryXdr: string;
-                    /** Absolute ledger the signature expires at. */
                     validUntilLedger: number;
                 };
             };
@@ -3232,6 +3403,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3245,6 +3418,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3258,6 +3433,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3271,6 +3448,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3336,6 +3515,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3349,6 +3530,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3362,6 +3545,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3619,6 +3804,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3632,6 +3819,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3645,6 +3834,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3694,6 +3885,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3707,6 +3900,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3770,6 +3965,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3783,6 +3980,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3831,6 +4030,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3844,6 +4045,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3857,6 +4060,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3870,6 +4075,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3947,6 +4154,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3960,6 +4169,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3973,6 +4184,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4028,6 +4241,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4041,6 +4256,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4096,6 +4313,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4109,6 +4328,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4172,6 +4393,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4185,6 +4408,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4198,6 +4423,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4257,6 +4484,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4270,6 +4499,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4318,6 +4549,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4331,6 +4564,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4344,6 +4579,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4393,6 +4630,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4406,6 +4645,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4461,6 +4702,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4474,6 +4717,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4487,6 +4732,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4545,6 +4792,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4558,6 +4807,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4620,6 +4871,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4633,6 +4886,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4646,6 +4901,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4705,6 +4962,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4718,6 +4977,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4731,6 +4992,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4783,6 +5046,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4796,6 +5061,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4809,6 +5076,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4861,6 +5130,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4911,6 +5182,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4924,6 +5197,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4937,6 +5212,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4950,6 +5227,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
