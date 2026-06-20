@@ -338,16 +338,21 @@ export class PollarClient {
         self._lastRequestAt = Date.now();
         await self._initialized;
         // Cache the body before fetch() disturbs the stream — retries can't
-        // call request.clone() once the body is consumed. Guard on the method:
-        // GET/HEAD carry no body, and in RN's fetch polyfill `request.body` is
-        // `undefined` (not `null`) for them, so a bare `!== null` check would
-        // snapshot an empty ArrayBuffer and later make a GET retry throw
-        // "Body not allowed for GET or HEAD requests".
+        // call request.clone() once the body is consumed. Gate only on the
+        // method: GET/HEAD carry no body. Do NOT gate on `request.body` — in
+        // RN's fetch polyfill that getter is `undefined` even for a POST with a
+        // JSON body, so the old `request.body != null` check silently skipped
+        // the snapshot and a /auth/refresh retry (after a DPoP nonce challenge)
+        // was replayed with an empty body → server 400 "Malformed JSON". We
+        // snapshot via clone().arrayBuffer() (works in RN by reading the
+        // polyfill's internal body) and only store non-empty buffers so a
+        // genuinely body-less POST never gets a phantom body on retry.
         const cacheMethod = request.method.toUpperCase();
         const cacheBodyAllowed = cacheMethod !== 'GET' && cacheMethod !== 'HEAD';
-        if (cacheBodyAllowed && request.body != null) {
+        if (cacheBodyAllowed) {
           try {
-            self._requestBodyCache.set(request, await request.clone().arrayBuffer());
+            const snapshot = await request.clone().arrayBuffer();
+            if (snapshot.byteLength > 0) self._requestBodyCache.set(request, snapshot);
           } catch (err) {
             this._log.warn('[PollarClient] Could not snapshot request body for retry', err);
           }
@@ -540,7 +545,7 @@ export class PollarClient {
     const retried = new Request(originalRequest.url, {
       method: originalRequest.method,
       headers,
-      body: cachedBody ?? null,
+      body: cachedBody && cachedBody.byteLength > 0 ? cachedBody : null,
       credentials: originalRequest.credentials,
       mode: originalRequest.mode,
       redirect: originalRequest.redirect,
