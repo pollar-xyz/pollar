@@ -1,5 +1,5 @@
 import { base64urlEncode } from '../lib/base64url';
-import { hashApiKey } from '../lib/api-key-hash';
+import { hashApiKey, legacyHashApiKey } from '../lib/api-key-hash';
 import { canonicalEcJwk, computeJwkThumbprint } from './thumbprint';
 import type { KeyManager, PublicEcJwk } from './types';
 
@@ -140,6 +140,27 @@ export class WebCryptoKeyManager implements KeyManager {
       // storage in a 3rd-party iframe). Fall through to fresh keygen — we
       // lose persistence across reloads but the current session can sign.
       pair = undefined;
+    }
+
+    if (!pair) {
+      // Migration: adopt a key pair stored under the pre-0.10 8-hex namespace.
+      // IndexedDB structured-clones the CryptoKeyPair even though the private
+      // key is non-extractable, so we can re-home it under the wider namespace
+      // without extraction — keeping the SAME key so the restored session's
+      // cnf.jkt binding survives the hash widening instead of forcing a re-login.
+      try {
+        const legacyHash = await legacyHashApiKey(this.apiKey);
+        if (legacyHash !== this.apiKeyHash) {
+          const legacyPair = await dbGet<CryptoKeyPair>(legacyHash);
+          if (legacyPair && isCryptoKeyPair(legacyPair)) {
+            pair = legacyPair;
+            await dbPut(this.apiKeyHash, legacyPair);
+            await dbDelete(legacyHash);
+          }
+        }
+      } catch {
+        // Best-effort; fall through to generating a fresh key pair.
+      }
     }
 
     if (!pair) {

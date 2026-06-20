@@ -6,7 +6,7 @@ import { createOffRamp, createOnRamp, getRampsQuote, getRampTransaction, pollRam
 import { buildProof } from '../dpop';
 import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
-import { hashApiKey } from '../lib/api-key-hash';
+import { hashApiKey, legacyHashApiKey } from '../lib/api-key-hash';
 import { createLogger, type PollarLogger } from '../lib/logger';
 import { redactBody } from '../lib/logging';
 import { randomUUID } from '../lib/random-uuid';
@@ -74,7 +74,15 @@ import { defaultWebOAuthOpener, loginOAuth } from './auth/oauthFlow';
 import { smartWalletFlow } from './auth/passkeyFlow';
 import { emailProvider, oauthProvider } from './auth/providers';
 import { loginWallet, requestWalletChallenge } from './auth/walletFlow';
-import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
+import {
+  migrateLegacyStorage,
+  readStorage,
+  readWalletType,
+  removeStorage,
+  sessionStorageKey,
+  writeStorage,
+  writeWalletType,
+} from './session';
 
 /** Request body for the external-provider auth leg (`POST /auth/external`). */
 type ExternalAuthBody = NonNullable<paths['/auth/external']['post']['requestBody']>['content']['application/json'];
@@ -89,6 +97,14 @@ const isReactNative = typeof navigator !== 'undefined' && (navigator as { produc
  * check alone wrongly treated RN (no `localStorage`) as server-side.
  */
 const isClientRuntime = isBrowser || isReactNative;
+
+/**
+ * Live client count per API key, so we can warn on the duplicate-instance
+ * footgun: two `PollarClient`s for the same key share one persisted session +
+ * DPoP key and run independent refresh loops; the single-use refresh-token
+ * rotation then trips server-side reuse-detection and logs all of them out.
+ */
+const liveClientsByApiKey = new Map<string, number>();
 
 /** Renew the access token this many seconds before its `exp` to absorb clock skew + signing latency. */
 const REFRESH_SKEW_SECONDS = 60;
@@ -223,6 +239,16 @@ export class PollarClient {
       defaultStorage({
         logger: this._log,
         onDegrade: (reason, error) => {
+          // N6: on React Native the default storage falls back to memory because
+          // there is no localStorage — make that misconfiguration obvious rather
+          // than letting sessions silently vanish on every cold start.
+          if (isReactNative && reason === 'unavailable') {
+            this._log.warn(
+              '[PollarClient] No persistent storage on React Native — sessions and the DPoP key ' +
+                'live in memory only and are lost on cold start (the user is logged out each launch). ' +
+                'Pass a Keychain/SecureStore adapter via `config.storage`.',
+            );
+          }
           // Forward to the legacy one-shot callback (back-compat) and to any
           // subscribers added via `client.onStorageDegrade(cb)`. Both fire
           // exactly once because the underlying adapter dedupes.
@@ -267,6 +293,30 @@ export class PollarClient {
       `[PollarClient] Initialized v${POLLAR_CORE_VERSION} — endpoint: ${this.basePath}, network: ${this._networkState.network}`,
     );
 
+    // N4: warn (don't throw — that would break StrictMode double-mounts / HMR)
+    // when a second live client exists for this API key.
+    const liveForKey = (liveClientsByApiKey.get(this.apiKey) ?? 0) + 1;
+    liveClientsByApiKey.set(this.apiKey, liveForKey);
+    if (liveForKey > 1) {
+      this._log.warn(
+        '[PollarClient] Another PollarClient is already active for this API key. Multiple ' +
+          'instances share one persisted session + DPoP key and run independent refresh loops; ' +
+          'the single-use refresh-token rotation will trip server-side reuse-detection and log ' +
+          'all of them out. Create one client per API key and reuse it (e.g. a module singleton).',
+      );
+    }
+
+    // N5: on a non-browser client runtime (React Native) the default visibility
+    // provider is a no-op, so proactive refresh can't resume when the app
+    // returns to the foreground (the OS suspended the timer in the background).
+    if (!isBrowser && !config.visibilityProvider) {
+      this._log.warn(
+        '[PollarClient] No visibilityProvider configured on a non-browser runtime. Proactive ' +
+          'token refresh will not resume on foreground (only reactive 401-refresh will). Pass a ' +
+          'visibilityProvider (e.g. the React Native AppState adapter) to keep the session fresh.',
+      );
+    }
+
     this._initialized = this._initialize();
   }
 
@@ -281,6 +331,16 @@ export class PollarClient {
     // Compute the storage namespace first — every subsequent storage op
     // (including the cross-tab listener below and `_restoreSession`) reads it.
     this._apiKeyHash = await hashApiKey(this.apiKey);
+
+    // One-time migration from the pre-0.10 8-hex namespace to the wider hash,
+    // so existing sessions aren't orphaned (which would look like a logout) when
+    // the hash width changed. Runs before keyManager.init() (which migrates the
+    // matching DPoP key) and before _restoreSession() reads the session.
+    try {
+      await migrateLegacyStorage(this._storage, this._apiKeyHash, await legacyHashApiKey(this.apiKey));
+    } catch (err) {
+      this._log.warn('[PollarClient] Legacy storage migration failed', err);
+    }
 
     // Cross-tab session sync. Browser-only — the `storage` event is a DOM
     // feature with no React Native equivalent (each RN process owns its
@@ -322,7 +382,13 @@ export class PollarClient {
     // Latch first so anything still in flight (a refresh resolving, a queued
     // proactive-refresh timer callback) sees a destroyed client and bails
     // instead of re-arming a timer or writing state after teardown.
+    if (this._destroyed) return; // idempotent — don't double-decrement the registry
     this._destroyed = true;
+    if (isClientRuntime) {
+      const remaining = (liveClientsByApiKey.get(this.apiKey) ?? 1) - 1;
+      if (remaining <= 0) liveClientsByApiKey.delete(this.apiKey);
+      else liveClientsByApiKey.set(this.apiKey, remaining);
+    }
     if (this._storageEventHandler && isBrowser) {
       window.removeEventListener('storage', this._storageEventHandler);
       this._storageEventHandler = null;

@@ -74,12 +74,15 @@ function delay(ms, signal) {
   });
 }
 
-async function apiKeyHashOf(apiKey) {
+// Current namespace width is 16 bytes / 32 hex (see lib/api-key-hash.ts).
+async function hashOf(apiKey, bytes) {
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(apiKey));
-  return Array.from(new Uint8Array(digest).slice(0, 4))
+  return Array.from(new Uint8Array(digest).slice(0, bytes))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 }
+const apiKeyHashOf = (apiKey) => hashOf(apiKey, 16);
+const legacyApiKeyHashOf = (apiKey) => hashOf(apiKey, 4);
 
 function freshSession(accessToken = 'AT', expiresInSec = 600) {
   return JSON.stringify({
@@ -291,6 +294,31 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     check('  picked up the rotated token', client.getAuthState().session.token.accessToken === 'ROTATED_AT');
     const resumeCalls = mock.calls.filter((c) => c.url.includes('/auth/session/resume'));
     check('  no redundant /auth/session/resume fired', resumeCalls.length === 0, resumeCalls.length);
+    client.destroy();
+  }
+
+  // ── H. legacy 8-hex storage is migrated to the wider namespace (N3) ────────
+  console.log('\n── H. legacy storage migrated to wider hash (N3) ─────────────');
+  {
+    mock.calls = [];
+    const apiKey = 'pk_race_H';
+    const storage = sdk.createMemoryAdapter();
+    const legacyHash = await legacyApiKeyHashOf(apiKey);
+    const newHash = await apiKeyHashOf(apiKey);
+    check('hash widened (legacy 8 hex vs new 32 hex)', legacyHash.length === 8 && newHash.length === 32);
+
+    // Seed a session ONLY under the pre-0.10 (8-hex) key.
+    const legacyKey = `pollar:${legacyHash}:session`;
+    const newKey = `pollar:${newHash}:session`;
+    await storage.set(legacyKey, freshSession('LEGACY_AT'));
+
+    const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+    await client.ready();
+
+    check('client restored the legacy session (migrated, not logged out)', client.getAuthState().step === 'authenticated');
+    check('  session moved to the new namespace key', (await storage.get(newKey)) !== null);
+    check('  legacy key removed after migration', (await storage.get(legacyKey)) === null);
+    check('  restored token came from the legacy session', client.getAuthState().session.token.accessToken === 'LEGACY_AT');
     client.destroy();
   }
 

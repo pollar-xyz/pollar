@@ -204,3 +204,35 @@ export async function writeWalletType(storage: Storage, apiKeyHash: string, type
 export async function readWalletType(storage: Storage, apiKeyHash: string): Promise<string | null> {
   return storage.get(walletTypeStorageKey(apiKeyHash));
 }
+
+/**
+ * One-time migration: move a session (and its wallet-type) written under the
+ * pre-0.10 8-hex namespace to the current wider namespace, so widening the
+ * storage hash doesn't orphan stored state and look like a logout on upgrade.
+ *
+ * No-op once migrated (the new key already exists) or on a fresh install (no
+ * legacy key). Never throws — a storage hiccup just means restore won't find a
+ * session and the user logs in again. The matching DPoP key is migrated
+ * separately inside the key manager so the session's `cnf.jkt` binding survives.
+ */
+export async function migrateLegacyStorage(
+  storage: Storage,
+  apiKeyHash: string,
+  legacyApiKeyHash: string,
+): Promise<void> {
+  if (apiKeyHash === legacyApiKeyHash) return;
+  for (const keyOf of [sessionStorageKey, walletTypeStorageKey]) {
+    try {
+      const nextKey = keyOf(apiKeyHash);
+      if ((await storage.get(nextKey)) != null) continue; // already migrated / fresh session present
+      const legacyKey = keyOf(legacyApiKeyHash);
+      const legacyVal = await storage.get(legacyKey);
+      if (legacyVal != null) {
+        await storage.set(nextKey, legacyVal);
+        await storage.remove(legacyKey);
+      }
+    } catch {
+      // Leave both keys as-is; restore will simply miss and the user re-logs in.
+    }
+  }
+}
