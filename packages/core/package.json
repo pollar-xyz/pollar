@@ -86,7 +86,7 @@
   "dependencies": {
     "@noble/curves": "~1.9.7",
     "@noble/hashes": "~1.8.0",
-    "@stellar/freighter-api": "^2.0.0",
+    "@stellar/freighter-api": "^6.0.1",
     "openapi-fetch": "^0.17.0"
   },
   "peerDependencies": {
