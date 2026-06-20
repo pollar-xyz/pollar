@@ -377,6 +377,11 @@ export class PollarClient {
         const cacheBodyAllowed = cacheMethod !== 'GET' && cacheMethod !== 'HEAD';
         if (cacheBodyAllowed) {
           try {
+            // TODO(files): this assumes a JSON-string body. If/when an endpoint
+            // sends FormData/Blob (e.g. a KYC file upload), arrayBuffer() on RN's
+            // fetch polyfill is unreliable for those — the DPoP-nonce retry could
+            // replay an empty body (same class as the rc.1 bug). Handle multipart
+            // bodies explicitly before adding any non-JSON upload route.
             const snapshot = await request.clone().arrayBuffer();
             if (snapshot.byteLength > 0) self._requestBodyCache.set(request, snapshot);
           } catch (err) {
@@ -424,8 +429,14 @@ export class PollarClient {
 
         if (response.status !== 401) return self._logHttp(request, response);
 
+        // Case-insensitive: RFC 9449 carries this as `error="use_dpop_nonce"`,
+        // but header casing isn't guaranteed end-to-end (a proxy/CDN can rewrite
+        // it). A case-sensitive match would misclassify the nonce challenge as a
+        // plain token-expiry 401 → a pointless refresh and, for a POST, no retry
+        // (POSTs don't auto-retry after a token refresh), surfacing as a spurious
+        // failure on the first DPoP request behind such infra.
         const wwwAuth = response.headers.get('WWW-Authenticate') ?? '';
-        const isNonceChallenge = wwwAuth.includes('use_dpop_nonce');
+        const isNonceChallenge = wwwAuth.toLowerCase().includes('use_dpop_nonce');
 
         // The refresh endpoint has special handling: don't recursively trigger
         // refresh from inside itself. But DO honor a nonce challenge — the
@@ -2212,6 +2223,11 @@ export class PollarClient {
   }
 
   private async _restoreSession(): Promise<void> {
+    // Capture the pre-restore state so we can tell a genuine restore (cold
+    // start, or another user's session) apart from a cross-tab token ROTATION
+    // of the session we already have verified.
+    const prevState = this._authState;
+    const prevSession = this._session;
     this._session = await readStorage(this._storage, this.apiKeyHash, this._log);
     if (this._session) {
       const storedType = await readWalletType(this._storage, this.apiKeyHash);
@@ -2225,6 +2241,26 @@ export class PollarClient {
           this._log.warn('[PollarClient] Could not restore wallet adapter for stored id', { id: storedType, err });
         }
       }
+
+      // Cross-tab token rotation of the SAME already-verified session: another
+      // tab just refreshed and wrote a fresh token. The server issued that
+      // token, so the session is still valid — keep `verified: true`, pick up
+      // the new token, and skip the redundant `/auth/session/resume`. Without
+      // this, every sibling tab's rotation would flap `verified` true→false→true
+      // and fire an extra resume round-trip.
+      const isSameVerifiedSession =
+        prevState.step === 'authenticated' &&
+        prevState.verified &&
+        prevSession?.userId != null &&
+        prevSession.userId === this._session.userId &&
+        prevSession.clientSessionId === this._session.clientSessionId;
+      if (isSameVerifiedSession) {
+        this._log.info('[PollarClient] Session token rotated (cross-tab); keeping verified');
+        this._setAuthState({ step: 'authenticated', session: this._session, verified: true });
+        this._scheduleNextRefresh();
+        return;
+      }
+
       this._log.info('[PollarClient] Session restored from storage');
       // Emit through the setter so listeners that subscribe after
       // _initialize() resolves still get notified. A direct assignment to

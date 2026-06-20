@@ -15,11 +15,21 @@
 
 const path = require('node:path');
 
+// Capture DOM event listeners so the cross-tab `storage` handler can be fired
+// synthetically (no real multi-tab environment in node).
+const winListeners = {};
 globalThis.window = {
   location: { origin: 'https://x.test', href: 'https://x.test/' },
-  addEventListener: () => {},
-  removeEventListener: () => {},
+  addEventListener: (type, cb) => {
+    (winListeners[type] ??= new Set()).add(cb);
+  },
+  removeEventListener: (type, cb) => {
+    winListeners[type]?.delete(cb);
+  },
 };
+function dispatchStorageEvent(key) {
+  for (const cb of winListeners.storage ?? []) cb({ key });
+}
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 
 const SDK_DIST = path.resolve(__dirname, '../packages/core/dist/index.js');
@@ -88,6 +98,9 @@ const mock = {
   refreshDelayMs: 0,
   refreshStatus: 200,
   resumeDelayMs: 0,
+  // When set, the next /tx/history responds with a DPoP nonce challenge (401)
+  // using the given WWW-Authenticate value, then succeeds on retry.
+  txNonceChallengeWwwAuth: null,
 };
 
 globalThis.fetch = async (req) => {
@@ -111,6 +124,14 @@ globalThis.fetch = async (req) => {
   if (req.url.includes('/auth/session/resume')) {
     if (mock.resumeDelayMs) await delay(mock.resumeDelayMs, req.signal);
     return new Response(JSON.stringify({ success: true, content: { mail: 'a@b.c' } }), { status: 200 });
+  }
+  if (req.url.includes('/tx/history') && mock.txNonceChallengeWwwAuth) {
+    const www = mock.txNonceChallengeWwwAuth;
+    mock.txNonceChallengeWwwAuth = null; // one-shot: the retry below succeeds
+    return new Response(JSON.stringify({ success: false }), {
+      status: 401,
+      headers: { 'WWW-Authenticate': www, 'DPoP-Nonce': 'srv-nonce-1' },
+    });
   }
   // tx/history, logout, everything else.
   return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
@@ -227,6 +248,49 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     check('concurrent request did not throw the refresh rejection', txThrew === false);
     mock.refreshDelayMs = 0;
     mock.refreshStatus = 200;
+    client.destroy();
+  }
+
+  // ── F. DPoP nonce challenge is classified case-insensitively (N1) ──────────
+  console.log('\n── F. DPoP nonce challenge case-insensitive (N1) ─────────────');
+  {
+    mock.calls = [];
+    const { client } = await makeClient('pk_race_F');
+    mock.calls = [];
+    // Server (or a proxy) returns the challenge in a non-canonical casing.
+    mock.txNonceChallengeWwwAuth = 'DPoP error="USE_DPOP_NONCE"';
+    await client.fetchTxHistory(); // must transparently retry with the nonce
+
+    const txCalls = mock.calls.filter((c) => c.url.includes('/tx/history'));
+    const refreshCalls = mock.calls.filter((c) => c.url.includes('/auth/refresh'));
+    check('nonce challenge triggered exactly one retry (2 tx calls)', txCalls.length === 2, txCalls.length);
+    check('  classified as nonce, NOT token-expiry → no spurious refresh', refreshCalls.length === 0, refreshCalls.length);
+    const retryNonce = txCalls[1]?.headers.dpop ? JSON.parse(Buffer.from(txCalls[1].headers.dpop.split('.')[1], 'base64url').toString()).nonce : null;
+    check('  retry proof carries the server nonce', retryNonce === 'srv-nonce-1', retryNonce);
+    client.destroy();
+  }
+
+  // ── G. cross-tab token rotation keeps `verified`, skips resume (N2) ────────
+  console.log('\n── G. cross-tab rotation keeps verified, no re-resume (N2) ───');
+  {
+    mock.calls = [];
+    const { client, storage, sessionKey } = await makeClient('pk_race_G');
+    await waitFor(() => client.getAuthState().verified === true); // resume confirmed it
+    const states = [];
+    client.onAuthStateChange((s) => states.push(s.step + (s.step === 'authenticated' ? `:${s.verified}` : '')));
+    states.length = 0;
+    mock.calls = [];
+
+    // Simulate another tab refreshing: same user/session, rotated access token.
+    await storage.set(sessionKey, freshSession('ROTATED_AT'));
+    dispatchStorageEvent(sessionKey);
+    await new Promise((r) => setTimeout(r, 60));
+
+    check('verified stayed true (no flap to false)', client.getAuthState().verified === true);
+    check('  no authenticated:false emitted during rotation', !states.includes('authenticated:false'), JSON.stringify(states));
+    check('  picked up the rotated token', client.getAuthState().session.token.accessToken === 'ROTATED_AT');
+    const resumeCalls = mock.calls.filter((c) => c.url.includes('/auth/session/resume'));
+    check('  no redundant /auth/session/resume fired', resumeCalls.length === 0, resumeCalls.length);
     client.destroy();
   }
 
