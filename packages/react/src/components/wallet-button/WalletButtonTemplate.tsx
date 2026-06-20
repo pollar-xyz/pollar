@@ -2,6 +2,7 @@
 
 import { WalletId } from '@pollar/core';
 import { LOGO_POLLAR } from '../../constants';
+import './WalletButton.css';
 
 function ButtonLogo() {
   return <img src={LOGO_POLLAR} alt="Pollar" width={22} height={22} className="wallet-btn-logo" />;
@@ -24,6 +25,10 @@ export interface WalletButtonTemplateProps {
   onTxHistory: () => void;
   onSend: () => void;
   onReceive: () => void;
+  onSessions: () => void;
+  onKyc: () => void;
+  onRamp: () => void;
+  onDistributionRules: () => void;
   onLogout: () => void;
   onLogin: () => void;
 }
@@ -49,6 +54,10 @@ export function WalletButtonTemplate({
   onTxHistory,
   onSend,
   onReceive,
+  onSessions,
+  onKyc,
+  onRamp,
+  onDistributionRules,
   onLogout,
   onLogin,
 }: WalletButtonTemplateProps) {
@@ -102,7 +111,6 @@ export function WalletButtonTemplate({
 
       {open && (
         <div className="wallet-dropdown" style={{ backgroundColor: dropdownBg, borderColor: dropdownBorder }}>
-          {/* Send */}
           <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onSend}>
             <svg
               width="14"
@@ -119,8 +127,6 @@ export function WalletButtonTemplate({
             </svg>
             Send
           </button>
-
-          {/* Receive */}
           <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onReceive}>
             <svg
               width="14"
@@ -138,10 +144,7 @@ export function WalletButtonTemplate({
             </svg>
             Receive
           </button>
-
           <div className="wallet-dropdown-divider" />
-
-          {/* Copy address */}
           <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onCopy}>
             <svg
               width="14"
@@ -158,8 +161,6 @@ export function WalletButtonTemplate({
             </svg>
             {copied ? 'Copied!' : 'Copy address'}
           </button>
-
-          {/* Wallet balance */}
           <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onWalletBalance}>
             <svg
               width="14"
@@ -177,8 +178,6 @@ export function WalletButtonTemplate({
             </svg>
             Wallet balance
           </button>
-
-          {/* Transaction history */}
           <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onTxHistory}>
             <svg
               width="14"
@@ -198,10 +197,81 @@ export function WalletButtonTemplate({
             </svg>
             Transaction history
           </button>
-
           <div className="wallet-dropdown-divider" />
-
-          {/* Logout */}
+          {/* Buy / Sell (ramp) */}
+          <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onRamp}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="17 1 21 5 17 9" />
+              <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+              <polyline points="7 23 3 19 7 15" />
+              <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+            </svg>
+            Buy / Sell
+          </button>
+          {/* Identity verification */}
+          <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onKyc}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+              <path d="M2 21v-1a6 6 0 0 1 6-6h2" />
+              <polyline points="16 11 18 13 22 9" />
+            </svg>
+            Identity verification
+          </button>
+          <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onDistributionRules}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="18" cy="5" r="3" />
+              <circle cx="6" cy="12" r="3" />
+              <circle cx="18" cy="19" r="3" />
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+            </svg>
+            Distribution rules
+          </button>
+          <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onSessions}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+            Active sessions
+          </button>
+          <div className="wallet-dropdown-divider" />
           <button className="wallet-dropdown-item danger" onClick={onLogout}>
             <svg
               width="14"

@@ -3,7 +3,7 @@
 import { type ISupportedWallet, type ModuleInterface, type Networks, StellarWalletsKit } from '@creit.tech/stellar-wallets-kit';
 import type { RenderWalletsProps } from '@pollar/react';
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
-import { ensureInit, type KitPickerOptions } from '../factory';
+import { ensureInit, getKitLogger, type KitPickerOptions } from '../factory';
 
 export interface KitWalletPickerProps extends RenderWalletsProps {
   network?: Networks;
@@ -29,7 +29,7 @@ export function KitWalletPicker({ onConnect, authState, network, modules, picker
         setWallets(list);
       })
       .catch((err) => {
-        console.error('[KitWalletPicker] refreshSupportedWallets failed', err);
+        getKitLogger().error('[KitWalletPicker] refreshSupportedWallets failed', err);
         if (!cancelled) setWallets([]);
       });
     return () => {
@@ -45,7 +45,8 @@ export function KitWalletPicker({ onConnect, authState, network, modules, picker
     let result: ISupportedWallet[];
 
     if (allowedIds && allowedIds.length > 0) {
-      // Honor `as-given` order from the allowedIds; warn once for unknowns.
+      // Build the base list in `allowedIds` order; warn once per unknown id.
+      // A later `order` setting may re-sort this list.
       result = [];
       for (const id of allowedIds) {
         const w = byId.get(id);
@@ -53,7 +54,7 @@ export function KitWalletPicker({ onConnect, authState, network, modules, picker
           result.push(w);
         } else if (!warnedRef.current.has(id)) {
           warnedRef.current.add(id);
-          console.warn(`[KitWalletPicker] wallet id "${id}" not present in the active kit modules — skipped`);
+          getKitLogger().warn(`[KitWalletPicker] wallet id "${id}" not present in the active kit modules — skipped`);
         }
       }
     } else {

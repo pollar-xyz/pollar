@@ -1,5 +1,282 @@
 # Changelog
 
+## 0.9.0
+
+> **⚠️ BREAKING CHANGES (SDK packages only — the SDK API stays backward-compatible).**
+>
+> - **`session.wallet.type` value `'custodial'` → `'internal'`** in `@pollar/core`.
+>   The developer-facing union is now `'internal' | 'smart' | 'external'` (aligns
+>   with the DB `SdkUserWalletSource.INTERNAL`). Apps branching on
+>   `wallet.type === 'custodial'` must switch to `'internal'`. **The wire is
+>   unchanged**: `sdk-api` still emits `'custodial'`, and `@pollar/core` ≥0.9.0
+>   remaps it to `'internal'` at the client boundary — so SDKs ≤0.8.x keep
+>   working and no coordinated backend deploy is required.
+> - The session wallet drops the legacy `publicKey` alias. `session.wallet`
+>   now exposes **only `address`** (it always held the same value). Read
+>   `session.wallet.address` instead of `session.wallet.publicKey`.
+> - The wallet-adapter `ConnectWalletResponse` is now `{ address }` only —
+>   `publicKey` is gone. Affects authors implementing a custom `WalletAdapter`.
+> - The `sdk-api` `/v1/auth/login` response is **unchanged** and still emits
+>   both `publicKey` and `address`, so SDKs ≤0.8.x keep working.
+> - `sdk-api` `/tx/*` now accept **either `address` (preferred) or `publicKey`
+>   (legacy)** in the request body — `address` wins when both are sent. Old SDKs
+>   that send `publicKey` keep working; `@pollar/core` 0.9.0 sends `address`.
+>   ⚠️ **Deploy ordering:** ship the `sdk-api` change before/with `@pollar/core`
+>   0.9.0, since that core sends `address` and needs a backend that accepts it.
+> - Apps consuming `@pollar/react`'s `usePollar().walletAddress` need **no
+>   changes** — the field is resolved internally.
+
+### `@pollar/core` — BREAKING
+
+- **`wallet.type` `'custodial'` → `'internal'`.** `PollarPersistedSession.wallet.type`
+  and the `isValidSession` check now use `'internal' | 'smart' | 'external'`.
+  Code branching on `'custodial'` must switch to `'internal'`. The change is
+  **SDK-only**: the `sdk-api` wire still emits `'custodial'`, and core remaps it
+  to `'internal'` in `_storeSession` (fresh login) and `readStorage` (legacy
+  persisted sessions). The DB enum stays `SdkUserWalletSource.INTERNAL` — no
+  migration. This keeps clients ≤0.8.x working while the SDK surface and the DB
+  speak one vocabulary.
+- **`PollarPersistedSession.wallet.publicKey` removed.** The persisted session
+  wallet is now `{ type, address, existsOnStellar?, createdAt?, linkedAt?,
+network?, deployTxHash? }`. `address` is the on-chain address for every type
+  (G-address internal, C-address smart/passkey, connected pubkey external).
+- **`ConnectWalletResponse` is now `{ address: string }`.** The duplicate
+  `publicKey` field is gone; the built-in `FreighterAdapter` / `AlbedoAdapter`
+  and any custom adapter must return `address` only.
+
+### `@pollar/core` — fixes
+
+- **Login no longer clears the session on every custodial (email/OAuth) login.**
+  `authenticate()` validates the raw `/auth/login` wire response with
+  `isValidSession()` **before** `_storeSession` remaps `custodial → internal`,
+  so the transitional wire value `'custodial'` is tolerated at the guard and the
+  flow no longer falls through to the error branch → `clearSession()`
+  (`[PollarClient] Session cleared`). Callers still remap it before it reaches
+  app code, so the persisted/SDK surface vocabulary is unchanged.
+
+### `@pollar/core` — internal
+
+- **Sessions persisted by older SDKs (≤0.8.x) are migrated transparently.**
+  `readStorage` backfills `address` from the legacy `publicKey` key and remaps
+  `type: 'custodial'` → `'internal'` before validation, so existing users are
+  **not** forced to re-log in on upgrade.
+- **`/tx/*` request bodies now send `address`** (was `publicKey`). The backend
+  accepts both for backward compat (see the `sdk-api` note above), so this is
+  transparent once the matching backend is deployed.
+- Removed a dead `smart` local in `_runSmartTx` (assigned, never read).
+
+### Configurable logging — new features (all SDK packages)
+
+- **`logLevel` + `logger` on `PollarClientConfig`.** A new `LogLevel`
+  (`silent` < `error` < `warn` < `info` < `debug`, default **`info`**) filters
+  SDK logging, and an optional `logger?: PollarLogger` routes logs to a custom
+  sink (pino, Sentry breadcrumbs, a test spy…) instead of `console`. Exported
+  `createLogger(level, sink?)` and the `LogLevel` / `PollarLogger` types from
+  `@pollar/core`. `PollarClient.getLogger()` exposes the configured logger so
+  the runtime layer reuses the same level + sink.
+- **State-transition chatter is now `debug`.** The per-transition
+  `auth:…` / `transaction:…` / `network:…` logs, the session-status retry
+  warnings, and "Login cancelled" moved from `info` to `debug`, so the default
+  `info` console is much quieter without losing lifecycle logs (Initialized,
+  Session stored/restored/cleared, Tokens refreshed). Per-field session
+  validation detail dropped to `debug` too.
+- **No more double-logged key-manager init failures.** `NobleKeyManager` /
+  `WebCryptoKeyManager` no longer `console.error` on init failure — the error
+  already propagates to `PollarClient`, which logs it once through the
+  configured logger.
+- **`@pollar/stellar-wallets-kit-adapter`** gains `logLevel` / `logger` on
+  `StellarWalletsKitAdapterOptions` (set once at init — the kit is a global
+  singleton). **`@pollar/react`** routes the provider's logs and the modal
+  error boundary through the client's logger via `PollarClient.getLogger()`.
+
+### `@pollar/react` — BREAKING
+
+- **`walletAddress` now derives from `session.wallet.address`** instead of
+  `session.wallet.publicKey`. The public `usePollar().walletAddress` value is
+  identical — no consumer change needed. The internal session-equality check
+  compares `wallet.address`.
+
+### `@pollar/stellar-wallets-kit-adapter` — BREAKING
+
+- **`connect()` returns `{ address }` only** (matches the new
+  `ConnectWalletResponse`). Requires `@pollar/core@^0.9.0` /
+  `@pollar/react@^0.9.0` (peer ranges pinned).
+
+### `@pollar/privy-adapter` — release alignment
+
+- **Version bump to `0.9.0` only — no functional changes.** Republished so all
+  `@pollar/*` packages share a single `0.9.0` release line. The adapter API,
+  config fields, and error envelope are identical to `0.8.1`.
+
+### Migration
+
+```ts
+// Reading the wallet address off the auth state (core, headless):
+client.onAuthStateChange((s) => {
+  if (s.step !== 'authenticated') return;
+  // BEFORE (≤0.8.x): s.session.wallet.publicKey
+  // AFTER  (0.9.0):  s.session.wallet.address
+  const addr = s.session.wallet.address;
+});
+```
+
+Custom `WalletAdapter` authors:
+
+```ts
+// BEFORE
+async connect(): Promise<ConnectWalletResponse> {
+  return { address: pubkey, publicKey: pubkey };
+}
+// AFTER
+async connect(): Promise<ConnectWalletResponse> {
+  return { address: pubkey };
+}
+```
+
+`@pollar/react` consumers using `usePollar().walletAddress`: **no change**.
+
+## 0.8.3
+
+### `@pollar/core` — new features
+
+- **Session resume on cold start — sessions are revalidated and the profile is
+  repopulated after a reload/reopen.** Until now, `_restoreSession()` rehydrated
+  the session entirely from storage and went straight to `authenticated` without
+  telling the server, so (1) a session revoked elsewhere (logout on another
+  device, family revoked) still showed as `authenticated` until the next request
+  401'd, and (2) `getUserProfile()` returned `null` after a cold reload because
+  PII lives in memory only and was never re-fetched. On restore the client now
+  fires `GET /auth/session/resume` in the background (non-blocking — startup
+  never waits on it):
+  - **200** → the in-memory profile is repopulated (`getUserProfile()` stops
+    being `null`) and the session is marked `verified`.
+  - **revoked family / 401** → the existing refresh-on-401 path clears the
+    session, so the client converges to `idle` instead of showing a stale
+    `authenticated`.
+  - **offline / network error** → the session is **not** cleared; it stays
+    optimistic and is revalidated on the next `visibilitychange` or request.
+    Resume goes through the normal authed client, so it coalesces with any
+    in-flight refresh and (being a GET) is auto-retried after a token refresh. The
+    endpoint never rotates the refresh token or creates a new family.
+- **`AuthState.authenticated` now carries `verified: boolean`** — `false` while
+  a restored session is still optimistic (pre-revalidation), `true` after a
+  fresh login/refresh or a successful resume. Gate sensitive actions on it.
+
+### `@pollar/react` — new features
+
+- **`usePollar().verified`** exposes the new `verified` flag so apps can gate
+  sensitive actions (e.g. signing) until the cold-start session is confirmed.
+
+## 0.8.2
+
+### `@pollar/core` — new features
+
+- **`POLLAR_CORE_VERSION` export + version in the init log.** The package version
+  is injected at build time (tsup `define`) and exported as
+  `POLLAR_CORE_VERSION` (e.g. `'0.8.2'`, `'dev'` when running unbundled). The
+  `PollarClient` startup log now includes it:
+  `[PollarClient] Initialized v0.8.2 — endpoint: …, network: …`. Named per
+  package so it won't collide with a future `POLLAR_REACT_VERSION`, letting apps
+  report both in one diagnostics line.
+
+### `@pollar/core` — fixes
+
+- **SHA-256 no longer requires `crypto.subtle` — React Native runs in Expo Go.**
+  `sha256` ran on `crypto.subtle.digest('SHA-256')`, which is absent on
+  React Native / Hermes unless `react-native-quick-crypto` (a native module that
+  forces an Expo **dev build**) is installed. Since SHA-256 is on the hot path
+  (DPoP `ath`, API-key namespace hashing, JWK thumbprints, `NobleKeyManager`),
+  nothing worked on Expo Go. `sha256` now runs on pure-JS
+  [`@noble/hashes`](https://github.com/paulmillr/noble-hashes) (`@noble/hashes/sha2`),
+  already present via `@noble/curves`, now a direct dependency. The function keeps
+  its `async` signature, so call sites are unchanged. `react-native-quick-crypto`
+  becomes optional — install it only to upgrade to non-extractable WebCrypto keys.
+- **Drop deprecated `@noble/curves/p256` import.** `NobleKeyManager` imported
+  `p256` from `@noble/curves/p256`, deprecated in `@noble/curves` 1.9.x
+  (TS6385). Switched to the supported `@noble/curves/nist` entry; the `p256`
+  object and its API are identical.
+- **Expo SecureStore storage adapter no longer throws on the SDK's namespaced
+  keys.** `createSecureStoreAdapter()` passed keys straight to
+  `expo-secure-store`, but SecureStore only accepts keys matching
+  `[A-Za-z0-9._-]` while the SDK namespaces its keys with `:`
+  (`pollar:<apiKeyHash>:session`, `pollar:<apiKeyHash>:walletType`,
+  `pollar:dpop-key:<apiKeyHash>`). Every read/write failed with an
+  `Invalid key` error on React Native / Expo. The adapter now sanitizes each
+  key (disallowed characters → `_`) before calling SecureStore. The transform
+  is deterministic and collision-free for the SDK's fixed key templates. No
+  migration needed — the adapter never persisted anything under the rejected
+  keys. The `react-native-keychain` adapter was unaffected (Keychain `service`
+  names allow `:`).
+
+## 0.8.1
+
+### `@pollar/core` — new features
+
+- **React Native / Expo runtime support.** The DPoP path no longer assumes a
+  browser-grade runtime, so the SDK now boots on React Native / Hermes once the
+  documented polyfills are registered. Three pieces:
+  - **`randomUUID()` with a fallback.** Prefers the secure-context
+    `crypto.randomUUID`, and falls back to a manual RFC 4122 v4 build via
+    `crypto.getRandomValues` for environments where `randomUUID` is missing
+    (older RN/Hermes where `react-native-get-random-values` provides
+    `getRandomValues` but not `randomUUID`, and insecure HTTP origins). Throws
+    only when no secure random source exists at all.
+  - **Runtime-agnostic abort helpers.** `abortError()` builds an `AbortError`
+    via the native `DOMException` when present and falls back to a plain `Error`
+    tagged `name = 'AbortError'` on Hermes (where `DOMException` is not a
+    global). `throwIfAborted(signal)` replaces `signal.throwIfAborted()`, which
+    is absent on older RN `AbortSignal` polyfills. The
+    `error.name === 'AbortError'` contract the rest of the SDK relies on is
+    preserved everywhere.
+  - **Non-streaming session-status fallback.** A new `waitForSessionReady`
+    transport picks the SSE stream on web and one-shot polling of
+    `/auth/session/status/{id}/poll` (`pollUntilFound`) on React Native — whose
+    `fetch` exposes no readable `response.body` — so login completes without a
+    streaming body. Backoff and abort semantics match the SSE path.
+
+- **Terminal session-status handling.** A login session that is invalid or
+  expired now resets the flow to an `error` state instead of waiting forever.
+  Both transports surface `SessionStatusError` (`INVALID_CLIENT_SESSION_ID` /
+  `EXPIRED_CLIENT_ID`, from SSE `error` events or 404/410 on the poll endpoint),
+  which the auth flow maps to two new `AUTH_ERROR_CODES`: **`SESSION_EXPIRED`**
+  and **`SESSION_INVALID`**. Applies to web and React Native alike.
+- The README gains a full **React Native runtime requirements** section listing
+  the four Web primitives the DPoP proof needs (`crypto.getRandomValues`,
+  `crypto.subtle.digest`, `TextEncoder`/`TextDecoder`, spec-compliant `URL`) and
+  the polyfills that provide them (`react-native-get-random-values`,
+  `react-native-quick-crypto`, `react-native-polyfill-globals`).
+
+### `@pollar/react` — fixes
+
+- **`onWalletConnect` is now optional on `<LoginModalTemplate>`.** The prop
+  changed from required to `onWalletConnect?: (id: WalletId) => void` and
+  defaults to a no-op. Consumers that drive the wallet picker entirely through
+  `ui.renderWallets` no longer have to thread a handler they don't use.
+
+### `@pollar/privy-adapter` — new features
+
+- **Operation allowlist.** The adapter signs through Privy `rawSign`, so only the
+  transaction _hash_ ever reaches Privy and Privy cannot enforce per-operation
+  policy — the adapter is the only place that can. Two new optional, fully
+  backward-compatible config fields let you cap what `/wallets/sign` will sign:
+  - `allowedOperations?: string[]` — explicit allowlist of stellar-sdk operation
+    type names (e.g. `['changeTrust', 'payment']`). `undefined` (default) keeps the
+    legacy behavior: any non-fee-bump transaction is signed.
+  - `restrictToTrustlines?: boolean` — shortcut that allows the trustline preset
+    (`changeTrust` + the `beginSponsoringFutureReserves` / `endSponsoringFutureReserves`
+    sandwich) **and** additionally requires at least one `changeTrust`. When both
+    fields are set, the effective allowlist is the union of the two and the
+    changeTrust requirement still applies.
+
+  Validation runs after the transaction is parsed and before any Privy round-trip,
+  so a disallowed transaction never reaches signing. The existing fee-bump
+  rejection is unchanged.
+
+- **New error code `TX_OPERATION_NOT_ALLOWED` (HTTP 403).** Returned when a
+  transaction contains an operation outside the allowlist, or is missing a
+  `changeTrust` while `restrictToTrustlines` is on. The response carries a `reason`
+  naming the offending operation: `{ "code": "TX_OPERATION_NOT_ALLOWED", "success": false, "reason": "..." }`.
+
 ## 0.8.0
 
 > **⚠️ BREAKING CHANGES.**

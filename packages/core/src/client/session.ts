@@ -1,3 +1,4 @@
+import type { PollarLogger } from '../lib/logger';
 import type { Storage } from '../storage/types';
 import type { PollarPersistedSession } from '../types';
 
@@ -41,91 +42,130 @@ function isBoundedString(v: unknown, max: number, allowEmpty = false): v is stri
   return v.length <= max;
 }
 
-export function isValidSession(value: unknown): value is PollarPersistedSession {
+export function isValidSession(value: unknown, logger: PollarLogger = console): value is PollarPersistedSession {
   if (typeof value !== 'object' || value === null) {
-    console.warn('[PollarClient:session] Invalid session — value is not an object');
+    logger.debug('[PollarClient:session] Invalid session — value is not an object');
     return false;
   }
   const s = value as Record<string, unknown>;
 
   if (!isBoundedString(s['clientSessionId'], MAX_CLIENT_SESSION_ID)) {
-    console.warn('[PollarClient:session] Invalid session — clientSessionId missing/empty/too long');
+    logger.debug('[PollarClient:session] Invalid session — clientSessionId missing/empty/too long');
     return false;
   }
   if (s['userId'] !== null && !isBoundedString(s['userId'], MAX_USER_ID)) {
-    console.warn('[PollarClient:session] Invalid session — userId must be string|null');
+    logger.debug('[PollarClient:session] Invalid session — userId must be string|null');
     return false;
   }
   if (!isBoundedString(s['status'], MAX_STATUS)) {
-    console.warn('[PollarClient:session] Invalid session — status must be string');
+    logger.debug('[PollarClient:session] Invalid session — status must be string');
     return false;
   }
 
   const token = s['token'];
   if (typeof token !== 'object' || token === null) {
-    console.warn('[PollarClient:session] Invalid session — token missing or not an object');
+    logger.debug('[PollarClient:session] Invalid session — token missing or not an object');
     return false;
   }
   const t = token as Record<string, unknown>;
   if (!isBoundedString(t['accessToken'], MAX_ACCESS_TOKEN)) {
-    console.warn('[PollarClient:session] Invalid session — token.accessToken missing/empty/too long');
+    logger.debug('[PollarClient:session] Invalid session — token.accessToken missing/empty/too long');
     return false;
   }
   if (!isBoundedString(t['refreshToken'], MAX_REFRESH_TOKEN)) {
-    console.warn('[PollarClient:session] Invalid session — token.refreshToken missing/empty/too long');
+    logger.debug('[PollarClient:session] Invalid session — token.refreshToken missing/empty/too long');
     return false;
   }
   if (typeof t['expiresAt'] !== 'number' || !Number.isFinite(t['expiresAt'])) {
-    console.warn('[PollarClient:session] Invalid session — token.expiresAt must be a finite number');
+    logger.debug('[PollarClient:session] Invalid session — token.expiresAt must be a finite number');
     return false;
   }
 
   const user = s['user'];
   if (typeof user !== 'object' || user === null) {
-    console.warn('[PollarClient:session] Invalid session — user missing or not an object');
+    logger.debug('[PollarClient:session] Invalid session — user missing or not an object');
     return false;
   }
   const u = user as Record<string, unknown>;
   if (u['id'] !== undefined && !isBoundedString(u['id'], MAX_USER_ID)) {
-    console.warn('[PollarClient:session] Invalid session — user.id must be string if present');
+    logger.debug('[PollarClient:session] Invalid session — user.id must be string if present');
     return false;
   }
   if (typeof u['ready'] !== 'boolean') {
-    console.warn('[PollarClient:session] Invalid session — user.ready must be boolean');
+    logger.debug('[PollarClient:session] Invalid session — user.ready must be boolean');
     return false;
   }
 
+  // The wallet object is always present; `type` discriminates internal (G,
+  // platform-custodied), smart/passkey (C), and external wallets. `address` is
+  // the on-chain address for all types.
+  //
+  // This guard runs against BOTH the persisted shape (vocabulary `internal`)
+  // and the raw `/auth/login` wire response (vocabulary `custodial`) — the login
+  // flow validates the wire body here *before* `_storeSession` remaps
+  // `custodial → internal`. So we tolerate `'custodial'` as the transitional
+  // wire alias for `'internal'`; callers remap it (`_storeSession` on fresh
+  // login, `readStorage` for legacy persisted sessions) before it reaches app
+  // code. (Sessions persisted by older SDKs also carry a legacy `publicKey`
+  // alias — `readStorage` backfills `address` from it before validation, so the
+  // field is tolerated but no longer required.)
   const wallet = s['wallet'];
   if (typeof wallet !== 'object' || wallet === null) {
-    console.warn('[PollarClient:session] Invalid session — wallet missing or not an object');
+    logger.debug('[PollarClient:session] Invalid session — wallet missing or not an object');
     return false;
   }
   const w = wallet as Record<string, unknown>;
-  if (w['publicKey'] !== null && !isBoundedString(w['publicKey'], MAX_WALLET_PUBLIC_KEY)) {
-    console.warn('[PollarClient:session] Invalid session — wallet.publicKey must be string|null');
+  if (w['type'] !== 'internal' && w['type'] !== 'smart' && w['type'] !== 'external' && w['type'] !== 'custodial') {
+    logger.debug('[PollarClient:session] Invalid session — wallet.type must be internal|smart|external');
+    return false;
+  }
+  if (w['address'] !== null && !isBoundedString(w['address'], MAX_WALLET_PUBLIC_KEY)) {
+    logger.debug('[PollarClient:session] Invalid session — wallet.address must be string|null');
     return false;
   }
   if (w['existsOnStellar'] !== undefined && typeof w['existsOnStellar'] !== 'boolean') {
-    console.warn('[PollarClient:session] Invalid session — wallet.existsOnStellar must be boolean if present');
+    logger.debug('[PollarClient:session] Invalid session — wallet.existsOnStellar must be boolean if present');
     return false;
   }
   if (w['createdAt'] !== undefined && (typeof w['createdAt'] !== 'number' || !Number.isFinite(w['createdAt']))) {
-    console.warn('[PollarClient:session] Invalid session — wallet.createdAt must be a finite number if present');
+    logger.debug('[PollarClient:session] Invalid session — wallet.createdAt must be a finite number if present');
+    return false;
+  }
+  if (w['linkedAt'] !== undefined && (typeof w['linkedAt'] !== 'number' || !Number.isFinite(w['linkedAt']))) {
+    logger.debug('[PollarClient:session] Invalid session — wallet.linkedAt must be a finite number if present');
     return false;
   }
 
   return true;
 }
 
-export async function readStorage(storage: Storage, apiKeyHash: string): Promise<PollarPersistedSession | null> {
+export async function readStorage(
+  storage: Storage,
+  apiKeyHash: string,
+  logger: PollarLogger = console,
+): Promise<PollarPersistedSession | null> {
   const raw = await storage.get(sessionStorageKey(apiKeyHash));
   if (!raw) return null;
 
   try {
     const session = JSON.parse(raw) as unknown;
-    if (!isValidSession(session)) {
+    // Migrate sessions persisted by older SDKs (≤0.8.x): they stored the wallet
+    // address under the legacy `publicKey` key, and persisted the wire type
+    // `'custodial'` (now remapped to `'internal'` at the client boundary).
+    // Backfill `address` and remap the type so they pass validation and survive
+    // the upgrade instead of forcing a re-login.
+    if (typeof session === 'object' && session !== null) {
+      const w = (session as { wallet?: Record<string, unknown> }).wallet;
+      if (w && w['address'] == null && typeof w['publicKey'] === 'string') {
+        w['address'] = w['publicKey'];
+      }
+      if (w && w['type'] === 'custodial') {
+        w['type'] = 'internal';
+      }
+    }
+    if (!isValidSession(session, logger)) {
       await storage.remove(sessionStorageKey(apiKeyHash));
-      console.warn('[PollarClient:session] Stored session is invalid — clearing storage');
+      logger.warn('[PollarClient:session] Stored session is invalid — clearing storage');
       return null;
     }
     if (session.token.expiresAt * 1000 < Date.now()) {
@@ -135,7 +175,7 @@ export async function readStorage(storage: Storage, apiKeyHash: string): Promise
     }
     return session;
   } catch (error) {
-    console.error('[PollarClient:session] Failed to parse session from storage', error);
+    logger.error('[PollarClient:session] Failed to parse session from storage', error);
     await storage.remove(sessionStorageKey(apiKeyHash));
     return null;
   }

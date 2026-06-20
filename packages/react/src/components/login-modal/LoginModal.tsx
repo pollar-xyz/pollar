@@ -35,6 +35,12 @@ export function LoginModal({ onClose }: LoginModalProps) {
         setCodeInputKey((k) => k + 1);
       }
       if (next.step === 'authenticated') {
+        // Clear any timer already pending — if `authenticated` fires more than
+        // once, overwriting the handle would orphan the previous timeout
+        // (cleanup only tracks the latest).
+        if (autoCloseTimer.current !== null) {
+          clearTimeout(autoCloseTimer.current);
+        }
         autoCloseTimer.current = setTimeout(() => {
           autoCloseTimer.current = null;
           onCloseRef.current();
@@ -50,7 +56,10 @@ export function LoginModal({ onClose }: LoginModalProps) {
     };
   }, [getClient]);
 
-  const { theme = 'light', accentColor = '#005DB4', logoUrl, emailEnabled, embeddedWallets, providers } = styles;
+  const { theme = 'light', accentColor = '#005DB4', logoUrl, emailEnabled, embeddedWallets, smartWallet, providers } = styles;
+  // Opt-in: the Smart Wallet (passkey) option only shows when the dashboard
+  // explicitly enables it. Absent → hidden.
+  const smartWalletEnabled = smartWallet ?? false;
 
   function handleClose() {
     setEmail('');
@@ -70,6 +79,14 @@ export function LoginModal({ onClose }: LoginModalProps) {
 
   function handleWalletConnect(type: WalletId) {
     getClient().loginWallet(type);
+  }
+
+  function handleLoginSmartWallet() {
+    getClient().loginSmartWallet();
+  }
+
+  function handleCreateSmartWallet() {
+    getClient().createSmartWallet();
   }
 
   function handleVerifyCode(code: string) {
@@ -96,6 +113,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
         logoUrl={logoUrl ?? null}
         emailEnabled={!!emailEnabled}
         embeddedWallets={!!embeddedWallets}
+        smartWallet={smartWalletEnabled}
         providers={{
           google: !!providers?.google,
           discord: !!providers?.discord,
@@ -109,6 +127,8 @@ export function LoginModal({ onClose }: LoginModalProps) {
         onEmailSubmit={handleEmailSubmit}
         onSocialLogin={handleSocialLogin}
         onWalletConnect={handleWalletConnect}
+        onLoginSmartWallet={handleLoginSmartWallet}
+        onCreateSmartWallet={handleCreateSmartWallet}
         {...(renderWallets !== undefined && { renderWallets })}
         authState={authState}
         codeInputKey={codeInputKey}

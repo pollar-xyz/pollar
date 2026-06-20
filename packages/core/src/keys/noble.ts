@@ -1,4 +1,4 @@
-import { p256 } from '@noble/curves/p256';
+import { p256 } from '@noble/curves/nist';
 import { hashApiKey } from '../lib/api-key-hash';
 import { base64urlDecode, base64urlEncode } from '../lib/base64url';
 import { sha256 } from '../lib/sha256';
@@ -8,10 +8,12 @@ import type { KeyManager, PublicEcJwk } from './types';
 
 /**
  * `KeyManager` backed by `@noble/curves` (pure-JS ECDSA P-256) + an injected
- * `Storage` adapter. Used in React Native, where Web Crypto's ECDSA support
- * is incomplete or absent. The 32-byte private scalar is base64url-encoded
- * and stored through the `Storage` adapter (Keychain / SecureStore in
- * production).
+ * `Storage` adapter. Used in React Native, where `WebCryptoKeyManager` can't
+ * be: its non-extractable keys can't be serialized to the `Storage` adapter
+ * (and RN has no IndexedDB), so the keypair would be regenerated every launch
+ * — see the rationale in `index.rn.ts`. The 32-byte private scalar is
+ * base64url-encoded and stored through the `Storage` adapter (Keychain /
+ * SecureStore in production).
  *
  * React Native: requires `react-native-get-random-values` to be imported at
  * app entry so `crypto.getRandomValues` is available for `randomPrivateKey`.
@@ -56,9 +58,9 @@ export class NobleKeyManager implements KeyManager {
     if (this.privateKey) return;
     if (!this._initPromise) {
       this._initPromise = this._doInit().catch((err) => {
-        // Loud log so init failures don't masquerade as cryptic "privateKey is
-        // null" downstream errors. Clear the promise so the next call retries.
-        console.error('[PollarClient:keys] NobleKeyManager init failed', err);
+        // Clear the promise so the next call retries. The error propagates to
+        // the caller — `PollarClient` logs it through its configured logger, so
+        // we don't double-log (raw, ungated) here.
         this._initPromise = null;
         throw err;
       });
@@ -141,7 +143,7 @@ export class NobleKeyManager implements KeyManager {
     if (!this.privateKey) {
       throw new Error('[PollarClient:keys] Keypair initialization failed; sign unavailable');
     }
-    // Two-step: hash with WebCrypto SHA-256, then sign the digest with
+    // Two-step: hash with `@noble/hashes` SHA-256, then sign the digest with
     // `prehash: false`. `p256.sign(msg)` with default prehash uses noble's
     // own internal preprocessing whose output is not bit-equivalent to a
     // simple SHA-256, so we explicitly compute the digest ourselves to

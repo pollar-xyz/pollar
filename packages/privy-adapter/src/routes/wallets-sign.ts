@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { type AdapterDeps, type AppEnv, ErrorCode, SuccessCode } from '../types';
 import { withTimeout } from '../lib/timeout';
 import { findStellarWalletInUser } from '../lib/user-mapping';
-import { assembleSignedXdr, parseTx } from '../stellar';
+import { assembleSignedXdr, parseTx, validateTxOperations } from '../stellar';
 
 const BodySchema = z.object({
   userId: z.string().min(1),
@@ -33,6 +33,17 @@ export const createWalletsSignRoute = (deps: AdapterDeps) => {
       tx = parseTx(txXdr, deps.config.network);
     } catch {
       return c.var.error(ErrorCode.TX_INVALID_SIGNED_XDR, 400);
+    }
+
+    // Operation allowlist gate. Privy can't apply per-operation policy (it only
+    // ever sees the tx hash via rawSign), so this is the only enforcement point.
+    // Runs before any Privy round-trip so a disallowed tx never reaches signing.
+    const policyCheck = validateTxOperations(tx, {
+      allowedOperations: deps.config.allowedOperations,
+      restrictToTrustlines: deps.config.restrictToTrustlines,
+    });
+    if (!policyCheck.ok) {
+      return c.var.error(ErrorCode.TX_OPERATION_NOT_ALLOWED, 403, { reason: policyCheck.reason });
     }
 
     try {

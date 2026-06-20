@@ -1,6 +1,6 @@
 {
   "name": "polar-auth-monorepo",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
@@ -15,9 +15,9 @@
     "test:smoke": "node tests/smoke-keys.cjs && node tests/smoke-client.cjs"
   },
   "devDependencies": {
-    "prettier": "^3.4.0",
-    "turbo": "^2.3.0",
-    "typescript": "^5.7.0"
+    "prettier": "^3.8.4",
+    "turbo": "^2.9.18",
+    "typescript": "^6.0.3"
   },
   "workspaces": [
     "packages/*"

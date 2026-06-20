@@ -1,5 +1,6 @@
 import { pollarPaths, StellarNetwork } from './index';
 import type { KeyManager } from './keys/types';
+import type { LogLevel, PollarLogger } from './lib/logger';
 import type { OnStorageDegrade, Storage } from './storage/types';
 import type { VisibilityProvider } from './visibility/types';
 import { WalletAdapterResolver, WalletId } from './wallets';
@@ -19,7 +20,24 @@ export interface PollarPersistedSession {
   status: string;
   token: { accessToken: string; refreshToken: string; expiresAt: number };
   user: { id?: string; ready: boolean };
-  wallet: { publicKey: string | null; existsOnStellar?: boolean; createdAt?: number };
+  // The user's on-chain wallet, discriminated by `type`:
+  //   - 'internal' → platform-managed (custodial) Stellar account (G-address)
+  //   - 'smart'    → Soroban smart-account / passkey (C-address)
+  //   - 'external' → user-connected wallet (Freighter/Albedo)
+  // `address` is the on-chain address for every type (G-address for internal,
+  // C-address for smart/passkey, the connected pubkey for external).
+  wallet: {
+    type: 'internal' | 'smart' | 'external';
+    address: string | null;
+    existsOnStellar?: boolean;
+    // On-chain creation time (smart = deploy; internal = keypair creation).
+    createdAt?: number;
+    // When the wallet was first linked to Pollar (our DB record), not on-chain
+    // creation. Used for external wallets.
+    linkedAt?: number;
+    network?: string;
+    deployTxHash?: string | null;
+  };
 }
 
 /** In-memory user profile (kept on `PollarClient`, never persisted). */
@@ -48,9 +66,22 @@ export interface PollarClientConfig {
   storage?: Storage;
   /**
    * Pluggable DPoP key manager. Defaults to `defaultKeyManager(storage,
-   * apiKeyHash)`: WebCrypto in browsers, `@noble/curves` in RN.
+   * apiKey)`: WebCrypto in browsers, `@noble/curves` in RN.
    */
   keyManager?: KeyManager;
+  /**
+   * Minimum severity the SDK logs. `silent` disables all SDK logging; the rest
+   * emit that level and everything more important (`error` < `warn` < `info` <
+   * `debug`). State-transition chatter (auth/tx/network) is at `debug`.
+   * Defaults to `'info'`.
+   */
+  logLevel?: LogLevel;
+  /**
+   * Sink the SDK writes logs to. Defaults to the global `console`. Inject your
+   * own (pino, Sentry breadcrumbs, a test spy…) to route SDK logs anywhere.
+   * Filtering by `logLevel` still applies on top of whatever you pass.
+   */
+  logger?: PollarLogger;
   /**
    * Notified when persistent storage silently degrades to in-memory mode
    * (Safari private browsing quota errors, sandboxed iframes, etc.). Useful
@@ -87,7 +118,8 @@ export interface PollarClientConfig {
    * the moment visibility comes back. Defaults to a web provider in the
    * browser (`visibilitychange` + BFCache + focus) and a noop elsewhere.
    * React Native consumers should inject an `AppState`-backed provider —
-   * see TODO on `VisibilityProvider`.
+   * use `createAppStateVisibilityProvider` from
+   * `@pollar/core/adapters/react-native-appstate`.
    */
   visibilityProvider?: VisibilityProvider;
   /**
@@ -99,6 +131,95 @@ export interface PollarClientConfig {
    * `undefined` = refresh forever as long as the app is visible.
    */
   maxIdleMs?: number;
+  /**
+   * Strategy for opening the hosted OAuth URL during
+   * `login({ provider: 'google' | 'github' })`. Defaults to a browser popup
+   * on web. React Native consumers MUST provide one (typically wrapping
+   * `expo-web-browser`'s `openAuthSessionAsync`), since `window.open` does
+   * not exist there. The SDK still drives the rest of the flow by polling the
+   * auth-session status, so the opener only needs to surface the URL — it does
+   * NOT need to capture the redirect payload.
+   */
+  openAuthUrl?: AuthUrlOpener;
+  /**
+   * Value sent to the backend as `redirect_uri` for hosted OAuth (where the
+   * provider returns the user afterwards). Defaults to `window.location.origin`
+   * on web. On React Native set this to your app's deep link / scheme — the
+   * same URL you pass to `WebBrowser.openAuthSessionAsync`.
+   */
+  oauthRedirectUri?: string;
+  /**
+   * The passkey (WebAuthn) ceremony for "Smart Wallet" login, injected by the
+   * runtime layer (`@pollar/react` implements it with `@simplewebauthn/browser`).
+   * `@pollar/core` stays runtime-agnostic and never touches `navigator.credentials`
+   * directly. Required to use `loginSmartWallet()`. Browser-only for now;
+   * React Native needs a native passkey provider.
+   */
+  passkey?: PasskeyCeremony;
+  /**
+   * Signs smart-account (C-address) transactions with the user's passkey.
+   * Required to send from a smart wallet. Injected by `@pollar/react`;
+   * browser-only for now.
+   */
+  passkeySign?: PasskeySigner;
+}
+
+/**
+ * Runs the device WebAuthn ceremony for a server-issued challenge and returns
+ * the result to forward to the backend: a registration response for a new user
+ * (`create()`) or an authentication assertion for a returning one (`get()`).
+ * `mode` tells the ceremony which to run: `'login'` runs `get()` only (returning
+ * user) and `'register'` runs `create()` only (new wallet) — the caller picks via
+ * the "Log in" / "Create wallet" buttons, so there's no ambiguous autodetect that
+ * could create a wallet when the user merely cancelled a login prompt. `response`
+ * is the browser's PublicKeyCredential serialized to JSON — forwarded verbatim to
+ * `/auth/passkey/{register,login}`.
+ */
+export type PasskeyMode = 'login' | 'register';
+
+export type PasskeyCeremony = (ctx: {
+  challenge: string;
+  mode: PasskeyMode;
+}) => Promise<{ kind: 'login'; response: unknown } | { kind: 'register'; response: unknown }>;
+
+/**
+ * Signs a smart-account transaction's auth digest with the user's passkey
+ * (a WebAuthn `get()` whose challenge is the raw digest). Returns the PUBLIC
+ * assertion fields (base64url) for the server to assemble into the Soroban auth
+ * entry — no secret leaves the device. Injected by the runtime layer
+ * (`@pollar/react`); `@pollar/core` never touches `navigator.credentials`.
+ */
+export type PasskeySigner = (ctx: {
+  /** base64url WebAuthn credential id to sign with. */
+  credentialId: string;
+  /** hex-encoded auth digest to use as the WebAuthn challenge. */
+  challenge: string;
+}) => Promise<{ authenticatorData: string; clientDataJSON: string; signature: string }>;
+
+/**
+ * Strategy for opening the hosted OAuth URL. The SDK mints the per-login auth
+ * session lazily inside `getUrl()` (call it once; the first call creates the
+ * `clientSessionId` and returns the full URL, or `null` if session creation
+ * failed). Open the resolved URL however the platform allows — a popup on web,
+ * `WebBrowser.openAuthSessionAsync(url, redirectUri)` on React Native — and
+ * resolve once the user-facing browser step is done or dismissed. You do NOT
+ * need to capture the redirect payload: the SDK polls the auth-session status
+ * until the backend marks it READY.
+ */
+export type AuthUrlOpener = (ctx: AuthOpenContext) => void | Promise<void>;
+
+export interface AuthOpenContext {
+  provider: 'google' | 'github';
+  /**
+   * Mints the auth session (once) and returns the full hosted-OAuth URL, or
+   * `null` if session creation failed. On web, call it AFTER reserving the
+   * popup window so popup blockers (which only honor `window.open` inside the
+   * original user-gesture tick) don't swallow it.
+   */
+  getUrl: () => Promise<string | null>;
+  /** The redirect target passed to the backend as `redirect_uri`. */
+  redirectUri: string;
+  signal: AbortSignal;
 }
 
 /**
@@ -115,6 +236,18 @@ export interface SessionInfo {
   current: boolean;
   expiresAt: string;
 }
+
+/**
+ * Observable state for the active-sessions list. Lives on the client (like
+ * {@link TxHistoryState} / {@link WalletBalanceState}) so UI layers can
+ * subscribe via `onSessionsStateChange` and stay pure readers instead of
+ * holding the loading state locally.
+ */
+export type SessionsState =
+  | { step: 'idle' }
+  | { step: 'loading' }
+  | { step: 'loaded'; sessions: SessionInfo[] }
+  | { step: 'error'; message: string };
 
 export type TxBuildBody = NonNullable<pollarPaths['/tx/build']['post']['requestBody']>['content']['application/json'];
 export type TxBuildResponse = pollarPaths['/tx/build']['post']['responses'][200]['content']['application/json'];
@@ -213,8 +346,21 @@ export type SubmitOutcome =
   | { status: 'pending'; hash: string; buildData?: TxBuildContent }
   | { status: 'error'; hash?: string; details?: string; resultCode?: string; buildData?: TxBuildContent };
 
+/**
+ * Result of {@link PollarClient.setTrustline}. Like {@link SubmitOutcome} but the
+ * `hash` is optional: the sponsored, server-orchestrated path completes without
+ * surfacing a transaction hash to the client, whereas the self-paid path returns
+ * the underlying submit outcome (hash included).
+ */
+export type TrustlineOutcome =
+  | { status: 'success'; hash?: string }
+  | { status: 'pending'; hash?: string }
+  | { status: 'error'; details?: string };
+
 export const AUTH_ERROR_CODES = {
   SESSION_CREATE_FAILED: 'SESSION_CREATE_FAILED',
+  SESSION_EXPIRED: 'SESSION_EXPIRED',
+  SESSION_INVALID: 'SESSION_INVALID',
   EMAIL_SEND_FAILED: 'EMAIL_SEND_FAILED',
   EMAIL_VERIFY_FAILED: 'EMAIL_VERIFY_FAILED',
   EMAIL_CODE_EXPIRED: 'EMAIL_CODE_EXPIRED',
@@ -223,6 +369,7 @@ export const AUTH_ERROR_CODES = {
   WALLET_CONNECT_FAILED: 'WALLET_CONNECT_FAILED',
   WALLET_AUTH_FAILED: 'WALLET_AUTH_FAILED',
   WALLET_RESOLVER_TIMEOUT: 'WALLET_RESOLVER_TIMEOUT',
+  PASSKEY_FAILED: 'PASSKEY_FAILED',
   UNEXPECTED_ERROR: 'UNEXPECTED_ERROR',
 } as const;
 
@@ -239,8 +386,21 @@ export type AuthState =
   | { step: 'connecting_wallet'; walletType: WalletId }
   | { step: 'wallet_not_installed'; walletType: WalletId }
   | { step: 'authenticating_wallet' }
+  // Passkey (Smart Wallet) login: device ceremony, then (new user) the
+  // sponsored on-chain deploy of the C-address.
+  | { step: 'creating_passkey' }
+  | { step: 'deploying_smart_account' }
   | { step: 'authenticating' }
-  | { step: 'authenticated'; session: PollarPersistedSession }
+  | {
+      step: 'authenticated';
+      session: PollarPersistedSession;
+      /**
+       * `false` while the session is restored optimistically from storage and
+       * not yet revalidated with the server; `true` after a fresh login/refresh
+       * or a successful `/auth/session/resume`. Gate sensitive actions on this.
+       */
+      verified: boolean;
+    }
   | {
       step: 'error';
       previousStep: string;
@@ -270,6 +430,18 @@ export type WalletBalanceState =
   | { step: 'idle' }
   | { step: 'loading' }
   | { step: 'loaded'; data: WalletBalanceContent }
+  | { step: 'error'; message: string };
+
+// ─── Enabled-asset types ──────────────────────────────────────────────────────
+
+export type WalletAssetsContent =
+  pollarPaths['/wallet/assets']['get']['responses'][200]['content']['application/json']['content'];
+export type EnabledAssetRecord = WalletAssetsContent['assets'][number];
+
+export type EnabledAssetsState =
+  | { step: 'idle' }
+  | { step: 'loading' }
+  | { step: 'loaded'; data: WalletAssetsContent }
   | { step: 'error'; message: string };
 
 // ─── Tx history types ─────────────────────────────────────────────────────────

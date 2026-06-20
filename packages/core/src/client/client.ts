@@ -6,14 +6,18 @@ import { buildProof } from '../dpop';
 import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
 import { hashApiKey } from '../lib/api-key-hash';
+import { createLogger, type PollarLogger } from '../lib/logger';
+import { randomUUID } from '../lib/random-uuid';
 import { StellarNetwork } from '../stellar/StellarClient';
 import { defaultStorage } from '../storage/autodetect';
 import type { OnStorageDegrade, Storage, StorageDegradeReason } from '../storage/types';
+import { POLLAR_CORE_VERSION } from '../version';
 import { defaultVisibilityProvider } from '../visibility/autodetect';
 import type { VisibilityProvider } from '../visibility/types';
 import {
   AUTH_ERROR_CODES,
   AuthState,
+  AuthUrlOpener,
   BuildOutcome,
   DistributionClaimBody,
   DistributionClaimContent,
@@ -23,6 +27,8 @@ import {
   KycStartResponse,
   KycStatus,
   NetworkState,
+  PasskeyCeremony,
+  PasskeySigner,
   PollarApplicationConfigContent,
   PollarClientConfig,
   PollarFlowError,
@@ -38,28 +44,44 @@ import {
   RampsTransactionResponse,
   RampTxStatus,
   SessionInfo,
+  SessionsState,
   SignOutcome,
   SubmitOutcome,
+  TrustlineOutcome,
   TransactionState,
   TxBuildBody,
   TxBuildContent,
   TxHistoryParams,
   TxHistoryState,
   TxSignAndSendBody,
+  EnabledAssetsState,
+  WalletBalanceContent,
   WalletBalanceState,
 } from '../types';
 import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletAdapterResolver, WalletId, WalletType } from '../wallets';
 import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/emailFlow';
-import { loginOAuth } from './auth/oauthFlow';
+import { defaultWebOAuthOpener, loginOAuth } from './auth/oauthFlow';
+import { smartWalletFlow } from './auth/passkeyFlow';
 import { loginWallet } from './auth/walletFlow';
 import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
 
 const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+/** React Native runtime: `navigator.product === 'ReactNative'` (set by the RN runtime). */
+const isReactNative = typeof navigator !== 'undefined' && (navigator as { product?: string }).product === 'ReactNative';
+/**
+ * True wherever the SDK can persist state and do crypto — browser OR React
+ * Native. False only in true server-side renders (Node/SSR) where there is no
+ * client runtime. Gates everything that previously keyed off `isBrowser`; that
+ * check alone wrongly treated RN (no `localStorage`) as server-side.
+ */
+const isClientRuntime = isBrowser || isReactNative;
 
 /** Renew the access token this many seconds before its `exp` to absorb clock skew + signing latency. */
 const REFRESH_SKEW_SECONDS = 60;
 
 function warnServerSide(method: string): void {
+  // Module-level (no client instance / logger yet) — and a misuse warning the
+  // developer should always see, so it stays on the raw console.
   console.warn(
     `[PollarClient] ${method}() called server-side — browser APIs unavailable. Use PollarClient only in Client Components.`,
   );
@@ -71,6 +93,7 @@ export class PollarClient {
   readonly basePath: string;
 
   private readonly _api: PollarApiClient;
+  private readonly _log: PollarLogger;
   private readonly _storage: Storage;
   private readonly _keyManager: KeyManager;
   /** Resolves once `keyManager.init()` and the initial session restore complete. */
@@ -123,8 +146,12 @@ export class PollarClient {
   private _transactionStateListeners = new Set<(state: TransactionState) => void>();
   private _txHistoryState: TxHistoryState = { step: 'idle' };
   private _txHistoryStateListeners = new Set<(state: TxHistoryState) => void>();
+  private _sessionsState: SessionsState = { step: 'idle' };
+  private _sessionsStateListeners = new Set<(state: SessionsState) => void>();
   private _walletBalanceState: WalletBalanceState = { step: 'idle' };
   private _walletBalanceStateListeners = new Set<(state: WalletBalanceState) => void>();
+  private _enabledAssetsState: EnabledAssetsState = { step: 'idle' };
+  private _enabledAssetsStateListeners = new Set<(state: EnabledAssetsState) => void>();
   private _authState: AuthState = { step: 'idle' };
   private _authStateListeners = new Set<(state: AuthState) => void>();
   private _networkState: NetworkState = { step: 'idle' };
@@ -142,16 +169,26 @@ export class PollarClient {
   private _walletAdapter: WalletAdapter | null = null;
   private readonly _walletAdapterResolver: WalletAdapterResolver | null;
   private readonly _walletResolverTimeoutMs: number;
+  private readonly _passkey: PasskeyCeremony | null;
+  private readonly _passkeySign: PasskeySigner | null;
   private _loginController: AbortController | null = null;
+  /** Aborts an in-flight `/auth/session/resume` on destroy() or re-trigger. */
+  private _resumeController: AbortController | null = null;
+  /** Platform strategy for opening the hosted-OAuth URL (popup on web; injected on RN). */
+  private readonly _openAuthUrl: AuthUrlOpener;
+  /** `redirect_uri` sent to the backend for hosted OAuth. */
+  private readonly _oauthRedirectUri: string;
 
   constructor(config: PollarClientConfig) {
     this.apiKey = config.apiKey;
-    this.id = crypto.randomUUID();
+    this.id = randomUUID();
     this.basePath = `${config.baseUrl || 'https://sdk.api.pollar.xyz'}/v1`;
+    this._log = createLogger(config.logLevel ?? 'info', config.logger);
 
     this._storage =
       config.storage ??
       defaultStorage({
+        logger: this._log,
         onDegrade: (reason, error) => {
           // Forward to the legacy one-shot callback (back-compat) and to any
           // subscribers added via `client.onStorageDegrade(cb)`. Both fire
@@ -163,22 +200,31 @@ export class PollarClient {
     this._keyManager = config.keyManager ?? defaultKeyManager(this._storage, config.apiKey);
     this._walletAdapterResolver = config.walletAdapter ?? null;
     this._walletResolverTimeoutMs = config.walletResolverTimeoutMs ?? 5000;
+    this._passkey = config.passkey ?? null;
+    this._passkeySign = config.passkeySign ?? null;
     this._deviceLabel = config.deviceLabel;
     this._visibilityProvider = config.visibilityProvider ?? defaultVisibilityProvider();
     this._maxIdleMs = config.maxIdleMs;
+    this._openAuthUrl = config.openAuthUrl ?? defaultWebOAuthOpener;
+    // `window.location` can be absent even when `isBrowser` is true (some
+    // webview/SSR shims expose a partial `window`); read it defensively so the
+    // constructor never throws on a missing `.origin`.
+    this._oauthRedirectUri = config.oauthRedirectUri ?? (isBrowser ? (window.location?.origin ?? '') : '');
 
     this._api = createApiClient(this.basePath);
     this._wireMiddlewares();
 
     this._networkState = { step: 'connected', network: config.stellarNetwork ?? 'testnet' };
 
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('constructor');
       this._initialized = Promise.resolve();
       return;
     }
 
-    console.info(`[PollarClient] Initialized — endpoint: ${this.basePath}, network: ${this._networkState.network}`);
+    this._log.info(
+      `[PollarClient] Initialized v${POLLAR_CORE_VERSION} — endpoint: ${this.basePath}, network: ${this._networkState.network}`,
+    );
 
     this._initialized = this._initialize();
   }
@@ -195,13 +241,14 @@ export class PollarClient {
     // (including the cross-tab listener below and `_restoreSession`) reads it.
     this._apiKeyHash = await hashApiKey(this.apiKey);
 
-    // Cross-tab session sync. Fires only for localStorage-backed storage; for
-    // non-DOM adapters the listener is harmless (events never arrive).
-    if (typeof window !== 'undefined') {
+    // Cross-tab session sync. Browser-only — the `storage` event is a DOM
+    // feature with no React Native equivalent (each RN process owns its
+    // SecureStore/Keychain), so we gate on `isBrowser`, not `isClientRuntime`.
+    if (isBrowser) {
       const sessionKey = sessionStorageKey(this._apiKeyHash);
       const handler = (e: StorageEvent): void => {
         if (e.key === sessionKey) {
-          this._restoreSession().catch((err) => console.error('[PollarClient] Cross-tab restore failed', err));
+          this._restoreSession().catch((err) => this._log.error('[PollarClient] Cross-tab restore failed', err));
         }
       };
       window.addEventListener('storage', handler);
@@ -211,7 +258,7 @@ export class PollarClient {
     try {
       await this._keyManager.init();
     } catch (err) {
-      console.warn('[PollarClient] KeyManager init failed; DPoP unavailable for this session', err);
+      this._log.warn('[PollarClient] KeyManager init failed; DPoP unavailable for this session', err);
     }
     await this._restoreSession();
 
@@ -219,18 +266,26 @@ export class PollarClient {
     // by `_restoreSession` itself, and the visibility listener only fires
     // re-checks for transitions that happen from this point forward.
     this._visibilityUnsubscribe = this._visibilityProvider.onChange((visible) => {
-      if (visible) void this._maybeProactiveRefresh();
+      if (!visible) return;
+      void this._maybeProactiveRefresh();
+      // B5: if the session is still optimistic (e.g. the startup resume failed
+      // offline), retry validation now that the app is foreground again.
+      if (this._authState.step === 'authenticated' && !this._authState.verified) {
+        void this._resume();
+      }
     });
   }
 
   /** Detach the cross-tab storage listener and abort any in-flight login. */
   destroy(): void {
-    if (this._storageEventHandler && typeof window !== 'undefined') {
+    if (this._storageEventHandler && isBrowser) {
       window.removeEventListener('storage', this._storageEventHandler);
       this._storageEventHandler = null;
     }
     this._loginController?.abort();
     this._loginController = null;
+    this._resumeController?.abort();
+    this._resumeController = null;
     this._clearRefreshTimer();
     if (this._visibilityUnsubscribe) {
       this._visibilityUnsubscribe();
@@ -254,12 +309,18 @@ export class PollarClient {
         self._lastRequestAt = Date.now();
         await self._initialized;
         // Cache the body before fetch() disturbs the stream — retries can't
-        // call request.clone() once the body is consumed.
-        if (request.body !== null) {
+        // call request.clone() once the body is consumed. Guard on the method:
+        // GET/HEAD carry no body, and in RN's fetch polyfill `request.body` is
+        // `undefined` (not `null`) for them, so a bare `!== null` check would
+        // snapshot an empty ArrayBuffer and later make a GET retry throw
+        // "Body not allowed for GET or HEAD requests".
+        const cacheMethod = request.method.toUpperCase();
+        const cacheBodyAllowed = cacheMethod !== 'GET' && cacheMethod !== 'HEAD';
+        if (cacheBodyAllowed && request.body != null) {
           try {
             self._requestBodyCache.set(request, await request.clone().arrayBuffer());
           } catch (err) {
-            console.warn('[PollarClient] Could not snapshot request body for retry', err);
+            this._log.warn('[PollarClient] Could not snapshot request body for retry', err);
           }
         }
         // The refresh endpoint must not wait on its own in-flight refresh —
@@ -348,7 +409,7 @@ export class PollarClient {
         this._keyManager,
       );
     } catch (err) {
-      console.warn('[PollarClient] DPoP proof build failed', err);
+      this._log.warn('[PollarClient] DPoP proof build failed', err);
       return null;
     }
   }
@@ -384,7 +445,13 @@ export class PollarClient {
       }
     }
 
-    const cachedBody = this._requestBodyCache.get(originalRequest);
+    // Never attach a body to a GET/HEAD retry — the Fetch API (and RN's
+    // polyfill) throws "Body not allowed for GET or HEAD requests". This is
+    // the retry that the `/auth/session/resume` GET hits after a DPoP nonce
+    // challenge.
+    const retryMethod = originalRequest.method.toUpperCase();
+    const retryBodyAllowed = retryMethod !== 'GET' && retryMethod !== 'HEAD';
+    const cachedBody = retryBodyAllowed ? this._requestBodyCache.get(originalRequest) : undefined;
     const retried = new Request(originalRequest.url, {
       method: originalRequest.method,
       headers,
@@ -415,7 +482,7 @@ export class PollarClient {
   private async _doRefresh(): Promise<void> {
     const refreshToken = this._session?.token?.refreshToken;
     if (!refreshToken) {
-      console.warn('[PollarClient] Refresh skipped: no refresh token in session');
+      this._log.warn('[PollarClient] Refresh skipped: no refresh token in session');
       await this._clearSession();
       throw new Error('No refresh token available');
     }
@@ -427,19 +494,24 @@ export class PollarClient {
       data = response.data;
       error = response.error;
     } catch (err) {
-      console.error('[PollarClient] /auth/refresh request threw', err);
+      this._log.error('[PollarClient] /auth/refresh request threw', err);
       await this._clearSession();
       throw err;
     }
 
     if (error || !data) {
-      console.warn('[PollarClient] /auth/refresh returned error', { error });
+      this._log.error('[PollarClient] /auth/refresh returned error', { error });
       await this._clearSession();
       throw new Error('Refresh failed');
     }
     const successData = data as { success?: boolean; content?: { token?: PollarPersistedSession['token'] } };
     if (!successData.success || !successData.content?.token) {
-      console.warn('[PollarClient] /auth/refresh response malformed', successData);
+      // Don't log `successData` — its `content.token` would write access/refresh
+      // tokens to the console. Log only the non-sensitive shape.
+      this._log.error('[PollarClient] /auth/refresh response malformed', {
+        success: successData.success,
+        hasToken: !!successData.content?.token,
+      });
       await this._clearSession();
       throw new Error('Refresh response malformed');
     }
@@ -450,7 +522,12 @@ export class PollarClient {
       typeof newToken.refreshToken !== 'string' ||
       typeof newToken.expiresAt !== 'number'
     ) {
-      console.warn('[PollarClient] /auth/refresh token shape invalid', newToken);
+      // Log the field TYPES, never the token values themselves.
+      this._log.error('[PollarClient] /auth/refresh token shape invalid', {
+        accessToken: typeof newToken.accessToken,
+        refreshToken: typeof newToken.refreshToken,
+        expiresAt: typeof newToken.expiresAt,
+      });
       await this._clearSession();
       throw new Error('Refresh response token shape invalid');
     }
@@ -459,9 +536,9 @@ export class PollarClient {
       try {
         this._session = { ...this._session, token: newToken };
         await writeStorage(this._storage, this.apiKeyHash, this._session);
-        console.info('[PollarClient] Tokens refreshed');
+        this._log.info('[PollarClient] Tokens refreshed');
       } catch (err) {
-        console.error('[PollarClient] Failed to persist refreshed session', err);
+        this._log.error('[PollarClient] Failed to persist refreshed session', err);
         // In-memory state is still updated; the session works for this
         // process but won't survive reload. Don't clear — that'd surprise
         // the user with a logout for what's essentially a storage hiccup.
@@ -521,7 +598,7 @@ export class PollarClient {
     try {
       await this.refresh();
     } catch (err) {
-      console.warn('[PollarClient] Proactive refresh failed; session cleared', err);
+      this._log.warn('[PollarClient] Proactive refresh failed; session cleared', err);
     }
   }
 
@@ -573,7 +650,7 @@ export class PollarClient {
       try {
         cb(reason, error);
       } catch (err) {
-        console.error('[PollarClient] onStorageDegrade listener threw', err);
+        this._log.error('[PollarClient] onStorageDegrade listener threw', err);
       }
     }
   }
@@ -586,7 +663,7 @@ export class PollarClient {
   // ─── Login (unified entry point) ─────────────────────────────────────────
 
   login(options: PollarLoginOptions): void {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('login');
       return;
     }
@@ -598,6 +675,8 @@ export class PollarClient {
           ...deps,
           basePath: this.basePath,
           apiKey: this.apiKey,
+          openAuthUrl: this._openAuthUrl,
+          redirectUri: this._oauthRedirectUri,
         }).catch((err) => this._handleFlowError(err));
       } else if (options.provider === 'email') {
         const { email } = options;
@@ -617,7 +696,7 @@ export class PollarClient {
   // ─── Email OTP flow (3 steps) ─────────────────────────────────────────────
 
   beginEmailLogin(): void {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('beginEmailLogin');
       return;
     }
@@ -626,7 +705,7 @@ export class PollarClient {
   }
 
   sendEmailCode(email: string): void {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('sendEmailCode');
       return;
     }
@@ -639,7 +718,7 @@ export class PollarClient {
   }
 
   verifyEmailCode(code: string): void {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('verifyEmailCode');
       return;
     }
@@ -666,12 +745,42 @@ export class PollarClient {
   // ─── Wallet flow (single call) ────────────────────────────────────────────
 
   loginWallet(type: WalletId): void {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('loginWallet');
       return;
     }
     const controller = this._newController();
     loginWallet(type, this._flowDeps(controller.signal)).catch((err) => this._handleFlowError(err));
+  }
+
+  /**
+   * "Smart Wallet" login: runs the passkey (WebAuthn) `get()` ceremony for a
+   * returning user and signs them in. Use {@link createSmartWallet} for a new
+   * user. Requires the `passkey` ceremony to be configured (e.g. via
+   * `@pollar/react`).
+   */
+  loginSmartWallet(): void {
+    if (!isClientRuntime) {
+      warnServerSide('loginSmartWallet');
+      return;
+    }
+    const controller = this._newController();
+    smartWalletFlow(this._flowDeps(controller.signal), 'login').catch((err) => this._handleFlowError(err));
+  }
+
+  /**
+   * "Smart Wallet" registration: runs the passkey (WebAuthn) `create()` ceremony
+   * for a new user and deploys a sponsored smart-account C-address. Use
+   * {@link loginSmartWallet} for a returning user. Requires the `passkey`
+   * ceremony to be configured (e.g. via `@pollar/react`).
+   */
+  createSmartWallet(): void {
+    if (!isClientRuntime) {
+      warnServerSide('createSmartWallet');
+      return;
+    }
+    const controller = this._newController();
+    smartWalletFlow(this._flowDeps(controller.signal), 'register').catch((err) => this._handleFlowError(err));
   }
 
   // ─── Cancel ───────────────────────────────────────────────────────────────
@@ -696,11 +805,11 @@ export class PollarClient {
    * across all devices.
    */
   async logout(options: { everywhere?: boolean } = {}): Promise<void> {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('logout');
       return;
     }
-    console.info('[PollarClient] Logout requested', { everywhere: !!options.everywhere });
+    this._log.info('[PollarClient] Logout requested', { everywhere: !!options.everywhere });
 
     if (this._session?.token?.accessToken) {
       try {
@@ -708,14 +817,14 @@ export class PollarClient {
           body: options.everywhere ? { everywhere: true } : {},
         });
       } catch (err) {
-        console.warn('[PollarClient] Server logout failed (continuing with local clear)', err);
+        this._log.warn('[PollarClient] Server logout failed (continuing with local clear)', err);
       }
     }
 
     try {
       await this._clearSession();
     } catch (err) {
-      console.warn('[PollarClient] Local logout cleanup failed', err);
+      this._log.warn('[PollarClient] Local logout cleanup failed', err);
     }
   }
 
@@ -730,7 +839,7 @@ export class PollarClient {
    * `current` flag identifies which entry corresponds to this client.
    */
   async listSessions(): Promise<SessionInfo[]> {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('listSessions');
       return [];
     }
@@ -744,13 +853,39 @@ export class PollarClient {
     return data.content.sessions;
   }
 
+  getSessionsState(): SessionsState {
+    return this._sessionsState;
+  }
+
+  onSessionsStateChange(cb: (state: SessionsState) => void): () => void {
+    this._sessionsStateListeners.add(cb);
+    cb(this._sessionsState);
+    return () => this._sessionsStateListeners.delete(cb);
+  }
+
+  /**
+   * Fire-and-forget variant of {@link listSessions} that drives the observable
+   * `SessionsState` store instead of returning the array. UI layers subscribe
+   * via `onSessionsStateChange` and stay pure readers — mirrors `fetchTxHistory`.
+   */
+  async fetchSessions(): Promise<void> {
+    this._setSessionsState({ step: 'loading' });
+    try {
+      const sessions = await this.listSessions();
+      this._setSessionsState({ step: 'loaded', sessions });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load sessions';
+      this._setSessionsState({ step: 'error', message });
+    }
+  }
+
   /**
    * Revoke a specific refresh-token family (a single device session). Use
    * `listSessions` to enumerate the familyIds. Revoking the current session
    * does NOT clear local state — call `logout()` for that case.
    */
   async revokeSession(familyId: string): Promise<void> {
-    if (!isBrowser) {
+    if (!isClientRuntime) {
       warnServerSide('revokeSession');
       return;
     }
@@ -773,6 +908,15 @@ export class PollarClient {
 
   getNetworkState(): NetworkState {
     return this._networkState;
+  }
+
+  /**
+   * The client's level-gated logger (built from `logLevel` / `logger`). Exposed
+   * so the runtime layer (`@pollar/react`) can route its own logs through the
+   * same level and sink instead of calling `console` directly.
+   */
+  getLogger(): PollarLogger {
+    return this._log;
   }
 
   setNetwork(network: StellarNetwork): void {
@@ -836,16 +980,19 @@ export class PollarClient {
     return () => this._walletBalanceStateListeners.delete(cb);
   }
 
-  async refreshBalance(publicKey?: string): Promise<void> {
-    const pk = publicKey ?? this._session?.wallet?.publicKey;
-    if (!pk) {
+  /**
+   * Refreshes the balances of the authenticated user's OWN wallet. The wallet
+   * and network are resolved server-side from the session — no arguments. Drives
+   * `walletBalanceState`. For an arbitrary wallet, use {@link getWalletBalance}.
+   */
+  async refreshBalance(): Promise<void> {
+    if (!this._session?.wallet?.address) {
       this._setWalletBalanceState({ step: 'error', message: 'No wallet connected' });
       return;
     }
     this._setWalletBalanceState({ step: 'loading' });
     try {
-      const network = this.getNetwork();
-      const { data, error } = await this._api.GET('/wallet/balance', { params: { query: { publicKey: pk, network } } });
+      const { data, error } = await this._api.GET('/wallet/balance');
       if (!error && data?.success && data.content) {
         this._setWalletBalanceState({ step: 'loaded', data: data.content });
       } else {
@@ -854,6 +1001,121 @@ export class PollarClient {
     } catch {
       this._setWalletBalanceState({ step: 'error', message: 'Failed to load balance' });
     }
+  }
+
+  /**
+   * General-purpose balance lookup for ANY wallet on ANY network — not scoped
+   * to this application. Enumerates the account's real on-chain holdings via
+   * Horizon (server-side) and returns the data directly (no reactive state).
+   * `network` defaults to the client's current network.
+   */
+  async getWalletBalance(publicKey: string, network?: StellarNetwork): Promise<WalletBalanceContent> {
+    const { data, error } = await this._api.GET('/wallet/{publicKey}/balance', {
+      params: { path: { publicKey }, query: { network: network ?? this.getNetwork() } },
+    });
+    if (error || !data?.success || !data.content) {
+      throw new Error('[PollarClient] Failed to load wallet balance');
+    }
+    return data.content;
+  }
+
+  // ─── Enabled assets ───────────────────────────────────────────────────────
+
+  getEnabledAssetsState(): EnabledAssetsState {
+    return this._enabledAssetsState;
+  }
+
+  onEnabledAssetsStateChange(cb: (state: EnabledAssetsState) => void): () => void {
+    this._enabledAssetsStateListeners.add(cb);
+    cb(this._enabledAssetsState);
+    return () => this._enabledAssetsStateListeners.delete(cb);
+  }
+
+  /**
+   * Loads the application's enabled assets paired with the authenticated
+   * wallet's on-chain trustline state — so the SDK knows which trustlines still
+   * need to be added. Wallet and network are resolved server-side from the
+   * session. Drives `enabledAssetsState`; mirrors {@link refreshBalance}.
+   */
+  async refreshAssets(): Promise<void> {
+    if (!this._session?.wallet?.address) {
+      this._setEnabledAssetsState({ step: 'error', message: 'No wallet connected' });
+      return;
+    }
+    this._setEnabledAssetsState({ step: 'loading' });
+    try {
+      const { data, error } = await this._api.GET('/wallet/assets');
+      if (!error && data?.success && data.content) {
+        this._setEnabledAssetsState({ step: 'loaded', data: data.content });
+      } else {
+        this._setEnabledAssetsState({ step: 'error', message: 'Failed to load assets' });
+      }
+    } catch {
+      this._setEnabledAssetsState({ step: 'error', message: 'Failed to load assets' });
+    }
+  }
+
+  /**
+   * Establishes (omit `limit`) or removes (`limit: '0'`) a trustline for an asset.
+   *
+   * Routing mirrors how the platform pays for the reserve:
+   *  - **Sponsored custodial** (`opts.sponsored` true, internal wallet) → the
+   *    server orchestrates a sponsored `changeTrust`: the app's wallets cover the
+   *    0.5 XLM reserve and the fee, so the user pays nothing. Pass the asset's
+   *    `sponsored` flag (from {@link refreshAssets}) straight through.
+   *  - **Self-paid** (external/adapter wallet, sponsorship disabled, or a custom
+   *    asset not configured in the app) → a plain `change_trust` transaction the
+   *    user's own wallet signs and pays for, via {@link runTx}.
+   *
+   * Does not refresh on its own — callers should `refreshAssets()` afterwards.
+   */
+  async setTrustline(
+    asset: { code: string; issuer: string },
+    opts?: { limit?: string; sponsored?: boolean },
+  ): Promise<TrustlineOutcome> {
+    const limit = opts?.limit;
+    const walletType = this._session?.wallet?.type;
+
+    if (!this._session?.wallet?.address) {
+      return { status: 'error', details: 'No wallet connected' };
+    }
+    if (walletType === 'smart') {
+      // Passkey C-addresses hold SAC tokens — they don't use classic trustlines.
+      return { status: 'error', details: 'Trustlines do not apply to smart wallets' };
+    }
+
+    // Sponsored custodial path: the platform co-signs and the app pays. Only an
+    // app-configured asset on an internal (custodial) wallet qualifies — the
+    // backend re-checks and 400s otherwise.
+    if (opts?.sponsored && !this._walletAdapter && walletType === 'internal') {
+      try {
+        const { data, error } = await this._api.POST('/wallet/assets/trustline', {
+          body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
+        });
+        if (!error && data?.success) {
+          if (data.content) this._setEnabledAssetsState({ step: 'loaded', data: data.content });
+          return { status: 'success' };
+        }
+        const details =
+          (error as { details?: string; code?: string } | undefined)?.details ?? (error as { code?: string } | undefined)?.code;
+        return { status: 'error', ...(details && { details }) };
+      } catch (err) {
+        const details = err instanceof Error ? err.message : undefined;
+        return { status: 'error', ...(details && { details }) };
+      }
+    }
+
+    // Self-paid path: the user's own wallet signs and covers the reserve + fee.
+    // The backend's change_trust schema is a discriminated union on `type`, so
+    // derive it from the code length (1–4 → alphanum4, 5–12 → alphanum12).
+    return this.runTx('change_trust', {
+      asset: {
+        type: asset.code.length <= 4 ? 'credit_alphanum4' : 'credit_alphanum12',
+        code: asset.code,
+        issuer: asset.issuer,
+      },
+      ...(limit !== undefined && { limit }),
+    } as TxBuildBody['params']);
   }
 
   // ─── Transactions ─────────────────────────────────────────────────────────
@@ -868,7 +1130,7 @@ export class PollarClient {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ): Promise<BuildOutcome> {
-    if (!this._session?.wallet?.publicKey) {
+    if (!this._session?.wallet?.address) {
       const details = 'No wallet connected';
       this._setTransactionState({ step: 'error', phase: 'building', details });
       return { status: 'error', details };
@@ -876,7 +1138,7 @@ export class PollarClient {
 
     const body = {
       network: this.getNetwork(),
-      publicKey: this._session.wallet.publicKey,
+      address: this._session.wallet.address,
       operation,
       params,
       options: options ?? {},
@@ -893,7 +1155,7 @@ export class PollarClient {
       this._setTransactionState({ step: 'error', phase: 'building', ...(details && { details }) });
       return { status: 'error', ...(details && { details }) };
     } catch (err) {
-      console.error('[PollarClient] buildTx failed', err);
+      this._log.error('[PollarClient] buildTx failed', err);
       this._setTransactionState({ step: 'error', phase: 'building' });
       return { status: 'error' };
     }
@@ -921,7 +1183,7 @@ export class PollarClient {
     this._setTransactionState({ step: 'signing', ...(buildData && { buildData }) });
 
     if (this._walletAdapter) {
-      const accountToSign = this._session?.wallet?.publicKey;
+      const accountToSign = this._session?.wallet?.address;
       const signOpts = accountToSign
         ? { networkPassphrase: this._networkPassphrase(), accountToSign }
         : { networkPassphrase: this._networkPassphrase() };
@@ -946,10 +1208,10 @@ export class PollarClient {
     }
 
     // Custodial path: backend signs and returns the XDR + idempotencyKey.
-    const publicKey = this._session?.wallet?.publicKey ?? '';
+    const address = this._session?.wallet?.address ?? '';
     try {
       const { data, error } = await this._api.POST('/tx/sign', {
-        body: { network: this.getNetwork(), publicKey, unsignedXdr },
+        body: { network: this.getNetwork(), address, unsignedXdr },
       });
       if (!error && data?.success && data.content?.signedXdr) {
         const { signedXdr, idempotencyKey } = data.content;
@@ -1004,12 +1266,12 @@ export class PollarClient {
     const outcomeExtra: { buildData?: TxBuildContent } = buildData ? { buildData } : {};
     this._setTransactionState({ step: 'submitting', signedXdr, ...(buildData && { buildData }) });
 
-    const publicKey = this._session?.wallet?.publicKey ?? '';
+    const address = this._session?.wallet?.address ?? '';
     try {
       const { data, error } = await this._api.POST('/tx/submit', {
         body: {
           network: this.getNetwork(),
-          publicKey,
+          address,
           signedXdr,
           ...(opts?.submissionToken && { idempotencyKey: opts.submissionToken }),
         },
@@ -1069,7 +1331,24 @@ export class PollarClient {
    *   backend call) and then transitions to `submitted` (Horizon ack only) or
    *   `success` (ledger-confirmed), or `error[phase: 'signing-submitting']`.
    */
-  async signAndSubmitTx(unsignedXdr: string): Promise<SubmitOutcome> {
+  async signAndSubmitTx(unsignedXdr?: string): Promise<SubmitOutcome> {
+    // Smart wallet: there is no unsigned XDR — sign the prepared auth digest
+    // with the passkey and submit, using the build already on the state machine.
+    if (this._session?.wallet?.type === 'smart') {
+      const buildData = this._currentBuildData();
+      if (!buildData?.smart) {
+        const details = 'no prepared smart transaction; call buildTx first';
+        this._setTransactionState({ step: 'error', phase: 'signing', details });
+        return { status: 'error', details };
+      }
+      return this._signSubmitSmart(buildData);
+    }
+
+    if (!unsignedXdr) {
+      this._setTransactionState({ step: 'error', phase: 'signing', details: 'missing unsigned transaction' });
+      return { status: 'error', details: 'missing unsigned transaction' };
+    }
+
     if (this._walletAdapter) {
       // External — the composed signTx+submitTx already emit the granular
       // state-machine sequence. We just pass outcomes through.
@@ -1093,7 +1372,7 @@ export class PollarClient {
 
     const body: TxSignAndSendBody = {
       network: this.getNetwork(),
-      publicKey: this._session?.wallet?.publicKey ?? '',
+      address: this._session?.wallet?.address ?? '',
       unsignedXdr,
     };
     try {
@@ -1172,16 +1451,25 @@ export class PollarClient {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ): Promise<SubmitOutcome> {
+    // Smart wallet (passkey / C-address): build (prepare) → sign the auth digest
+    // with the passkey → submit. The signed entry is assembled server-side.
+    if (this._session?.wallet?.type === 'smart') {
+      return this._runSmartTx(operation, params, options);
+    }
+
     if (this._walletAdapter) {
       const built = await this.buildTx(operation, params, options);
       if (built.status === 'error') {
         return { status: 'error', ...(built.details && { details: built.details }) };
       }
+      if (!built.buildData.unsignedXdr) {
+        return { status: 'error', details: 'build returned no unsigned transaction' };
+      }
       return this.signAndSubmitTx(built.buildData.unsignedXdr);
     }
 
     // Custodial path — single backend call, compound state-machine step.
-    if (!this._session?.wallet?.publicKey) {
+    if (!this._session?.wallet?.address) {
       this._setTransactionState({ step: 'error', phase: 'building-signing-submitting', details: 'No wallet connected' });
       return { status: 'error', details: 'No wallet connected' };
     }
@@ -1190,7 +1478,7 @@ export class PollarClient {
       const { data, error } = await this._api.POST('/tx/build-sign-submit', {
         body: {
           network: this.getNetwork(),
-          publicKey: this._session.wallet.publicKey,
+          address: this._session.wallet.address,
           operation,
           params,
           options: options ?? {},
@@ -1238,6 +1526,126 @@ export class PollarClient {
     options?: TxBuildBody['options'],
   ): Promise<SubmitOutcome> {
     return this.buildAndSignAndSubmitTx(operation, params, options);
+  }
+
+  /**
+   * Smart-wallet (passkey / C-address) transaction: build (server prepares the
+   * SAC transfer + returns the auth digest) → sign the digest with the passkey
+   * → submit (server assembles the signed auth entry and broadcasts; the
+   * sponsor pays the fee). State machine: building → built → signing →
+   * submitting → success.
+   */
+  private async _runSmartTx(
+    operation: TxBuildBody['operation'],
+    params: TxBuildBody['params'],
+    options?: TxBuildBody['options'],
+  ): Promise<SubmitOutcome> {
+    const address = this._session?.wallet?.address;
+    if (!address) {
+      this._setTransactionState({ step: 'error', phase: 'building', details: 'No wallet connected' });
+      return { status: 'error', details: 'No wallet connected' };
+    }
+    if (!this._passkeySign) {
+      const details = 'Passkey signer not configured';
+      this._setTransactionState({ step: 'error', phase: 'signing', details });
+      return { status: 'error', details };
+    }
+
+    // 1. Build (prepare) — returns the auth digest to sign, not an unsigned XDR.
+    this._setTransactionState({ step: 'building' });
+    let buildData: TxBuildContent;
+    try {
+      const body = {
+        network: this.getNetwork(),
+        address,
+        operation,
+        params,
+        options: options ?? {},
+      } as TxBuildBody;
+      const { data, error } = await this._api.POST('/tx/build', { body });
+      if (error || !data?.success || !data.content?.smart) {
+        const details = (error as { details?: string } | undefined)?.details ?? 'Failed to build transaction';
+        this._setTransactionState({ step: 'error', phase: 'building', details });
+        return { status: 'error', details };
+      }
+      buildData = data.content;
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      this._setTransactionState({ step: 'error', phase: 'building', ...(details && { details }) });
+      return { status: 'error', ...(details && { details }) };
+    }
+    this._setTransactionState({ step: 'built', buildData });
+
+    return this._signSubmitSmart(buildData);
+  }
+
+  /**
+   * Steps 2–3 of the smart-wallet flow: sign the prepared auth digest with the
+   * passkey, then submit. Shared by `_runSmartTx` (atomic) and `signAndSubmitTx`
+   * (split flow, when a smart build is already on the state machine).
+   */
+  private async _signSubmitSmart(buildData: TxBuildContent): Promise<SubmitOutcome> {
+    const address = this._session?.wallet?.address;
+    const smart = buildData.smart;
+    if (!address || !smart) {
+      const details = 'no prepared smart transaction';
+      this._setTransactionState({ step: 'error', phase: 'signing', buildData, details });
+      return { status: 'error', buildData, details };
+    }
+    if (!this._passkeySign) {
+      const details = 'Passkey signer not configured';
+      this._setTransactionState({ step: 'error', phase: 'signing', buildData, details });
+      return { status: 'error', buildData, details };
+    }
+
+    // 2. Sign the auth digest with the passkey (biometric prompt).
+    this._setTransactionState({ step: 'signing', buildData });
+    let assertion: Awaited<ReturnType<PasskeySigner>>;
+    try {
+      assertion = await this._passkeySign({ credentialId: smart.credentialId, challenge: smart.digest });
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      this._setTransactionState({ step: 'error', phase: 'signing', buildData, ...(details && { details }) });
+      return { status: 'error', buildData, ...(details && { details }) };
+    }
+
+    // 3. Submit — server assembles the signed auth entry and broadcasts.
+    this._setTransactionState({ step: 'submitting', buildData });
+    const outcomeExtra: { buildData: TxBuildContent } = { buildData };
+    try {
+      const { data, error } = await this._api.POST('/tx/submit', {
+        body: {
+          network: this.getNetwork(),
+          address,
+          smart: { entryXdr: smart.entryXdr, funcXdr: smart.funcXdr, assertion },
+        },
+      });
+      if (!error && data?.success && data.content) {
+        const { hash, status: backendStatus, resultCode } = data.content;
+        if (backendStatus === 'SUCCESS') {
+          this._setTransactionState({ step: 'success', hash, buildData });
+          return { status: 'success', hash, ...outcomeExtra };
+        }
+        if (backendStatus === 'PENDING') {
+          this._setTransactionState({ step: 'submitted', hash, buildData });
+          return { status: 'pending', hash, ...outcomeExtra };
+        }
+        this._setTransactionState({
+          step: 'error',
+          phase: 'submitting',
+          buildData,
+          ...(resultCode && { details: resultCode }),
+        });
+        return { status: 'error', hash, ...outcomeExtra, ...(resultCode && { details: resultCode, resultCode }) };
+      }
+      const details = (error as { details?: string } | undefined)?.details;
+      this._setTransactionState({ step: 'error', phase: 'submitting', buildData, ...(details && { details }) });
+      return { status: 'error', ...outcomeExtra, ...(details && { details }) };
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      this._setTransactionState({ step: 'error', phase: 'submitting', buildData, ...(details && { details }) });
+      return { status: 'error', ...outcomeExtra, ...(details && { details }) };
+    }
   }
 
   // ─── App config ───────────────────────────────────────────────────────────
@@ -1311,9 +1719,19 @@ export class PollarClient {
     for (const cb of this._txHistoryStateListeners) cb(next);
   }
 
+  private _setSessionsState(next: SessionsState): void {
+    this._sessionsState = next;
+    for (const cb of this._sessionsStateListeners) cb(next);
+  }
+
   private _setWalletBalanceState(next: WalletBalanceState): void {
     this._walletBalanceState = next;
     for (const cb of this._walletBalanceStateListeners) cb(next);
+  }
+
+  private _setEnabledAssetsState(next: EnabledAssetsState): void {
+    this._enabledAssetsState = next;
+    for (const cb of this._enabledAssetsStateListeners) cb(next);
   }
 
   // ─── Private ──────────────────────────────────────────────────────────────
@@ -1327,6 +1745,12 @@ export class PollarClient {
   private _flowDeps(signal: AbortSignal) {
     return {
       api: this._api,
+      logger: this._log,
+      basePath: this.basePath,
+      // SSE status streaming works on web; React Native's `fetch` has no
+      // readable `response.body`, so those clients poll the non-streaming
+      // status endpoint instead. `isBrowser` is false in RN and SSR alike.
+      useStreaming: isBrowser,
       signal,
       setAuthState: this._setAuthState.bind(this),
       storeSession: this._storeSession.bind(this),
@@ -1337,6 +1761,7 @@ export class PollarClient {
         this._walletAdapter = adapter;
         await writeWalletType(this._storage, this.apiKeyHash, id);
       },
+      ...(this._passkey ? { passkey: this._passkey } : {}),
       ...(this._deviceLabel ? { deviceLabel: this._deviceLabel } : {}),
     };
   }
@@ -1372,7 +1797,7 @@ export class PollarClient {
       }
     }
     if (id === WalletType.FREIGHTER) return new FreighterAdapter();
-    if (id === WalletType.ALBEDO) return new AlbedoAdapter();
+    if (id === WalletType.ALBEDO) return new AlbedoAdapter(this.getNetwork() === 'mainnet' ? 'public' : 'testnet');
     throw new Error(
       `[PollarClient] No wallet adapter configured for "${id}". Pass a walletAdapter resolver in PollarClientConfig.`,
     );
@@ -1380,12 +1805,12 @@ export class PollarClient {
 
   private _handleFlowError(error: unknown): void {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.info('[PollarClient] Login cancelled');
+      this._log.debug('[PollarClient] Login cancelled');
       this._setAuthState({ step: 'idle' });
       return;
     }
     if (error instanceof Error && (error as { code?: string }).code === AUTH_ERROR_CODES.WALLET_RESOLVER_TIMEOUT) {
-      console.error('[PollarClient]', error.message);
+      this._log.error('[PollarClient]', error.message);
       this._setAuthState({
         step: 'error',
         previousStep: this._authState.step,
@@ -1394,7 +1819,7 @@ export class PollarClient {
       });
       return;
     }
-    console.error('[PollarClient] Unexpected error in auth flow', error);
+    this._log.error('[PollarClient] Unexpected error in auth flow', error);
     this._setAuthState({
       step: 'error',
       previousStep: this._authState.step,
@@ -1404,7 +1829,7 @@ export class PollarClient {
   }
 
   private async _restoreSession(): Promise<void> {
-    this._session = await readStorage(this._storage, this.apiKeyHash);
+    this._session = await readStorage(this._storage, this.apiKeyHash, this._log);
     if (this._session) {
       const storedType = await readWalletType(this._storage, this.apiKeyHash);
       if (storedType) {
@@ -1414,32 +1839,96 @@ export class PollarClient {
           // No resolver knows this id (e.g. user removed the kit-adapter
           // package). Session stays valid; signing will fall back to the
           // server-side custodial path until the user reconnects a wallet.
-          console.warn('[PollarClient] Could not restore wallet adapter for stored id', { id: storedType, err });
+          this._log.warn('[PollarClient] Could not restore wallet adapter for stored id', { id: storedType, err });
         }
       }
-      console.info('[PollarClient] Session restored from storage');
+      this._log.info('[PollarClient] Session restored from storage');
       // Emit through the setter so listeners that subscribe after
       // _initialize() resolves still get notified. A direct assignment to
       // _authState would race past any onAuthStateChange subscription that
       // hasn't run yet (e.g. PollarProvider's useEffect).
-      this._setAuthState({ step: 'authenticated', session: this._session });
+      // Optimistic: storage is trusted enough to show `authenticated`, but the
+      // server hasn't confirmed the session is still alive (it may have been
+      // revoked elsewhere), so `verified: false`.
+      this._setAuthState({ step: 'authenticated', session: this._session, verified: false });
       this._scheduleNextRefresh();
+      // Fire-and-forget: revalidate + repopulate the profile in the background.
+      // Deliberately NOT awaited so `_initialized` resolves immediately and the
+      // UI never blocks on a network round-trip at startup.
+      void this._resume();
     } else {
-      console.info('[PollarClient] No session in storage');
+      this._log.info('[PollarClient] No session in storage');
+      // Another tab (or this one) wiped the session key. If we were
+      // authenticated, propagate the logout: tear down in-memory state, the
+      // refresh timer and DPoP keys, and emit `idle`. Guarded so the cold-start
+      // call (step already `idle`) is a no-op and we never recurse — the
+      // `removeStorage` inside `_clearSession` targets an already-removed key.
+      if (this._authState.step !== 'idle') {
+        await this._clearSession();
+      }
+    }
+  }
+
+  /**
+   * Validate the restored session against the server and repopulate the
+   * in-memory profile (PII is never persisted, so it's null after a cold
+   * reload). Goes through the normal authed client, so it coalesces with any
+   * in-flight refresh (onRequest awaits `_refreshPromise`) and, being a GET,
+   * is auto-retried after a 401-triggered refresh.
+   *
+   * - 200          → store profile, mark the session `verified`.
+   * - 401          → the refresh-on-401 path already ran; if the family was
+   *                  revoked, refresh failed and `_clearSession()` took us to
+   *                  idle. Nothing to do here — don't double-handle.
+   * - network error → stay optimistic (do NOT log out); revalidated later on
+   *                  `visibilitychange` or first use.
+   */
+  private async _resume(): Promise<void> {
+    if (!this._session) return;
+    this._resumeController?.abort();
+    const controller = new AbortController();
+    this._resumeController = controller;
+    try {
+      const { data, error } = await this._api.GET('/auth/session/resume', { signal: controller.signal });
+      if (error || !data) return;
+      const content = (data as { content?: PollarUserProfile }).content;
+      if (!content || !this._session) return;
+      this._profile = { ...content };
+      this._setAuthState({ step: 'authenticated', session: this._session, verified: true });
+    } catch (err) {
+      if ((err as { name?: string })?.name === 'AbortError') return;
+      // Network failure — keep the optimistic (unverified) session and retry
+      // when the app next becomes visible or on the next authed request.
+      this._log.warn('[PollarClient] resume failed (network); will retry', err);
+    } finally {
+      if (this._resumeController === controller) this._resumeController = null;
     }
   }
 
   private async _storeSession(session: PollarApplicationConfigContent): Promise<void> {
-    // Drop the userId log — leaks user identity to console.
-    console.info('[PollarClient] Session stored');
+    this._log.info('[PollarClient] Session stored');
 
+    const w = session.wallet;
     const persisted: PollarPersistedSession = {
       clientSessionId: session.clientSessionId,
       userId: session.userId ?? null,
       status: session.status,
       token: session.token,
       user: session.user,
-      wallet: session.wallet,
+      // The wire response still carries the legacy `publicKey` alias (kept for
+      // older SDKs); the persisted session standardizes on `address` only.
+      // The wire also still emits the legacy type `'custodial'` (unchanged for
+      // SDKs ≤0.8.x); we remap it to `'internal'` here so the SDK surface and
+      // persisted session speak one vocabulary while the wire stays compatible.
+      wallet: {
+        type: w.type === 'custodial' ? 'internal' : w.type,
+        address: w.address ?? w.publicKey ?? null,
+        ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
+        ...(w.createdAt !== undefined ? { createdAt: w.createdAt } : {}),
+        ...(w.linkedAt !== undefined ? { linkedAt: w.linkedAt } : {}),
+        ...(w.network !== undefined ? { network: w.network } : {}),
+        ...(w.deployTxHash !== undefined ? { deployTxHash: w.deployTxHash } : {}),
+      },
     };
     this._session = persisted;
 
@@ -1454,12 +1943,14 @@ export class PollarClient {
     }
 
     await writeStorage(this._storage, this.apiKeyHash, persisted);
-    this._setAuthState({ step: 'authenticated', session: persisted });
+    // Fresh login/refresh response came straight from the server, so the
+    // session is already server-validated → `verified: true`.
+    this._setAuthState({ step: 'authenticated', session: persisted, verified: true });
     this._scheduleNextRefresh();
   }
 
   private async _clearSession(): Promise<void> {
-    console.info('[PollarClient] Session cleared');
+    this._log.info('[PollarClient] Session cleared');
     this._clearRefreshTimer();
     this._session = null;
     this._profile = null;
@@ -1468,7 +1959,7 @@ export class PollarClient {
     try {
       await this._keyManager.reset();
     } catch (err) {
-      console.warn('[PollarClient] KeyManager reset failed during clearSession', err);
+      this._log.warn('[PollarClient] KeyManager reset failed during clearSession', err);
     }
     await removeStorage(this._storage, this.apiKeyHash);
     this._transactionState = null;
@@ -1484,19 +1975,19 @@ export class PollarClient {
   private _setNetworkState(next: NetworkState): void {
     this._networkState = next;
     const label = next.step === 'connected' ? next.network : next.step;
-    console.info(`[PollarClient] network:${label}`);
+    this._log.debug(`[PollarClient] network:${label}`);
     for (const cb of this._networkStateListeners) cb(next);
   }
 
   private _setAuthState(next: AuthState): void {
     this._authState = next;
-    console.info(`[PollarClient] auth:${next.step}`);
+    this._log.debug(`[PollarClient] auth:${next.step}`);
     for (const cb of this._authStateListeners) cb(next);
   }
 
   private _setTransactionState(next: TransactionState): void {
     this._transactionState = next;
-    console.info(`[PollarClient] transaction:${next.step}`);
+    this._log.debug(`[PollarClient] transaction:${next.step}`);
     for (const cb of this._transactionStateListeners) cb(next);
   }
 

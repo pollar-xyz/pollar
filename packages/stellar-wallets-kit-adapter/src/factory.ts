@@ -11,7 +11,7 @@ import { LobstrModule } from '@creit.tech/stellar-wallets-kit/modules/lobstr';
 import { OneKeyModule } from '@creit.tech/stellar-wallets-kit/modules/onekey';
 import { RabetModule } from '@creit.tech/stellar-wallets-kit/modules/rabet';
 import { xBullModule } from '@creit.tech/stellar-wallets-kit/modules/xbull';
-import type { WalletAdapterResolver, WalletId } from '@pollar/core';
+import { createLogger, type LogLevel, type PollarLogger, type WalletAdapterResolver, type WalletId } from '@pollar/core';
 import { StellarWalletsKitAdapter } from './StellarWalletsKitAdapter';
 
 /**
@@ -63,10 +63,24 @@ export interface StellarWalletsKitAdapterOptions {
    * itself ignores them.
    */
   picker?: KitPickerOptions;
+  /**
+   * Minimum log severity. `silent` disables logging; otherwise `error` < `warn`
+   * < `info` < `debug`. Defaults to `'info'`. Since the kit is a global
+   * singleton, this is set once at init.
+   */
+  logLevel?: LogLevel;
+  /** Sink for logs. Defaults to the global `console`. */
+  logger?: PollarLogger;
 }
 
 let initialised = false;
 let initNetwork: Networks | null = null;
+let _log: PollarLogger = console;
+
+/** The kit's configured logger (set at init). Used by the adapter + picker. */
+export function getKitLogger(): PollarLogger {
+  return _log;
+}
 
 /** @internal — used by the `/picker` subpath. */
 export function buildDefaultModules(): ModuleInterface[] {
@@ -95,12 +109,15 @@ export function buildDefaultModules(): ModuleInterface[] {
  * first-time init path `network` is required and we throw if it's absent.
  */
 export function ensureInit(options: Partial<StellarWalletsKitAdapterOptions>): void {
+  if (options.logLevel !== undefined || options.logger !== undefined) {
+    _log = createLogger(options.logLevel ?? 'info', options.logger);
+  }
   if (initialised) {
     // The kit is a global singleton — a second call with a different network
     // would be silently ignored. Warn so the developer notices the
     // misconfiguration instead of debugging wrong-chain signatures later.
     if (options.network && options.network !== initNetwork) {
-      console.warn(
+      _log.warn(
         `[StellarWalletsKit] Already initialised with network "${initNetwork}". Ignoring attempted reconfiguration to "${options.network}". The kit is a global singleton — reload the page to change networks.`,
       );
     }

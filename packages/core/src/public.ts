@@ -4,6 +4,9 @@
 // modules so bundlers can tree-shake unused code paths.
 
 export { PollarClient } from './client/client';
+export { POLLAR_CORE_VERSION } from './version';
+export { createLogger } from './lib/logger';
+export type { LogLevel, PollarLogger } from './lib/logger';
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 export type { Storage, OnStorageDegrade, StorageDegradeReason } from './storage/types';

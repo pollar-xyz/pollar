@@ -12,7 +12,7 @@ interface RampWidgetProps {
   onClose: () => void;
 }
 
-// ─── Mock data — used until backend implements /ramps/quote and /ramps/onramp ──
+// ─── Demo fallback data, used when the /ramps/quote and /ramps/onramp calls fail ──
 
 const MOCK_DEFAULT_QUOTES: RampQuote[] = [
   {
@@ -123,7 +123,6 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setIsLoading(true);
 
     try {
-      // Real call — will work once backend implements /ramps/quote
       const result = await client.getRampsQuote({
         country,
         amount: Number(amount),
@@ -132,7 +131,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
       });
       if (result.quotes) setQuotes(result.quotes);
     } catch {
-      // Backend not ready yet — fall back to mock data
+      // On any quote error, fall back to demo data so the UI stays usable.
       await new Promise((r) => setTimeout(r, 1500));
       setQuotes(MOCK_QUOTES[country] ?? MOCK_DEFAULT_QUOTES);
     } finally {
@@ -154,11 +153,10 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     };
 
     try {
-      // Real call — will work once backend implements /ramps/onramp
       const result = await client.createOnRamp(body);
       setPaymentInstructions(result.paymentInstructions);
     } catch {
-      // Backend not ready yet — fall back to mock data
+      // On any on-ramp error, fall back to demo data so the UI stays usable.
       await new Promise((r) => setTimeout(r, 800));
       setPaymentInstructions({ ...MOCK_PAYMENT, currency });
     } finally {

@@ -3,6 +3,11 @@
 React bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI, transaction modals, and hooks for
 Stellar-based applications.
 
+> **0.9.0** requires `@pollar/core@^0.9.0`. `usePollar().walletAddress` is
+> unchanged (now derived from `session.wallet.address` internally — no consumer
+> change), and provider/modal logs route through the client's configured
+> `logLevel` / `logger`. Read the [CHANGELOG](../../CHANGELOG.md) before upgrading.
+>
 > **0.8.0 reshapes `<PollarProvider>` props (breaking).** `config` → `client`
 > (now accepts a `PollarClient` instance or a `PollarClientConfig`); `styles`
 > moves under `appConfig.styles`; new `appConfig` prop is the opt-out switch
@@ -246,6 +251,9 @@ want to swap the chrome but keep the data wiring from `usePollar()`.
 
 `<TxStatusView>` is the shared status component (build → sign → success/error) reused by `TransactionModal` and
 `SendModal`; it's exported on its own for consumers that want to embed the lifecycle elsewhere.
+
+> **0.8.1** — `onWalletConnect` is now **optional** on `<LoginModalTemplate>` (defaults to a no-op). If you drive the
+> wallet picker entirely through `ui.renderWallets`, you no longer have to pass a handler you don't use.
 
 ---
 

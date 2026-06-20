@@ -1,6 +1,6 @@
 {
   "name": "@pollar/core",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Core authentication functions for Pollar services",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -46,6 +46,16 @@
         "types": "./dist/adapters/react-native-keychain.d.ts",
         "default": "./dist/adapters/react-native-keychain.js"
       }
+    },
+    "./adapters/react-native-appstate": {
+      "import": {
+        "types": "./dist/adapters/react-native-appstate.d.mts",
+        "default": "./dist/adapters/react-native-appstate.mjs"
+      },
+      "require": {
+        "types": "./dist/adapters/react-native-appstate.d.ts",
+        "default": "./dist/adapters/react-native-appstate.js"
+      }
     }
   },
   "files": [
@@ -67,14 +77,15 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.4",
-    "eslint": "^9.39.4",
-    "tsup": "^8.3.0",
-    "typescript": "^5.7.0",
-    "typescript-eslint": "^8.58.1"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.5.0",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.0"
   },
   "dependencies": {
     "@noble/curves": "~1.9.7",
+    "@noble/hashes": "~1.8.0",
     "@stellar/freighter-api": "^2.0.0",
     "openapi-fetch": "^0.17.0"
   },

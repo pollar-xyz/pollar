@@ -67,7 +67,7 @@ async function loadKeychain(): Promise<KeychainApi> {
       `[PollarClient:storage] Failed to load 'react-native-keychain'. ` +
       `Install it in your React Native app: \`npm i react-native-keychain\` ` +
       `(plus iOS pod install). Original error: ${error instanceof Error ? error.message : String(error)}`;
-    throw new Error(message);
+    throw new Error(message, { cause: error });
   }
 }
 

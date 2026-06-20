@@ -15,6 +15,10 @@ export function WalletButton() {
     openWalletBalanceModal,
     openSendModal,
     openReceiveModal,
+    openSessionsModal,
+    openKycModal,
+    openRampModal,
+    openDistributionRulesModal,
     tx: transaction,
     walletType,
   } = usePollar();
@@ -83,6 +87,26 @@ export function WalletButton() {
     openReceiveModal();
   }
 
+  function handleSessions() {
+    setOpen(false);
+    openSessionsModal();
+  }
+
+  function handleKyc() {
+    setOpen(false);
+    openKycModal();
+  }
+
+  function handleRamp() {
+    setOpen(false);
+    openRampModal();
+  }
+
+  function handleDistributionRules() {
+    setOpen(false);
+    openDistributionRulesModal();
+  }
+
   return (
     <WalletButtonTemplate
       walletAddress={walletAddress ?? null}
@@ -101,6 +125,10 @@ export function WalletButton() {
       onTxHistory={handleTxHistory}
       onSend={handleSend}
       onReceive={handleReceive}
+      onSessions={handleSessions}
+      onKyc={handleKyc}
+      onRamp={handleRamp}
+      onDistributionRules={handleDistributionRules}
       onLogout={handleLogout}
       onLogin={openLoginModal}
     />

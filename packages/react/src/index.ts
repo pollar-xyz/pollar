@@ -1,8 +1,6 @@
 export { PollarProvider, usePollar } from './context';
 export { createPollarAdapterHook } from './usePollarAdapter';
 export type {
-  AuthProviderProps,
-  AuthContextValue,
   LoginButtonProps,
   AuthModalProps,
   PollarStyles,
@@ -11,6 +9,7 @@ export type {
   RenderWalletsSlot,
 } from './types';
 export { WalletButton } from './components/wallet-button/WalletButton';
+export { WalletButtonTemplate, type WalletButtonTemplateProps } from './components/wallet-button/WalletButtonTemplate';
 
 // ─── Modals ───────────────────────────────────────────────────────────────────
 export { KycModal } from './components/kyc-modal/KycModal';
@@ -18,6 +17,7 @@ export { KycStatus } from './components/kyc-modal/KycStatus';
 export { RampWidget } from './components/ramp-widget/RampWidget';
 export { RouteDisplay } from './components/ramp-widget/RouteDisplay';
 export { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
+export { EnabledAssetsModal } from './components/enabled-assets-modal/EnabledAssetsModal';
 export { SendModal } from './components/send-modal/SendModal';
 export { ReceiveModal } from './components/receive-modal/ReceiveModal';
 export { SessionsModal } from './components/sessions-modal/SessionsModal';
@@ -36,6 +36,8 @@ export type { TxStatusViewProps } from './components/transaction-modal/TxStatusV
 export { TxHistoryModalTemplate } from './components/tx-history-modal/TxHistoryModalTemplate';
 export { WalletBalanceModalTemplate } from './components/wallet-balance-modal/WalletBalanceModalTemplate';
 export type { WalletBalanceModalTemplateProps } from './components/wallet-balance-modal/WalletBalanceModalTemplate';
+export { EnabledAssetsModalTemplate } from './components/enabled-assets-modal/EnabledAssetsModalTemplate';
+export type { EnabledAssetsModalTemplateProps } from './components/enabled-assets-modal/EnabledAssetsModalTemplate';
 export { SendModalTemplate } from './components/send-modal/SendModalTemplate';
 export type { SendModalTemplateProps } from './components/send-modal/SendModalTemplate';
 export { ReceiveModalTemplate } from './components/receive-modal/ReceiveModalTemplate';

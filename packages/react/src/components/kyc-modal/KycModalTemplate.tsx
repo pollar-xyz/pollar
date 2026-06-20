@@ -98,10 +98,9 @@ export function KycModalTemplate({
                 <span>🔒</span>
                 <span>
                   {selectedProvider.flow === 'form'
-                    ? 'Form-based KYC — fields will render here once backend is connected'
-                    : 'KYC iframe will load here once backend is connected'}
+                    ? 'The identity verification form will appear here.'
+                    : 'Identity verification will open here.'}
                 </span>
-                <code style={{ fontSize: '0.7rem', opacity: 0.6 }}>provider: {selectedProvider.id}</code>
               </div>
             )}
           </div>

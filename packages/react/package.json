@@ -1,6 +1,6 @@
 {
   "name": "@pollar/react",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "React components for Pollar authentication",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -34,24 +34,25 @@
     "node": ">=20"
   },
   "peerDependencies": {
-    "@pollar/core": "*",
+    "@pollar/core": "^0.9.0",
     "react": ">=18",
     "react-dom": ">=18"
   },
   "dependencies": {
-    "@pollar/core": "*",
+    "@pollar/core": "^0.9.0",
+    "@simplewebauthn/browser": "^13.3.0",
     "qr.js": "^0.0.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.4",
+    "@eslint/js": "^10.0.1",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
-    "eslint": "^9.39.4",
-    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint": "^10.5.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
-    "tsup": "^8.3.0",
-    "typescript": "^5.7.0",
-    "typescript-eslint": "^8.58.1"
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.0"
   }
 }

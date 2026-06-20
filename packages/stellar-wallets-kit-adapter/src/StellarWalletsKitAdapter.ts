@@ -8,7 +8,7 @@ import type {
   WalletAdapter,
   WalletId,
 } from '@pollar/core';
-import { getInitNetwork } from './factory';
+import { getInitNetwork, getKitLogger } from './factory';
 
 /**
  * Wraps Stellar Wallets Kit so it satisfies the `@pollar/core` `WalletAdapter`
@@ -35,7 +35,7 @@ export class StellarWalletsKitAdapter implements WalletAdapter {
       const wallet = supported.find((w) => w.id === String(this.type));
       return wallet?.isAvailable ?? false;
     } catch (err) {
-      console.warn(`[StellarWalletsKit] isAvailable probe failed for "${this.type}"`, err);
+      getKitLogger().warn(`[StellarWalletsKit] isAvailable probe failed for "${this.type}"`, err);
       return false;
     }
   }
@@ -47,7 +47,7 @@ export class StellarWalletsKitAdapter implements WalletAdapter {
       throw new Error(`[StellarWalletsKit] Empty address returned for wallet "${this.type}"`);
     }
     this._address = address;
-    return { address, publicKey: address };
+    return { address };
   }
 
   async disconnect(): Promise<void> {

@@ -1,5 +1,68 @@
 # Upgrade guide
 
+## 0.8.x → 0.9.0
+
+The SDK surface drops the legacy wallet `publicKey` alias in favor of `address`,
+and surfaces the internal wallet type as `'internal'` instead of `'custodial'`.
+**The `sdk-api` wire is unchanged** — it still emits `'custodial'` and
+`publicKey`, and `@pollar/core` ≥0.9.0 remaps both at the client boundary. So
+SDKs ≤0.8.x keep working, sessions persisted by older SDKs are migrated
+transparently on read, and no coordinated backend deploy is required.
+
+### Most consumers — no change
+
+If you read the wallet address through `usePollar().walletAddress`
+(`@pollar/react`), nothing changes — it's resolved internally from
+`session.wallet.address`.
+
+### Required changes
+
+#### 1. Reading the wallet address (headless `@pollar/core`)
+
+`session.wallet.publicKey` is removed; read `session.wallet.address` (it always
+held the same value).
+
+```ts
+client.onAuthStateChange((s) => {
+  if (s.step !== 'authenticated') return;
+  // BEFORE (≤0.8.x): s.session.wallet.publicKey
+  // AFTER  (0.9.0):  s.session.wallet.address
+  const addr = s.session.wallet.address;
+});
+```
+
+#### 2. `wallet.type` `'custodial'` → `'internal'`
+
+The developer-facing union is now `'internal' | 'smart' | 'external'`. Code
+branching on `wallet.type === 'custodial'` must switch to `'internal'`.
+
+#### 3. Custom `WalletAdapter` authors
+
+`ConnectWalletResponse` is now `{ address }` only — drop the duplicate
+`publicKey`.
+
+```ts
+// BEFORE
+async connect(): Promise<ConnectWalletResponse> {
+  return { address: pubkey, publicKey: pubkey };
+}
+// AFTER
+async connect(): Promise<ConnectWalletResponse> {
+  return { address: pubkey };
+}
+```
+
+### Deploy ordering
+
+`@pollar/core` 0.9.0 sends `address` (preferred) on `/tx/*` request bodies. The
+`sdk-api` accepts **either `address` or `publicKey`** (`address` wins), so ship
+the matching `sdk-api` change before/with `@pollar/core` 0.9.0.
+
+### `@pollar/stellar-wallets-kit-adapter`
+
+`connect()` now returns `{ address }` only. Requires `@pollar/core@^0.9.0` /
+`@pollar/react@^0.9.0` (peer ranges pinned).
+
 ## 0.7.x → 0.8.0
 
 `<PollarProvider>` is reshaped to make the wallet picker pluggable and to give

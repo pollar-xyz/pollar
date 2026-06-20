@@ -1,0 +1,262 @@
+/* ---- Enabled assets modal ---- */
+.pollar-asset-modal {
+  max-width: 380px;
+}
+
+/* ---- Address chip ---- */
+.pollar-asset-address {
+  font-size: 0.75rem;
+  font-family: monospace;
+  color: var(--pollar-muted);
+  background: var(--pollar-input-bg);
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius, 10px);
+  padding: 0.375rem 0.75rem;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Asset list ---- */
+.pollar-asset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.pollar-asset-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--pollar-input-bg);
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius, 10px);
+  padding: 0.75rem 1rem;
+}
+
+.pollar-asset-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.pollar-asset-code-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.pollar-asset-code {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--pollar-text);
+}
+
+/* ---- "App" tag (asset is part of the application's config) ---- */
+.pollar-asset-tag {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--pollar-accent);
+  background: color-mix(in srgb, var(--pollar-accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pollar-accent) 35%, transparent);
+  border-radius: 999px;
+  padding: 0.0625rem 0.375rem;
+  line-height: 1.4;
+}
+
+.pollar-asset-name {
+  font-size: 0.6875rem;
+  color: var(--pollar-muted);
+}
+
+/* ---- Trustline badge ---- */
+.pollar-asset-trustline {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--pollar-muted);
+  background: var(--pollar-bg);
+  border: 1px solid var(--pollar-border);
+  border-radius: 999px;
+  padding: 0.1875rem 0.5rem;
+  white-space: nowrap;
+}
+
+.pollar-asset-trustline.established {
+  color: var(--pollar-success-text);
+  border-color: var(--pollar-success-text);
+}
+
+/* ---- Per-asset sponsorship hint ---- */
+.pollar-asset-sponsor {
+  font-size: 0.625rem;
+  color: var(--pollar-muted);
+}
+
+/* ---- Per-asset actions (badge + button) ---- */
+.pollar-asset-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pollar-asset-btn {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--pollar-accent);
+  background: var(--pollar-bg);
+  border: 1px solid var(--pollar-accent);
+  border-radius: 999px;
+  padding: 0.25rem 0.625rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    opacity 0.15s,
+    background 0.15s,
+    color 0.15s;
+}
+
+.pollar-asset-btn:hover:not(:disabled) {
+  background: var(--pollar-accent);
+  color: #fff;
+}
+
+.pollar-asset-btn.danger {
+  color: var(--pollar-error-text);
+  border-color: var(--pollar-error-border);
+}
+
+.pollar-asset-btn.danger:hover:not(:disabled) {
+  background: var(--pollar-error-text);
+  color: #fff;
+}
+
+.pollar-asset-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- Add custom trustline ---- */
+.pollar-asset-add-custom {
+  width: 100%;
+  background: none;
+  border: 1px dashed var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius, 10px);
+  color: var(--pollar-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.625rem;
+  margin-bottom: 1rem;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.pollar-asset-add-custom:hover:not(:disabled) {
+  color: var(--pollar-accent);
+  border-color: var(--pollar-accent);
+}
+
+.pollar-asset-add-custom:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- Action error banner ---- */
+.pollar-modal-action-error {
+  font-size: 0.75rem;
+  color: var(--pollar-error-text);
+  background: var(--pollar-error-bg);
+  border: 1px solid var(--pollar-error-border);
+  border-radius: var(--pollar-card-border-radius, 10px);
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+}
+
+/* ---- Back nav button (matches close-btn base) ---- */
+.pollar-modal-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: var(--pollar-buttons-border-radius, 6px);
+  border: 1px solid var(--pollar-border);
+  background-color: transparent;
+  color: var(--pollar-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.pollar-modal-back:hover:not(:disabled) {
+  background-color: var(--pollar-input-bg);
+  color: var(--pollar-text);
+  border-color: var(--pollar-text);
+}
+
+.pollar-modal-back:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- Custom trustline form ---- */
+.pollar-asset-custom-hint {
+  font-size: 0.75rem;
+  color: var(--pollar-muted);
+  margin: 0 0 1rem;
+  line-height: 1.4;
+}
+
+.pollar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: 0.875rem;
+}
+
+.pollar-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--pollar-text);
+}
+
+.pollar-label-optional {
+  font-weight: 400;
+  color: var(--pollar-muted);
+}
+
+.pollar-field-error {
+  font-size: 0.6875rem;
+  color: var(--pollar-error-text);
+}
+
+.pollar-asset-submit {
+  width: 100%;
+  height: var(--pollar-buttons-height, 44px);
+  border: none;
+  border-radius: var(--pollar-buttons-border-radius, 6px);
+  background-color: var(--pollar-accent);
+  color: #fff;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 1rem;
+  transition: opacity 0.15s;
+}
+
+.pollar-asset-submit:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.pollar-asset-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

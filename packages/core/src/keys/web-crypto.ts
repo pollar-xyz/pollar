@@ -1,3 +1,4 @@
+import { base64urlEncode } from '../lib/base64url';
 import { hashApiKey } from '../lib/api-key-hash';
 import { canonicalEcJwk, computeJwkThumbprint } from './thumbprint';
 import type { KeyManager, PublicEcJwk } from './types';
@@ -29,7 +30,7 @@ function openDb(): Promise<IDBDatabase> {
       return;
     }
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onerror = (): void => reject(req.error ?? new Error('IDB open failed'));
+    req.onerror = (): void => reject(req.error ?? new Error('[PollarClient:keys] IDB open failed'));
     req.onsuccess = (): void => resolve(req.result);
     req.onupgradeneeded = (): void => {
       const db = req.result;
@@ -43,7 +44,7 @@ function openDb(): Promise<IDBDatabase> {
 function awaitTx<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     req.onsuccess = (): void => resolve(req.result);
-    req.onerror = (): void => reject(req.error ?? new Error('IDB request failed'));
+    req.onerror = (): void => reject(req.error ?? new Error('[PollarClient:keys] IDB request failed'));
   });
 }
 
@@ -114,10 +115,10 @@ export class WebCryptoKeyManager implements KeyManager {
     if (this.keyPair) return;
     if (!this._initPromise) {
       this._initPromise = this._doInit().catch((err) => {
-        // Loud log so init failures don't masquerade as cryptic "publicJwk is
-        // null" downstream errors. Clear the promise so the next call retries
-        // instead of permanently returning a rejected promise.
-        console.error('[PollarClient:keys] WebCryptoKeyManager init failed', err);
+        // Clear the promise so the next call retries instead of permanently
+        // returning a rejected promise. The error propagates to the caller —
+        // `PollarClient` logs it through its configured logger, so we don't
+        // double-log (raw, ungated) here.
         this._initPromise = null;
         throw err;
       });
@@ -157,9 +158,42 @@ export class WebCryptoKeyManager implements KeyManager {
     }
 
     this.keyPair = pair;
-    const exported = (await globalThis.crypto.subtle.exportKey('jwk', pair.publicKey)) as JsonWebKey;
-    this.publicJwk = canonicalEcJwk(exported);
+    this.publicJwk = await this._exportPublicJwk(pair.publicKey);
     this.thumbprint = await computeJwkThumbprint(this.publicJwk);
+  }
+
+  /**
+   * Derive the public JWK from a `CryptoKey`. Prefers the `'raw'` export (the
+   * 65-byte uncompressed point `0x04 || X(32) || Y(32)`) and base64url-encodes
+   * the coordinates ourselves — that sidesteps polyfills whose `exportKey('jwk')`
+   * emits non-base64url `x`/`y` (standard base64, `=` padding, or — as seen with
+   * `react-native-quick-crypto` — a stray `.`). Real browsers and most polyfills
+   * support `'raw'` for public EC keys.
+   *
+   * Falls back to the `'jwk'` export (normalized via `canonicalEcJwk`) if `'raw'`
+   * is unsupported or returns an unexpected shape, so this can't regress on a
+   * runtime that only implements the JWK path. Both routes yield identical
+   * coordinate bytes, so the `cnf.jkt` thumbprint is unchanged either way.
+   */
+  private async _exportPublicJwk(publicKey: CryptoKey): Promise<PublicEcJwk> {
+    try {
+      const raw = new Uint8Array(await globalThis.crypto.subtle.exportKey('raw', publicKey));
+      // Uncompressed P-256 point: 65 bytes, leading 0x04 tag.
+      if (raw.length !== 65 || raw[0] !== 0x04) {
+        throw new Error(`[PollarClient:keys] Unexpected raw EC point (len=${raw.length}, tag=${raw[0]})`);
+      }
+      return {
+        kty: 'EC',
+        crv: 'P-256',
+        x: base64urlEncode(raw.slice(1, 33)),
+        y: base64urlEncode(raw.slice(33, 65)),
+      };
+    } catch {
+      // 'raw' unsupported (or odd) on this runtime — fall back to the JWK export
+      // and normalize its coordinates to unpadded base64url.
+      const jwk = (await globalThis.crypto.subtle.exportKey('jwk', publicKey)) as JsonWebKey;
+      return canonicalEcJwk(jwk);
+    }
   }
 
   async reset(): Promise<void> {

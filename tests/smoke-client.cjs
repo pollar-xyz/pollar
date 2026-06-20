@@ -6,7 +6,11 @@
 
 const path = require('node:path');
 
-globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
+globalThis.window = {
+  location: { origin: 'https://x.test', href: 'https://x.test/' },
+  addEventListener: () => {},
+  removeEventListener: () => {},
+};
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 
 const SDK_DIST = path.resolve(__dirname, '../packages/core/dist/index.js');
@@ -47,6 +51,17 @@ function check(label, ok, extra) {
   }
 }
 
+// Poll until `cond()` is true (or time out). Used to await fire-and-forget work
+// (e.g. the `/auth/session/resume` revalidation) that the SDK does not expose a
+// promise for.
+async function waitFor(cond, timeoutMs = 1000) {
+  const start = Date.now();
+  while (!cond()) {
+    if (Date.now() - start > timeoutMs) throw new Error('waitFor: condition not met within timeout');
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
+
 (async () => {
   const apiKey = 'pk_smoke_client';
   const storage = sdk.createMemoryAdapter();
@@ -69,7 +84,9 @@ function check(label, ok, extra) {
         expiresAt: Math.floor(Date.now() / 1000) + 600,
       },
       user: { ready: true },
-      wallet: { publicKey: null },
+      // `wallet.type` (internal|smart|external) is required by isValidSession;
+      // the legacy `publicKey`-only shape is no longer accepted.
+      wallet: { type: 'internal', address: null },
     }),
   );
 
@@ -94,6 +111,12 @@ function check(label, ok, extra) {
         { status: 200 },
       );
     }
+    if (req.url.includes('/auth/session/resume')) {
+      // Restored-session revalidation. Deliberately omit DPoP-Nonce so the
+      // nonce-flow assertions below observe the tx/history pair in isolation
+      // (otherwise resume would capture the nonce before the first tx/history).
+      return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
+    }
     return new Response(JSON.stringify({ success: true, content: {} }), {
       status: 200,
       headers: { 'DPoP-Nonce': 'rotated' },
@@ -109,6 +132,12 @@ function check(label, ok, extra) {
   await client.ready();
   check('client.ready() resolves', true);
   check('  apiKeyHash matches local computation', client.apiKeyHash === apiKeyHash);
+
+  // A restored session kicks off a fire-and-forget `/auth/session/resume`
+  // revalidation. Wait for it to land, then clear `calls` so the request-path
+  // assertions below index only the requests they themselves trigger.
+  await waitFor(() => calls.some((c) => c.url.includes('/auth/session/resume')));
+  calls.length = 0;
 
   console.log('\n── 2. Authenticated request carries DPoP + Authorization ─────');
   await client.fetchTxHistory();
