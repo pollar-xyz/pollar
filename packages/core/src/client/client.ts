@@ -633,6 +633,16 @@ export class PollarClient {
         // process but won't survive reload. Don't clear — that'd surprise
         // the user with a logout for what's essentially a storage hiccup.
       }
+      // Emit the rotated session so getAuthState()/onAuthStateChange consumers
+      // observe the fresh token. The SDK's own requests read `_session`
+      // directly and already see the rotation, but external readers (e.g. code
+      // that forwards the access token to a customer backend, or a
+      // `getFreshAccessToken` helper that awaits an onAuthStateChange emission)
+      // only see `_authState` — without this they keep handing out the stale,
+      // now-expired token. Preserve `step`/`verified`; only swap the session.
+      if (this._authState.step === 'authenticated') {
+        this._setAuthState({ ...this._authState, session: this._session });
+      }
       this._scheduleNextRefresh();
     }
   }
