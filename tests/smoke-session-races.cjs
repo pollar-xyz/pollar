@@ -133,6 +133,9 @@ const mock = {
   // When true, /tx/submit answers 200 with `{success:false, code, message}` (a
   // failure carried in a 2xx envelope) to assert the code/message is surfaced.
   txSubmitFail2xx: false,
+  // Delay (ms) before /tx/submit responds — to keep a submit in flight while a
+  // logout lands, for the post-logout tx-state guard test.
+  txSubmitDelayMs: 0,
 };
 
 globalThis.fetch = async (req) => {
@@ -211,6 +214,7 @@ globalThis.fetch = async (req) => {
     return new Response(JSON.stringify({ success: true, content: { marker: mock.buildMarker, amount: '5' } }), { status: 200 });
   }
   if (req.url.includes('/tx/submit')) {
+    if (mock.txSubmitDelayMs) await delay(mock.txSubmitDelayMs, req.signal);
     if (mock.txSubmitFail2xx) {
       return new Response(JSON.stringify({ success: false, code: 'TX_FEE_LIMIT_EXCEEDED', message: 'fee too high' }), {
         status: 200,
@@ -1098,6 +1102,49 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
       '  skipped the redundant /auth/session/resume',
       mock.calls.filter((c) => c.url.includes('/auth/session/resume')).length === 0,
     );
+    client.destroy();
+  }
+
+  // ── FF. a tx that RESOLVES after a logout can't repopulate/emit the old
+  //       session's transaction state (F2 — _txStartGen guard)
+  console.log('\n── FF. tx resolving after logout does not repopulate state (F2) ──');
+  {
+    mock.calls = [];
+    mock.txSubmitDelayMs = 80; // keep the submit in flight while logout lands
+    const apiKey = 'pk_race_FF';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    await storage.set(
+      `pollar:${hash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'internal', address: 'Gtest' },
+      }),
+    );
+    const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+    await client.ready();
+    const txStates = [];
+    client.onTransactionStateChange((s) => txStates.push(s.step));
+    const sp = client.submitTx('SIGNED_XDR'); // in-flight (~80ms)
+    await waitFor(() => client.getTransactionState()?.step === 'submitting');
+    await client.logout(); // bumps generation + resets _transactionState
+    await sp; // submit now resolves SUCCESS — must be dropped (stale generation)
+    await new Promise((r) => setTimeout(r, 20));
+    check(
+      'tx state not repopulated after logout (getTransactionState stays null)',
+      client.getTransactionState() === null,
+      JSON.stringify(client.getTransactionState()),
+    );
+    check(
+      '  no post-logout success/submitted was emitted to subscribers',
+      !txStates.includes('success') && !txStates.includes('submitted'),
+      JSON.stringify(txStates),
+    );
+    mock.txSubmitDelayMs = 0;
     client.destroy();
   }
 

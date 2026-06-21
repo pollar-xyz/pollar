@@ -185,6 +185,11 @@ export class PollarClient {
 
   private _transactionState: TransactionState | null = null;
   private _transactionStateListeners = new Set<(state: TransactionState) => void>();
+  // Snapshot of `_sessionGeneration` taken at the start of each tx operation. A
+  // tx belongs to the session it began in; if the generation changes mid-flight
+  // (logout / new login), `_setTransactionState` drops the now-stale write so a
+  // tx resolving after logout can't repopulate or emit the old session's state.
+  private _txStartGen = 0;
   private _txHistoryState: TxHistoryState = { step: 'idle' };
   private _txHistoryStateListeners = new Set<(state: TxHistoryState) => void>();
   private _sessionsState: SessionsState = { step: 'idle' };
@@ -1518,6 +1523,7 @@ export class PollarClient {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ): Promise<BuildOutcome> {
+    this._txStartGen = this._sessionGeneration;
     if (!this._session?.wallet?.address) {
       const details = 'No wallet connected';
       this._setTransactionState({ step: 'error', phase: 'building', details });
@@ -1591,6 +1597,7 @@ export class PollarClient {
    * is threaded through if the consumer previously called `buildTx`.
    */
   async signTx(unsignedXdr: string): Promise<SignOutcome> {
+    this._txStartGen = this._sessionGeneration;
     const buildData = this._currentBuildData();
     this._setTransactionState({ step: 'signing', ...(buildData && { buildData }) });
 
@@ -1779,6 +1786,7 @@ export class PollarClient {
   }
 
   async submitTx(signedXdr: string, opts?: { submissionToken?: string }): Promise<SubmitOutcome> {
+    this._txStartGen = this._sessionGeneration;
     const buildData = this._currentBuildData();
     const outcomeExtra: { buildData?: TxBuildContent } = buildData ? { buildData } : {};
     this._setTransactionState({ step: 'submitting', signedXdr, ...(buildData && { buildData }) });
@@ -1857,6 +1865,7 @@ export class PollarClient {
    *   `success` (ledger-confirmed), or `error[phase: 'signing-submitting']`.
    */
   async signAndSubmitTx(unsignedXdr?: string): Promise<SubmitOutcome> {
+    this._txStartGen = this._sessionGeneration;
     // Smart wallet: there is no unsigned XDR — sign the prepared auth digest
     // with the passkey and submit, using the build already on the state machine.
     if (this._session?.wallet?.type === 'smart') {
@@ -1984,6 +1993,7 @@ export class PollarClient {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ): Promise<SubmitOutcome> {
+    this._txStartGen = this._sessionGeneration;
     // Smart wallet (passkey / C-address): build (prepare) → sign the auth digest
     // with the passkey → submit. The signed entry is assembled server-side.
     if (this._session?.wallet?.type === 'smart') {
@@ -2075,6 +2085,7 @@ export class PollarClient {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ): Promise<SubmitOutcome> {
+    this._txStartGen = this._sessionGeneration;
     const address = this._session?.wallet?.address;
     if (!address) {
       this._setTransactionState({ step: 'error', phase: 'building', details: 'No wallet connected' });
@@ -2120,6 +2131,7 @@ export class PollarClient {
    * (split flow, when a smart build is already on the state machine).
    */
   private async _signSubmitSmart(buildData: TxBuildContent): Promise<SubmitOutcome> {
+    this._txStartGen = this._sessionGeneration;
     const address = this._session?.wallet?.address;
     const smart = buildData.smart;
     if (!address || !smart) {
@@ -2773,6 +2785,9 @@ export class PollarClient {
   }
 
   private _setTransactionState(next: TransactionState): void {
+    // Drop a write from a tx whose session was torn down (logout) or replaced
+    // (new login) after it started — see `_txStartGen`.
+    if (this._sessionGeneration !== this._txStartGen) return;
     this._transactionState = next;
     this._log.debug(`[PollarClient] transaction:${next.step}`);
     for (const cb of this._transactionStateListeners) cb(next);
