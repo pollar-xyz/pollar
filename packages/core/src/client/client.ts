@@ -902,15 +902,16 @@ export class PollarClient {
 
   // ─── Auth state ──────────────────────────────────────────────────────────────
 
-  getAuthState(): AuthState {
-    // Return a copy so a caller can't mutate the live `_authState` / `_session`
-    // — which the SDK's own request middleware reads (`_session.token.accessToken`)
-    // and the next writeStorage() serializes — through the returned object.
-    // Clone the nested `token`/`wallet`/`user` too: a shallow session copy still
-    // shares those object refs, so `getAuthState().session.token.accessToken = …`
-    // (or `.user.ready = …`) would otherwise corrupt the live session the SDK
-    // signs with and persists.
-    const s = this._authState;
+  /**
+   * Copy an auth state so an external reader can't mutate the live `_authState` /
+   * `_session` — which the SDK's own request middleware reads
+   * (`_session.token.accessToken`) and the next writeStorage() serializes —
+   * through the object it received. Clones the nested `token`/`wallet`/`user`
+   * too: a shallow session copy still shares those object refs, so
+   * `state.session.token.accessToken = …` (or `.user.ready = …`) would otherwise
+   * corrupt the live session the SDK signs with and persists.
+   */
+  private _cloneAuthState(s: AuthState): AuthState {
     if (s.step !== 'authenticated') return { ...s };
     return {
       ...s,
@@ -923,9 +924,14 @@ export class PollarClient {
     };
   }
 
+  getAuthState(): AuthState {
+    return this._cloneAuthState(this._authState);
+  }
+
   onAuthStateChange(cb: (state: AuthState) => void): () => void {
     this._authStateListeners.add(cb);
-    cb(this._authState);
+    // Emit a clone on subscribe too, for the same reason as `_setAuthState`.
+    cb(this._cloneAuthState(this._authState));
     return () => this._authStateListeners.delete(cb);
   }
 
@@ -2558,6 +2564,15 @@ export class PollarClient {
     }
 
     await writeStorage(this._storage, this.apiKeyHash, persisted);
+    // Drop a stale external adapter when switching to a non-external session
+    // (e.g. external-wallet login → later email/passkey login). The wallet flow
+    // sets `_walletAdapter` BEFORE calling us (storeWalletAdapter → authenticate
+    // → storeSession), so only clear it when the NEW session isn't external —
+    // that preserves the adapter an external login just stored for itself, while
+    // fixing getWalletType()/signing reporting a stale wallet after a switch.
+    if (persisted.wallet.type !== 'external') {
+      this._walletAdapter = null;
+    }
     // Fresh login/refresh response came straight from the server, so the
     // session is already server-validated → `verified: true`.
     this._setAuthState({ step: 'authenticated', session: persisted, verified: true });
@@ -2604,7 +2619,13 @@ export class PollarClient {
   private _setAuthState(next: AuthState): void {
     this._authState = next;
     this._log.debug(`[PollarClient] auth:${next.step}`);
-    for (const cb of this._authStateListeners) cb(next);
+    // Dispatch a clone: `next.session` is the live `_session` the middleware
+    // signs with, so a subscriber that mutates `state.session.token` would
+    // otherwise corrupt it. `getAuthState()` already clones; this makes the
+    // push path symmetric. (`@pollar/react` dedupes by value, so a fresh object
+    // per emission is safe — verified no useSyncExternalStore / ref-dedupe.)
+    const snapshot = this._cloneAuthState(next);
+    for (const cb of this._authStateListeners) cb(snapshot);
   }
 
   private _setTransactionState(next: TransactionState): void {
@@ -2622,6 +2643,13 @@ export class PollarClient {
   private _currentBuildData(): TxBuildContent | undefined {
     const s = this._transactionState;
     if (!s) return undefined;
+    // A terminal step belongs to a FINISHED tx. `_transactionState` is only
+    // reset on `_clearSession`, so without this a standalone signTx/submitTx
+    // (no preceding buildTx) would thread the previous tx's buildData into the
+    // new one — mislabeling its UI summary. Only carry buildData forward from
+    // live, in-progress steps; the composed paths (buildTx→signTx→submitTx) read
+    // it while non-terminal (`built`/`signed`), so they're unaffected.
+    if (s.step === 'success' || s.step === 'submitted' || s.step === 'error') return undefined;
     if ('buildData' in s && s.buildData) return s.buildData;
     return undefined;
   }

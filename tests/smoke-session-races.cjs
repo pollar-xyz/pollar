@@ -127,6 +127,9 @@ const mock = {
   // Raw `Date` header string to put on /tx/history responses (overrides the
   // offset-based one). Used to test that an implausible Date is ignored.
   serverDateOverride: null,
+  // Marker echoed as /tx/build content (buildData) so a test can tell which tx
+  // a buildData belongs to.
+  buildMarker: 'BUILD',
 };
 
 globalThis.fetch = async (req) => {
@@ -193,6 +196,12 @@ globalThis.fetch = async (req) => {
     if (mock.serverDateOverride) respHeaders.Date = mock.serverDateOverride;
     else if (mock.serverDateOffsetSec) respHeaders.Date = new Date(Date.now() + mock.serverDateOffsetSec * 1000).toUTCString();
     return new Response(JSON.stringify({ success: true, content: { ok: true, cursor } }), { status: 200, headers: respHeaders });
+  }
+  if (req.url.includes('/tx/build')) {
+    return new Response(JSON.stringify({ success: true, content: { marker: mock.buildMarker, amount: '5' } }), { status: 200 });
+  }
+  if (req.url.includes('/tx/submit')) {
+    return new Response(JSON.stringify({ success: true, content: { hash: 'HASH', status: 'SUCCESS' } }), { status: 200 });
   }
   // tx/history, logout, everything else.
   return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
@@ -651,6 +660,58 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     const nowSec = Math.floor(Date.now() / 1000);
     check('proof iat stayed at local time (implausible Date ignored)', Math.abs(iat - nowSec) < 5, iat - nowSec);
     mock.serverDateOverride = null;
+    client.destroy();
+  }
+
+  // ── V. onAuthStateChange hands a clone — listener can't corrupt live (C2) ──
+  console.log('\n── V. onAuthStateChange hands a clone (C2) ──────────────────');
+  {
+    mock.calls = [];
+    const { client } = await makeClient('pk_race_V');
+    let captured = null;
+    client.onAuthStateChange((s) => {
+      if (s.step === 'authenticated') captured = s;
+    });
+    await waitFor(() => captured !== null);
+    captured.session.token.accessToken = 'HACKED_VIA_LISTENER'; // mutate the received state
+    mock.calls = [];
+    await client.fetchTxHistory();
+    const auth = mock.calls.find((c) => c.url.includes('/tx/history'))?.headers.authorization;
+    check('a listener mutating its session did not corrupt the live signing token', auth === 'DPoP AT', auth);
+    client.destroy();
+  }
+
+  // ── W. a finished tx's buildData is not threaded into a new tx (C4) ────────
+  console.log('\n── W. terminal tx buildData not inherited by a new tx (C4) ───');
+  {
+    mock.calls = [];
+    const apiKey = 'pk_race_W';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    await storage.set(
+      `pollar:${hash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'internal', address: 'Gtest' }, // buildTx requires an address
+      }),
+    );
+    const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+    await client.ready();
+
+    mock.buildMarker = 'TX_A';
+    await client.buildTx('payment', { amount: '5' }); // → state 'built' with buildData TX_A
+    await client.submitTx('XDR_A'); // → terminal 'success' carrying buildData TX_A
+    check('tx A reached success carrying its buildData', client.getTransactionState()?.buildData?.marker === 'TX_A', JSON.stringify(client.getTransactionState()?.buildData));
+
+    // A NEW standalone submit (no preceding buildTx) must NOT inherit TX_A's buildData.
+    await client.submitTx('XDR_B');
+    const st = client.getTransactionState();
+    check('a standalone submit did NOT inherit the finished tx buildData', st?.buildData?.marker !== 'TX_A', JSON.stringify(st?.buildData));
+    mock.buildMarker = 'BUILD';
     client.destroy();
   }
 

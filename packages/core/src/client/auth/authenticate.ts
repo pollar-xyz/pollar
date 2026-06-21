@@ -68,6 +68,11 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
       await clearSession();
       return;
     }
+    // The login was cancelled (cancelLogin) or superseded by a newer attempt
+    // (_newController) while POST /auth/login was in flight — its `signal` is now
+    // aborted. Don't resurrect `authenticated` over the idle/new state. (The
+    // intervening error/clearSession writes above are intentionally NOT guarded.)
+    if (signal.aborted) return;
     await storeSession(data.content);
   } else {
     if (!error) logApiError(logger, 'POST /auth/login', { body, data });
