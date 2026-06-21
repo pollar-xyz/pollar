@@ -1,5 +1,5 @@
 import type { PollarLogger } from '../../lib/logger';
-import { redactBody } from '../../lib/logging';
+import { redactBody, redactDeep } from '../../lib/logging';
 
 /**
  * Logs an auth failure that the central HTTP middleware can't see — namely an
@@ -20,6 +20,8 @@ export function logApiError(
   logger[level](`[PollarClient:auth] ${route} failed`, {
     route,
     ...(body !== undefined ? { body: redactBody(body) } : {}),
-    cause: error ?? data,
+    // The cause is a server `data`/`error` envelope that can carry nested token
+    // material — redact it recursively rather than logging it raw.
+    cause: redactDeep(error ?? data),
   });
 }

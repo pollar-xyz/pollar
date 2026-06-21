@@ -121,6 +121,12 @@ const mock = {
   // When true, the next /auth/refresh responds with a DPoP nonce challenge (401),
   // then succeeds on retry — to assert the retry resends the POST body.
   refreshNonceChallengeOnce: false,
+  // When true, the next /tx/history returns a 500 whose body nests token material
+  // — to assert it's redacted in the error log.
+  txHistoryErrorWithToken: false,
+  // Raw `Date` header string to put on /tx/history responses (overrides the
+  // offset-based one). Used to test that an implausible Date is ignored.
+  serverDateOverride: null,
 };
 
 globalThis.fetch = async (req) => {
@@ -171,15 +177,21 @@ globalThis.fetch = async (req) => {
     });
   }
   if (req.url.includes('/tx/history')) {
+    if (mock.txHistoryErrorWithToken) {
+      mock.txHistoryErrorWithToken = false;
+      return new Response(
+        JSON.stringify({ success: false, content: { token: { accessToken: 'SECRET_AT', refreshToken: 'SECRET_RT' } } }),
+        { status: 500, headers: { 'content-type': 'application/json' } },
+      );
+    }
     // Delay by the `cursor` query param so the test controls response ordering
     // independent of which request reaches the mock first.
     const cursor = new URL(req.url).searchParams.get('cursor');
     const d = (cursor && mock.txHistoryDelays[cursor]) || 0;
     if (d) await delay(d, req.signal);
     const respHeaders = {};
-    if (mock.serverDateOffsetSec) {
-      respHeaders.Date = new Date(Date.now() + mock.serverDateOffsetSec * 1000).toUTCString();
-    }
+    if (mock.serverDateOverride) respHeaders.Date = mock.serverDateOverride;
+    else if (mock.serverDateOffsetSec) respHeaders.Date = new Date(Date.now() + mock.serverDateOffsetSec * 1000).toUTCString();
     return new Response(JSON.stringify({ success: true, content: { ok: true, cursor } }), { status: 200, headers: respHeaders });
   }
   // tx/history, logout, everything else.
@@ -598,6 +610,47 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     await client.ready();
     check('smart session did NOT resolve an external adapter from the stale walletType row', resolverCalled === false);
     check('  session still restored fine', client.getAuthState().step === 'authenticated');
+    client.destroy();
+  }
+
+  // ── T. token material in a failed response is redacted in logs (SEC1) ──────
+  console.log('\n── T. failed-response token material redacted in logs (SEC1) ─');
+  {
+    const logs = [];
+    const logger = { error: (...a) => logs.push(a), warn() {}, info() {}, debug() {} };
+    const apiKey = 'pk_race_T';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    await storage.set(`pollar:${hash}:session`, freshSession());
+    const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logger });
+    await client.ready();
+    await waitFor(() => mock.calls.some((c) => c.url.includes('/auth/session/resume')));
+    logs.length = 0;
+    mock.txHistoryErrorWithToken = true; // next /tx/history → 500 with token in the body
+    await client.fetchTxHistory();
+    const dump = JSON.stringify(logs);
+    check('the logged response did NOT leak the access/refresh token', !dump.includes('SECRET_AT') && !dump.includes('SECRET_RT'), dump.slice(0, 160));
+    check('  the sensitive token field was redacted', dump.includes('[redacted]'));
+    mock.txHistoryErrorWithToken = false;
+    client.destroy();
+  }
+
+  // ── U. an implausible server Date is ignored (no proof poisoning) (SEC2) ───
+  console.log('\n── U. implausible server Date ignored (SEC2) ────────────────');
+  {
+    const decodeIat = (dpop) => JSON.parse(Buffer.from(dpop.split('.')[1], 'base64url').toString()).iat;
+    const txDpop = () => mock.calls.find((c) => c.url.includes('/tx/history'))?.headers.dpop;
+    mock.calls = [];
+    const { client } = await makeClient('pk_race_U');
+    mock.serverDateOverride = new Date(0).toUTCString(); // epoch — outside the 2020–2100 window
+    mock.calls = [];
+    await client.fetchTxHistory(); // response carries the bad Date → must be ignored
+    mock.calls = [];
+    await client.fetchTxHistory(); // proof iat must still be ~local time, not poisoned
+    const iat = decodeIat(txDpop());
+    const nowSec = Math.floor(Date.now() / 1000);
+    check('proof iat stayed at local time (implausible Date ignored)', Math.abs(iat - nowSec) < 5, iat - nowSec);
+    mock.serverDateOverride = null;
     client.destroy();
   }
 

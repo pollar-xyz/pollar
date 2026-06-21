@@ -8,7 +8,7 @@ import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
 import { hashApiKey } from '../lib/api-key-hash';
 import { createLogger, type PollarLogger } from '../lib/logger';
-import { redactBody } from '../lib/logging';
+import { redactBody, redactDeep } from '../lib/logging';
 import { randomUUID } from '../lib/random-uuid';
 import { StellarNetwork } from '../stellar/StellarClient';
 import { defaultStorage } from '../storage/autodetect';
@@ -520,7 +520,14 @@ export class PollarClient {
         const serverDate = response.headers.get('Date');
         if (serverDate) {
           const serverSec = Math.floor(Date.parse(serverDate) / 1000);
-          if (Number.isFinite(serverSec)) self._clockOffsetSec = serverSec - Math.floor(Date.now() / 1000);
+          // Only learn the offset from a PLAUSIBLE absolute server time (the
+          // server clock is always ~now). This still compensates any local-clock
+          // skew (the offset is server−local), but ignores a garbage/hostile
+          // `Date` (epoch, year 2099, a CDN error page's wrong clock) that would
+          // otherwise poison every proof's `iat` and wedge auth. Window: 2020–2100.
+          if (Number.isFinite(serverSec) && serverSec > 1_577_836_800 && serverSec < 4_102_444_800) {
+            self._clockOffsetSec = serverSec - Math.floor(Date.now() / 1000);
+          }
         }
 
         if (response.status !== 401) return self._logHttp(request, response);
@@ -602,7 +609,10 @@ export class PollarClient {
     let responseBody: unknown;
     if ((response.headers.get('content-type') ?? '').includes('application/json')) {
       try {
-        responseBody = await response.json();
+        // Recursively redact: an error response can carry nested token material
+        // (e.g. `content.token.accessToken`) that the shallow request redactor
+        // wouldn't catch. Never log a raw response body.
+        responseBody = redactDeep(await response.json());
       } catch {
         // Body already consumed or not valid JSON — omit it.
       }
@@ -1429,7 +1439,12 @@ export class PollarClient {
           body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
         });
         if (!error && data?.success) {
-          if (data.content) this._setEnabledAssetsState({ step: 'loaded', data: data.content });
+          if (data.content) {
+            // Bump the assets generation so a refreshAssets() that was in flight
+            // can't clobber this post-trustline (fresher) snapshot.
+            ++this._enabledAssetsGen;
+            this._setEnabledAssetsState({ step: 'loaded', data: data.content });
+          }
           return { status: 'success' };
         }
         const details =

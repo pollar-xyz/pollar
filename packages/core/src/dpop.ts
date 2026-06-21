@@ -86,7 +86,8 @@ export async function buildProof(args: BuildProofArgs, keyManager: KeyManager): 
     jti: randomUUID(),
     htm: args.htm.toUpperCase(),
     htu: normalizeHtu(args.htu),
-    iat: Math.floor(Date.now() / 1000) + (args.clockOffsetSec ?? 0),
+    // Floor at 1 so a pathological offset can never produce a zero/negative iat.
+    iat: Math.max(1, Math.floor(Date.now() / 1000) + (args.clockOffsetSec ?? 0)),
   };
 
   if (args.accessToken !== undefined && args.accessToken !== '') {

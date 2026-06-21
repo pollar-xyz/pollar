@@ -10,11 +10,16 @@ export const SENSITIVE_BODY_KEYS = new Set([
   'dpopJwk',
   'response',
   'refreshToken',
+  // Token material that can appear in RESPONSE envelopes (e.g. `content.token`):
+  'accessToken',
+  'token',
   // SEP-10 challenge envelopes: a counter-signed challenge is a live, replayable
   // auth credential — never log it in the clear.
   'signedChallengeXdr',
   'challengeXdr',
   'signedTxXdr',
+  'signedXdr',
+  'signedAuthEntry',
 ]);
 
 /**
@@ -26,6 +31,23 @@ export function redactBody(body: unknown): unknown {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
     out[key] = SENSITIVE_BODY_KEYS.has(key) ? '[redacted]' : value;
+  }
+  return out;
+}
+
+/**
+ * Like {@link redactBody} but RECURSIVE — masks sensitive keys at any depth. Use
+ * for RESPONSE bodies / error causes, where token material is nested (e.g.
+ * `{ content: { token: { accessToken, refreshToken } } }`) and the shallow
+ * `redactBody` would leak it. Depth-bounded so a pathological/cyclic object
+ * can't blow the stack.
+ */
+export function redactDeep(value: unknown, depth = 0): unknown {
+  if (depth > 8 || !value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map((v) => redactDeep(v, depth + 1));
+  const out: Record<string, unknown> = {};
+  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = SENSITIVE_BODY_KEYS.has(key) ? '[redacted]' : redactDeep(v, depth + 1);
   }
   return out;
 }
