@@ -1148,7 +1148,9 @@ export class PollarClient {
       return;
     }
     const controller = this._newController();
-    smartWalletFlow(this._flowDeps(controller.signal), 'register').catch((err) => this._handleFlowError(err, controller.signal));
+    smartWalletFlow(this._flowDeps(controller.signal), 'register').catch((err) =>
+      this._handleFlowError(err, controller.signal),
+    );
   }
 
   // ─── Cancel ───────────────────────────────────────────────────────────────
