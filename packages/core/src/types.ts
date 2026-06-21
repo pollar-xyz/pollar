@@ -498,6 +498,9 @@ export const AUTH_ERROR_CODES = {
   SESSION_CREATE_FAILED: 'SESSION_CREATE_FAILED',
   SESSION_EXPIRED: 'SESSION_EXPIRED',
   SESSION_INVALID: 'SESSION_INVALID',
+  /** The interactive login didn't complete within the overall deadline (e.g. an
+   *  abandoned OAuth popup, or the session stuck in a non-terminal state). */
+  LOGIN_TIMEOUT: 'LOGIN_TIMEOUT',
   EMAIL_SEND_FAILED: 'EMAIL_SEND_FAILED',
   EMAIL_VERIFY_FAILED: 'EMAIL_VERIFY_FAILED',
   EMAIL_CODE_EXPIRED: 'EMAIL_CODE_EXPIRED',

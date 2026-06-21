@@ -25,16 +25,16 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
     // Other errors (AbortError from cancelLogin, etc.) bubble to the flow's
     // generic handler unchanged.
     if (err instanceof SessionStatusError) {
-      const expired = err.code === 'EXPIRED_CLIENT_ID';
       // App-level terminal session status rides on a 2xx stream, so the central
       // HTTP middleware can't classify it — log it here.
       logApiError(logger, 'session status', { data: err });
-      setAuthState({
-        step: 'error',
-        previousStep: 'authenticating',
-        message: expired ? 'Login session expired — please try again' : 'Login session is no longer valid — please try again',
-        errorCode: expired ? AUTH_ERROR_CODES.SESSION_EXPIRED : AUTH_ERROR_CODES.SESSION_INVALID,
-      });
+      const { message, errorCode } =
+        err.code === 'LOGIN_TIMEOUT'
+          ? { message: 'Login timed out — please try again', errorCode: AUTH_ERROR_CODES.LOGIN_TIMEOUT }
+          : err.code === 'EXPIRED_CLIENT_ID'
+            ? { message: 'Login session expired — please try again', errorCode: AUTH_ERROR_CODES.SESSION_EXPIRED }
+            : { message: 'Login session is no longer valid — please try again', errorCode: AUTH_ERROR_CODES.SESSION_INVALID };
+      setAuthState({ step: 'error', previousStep: 'authenticating', message, errorCode });
       await clearSession();
       return;
     }

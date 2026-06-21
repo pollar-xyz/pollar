@@ -65,7 +65,6 @@ export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void>
 
     const { address } = await withSignal(adapter.connect(), signal);
     connectedWallet = address;
-    deps.storeWalletAdapter(adapter, type);
 
     // SEP-10 challenge-response: prove control of the wallet key. Get a
     // server-signed challenge tx, have the wallet counter-sign it, and send the
@@ -115,6 +114,13 @@ export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void>
       });
       return;
     }
+
+    // Key control is proven — NOW persist the adapter (and its walletType).
+    // Storing it at connect time left a dangling adapter + walletType row with
+    // NO session whenever any step above failed; doing it here means a failure
+    // never strands one. If the `authenticate()` call below fails, it runs
+    // `clearSession()` which clears the adapter again.
+    await deps.storeWalletAdapter(adapter, type);
   } catch (err) {
     logApiError(logger, 'wallet connect', { error: err });
     setAuthState({

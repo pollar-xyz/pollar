@@ -106,6 +106,9 @@ const mock = {
   // When set, the next /tx/history responds with a DPoP nonce challenge (401)
   // using the given WWW-Authenticate value, then succeeds on retry.
   txNonceChallengeWwwAuth: null,
+  // Override the expiresAt the refresh endpoint returns (e.g. null to mimic a
+  // malformed/NaN value). undefined → a normal future timestamp.
+  refreshExpiresAt: undefined,
 };
 
 globalThis.fetch = async (req) => {
@@ -118,10 +121,11 @@ globalThis.fetch = async (req) => {
     if (mock.refreshStatus !== 200) {
       return new Response(JSON.stringify({ success: false, message: 'nope' }), { status: mock.refreshStatus });
     }
+    const expiresAt = mock.refreshExpiresAt !== undefined ? mock.refreshExpiresAt : Math.floor(Date.now() / 1000) + 600;
     return new Response(
       JSON.stringify({
         success: true,
-        content: { token: { accessToken: 'NEW_AT', refreshToken: 'NEW_RT', expiresAt: Math.floor(Date.now() / 1000) + 600 } },
+        content: { token: { accessToken: 'NEW_AT', refreshToken: 'NEW_RT', expiresAt } },
       }),
       { status: 200 },
     );
@@ -200,12 +204,18 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     check('two getAuthState() calls return distinct objects', a !== b);
     check('  and distinct session objects', a.step === 'authenticated' && b.step === 'authenticated' && a.session !== b.session);
 
-    // Attempt to corrupt the live session through the returned object.
-    if (a.step === 'authenticated') a.session.token.accessToken = 'HACKED';
+    // Attempt to corrupt the live session through the returned object (token AND
+    // the nested user object — R1: the clone must cover `user` too).
+    if (a.step === 'authenticated') {
+      a.session.token.accessToken = 'HACKED';
+      a.session.user.ready = false;
+    }
     mock.calls = [];
     await client.fetchTxHistory();
     const auth = mock.calls.find((c) => c.url.includes('/tx/history'))?.headers.authorization;
     check('request still signs with the real token, not the mutated one', auth === 'DPoP AT', auth);
+    const live = client.getAuthState();
+    check('mutating the returned session.user did not corrupt live state', live.step === 'authenticated' && live.session.user.ready === true);
     client.destroy();
   }
 
@@ -339,6 +349,61 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     await new Promise((r) => setTimeout(r, 40));
 
     check('cross-tab logout took this tab to idle (despite stale local storage)', client.getAuthState().step === 'idle', client.getAuthState().step);
+    client.destroy();
+  }
+
+  // ── J. cross-tab rotation keeps verified for a null-userId session (R2) ────
+  console.log('\n── J. null-userId session keeps verified on rotation (R2) ────');
+  {
+    mock.calls = [];
+    const apiKey = 'pk_race_J';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    const sessionKey = `pollar:${hash}:session`;
+    // Session with userId === null (valid: isValidSession allows it).
+    const nullUserSession = (at) =>
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: null,
+        status: 'CONSUMED',
+        token: { accessToken: at, refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'internal', address: null },
+      });
+    await storage.set(sessionKey, nullUserSession('AT'));
+    const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+    await client.ready();
+    await waitFor(() => client.getAuthState().verified === true);
+
+    const states = [];
+    client.onAuthStateChange((s) => states.push(s.step + (s.step === 'authenticated' ? `:${s.verified}` : '')));
+    states.length = 0;
+    mock.calls = [];
+
+    const rotated = nullUserSession('ROTATED_AT');
+    await storage.set(sessionKey, rotated);
+    dispatchStorageEvent(sessionKey, rotated);
+    await new Promise((r) => setTimeout(r, 60));
+
+    check('verified stayed true for null-userId session', client.getAuthState().verified === true);
+    check('  no authenticated:false flap', !states.includes('authenticated:false'), JSON.stringify(states));
+    check('  no redundant resume fired', mock.calls.filter((c) => c.url.includes('/auth/session/resume')).length === 0);
+    client.destroy();
+  }
+
+  // ── K. refresh with a non-finite expiresAt is rejected (B5) ────────────────
+  console.log('\n── K. malformed expiresAt from refresh is rejected (B5) ──────');
+  {
+    mock.calls = [];
+    const { client } = await makeClient('pk_race_K');
+    mock.refreshExpiresAt = null; // JSON has no NaN; null is what NaN serializes to
+    let threw = false;
+    await client.refresh().catch(() => {
+      threw = true;
+    });
+    check('refresh() rejected on a non-finite expiresAt', threw === true);
+    check('  malformed token did not become the session (cleared to idle)', client.getAuthState().step === 'idle', client.getAuthState().step);
+    mock.refreshExpiresAt = undefined;
     client.destroy();
   }
 

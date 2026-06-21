@@ -728,16 +728,29 @@ export class PollarClient {
     if (
       typeof newToken.accessToken !== 'string' ||
       typeof newToken.refreshToken !== 'string' ||
-      typeof newToken.expiresAt !== 'number'
+      // `typeof NaN === 'number'`, so the old check let NaN/Infinity through —
+      // require a finite, positive Unix-seconds value.
+      !Number.isFinite(newToken.expiresAt) ||
+      newToken.expiresAt <= 0
     ) {
-      // Log the field TYPES, never the token values themselves.
+      // Log the field TYPES, never the token values themselves (`expiresAt` is a
+      // timestamp, not a secret, so its value is safe to log).
       this._log.error('[PollarClient] /auth/refresh token shape invalid', {
         accessToken: typeof newToken.accessToken,
         refreshToken: typeof newToken.refreshToken,
-        expiresAt: typeof newToken.expiresAt,
+        expiresAt: newToken.expiresAt,
       });
       await this._clearSession();
       throw new Error('Refresh response token shape invalid');
+    }
+    // Sanity (non-fatal): `expiresAt` is Unix SECONDS. A value implausibly far
+    // ahead (e.g. the server mistakenly sending milliseconds) would silently
+    // disable proactive refresh — the scheduler clamps the huge delay — so the
+    // token would only ever be refreshed reactively on a 401. Surface it.
+    if (newToken.expiresAt > Math.floor(Date.now() / 1000) + 400 * 24 * 60 * 60) {
+      this._log.warn('[PollarClient] /auth/refresh expiresAt is implausibly far ahead (seconds vs ms?)', {
+        expiresAt: newToken.expiresAt,
+      });
     }
 
     // Discard the result if the session was torn down or replaced (logout / new
@@ -852,9 +865,10 @@ export class PollarClient {
     // Return a copy so a caller can't mutate the live `_authState` / `_session`
     // — which the SDK's own request middleware reads (`_session.token.accessToken`)
     // and the next writeStorage() serializes — through the returned object.
-    // Clone the nested `token`/`wallet` too: a shallow session copy still shares
-    // those object refs, so `getAuthState().session.token.accessToken = …` would
-    // otherwise corrupt the token the SDK signs with.
+    // Clone the nested `token`/`wallet`/`user` too: a shallow session copy still
+    // shares those object refs, so `getAuthState().session.token.accessToken = …`
+    // (or `.user.ready = …`) would otherwise corrupt the live session the SDK
+    // signs with and persists.
     const s = this._authState;
     if (s.step !== 'authenticated') return { ...s };
     return {
@@ -863,6 +877,7 @@ export class PollarClient {
         ...s.session,
         token: { ...s.session.token },
         wallet: { ...s.session.wallet },
+        user: { ...s.session.user },
       },
     };
   }
@@ -983,7 +998,10 @@ export class PollarClient {
       throw new PollarFlowError(`sendEmailCode() requires step 'entering_email', current step is '${this._authState.step}'`);
     }
     const { clientSessionId } = this._authState;
-    const signal = this._loginController!.signal;
+    // Reuse the active login controller if present, else mint one — matching the
+    // other entry points. A bare `this._loginController!.signal` would throw a
+    // TypeError if `entering_email` was reached without a controller.
+    const signal = (this._loginController ?? this._newController()).signal;
     sendEmailCode(email, clientSessionId, this._providerContext(signal)).catch((err) => this._handleFlowError(err));
   }
 
@@ -996,7 +1014,10 @@ export class PollarClient {
       this._authState.step === 'error' &&
       this._authState.clientSessionId != null &&
       (this._authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_INVALID ||
-        this._authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_EXPIRED);
+        this._authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_EXPIRED ||
+        // A generic verify failure (transient 5xx / contract drift) is also
+        // retryable — its error state now carries the clientSessionId/email.
+        this._authState.errorCode === AUTH_ERROR_CODES.EMAIL_VERIFY_FAILED);
 
     if (this._authState.step !== 'entering_code' && !isRetryableError) {
       throw new PollarFlowError(`verifyEmailCode() requires step 'entering_code', current step is '${this._authState.step}'`);
@@ -2219,7 +2240,14 @@ export class PollarClient {
       resolveWalletAdapter: (id: WalletId) => this._resolveWalletAdapter(id),
       storeWalletAdapter: async (adapter: WalletAdapter, id: WalletId) => {
         this._walletAdapter = adapter;
-        await writeWalletType(this._storage, this.apiKeyHash, id);
+        try {
+          await writeWalletType(this._storage, this.apiKeyHash, id);
+        } catch (err) {
+          // The adapter is set in memory and works for this session; persistence
+          // is best-effort (the wallet just won't auto-restore on next cold
+          // start). Never let a storage failure break the login.
+          this._log.warn('[PollarClient] Could not persist wallet type', err);
+        }
       },
       ...(this._passkey ? { passkey: this._passkey } : {}),
       ...(this._deviceLabel ? { deviceLabel: this._deviceLabel } : {}),
@@ -2314,11 +2342,16 @@ export class PollarClient {
       // the new token, and skip the redundant `/auth/session/resume`. Without
       // this, every sibling tab's rotation would flap `verified` true→false→true
       // and fire an extra resume round-trip.
+      // Key on `clientSessionId` — the canonical per-session identity, always
+      // present. Do NOT also require `userId`: a valid session can have
+      // `userId: null` (isValidSession allows it), and gating on it would make
+      // those sessions miss this fast path and keep flapping `verified` on every
+      // cross-tab rotation. Two different users can't share a clientSessionId.
       const isSameVerifiedSession =
         prevState.step === 'authenticated' &&
         prevState.verified &&
-        prevSession?.userId != null &&
-        prevSession.userId === this._session.userId &&
+        prevSession != null &&
+        !!prevSession.clientSessionId &&
         prevSession.clientSessionId === this._session.clientSessionId;
       if (isSameVerifiedSession) {
         this._log.info('[PollarClient] Session token rotated (cross-tab); keeping verified');

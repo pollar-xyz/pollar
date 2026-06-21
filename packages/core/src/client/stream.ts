@@ -6,7 +6,15 @@ import type { PollarLogger } from '../lib/logger';
  *  (as `error` events) and the poll endpoint (as 404 / 410). When either occurs
  *  the session can never become ready, so the wait stops and the auth flow
  *  resets to an error state instead of retrying forever. */
-export type SessionStatusErrorCode = 'INVALID_CLIENT_SESSION_ID' | 'EXPIRED_CLIENT_ID';
+export type SessionStatusErrorCode = 'INVALID_CLIENT_SESSION_ID' | 'EXPIRED_CLIENT_ID' | 'LOGIN_TIMEOUT';
+
+/**
+ * Overall deadline for an interactive login to reach a ready session. Bounds an
+ * abandoned flow (OAuth popup closed, user walked away, backend stuck in a
+ * non-terminal status) so the poll/stream can't run forever. 5 minutes is
+ * generous for a hosted login with 2FA while still failing a dead flow.
+ */
+export const LOGIN_FLOW_TIMEOUT_MS = 5 * 60 * 1000;
 
 export class SessionStatusError extends Error {
   constructor(readonly code: SessionStatusErrorCode) {
@@ -220,9 +228,42 @@ export function waitForSessionReady(args: {
   retryDelayMs?: number;
   signal?: AbortSignal;
   logger?: PollarLogger;
+  timeoutMs?: number;
 }): Promise<Record<string, unknown>> {
   const { api, baseUrl, clientSessionId, check, useStreaming, retryDelayMs, signal, logger = console } = args;
-  return useStreaming
-    ? streamUntilFound(api, clientSessionId, check, retryDelayMs ?? 200, signal, logger)
-    : pollUntilFound(baseUrl, clientSessionId, check, retryDelayMs ?? 500, signal, logger);
+  const timeoutMs = args.timeoutMs ?? LOGIN_FLOW_TIMEOUT_MS;
+
+  // Combine the caller's signal with an overall deadline: the underlying
+  // poll/stream loops only stop on a terminal status, success, or abort, so
+  // without this an abandoned login would run forever. We abort a derived
+  // controller on timeout (which unblocks the in-flight fetch / SSE read and
+  // the backoff sleep) and re-surface that abort as a `LOGIN_TIMEOUT` terminal,
+  // distinct from a user-initiated cancel (which stays an AbortError).
+  const controller = new AbortController();
+  const onExternalAbort = (): void => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', onExternalAbort, { once: true });
+  }
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  const run = useStreaming
+    ? streamUntilFound(api, clientSessionId, check, retryDelayMs ?? 200, controller.signal, logger)
+    : pollUntilFound(baseUrl, clientSessionId, check, retryDelayMs ?? 500, controller.signal, logger);
+
+  return run
+    .catch((err: unknown) => {
+      if (timedOut && err instanceof Error && err.name === 'AbortError') {
+        throw new SessionStatusError('LOGIN_TIMEOUT');
+      }
+      throw err;
+    })
+    .finally(() => {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', onExternalAbort);
+    });
 }

@@ -85,10 +85,16 @@ export async function verifyAndAuthenticate(
   }
 
   if (!error) logApiError(logger, 'POST /auth/email/verify-code', { body, data });
+  // Carry `clientSessionId`/`email` so this generic failure (transient 5xx,
+  // contract drift) stays RETRYABLE — the message says "try again" and the
+  // session is usually still alive, so `verifyEmailCode()` must be able to
+  // re-submit without restarting the whole flow.
   setAuthState({
     step: 'error',
     previousStep: 'verifying_email_code',
     message: 'Failed to verify code — try again',
     errorCode: AUTH_ERROR_CODES.EMAIL_VERIFY_FAILED,
+    clientSessionId,
+    email,
   });
 }
