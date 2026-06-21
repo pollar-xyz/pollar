@@ -109,6 +109,12 @@ const mock = {
   // Override the expiresAt the refresh endpoint returns (e.g. null to mimic a
   // malformed/NaN value). undefined → a normal future timestamp.
   refreshExpiresAt: undefined,
+  // Per-cursor response delays (ms) for /tx/history, keyed by the `cursor` query
+  // param, to force a specific response ordering for the concurrent-fetch test.
+  txHistoryDelays: {},
+  // HTTP status for /auth/session/resume (200 success; 403/410 = revoked;
+  // 5xx/404 = transient/not-found).
+  resumeStatus: 200,
 };
 
 globalThis.fetch = async (req) => {
@@ -132,6 +138,9 @@ globalThis.fetch = async (req) => {
   }
   if (req.url.includes('/auth/session/resume')) {
     if (mock.resumeDelayMs) await delay(mock.resumeDelayMs, req.signal);
+    if (mock.resumeStatus !== 200) {
+      return new Response(JSON.stringify({ success: false }), { status: mock.resumeStatus });
+    }
     return new Response(JSON.stringify({ success: true, content: { mail: 'a@b.c' } }), { status: 200 });
   }
   if (req.url.includes('/tx/history') && mock.txNonceChallengeWwwAuth) {
@@ -141,6 +150,14 @@ globalThis.fetch = async (req) => {
       status: 401,
       headers: { 'WWW-Authenticate': www, 'DPoP-Nonce': 'srv-nonce-1' },
     });
+  }
+  if (req.url.includes('/tx/history')) {
+    // Delay by the `cursor` query param so the test controls response ordering
+    // independent of which request reaches the mock first.
+    const cursor = new URL(req.url).searchParams.get('cursor');
+    const d = (cursor && mock.txHistoryDelays[cursor]) || 0;
+    if (d) await delay(d, req.signal);
+    return new Response(JSON.stringify({ success: true, content: { ok: true, cursor } }), { status: 200 });
   }
   // tx/history, logout, everything else.
   return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
@@ -404,6 +421,57 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     check('refresh() rejected on a non-finite expiresAt', threw === true);
     check('  malformed token did not become the session (cleared to idle)', client.getAuthState().step === 'idle', client.getAuthState().step);
     mock.refreshExpiresAt = undefined;
+    client.destroy();
+  }
+
+  // ── L. concurrent fetchTxHistory: the latest call wins (#2) ────────────────
+  console.log('\n── L. concurrent fetchTxHistory — latest wins (#2) ───────────');
+  {
+    mock.calls = [];
+    const { client } = await makeClient('pk_race_L');
+    mock.txHistoryDelays = { A: 80, B: 10 }; // A (older call) responds AFTER B
+    const pA = client.fetchTxHistory({ cursor: 'A' });
+    const pB = client.fetchTxHistory({ cursor: 'B' });
+    await Promise.all([pA, pB]);
+    await new Promise((r) => setTimeout(r, 60)); // let A's late response land + be dropped
+    const st = client.getTxHistoryState();
+    check('latest fetch (B) won; stale slow response (A) dropped', st.step === 'loaded' && st.params.cursor === 'B', JSON.stringify(st.params ?? st.step));
+    mock.txHistoryDelays = {};
+    client.destroy();
+  }
+
+  // ── M. resume → 403 (revoked elsewhere) logs the session out (#3) ──────────
+  console.log('\n── M. resume 403 (revoked) → logout (#3) ─────────────────────');
+  {
+    mock.calls = [];
+    mock.resumeStatus = 403; // session revoked from another device, AT still valid
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf('pk_race_M');
+    await storage.set(`pollar:${hash}:session`, freshSession());
+    const client = new sdk.PollarClient({ apiKey: 'pk_race_M', storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+    await client.ready();
+    await waitFor(() => mock.calls.some((c) => c.url.includes('/auth/session/resume')));
+    await waitFor(() => client.getAuthState().step === 'idle');
+    check('a definitive 403 from resume cleared the session to idle', client.getAuthState().step === 'idle');
+    mock.resumeStatus = 200;
+    client.destroy();
+  }
+
+  // ── N. resume → 503 (transient) keeps the optimistic session (#3) ──────────
+  console.log('\n── N. resume 503 (transient) → stays optimistic (#3) ─────────');
+  {
+    mock.calls = [];
+    mock.resumeStatus = 503; // transient server error — must NOT log out
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf('pk_race_N');
+    await storage.set(`pollar:${hash}:session`, freshSession());
+    const client = new sdk.PollarClient({ apiKey: 'pk_race_N', storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+    await client.ready();
+    await waitFor(() => mock.calls.some((c) => c.url.includes('/auth/session/resume')));
+    await new Promise((r) => setTimeout(r, 40));
+    const s = client.getAuthState();
+    check('a transient 503 from resume did NOT log out (stays optimistic)', s.step === 'authenticated' && s.verified === false, s.step);
+    mock.resumeStatus = 200;
     client.destroy();
   }
 

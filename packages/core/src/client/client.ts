@@ -186,6 +186,17 @@ export class PollarClient {
   private _walletBalanceStateListeners = new Set<(state: WalletBalanceState) => void>();
   private _enabledAssetsState: EnabledAssetsState = { step: 'idle' };
   private _enabledAssetsStateListeners = new Set<(state: EnabledAssetsState) => void>();
+  /**
+   * Per-reader request generations. Each reactive fetch (`fetchTxHistory`,
+   * `refreshBalance`, `refreshAssets`, `fetchSessions`) bumps its counter and,
+   * after awaiting, drops its result if a newer call superseded it — so two
+   * overlapping calls (fast pagination, pull-to-refresh spam) can't land
+   * last-writer-wins with the wrong page's data.
+   */
+  private _txHistoryGen = 0;
+  private _sessionsGen = 0;
+  private _walletBalanceGen = 0;
+  private _enabledAssetsGen = 0;
   private _authState: AuthState = { step: 'idle' };
   private _authStateListeners = new Set<(state: AuthState) => void>();
   private _networkState: NetworkState = { step: 'idle' };
@@ -1160,11 +1171,14 @@ export class PollarClient {
    * via `onSessionsStateChange` and stay pure readers — mirrors `fetchTxHistory`.
    */
   async fetchSessions(): Promise<void> {
+    const gen = ++this._sessionsGen;
     this._setSessionsState({ step: 'loading' });
     try {
       const sessions = await this.listSessions();
+      if (gen !== this._sessionsGen) return; // a newer fetch superseded this one
       this._setSessionsState({ step: 'loaded', sessions });
     } catch (err) {
+      if (gen !== this._sessionsGen) return;
       const message = err instanceof Error ? err.message : 'Failed to load sessions';
       this._setSessionsState({ step: 'error', message });
     }
@@ -1245,9 +1259,11 @@ export class PollarClient {
   }
 
   async fetchTxHistory(params: TxHistoryParams = {}): Promise<void> {
+    const gen = ++this._txHistoryGen;
     this._setTxHistoryState({ step: 'loading', params });
     try {
       const { data, error } = await this._api.GET('/tx/history', { params: { query: params } });
+      if (gen !== this._txHistoryGen) return; // a newer fetch superseded this one
       if (!error && data?.success && data.content) {
         this._setTxHistoryState({ step: 'loaded', params, data: data.content });
       } else {
@@ -1255,6 +1271,7 @@ export class PollarClient {
         this._setTxHistoryState({ step: 'error', params, message });
       }
     } catch {
+      if (gen !== this._txHistoryGen) return;
       this._setTxHistoryState({ step: 'error', params, message: 'Failed to load history' });
     }
   }
@@ -1278,18 +1295,22 @@ export class PollarClient {
    */
   async refreshBalance(): Promise<void> {
     if (!this._session?.wallet?.address) {
+      ++this._walletBalanceGen; // supersede any in-flight load (e.g. wallet went away)
       this._setWalletBalanceState({ step: 'error', message: 'No wallet connected' });
       return;
     }
+    const gen = ++this._walletBalanceGen;
     this._setWalletBalanceState({ step: 'loading' });
     try {
       const { data, error } = await this._api.GET('/wallet/balance');
+      if (gen !== this._walletBalanceGen) return; // a newer refresh superseded this one
       if (!error && data?.success && data.content) {
         this._setWalletBalanceState({ step: 'loaded', data: data.content });
       } else {
         this._setWalletBalanceState({ step: 'error', message: 'Failed to load balance' });
       }
     } catch {
+      if (gen !== this._walletBalanceGen) return;
       this._setWalletBalanceState({ step: 'error', message: 'Failed to load balance' });
     }
   }
@@ -1330,18 +1351,22 @@ export class PollarClient {
    */
   async refreshAssets(): Promise<void> {
     if (!this._session?.wallet?.address) {
+      ++this._enabledAssetsGen; // supersede any in-flight load (e.g. wallet went away)
       this._setEnabledAssetsState({ step: 'error', message: 'No wallet connected' });
       return;
     }
+    const gen = ++this._enabledAssetsGen;
     this._setEnabledAssetsState({ step: 'loading' });
     try {
       const { data, error } = await this._api.GET('/wallet/assets');
+      if (gen !== this._enabledAssetsGen) return; // a newer refresh superseded this one
       if (!error && data?.success && data.content) {
         this._setEnabledAssetsState({ step: 'loaded', data: data.content });
       } else {
         this._setEnabledAssetsState({ step: 'error', message: 'Failed to load assets' });
       }
     } catch {
+      if (gen !== this._enabledAssetsGen) return;
       this._setEnabledAssetsState({ step: 'error', message: 'Failed to load assets' });
     }
   }
@@ -2394,12 +2419,16 @@ export class PollarClient {
    * in-flight refresh (onRequest awaits `_refreshPromise`) and, being a GET,
    * is auto-retried after a 401-triggered refresh.
    *
-   * - 200          → store profile, mark the session `verified`.
-   * - 401          → the refresh-on-401 path already ran; if the family was
-   *                  revoked, refresh failed and `_clearSession()` took us to
-   *                  idle. Nothing to do here — don't double-handle.
-   * - network error → stay optimistic (do NOT log out); revalidated later on
-   *                  `visibilitychange` or first use.
+   * - 200            → store profile, mark the session `verified`.
+   * - 401            → the refresh-on-401 path already ran; if the family was
+   *                    revoked, refresh failed and `_clearSession()` took us to
+   *                    idle. We also clear here as a belt-and-suspenders.
+   * - 403 / 410      → the session was revoked elsewhere while its access token
+   *                    is still unexpired (so the 401→refresh path never fired).
+   *                    Definitive: converge to logged-out.
+   * - 404/429/5xx    → endpoint mismatch / rate limit / transient: do NOT log
+   *                    out; keep the optimistic session for a later retry.
+   * - network error  → stay optimistic; revalidated on `visibilitychange`/use.
    */
   private async _resume(): Promise<void> {
     if (!this._session) return;
@@ -2408,19 +2437,31 @@ export class PollarClient {
     const controller = new AbortController();
     this._resumeController = controller;
     try {
-      const { data, error } = await this._api.GET('/auth/session/resume', { signal: controller.signal });
-      if (error || !data) return;
-      const content = (data as { content?: PollarUserProfile }).content;
+      const { data, error, response } = await this._api.GET('/auth/session/resume', { signal: controller.signal });
       // Bail if the session was cleared/replaced (logout / refresh / new login)
-      // or the client destroyed while resume was in flight — otherwise we'd
-      // re-emit `authenticated` over a logged-out or superseded session.
-      if (!content || !this._session || this._destroyed || this._sessionGeneration !== gen) return;
+      // or the client destroyed while resume was in flight — don't emit over, or
+      // clear, a session that's no longer the one we started with.
+      if (this._destroyed || this._sessionGeneration !== gen || !this._session) return;
+
+      if (error || !data) {
+        // Only treat statuses that unambiguously mean "this session is gone" as a
+        // logout. A 404 (deploy/endpoint mismatch), 429 (rate limit) or 5xx
+        // (transient) must NOT strand the user logged-out.
+        const status = response?.status ?? 0;
+        if (status === 401 || status === 403 || status === 410) {
+          await this._clearSession();
+        }
+        return;
+      }
+
+      const content = (data as { content?: PollarUserProfile }).content;
+      if (!content) return;
       this._profile = { ...content };
       this._setAuthState({ step: 'authenticated', session: this._session, verified: true });
     } catch (err) {
       if ((err as { name?: string })?.name === 'AbortError') return;
-      // Network failure — keep the optimistic (unverified) session and retry
-      // when the app next becomes visible or on the next authed request.
+      // Network failure (no response) — keep the optimistic (unverified) session
+      // and retry when the app next becomes visible or on the next authed request.
       this._log.warn('[PollarClient] resume failed (network); will retry', err);
     } finally {
       if (this._resumeController === controller) this._resumeController = null;
