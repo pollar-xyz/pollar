@@ -1656,10 +1656,13 @@ export class PollarClient {
     if (this._walletAdapter && this._session?.wallet?.type !== 'smart') {
       const accountToSign = this._session?.wallet?.address;
       try {
-        const { signedAuthEntry } = await this._walletAdapter.signAuthEntry(
-          entryXdr,
-          accountToSign ? { accountToSign } : undefined,
-        );
+        const { signedAuthEntry } = await this._walletAdapter.signAuthEntry(entryXdr, {
+          // Pass the CURRENT network (like signTx) so an external adapter signs
+          // on the configured network even after a mid-session setNetwork(), not
+          // a network captured when the adapter was constructed.
+          networkPassphrase: this._networkPassphrase(),
+          ...(accountToSign ? { accountToSign } : {}),
+        });
         return { status: 'signed', signedAuthEntry };
       } catch (err) {
         const details = err instanceof Error ? err.message : undefined;

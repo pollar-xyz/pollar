@@ -747,6 +747,59 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     client.destroy();
   }
 
+  // ── Y. signAuthEntry passes the CURRENT network to the adapter (Albedo H1) ─
+  console.log('\n── Y. signAuthEntry passes current network to adapter (H1) ──');
+  {
+    mock.calls = [];
+    const apiKey = 'pk_race_Y';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    // External session + walletType row → _restoreSession resolves the adapter.
+    await storage.set(
+      `pollar:${hash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'external', address: 'Gtest' },
+      }),
+    );
+    await storage.set(`pollar:${hash}:walletType`, 'fake');
+    const captured = [];
+    const fakeAdapter = {
+      type: 'fake',
+      isAvailable: async () => true,
+      connect: async () => ({ address: 'Gtest' }),
+      signTransaction: async () => ({ signedTxXdr: 'x' }),
+      signAuthEntry: async (_xdr, options) => {
+        captured.push(options);
+        return { signedAuthEntry: 'sig' };
+      },
+    };
+    const client = new sdk.PollarClient({
+      apiKey,
+      storage,
+      baseUrl: 'https://x.test',
+      logLevel: 'silent',
+      stellarNetwork: 'testnet',
+      walletAdapter: () => fakeAdapter,
+    });
+    await client.ready();
+    await client.signAuthEntry('ENTRY_XDR', { validUntilLedger: 1000 });
+    check('signAuthEntry passed a networkPassphrase to the adapter', !!captured[0]?.networkPassphrase, JSON.stringify(captured[0]));
+    const testnetPp = captured[0]?.networkPassphrase;
+    client.setNetwork('mainnet');
+    await client.signAuthEntry('ENTRY_XDR', { validUntilLedger: 1000 });
+    check(
+      '  after setNetwork(mainnet) the passphrase changed (no stale network)',
+      !!captured[1]?.networkPassphrase && captured[1].networkPassphrase !== testnetPp,
+      JSON.stringify(captured.map((c) => c?.networkPassphrase)),
+    );
+    client.destroy();
+  }
+
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
 })().catch((err) => {

@@ -26,6 +26,13 @@ export interface SignTransactionOptions {
 }
 
 export interface SignAuthEntryOptions {
+  /** Stellar network the entry is signed against. Mirrors
+   *  {@link SignTransactionOptions} so an adapter (e.g. Albedo) signs on the
+   *  network currently configured on `PollarClient`, not a stale one captured at
+   *  construction. Adapters that read the network from their own extension (e.g.
+   *  Freighter) ignore these. */
+  network?: string;
+  networkPassphrase?: string;
   accountToSign?: string;
 }
 
