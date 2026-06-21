@@ -183,6 +183,28 @@ async function waitFor(cond, timeoutMs = 1000) {
   await waitFor(() => client.getAuthState().step === 'error');
   check('unknown provider sets error state', client.getAuthState().step === 'error');
 
+  console.log('\n── 9. email verify generic failure is retryable (B1) ─────────');
+  // login(email) creates the session and sends the code → step 'entering_code'.
+  client.login({ provider: 'email', email: 'retry@b.test' });
+  await waitFor(() => client.getAuthState().step === 'entering_code');
+  // The mock answers /auth/email/verify-code with success:true but NO
+  // SDK_EMAIL_CODE_VERIFIED code → the SDK's generic EMAIL_VERIFY_FAILED branch.
+  client.verifyEmailCode('000000');
+  await waitFor(() => client.getAuthState().step === 'error');
+  check(
+    'generic verify failure → EMAIL_VERIFY_FAILED',
+    client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.EMAIL_VERIFY_FAILED,
+    client.getAuthState().errorCode,
+  );
+  check('  error state carries clientSessionId so it can retry', !!client.getAuthState().clientSessionId);
+  let verifyThrew = false;
+  try {
+    client.verifyEmailCode('111111'); // must be retryable now — no synchronous PollarFlowError
+  } catch {
+    verifyThrew = true;
+  }
+  check('  verifyEmailCode is retryable after a generic failure (no throw)', verifyThrew === false);
+
   console.log(`\n${fail === 0 ? '✅' : '❌'} providers smoke: ${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);
 })().catch((err) => {

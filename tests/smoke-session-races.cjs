@@ -118,14 +118,30 @@ const mock = {
   // When non-zero, /tx/history responses carry a `Date` header offset from local
   // time by this many seconds, to exercise DPoP clock-skew compensation.
   serverDateOffsetSec: 0,
+  // When true, the next /auth/refresh responds with a DPoP nonce challenge (401),
+  // then succeeds on retry — to assert the retry resends the POST body.
+  refreshNonceChallengeOnce: false,
 };
 
 globalThis.fetch = async (req) => {
   const headers = {};
   req.headers.forEach((v, k) => (headers[k] = v));
-  mock.calls.push({ url: req.url, method: req.method, headers });
+  let body = '';
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    try {
+      body = await req.clone().text();
+    } catch {}
+  }
+  mock.calls.push({ url: req.url, method: req.method, headers, body });
 
   if (req.url.includes('/auth/refresh')) {
+    if (mock.refreshNonceChallengeOnce) {
+      mock.refreshNonceChallengeOnce = false; // one-shot: the retry below succeeds
+      return new Response(JSON.stringify({ success: false }), {
+        status: 401,
+        headers: { 'WWW-Authenticate': 'DPoP error="use_dpop_nonce"', 'DPoP-Nonce': 'refresh-nonce-1' },
+      });
+    }
     if (mock.refreshDelayMs) await delay(mock.refreshDelayMs, req.signal);
     if (mock.refreshStatus !== 200) {
       return new Response(JSON.stringify({ success: false, message: 'nope' }), { status: mock.refreshStatus });
@@ -502,6 +518,86 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     check('first proof iat ≈ local time (offset not yet learned)', Math.abs(iat1 - nowSec) < 5, iat1 - nowSec);
     check('second proof iat shifted ≈ +1000s toward server time', Math.abs(iat2 - (nowSec + 1000)) < 5, iat2 - nowSec);
     mock.serverDateOffsetSec = 0;
+    client.destroy();
+  }
+
+  // ── P. /auth/refresh retry resends the POST body after a nonce challenge (rc.1) ─
+  console.log('\n── P. refresh retry preserves the POST body (rc.1) ──────────');
+  {
+    mock.calls = [];
+    const { client } = await makeClient('pk_race_P');
+    mock.calls = [];
+    mock.refreshNonceChallengeOnce = true; // first refresh → nonce challenge; the retry must resend the body
+    await client.refresh();
+    const refreshCalls = mock.calls.filter((c) => c.url.includes('/auth/refresh'));
+    check('refresh retried after the nonce challenge (2 calls)', refreshCalls.length === 2, refreshCalls.length);
+    check('  the retry carried a non-empty body (refreshToken not dropped)', !!refreshCalls[1] && refreshCalls[1].body.includes('refreshToken'), refreshCalls[1]?.body);
+    client.destroy();
+  }
+
+  // ── Q. refresh() emits the rotated token to getAuthState/onAuthStateChange (rc.2) ─
+  console.log('\n── Q. refresh emits rotated token to authState (rc.2) ────────');
+  {
+    mock.calls = [];
+    const { client } = await makeClient('pk_race_Q');
+    const seen = [];
+    client.onAuthStateChange((s) => {
+      if (s.step === 'authenticated') seen.push(s.session.token.accessToken);
+    });
+    seen.length = 0;
+    await client.refresh();
+    check('getAuthState() reflects the rotated token', client.getAuthState().session.token.accessToken === 'NEW_AT');
+    check('  onAuthStateChange emitted the rotated token', seen.includes('NEW_AT'), JSON.stringify(seen));
+    client.destroy();
+  }
+
+  // ── R. a duplicate PollarClient for the same apiKey warns (N4) ─────────────
+  console.log('\n── R. duplicate client for same apiKey warns (N4) ────────────');
+  {
+    const warns = [];
+    const logger = { error() {}, warn: (...a) => warns.push(a.join(' ')), info() {}, debug() {} };
+    const c1 = new sdk.PollarClient({ apiKey: 'pk_dup', storage: sdk.createMemoryAdapter(), baseUrl: 'https://x.test', logger });
+    const c2 = new sdk.PollarClient({ apiKey: 'pk_dup', storage: sdk.createMemoryAdapter(), baseUrl: 'https://x.test', logger });
+    await Promise.all([c1.ready(), c2.ready()]);
+    check('a second client for the same apiKey logged a warning', warns.some((w) => w.includes('Another PollarClient is already active')));
+    c1.destroy();
+    c2.destroy();
+  }
+
+  // ── S. a smart session does NOT restore an external adapter (#4) ───────────
+  console.log('\n── S. smart session does not restore an external adapter (#4) ─');
+  {
+    mock.calls = [];
+    const apiKey = 'pk_race_S';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    // A SMART session + a stale walletType row, as if a prior external login left one.
+    await storage.set(
+      `pollar:${hash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'smart', address: 'Csmart' },
+      }),
+    );
+    await storage.set(`pollar:${hash}:walletType`, 'freighter');
+    let resolverCalled = false;
+    const client = new sdk.PollarClient({
+      apiKey,
+      storage,
+      baseUrl: 'https://x.test',
+      logLevel: 'silent',
+      walletAdapter: () => {
+        resolverCalled = true;
+        return { type: 'freighter', isAvailable: async () => true };
+      },
+    });
+    await client.ready();
+    check('smart session did NOT resolve an external adapter from the stale walletType row', resolverCalled === false);
+    check('  session still restored fine', client.getAuthState().step === 'authenticated');
     client.destroy();
   }
 
