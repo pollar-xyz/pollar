@@ -1021,7 +1021,7 @@ export class PollarClient {
     if (!fn) {
       throw new PollarFlowError(`Auth provider '${provider}' has no action '${action}'`);
     }
-    const signal = this._loginController?.signal ?? this._newController().signal;
+    const signal = this._activeLoginSignal();
     fn(this._providerContext(signal), payload).catch((err) => this._handleFlowError(err, signal));
   }
 
@@ -1046,9 +1046,9 @@ export class PollarClient {
     }
     const { clientSessionId } = this._authState;
     // Reuse the active login controller if present, else mint one — matching the
-    // other entry points. A bare `this._loginController!.signal` would throw a
-    // TypeError if `entering_email` was reached without a controller.
-    const signal = (this._loginController ?? this._newController()).signal;
+    // other entry points; mint a fresh controller if there's none or the
+    // existing one is already aborted (else this resend would hit a dead signal).
+    const signal = this._activeLoginSignal();
     sendEmailCode(email, clientSessionId, this._providerContext(signal)).catch((err) => this._handleFlowError(err, signal));
   }
 
@@ -2231,6 +2231,19 @@ export class PollarClient {
   }
 
   /**
+   * Signal for a continuation of the current login (e.g. `sendEmailCode`,
+   * `providerAction`). Reuses the active login controller, but mints a fresh one
+   * if there's none OR the existing one is already aborted — a prior terminal
+   * flow can leave `_loginController` set-but-aborted, and reusing that dead
+   * signal would make the continuation's first request reject immediately and
+   * drop the user to `idle`.
+   */
+  private _activeLoginSignal(): AbortSignal {
+    if (this._loginController && !this._loginController.signal.aborted) return this._loginController.signal;
+    return this._newController().signal;
+  }
+
+  /**
    * Build the {@link AuthProviderContext} facade for one login attempt. Wraps
    * the internal `FlowDeps` so providers get only the curated primitives —
    * `createSession`, `authenticate`, `exchangeExternalToken`, `startHostedOAuth`
@@ -2618,6 +2631,18 @@ export class PollarClient {
     }
     await removeStorage(this._storage, this.apiKeyHash);
     this._transactionState = null;
+    // Reset the reactive read stores so a UI still subscribed after logout shows
+    // no data (not the previous user's balance/assets/history/sessions), and bump
+    // their generations so an in-flight fetch that resolves after this can't
+    // repopulate them.
+    this._txHistoryGen++;
+    this._walletBalanceGen++;
+    this._enabledAssetsGen++;
+    this._sessionsGen++;
+    this._setTxHistoryState({ step: 'idle' });
+    this._setWalletBalanceState({ step: 'idle' });
+    this._setEnabledAssetsState({ step: 'idle' });
+    this._setSessionsState({ step: 'idle' });
     this._setAuthState({ step: 'idle' });
   }
 

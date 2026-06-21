@@ -720,6 +720,33 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     client.destroy();
   }
 
+  // ── X. logout resets the reactive read stores (L5) ────────────────────────
+  console.log('\n── X. logout resets the reactive read stores (L5) ───────────');
+  {
+    mock.calls = [];
+    const apiKey = 'pk_race_X';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    await storage.set(
+      `pollar:${hash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'internal', address: 'Gtest' }, // refreshBalance needs an address
+      }),
+    );
+    const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+    await client.ready();
+    await client.refreshBalance();
+    check('balance store loaded before logout', client.getWalletBalanceState().step === 'loaded', client.getWalletBalanceState().step);
+    await client.logout();
+    check("  logout reset the balance store to 'idle' (no stale previous-user data)", client.getWalletBalanceState().step === 'idle', client.getWalletBalanceState().step);
+    client.destroy();
+  }
+
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
 })().catch((err) => {

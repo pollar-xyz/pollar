@@ -37,7 +37,17 @@ export async function requestWalletChallenge(
     if (!error) logApiError(logger, 'POST /auth/wallet/challenge', { body, data });
     return null;
   }
-  return data.content.challengeXdr;
+  const challengeXdr = data.content.challengeXdr;
+  // Defense-in-depth before ANY consumer hands this to a real wallet to sign —
+  // the built-in flow AND custom providers (via `ctx.requestChallenge`). Refuse
+  // anything that isn't a real SEP-10 challenge (e.g. a live, submittable tx with
+  // sequence != 0 from a compromised/MITM'd challenge endpoint). The server's
+  // verifyChallengeTxSigners is still authoritative; this blocks the worst case.
+  if (!isValidSep10Challenge(challengeXdr)) {
+    logApiError(logger, 'SEP-10 challenge validation', { error: 'unexpected challenge structure (sequence != 0?)' });
+    return null;
+  }
+  return challengeXdr;
 }
 
 export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void> {
@@ -70,26 +80,14 @@ export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void>
     // server-signed challenge tx, have the wallet counter-sign it, and send the
     // signed XDR to /auth/wallet.
     setAuthState({ step: 'signing_wallet_challenge', walletType: type });
+    // requestWalletChallenge now runs the SEP-10 validation internally (so custom
+    // providers get it too) and returns null on a missing OR malformed challenge.
     const challengeXdr = await requestWalletChallenge(clientSessionId, address, deps);
     if (!challengeXdr) {
       setAuthState({
         step: 'error',
         previousStep: 'signing_wallet_challenge',
-        message: 'Failed to obtain wallet challenge',
-        errorCode: AUTH_ERROR_CODES.WALLET_AUTH_FAILED,
-      });
-      return;
-    }
-    // Defense-in-depth before signing: refuse anything that isn't a real SEP-10
-    // challenge (e.g. a live, submittable tx with sequence != 0 slipped in by a
-    // compromised/MITM'd challenge endpoint). The authoritative check is still
-    // server-side; this just blocks the worst case before the user signs.
-    if (!isValidSep10Challenge(challengeXdr)) {
-      logApiError(logger, 'SEP-10 challenge validation', { error: 'unexpected challenge structure (sequence != 0?)' });
-      setAuthState({
-        step: 'error',
-        previousStep: 'signing_wallet_challenge',
-        message: 'Invalid wallet challenge',
+        message: 'Failed to obtain a valid wallet challenge',
         errorCode: AUTH_ERROR_CODES.WALLET_AUTH_FAILED,
       });
       return;
