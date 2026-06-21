@@ -122,6 +122,11 @@ export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void>
     // `clearSession()` which clears the adapter again.
     await deps.storeWalletAdapter(adapter, type);
   } catch (err) {
+    // A cancel (cancelLogin / destroy / new login) aborts the signal → withSignal
+    // rejects with an AbortError. Rethrow it so the flow's handler maps it to
+    // `idle`, instead of mislabeling a user cancel as WALLET_CONNECT_FAILED.
+    // (Mirrors how the other flows let AbortError propagate.)
+    if ((err as { name?: string })?.name === 'AbortError') throw err;
     logApiError(logger, 'wallet connect', { error: err });
     setAuthState({
       step: 'error',

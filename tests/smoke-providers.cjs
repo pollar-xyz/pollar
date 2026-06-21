@@ -105,12 +105,31 @@ async function waitFor(cond, timeoutMs = 1000) {
     },
   };
 
+  // A provider whose login parks at a gate, then writes state — used to prove a
+  // CANCELLED flow's late `ctx.setAuthState` is suppressed (C1 completion).
+  let releaseGate;
+  const gate = new Promise((r) => {
+    releaseGate = r;
+  });
+  const gatedProvider = {
+    id: 'gated',
+    async login(ctx) {
+      await gate;
+      ctx.setAuthState({
+        step: 'error',
+        previousStep: 'authenticating',
+        message: 'late write from a cancelled flow',
+        errorCode: sdk.AUTH_ERROR_CODES.UNEXPECTED_ERROR,
+      });
+    },
+  };
+
   console.log('── 1. Construction with custom providers ─────────────────────');
   const client = new sdk.PollarClient({
     apiKey,
     storage: sdk.createMemoryAdapter(),
     baseUrl: 'https://x.test',
-    providers: [recorderProvider, fakeGoogle],
+    providers: [recorderProvider, fakeGoogle, gatedProvider],
     // Stub the OAuth opener so the github built-in resolves without a popup.
     openAuthUrl: async () => {
       /* never calls getUrl → flow returns before authenticate() */
@@ -204,6 +223,18 @@ async function waitFor(cond, timeoutMs = 1000) {
     verifyThrew = true;
   }
   check('  verifyEmailCode is retryable after a generic failure (no throw)', verifyThrew === false);
+
+  console.log('\n── 10. a cancelled flow cannot clobber state (C1 completion) ──');
+  client.login({ provider: 'gated' }); // provider parks at the gate (signal captured)
+  client.cancelLogin(); // aborts the controller and sets idle
+  check('cancelLogin set idle', client.getAuthState().step === 'idle', client.getAuthState().step);
+  releaseGate(); // provider now calls ctx.setAuthState with an aborted signal
+  await new Promise((r) => setTimeout(r, 20));
+  check(
+    "  the cancelled flow's late setAuthState did NOT clobber idle",
+    client.getAuthState().step === 'idle',
+    client.getAuthState().step,
+  );
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} providers smoke: ${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);

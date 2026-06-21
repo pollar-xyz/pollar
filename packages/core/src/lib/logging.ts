@@ -36,18 +36,28 @@ export function redactBody(body: unknown): unknown {
 }
 
 /**
+ * Sensitive keys for a RESPONSE / error-cause envelope. Same as
+ * {@link SENSITIVE_BODY_KEYS} but WITHOUT `code` — in a request body `code` is
+ * the email OTP (a secret), but in a response/cause it's the diagnostic error
+ * code (`TX_FEE_LIMIT_EXCEEDED`, `INVALID_EMAIL_CODE`, …) that you need in logs.
+ * Token/PII/XDR keys stay masked.
+ */
+const SENSITIVE_RESPONSE_KEYS = new Set([...SENSITIVE_BODY_KEYS].filter((k) => k !== 'code'));
+
+/**
  * Like {@link redactBody} but RECURSIVE — masks sensitive keys at any depth. Use
  * for RESPONSE bodies / error causes, where token material is nested (e.g.
  * `{ content: { token: { accessToken, refreshToken } } }`) and the shallow
- * `redactBody` would leak it. Depth-bounded so a pathological/cyclic object
- * can't blow the stack.
+ * `redactBody` would leak it. Keeps the diagnostic `code` visible (see
+ * {@link SENSITIVE_RESPONSE_KEYS}). Depth-bounded so a pathological/cyclic
+ * object can't blow the stack.
  */
 export function redactDeep(value: unknown, depth = 0): unknown {
   if (depth > 8 || !value || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map((v) => redactDeep(v, depth + 1));
   const out: Record<string, unknown> = {};
   for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
-    out[key] = SENSITIVE_BODY_KEYS.has(key) ? '[redacted]' : redactDeep(v, depth + 1);
+    out[key] = SENSITIVE_RESPONSE_KEYS.has(key) ? '[redacted]' : redactDeep(v, depth + 1);
   }
   return out;
 }

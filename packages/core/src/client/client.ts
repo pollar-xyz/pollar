@@ -749,7 +749,7 @@ export class PollarClient {
     }
 
     if (error || !data) {
-      this._log.error('[PollarClient] /auth/refresh returned error', { error });
+      this._log.error('[PollarClient] /auth/refresh returned error', { error: redactDeep(error) });
       await this._clearSession();
       throw new Error('Refresh failed');
     }
@@ -1001,7 +1001,7 @@ export class PollarClient {
     }
 
     const controller = this._newController();
-    provider.login(this._providerContext(controller.signal), options).catch((err) => this._handleFlowError(err));
+    provider.login(this._providerContext(controller.signal), options).catch((err) => this._handleFlowError(err, controller.signal));
   }
 
   /**
@@ -1022,7 +1022,7 @@ export class PollarClient {
       throw new PollarFlowError(`Auth provider '${provider}' has no action '${action}'`);
     }
     const signal = this._loginController?.signal ?? this._newController().signal;
-    fn(this._providerContext(signal), payload).catch((err) => this._handleFlowError(err));
+    fn(this._providerContext(signal), payload).catch((err) => this._handleFlowError(err, signal));
   }
 
   // ─── Email OTP flow (3 steps) ─────────────────────────────────────────────
@@ -1033,7 +1033,7 @@ export class PollarClient {
       return;
     }
     const controller = this._newController();
-    initEmailSession(this._providerContext(controller.signal)).catch((err) => this._handleFlowError(err));
+    initEmailSession(this._providerContext(controller.signal)).catch((err) => this._handleFlowError(err, controller.signal));
   }
 
   sendEmailCode(email: string): void {
@@ -1049,7 +1049,7 @@ export class PollarClient {
     // other entry points. A bare `this._loginController!.signal` would throw a
     // TypeError if `entering_email` was reached without a controller.
     const signal = (this._loginController ?? this._newController()).signal;
-    sendEmailCode(email, clientSessionId, this._providerContext(signal)).catch((err) => this._handleFlowError(err));
+    sendEmailCode(email, clientSessionId, this._providerContext(signal)).catch((err) => this._handleFlowError(err, signal));
   }
 
   verifyEmailCode(code: string): void {
@@ -1076,7 +1076,7 @@ export class PollarClient {
 
     const controller = this._newController();
     verifyAndAuthenticate(code, clientSessionId, email, this._providerContext(controller.signal)).catch((err) =>
-      this._handleFlowError(err),
+      this._handleFlowError(err, controller.signal),
     );
   }
 
@@ -1088,7 +1088,7 @@ export class PollarClient {
       return;
     }
     const controller = this._newController();
-    loginWallet(type, this._flowDeps(controller.signal)).catch((err) => this._handleFlowError(err));
+    loginWallet(type, this._flowDeps(controller.signal)).catch((err) => this._handleFlowError(err, controller.signal));
   }
 
   /**
@@ -1103,7 +1103,7 @@ export class PollarClient {
       return;
     }
     const controller = this._newController();
-    smartWalletFlow(this._flowDeps(controller.signal), 'login').catch((err) => this._handleFlowError(err));
+    smartWalletFlow(this._flowDeps(controller.signal), 'login').catch((err) => this._handleFlowError(err, controller.signal));
   }
 
   /**
@@ -1118,7 +1118,7 @@ export class PollarClient {
       return;
     }
     const controller = this._newController();
-    smartWalletFlow(this._flowDeps(controller.signal), 'register').catch((err) => this._handleFlowError(err));
+    smartWalletFlow(this._flowDeps(controller.signal), 'register').catch((err) => this._handleFlowError(err, controller.signal));
   }
 
   // ─── Cancel ───────────────────────────────────────────────────────────────
@@ -2245,7 +2245,9 @@ export class PollarClient {
       basePath: this.basePath,
       apiKey: this.apiKey,
       logger: this._log,
-      setAuthState: this._setAuthState.bind(this),
+      // Use the signal-guarded wrapper from `deps` (see `_flowDeps`) so a
+      // cancelled/superseded provider flow can't clobber the active state.
+      setAuthState: deps.setAuthState,
       createSession: () => createAuthSession(deps),
       authenticate: (clientSessionId: string) => authenticate(clientSessionId, deps),
       requestChallenge: (clientSessionId: string, walletAddress: string) =>
@@ -2282,13 +2284,16 @@ export class PollarClient {
     });
 
     if (error || !data?.success) {
-      this._log.error('[PollarClient] External provider authentication failed', { error });
-      this._setAuthState({
-        step: 'error',
-        previousStep: this._authState.step,
-        message: 'External provider authentication failed',
-        errorCode: AUTH_ERROR_CODES.EXTERNAL_AUTH_FAILED,
-      });
+      this._log.error('[PollarClient] External provider authentication failed', { error: redactDeep(error) });
+      // Don't clobber the active flow if this one was cancelled/superseded.
+      if (!signal.aborted) {
+        this._setAuthState({
+          step: 'error',
+          previousStep: this._authState.step,
+          message: 'External provider authentication failed',
+          errorCode: AUTH_ERROR_CODES.EXTERNAL_AUTH_FAILED,
+        });
+      }
       return false;
     }
     return true;
@@ -2305,9 +2310,18 @@ export class PollarClient {
       // status endpoint instead. `isBrowser` is false in RN and SSR alike.
       useStreaming: isBrowser,
       signal,
-      setAuthState: this._setAuthState.bind(this),
-      storeSession: this._storeSession.bind(this),
-      clearSession: this._clearSession.bind(this),
+      // Suppress terminal writes from a flow that was CANCELLED or SUPERSEDED
+      // (its `signal` is aborted) so a late-resolving loser can't clobber the
+      // active flow's state or, via clearSession, tear down a newer session /
+      // reset the DPoP key. The active flow's signal is never aborted, so the
+      // happy path is unchanged. (Completes the C1 guard — covers error/clear
+      // writes, not just storeSession.)
+      setAuthState: (state: AuthState) => {
+        if (!signal.aborted) this._setAuthState(state);
+      },
+      storeSession: (session: PollarApplicationConfigContent) =>
+        signal.aborted ? Promise.resolve() : this._storeSession(session),
+      clearSession: () => (signal.aborted ? Promise.resolve() : this._clearSession()),
       getPublicJwk: () => this._keyManager.getPublicJwk(),
       resolveWalletAdapter: (id: WalletId) => this._resolveWalletAdapter(id),
       storeWalletAdapter: async (adapter: WalletAdapter, id: WalletId) => {
@@ -2363,7 +2377,11 @@ export class PollarClient {
     );
   }
 
-  private _handleFlowError(error: unknown): void {
+  private _handleFlowError(error: unknown, signal?: AbortSignal): void {
+    // A cancelled/superseded flow's signal is aborted — drop its terminal write
+    // so it can't clobber the active flow (e.g. flash `idle`/`error` over a new
+    // login). cancelLogin already set the right state.
+    if (signal?.aborted) return;
     if (error instanceof Error && error.name === 'AbortError') {
       this._log.debug('[PollarClient] Login cancelled');
       this._setAuthState({ step: 'idle' });

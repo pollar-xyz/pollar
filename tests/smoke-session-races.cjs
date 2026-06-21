@@ -183,7 +183,11 @@ globalThis.fetch = async (req) => {
     if (mock.txHistoryErrorWithToken) {
       mock.txHistoryErrorWithToken = false;
       return new Response(
-        JSON.stringify({ success: false, content: { token: { accessToken: 'SECRET_AT', refreshToken: 'SECRET_RT' } } }),
+        JSON.stringify({
+          success: false,
+          code: 'TX_FEE_LIMIT_EXCEEDED', // diagnostic — must stay visible in logs
+          content: { token: { accessToken: 'SECRET_AT', refreshToken: 'SECRET_RT' } },
+        }),
         { status: 500, headers: { 'content-type': 'application/json' } },
       );
     }
@@ -640,6 +644,7 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     const dump = JSON.stringify(logs);
     check('the logged response did NOT leak the access/refresh token', !dump.includes('SECRET_AT') && !dump.includes('SECRET_RT'), dump.slice(0, 160));
     check('  the sensitive token field was redacted', dump.includes('[redacted]'));
+    check('  but the diagnostic `code` is PRESERVED (not over-redacted)', dump.includes('TX_FEE_LIMIT_EXCEEDED'), dump.slice(0, 200));
     mock.txHistoryErrorWithToken = false;
     client.destroy();
   }
