@@ -1064,6 +1064,43 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     client.destroy();
   }
 
+  // ── EE. restoring a session whose access token is ALREADY expired refreshes
+  //       inline before surfacing it — no dead token in the verified:false window (F5)
+  console.log('\n── EE. expired-AT restore refreshes before surfacing (F5) ───');
+  {
+    mock.calls = [];
+    mock.refreshStatus = 200; // refresh succeeds → NEW_AT
+    const apiKey = 'pk_race_EE';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    await storage.set(
+      `pollar:${hash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: 'u',
+        status: 'CONSUMED',
+        // expiresAt in the PAST → the stored access token is already dead.
+        token: { accessToken: 'EXPIRED_AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) - 100 },
+        user: { ready: true },
+        wallet: { type: 'internal', address: null },
+      }),
+    );
+    const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+    await client.ready();
+    const st = client.getAuthState();
+    check(
+      'surfaced the REFRESHED token, not the expired one',
+      st.step === 'authenticated' && st.session?.token?.accessToken === 'NEW_AT',
+      JSON.stringify({ step: st.step, at: st.session?.token?.accessToken }),
+    );
+    check('  verified:true (refresh proved the session is alive)', st.verified === true, st.verified);
+    check(
+      '  skipped the redundant /auth/session/resume',
+      mock.calls.filter((c) => c.url.includes('/auth/session/resume')).length === 0,
+    );
+    client.destroy();
+  }
+
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
 })().catch((err) => {

@@ -446,7 +446,12 @@ export class PollarClient {
       onRequest: async ({ request }: { request: Request }) => {
         request.headers.set('x-pollar-api-key', self.apiKey);
         self._lastRequestAt = Date.now();
-        await self._initialized;
+        // Every request waits until the client is initialized — EXCEPT a
+        // /auth/refresh: the expired-AT restore (F5) issues one from WITHIN
+        // _restoreSession (before `_initialized` resolves), so awaiting here would
+        // deadlock. Post-init this is a no-op (already resolved), and the refresh
+        // has everything it needs by then (keyManager init'd, `_session` set).
+        if (!request.url.includes('/auth/refresh')) await self._initialized;
         // Cache the body before fetch() disturbs the stream — retries can't
         // call request.clone() once the body is consumed. Gate only on the
         // method: GET/HEAD carry no body. Do NOT gate on `request.body` — in
@@ -2534,6 +2539,26 @@ export class PollarClient {
         this._log.info('[PollarClient] Session token rotated (cross-tab); keeping verified');
         this._setAuthState({ step: 'authenticated', session: this._session, verified: true });
         this._scheduleNextRefresh();
+        return;
+      }
+
+      // F5: if the stored access token is ALREADY expired, refresh inline BEFORE
+      // surfacing the session — otherwise a consumer reading `session.token` in
+      // the optimistic `verified:false` window forwards a token we already know is
+      // dead. A successful refresh both rotates the token AND proves the session
+      // is alive server-side, so emit `verified:true` and skip the resume.
+      // `_doRefresh` already re-armed the proactive timer and, on failure, cleared
+      // the session (so we just return).
+      if (this._session.token.expiresAt * 1000 < Date.now()) {
+        this._log.info('[PollarClient] Restored session has an expired access token; refreshing before surfacing it');
+        try {
+          await this.refresh();
+        } catch {
+          return; // refresh failed → session was cleared; stay logged out
+        }
+        if (this._session) {
+          this._setAuthState({ step: 'authenticated', session: this._session, verified: true });
+        }
         return;
       }
 
