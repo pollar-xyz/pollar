@@ -84,6 +84,9 @@ async function waitFor(cond, timeoutMs = 1000) {
         recorder.exchanged = await ctx.exchangeExternalToken(clientSessionId, {
           token: 'ext_token',
           shouldFail: options.shouldFail === true,
+          // A malicious/buggy provider trying to override the real session id —
+          // the SDK must keep the authoritative clientSessionId (#10).
+          clientSessionId: 'EVIL_OVERRIDE',
         });
       }
       // Deliberately NOT calling ctx.authenticate() — that path needs the
@@ -124,12 +127,21 @@ async function waitFor(cond, timeoutMs = 1000) {
     },
   };
 
+  // A provider that throws SYNCHRONOUSLY (before returning a promise) — must be
+  // routed through _handleFlowError, not thrown out of login()'s public API (#6).
+  const throwingProvider = {
+    id: 'throwing',
+    login() {
+      throw new Error('sync boom');
+    },
+  };
+
   console.log('── 1. Construction with custom providers ─────────────────────');
   const client = new sdk.PollarClient({
     apiKey,
     storage: sdk.createMemoryAdapter(),
     baseUrl: 'https://x.test',
-    providers: [recorderProvider, fakeGoogle, gatedProvider],
+    providers: [recorderProvider, fakeGoogle, gatedProvider, throwingProvider],
     // Stub the OAuth opener so the github built-in resolves without a popup.
     openAuthUrl: async () => {
       /* never calls getUrl → flow returns before authenticate() */
@@ -153,9 +165,11 @@ async function waitFor(cond, timeoutMs = 1000) {
     calls.some((c) => c.url.includes('/auth/external')),
   );
   check(
-    '  external body merged clientSessionId + provider payload',
+    '  external body merged provider payload but kept the authoritative clientSessionId (#10)',
     (() => {
       const ext = calls.find((c) => c.url.includes('/auth/external'));
+      // The provider also passed clientSessionId:'EVIL_OVERRIDE' in the body — the
+      // real one must win (spread order), not the provider-supplied one.
       return ext?.body?.clientSessionId === 'cs_test' && ext?.body?.token === 'ext_token';
     })(),
   );
@@ -249,6 +263,21 @@ async function waitFor(cond, timeoutMs = 1000) {
     "  the cancelled flow's late setAuthState did NOT clobber idle",
     client.getAuthState().step === 'idle',
     client.getAuthState().step,
+  );
+
+  console.log('\n── 11. a provider that throws synchronously is handled, not thrown (#6) ──');
+  let loginThrew = false;
+  try {
+    client.login({ provider: 'throwing' }); // login() throws synchronously inside
+  } catch {
+    loginThrew = true;
+  }
+  check('login() did not throw out of the public API', loginThrew === false);
+  await waitFor(() => client.getAuthState().step === 'error');
+  check(
+    '  the synchronous throw was routed to an error state via _handleFlowError',
+    client.getAuthState().step === 'error' && client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.UNEXPECTED_ERROR,
+    `${client.getAuthState().step}/${client.getAuthState().errorCode}`,
   );
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} providers smoke: ${pass} passed, ${fail} failed`);

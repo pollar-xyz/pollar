@@ -932,6 +932,34 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     client.destroy();
   }
 
+  // ── AA. signAuthEntry on a SMART session returns an explicit error and does
+  //       NOT hit the custodial endpoint (#9)
+  console.log('\n── AA. smart-session signAuthEntry → explicit error, no custodial POST (#9) ──');
+  {
+    mock.calls = [];
+    const apiKey = 'pk_race_AA';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    await storage.set(
+      `pollar:${hash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'smart', address: 'Csmart' },
+      }),
+    );
+    const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+    await client.ready();
+    const outcome = await client.signAuthEntry('ENTRY_XDR', { validUntilLedger: 1000 });
+    check('smart signAuthEntry returned status:error', outcome?.status === 'error', JSON.stringify(outcome));
+    const custodial = mock.calls.filter((c) => c.url.includes('/tx/sign-auth-entry'));
+    check('  no custodial /tx/sign-auth-entry POST fired', custodial.length === 0, custodial.length);
+    client.destroy();
+  }
+
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
 })().catch((err) => {

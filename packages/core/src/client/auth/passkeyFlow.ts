@@ -76,6 +76,11 @@ export async function smartWalletFlow(deps: FlowDeps, mode: PasskeyMode): Promis
       }
     }
   } catch (err) {
+    // A cancel (cancelLogin / destroy / new login) aborts the signal → the
+    // WebAuthn/ceremony call rejects with an AbortError. Rethrow it so the flow's
+    // handler maps it to `idle`, instead of mislabeling a user cancel as
+    // PASSKEY_FAILED. (Mirrors walletFlow.)
+    if ((err as { name?: string })?.name === 'AbortError') throw err;
     logApiError(logger, 'passkey ceremony', { error: err });
     return failPasskey(setAuthState, undefined, 'Passkey login failed');
   }

@@ -34,8 +34,12 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
           : err.code === 'EXPIRED_CLIENT_ID'
             ? { message: 'Login session expired — please try again', errorCode: AUTH_ERROR_CODES.SESSION_EXPIRED }
             : { message: 'Login session is no longer valid — please try again', errorCode: AUTH_ERROR_CODES.SESSION_INVALID };
-      setAuthState({ step: 'error', previousStep: 'authenticating', message, errorCode });
+      // Clear the partial session FIRST, then emit the error. clearSession emits
+      // `idle`, so emitting the error AFTER makes it the final state a consumer
+      // sees — otherwise the error (LOGIN_TIMEOUT / SESSION_EXPIRED / …) is
+      // immediately overwritten by idle and lost.
       await clearSession();
+      setAuthState({ step: 'error', previousStep: 'authenticating', message, errorCode });
       return;
     }
     throw err;
@@ -59,13 +63,14 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
     // should surface as a clean wallet-mismatch error, not a raw TypeError.
     const sessionWallet = data.content.data?.providers?.wallet?.address;
     if (expectedWallet && sessionWallet !== expectedWallet) {
+      // Clear first, then emit error (see the LOGIN_TIMEOUT branch above).
+      await clearSession();
       setAuthState({
         step: 'error',
         previousStep: 'authenticating',
         message: 'Wallet mismatch: session wallet does not match connected wallet',
         errorCode: AUTH_ERROR_CODES.WALLET_AUTH_FAILED,
       });
-      await clearSession();
       return;
     }
     // The login was cancelled (cancelLogin) or superseded by a newer attempt
@@ -76,12 +81,13 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
     await storeSession(data.content);
   } else {
     if (!error) logApiError(logger, 'POST /auth/login', { body, data });
+    // Clear first, then emit error (see the LOGIN_TIMEOUT branch above).
+    await clearSession();
     setAuthState({
       step: 'error',
       previousStep: 'authenticating',
       message: 'Failed to load session',
       errorCode: AUTH_ERROR_CODES.AUTH_FAILED,
     });
-    await clearSession();
   }
 }

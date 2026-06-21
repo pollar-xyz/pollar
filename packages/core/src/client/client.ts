@@ -1011,7 +1011,12 @@ export class PollarClient {
     }
 
     const controller = this._newController();
-    provider.login(this._providerContext(controller.signal), options).catch((err) => this._handleFlowError(err, controller.signal));
+    // Wrap in Promise.resolve().then so a custom provider that throws
+    // SYNCHRONOUSLY (before returning its promise) is routed through
+    // _handleFlowError too, instead of escaping login()'s public API.
+    Promise.resolve()
+      .then(() => provider.login?.(this._providerContext(controller.signal), options))
+      .catch((err) => this._handleFlowError(err, controller.signal));
   }
 
   /**
@@ -1032,7 +1037,10 @@ export class PollarClient {
       throw new PollarFlowError(`Auth provider '${provider}' has no action '${action}'`);
     }
     const signal = this._activeLoginSignal();
-    fn(this._providerContext(signal), payload).catch((err) => this._handleFlowError(err, signal));
+    // See login() — guard against a custom action throwing synchronously.
+    Promise.resolve()
+      .then(() => fn(this._providerContext(signal), payload))
+      .catch((err) => this._handleFlowError(err, signal));
   }
 
   // ─── Email OTP flow (3 steps) ─────────────────────────────────────────────
@@ -1680,6 +1688,18 @@ export class PollarClient {
       }
     }
 
+    // Smart-wallet (C-address/passkey) sessions sign auth entries with their
+    // passkey credential, NOT the custodial endpoint. Standalone signAuthEntry
+    // doesn't run that ceremony, so return an explicit, actionable error instead
+    // of silently POSTing to /tx/sign-auth-entry (which would sign with the wrong
+    // key / 4xx). Mirrors the smart guards on the signing paths.
+    if (this._session?.wallet?.type === 'smart') {
+      return {
+        status: 'error',
+        details: 'signAuthEntry is not supported for smart (passkey) wallets in this SDK build.',
+      };
+    }
+
     // Custodial path: backend enforces the app's auth-entry policy, then signs.
     const address = this._session?.wallet?.address ?? '';
     try {
@@ -2305,7 +2325,8 @@ export class PollarClient {
     signal: AbortSignal,
   ): Promise<boolean> {
     const { data, error } = await this._api.POST('/auth/external', {
-      body: { clientSessionId, ...body } as ExternalAuthBody,
+      // clientSessionId LAST so a provider's body can't override the real one.
+      body: { ...body, clientSessionId } as ExternalAuthBody,
       signal,
     });
 
