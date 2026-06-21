@@ -965,6 +965,10 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     check('smart signAuthEntry returned status:error', outcome?.status === 'error', JSON.stringify(outcome));
     const custodial = mock.calls.filter((c) => c.url.includes('/tx/sign-auth-entry'));
     check('  no custodial /tx/sign-auth-entry POST fired', custodial.length === 0, custodial.length);
+    // signTx has the same smart guard (sibling of the signAuthEntry fix).
+    const signOutcome = await client.signTx('UNSIGNED_XDR');
+    check('  smart signTx returned status:error', signOutcome?.status === 'error', JSON.stringify(signOutcome));
+    check('  no custodial /tx/sign POST fired', mock.calls.filter((c) => /\/tx\/sign(\?|$)/.test(c.url)).length === 0);
     client.destroy();
   }
 
@@ -997,6 +1001,66 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
       JSON.stringify(outcome),
     );
     mock.txSubmitFail2xx = false;
+    client.destroy();
+  }
+
+  // ── CC. setTrustline rejects an out-of-range asset code up front, no network
+  console.log('\n── CC. setTrustline validates asset code length (1–12) ──────');
+  {
+    mock.calls = [];
+    const apiKey = 'pk_race_CC';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    await storage.set(
+      `pollar:${hash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'internal', address: 'Gtest' },
+      }),
+    );
+    const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+    await client.ready();
+    mock.calls = [];
+    const empty = await client.setTrustline({ code: '', issuer: 'Gissuer' });
+    const tooLong = await client.setTrustline({ code: 'ABCDEFGHIJKLM', issuer: 'Gissuer' }); // 13 chars
+    check('empty asset code → error', empty?.status === 'error', JSON.stringify(empty));
+    check('  >12 asset code → error', tooLong?.status === 'error', JSON.stringify(tooLong));
+    const txCalls = mock.calls.filter((c) => c.url.includes('/wallet/assets/trustline') || c.url.includes('/tx/'));
+    check('  no network call fired for an invalid code', txCalls.length === 0, txCalls.length);
+    client.destroy();
+  }
+
+  // ── DD. wallet_not_installed does NOT mint a server session up front (F7) ───
+  console.log('\n── DD. unavailable wallet → no orphaned /auth/session (F7) ───');
+  {
+    mock.calls = [];
+    const apiKey = 'pk_race_DD';
+    const storage = sdk.createMemoryAdapter();
+    const fakeAdapter = {
+      type: 'fake',
+      isAvailable: async () => false, // extension not installed
+      connect: async () => ({ address: 'G' }),
+      signTransaction: async () => ({ signedTxXdr: 'x' }),
+      signAuthEntry: async () => ({ signedAuthEntry: 'x' }),
+    };
+    const client = new sdk.PollarClient({
+      apiKey,
+      storage,
+      baseUrl: 'https://x.test',
+      logLevel: 'silent',
+      walletAdapter: () => fakeAdapter,
+    });
+    await client.ready();
+    mock.calls = [];
+    client.loginWallet('fake');
+    await waitFor(() => client.getAuthState().step === 'wallet_not_installed');
+    check('state → wallet_not_installed', client.getAuthState().step === 'wallet_not_installed');
+    const sessionCalls = mock.calls.filter((c) => /\/auth\/session(\?|$)/.test(c.url));
+    check('  no /auth/session minted for an uninstalled wallet (F7)', sessionCalls.length === 0, sessionCalls.length);
     client.destroy();
   }
 

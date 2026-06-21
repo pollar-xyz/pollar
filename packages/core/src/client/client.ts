@@ -1455,6 +1455,12 @@ export class PollarClient {
       // Passkey C-addresses hold SAC tokens — they don't use classic trustlines.
       return { status: 'error', details: 'Trustlines do not apply to smart wallets' };
     }
+    // A Stellar asset code is 1–12 chars (alphanum4 ≤4, alphanum12 5–12). Reject
+    // out-of-range codes up front — otherwise the self-paid path would emit an
+    // empty-code alphanum4 or an invalid >12 alphanum12 and the backend 400s.
+    if (asset.code.length < 1 || asset.code.length > 12) {
+      return { status: 'error', details: 'Asset code must be 1–12 characters' };
+    }
 
     // Sponsored custodial path: the platform co-signs and the app pays. Only an
     // app-configured asset on an internal (custodial) wallet qualifies — the
@@ -1610,6 +1616,17 @@ export class PollarClient {
         });
         return { status: 'error', ...(details && { details }) };
       }
+    }
+
+    // Smart-wallet (C-address/passkey) sessions sign via signAndSubmitTx
+    // (_signSubmitSmart's passkey ceremony), NOT the custodial endpoint. A
+    // standalone signTx can't run that ceremony, so return an explicit error
+    // instead of POSTing to /tx/sign with the wrong key. Mirrors signAuthEntry.
+    if (this._session?.wallet?.type === 'smart') {
+      return {
+        status: 'error',
+        details: 'signTx is not supported for smart (passkey) wallets; use signAndSubmitTx.',
+      };
     }
 
     // Custodial path: backend signs and returns the XDR + idempotencyKey.

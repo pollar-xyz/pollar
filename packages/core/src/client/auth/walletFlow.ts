@@ -53,10 +53,10 @@ export async function requestWalletChallenge(
 export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void> {
   const { api, logger, signal, setAuthState } = deps;
 
-  const clientSessionId = await createAuthSession(deps);
-  if (!clientSessionId) return;
-
   let connectedWallet: string;
+  // Assigned after the wallet is confirmed installed (see below) — declared here
+  // so it's in scope for the `authenticate()` call after the try/catch.
+  let clientSessionId: string;
   // Track the phase so the catch reports where the failure ACTUALLY happened
   // (connect vs sign vs the /auth/wallet call) instead of always blaming
   // 'connecting_wallet'.
@@ -76,6 +76,13 @@ export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void>
       setAuthState({ step: 'wallet_not_installed', walletType: type });
       return;
     }
+
+    // Mint the server session only AFTER confirming the wallet is installed, so
+    // tapping "connect" without the extension doesn't orphan an unauthenticated
+    // /auth/session each time.
+    const sid = await createAuthSession(deps);
+    if (!sid) return;
+    clientSessionId = sid;
 
     const { address } = await withSignal(adapter.connect(), signal);
     connectedWallet = address;
