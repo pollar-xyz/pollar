@@ -144,12 +144,21 @@ async function waitFor(cond, timeoutMs = 1000) {
   check('custom provider.login() was invoked', recorder.ctx !== null);
   check('  options passed through verbatim', recorder.options?.foo === 'bar');
   check('  ctx.createSession() returned the backend clientSessionId', recorder.sessionId === 'cs_test');
-  check('  POST /auth/session fired', calls.some((c) => c.url.endsWith('/auth/session')));
-  check('  ctx.exchangeExternalToken() posted /auth/external', calls.some((c) => c.url.includes('/auth/external')));
-  check('  external body merged clientSessionId + provider payload', (() => {
-    const ext = calls.find((c) => c.url.includes('/auth/external'));
-    return ext?.body?.clientSessionId === 'cs_test' && ext?.body?.token === 'ext_token';
-  })());
+  check(
+    '  POST /auth/session fired',
+    calls.some((c) => c.url.endsWith('/auth/session')),
+  );
+  check(
+    '  ctx.exchangeExternalToken() posted /auth/external',
+    calls.some((c) => c.url.includes('/auth/external')),
+  );
+  check(
+    '  external body merged clientSessionId + provider payload',
+    (() => {
+      const ext = calls.find((c) => c.url.includes('/auth/external'));
+      return ext?.body?.clientSessionId === 'cs_test' && ext?.body?.token === 'ext_token';
+    })(),
+  );
   check('  exchange returned true on success', recorder.exchanged === true);
 
   console.log('\n── 3. context exposes only the curated facade ────────────────');
@@ -179,11 +188,17 @@ async function waitFor(cond, timeoutMs = 1000) {
   calls.length = 0;
   client.login({ provider: 'email', email: 'a@b.test' });
   await waitFor(() => calls.some((c) => c.url.includes('/auth/email')));
-  check('email login created a session', calls.some((c) => c.url.endsWith('/auth/session')));
-  check('  POST /auth/email fired with the address', (() => {
-    const e = calls.find((c) => c.url.includes('/auth/email'));
-    return e?.body?.email === 'a@b.test';
-  })());
+  check(
+    'email login created a session',
+    calls.some((c) => c.url.endsWith('/auth/session')),
+  );
+  check(
+    '  POST /auth/email fired with the address',
+    (() => {
+      const e = calls.find((c) => c.url.includes('/auth/email'));
+      return e?.body?.email === 'a@b.test';
+    })(),
+  );
 
   console.log('\n── 7. providerAction dispatches; unknowns are rejected ───────');
   client.providerAction('recorder', 'ping', { hi: 1 });

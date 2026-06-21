@@ -199,7 +199,10 @@ globalThis.fetch = async (req) => {
     const respHeaders = {};
     if (mock.serverDateOverride) respHeaders.Date = mock.serverDateOverride;
     else if (mock.serverDateOffsetSec) respHeaders.Date = new Date(Date.now() + mock.serverDateOffsetSec * 1000).toUTCString();
-    return new Response(JSON.stringify({ success: true, content: { ok: true, cursor } }), { status: 200, headers: respHeaders });
+    return new Response(JSON.stringify({ success: true, content: { ok: true, cursor } }), {
+      status: 200,
+      headers: respHeaders,
+    });
   }
   if (req.url.includes('/tx/build')) {
     return new Response(JSON.stringify({ success: true, content: { marker: mock.buildMarker, amount: '5' } }), { status: 200 });
@@ -239,7 +242,11 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     await rp;
 
     const persisted = JSON.parse(await storage.get(sessionKey));
-    check('refresh did NOT write the rotated token after destroy', persisted.token.accessToken === 'AT', persisted.token.accessToken);
+    check(
+      'refresh did NOT write the rotated token after destroy',
+      persisted.token.accessToken === 'AT',
+      persisted.token.accessToken,
+    );
 
     const before = mock.calls.length;
     await new Promise((r) => setTimeout(r, 30));
@@ -267,7 +274,10 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     const a = client.getAuthState();
     const b = client.getAuthState();
     check('two getAuthState() calls return distinct objects', a !== b);
-    check('  and distinct session objects', a.step === 'authenticated' && b.step === 'authenticated' && a.session !== b.session);
+    check(
+      '  and distinct session objects',
+      a.step === 'authenticated' && b.step === 'authenticated' && a.session !== b.session,
+    );
 
     // Attempt to corrupt the live session through the returned object (token AND
     // the nested user object — R1: the clone must cover `user` too).
@@ -280,7 +290,10 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     const auth = mock.calls.find((c) => c.url.includes('/tx/history'))?.headers.authorization;
     check('request still signs with the real token, not the mutated one', auth === 'DPoP AT', auth);
     const live = client.getAuthState();
-    check('mutating the returned session.user did not corrupt live state', live.step === 'authenticated' && live.session.user.ready === true);
+    check(
+      'mutating the returned session.user did not corrupt live state',
+      live.step === 'authenticated' && live.session.user.ready === true,
+    );
     client.destroy();
   }
 
@@ -302,7 +315,11 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     await new Promise((r) => setTimeout(r, 200)); // let the (aborted) resume settle
 
     check('final auth state is idle', client.getAuthState().step === 'idle', client.getAuthState().step);
-    check('  no authenticated emission after logout went idle', states.lastIndexOf('idle') === states.length - 1, JSON.stringify(states));
+    check(
+      '  no authenticated emission after logout went idle',
+      states.lastIndexOf('idle') === states.length - 1,
+      JSON.stringify(states),
+    );
     mock.resumeDelayMs = 0;
     client.destroy();
   }
@@ -345,7 +362,9 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     const refreshCalls = mock.calls.filter((c) => c.url.includes('/auth/refresh'));
     check('nonce challenge triggered exactly one retry (2 tx calls)', txCalls.length === 2, txCalls.length);
     check('  classified as nonce, NOT token-expiry → no spurious refresh', refreshCalls.length === 0, refreshCalls.length);
-    const retryNonce = txCalls[1]?.headers.dpop ? JSON.parse(Buffer.from(txCalls[1].headers.dpop.split('.')[1], 'base64url').toString()).nonce : null;
+    const retryNonce = txCalls[1]?.headers.dpop
+      ? JSON.parse(Buffer.from(txCalls[1].headers.dpop.split('.')[1], 'base64url').toString()).nonce
+      : null;
     check('  retry proof carries the server nonce', retryNonce === 'srv-nonce-1', retryNonce);
     client.destroy();
   }
@@ -393,7 +412,11 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
     await client.ready();
 
-    check('legacy session is NOT restored (user must re-login)', client.getAuthState().step === 'idle', client.getAuthState().step);
+    check(
+      'legacy session is NOT restored (user must re-login)',
+      client.getAuthState().step === 'idle',
+      client.getAuthState().step,
+    );
     check('  no session written under the new namespace yet', (await storage.get(`pollar:${newHash}:session`)) === null);
     client.destroy();
   }
@@ -413,7 +436,11 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     dispatchStorageEvent(sessionKey, null); // cross-tab logout (removal)
     await new Promise((r) => setTimeout(r, 40));
 
-    check('cross-tab logout took this tab to idle (despite stale local storage)', client.getAuthState().step === 'idle', client.getAuthState().step);
+    check(
+      'cross-tab logout took this tab to idle (despite stale local storage)',
+      client.getAuthState().step === 'idle',
+      client.getAuthState().step,
+    );
     client.destroy();
   }
 
@@ -467,7 +494,11 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
       threw = true;
     });
     check('refresh() rejected on a non-finite expiresAt', threw === true);
-    check('  malformed token did not become the session (cleared to idle)', client.getAuthState().step === 'idle', client.getAuthState().step);
+    check(
+      '  malformed token did not become the session (cleared to idle)',
+      client.getAuthState().step === 'idle',
+      client.getAuthState().step,
+    );
     mock.refreshExpiresAt = undefined;
     client.destroy();
   }
@@ -483,7 +514,11 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     await Promise.all([pA, pB]);
     await new Promise((r) => setTimeout(r, 60)); // let A's late response land + be dropped
     const st = client.getTxHistoryState();
-    check('latest fetch (B) won; stale slow response (A) dropped', st.step === 'loaded' && st.params.cursor === 'B', JSON.stringify(st.params ?? st.step));
+    check(
+      'latest fetch (B) won; stale slow response (A) dropped',
+      st.step === 'loaded' && st.params.cursor === 'B',
+      JSON.stringify(st.params ?? st.step),
+    );
     mock.txHistoryDelays = {};
     client.destroy();
   }
@@ -518,7 +553,11 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     await waitFor(() => mock.calls.some((c) => c.url.includes('/auth/session/resume')));
     await new Promise((r) => setTimeout(r, 40));
     const s = client.getAuthState();
-    check('a transient 503 from resume did NOT log out (stays optimistic)', s.step === 'authenticated' && s.verified === false, s.step);
+    check(
+      'a transient 503 from resume did NOT log out (stays optimistic)',
+      s.step === 'authenticated' && s.verified === false,
+      s.step,
+    );
     mock.resumeStatus = 200;
     client.destroy();
   }
@@ -556,7 +595,11 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     await client.refresh();
     const refreshCalls = mock.calls.filter((c) => c.url.includes('/auth/refresh'));
     check('refresh retried after the nonce challenge (2 calls)', refreshCalls.length === 2, refreshCalls.length);
-    check('  the retry carried a non-empty body (refreshToken not dropped)', !!refreshCalls[1] && refreshCalls[1].body.includes('refreshToken'), refreshCalls[1]?.body);
+    check(
+      '  the retry carried a non-empty body (refreshToken not dropped)',
+      !!refreshCalls[1] && refreshCalls[1].body.includes('refreshToken'),
+      refreshCalls[1]?.body,
+    );
     client.destroy();
   }
 
@@ -581,10 +624,23 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
   {
     const warns = [];
     const logger = { error() {}, warn: (...a) => warns.push(a.join(' ')), info() {}, debug() {} };
-    const c1 = new sdk.PollarClient({ apiKey: 'pk_dup', storage: sdk.createMemoryAdapter(), baseUrl: 'https://x.test', logger });
-    const c2 = new sdk.PollarClient({ apiKey: 'pk_dup', storage: sdk.createMemoryAdapter(), baseUrl: 'https://x.test', logger });
+    const c1 = new sdk.PollarClient({
+      apiKey: 'pk_dup',
+      storage: sdk.createMemoryAdapter(),
+      baseUrl: 'https://x.test',
+      logger,
+    });
+    const c2 = new sdk.PollarClient({
+      apiKey: 'pk_dup',
+      storage: sdk.createMemoryAdapter(),
+      baseUrl: 'https://x.test',
+      logger,
+    });
     await Promise.all([c1.ready(), c2.ready()]);
-    check('a second client for the same apiKey logged a warning', warns.some((w) => w.includes('Another PollarClient is already active')));
+    check(
+      'a second client for the same apiKey logged a warning',
+      warns.some((w) => w.includes('Another PollarClient is already active')),
+    );
     c1.destroy();
     c2.destroy();
   }
@@ -642,9 +698,17 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     mock.txHistoryErrorWithToken = true; // next /tx/history → 500 with token in the body
     await client.fetchTxHistory();
     const dump = JSON.stringify(logs);
-    check('the logged response did NOT leak the access/refresh token', !dump.includes('SECRET_AT') && !dump.includes('SECRET_RT'), dump.slice(0, 160));
+    check(
+      'the logged response did NOT leak the access/refresh token',
+      !dump.includes('SECRET_AT') && !dump.includes('SECRET_RT'),
+      dump.slice(0, 160),
+    );
     check('  the sensitive token field was redacted', dump.includes('[redacted]'));
-    check('  but the diagnostic `code` is PRESERVED (not over-redacted)', dump.includes('TX_FEE_LIMIT_EXCEEDED'), dump.slice(0, 200));
+    check(
+      '  but the diagnostic `code` is PRESERVED (not over-redacted)',
+      dump.includes('TX_FEE_LIMIT_EXCEEDED'),
+      dump.slice(0, 200),
+    );
     mock.txHistoryErrorWithToken = false;
     client.destroy();
   }
@@ -710,12 +774,20 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     mock.buildMarker = 'TX_A';
     await client.buildTx('payment', { amount: '5' }); // → state 'built' with buildData TX_A
     await client.submitTx('XDR_A'); // → terminal 'success' carrying buildData TX_A
-    check('tx A reached success carrying its buildData', client.getTransactionState()?.buildData?.marker === 'TX_A', JSON.stringify(client.getTransactionState()?.buildData));
+    check(
+      'tx A reached success carrying its buildData',
+      client.getTransactionState()?.buildData?.marker === 'TX_A',
+      JSON.stringify(client.getTransactionState()?.buildData),
+    );
 
     // A NEW standalone submit (no preceding buildTx) must NOT inherit TX_A's buildData.
     await client.submitTx('XDR_B');
     const st = client.getTransactionState();
-    check('a standalone submit did NOT inherit the finished tx buildData', st?.buildData?.marker !== 'TX_A', JSON.stringify(st?.buildData));
+    check(
+      'a standalone submit did NOT inherit the finished tx buildData',
+      st?.buildData?.marker !== 'TX_A',
+      JSON.stringify(st?.buildData),
+    );
     mock.buildMarker = 'BUILD';
     client.destroy();
   }
@@ -741,9 +813,17 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
     await client.ready();
     await client.refreshBalance();
-    check('balance store loaded before logout', client.getWalletBalanceState().step === 'loaded', client.getWalletBalanceState().step);
+    check(
+      'balance store loaded before logout',
+      client.getWalletBalanceState().step === 'loaded',
+      client.getWalletBalanceState().step,
+    );
     await client.logout();
-    check("  logout reset the balance store to 'idle' (no stale previous-user data)", client.getWalletBalanceState().step === 'idle', client.getWalletBalanceState().step);
+    check(
+      "  logout reset the balance store to 'idle' (no stale previous-user data)",
+      client.getWalletBalanceState().step === 'idle',
+      client.getWalletBalanceState().step,
+    );
     client.destroy();
   }
 
@@ -788,7 +868,11 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     });
     await client.ready();
     await client.signAuthEntry('ENTRY_XDR', { validUntilLedger: 1000 });
-    check('signAuthEntry passed a networkPassphrase to the adapter', !!captured[0]?.networkPassphrase, JSON.stringify(captured[0]));
+    check(
+      'signAuthEntry passed a networkPassphrase to the adapter',
+      !!captured[0]?.networkPassphrase,
+      JSON.stringify(captured[0]),
+    );
     const testnetPp = captured[0]?.networkPassphrase;
     client.setNetwork('mainnet');
     await client.signAuthEntry('ENTRY_XDR', { validUntilLedger: 1000 });
