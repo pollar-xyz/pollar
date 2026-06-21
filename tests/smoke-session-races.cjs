@@ -115,6 +115,9 @@ const mock = {
   // HTTP status for /auth/session/resume (200 success; 403/410 = revoked;
   // 5xx/404 = transient/not-found).
   resumeStatus: 200,
+  // When non-zero, /tx/history responses carry a `Date` header offset from local
+  // time by this many seconds, to exercise DPoP clock-skew compensation.
+  serverDateOffsetSec: 0,
 };
 
 globalThis.fetch = async (req) => {
@@ -157,7 +160,11 @@ globalThis.fetch = async (req) => {
     const cursor = new URL(req.url).searchParams.get('cursor');
     const d = (cursor && mock.txHistoryDelays[cursor]) || 0;
     if (d) await delay(d, req.signal);
-    return new Response(JSON.stringify({ success: true, content: { ok: true, cursor } }), { status: 200 });
+    const respHeaders = {};
+    if (mock.serverDateOffsetSec) {
+      respHeaders.Date = new Date(Date.now() + mock.serverDateOffsetSec * 1000).toUTCString();
+    }
+    return new Response(JSON.stringify({ success: true, content: { ok: true, cursor } }), { status: 200, headers: respHeaders });
   }
   // tx/history, logout, everything else.
   return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
@@ -472,6 +479,29 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     const s = client.getAuthState();
     check('a transient 503 from resume did NOT log out (stays optimistic)', s.step === 'authenticated' && s.verified === false, s.step);
     mock.resumeStatus = 200;
+    client.destroy();
+  }
+
+  // ── O. DPoP iat compensates for a skewed server clock (#1) ─────────────────
+  console.log('\n── O. DPoP iat learns clock offset from Date header (#1) ─────');
+  {
+    const decodeIat = (dpop) => JSON.parse(Buffer.from(dpop.split('.')[1], 'base64url').toString()).iat;
+    const txDpop = () => mock.calls.find((c) => c.url.includes('/tx/history'))?.headers.dpop;
+    mock.calls = [];
+    const { client } = await makeClient('pk_race_O');
+    mock.serverDateOffsetSec = 1000; // server clock reads 1000s "ahead" of this device
+
+    mock.calls = [];
+    await client.fetchTxHistory(); // req1: offset not learned yet → iat ≈ local now
+    const iat1 = decodeIat(txDpop());
+    mock.calls = [];
+    await client.fetchTxHistory(); // req2: offset learned from req1's Date header
+    const iat2 = decodeIat(txDpop());
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    check('first proof iat ≈ local time (offset not yet learned)', Math.abs(iat1 - nowSec) < 5, iat1 - nowSec);
+    check('second proof iat shifted ≈ +1000s toward server time', Math.abs(iat2 - (nowSec + 1000)) < 5, iat2 - nowSec);
+    mock.serverDateOffsetSec = 0;
     client.destroy();
   }
 

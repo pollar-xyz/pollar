@@ -45,6 +45,13 @@ export interface BuildProofArgs {
    * 9449 §8.
    */
   nonce?: string;
+  /**
+   * Seconds to add to the local clock when stamping `iat`, to compensate for a
+   * skewed device clock (`serverTime − localTime`, learned from the `Date`
+   * response header). Defaults to 0. Keeps `iat` inside the server's acceptance
+   * window even when the device clock is wrong, avoiding proof rejections.
+   */
+  clockOffsetSec?: number;
 }
 
 interface ProofHeader {
@@ -79,7 +86,7 @@ export async function buildProof(args: BuildProofArgs, keyManager: KeyManager): 
     jti: randomUUID(),
     htm: args.htm.toUpperCase(),
     htu: normalizeHtu(args.htu),
-    iat: Math.floor(Date.now() / 1000),
+    iat: Math.floor(Date.now() / 1000) + (args.clockOffsetSec ?? 0),
   };
 
   if (args.accessToken !== undefined && args.accessToken !== '') {

@@ -144,6 +144,14 @@ export class PollarClient {
   /** Last `DPoP-Nonce` we saw from a server response. Carried into the next proof. */
   private _dpopNonce: string | null = null;
   /**
+   * Clock skew compensation, in seconds (`serverTime − localTime`), learned from
+   * the `Date` header of every server response and added to the DPoP proof
+   * `iat`. Keeps proofs inside the server's acceptance window on devices whose
+   * clock is wrong, and self-heals when the clock changes mid-session — so a
+   * skewed clock can't trigger a proof-rejection → refresh-failure → logout loop.
+   */
+  private _clockOffsetSec = 0;
+  /**
    * Snapshot of each in-flight request's body, taken in `onRequest` before
    * `fetch()` consumes the stream. Needed because `Request.clone()` throws
    * once the body is disturbed, so the auto-retry path (DPoP nonce challenge
@@ -504,6 +512,17 @@ export class PollarClient {
         const newNonce = response.headers.get('DPoP-Nonce');
         if (newNonce) self._dpopNonce = newNonce;
 
+        // Learn the clock skew from the server's `Date` header BEFORE any retry
+        // or refresh below, so a proof rejected for a bad `iat` is rebuilt with
+        // the corrected offset on the very next attempt (no logout loop). Every
+        // HTTP response carries `Date`; we recompute each time so a clock that
+        // changes mid-session self-heals.
+        const serverDate = response.headers.get('Date');
+        if (serverDate) {
+          const serverSec = Math.floor(Date.parse(serverDate) / 1000);
+          if (Number.isFinite(serverSec)) self._clockOffsetSec = serverSec - Math.floor(Date.now() / 1000);
+        }
+
         if (response.status !== 401) return self._logHttp(request, response);
 
         // Case-insensitive: RFC 9449 carries this as `error="use_dpop_nonce"`,
@@ -614,6 +633,7 @@ export class PollarClient {
           htu,
           ...(accessToken ? { accessToken } : {}),
           ...(this._dpopNonce !== null ? { nonce: this._dpopNonce } : {}),
+          clockOffsetSec: this._clockOffsetSec,
         },
         this._keyManager,
       );
@@ -1522,7 +1542,11 @@ export class PollarClient {
     const buildData = this._currentBuildData();
     this._setTransactionState({ step: 'signing', ...(buildData && { buildData }) });
 
-    if (this._walletAdapter) {
+    // A smart-wallet session signs via the passkey path (signAndSubmitTx →
+    // _signSubmitSmart), never an external adapter. Guard on the session type so
+    // a stale/foreign `_walletAdapter` can't hijack signing — consistent with
+    // the type-first ordering in signAndSubmitTx/buildAndSignAndSubmitTx.
+    if (this._walletAdapter && this._session?.wallet?.type !== 'smart') {
       const accountToSign = this._session?.wallet?.address;
       const signOpts = accountToSign
         ? { networkPassphrase: this._networkPassphrase(), accountToSign }
@@ -1605,8 +1629,10 @@ export class PollarClient {
    *   path, where the provider sets its own expiration.
    */
   async signAuthEntry(entryXdr: string, options: { validUntilLedger: number }): Promise<SignAuthEntryOutcome> {
-    // External adapter: the provider signs the entry directly.
-    if (this._walletAdapter) {
+    // External adapter: the provider signs the entry directly. Skip it for a
+    // smart-wallet session (passkey-signed) so a stale/foreign adapter can't
+    // hijack signing — consistent with the type-first signing paths.
+    if (this._walletAdapter && this._session?.wallet?.type !== 'smart') {
       const accountToSign = this._session?.wallet?.address;
       try {
         const { signedAuthEntry } = await this._walletAdapter.signAuthEntry(
@@ -2349,7 +2375,11 @@ export class PollarClient {
     const prevSession = this._session;
     this._session = await readStorage(this._storage, this.apiKeyHash, this._log);
     if (this._session) {
-      const storedType = await readWalletType(this._storage, this.apiKeyHash);
+      // Only restore an external adapter for a session that actually signs via
+      // one. A `smart` session is passkey-signed; restoring an adapter for it
+      // (from a stale walletType row) would leave `_walletAdapter` set on a
+      // smart session and could mis-route signing.
+      const storedType = this._session.wallet?.type === 'smart' ? null : await readWalletType(this._storage, this.apiKeyHash);
       if (storedType) {
         try {
           this._walletAdapter = await this._resolveWalletAdapter(storedType);
