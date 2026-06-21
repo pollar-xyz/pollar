@@ -27,8 +27,10 @@ globalThis.window = {
     winListeners[type]?.delete(cb);
   },
 };
-function dispatchStorageEvent(key) {
-  for (const cb of winListeners.storage ?? []) cb({ key });
+function dispatchStorageEvent(key, newValue = null) {
+  // newValue === null mimics a cross-tab remove/clear (logout); a string mimics
+  // a cross-tab set (login / token rotation).
+  for (const cb of winListeners.storage ?? []) cb({ key, newValue });
 }
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 
@@ -285,8 +287,9 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     mock.calls = [];
 
     // Simulate another tab refreshing: same user/session, rotated access token.
-    await storage.set(sessionKey, freshSession('ROTATED_AT'));
-    dispatchStorageEvent(sessionKey);
+    const rotated = freshSession('ROTATED_AT');
+    await storage.set(sessionKey, rotated);
+    dispatchStorageEvent(sessionKey, rotated); // set event carries the new value
     await new Promise((r) => setTimeout(r, 60));
 
     check('verified stayed true (no flap to false)', client.getAuthState().verified === true);
@@ -317,6 +320,25 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
 
     check('legacy session is NOT restored (user must re-login)', client.getAuthState().step === 'idle', client.getAuthState().step);
     check('  no session written under the new namespace yet', (await storage.get(`pollar:${newHash}:session`)) === null);
+    client.destroy();
+  }
+
+  // ── I. cross-tab logout propagates even if this tab can't re-read storage ──
+  console.log('\n── I. cross-tab logout propagates when storage degraded ──────');
+  {
+    mock.calls = [];
+    const { client, storage, sessionKey } = await makeClient('pk_race_I');
+    await waitFor(() => client.getAuthState().verified === true);
+
+    // Simulate a degraded tab: its storage STILL holds the session (a re-read
+    // would keep it logged in). Another tab logs out → the session key is removed
+    // from real localStorage → the `storage` event fires with newValue === null.
+    // We deliberately do NOT clear this tab's storage.
+    check('precondition: this tab still has the session in storage', (await storage.get(sessionKey)) !== null);
+    dispatchStorageEvent(sessionKey, null); // cross-tab logout (removal)
+    await new Promise((r) => setTimeout(r, 40));
+
+    check('cross-tab logout took this tab to idle (despite stale local storage)', client.getAuthState().step === 'idle', client.getAuthState().step);
     client.destroy();
   }
 

@@ -330,9 +330,27 @@ export class PollarClient {
     if (isBrowser) {
       const sessionKey = sessionStorageKey(this._apiKeyHash);
       const handler = (e: StorageEvent): void => {
-        if (e.key === sessionKey) {
-          this._restoreSession().catch((err) => this._log.error('[PollarClient] Cross-tab restore failed', err));
+        // `localStorage.clear()` fires with key === null; a targeted set/remove
+        // fires with key === sessionKey. Ignore unrelated keys.
+        if (e.key !== null && e.key !== sessionKey) return;
+
+        // Cross-tab LOGOUT: the session key was removed (newValue === null) or
+        // all storage was cleared (key === null). Propagate the logout straight
+        // from the event WITHOUT re-reading storage — a tab whose adapter
+        // degraded to memory (Safari private mode, quota) still holds its own
+        // copy of the session, so a re-read would miss the logout and keep using
+        // the now-revoked token.
+        if (e.key === null || e.newValue === null) {
+          if (this._authState.step !== 'idle') {
+            void this._clearSession().catch((err) => this._log.error('[PollarClient] Cross-tab logout failed', err));
+          }
+          return;
         }
+
+        // Cross-tab LOGIN / token rotation: re-sync from storage (this also
+        // keeps a verified session verified on a pure rotation — see
+        // _restoreSession's same-session fast path).
+        this._restoreSession().catch((err) => this._log.error('[PollarClient] Cross-tab restore failed', err));
       };
       window.addEventListener('storage', handler);
       this._storageEventHandler = handler;
