@@ -884,6 +884,54 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     client.destroy();
   }
 
+  // ── Z. a FAILING refresh of the OLD session can't wipe a cross-tab-restored
+  //      NEW session (#5 gen-guarded clearSession + #2 restore bumps generation)
+  console.log('\n── Z. failing old-session refresh keeps the new session (#2+#5) ──');
+  {
+    mock.calls = [];
+    mock.refreshDelayMs = 80;
+    mock.refreshStatus = 500; // the in-flight refresh of session A will FAIL
+    const { client, storage, sessionKey } = await makeClient('pk_race_Z');
+    await waitFor(() => client.getAuthState().verified === true);
+    mock.calls = [];
+
+    // Session A ('cs') refresh goes on the wire and will fail in ~80ms.
+    const rp = client.refresh().catch(() => {}); // _doRefresh captures gen G now
+
+    // Meanwhile another tab logs in as a DIFFERENT user (different
+    // clientSessionId) → the cross-tab restore must bump the generation (#2).
+    const sessionB = JSON.stringify({
+      clientSessionId: 'cs2',
+      userId: 'u2',
+      status: 'CONSUMED',
+      token: { accessToken: 'B_AT', refreshToken: 'B_RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+      user: { ready: true },
+      wallet: { type: 'internal', address: null },
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    await storage.set(sessionKey, sessionB);
+    dispatchStorageEvent(sessionKey, sessionB);
+    await waitFor(() => client.getAuthState().session?.clientSessionId === 'cs2');
+
+    await rp; // session-A refresh now rejects (500) → must NOT clear session B
+    await new Promise((r) => setTimeout(r, 20));
+
+    check(
+      'new session (cs2) survived the failing old-session refresh',
+      client.getAuthState().step === 'authenticated' && client.getAuthState().session?.clientSessionId === 'cs2',
+      `${client.getAuthState().step}/${client.getAuthState().session?.clientSessionId}`,
+    );
+    const persisted = JSON.parse((await storage.get(sessionKey)) ?? 'null');
+    check(
+      '  storage still holds the new session (not cleared)',
+      persisted?.clientSessionId === 'cs2',
+      persisted?.clientSessionId,
+    );
+    mock.refreshDelayMs = 0;
+    mock.refreshStatus = 200;
+    client.destroy();
+  }
+
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
 })().catch((err) => {

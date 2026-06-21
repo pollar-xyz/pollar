@@ -723,6 +723,16 @@ export class PollarClient {
     return this._refreshPromise;
   }
 
+  /**
+   * Tear down the session ONLY if it's still the one identified by `gen`. A
+   * refresh that fails AFTER a logout/login landed must not `_clearSession()` —
+   * that would wipe a session it no longer owns (the new login's, or re-clear an
+   * already-cleared one). Used by `_doRefresh`'s error branches.
+   */
+  private async _clearIfCurrent(gen: number): Promise<void> {
+    if (!this._destroyed && this._sessionGeneration === gen) await this._clearSession();
+  }
+
   private async _doRefresh(): Promise<void> {
     // Snapshot the session identity before the network round-trip. If a logout
     // or a fresh login lands while `/auth/refresh` is in flight, the generation
@@ -744,13 +754,13 @@ export class PollarClient {
       error = response.error;
     } catch (err) {
       this._log.error('[PollarClient] /auth/refresh request threw', err);
-      await this._clearSession();
+      await this._clearIfCurrent(gen);
       throw err;
     }
 
     if (error || !data) {
       this._log.error('[PollarClient] /auth/refresh returned error', { error: redactDeep(error) });
-      await this._clearSession();
+      await this._clearIfCurrent(gen);
       throw new Error('Refresh failed');
     }
     const successData = data as { success?: boolean; content?: { token?: PollarPersistedSession['token'] } };
@@ -761,7 +771,7 @@ export class PollarClient {
         success: successData.success,
         hasToken: !!successData.content?.token,
       });
-      await this._clearSession();
+      await this._clearIfCurrent(gen);
       throw new Error('Refresh response malformed');
     }
 
@@ -781,7 +791,7 @@ export class PollarClient {
         refreshToken: typeof newToken.refreshToken,
         expiresAt: newToken.expiresAt,
       });
-      await this._clearSession();
+      await this._clearIfCurrent(gen);
       throw new Error('Refresh response token shape invalid');
     }
     // Sanity (non-fatal): `expiresAt` is Unix SECONDS. A value implausibly far
@@ -2404,7 +2414,7 @@ export class PollarClient {
       return;
     }
     if (error instanceof Error && (error as { code?: string }).code === AUTH_ERROR_CODES.WALLET_RESOLVER_TIMEOUT) {
-      this._log.error('[PollarClient]', error.message);
+      this._log.error('[PollarClient] Wallet resolver timeout', error.message);
       this._setAuthState({
         step: 'error',
         previousStep: this._authState.step,
@@ -2430,6 +2440,15 @@ export class PollarClient {
     const prevSession = this._session;
     this._session = await readStorage(this._storage, this.apiKeyHash, this._log);
     if (this._session) {
+      // A DIFFERENT session was restored (e.g. a cross-tab login as another user
+      // overwrote storage): invalidate any refresh/resume still in flight against
+      // the OLD session, so its rotated token can't be written over the
+      // newly-restored one. (A same-session cross-tab rotation keeps the same
+      // clientSessionId and is handled by the verified fast path below — no bump,
+      // so it doesn't disturb an in-flight refresh of the very same session.)
+      if (prevSession && prevSession.clientSessionId !== this._session.clientSessionId) {
+        this._sessionGeneration++;
+      }
       // Only restore an external adapter for a session that actually signs via
       // one. A `smart` session is passkey-signed; restoring an adapter for it
       // (from a stale walletType row) would leave `_walletAdapter` set on a
@@ -2585,6 +2604,7 @@ export class PollarClient {
     // A fresh login replaces the session: invalidate any refresh/resume still
     // in flight against the previous one.
     this._sessionGeneration++;
+    const gen = this._sessionGeneration;
     this._session = persisted;
 
     if (session.data) {
@@ -2598,6 +2618,11 @@ export class PollarClient {
     }
 
     await writeStorage(this._storage, this.apiKeyHash, persisted);
+    // A logout / destroy / newer login landed DURING the persist await — bail so
+    // we don't emit `authenticated` (resurrecting a session that was just
+    // cleared) or re-arm the refresh timer for a session this call no longer
+    // owns. Mirrors the generation guard in `_doRefresh`.
+    if (this._destroyed || this._sessionGeneration !== gen) return;
     // Drop a stale external adapter when switching to a non-external session
     // (e.g. external-wallet login → later email/passkey login). The wallet flow
     // sets `_walletAdapter` BEFORE calling us (storeWalletAdapter → authenticate
