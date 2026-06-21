@@ -17,6 +17,19 @@ export async function initEmailSession(ctx: AuthProviderContext): Promise<string
 export async function sendEmailCode(email: string, clientSessionId: string, ctx: AuthProviderContext): Promise<void> {
   const { api, logger, signal, setAuthState } = ctx;
 
+  // Validate before hitting the API — an empty email/session (e.g. login()
+  // called without an `email`, or an action with a missing payload) would
+  // otherwise POST blanks to /auth/email and get an opaque 400.
+  if (!email?.trim() || !clientSessionId) {
+    setAuthState({
+      step: 'error',
+      previousStep: 'sending_email',
+      message: 'A valid email address is required',
+      errorCode: AUTH_ERROR_CODES.EMAIL_SEND_FAILED,
+    });
+    return;
+  }
+
   setAuthState({ step: 'sending_email', email });
 
   const body = { clientSessionId, email };
@@ -43,6 +56,18 @@ export async function verifyAndAuthenticate(
   ctx: AuthProviderContext,
 ): Promise<void> {
   const { api, logger, signal, setAuthState } = ctx;
+
+  // Validate before hitting the API — a blank code/session would otherwise POST
+  // blanks to /auth/email/verify-code for an opaque 400.
+  if (!code?.trim() || !clientSessionId) {
+    setAuthState({
+      step: 'error',
+      previousStep: 'verifying_email_code',
+      message: 'A verification code is required',
+      errorCode: AUTH_ERROR_CODES.EMAIL_CODE_INVALID,
+    });
+    return;
+  }
 
   setAuthState({ step: 'verifying_email_code', clientSessionId, email });
 

@@ -114,6 +114,7 @@ async function waitFor(cond, timeoutMs = 1000) {
   const gate = new Promise((r) => {
     releaseGate = r;
   });
+  let gatedLoginSettled = false; // set when the late write has been attempted
   const gatedProvider = {
     id: 'gated',
     async login(ctx) {
@@ -124,6 +125,7 @@ async function waitFor(cond, timeoutMs = 1000) {
         message: 'late write from a cancelled flow',
         errorCode: sdk.AUTH_ERROR_CODES.UNEXPECTED_ERROR,
       });
+      gatedLoginSettled = true;
     },
   };
 
@@ -258,7 +260,7 @@ async function waitFor(cond, timeoutMs = 1000) {
   client.cancelLogin(); // aborts the controller and sets idle
   check('cancelLogin set idle', client.getAuthState().step === 'idle', client.getAuthState().step);
   releaseGate(); // provider now calls ctx.setAuthState with an aborted signal
-  await new Promise((r) => setTimeout(r, 20));
+  await waitFor(() => gatedLoginSettled); // wait for the late write to actually fire (not a fixed sleep)
   check(
     "  the cancelled flow's late setAuthState did NOT clobber idle",
     client.getAuthState().step === 'idle',
@@ -278,6 +280,22 @@ async function waitFor(cond, timeoutMs = 1000) {
     '  the synchronous throw was routed to an error state via _handleFlowError',
     client.getAuthState().step === 'error' && client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.UNEXPECTED_ERROR,
     `${client.getAuthState().step}/${client.getAuthState().errorCode}`,
+  );
+
+  console.log('\n── 12. email flow validates a blank email before the API ─────');
+  calls.length = 0;
+  client.login({ provider: 'email', email: '' }); // missing email
+  // Wait for the SPECIFIC validation error (a prior block left a stale `error`).
+  await waitFor(() => client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.EMAIL_SEND_FAILED);
+  check(
+    'blank email → error (EMAIL_SEND_FAILED), not an opaque API 400',
+    client.getAuthState().step === 'error' && client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.EMAIL_SEND_FAILED,
+    client.getAuthState().errorCode,
+  );
+  check(
+    '  no blank email was POSTed to /auth/email',
+    !calls.some((c) => c.url.includes('/auth/email') && !c.url.includes('verify-code')),
+    JSON.stringify(calls.map((c) => c.url)),
   );
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} providers smoke: ${pass} passed, ${fail} failed`);

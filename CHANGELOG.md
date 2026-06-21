@@ -15,7 +15,7 @@
 
 - **Pluggable custom auth providers** — register your own provider(s) via
   `providers: [...]` and drive them through `login({ provider, ... })` /
-  `providerAction(...)`, alongside the built-in google / github / email / wallet
+  `providerAction(...)`, alongside the built-in Google / GitHub / email / wallet
   flows.
 
 ### `@pollar/core` — fixes
