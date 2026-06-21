@@ -87,12 +87,18 @@ const CATALOG: Record<string, ResolvedAuthError> = {
 
 /**
  * Resolves a backend error `code` to a friendly message + bucket. Falls back to
- * the supplied default message (and the `PASSKEY_FAILED` bucket) when the code
- * is unknown or absent.
+ * the supplied default message when the code is unknown or absent, bucketing by
+ * the code's domain prefix (`TX_`/`SDK_TX_` → `TX_FAILED`, else `PASSKEY_FAILED`).
  */
 export function resolveAuthError(code: string | undefined, fallbackMessage: string): ResolvedAuthError {
   if (code && CATALOG[code]) return CATALOG[code];
-  return { message: fallbackMessage, errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED };
+  // Bucket an UNKNOWN code by its domain prefix so a transaction code isn't
+  // mislabeled as a passkey failure (the historical default).
+  const errorCode =
+    code && (code.startsWith('TX_') || code.startsWith('SDK_TX_'))
+      ? AUTH_ERROR_CODES.TX_FAILED
+      : AUTH_ERROR_CODES.PASSKEY_FAILED;
+  return { message: fallbackMessage, errorCode };
 }
 
 /**

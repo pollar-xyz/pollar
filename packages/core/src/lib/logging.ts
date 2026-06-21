@@ -20,6 +20,15 @@ export const SENSITIVE_BODY_KEYS = new Set([
   'signedTxXdr',
   'signedXdr',
   'signedAuthEntry',
+  // Defensive: generic token/secret key names, in case the wire ever nests one
+  // under an unexpected field (the redactor is allow-by-default, so an unknown
+  // key would otherwise pass through in the clear).
+  'bearer',
+  'jwt',
+  'authorization',
+  'secret',
+  'privateKey',
+  'seed',
 ]);
 
 /**

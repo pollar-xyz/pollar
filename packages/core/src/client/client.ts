@@ -31,7 +31,6 @@ import {
   PasskeyCeremony,
   PasskeySigner,
   PollarApplicationConfigContent,
-  PollarAuthMethod,
   PollarAuthProvider,
   PollarClientConfig,
   PollarFlowError,
@@ -995,7 +994,10 @@ export class PollarClient {
     // (reused for signing long after login) and needs the wallet-adapter
     // resolver — both orthogonal to the generic auth-provider abstraction.
     if (options.provider === 'wallet') {
-      this.loginWallet(options.type);
+      // 'wallet' is a reserved built-in id, so the shape is the wallet member —
+      // assert it (the custom-provider catch-all in PollarLoginOptions otherwise
+      // widens `type` away from WalletId).
+      this.loginWallet((options as { provider: 'wallet'; type: WalletId }).type);
       return;
     }
 
@@ -1558,7 +1560,7 @@ export class PollarClient {
       case 'smart':
         return { custody: 'smart', address: w.address, provider: 'passkey' };
       case 'internal':
-        return { custody: 'internal', address: w.address, provider: (w.provider as PollarAuthMethod | undefined) ?? null };
+        return { custody: 'internal', address: w.address, provider: (w.provider as string | undefined) ?? null };
       default:
         return null;
     }
@@ -1626,7 +1628,7 @@ export class PollarClient {
         });
         return { status: 'signed', signedXdr, submissionToken: idempotencyKey };
       }
-      const { details, code, message } = this._resolveTxApiError(error);
+      const { details, code, message } = this._resolveTxApiError(error, data);
       this._setTransactionState({
         step: 'error',
         phase: 'signing',
@@ -1742,8 +1744,11 @@ export class PollarClient {
    * is the raw diagnostic. Lets tx flows surface a typed reason instead of an
    * opaque details string.
    */
-  private _resolveTxApiError(error: unknown): { details?: string; code?: string; message?: string } {
-    const e = error as { details?: string; code?: string; message?: string } | undefined;
+  private _resolveTxApiError(error: unknown, data?: unknown): { details?: string; code?: string; message?: string } {
+    // On a non-2xx the failure envelope is in `error`; on a 2xx with
+    // `success:false` it rides in `data` — fall back to it so the backend's
+    // code/message contract isn't dropped on the 2xx-failure path.
+    const e = (error ?? data) as { details?: string; code?: string; message?: string } | undefined;
     const details = e?.details ?? e?.message;
     const code = e?.code;
     if (!code) return details ? { details } : {};
@@ -1789,7 +1794,7 @@ export class PollarClient {
           ...(resultCode && { details: resultCode, resultCode }),
         };
       }
-      const { details, code, message } = this._resolveTxApiError(error);
+      const { details, code, message } = this._resolveTxApiError(error, data);
       this._setTransactionState({
         step: 'error',
         phase: 'submitting',
@@ -1907,7 +1912,7 @@ export class PollarClient {
           ...(resultCode && { details: resultCode, resultCode }),
         };
       }
-      const { details, code, message } = this._resolveTxApiError(error);
+      const { details, code, message } = this._resolveTxApiError(error, data);
       this._setTransactionState({
         step: 'error',
         phase: 'signing-submitting',
@@ -2007,7 +2012,7 @@ export class PollarClient {
         });
         return { status: 'error', hash, ...(resultCode && { details: resultCode, resultCode }) };
       }
-      const { details, code, message } = this._resolveTxApiError(error);
+      const { details, code, message } = this._resolveTxApiError(error, data);
       this._setTransactionState({
         step: 'error',
         phase: 'building-signing-submitting',
@@ -2146,7 +2151,7 @@ export class PollarClient {
         });
         return { status: 'error', hash, ...outcomeExtra, ...(resultCode && { details: resultCode, resultCode }) };
       }
-      const { details, code, message } = this._resolveTxApiError(error);
+      const { details, code, message } = this._resolveTxApiError(error, data);
       this._setTransactionState({
         step: 'error',
         phase: 'submitting',
@@ -2372,6 +2377,11 @@ export class PollarClient {
       getPublicJwk: () => this._keyManager.getPublicJwk(),
       resolveWalletAdapter: (id: WalletId) => this._resolveWalletAdapter(id),
       storeWalletAdapter: async (adapter: WalletAdapter, id: WalletId) => {
+        // A cancelled/superseded flow must not leave a dangling adapter +
+        // persisted walletType row with no session (the same reason the other
+        // flow deps no-op on an aborted signal). The active flow is never
+        // aborted, so the happy path is unchanged.
+        if (signal.aborted) return;
         this._walletAdapter = adapter;
         try {
           await writeWalletType(this._storage, this.apiKeyHash, id);

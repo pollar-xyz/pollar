@@ -130,6 +130,9 @@ const mock = {
   // Marker echoed as /tx/build content (buildData) so a test can tell which tx
   // a buildData belongs to.
   buildMarker: 'BUILD',
+  // When true, /tx/submit answers 200 with `{success:false, code, message}` (a
+  // failure carried in a 2xx envelope) to assert the code/message is surfaced.
+  txSubmitFail2xx: false,
 };
 
 globalThis.fetch = async (req) => {
@@ -208,6 +211,11 @@ globalThis.fetch = async (req) => {
     return new Response(JSON.stringify({ success: true, content: { marker: mock.buildMarker, amount: '5' } }), { status: 200 });
   }
   if (req.url.includes('/tx/submit')) {
+    if (mock.txSubmitFail2xx) {
+      return new Response(JSON.stringify({ success: false, code: 'TX_FEE_LIMIT_EXCEEDED', message: 'fee too high' }), {
+        status: 200,
+      });
+    }
     return new Response(JSON.stringify({ success: true, content: { hash: 'HASH', status: 'SUCCESS' } }), { status: 200 });
   }
   // tx/history, logout, everything else.
@@ -957,6 +965,38 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     check('smart signAuthEntry returned status:error', outcome?.status === 'error', JSON.stringify(outcome));
     const custodial = mock.calls.filter((c) => c.url.includes('/tx/sign-auth-entry'));
     check('  no custodial /tx/sign-auth-entry POST fired', custodial.length === 0, custodial.length);
+    client.destroy();
+  }
+
+  // ── BB. a tx failure carried in a 2xx success:false envelope surfaces the
+  //       backend code/message (#8 — _resolveTxApiError now also reads `data`)
+  console.log('\n── BB. 2xx success:false tx failure surfaces code/message (#8) ──');
+  {
+    mock.calls = [];
+    mock.txSubmitFail2xx = true;
+    const apiKey = 'pk_race_BB';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    await storage.set(
+      `pollar:${hash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'internal', address: 'Gtest' },
+      }),
+    );
+    const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+    await client.ready();
+    const outcome = await client.submitTx('SIGNED_XDR');
+    check(
+      'submit error surfaced the diagnostic code from the 2xx body',
+      outcome?.status === 'error' && outcome?.code === 'TX_FEE_LIMIT_EXCEEDED',
+      JSON.stringify(outcome),
+    );
+    mock.txSubmitFail2xx = false;
     client.destroy();
   }
 

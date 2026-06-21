@@ -71,9 +71,12 @@ export type PollarAuthMethod = 'email' | 'google' | 'github' | 'oidc';
  * Obtained via {@link PollarClient.getWallet}.
  */
 export type WalletInfo =
-  | { custody: 'internal'; address: string; provider: PollarAuthMethod | null }
+  // `provider` widened with `(string & {})` so a custom provider id (e.g. a
+  // `privy` integration) survives instead of being lost to the closed enum,
+  // while the known PollarAuthMethod values still autocomplete.
+  | { custody: 'internal'; address: string; provider: PollarAuthMethod | (string & {}) | null }
   | { custody: 'smart'; address: string; provider: 'passkey' }
-  | { custody: 'external'; address: string; provider: WalletId | null };
+  | { custody: 'external'; address: string; provider: WalletId | (string & {}) | null };
 
 /** In-memory user profile (kept on `PollarClient`, never persisted). */
 export interface PollarUserProfile {
@@ -329,7 +332,13 @@ export type PollarLoginOptions =
   | { provider: 'google' }
   | { provider: 'github' }
   | { provider: 'email'; email: string }
-  | { provider: 'wallet'; type: WalletId };
+  | { provider: 'wallet'; type: WalletId }
+  // Catch-all for CUSTOM providers registered via `providers: [...]` (e.g.
+  // privy). `string & {}` keeps the built-in literals autocompleting; the
+  // arbitrary extra fields are the provider's own options. Trade-off: this also
+  // makes a bare `{ provider: 'email' }` (no `email`) type-check — the email
+  // flow still validates `email` at runtime.
+  | ({ provider: string & {} } & Record<string, unknown>);
 
 /**
  * Curated, stable facade handed to every {@link PollarAuthProvider}. It exposes

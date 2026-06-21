@@ -57,6 +57,10 @@ export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void>
   if (!clientSessionId) return;
 
   let connectedWallet: string;
+  // Track the phase so the catch reports where the failure ACTUALLY happened
+  // (connect vs sign vs the /auth/wallet call) instead of always blaming
+  // 'connecting_wallet'.
+  let currentStep: 'connecting_wallet' | 'signing_wallet_challenge' | 'authenticating_wallet' = 'connecting_wallet';
 
   try {
     setAuthState({ step: 'connecting_wallet', walletType: type });
@@ -79,6 +83,7 @@ export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void>
     // SEP-10 challenge-response: prove control of the wallet key. Get a
     // server-signed challenge tx, have the wallet counter-sign it, and send the
     // signed XDR to /auth/wallet.
+    currentStep = 'signing_wallet_challenge';
     setAuthState({ step: 'signing_wallet_challenge', walletType: type });
     // requestWalletChallenge now runs the SEP-10 validation internally (so custom
     // providers get it too) and returns null on a missing OR malformed challenge.
@@ -97,6 +102,7 @@ export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void>
       signal,
     );
 
+    currentStep = 'authenticating_wallet';
     setAuthState({ step: 'authenticating_wallet' });
 
     const body = { clientSessionId, walletAddress: address, signedChallengeXdr: signedTxXdr };
@@ -128,7 +134,7 @@ export async function loginWallet(type: WalletId, deps: FlowDeps): Promise<void>
     logApiError(logger, 'wallet connect', { error: err });
     setAuthState({
       step: 'error',
-      previousStep: 'connecting_wallet',
+      previousStep: currentStep,
       message: 'Wallet connection failed',
       errorCode: AUTH_ERROR_CODES.WALLET_CONNECT_FAILED,
     });

@@ -82,12 +82,16 @@ export async function buildProof(args: BuildProofArgs, keyManager: KeyManager): 
     jwk,
   };
 
+  // Sanitize the offset before it reaches `iat`: a NaN/Infinity/fractional value
+  // (`Math.max(1, NaN) === NaN`) would serialize to a `null`/invalid `iat` and
+  // break verification. Coerce to a finite integer, else 0.
+  const offsetSec = Number.isFinite(args.clockOffsetSec) ? Math.trunc(args.clockOffsetSec as number) : 0;
   const payload: ProofPayload = {
     jti: randomUUID(),
     htm: args.htm.toUpperCase(),
     htu: normalizeHtu(args.htu),
     // Floor at 1 so a pathological offset can never produce a zero/negative iat.
-    iat: Math.max(1, Math.floor(Date.now() / 1000) + (args.clockOffsetSec ?? 0)),
+    iat: Math.max(1, Math.floor(Date.now() / 1000) + offsetSec),
   };
 
   if (args.accessToken !== undefined && args.accessToken !== '') {
