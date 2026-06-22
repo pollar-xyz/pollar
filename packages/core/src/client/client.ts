@@ -1158,7 +1158,11 @@ export class PollarClient {
   cancelLogin(): void {
     this._loginController?.abort();
     this._loginController = null;
-    this._setAuthState({ step: 'idle' });
+    // Only reset to idle if a login was actually in progress. Don't flap an
+    // already-authenticated session to idle — the session stays in storage and
+    // would re-surface, a confusing visible logout-then-login. (Use logout() to
+    // end an authenticated session.)
+    if (this._authState.step !== 'authenticated') this._setAuthState({ step: 'idle' });
   }
 
   // ─── Logout ───────────────────────────────────────────────────────────────
@@ -1600,14 +1604,21 @@ export class PollarClient {
    */
   async signTx(unsignedXdr: string): Promise<SignOutcome> {
     this._txStartGen = this._sessionGeneration;
+    // Smart-wallet (C-address/passkey) sessions sign via signAndSubmitTx
+    // (_signSubmitSmart's passkey ceremony), not signTx. Bail BEFORE emitting any
+    // tx state so a UI subscribed to onTransactionStateChange isn't stranded on
+    // 'signing' (mirrors signAuthEntry, which emits no tx state for this case).
+    if (this._session?.wallet?.type === 'smart') {
+      return {
+        status: 'error',
+        details: 'signTx is not supported for smart (passkey) wallets; use signAndSubmitTx.',
+      };
+    }
     const buildData = this._currentBuildData();
     this._setTransactionState({ step: 'signing', ...(buildData && { buildData }) });
 
-    // A smart-wallet session signs via the passkey path (signAndSubmitTx →
-    // _signSubmitSmart), never an external adapter. Guard on the session type so
-    // a stale/foreign `_walletAdapter` can't hijack signing — consistent with
-    // the type-first ordering in signAndSubmitTx/buildAndSignAndSubmitTx.
-    if (this._walletAdapter && this._session?.wallet?.type !== 'smart') {
+    // External adapter signs directly (smart sessions already returned above).
+    if (this._walletAdapter) {
       const accountToSign = this._session?.wallet?.address;
       const signOpts = accountToSign
         ? { networkPassphrase: this._networkPassphrase(), accountToSign }
@@ -1630,17 +1641,6 @@ export class PollarClient {
         });
         return { status: 'error', ...(details && { details }) };
       }
-    }
-
-    // Smart-wallet (C-address/passkey) sessions sign via signAndSubmitTx
-    // (_signSubmitSmart's passkey ceremony), NOT the custodial endpoint. A
-    // standalone signTx can't run that ceremony, so return an explicit error
-    // instead of POSTing to /tx/sign with the wrong key. Mirrors signAuthEntry.
-    if (this._session?.wallet?.type === 'smart') {
-      return {
-        status: 'error',
-        details: 'signTx is not supported for smart (passkey) wallets; use signAndSubmitTx.',
-      };
     }
 
     // Custodial path: backend signs and returns the XDR + idempotencyKey.

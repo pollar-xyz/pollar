@@ -973,6 +973,12 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     const signOutcome = await client.signTx('UNSIGNED_XDR');
     check('  smart signTx returned status:error', signOutcome?.status === 'error', JSON.stringify(signOutcome));
     check('  no custodial /tx/sign POST fired', mock.calls.filter((c) => /\/tx\/sign(\?|$)/.test(c.url)).length === 0);
+    // The smart guard must bail BEFORE emitting 'signing' — no stranded tx state.
+    check(
+      '  smart signTx did not strand tx state on signing',
+      client.getTransactionState()?.step !== 'signing',
+      JSON.stringify(client.getTransactionState()),
+    );
     client.destroy();
   }
 
@@ -1168,6 +1174,21 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
       JSON.stringify(txStates),
     );
     mock.txSubmitDelayMs = 0;
+    client.destroy();
+  }
+
+  // ── GG. cancelLogin() must NOT flap an already-authenticated session to idle
+  console.log('\n── GG. cancelLogin does not flap an authenticated session ────');
+  {
+    mock.calls = [];
+    const { client } = await makeClient('pk_race_GG');
+    await waitFor(() => client.getAuthState().verified === true);
+    client.cancelLogin(); // no login in flight — must be a no-op on the session
+    check(
+      'cancelLogin kept the authenticated session (no flap to idle)',
+      client.getAuthState().step === 'authenticated',
+      client.getAuthState().step,
+    );
     client.destroy();
   }
 
