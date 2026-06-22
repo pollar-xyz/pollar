@@ -1015,6 +1015,9 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     const apiKey = 'pk_race_CC';
     const storage = sdk.createMemoryAdapter();
     const hash = await apiKeyHashOf(apiKey);
+    // Valid 56-char strkey so neither the session wallet nor the issuer can be
+    // rejected first — the ONLY thing left to reject is the asset code itself.
+    const validAccount = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
     await storage.set(
       `pollar:${hash}:session`,
       JSON.stringify({
@@ -1023,14 +1026,19 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
         status: 'CONSUMED',
         token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
         user: { ready: true },
-        wallet: { type: 'internal', address: 'Gtest' },
+        wallet: { type: 'internal', address: validAccount },
       }),
     );
     const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
     await client.ready();
+    check(
+      'precondition: restored authenticated session',
+      client.getAuthState().step === 'authenticated',
+      JSON.stringify(client.getAuthState()),
+    );
     mock.calls = [];
-    const empty = await client.setTrustline({ code: '', issuer: 'Gissuer' });
-    const tooLong = await client.setTrustline({ code: 'ABCDEFGHIJKLM', issuer: 'Gissuer' }); // 13 chars
+    const empty = await client.setTrustline({ code: '', issuer: validAccount });
+    const tooLong = await client.setTrustline({ code: 'ABCDEFGHIJKLM', issuer: validAccount }); // 13 chars
     check('empty asset code → error', empty?.status === 'error', JSON.stringify(empty));
     check('  >12 asset code → error', tooLong?.status === 'error', JSON.stringify(tooLong));
     const txCalls = mock.calls.filter((c) => c.url.includes('/wallet/assets/trustline') || c.url.includes('/tx/'));
@@ -1090,6 +1098,12 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
       }),
     );
     const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+    // Capture EVERY emission, not just the final state — a transient
+    // `authenticated` carrying the dead `EXPIRED_AT` would leak before refresh.
+    const authEmissions = [];
+    client.onAuthStateChange((s) => {
+      authEmissions.push({ step: s.step, verified: s.verified, accessToken: s.session?.token?.accessToken });
+    });
     await client.ready();
     const st = client.getAuthState();
     check(
@@ -1098,6 +1112,11 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
       JSON.stringify({ step: st.step, at: st.session?.token?.accessToken }),
     );
     check('  verified:true (refresh proved the session is alive)', st.verified === true, st.verified);
+    check(
+      '  no expired token was emitted during restore',
+      authEmissions.every((s) => s.step !== 'authenticated' || (s.verified === true && s.accessToken === 'NEW_AT')),
+      JSON.stringify(authEmissions),
+    );
     check(
       '  skipped the redundant /auth/session/resume',
       mock.calls.filter((c) => c.url.includes('/auth/session/resume')).length === 0,
@@ -1132,6 +1151,10 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     const sp = client.submitTx('SIGNED_XDR'); // in-flight (~80ms)
     await waitFor(() => client.getTransactionState()?.step === 'submitting');
     await client.logout(); // bumps generation + resets _transactionState
+    // Snapshot AFTER logout settled: any reset emission is already counted, so
+    // the delayed submit resolution must add exactly zero further emissions —
+    // regardless of which step it would have carried.
+    const emissionsAfterLogout = txStates.length;
     await sp; // submit now resolves SUCCESS — must be dropped (stale generation)
     await new Promise((r) => setTimeout(r, 20));
     check(
@@ -1140,8 +1163,8 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
       JSON.stringify(client.getTransactionState()),
     );
     check(
-      '  no post-logout success/submitted was emitted to subscribers',
-      !txStates.includes('success') && !txStates.includes('submitted'),
+      '  no transaction state was emitted after logout',
+      txStates.length === emissionsAfterLogout,
       JSON.stringify(txStates),
     );
     mock.txSubmitDelayMs = 0;
