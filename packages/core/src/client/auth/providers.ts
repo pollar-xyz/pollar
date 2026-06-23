@@ -1,4 +1,4 @@
-import { PollarAuthProvider } from '../../types';
+import { AUTH_ERROR_CODES, PollarAuthProvider } from '../../types';
 import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './emailFlow';
 
 /**
@@ -25,6 +25,19 @@ export function emailProvider(): PollarAuthProvider {
     id: 'email',
     login: async (ctx, options) => {
       const email = (options as { email?: string }).email ?? '';
+      // Reject a blank email BEFORE minting a server session, so an `email`-less
+      // login() doesn't create an orphaned session that then errors. sendEmailCode
+      // validates too (the real safety net) — this just fails faster and avoids
+      // the wasted /auth/session round-trip.
+      if (!email.trim()) {
+        ctx.setAuthState({
+          step: 'error',
+          previousStep: 'sending_email',
+          message: 'A valid email address is required',
+          errorCode: AUTH_ERROR_CODES.EMAIL_SEND_FAILED,
+        });
+        return;
+      }
       const clientSessionId = await initEmailSession(ctx);
       if (clientSessionId) await sendEmailCode(email, clientSessionId, ctx);
     },

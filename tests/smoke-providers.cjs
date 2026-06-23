@@ -297,6 +297,11 @@ async function waitFor(cond, timeoutMs = 1000) {
     !calls.some((c) => c.url.includes('/auth/email') && !c.url.includes('verify-code')),
     JSON.stringify(calls.map((c) => c.url)),
   );
+  check(
+    '  and no orphaned /auth/session was minted (providers.ts up-front guard)',
+    !calls.some((c) => c.url.endsWith('/auth/session')),
+    JSON.stringify(calls.map((c) => c.url)),
+  );
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} providers smoke: ${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);
