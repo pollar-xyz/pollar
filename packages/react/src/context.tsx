@@ -35,7 +35,7 @@ import { TransactionModal } from './components/transaction-modal/TransactionModa
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 import { browserPasskeyCeremony, browserPasskeySigner } from './lib/passkey-ceremony';
-import type { CustomLoginProvider, PollarConfig, PollarStyles, RenderWalletsSlot } from './types';
+import type { PollarConfig, PollarStyles, RenderWalletsSlot } from './types';
 
 const DEFAULT_APP_CONFIG: PollarConfig = {
   application: { name: '' },
@@ -91,10 +91,8 @@ interface PollarContextValue {
   openSessionsModal: () => void;
   appConfig: PollarConfig;
   styles: PollarStyles;
-  /** UI slot for wallet picker (forwarded from provider props). */
+  /** UI slot overriding the per-adapter wallet button list (forwarded from provider props). */
   renderWallets?: RenderWalletsSlot;
-  /** Custom login provider buttons (forwarded from `ui.customProviders`). */
-  customProviders?: CustomLoginProvider[];
   // transactions
   openTxModal: () => void;
   tx: TransactionState;
@@ -188,14 +186,8 @@ interface PollarProviderProps {
   appConfig?: PollarConfig;
   /** UI customization slots. */
   ui?: {
-    /** Replaces the default Freighter/Albedo wallet picker. */
+    /** Replaces the default per-adapter wallet button list with a custom picker. */
     renderWallets?: RenderWalletsSlot;
-    /**
-     * Custom login provider buttons (e.g. Privy) shown in the LoginModal. Each
-     * must match a {@link PollarAuthProvider} registered on the client; clicking
-     * one calls `client.login({ provider: id })` and the provider opens its own UI.
-     */
-    customProviders?: CustomLoginProvider[];
   };
   adapters?: PollarAdapters;
   /**
@@ -344,7 +336,6 @@ export function PollarProvider({
   const refreshAssets = useCallback(() => pollarClient.refreshAssets(), [pollarClient, walletAddress]);
 
   const renderWallets = ui?.renderWallets;
-  const customProviders = ui?.customProviders;
 
   const contextValue: PollarContextValue = useMemo(() => {
     const styles: PollarStyles = resolvedConfig.styles ?? {};
@@ -402,7 +393,6 @@ export function PollarProvider({
       appConfig: resolvedConfig,
       styles,
       renderWallets,
-      customProviders,
       adapters,
     } as PollarContextValue;
   }, [
@@ -421,7 +411,6 @@ export function PollarProvider({
     resolvedConfig,
     adapters,
     renderWallets,
-    customProviders,
   ]);
 
   return (

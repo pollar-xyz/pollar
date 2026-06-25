@@ -64,7 +64,7 @@ import {
 import { POLLAR_CORE_VERSION } from '../version';
 import { defaultVisibilityProvider } from '../visibility/autodetect';
 import type { VisibilityProvider } from '../visibility/types';
-import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletId } from '../wallets';
+import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletAdapterMeta, WalletId } from '../wallets';
 import { authenticate } from './auth/authenticate';
 import { createAuthSession } from './auth/deps';
 import { resolveAuthError } from './auth/errorMessages';
@@ -1565,6 +1565,15 @@ export class PollarClient {
 
   getWalletType(): WalletId | null {
     return this._walletAdapter?.type ?? null;
+  }
+
+  /**
+   * The registered wallet adapters (built-in Freighter/Albedo first, then any
+   * `config.walletAdapters`), as `{ id, meta }` for the login UI to render one
+   * button per adapter. Reach a login via `login({ provider: id })`.
+   */
+  listWalletAdapters(): { id: WalletId; meta: WalletAdapterMeta }[] {
+    return Array.from(this._walletAdapters.values()).map((a) => ({ id: a.type, meta: a.meta }));
   }
 
   /**

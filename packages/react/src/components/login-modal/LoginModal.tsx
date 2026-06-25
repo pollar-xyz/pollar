@@ -1,7 +1,7 @@
 'use client';
 
 import { AUTH_ERROR_CODES, AuthState, PollarLoginOptions, WalletId } from '@pollar/core';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { LoginModalTemplate } from './LoginModalTemplate';
 import '../shared.css';
@@ -15,8 +15,10 @@ interface LoginModalProps {
 
 export function LoginModal({ onClose }: LoginModalProps) {
   const [email, setEmail] = useState('');
-  const { getClient, styles, appConfig: config, renderWallets, customProviders } = usePollar();
+  const { getClient, styles, appConfig: config, renderWallets } = usePollar();
   const [authState, setAuthState] = useState<AuthState>(() => getClient().getAuthState());
+  // Registered wallet adapters (built-ins + config) → one login button each.
+  const walletAdapters = useMemo(() => getClient().listWalletAdapters(), [getClient]);
   const [codeInputKey, setCodeInputKey] = useState(0);
   const pendingEmail = useRef<string | null>(null);
 
@@ -77,15 +79,10 @@ export function LoginModal({ onClose }: LoginModalProps) {
     getClient().login({ provider });
   }
 
-  function handleCustomLogin(id: string) {
-    // The provider id is a runtime string (a registered custom provider like
-    // 'privy'); cast to the closed login-options union since React can't know
-    // the app's custom provider ids at compile time. The provider opens its own UI.
-    getClient().login({ provider: id } as PollarLoginOptions);
-  }
-
   function handleWalletConnect(type: WalletId) {
-    getClient().loginWallet(type);
+    // Any registered wallet adapter (freighter/albedo/privy/swk…). The adapter
+    // opens its own connect/auth UI; the SDK wraps the generic SEP-10 flow.
+    getClient().login({ provider: type } as PollarLoginOptions);
   }
 
   function handleLoginSmartWallet() {
@@ -128,13 +125,12 @@ export function LoginModal({ onClose }: LoginModalProps) {
           github: !!providers?.github,
           apple: !!providers?.apple,
         }}
-        {...(customProviders !== undefined && { customProviders })}
+        walletAdapters={walletAdapters}
         appName={config.application?.name ?? 'Pollar'}
         email={email}
         onEmailChange={setEmail}
         onEmailSubmit={handleEmailSubmit}
         onSocialLogin={handleSocialLogin}
-        onCustomLogin={handleCustomLogin}
         onWalletConnect={handleWalletConnect}
         onLoginSmartWallet={handleLoginSmartWallet}
         onCreateSmartWallet={handleCreateSmartWallet}

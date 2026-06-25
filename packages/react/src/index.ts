@@ -7,7 +7,6 @@ export type {
   PollarConfig,
   RenderWalletsProps,
   RenderWalletsSlot,
-  CustomLoginProvider,
 } from './types';
 // Re-export the custom-provider contracts so consumers can author providers
 // (e.g. a Privy login provider) without importing from `@pollar/core` directly.

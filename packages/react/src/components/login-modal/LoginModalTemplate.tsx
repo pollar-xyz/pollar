@@ -1,38 +1,35 @@
 'use client';
 
-import { AUTH_ERROR_CODES, AuthState, WalletId, WalletType } from '@pollar/core';
-import type { CustomLoginProvider } from '../../types';
+import { AUTH_ERROR_CODES, AuthState, WalletId } from '@pollar/core';
 
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 import { type CSSProperties, useState } from 'react';
-import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
+import { LOGO_POLLAR } from '../../constants';
 import type { RenderWalletsSlot } from '../../types';
 import { ModalStatusBanner, PollarModalFooter } from '../commons';
 import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
 
-function DefaultFreighterAlbedoButtons({ onConnect, isLoading }: { onConnect: (id: WalletId) => void; isLoading: boolean }) {
+type WalletAdapterEntry = { id: WalletId; meta: { label: string; iconUrl?: string } };
+
+function WalletAdapterButtons({
+  walletAdapters,
+  onConnect,
+  isLoading,
+}: {
+  walletAdapters: WalletAdapterEntry[];
+  onConnect: (id: WalletId) => void;
+  isLoading: boolean;
+}) {
   return (
     <div className="pollar-wallet-list">
-      <button
-        type="button"
-        disabled={isLoading}
-        className="pollar-wallet-list-btn"
-        onClick={() => onConnect(WalletType.FREIGHTER)}
-      >
-        <img src={LOGO_FREIGHTER} alt="Freighter" className="pollar-wallet-list-icon" />
-        <span className="pollar-wallet-list-name">Freighter</span>
-      </button>
-      <button
-        type="button"
-        disabled={isLoading}
-        className="pollar-wallet-list-btn"
-        onClick={() => onConnect(WalletType.ALBEDO)}
-      >
-        <img src={LOGO_ALBEDO} alt="Albedo" className="pollar-wallet-list-icon" />
-        <span className="pollar-wallet-list-name">Albedo</span>
-      </button>
+      {walletAdapters.map((a) => (
+        <button key={a.id} type="button" disabled={isLoading} className="pollar-wallet-list-btn" onClick={() => onConnect(a.id)}>
+          {a.meta.iconUrl && <img src={a.meta.iconUrl} alt={a.meta.label} className="pollar-wallet-list-icon" />}
+          <span className="pollar-wallet-list-name">{a.meta.label}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -94,15 +91,13 @@ interface LoginModalTemplateProps {
     github: boolean;
     apple: boolean;
   };
-  /** Custom login provider buttons (e.g. Privy). Each calls `onCustomLogin(id)`. */
-  customProviders?: CustomLoginProvider[];
+  /** Registered wallet adapters to render as buttons (Freighter, Albedo, Privy, …). */
+  walletAdapters: WalletAdapterEntry[];
   appName: string;
   email?: string;
   onEmailChange?: (email: string) => void;
   onEmailSubmit?: () => void;
   onSocialLogin?: (provider: 'google' | 'github') => void;
-  /** Triggers a custom provider login by id (wraps `client.login({ provider: id })`). */
-  onCustomLogin?: (id: string) => void;
   onWalletConnect?: (id: WalletId) => void;
   /** Log in with an existing passkey (returning user). */
   onLoginSmartWallet?: () => void;
@@ -126,13 +121,12 @@ export function LoginModalTemplate({
   embeddedWallets,
   smartWallet = false,
   providers,
-  customProviders = [],
+  walletAdapters,
   appName,
   email = '',
   onEmailChange,
   onEmailSubmit,
   onSocialLogin,
-  onCustomLogin,
   onWalletConnect,
   onLoginSmartWallet,
   onCreateSmartWallet,
@@ -232,7 +226,7 @@ export function LoginModalTemplate({
           {renderWallets ? (
             renderWallets({ onConnect: onWalletConnect ?? (() => {}), authState })
           ) : (
-            <DefaultFreighterAlbedoButtons onConnect={onWalletConnect ?? (() => {})} isLoading={isLoading} />
+            <WalletAdapterButtons walletAdapters={walletAdapters} onConnect={onWalletConnect ?? (() => {})} isLoading={isLoading} />
           )}
         </>
       ) : showPasskeyChooser ? (
@@ -272,7 +266,7 @@ export function LoginModalTemplate({
             </div>
           )}
 
-          {emailEnabled && (enabledSocial.length > 0 || customProviders.length > 0) && (
+          {emailEnabled && enabledSocial.length > 0 && (
             <div className="pollar-divider">
               <div className="pollar-divider-line" />
               <div className="pollar-divider-label">
@@ -289,23 +283,6 @@ export function LoginModalTemplate({
               {enabledSocial.some(([key]) => key === 'github') && (
                 <GithubButton disabled={isLoading} onClick={() => onSocialLogin?.('github')} />
               )}
-            </div>
-          )}
-
-          {customProviders.length > 0 && (
-            <div className="pollar-social-list">
-              {customProviders.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  disabled={isLoading}
-                  className="pollar-wallet-entry-btn"
-                  onClick={() => onCustomLogin?.(p.id)}
-                >
-                  {p.iconUrl && <img src={p.iconUrl} alt="" className="pollar-wallet-list-icon" />}
-                  {p.label}
-                </button>
-              ))}
             </div>
           )}
 
