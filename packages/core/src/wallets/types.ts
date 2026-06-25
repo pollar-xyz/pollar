@@ -44,8 +44,27 @@ export interface SignAuthEntryResponse {
   signedAuthEntry: string;
 }
 
+/** UI metadata for the login button auto-rendered per registered adapter. */
+export interface WalletAdapterMeta {
+  /** Button label shown in the login UI (e.g. "Freighter", "Privy"). */
+  label: string;
+  /** Optional icon URL / data-URI for the button. */
+  iconUrl?: string;
+}
+
+/**
+ * A client-side wallet integration: it does its own auth/connect (Freighter
+ * approve, Privy modal, SWK picker…) and signs. `@pollar/core` treats it as a
+ * black box — it wraps the generic SEP-10 login + tx signing around `connect()`
+ * and `signTransaction()`. Register instances via `PollarClientConfig.walletAdapters`.
+ */
 export interface WalletAdapter {
+  /** Stable id — matches `login({ provider: id })` and the server-side wallet provider. */
   type: WalletId;
+  /** UI metadata for the auto-rendered login button. */
+  meta: WalletAdapterMeta;
+  /** Where the signing key lives. Defaults to 'external' (client-signed). */
+  custody?: 'external' | 'smart';
   isAvailable(): Promise<boolean>;
   connect(): Promise<ConnectWalletResponse>;
   disconnect(): Promise<void>;
@@ -53,10 +72,3 @@ export interface WalletAdapter {
   signTransaction(xdr: string, options?: SignTransactionOptions): Promise<SignTransactionResponse>;
   signAuthEntry(entryXdr: string, options?: SignAuthEntryOptions): Promise<SignAuthEntryResponse>;
 }
-
-/**
- * Resolves a {@link WalletAdapter} for a given wallet id. Injected through
- * `PollarClientConfig.walletAdapter` so wallet implementations (Stellar
- * Wallets Kit, custom modules, etc.) can live outside `@pollar/core`.
- */
-export type WalletAdapterResolver = (id: WalletId) => WalletAdapter | Promise<WalletAdapter>;

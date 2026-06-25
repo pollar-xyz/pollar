@@ -29,12 +29,8 @@ export type FlowDeps = {
   setAuthState: (state: AuthState) => void;
   storeSession: (session: PollarApplicationConfigContent) => void | Promise<void>;
   clearSession: () => void | Promise<void>;
-  /**
-   * Resolves a wallet adapter for the requested id. Uses the consumer's
-   * injected `walletAdapter` resolver when present and falls back to the
-   * built-in Freighter/Albedo adapters otherwise.
-   */
-  resolveWalletAdapter: (id: WalletId) => Promise<WalletAdapter>;
+  /** Persists the connected adapter (in memory + the stored wallet id) so a
+   *  returning session restores it. Keyed by `adapter.type`. */
   storeWalletAdapter: (adapter: WalletAdapter, id: WalletId) => void | Promise<void>;
   /**
    * The passkey (WebAuthn) ceremony for `loginSmartWallet()`, injected from the

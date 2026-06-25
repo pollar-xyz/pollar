@@ -72,6 +72,8 @@ function waitForAlbedoPopup(): Promise<Record<string, string>> {
 
 export class AlbedoAdapter implements WalletAdapter {
   readonly type = WalletType.ALBEDO;
+  readonly meta = { label: 'Albedo' };
+  readonly custody = 'external' as const;
 
   /**
    * Network used for `connect` (which carries no per-call network) and as the

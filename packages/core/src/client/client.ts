@@ -64,7 +64,7 @@ import {
 import { POLLAR_CORE_VERSION } from '../version';
 import { defaultVisibilityProvider } from '../visibility/autodetect';
 import type { VisibilityProvider } from '../visibility/types';
-import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletAdapterResolver, WalletId, WalletType } from '../wallets';
+import { AlbedoAdapter, FreighterAdapter, WalletAdapter, WalletId } from '../wallets';
 import { authenticate } from './auth/authenticate';
 import { createAuthSession } from './auth/deps';
 import { resolveAuthError } from './auth/errorMessages';
@@ -72,7 +72,7 @@ import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/e
 import { defaultWebOAuthOpener, loginOAuth } from './auth/oauthFlow';
 import { smartWalletFlow } from './auth/passkeyFlow';
 import { emailProvider, oauthProvider } from './auth/providers';
-import { loginWallet, requestWalletChallenge } from './auth/walletFlow';
+import { loginWithAdapter, requestWalletChallenge } from './auth/walletFlow';
 import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
 
 /** Request body for the external-provider auth leg (`POST /auth/external`). */
@@ -224,8 +224,9 @@ export class PollarClient {
   private _storageDegradeListeners = new Set<OnStorageDegrade>();
 
   private _walletAdapter: WalletAdapter | null = null;
-  private readonly _walletAdapterResolver: WalletAdapterResolver | null;
-  private readonly _walletResolverTimeoutMs: number;
+  /** Registered wallet adapters, keyed by id. Seeded with the built-in
+   *  Freighter/Albedo, then any `config.walletAdapters` (override by `type`). */
+  private readonly _walletAdapters = new Map<WalletId, WalletAdapter>();
   private readonly _passkey: PasskeyCeremony | null;
   private readonly _passkeySign: PasskeySigner | null;
   private _loginController: AbortController | null = null;
@@ -272,8 +273,6 @@ export class PollarClient {
         },
       });
     this._keyManager = config.keyManager ?? defaultKeyManager(this._storage, config.apiKey);
-    this._walletAdapterResolver = config.walletAdapter ?? null;
-    this._walletResolverTimeoutMs = config.walletResolverTimeoutMs ?? 5000;
     this._passkey = config.passkey ?? null;
     this._passkeySign = config.passkeySign ?? null;
     this._deviceLabel = config.deviceLabel;
@@ -285,12 +284,18 @@ export class PollarClient {
     // constructor never throws on a missing `.origin`.
     this._oauthRedirectUri = config.oauthRedirectUri ?? (isBrowser ? (window.location?.origin ?? '') : '');
 
-    // Seed built-in providers first, then let custom ones override by id.
+    // Seed built-in auth providers (google/github/email).
     for (const provider of [oauthProvider('google'), oauthProvider('github'), emailProvider()]) {
       this._providers.set(provider.id, provider);
     }
-    for (const provider of config.providers ?? []) {
-      this._providers.set(provider.id, provider);
+    // Seed built-in wallet adapters, then register config ones (override by type).
+    // Read the network from config (not getNetwork(), `_networkState` isn't set yet).
+    const albedoNet = (config.stellarNetwork ?? 'testnet') === 'mainnet' ? 'public' : 'testnet';
+    for (const adapter of [new FreighterAdapter(), new AlbedoAdapter(albedoNet)] as WalletAdapter[]) {
+      this._walletAdapters.set(adapter.type, adapter);
+    }
+    for (const adapter of config.walletAdapters ?? []) {
+      this._walletAdapters.set(adapter.type, adapter);
     }
 
     this._api = createApiClient(this.basePath);
@@ -681,6 +686,13 @@ export class PollarClient {
       if (proof) headers.set('DPoP', proof);
       else headers.delete('DPoP');
     } else {
+      // Strip any stale auth copied from the original request FIRST: if the
+      // session was cleared between the original send and this retry (e.g. a
+      // concurrent logout), `accessToken` is undefined and we must NOT replay the
+      // old — now revoked — Authorization/DPoP headers. Mirrors the refresh
+      // branch above, which always deletes them.
+      headers.delete('Authorization');
+      headers.delete('DPoP');
       const accessToken = this._session?.token?.accessToken;
       if (accessToken) {
         const proof = await this._buildProofForRequest(originalRequest, accessToken);
@@ -1000,14 +1012,15 @@ export class PollarClient {
       warnServerSide('login');
       return;
     }
-    // Wallet stays a dedicated flow: it yields a persistent `WalletAdapter`
-    // (reused for signing long after login) and needs the wallet-adapter
-    // resolver — both orthogonal to the generic auth-provider abstraction.
-    if (options.provider === 'wallet') {
-      // 'wallet' is a reserved built-in id, so the shape is the wallet member —
-      // assert it (the custom-provider catch-all in PollarLoginOptions otherwise
-      // widens `type` away from WalletId).
-      this.loginWallet((options as { provider: 'wallet'; type: WalletId }).type);
+    // A registered wallet adapter (freighter/albedo/privy/xbull…): run the
+    // generic SEP-10 wallet flow. It yields a persistent adapter reused for
+    // signing long after login.
+    const walletAdapter = this._walletAdapters.get(options.provider);
+    if (walletAdapter) {
+      const walletController = this._newController();
+      loginWithAdapter(walletAdapter, this._flowDeps(walletController.signal)).catch((err) =>
+        this._handleFlowError(err, walletController.signal),
+      );
       return;
     }
 
@@ -1108,17 +1121,6 @@ export class PollarClient {
     verifyAndAuthenticate(code, clientSessionId, email, this._providerContext(controller.signal)).catch((err) =>
       this._handleFlowError(err, controller.signal),
     );
-  }
-
-  // ─── Wallet flow (single call) ────────────────────────────────────────────
-
-  loginWallet(type: WalletId): void {
-    if (!isClientRuntime) {
-      warnServerSide('loginWallet');
-      return;
-    }
-    const controller = this._newController();
-    loginWallet(type, this._flowDeps(controller.signal)).catch((err) => this._handleFlowError(err, controller.signal));
   }
 
   /**
@@ -2411,7 +2413,6 @@ export class PollarClient {
         signal.aborted ? Promise.resolve() : this._storeSession(session),
       clearSession: () => (signal.aborted ? Promise.resolve() : this._clearSession()),
       getPublicJwk: () => this._keyManager.getPublicJwk(),
-      resolveWalletAdapter: (id: WalletId) => this._resolveWalletAdapter(id),
       storeWalletAdapter: async (adapter: WalletAdapter, id: WalletId) => {
         // A cancelled/superseded flow must not leave a dangling adapter +
         // persisted walletType row with no session (the same reason the other
@@ -2431,43 +2432,6 @@ export class PollarClient {
       ...(this._passkey ? { passkey: this._passkey } : {}),
       ...(this._deviceLabel ? { deviceLabel: this._deviceLabel } : {}),
     };
-  }
-
-  /**
-   * Resolves a wallet adapter for the requested id. Uses the consumer's
-   * injected `walletAdapter` resolver when present; otherwise falls back to
-   * the built-in `FreighterAdapter` / `AlbedoAdapter`. Throws if the id is
-   * unknown and no resolver is configured.
-   */
-  private async _resolveWalletAdapter(id: WalletId): Promise<WalletAdapter> {
-    if (this._walletAdapterResolver) {
-      // Race the resolver against a timeout. A broken extension bridge can
-      // leave `walletAdapterResolver()` pending forever; without this the
-      // entire login flow would hang with no signal to the consumer. The
-      // resolver only constructs the adapter object (not the user-facing
-      // approval), so 5s is generous.
-      const timeoutMs = this._walletResolverTimeoutMs;
-      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutHandle = setTimeout(() => {
-          reject(
-            Object.assign(new Error(`[PollarClient] Wallet adapter resolver for "${id}" timed out after ${timeoutMs}ms`), {
-              code: AUTH_ERROR_CODES.WALLET_RESOLVER_TIMEOUT,
-            }),
-          );
-        }, timeoutMs);
-      });
-      try {
-        return await Promise.race([Promise.resolve(this._walletAdapterResolver(id)), timeoutPromise]);
-      } finally {
-        if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
-      }
-    }
-    if (id === WalletType.FREIGHTER) return new FreighterAdapter();
-    if (id === WalletType.ALBEDO) return new AlbedoAdapter(this.getNetwork() === 'mainnet' ? 'public' : 'testnet');
-    throw new Error(
-      `[PollarClient] No wallet adapter configured for "${id}". Pass a walletAdapter resolver in PollarClientConfig.`,
-    );
   }
 
   private _handleFlowError(error: unknown, signal?: AbortSignal): void {
@@ -2522,14 +2486,13 @@ export class PollarClient {
       // smart session and could mis-route signing.
       const storedType = this._session.wallet?.type === 'smart' ? null : await readWalletType(this._storage, this.apiKeyHash);
       if (storedType) {
-        try {
-          this._walletAdapter = await this._resolveWalletAdapter(storedType);
-        } catch (err) {
-          // No resolver knows this id (e.g. user removed the kit-adapter
-          // package). Session stays valid; signing will fall back to the
-          // server-side custodial path until the user reconnects a wallet.
-          this._log.warn('[PollarClient] Could not restore wallet adapter for stored id', { id: storedType, err });
-        }
+        // Look the adapter up in the registry. If it's no longer registered
+        // (e.g. the consumer dropped the kit-adapter package), the session stays
+        // valid; signing falls back to the server-side custodial path until the
+        // user reconnects a wallet.
+        const restored = this._walletAdapters.get(storedType);
+        if (restored) this._walletAdapter = restored;
+        else this._log.warn('[PollarClient] No registered wallet adapter for stored id', { id: storedType });
       }
 
       // Cross-tab token rotation of the SAME already-verified session: another
@@ -2745,7 +2708,17 @@ export class PollarClient {
       this._log.warn('[PollarClient] KeyManager reset failed during clearSession', err);
     }
     await removeStorage(this._storage, this.apiKeyHash);
-    this._transactionState = null;
+    // Reset the tx store to idle AND notify subscribers directly. A bare
+    // `= null` only updates the pull-read getTransactionState() and leaves
+    // push-subscribers (e.g. @pollar/react's `usePollar().tx`) showing the
+    // previous session's terminal tx state (a success/hash visible across a
+    // logout into the next login). We dispatch directly instead of via
+    // `_setTransactionState` ON PURPOSE: re-arming `_txStartGen` to defeat that
+    // method's F2 generation guard would ALSO let an in-flight tx's late write
+    // through. This leaves `_txStartGen` untouched, so a tx that resolves after
+    // this logout is still dropped by the guard.
+    this._transactionState = { step: 'idle' };
+    for (const cb of this._transactionStateListeners) cb(this._transactionState);
     // Reset the reactive read stores so a UI still subscribed after logout shows
     // no data (not the previous user's balance/assets/history/sessions), and bump
     // their generations so an in-flight fetch that resolves after this can't

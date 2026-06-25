@@ -4,7 +4,7 @@ import type { KeyManager } from './keys/types';
 import type { LogLevel, PollarLogger } from './lib/logger';
 import type { OnStorageDegrade, Storage } from './storage/types';
 import type { VisibilityProvider } from './visibility/types';
-import { WalletAdapterResolver, WalletId } from './wallets';
+import { WalletAdapter, WalletId } from './wallets';
 
 export type PollarApplicationConfigResponse =
   pollarPaths['/auth/login']['post']['responses'][200]['content']['application/json'];
@@ -127,21 +127,14 @@ export interface PollarClientConfig {
    */
   onStorageDegrade?: OnStorageDegrade;
   /**
-   * Resolves a {@link WalletAdapter} for a given wallet id. If omitted, the
-   * SDK falls back to its built-in `FreighterAdapter` / `AlbedoAdapter`,
-   * which only know `WalletType.FREIGHTER` and `WalletType.ALBEDO`. Inject
-   * `@pollar/stellar-wallets-kit-adapter` (or your own resolver) to support
-   * additional wallets without bundling those dependencies into `@pollar/core`.
+   * Client-side wallet integrations to register. Each renders as its own login
+   * button and is reachable via `login({ provider: adapter.type })`. The built-in
+   * `FreighterAdapter` / `AlbedoAdapter` are auto-registered; entries here are
+   * added on top and override a built-in by reusing its `type`. Import extra
+   * adapters from their own packages (`@pollar/stellar-wallets-kit-adapter`,
+   * `@pollar/privy-adapter`, …) so their deps stay out of `@pollar/core`'s bundle.
    */
-  walletAdapter?: WalletAdapterResolver;
-  /**
-   * Maximum time (ms) the SDK waits for a `walletAdapter` resolver to return.
-   * Guards against a broken extension bridge (e.g. Freighter content-script
-   * down) hanging the login flow forever. The resolver only constructs the
-   * adapter object — it does NOT include the user-facing approval step — so
-   * a few seconds is plenty. Defaults to 5000.
-   */
-  walletResolverTimeoutMs?: number;
+  walletAdapters?: WalletAdapter[];
   /**
    * Optional human-friendly label sent at /auth/login time and recorded on
    * the server-side refresh-token row so the user can identify it in the
@@ -186,16 +179,6 @@ export interface PollarClientConfig {
    * same URL you pass to `WebBrowser.openAuthSessionAsync`.
    */
   oauthRedirectUri?: string;
-  /**
-   * Custom auth providers (e.g. Privy, Magic). Each is a {@link PollarAuthProvider}
-   * registered by its `id`; `login({ provider: id })` then dispatches to it.
-   * Registered AFTER the built-ins, so an entry whose `id` matches a built-in
-   * (`'google'`, `'github'`, `'email'`) overrides it. Does NOT affect `wallet`,
-   * which keeps its own dedicated flow. Custom providers typically authenticate
-   * with their own SDK and then call `ctx.exchangeExternalToken(...)`, which the
-   * backend validates via `POST /auth/external`.
-   */
-  providers?: PollarAuthProvider[];
   /**
    * The passkey (WebAuthn) ceremony for "Smart Wallet" login, injected by the
    * runtime layer (`@pollar/react` implements it with `@simplewebauthn/browser`).
@@ -321,23 +304,19 @@ export type TxBuildSignSubmitResponse =
 export type TxBuildSignSubmitContent = TxBuildSignSubmitResponse['content'];
 
 /**
- * Discriminated union of every login the SDK understands. Intentionally
- * **closed**: each custom provider you add (and wire up server-side via
- * `POST /auth/external`) gets its own member here so `login()` stays fully
- * typed and `switch (options.provider)` stays exhaustive. To add one, append a
- * line — e.g. `| { provider: 'privy'; loginMethod?: 'email' | 'sms' }` — and
- * register a matching {@link PollarAuthProvider} via `PollarClientConfig.providers`.
+ * Discriminated union of every login the SDK understands. The built-ins
+ * (`google`, `github`, `email`) are explicit members; any registered wallet
+ * adapter is reached through the catch-all via `login({ provider: adapter.type })`.
  */
 export type PollarLoginOptions =
   | { provider: 'google' }
   | { provider: 'github' }
   | { provider: 'email'; email: string }
-  | { provider: 'wallet'; type: WalletId }
-  // Catch-all for CUSTOM providers registered via `providers: [...]` (e.g.
-  // privy). `string & {}` keeps the built-in literals autocompleting; the
-  // arbitrary extra fields are the provider's own options. Trade-off: this also
-  // makes a bare `{ provider: 'email' }` (no `email`) type-check — the email
-  // flow still validates `email` at runtime.
+  // Catch-all for any registered wallet adapter (`login({ provider: adapter.type })`,
+  // e.g. 'freighter' | 'albedo' | 'privy' | 'xbull'). `string & {}` keeps the
+  // built-in literals autocompleting. Trade-off: this also makes a bare
+  // `{ provider: 'email' }` (no `email`) type-check — the email flow still
+  // validates `email` at runtime.
   | ({ provider: string & {} } & Record<string, unknown>);
 
 /**

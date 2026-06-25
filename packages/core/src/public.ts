@@ -25,7 +25,7 @@ export type { BuildProofArgs } from './dpop';
 export { FreighterAdapter, AlbedoAdapter, WalletType } from './wallets';
 export type {
   WalletAdapter,
-  WalletAdapterResolver,
+  WalletAdapterMeta,
   WalletId,
   ConnectWalletResponse,
   SignTransactionOptions,
