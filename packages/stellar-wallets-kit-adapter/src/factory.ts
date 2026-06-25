@@ -11,7 +11,7 @@ import { LobstrModule } from '@creit.tech/stellar-wallets-kit/modules/lobstr';
 import { OneKeyModule } from '@creit.tech/stellar-wallets-kit/modules/onekey';
 import { RabetModule } from '@creit.tech/stellar-wallets-kit/modules/rabet';
 import { xBullModule } from '@creit.tech/stellar-wallets-kit/modules/xbull';
-import { createLogger, type LogLevel, type PollarLogger, type WalletAdapterResolver, type WalletId } from '@pollar/core';
+import { createLogger, type LogLevel, type PollarLogger, type WalletAdapter } from '@pollar/core';
 import { StellarWalletsKitAdapter } from './StellarWalletsKitAdapter';
 
 /**
@@ -145,24 +145,33 @@ export function getInitNetwork(): Networks {
 }
 
 /**
- * Build a {@link WalletAdapterResolver} backed by Stellar Wallets Kit. Pass
- * the result to `PollarClientConfig.walletAdapter` so Pollar can use any of
- * the kit's modules without `@pollar/core` having to depend on the kit.
+ * Build the list of {@link WalletAdapter}s backed by Stellar Wallets Kit — one
+ * per kit module — to pass to `PollarClientConfig.walletAdapters`. Each adapter
+ * carries the module's name/icon as its button `meta`. `picker.wallets` (subset)
+ * and `picker.labels` (overrides) are honored if provided.
  *
  * @example
  * ```ts
- * import { stellarWalletsKit } from '@pollar/stellar-wallets-kit-adapter';
+ * import { stellarWalletsKitAdapters } from '@pollar/stellar-wallets-kit-adapter';
  * import { Networks } from '@creit.tech/stellar-wallets-kit';
  *
  * const client = new PollarClient({
  *   apiKey: '…',
- *   walletAdapter: stellarWalletsKit({ network: Networks.PUBLIC }),
+ *   walletAdapters: stellarWalletsKitAdapters({ network: Networks.PUBLIC }),
  * });
  * ```
  */
-export function stellarWalletsKit(options: StellarWalletsKitAdapterOptions): WalletAdapterResolver {
-  return (id: WalletId) => {
-    ensureInit(options);
-    return new StellarWalletsKitAdapter(id);
-  };
+export function stellarWalletsKitAdapters(options: StellarWalletsKitAdapterOptions): WalletAdapter[] {
+  ensureInit(options);
+  const modules = options.modules ?? buildDefaultModules();
+  const wanted = options.picker?.wallets;
+  return modules
+    .filter((m) => !wanted || wanted.includes(m.productId))
+    .map(
+      (m) =>
+        new StellarWalletsKitAdapter(m.productId, {
+          label: options.picker?.labels?.[m.productId] ?? m.productName,
+          iconUrl: m.productIcon,
+        }),
+    );
 }

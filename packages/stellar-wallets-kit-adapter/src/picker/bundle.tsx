@@ -1,13 +1,13 @@
 'use client';
 
-import type { WalletAdapterResolver } from '@pollar/core';
+import type { WalletAdapter } from '@pollar/core';
 import type { RenderWalletsSlot } from '@pollar/react';
-import { stellarWalletsKit, type StellarWalletsKitAdapterOptions } from '../factory';
+import { stellarWalletsKitAdapters, type StellarWalletsKitAdapterOptions } from '../factory';
 import { KitWalletPicker } from './KitWalletPicker';
 
 export interface StellarWalletsKitBundle {
-  /** Pass to `PollarClientConfig.walletAdapter`. */
-  walletAdapter: WalletAdapterResolver;
+  /** Pass to `PollarClientConfig.walletAdapters`. */
+  walletAdapters: WalletAdapter[];
   /** Pass to `<PollarProvider ui={{ renderWallets }}>`. */
   renderWallets: RenderWalletsSlot;
 }
@@ -30,13 +30,13 @@ export interface StellarWalletsKitBundle {
  * });
  *
  * <PollarProvider
- *   client={{ apiKey: '…', walletAdapter: bundle.walletAdapter }}
+ *   client={{ apiKey: '…', walletAdapters: bundle.walletAdapters }}
  *   ui={{ renderWallets: bundle.renderWallets }}
  * />
  * ```
  */
 export function createStellarWalletsKitBundle(options: StellarWalletsKitAdapterOptions): StellarWalletsKitBundle {
-  const walletAdapter = stellarWalletsKit(options);
+  const walletAdapters = stellarWalletsKitAdapters(options);
   const renderWallets: RenderWalletsSlot = (slot) => (
     <KitWalletPicker
       onConnect={slot.onConnect}
@@ -46,5 +46,5 @@ export function createStellarWalletsKitBundle(options: StellarWalletsKitAdapterO
       {...(options.picker !== undefined && { picker: options.picker })}
     />
   );
-  return { walletAdapter, renderWallets };
+  return { walletAdapters, renderWallets };
 }

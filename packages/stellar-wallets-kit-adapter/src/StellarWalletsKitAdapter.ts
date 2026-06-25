@@ -6,6 +6,7 @@ import type {
   SignTransactionOptions,
   SignTransactionResponse,
   WalletAdapter,
+  WalletAdapterMeta,
   WalletId,
 } from '@pollar/core';
 import { getInitNetwork, getKitLogger } from './factory';
@@ -18,10 +19,13 @@ import { getInitNetwork, getKitLogger } from './factory';
  */
 export class StellarWalletsKitAdapter implements WalletAdapter {
   readonly type: WalletId;
+  readonly meta: WalletAdapterMeta;
+  readonly custody = 'external' as const;
   private _address: string | null = null;
 
-  constructor(walletId: WalletId) {
+  constructor(walletId: WalletId, meta: WalletAdapterMeta) {
     this.type = walletId;
+    this.meta = meta;
   }
 
   async isAvailable(): Promise<boolean> {
