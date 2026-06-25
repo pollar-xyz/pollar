@@ -1,5 +1,5 @@
 {
-  "name": "@pollar/privy-adapter",
+  "name": "@pollar/privy-server-adapter",
   "version": "0.9.0",
   "description": "Stateless HTTP proxy that lets Pollar sign Stellar transactions through your Privy account, without your Privy app secret leaving your infrastructure.",
   "main": "./dist/index.js",
