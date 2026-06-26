@@ -1,6 +1,6 @@
 {
   "name": "@pollar/privy-adapter",
-  "version": "0.10.0-rc.0",
+  "version": "0.10.0-rc.8",
   "description": "Privy client-side wallet adapter for @pollar/core — sign Stellar transactions with a user's Privy embedded Stellar wallet via raw-hash signing.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
