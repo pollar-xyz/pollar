@@ -72,7 +72,7 @@ function waitForAlbedoPopup(): Promise<Record<string, string>> {
 
 export class AlbedoAdapter implements WalletAdapter {
   readonly type = WalletType.ALBEDO;
-  readonly meta = { label: 'Albedo' };
+  readonly meta = { label: 'Albedo', group: 'Wallet' };
   readonly custody = 'external' as const;
 
   /**

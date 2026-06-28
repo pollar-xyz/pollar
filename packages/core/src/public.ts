@@ -22,7 +22,7 @@ export { computeJwkThumbprint, canonicalEcJwk } from './keys/thumbprint';
 export { buildProof, normalizeHtu } from './dpop';
 export type { BuildProofArgs } from './dpop';
 
-export { FreighterAdapter, AlbedoAdapter, WalletType } from './wallets';
+export { FreighterAdapter, AlbedoAdapter, WalletType, isInteractiveAuthAdapter } from './wallets';
 export type {
   WalletAdapter,
   WalletAdapterMeta,
@@ -32,6 +32,8 @@ export type {
   SignTransactionResponse,
   SignAuthEntryOptions,
   SignAuthEntryResponse,
+  AuthOption,
+  InteractiveAuthAdapter,
 } from './wallets';
 export type * from './types';
 export { AUTH_ERROR_CODES } from './types';

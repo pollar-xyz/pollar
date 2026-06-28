@@ -5,13 +5,12 @@ import { AUTH_ERROR_CODES, AuthState, WalletId } from '@pollar/core';
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 import { type CSSProperties, useState } from 'react';
 import { LOGO_POLLAR } from '../../constants';
-import type { RenderWalletsSlot } from '../../types';
 import { ModalStatusBanner, PollarModalFooter } from '../commons';
 import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
 
-type WalletAdapterEntry = { id: WalletId; meta: { label: string; iconUrl?: string } };
+type WalletAdapterEntry = { id: WalletId; meta: { label: string; iconUrl?: string; group?: string } };
 
 function WalletAdapterButtons({
   walletAdapters,
@@ -25,7 +24,13 @@ function WalletAdapterButtons({
   return (
     <div className="pollar-wallet-list">
       {walletAdapters.map((a) => (
-        <button key={a.id} type="button" disabled={isLoading} className="pollar-wallet-list-btn" onClick={() => onConnect(a.id)}>
+        <button
+          key={a.id}
+          type="button"
+          disabled={isLoading}
+          className="pollar-wallet-list-btn"
+          onClick={() => onConnect(a.id)}
+        >
           {a.meta.iconUrl && <img src={a.meta.iconUrl} alt={a.meta.label} className="pollar-wallet-list-icon" />}
           <span className="pollar-wallet-list-name">{a.meta.label}</span>
         </button>
@@ -103,8 +108,6 @@ interface LoginModalTemplateProps {
   onLoginSmartWallet?: () => void;
   /** Create a new passkey + smart wallet (new user). */
   onCreateSmartWallet?: () => void;
-  /** Optional override for the wallet picker view. Defaults to a Freighter+Albedo list. */
-  renderWallets?: RenderWalletsSlot;
   authState: AuthState;
   codeInputKey?: number;
   onCodeSubmit?: (code: string) => void;
@@ -130,7 +133,6 @@ export function LoginModalTemplate({
   onWalletConnect,
   onLoginSmartWallet,
   onCreateSmartWallet,
-  renderWallets,
   authState,
   codeInputKey,
   onCodeSubmit,
@@ -138,11 +140,27 @@ export function LoginModalTemplate({
   onCancel,
   onRetry,
 }: LoginModalTemplateProps) {
-  const [showWalletPicker, setShowWalletPicker] = useState(false);
   const [showPasskeyChooser, setShowPasskeyChooser] = useState(false);
+  // Which wallet group's sub-picker is open (gateway label), or null for the root view.
+  const [activeGroup, setActiveGroup] = useState<string | null>(null);
 
   const isDark = theme === 'dark';
   const enabledSocial = Object.entries(providers).filter(([, enabled]) => enabled);
+
+  // Split registered adapters into root-level buttons (no `meta.group`, e.g. Privy)
+  // and gateway groups (adapters sharing a `meta.group` collapse behind one button
+  // that opens a sub-picker — e.g. the Stellar Wallets Kit wallets under "Wallet").
+  const rootAdapters = walletAdapters.filter((a) => !a.meta.group);
+  const walletGroups = walletAdapters
+    .filter((a) => a.meta.group)
+    .reduce<{ label: string; adapters: WalletAdapterEntry[] }[]>((acc, a) => {
+      const label = a.meta.group as string;
+      const existing = acc.find((g) => g.label === label);
+      if (existing) existing.adapters.push(a);
+      else acc.push({ label, adapters: [a] });
+      return acc;
+    }, []);
+  const activeGroupAdapters = walletGroups.find((g) => g.label === activeGroup)?.adapters ?? [];
 
   const cssVars = {
     '--pollar-accent': accentColor,
@@ -220,14 +238,14 @@ export function LoginModalTemplate({
           <BackButton onClick={onBack} />
           <EmailCodeInput key={codeInputKey} email={email} onSubmit={onCodeSubmit ?? (() => {})} />
         </>
-      ) : showWalletPicker ? (
+      ) : activeGroup ? (
         <>
-          <BackButton onClick={() => setShowWalletPicker(false)} />
-          {renderWallets ? (
-            renderWallets({ onConnect: onWalletConnect ?? (() => {}), authState })
-          ) : (
-            <WalletAdapterButtons walletAdapters={walletAdapters} onConnect={onWalletConnect ?? (() => {})} isLoading={isLoading} />
-          )}
+          <BackButton onClick={() => setActiveGroup(null)} />
+          <WalletAdapterButtons
+            walletAdapters={activeGroupAdapters}
+            onConnect={onWalletConnect ?? (() => {})}
+            isLoading={isLoading}
+          />
         </>
       ) : showPasskeyChooser ? (
         <>
@@ -289,26 +307,38 @@ export function LoginModalTemplate({
           {(embeddedWallets || smartWallet) && (
             <div className="pollar-wallet-section">
               {embeddedWallets && (
-                <button
-                  type="button"
-                  disabled={isLoading}
-                  className="pollar-wallet-entry-btn"
-                  onClick={() => setShowWalletPicker(true)}
-                >
-                  <svg
-                    width="18"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                  </svg>
-                  Wallet
-                </button>
+                <>
+                  {walletGroups.map((g) => (
+                    <button
+                      key={g.label}
+                      type="button"
+                      disabled={isLoading}
+                      className="pollar-wallet-entry-btn"
+                      onClick={() => setActiveGroup(g.label)}
+                    >
+                      <svg
+                        width="18"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                      {g.label}
+                    </button>
+                  ))}
+                  {rootAdapters.length > 0 && (
+                    <WalletAdapterButtons
+                      walletAdapters={rootAdapters}
+                      onConnect={onWalletConnect ?? (() => {})}
+                      isLoading={isLoading}
+                    />
+                  )}
+                </>
               )}
 
               {smartWallet && (

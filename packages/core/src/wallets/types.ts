@@ -50,6 +50,16 @@ export interface WalletAdapterMeta {
   label: string;
   /** Optional icon URL / data-URI for the button. */
   iconUrl?: string;
+  /**
+   * Optional gateway grouping for the login UI. Adapters that share the same
+   * `group` string collapse behind a single gateway button (labeled with the
+   * `group` value) that opens a sub-picker listing them — this is how the
+   * Stellar Wallets Kit wallets (Freighter, Albedo, xBull, …) stay behind one
+   * "Wallet" button. Adapters with no `group` render as their own button in the
+   * root login view (e.g. Privy). Distinct group strings produce distinct
+   * gateway buttons.
+   */
+  group?: string;
 }
 
 /**
@@ -71,4 +81,39 @@ export interface WalletAdapter {
   getPublicKey(): Promise<string | null>;
   signTransaction(xdr: string, options?: SignTransactionOptions): Promise<SignTransactionResponse>;
   signAuthEntry(entryXdr: string, options?: SignAuthEntryOptions): Promise<SignAuthEntryResponse>;
+}
+
+/** A single login option an {@link InteractiveAuthAdapter} can render. */
+export type AuthOption = 'email' | 'google' | 'github';
+
+/**
+ * Optional capability layered on {@link WalletAdapter}: an adapter that drives a
+ * multi-step login of its own (email OTP / OAuth) which the login UI renders as a
+ * sub-modal, instead of the adapter being an opaque `connect()` black box.
+ *
+ * The UI calls these methods to run the provider login; once they resolve, it
+ * triggers the normal `login({ provider })` so `connect()` runs and core does the
+ * SEP-10 flow against the now-authenticated wallet. An adapter that implements
+ * this (e.g. `@pollar/privy-adapter`) is detected via {@link isInteractiveAuthAdapter}.
+ */
+export interface InteractiveAuthAdapter extends WalletAdapter {
+  /** Login options to render, in order. */
+  getAuthOptions(): AuthOption[];
+  /** Email login step 1: send the OTP. */
+  sendEmailCode(email: string): Promise<void>;
+  /** Email login step 2: verify the OTP; resolves once the provider authenticates. */
+  verifyEmailCode(code: string): Promise<void>;
+  /** OAuth login; resolves once the provider authenticates. */
+  loginWithOAuth(provider: 'google' | 'github'): Promise<void>;
+}
+
+/** Runtime guard: does this adapter implement the interactive-login capability? */
+export function isInteractiveAuthAdapter(adapter: WalletAdapter | null | undefined): adapter is InteractiveAuthAdapter {
+  return (
+    !!adapter &&
+    typeof (adapter as InteractiveAuthAdapter).getAuthOptions === 'function' &&
+    typeof (adapter as InteractiveAuthAdapter).sendEmailCode === 'function' &&
+    typeof (adapter as InteractiveAuthAdapter).verifyEmailCode === 'function' &&
+    typeof (adapter as InteractiveAuthAdapter).loginWithOAuth === 'function'
+  );
 }

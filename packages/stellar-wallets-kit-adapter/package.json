@@ -15,16 +15,6 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       }
-    },
-    "./picker": {
-      "import": {
-        "types": "./dist/picker.d.mts",
-        "default": "./dist/picker.mjs"
-      },
-      "require": {
-        "types": "./dist/picker.d.ts",
-        "default": "./dist/picker.js"
-      }
     }
   },
   "files": [
@@ -42,21 +32,7 @@
   },
   "peerDependencies": {
     "@creit.tech/stellar-wallets-kit": "^2.0.0",
-    "@pollar/core": "^0.10.0-rc.0",
-    "@pollar/react": "^0.10.0-rc.0",
-    "react": "^18.0.0 || ^19.0.0",
-    "react-dom": "^18.0.0 || ^19.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@pollar/react": {
-      "optional": true
-    },
-    "react": {
-      "optional": true
-    },
-    "react-dom": {
-      "optional": true
-    }
+    "@pollar/core": "^0.10.0-rc.0"
   },
   "dependencies": {
     "@pollar/core": "^0.10.0-rc.0"
@@ -64,10 +40,7 @@
   "devDependencies": {
     "@creit.tech/stellar-wallets-kit": "^2.3.0",
     "@eslint/js": "^10.0.1",
-    "@pollar/react": "*",
-    "@types/react": "^18.0.0",
     "eslint": "^10.5.0",
-    "react": "^18.0.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.61.0"

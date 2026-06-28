@@ -35,7 +35,7 @@ import { TransactionModal } from './components/transaction-modal/TransactionModa
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 import { browserPasskeyCeremony, browserPasskeySigner } from './lib/passkey-ceremony';
-import type { PollarConfig, PollarStyles, RenderWalletsSlot } from './types';
+import type { PollarConfig, PollarStyles } from './types';
 
 const DEFAULT_APP_CONFIG: PollarConfig = {
   application: { name: '' },
@@ -91,8 +91,6 @@ interface PollarContextValue {
   openSessionsModal: () => void;
   appConfig: PollarConfig;
   styles: PollarStyles;
-  /** UI slot overriding the per-adapter wallet button list (forwarded from provider props). */
-  renderWallets?: RenderWalletsSlot;
   // transactions
   openTxModal: () => void;
   tx: TransactionState;
@@ -184,11 +182,6 @@ interface PollarProviderProps {
    * `/applications/config` on mount.
    */
   appConfig?: PollarConfig;
-  /** UI customization slots. */
-  ui?: {
-    /** Replaces the default per-adapter wallet button list with a custom picker. */
-    renderWallets?: RenderWalletsSlot;
-  };
   adapters?: PollarAdapters;
   /**
    * Notified when persistent storage silently degrades to in-memory mode
@@ -206,7 +199,6 @@ interface PollarProviderProps {
 export function PollarProvider({
   client,
   appConfig: appConfigProp,
-  ui,
   adapters,
   onStorageDegrade,
   children,
@@ -335,8 +327,6 @@ export function PollarProvider({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- walletAddress is an intentional re-bind trigger, not read in the body
   const refreshAssets = useCallback(() => pollarClient.refreshAssets(), [pollarClient, walletAddress]);
 
-  const renderWallets = ui?.renderWallets;
-
   const contextValue: PollarContextValue = useMemo(() => {
     const styles: PollarStyles = resolvedConfig.styles ?? {};
     return {
@@ -392,7 +382,6 @@ export function PollarProvider({
       // config
       appConfig: resolvedConfig,
       styles,
-      renderWallets,
       adapters,
     } as PollarContextValue;
   }, [
@@ -410,7 +399,6 @@ export function PollarProvider({
     networkState,
     resolvedConfig,
     adapters,
-    renderWallets,
   ]);
 
   return (

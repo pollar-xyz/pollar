@@ -1,6 +1,6 @@
 export { FreighterAdapter } from './FreighterAdapter';
 export { AlbedoAdapter } from './AlbedoAdapter';
-export { WalletType } from './types';
+export { WalletType, isInteractiveAuthAdapter } from './types';
 export type {
   WalletAdapter,
   WalletAdapterMeta,
@@ -10,4 +10,6 @@ export type {
   SignTransactionResponse,
   SignAuthEntryOptions,
   SignAuthEntryResponse,
+  AuthOption,
+  InteractiveAuthAdapter,
 } from './types';

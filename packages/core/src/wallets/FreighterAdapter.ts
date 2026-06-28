@@ -23,7 +23,7 @@ import { WalletType } from './types';
 
 export class FreighterAdapter implements WalletAdapter {
   readonly type = WalletType.FREIGHTER;
-  readonly meta = { label: 'Freighter' };
+  readonly meta = { label: 'Freighter', group: 'Wallet' };
   readonly custody = 'external' as const;
 
   async isAvailable(): Promise<boolean> {

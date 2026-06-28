@@ -1588,6 +1588,15 @@ export class PollarClient {
   }
 
   /**
+   * Get a registered wallet adapter instance by id. Used by the login UI to reach
+   * an adapter's interactive-login methods (see {@link isInteractiveAuthAdapter})
+   * before handing off to `login({ provider: id })`.
+   */
+  getWalletAdapter(id: WalletId): WalletAdapter | undefined {
+    return this._walletAdapters.get(id);
+  }
+
+  /**
    * Sanitize adapter-supplied meta before exposing it to a login UI. A
    * third-party `walletAdapters` entry is consumer-chosen code, but a buggy or
    * hostile one could set `iconUrl` to an arbitrary URL that the login modal

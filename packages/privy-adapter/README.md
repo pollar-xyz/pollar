@@ -1,58 +1,91 @@
 # @pollar/privy-adapter
 
 Client-side [Privy](https://privy.io) wallet adapter for [`@pollar/core`](../core).
-Lets a user sign Stellar transactions with their **Privy embedded Stellar wallet**
-through Privy's raw-hash signing — Pollar wraps the signature into a Stellar
-`DecoratedSignature` and runs the standard SEP-10 login + tx flow.
+It drives the **whole** Privy flow itself — email / Google / GitHub login, creating
+the user's **Privy embedded Stellar wallet**, and raw-hash signing — then hands the
+signature to Pollar, which wraps it into a Stellar `DecoratedSignature` and runs the
+standard SEP-10 login + transaction flow.
 
-> Server-side custody (signing through your Privy app secret on your backend) is
-> a different package: [`@pollar/privy-server-adapter`](../privy-server-adapter).
+You configure it once with a slim, `PrivyClientConfig`-shaped object; you do **not**
+wire up Privy's hooks yourself.
 
-## Install
+> Server-side custody (signing through your Privy app secret on your backend) is a
+> different package: [`@pollar/privy-server-adapter`](../privy-server-adapter).
+
+## Supported platforms
+
+| Host | Status | Signing engine |
+|---|---|---|
+| React (web) | ✅ supported | `@privy-io/react-auth` |
+| React Native / Expo | 🚧 in progress | `@privy-io/expo` |
+| Angular, Vue, Svelte, vanilla | ❌ not supported | — (Privy ships no SDK) |
+
+There is no Privy SDK for Angular or Vue, so the adapter can't run there. If you use
+it in a non-React host it throws a clear `PrivyAdapterUnsupportedError` on first use.
+For those frameworks, sign server-side with `@pollar/privy-server-adapter` instead.
+
+## Install (web)
 
 ```bash
-npm i @pollar/privy-adapter @pollar/core @stellar/stellar-sdk @privy-io/react-auth
+npm i @pollar/privy-adapter @pollar/core @stellar/stellar-sdk @privy-io/react-auth react react-dom
 ```
 
-## How it works
+## Usage (web)
 
-Privy exposes Stellar signing on the client via the `useSignRawHash` hook
-(`@privy-io/react-auth/extended-chains`, `chainType: 'stellar'`). Because that's
-a React hook, you extract `signRawHash` (and the user's Stellar wallet address)
-in your component and hand both to `createPrivyAdapter`. The adapter is otherwise
-framework-agnostic.
+Create the adapter, wrap your app in `PrivyAdapterProvider`, and register it on the
+`PollarClient`. The provider mounts `@privy-io/react-auth` and bridges its hooks into
+the adapter for you.
 
 ```tsx
-import { useSignRawHash } from '@privy-io/react-auth/extended-chains';
-import { createPrivyAdapter } from '@pollar/privy-adapter';
-import { PollarClient } from '@pollar/core';
+import { createPrivyAdapter, PrivyAdapterProvider } from '@pollar/privy-adapter';
+import { PollarProvider } from '@pollar/react';
 
-function makeClient(stellarAddress: string) {
-  const { signRawHash } = useSignRawHash();
-  const privy = createPrivyAdapter({ address: stellarAddress, signRawHash });
+const privy = createPrivyAdapter({
+  appId: 'your-privy-app-id',
+  loginMethods: ['email', 'google', 'github'],
+  // appearance?, redirectUri?, meta? are optional
+});
 
-  return new PollarClient({
-    apiKey: '…',
-    walletAdapters: [privy], // shows a "Privy" button; login({ provider: 'privy' })
-  });
+export function App() {
+  return (
+    <PrivyAdapterProvider adapter={privy}>
+      <PollarProvider config={{ apiKey: '…', walletAdapters: [privy] }}>
+        {/* your app */}
+      </PollarProvider>
+    </PrivyAdapterProvider>
+  );
 }
 ```
 
-The user's Privy Stellar wallet is created/owned on Privy's side (e.g. via your
-backend with `@pollar/privy-server-adapter`, or Privy's wallet provisioning). This
-adapter only needs its **address** and the **`signRawHash`** function.
+In the Pollar login modal this renders a **Privy** button that opens a sub-modal with
+the `loginMethods` you configured (email, Google, GitHub). The adapter runs the Privy
+login, ensures the user has a Stellar embedded wallet, and resolves the address Pollar
+needs for SEP-10.
 
-## API
+## Config
 
-### `createPrivyAdapter(options): WalletAdapter`
+`createPrivyAdapter(config)`:
 
-| option | type | notes |
+| field | type | notes |
 |---|---|---|
-| `address` | `string` | the user's Privy Stellar G-address |
-| `signRawHash` | `PrivySignRawHash` | from Privy's `useSignRawHash()` |
-| `networkPassphrase?` | `string` | fallback; the SDK passes the app's passphrase per call |
+| `appId` | `string` | your Privy app id |
+| `loginMethods` | `('email' \| 'google' \| 'github')[]` | options shown in the sub-modal, in order |
+| `clientId?` | `string` | Privy app client id, if your app uses one |
+| `appearance?` | `{ theme?; accentColor?; logo? }` | forwarded to Privy's own surfaces |
+| `redirectUri?` | `string` | OAuth redirect; defaults to the current origin on web |
 | `meta?` | `{ label; iconUrl? }` | login button; defaults to `{ label: 'Privy' }` |
 
-`signTransaction` parses the XDR, signs `tx.hash()` via Privy (`chainType:
-'stellar'`), and appends the decorated signature. `signAuthEntry` throws — Privy
-external wallets are classic G-addresses, not Soroban smart accounts.
+The returned object is a `@pollar/core` `WalletAdapter` plus interactive-login methods
+(`getAuthOptions`, `sendEmailCode`, `verifyEmailCode`, `loginWithOAuth`) that the Pollar
+login modal drives. `signTransaction` parses the XDR, signs `tx.hash()` via Privy
+(`chainType: 'stellar'`), and appends the decorated signature. `signAuthEntry` throws —
+Privy external wallets are classic G-addresses, not Soroban smart accounts.
+
+## How it works
+
+`@privy-io/react-auth` is hook-based and must run inside a React tree, so the adapter is
+inert on its own. `PrivyAdapterProvider` mounts `PrivyProvider` plus a small bridge that
+captures Privy's hooks (`useLoginWithEmail`, `useLoginWithOAuth`, and `useCreateWallet` /
+`useSignRawHash` from `@privy-io/react-auth/extended-chains`) and attaches them to the
+adapter. Until that bridge mounts the adapter has no runtime — which is exactly why a
+non-React host fails fast with a clear, actionable error.

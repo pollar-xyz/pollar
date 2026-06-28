@@ -32,13 +32,33 @@
   },
   "peerDependencies": {
     "@pollar/core": "^0.10.0-rc.0",
-    "@stellar/stellar-sdk": "^15.1.0"
+    "@stellar/stellar-sdk": "^15.1.0",
+    "react": "^18 || ^19",
+    "react-dom": "^18 || ^19",
+    "@privy-io/react-auth": "^3",
+    "@privy-io/expo": ">=0.69 <1",
+    "react-native-webview": ">=13"
+  },
+  "peerDependenciesMeta": {
+    "react-dom": {
+      "optional": true
+    },
+    "@privy-io/react-auth": {
+      "optional": true
+    },
+    "@privy-io/expo": {
+      "optional": true
+    },
+    "react-native-webview": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@pollar/core": "^0.10.0-rc.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@privy-io/react-auth": "^3.32.2",
     "@stellar/stellar-sdk": "^15.1.0",
     "eslint": "^10.5.0",
     "tsup": "^8.5.1",

@@ -28,6 +28,14 @@ export interface KitPickerOptions {
   showInstalledOnly?: boolean;
   /** Per-wallet label overrides. Key = wallet id. */
   labels?: Record<string, string>;
+  /**
+   * Label of the gateway button these kit wallets collapse behind in the login
+   * UI (the `meta.group` applied to every adapter this factory builds). Default
+   * `'Wallet'` — the same group as the built-in Freighter/Albedo, so they share
+   * one gateway. Set a distinct value (e.g. `'More wallets'`) to render the kit
+   * wallets as a *separate* gateway button from the built-in ones.
+   */
+  groupLabel?: string;
   /** Visual layout. Default `'grid'`. */
   layout?: 'grid' | 'list';
   /** Theme passthrough — applied as CSS custom properties on the picker root. */
@@ -172,6 +180,7 @@ export function stellarWalletsKitAdapters(options: StellarWalletsKitAdapterOptio
         new StellarWalletsKitAdapter(m.productId, {
           label: options.picker?.labels?.[m.productId] ?? m.productName,
           iconUrl: m.productIcon,
+          group: options.picker?.groupLabel ?? 'Wallet',
         }),
     );
 }
