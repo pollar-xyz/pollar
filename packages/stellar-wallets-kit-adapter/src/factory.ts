@@ -170,6 +170,14 @@ export function getInitNetwork(): Networks {
  * ```
  */
 export function stellarWalletsKitAdapters(options: StellarWalletsKitAdapterOptions): WalletAdapter[] {
+  // SSR / non-browser guard. Stellar Wallets Kit talks to browser wallet
+  // extensions and touches `window` both at `StellarWalletsKit.init()` and in its
+  // wallet modules' constructors — there are no wallets server-side, so return an
+  // empty list instead of crashing during Next.js/Remix SSR. The real adapters
+  // are built when this re-runs on the client (so build your PollarClient and
+  // render the wallet UI on the client, e.g. behind a mounted flag or
+  // `dynamic(..., { ssr: false })`).
+  if (typeof window === 'undefined') return [];
   ensureInit(options);
   const modules = options.modules ?? buildDefaultModules();
   const wanted = options.picker?.wallets;
