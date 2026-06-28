@@ -344,20 +344,10 @@ export interface AuthProviderContext {
   authenticate(clientSessionId: string): Promise<void>;
   /**
    * `POST /auth/wallet/challenge` → the server-signed SEP-10 challenge transaction
-   * (XDR) the wallet must counter-sign to prove key control. Sign it with your
-   * provider's Stellar signer (e.g. Privy), then pass the result to
-   * {@link exchangeExternalToken} as `signedChallengeXdr`. Returns `null` on
+   * (XDR) the wallet must counter-sign to prove key control. Returns `null` on
    * failure. Bind the network you sign on to the app's network.
    */
   requestChallenge(clientSessionId: string, walletAddress: string): Promise<string | null>;
-  /**
-   * External-provider leg: `POST /auth/external` with `{ clientSessionId, ...body }`.
-   * The backend proves wallet control via SEP-10, so `body` must carry
-   * `{ provider, walletAddress, signedChallengeXdr }` (the challenge from
-   * {@link requestChallenge}, counter-signed by the wallet). Returns `false` and
-   * sets an error state on failure.
-   */
-  exchangeExternalToken(clientSessionId: string, body: Record<string, unknown>): Promise<boolean>;
   /** Built-in hosted-OAuth dance (popup on web, in-app browser on RN). Backs the google/github providers. */
   startHostedOAuth(provider: 'google' | 'github'): Promise<void>;
 }

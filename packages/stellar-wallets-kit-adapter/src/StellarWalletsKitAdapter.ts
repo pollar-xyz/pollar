@@ -87,6 +87,13 @@ export class StellarWalletsKitAdapter implements WalletAdapter {
   }
 
   async signAuthEntry(entryXdr: string, options?: SignAuthEntryOptions): Promise<SignAuthEntryResponse> {
+    // Mirror signTransaction's guard: the kit is a global singleton bound to one
+    // network at init, so reject a per-call network override that doesn't match.
+    if (options?.networkPassphrase !== undefined && options.networkPassphrase !== getInitNetwork()) {
+      throw new Error(
+        `[StellarWalletsKit] networkPassphrase override "${options.networkPassphrase}" does not match the network configured at init ("${getInitNetwork()}"). The kit is a global singleton — configure one network at \`stellarWalletsKit({ network })\` and use that for every call.`,
+      );
+    }
     StellarWalletsKit.setWallet(String(this.type));
     const result = await StellarWalletsKit.signAuthEntry(entryXdr, {
       ...(options?.accountToSign !== undefined && { address: options.accountToSign }),

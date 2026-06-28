@@ -1,5 +1,4 @@
 import { createApiClient, PollarApiClient } from '../api/client';
-import type { paths } from '../api/schema';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
 import { createOffRamp, createOnRamp, getRampsQuote, getRampTransaction, pollRampTransaction } from '../api/endpoints/ramps';
@@ -75,8 +74,6 @@ import { emailProvider, oauthProvider } from './auth/providers';
 import { loginWithAdapter, requestWalletChallenge } from './auth/walletFlow';
 import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
 
-/** Request body for the external-provider auth leg (`POST /auth/external`). */
-type ExternalAuthBody = NonNullable<paths['/auth/external']['post']['requestBody']>['content']['application/json'];
 
 const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
 /** React Native runtime: `navigator.product === 'ReactNative'` (set by the RN runtime). */
@@ -2386,8 +2383,8 @@ export class PollarClient {
   /**
    * Build the {@link AuthProviderContext} facade for one login attempt. Wraps
    * the internal `FlowDeps` so providers get only the curated primitives —
-   * `createSession`, `authenticate`, `exchangeExternalToken`, `startHostedOAuth`
-   * — while storage / wallet-adapter / key-manager internals stay private. All
+   * `createSession`, `authenticate`, `requestChallenge`, `startHostedOAuth` —
+   * while storage / wallet-adapter / key-manager internals stay private. All
    * legs share the same `signal`, so `cancelLogin()` aborts the whole chain.
    */
   private _providerContext(signal: AbortSignal): AuthProviderContext {
@@ -2405,7 +2402,6 @@ export class PollarClient {
       authenticate: (clientSessionId: string) => authenticate(clientSessionId, deps),
       requestChallenge: (clientSessionId: string, walletAddress: string) =>
         requestWalletChallenge(clientSessionId, walletAddress, deps),
-      exchangeExternalToken: (clientSessionId, body) => this._exchangeExternalToken(clientSessionId, body, signal),
       startHostedOAuth: (provider) =>
         loginOAuth(provider, {
           ...deps,
@@ -2426,32 +2422,6 @@ export class PollarClient {
    * `ctx.authenticate(clientSessionId)`. Returns `false` (and sets an error
    * state) on failure.
    */
-  private async _exchangeExternalToken(
-    clientSessionId: string,
-    body: Record<string, unknown>,
-    signal: AbortSignal,
-  ): Promise<boolean> {
-    const { data, error } = await this._api.POST('/auth/external', {
-      // clientSessionId LAST so a provider's body can't override the real one.
-      body: { ...body, clientSessionId } as ExternalAuthBody,
-      signal,
-    });
-
-    if (error || !data?.success) {
-      this._log.error('[PollarClient] External provider authentication failed', { error: redactDeep(error) });
-      // Don't clobber the active flow if this one was cancelled/superseded.
-      if (!signal.aborted) {
-        this._setAuthState({
-          step: 'error',
-          previousStep: this._authState.step,
-          message: 'External provider authentication failed',
-          errorCode: AUTH_ERROR_CODES.EXTERNAL_AUTH_FAILED,
-        });
-      }
-      return false;
-    }
-    return true;
-  }
 
   private _flowDeps(signal: AbortSignal) {
     return {
