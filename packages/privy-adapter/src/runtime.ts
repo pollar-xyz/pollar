@@ -10,7 +10,7 @@ import type {
 import type { PollarPrivyConfig, PrivyLoginMethod } from './config';
 
 export type { AuthOption, InteractiveAuthAdapter } from '@pollar/core';
-import { PrivyAdapterUnsupportedError, RUNTIME_ATTACH_TIMEOUT_MS, UNSUPPORTED_MESSAGE } from './environment';
+import { PrivyAdapterUnsupportedError, RUNTIME_ATTACH_TIMEOUT_MS, UNSUPPORTED_MESSAGE } from './environment.ts';
 
 export const PRIVY_ID = 'privy';
 

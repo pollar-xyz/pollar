@@ -36,6 +36,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "lint": "tsc --noEmit && eslint src",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"test/*.test.ts\"",
     "clean": "rm -rf dist"
   },
   "engines": {
