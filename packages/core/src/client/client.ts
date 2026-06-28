@@ -237,10 +237,10 @@ export class PollarClient {
   /** `redirect_uri` sent to the backend for hosted OAuth. */
   private readonly _oauthRedirectUri: string;
   /**
-   * Registry of pluggable login strategies, keyed by provider id. Seeded with
-   * the built-ins (`google`, `github`, `email`) and then any `config.providers`
-   * (which can override a built-in by reusing its id). `wallet` is deliberately
-   * absent — it keeps its own dedicated flow. See {@link PollarAuthProvider}.
+   * Registry of the built-in auth providers, keyed by provider id (`google`,
+   * `github`, `email`). Custom integrations now register as
+   * `config.walletAdapters`, not here. `providerAction()` reaches these
+   * providers' actions (e.g. email's resend/verify). See {@link PollarAuthProvider}.
    */
   private readonly _providers = new Map<string, PollarAuthProvider>();
 
@@ -295,6 +295,20 @@ export class PollarClient {
       this._walletAdapters.set(adapter.type, adapter);
     }
     for (const adapter of config.walletAdapters ?? []) {
+      // login() resolves the wallet registry BEFORE the auth-provider registry,
+      // so an adapter whose `type` collides with a built-in auth provider
+      // ('google'/'github'/'email') would silently steal that login. And a
+      // duplicate type across adapters silently drops one (Map overwrite). Warn
+      // on both so a config mistake isn't invisible.
+      if (this._providers.has(adapter.type)) {
+        this._log.warn(
+          `[PollarClient] Wallet adapter type '${adapter.type}' shadows the built-in '${adapter.type}' auth provider; login({ provider: '${adapter.type}' }) will run the wallet flow, not the provider.`,
+        );
+      } else if (this._walletAdapters.has(adapter.type)) {
+        this._log.warn(
+          `[PollarClient] Wallet adapter type '${adapter.type}' overrides an already-registered adapter of the same type.`,
+        );
+      }
       this._walletAdapters.set(adapter.type, adapter);
     }
 
@@ -1573,7 +1587,24 @@ export class PollarClient {
    * button per adapter. Reach a login via `login({ provider: id })`.
    */
   listWalletAdapters(): { id: WalletId; meta: WalletAdapterMeta }[] {
-    return Array.from(this._walletAdapters.values()).map((a) => ({ id: a.type, meta: a.meta }));
+    return Array.from(this._walletAdapters.values()).map((a) => ({ id: a.type, meta: this._safeMeta(a.meta) }));
+  }
+
+  /**
+   * Sanitize adapter-supplied meta before exposing it to a login UI. A
+   * third-party `walletAdapters` entry is consumer-chosen code, but a buggy or
+   * hostile one could set `iconUrl` to an arbitrary URL that the login modal
+   * fetches on render (a tracking beacon leaking "user opened login" + IP).
+   * Only allow `https:` and inline `data:image/` icons; drop anything else.
+   */
+  private _safeMeta(meta: WalletAdapterMeta): WalletAdapterMeta {
+    if (!meta.iconUrl) return meta;
+    const ok = /^https:\/\//i.test(meta.iconUrl) || /^data:image\//i.test(meta.iconUrl);
+    if (ok) return meta;
+    this._log.warn(`[PollarClient] Dropped wallet adapter '${meta.label}' iconUrl with a disallowed scheme (use https: or data:image/).`);
+    // Omit iconUrl entirely (exactOptionalPropertyTypes forbids `iconUrl: undefined`).
+    const { iconUrl: _dropped, ...safe } = meta;
+    return safe;
   }
 
   /**
@@ -1613,8 +1644,26 @@ export class PollarClient {
    * `signed` on success (or `error[phase: 'signing']` on failure). `buildData`
    * is threaded through if the consumer previously called `buildTx`.
    */
+  /**
+   * For an EXTERNAL-wallet session whose signing adapter isn't attached (the host
+   * didn't re-register the same `walletAdapters` this run, or the persisted
+   * walletType row was lost), the custodial signer can't help: the platform holds
+   * no key for a user-owned wallet. Return a clear reconnect error so the host can
+   * prompt the user, instead of POSTing to the custodial endpoint for a confusing
+   * 4xx. The session stays valid (reads/refresh still work); only signing needs the
+   * wallet reconnected, so this is an error, NOT a logout.
+   */
+  private _externalSignerMissing(): { status: 'error'; details: string } | null {
+    if (this._session?.wallet?.type === 'external' && !this._walletAdapter) {
+      return { status: 'error', details: 'Wallet not connected. Reconnect your wallet to sign.' };
+    }
+    return null;
+  }
+
   async signTx(unsignedXdr: string): Promise<SignOutcome> {
     this._txStartGen = this._sessionGeneration;
+    const noSigner = this._externalSignerMissing();
+    if (noSigner) return noSigner;
     // Smart-wallet (C-address/passkey) sessions sign via signAndSubmitTx
     // (_signSubmitSmart's passkey ceremony), not signTx. Bail BEFORE emitting any
     // tx state so a UI subscribed to onTransactionStateChange isn't stranded on
@@ -1712,6 +1761,8 @@ export class PollarClient {
    *   path, where the provider sets its own expiration.
    */
   async signAuthEntry(entryXdr: string, options: { validUntilLedger: number }): Promise<SignAuthEntryOutcome> {
+    const noSigner = this._externalSignerMissing();
+    if (noSigner) return noSigner;
     // External adapter: the provider signs the entry directly. Skip it for a
     // smart-wallet session (passkey-signed) so a stale/foreign adapter can't
     // hijack signing — consistent with the type-first signing paths.
@@ -1879,6 +1930,8 @@ export class PollarClient {
    */
   async signAndSubmitTx(unsignedXdr?: string): Promise<SubmitOutcome> {
     this._txStartGen = this._sessionGeneration;
+    const noSigner = this._externalSignerMissing();
+    if (noSigner) return noSigner;
     // Smart wallet: there is no unsigned XDR — sign the prepared auth digest
     // with the passkey and submit, using the build already on the state machine.
     if (this._session?.wallet?.type === 'smart') {
@@ -2007,6 +2060,8 @@ export class PollarClient {
     options?: TxBuildBody['options'],
   ): Promise<SubmitOutcome> {
     this._txStartGen = this._sessionGeneration;
+    const noSigner = this._externalSignerMissing();
+    if (noSigner) return noSigner;
     // Smart wallet (passkey / C-address): build (prepare) → sign the auth digest
     // with the passkey → submit. The signed entry is assembled server-side.
     if (this._session?.wallet?.type === 'smart') {

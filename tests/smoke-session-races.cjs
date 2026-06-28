@@ -677,20 +677,28 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
       }),
     );
     await storage.set(`pollar:${hash}:walletType`, 'freighter');
-    let resolverCalled = false;
+    const fakeFreighter = {
+      type: 'freighter',
+      meta: { label: 'Freighter' },
+      isAvailable: async () => true,
+      connect: async () => ({ address: 'G' }),
+      signTransaction: async () => ({ signedTxXdr: 'x' }),
+      signAuthEntry: async () => ({ signedAuthEntry: 'x' }),
+    };
     const client = new sdk.PollarClient({
       apiKey,
       storage,
       baseUrl: 'https://x.test',
       logLevel: 'silent',
-      walletAdapter: () => {
-        resolverCalled = true;
-        return { type: 'freighter', isAvailable: async () => true };
-      },
+      walletAdapters: [fakeFreighter],
     });
     await client.ready();
-    check('smart session did NOT resolve an external adapter from the stale walletType row', resolverCalled === false);
-    check('  session still restored fine', client.getAuthState().step === 'authenticated');
+    check('smart session still restored fine', client.getAuthState().step === 'authenticated');
+    check(
+      '  smart session is NOT treated as the external freighter wallet (stale walletType ignored)',
+      client.getWallet()?.custody === 'smart',
+      JSON.stringify(client.getWallet()),
+    );
     client.destroy();
   }
 
@@ -862,6 +870,7 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     const captured = [];
     const fakeAdapter = {
       type: 'fake',
+      meta: { label: 'Fake' },
       isAvailable: async () => true,
       connect: async () => ({ address: 'Gtest' }),
       signTransaction: async () => ({ signedTxXdr: 'x' }),
@@ -876,7 +885,7 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
       baseUrl: 'https://x.test',
       logLevel: 'silent',
       stellarNetwork: 'testnet',
-      walletAdapter: () => fakeAdapter,
+      walletAdapters: [fakeAdapter],
     });
     await client.ready();
     await client.signAuthEntry('ENTRY_XDR', { validUntilLedger: 1000 });
@@ -1060,6 +1069,7 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     const storage = sdk.createMemoryAdapter();
     const fakeAdapter = {
       type: 'fake',
+      meta: { label: 'Fake' },
       isAvailable: async () => false, // extension not installed
       connect: async () => ({ address: 'G' }),
       signTransaction: async () => ({ signedTxXdr: 'x' }),
@@ -1070,11 +1080,11 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
       storage,
       baseUrl: 'https://x.test',
       logLevel: 'silent',
-      walletAdapter: () => fakeAdapter,
+      walletAdapters: [fakeAdapter],
     });
     await client.ready();
     mock.calls = [];
-    client.loginWallet('fake');
+    client.login({ provider: 'fake' });
     await waitFor(() => client.getAuthState().step === 'wallet_not_installed');
     check('state → wallet_not_installed', client.getAuthState().step === 'wallet_not_installed');
     const sessionCalls = mock.calls.filter((c) => /\/auth\/session(\?|$)/.test(c.url));
@@ -1164,12 +1174,17 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     await sp; // submit now resolves SUCCESS — must be dropped (stale generation)
     await new Promise((r) => setTimeout(r, 20));
     check(
-      'tx state not repopulated after logout (getTransactionState stays null)',
-      client.getTransactionState() === null,
+      'tx store cleared to idle after logout (getTransactionState)',
+      client.getTransactionState()?.step === 'idle',
       JSON.stringify(client.getTransactionState()),
     );
     check(
-      '  no transaction state was emitted after logout',
+      '  subscribers were NOTIFIED of the idle reset on logout (not left on the old tx)',
+      txStates.includes('idle') && !txStates.includes('success') && !txStates.includes('submitted'),
+      JSON.stringify(txStates),
+    );
+    check(
+      '  the delayed submit (stale generation) added no further emission',
       txStates.length === emissionsAfterLogout,
       JSON.stringify(txStates),
     );
@@ -1188,6 +1203,77 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
       'cancelLogin kept the authenticated session (no flap to idle)',
       client.getAuthState().step === 'authenticated',
       client.getAuthState().step,
+    );
+    client.destroy();
+  }
+
+  // ── HH. external session whose adapter isn't registered -> reconnect error,
+  //       NOT a custodial misroute (_externalSignerMissing)
+  console.log('\n── HH. external session w/o adapter -> reconnect error, no custodial (#2) ──');
+  {
+    mock.calls = [];
+    const apiKey = 'pk_race_HH';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    await storage.set(
+      `pollar:${hash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'external', address: 'Gtest' },
+      }),
+    );
+    await storage.set(`pollar:${hash}:walletType`, 'fake'); // adapter intentionally NOT registered
+    const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+    await client.ready();
+    const outcome = await client.signTx('UNSIGNED_XDR');
+    check(
+      'external signTx with no attached adapter returned a reconnect error',
+      outcome?.status === 'error' && /reconnect/i.test(outcome?.details || ''),
+      JSON.stringify(outcome),
+    );
+    check(
+      '  did NOT misroute to the custodial /tx/sign endpoint',
+      mock.calls.filter((c) => /\/tx\/sign(\?|$)/.test(c.url)).length === 0,
+    );
+    client.destroy();
+  }
+
+  // ── II. a wallet adapter type colliding with a built-in auth provider warns (#4)
+  console.log('\n── II. wallet adapter type shadowing a built-in provider warns (#4) ──');
+  {
+    const warns = [];
+    const spyLogger = {
+      error() {},
+      warn(...a) {
+        warns.push(a.join(' '));
+      },
+      info() {},
+      debug() {},
+    };
+    const collider = {
+      type: 'google', // collides with the built-in google OAuth provider
+      meta: { label: 'Not Google' },
+      isAvailable: async () => true,
+      connect: async () => ({ address: 'G' }),
+      signTransaction: async () => ({ signedTxXdr: 'x' }),
+      signAuthEntry: async () => ({ signedAuthEntry: 'x' }),
+    };
+    const client = new sdk.PollarClient({
+      apiKey: 'pk_race_II',
+      storage: sdk.createMemoryAdapter(),
+      baseUrl: 'https://x.test',
+      logger: spyLogger,
+      walletAdapters: [collider],
+    });
+    await client.ready();
+    check(
+      "registering an adapter type 'google' warned about shadowing the provider",
+      warns.some((w) => w.includes("shadows the built-in 'google'")),
+      JSON.stringify(warns),
     );
     client.destroy();
   }

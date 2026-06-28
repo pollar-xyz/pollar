@@ -1,8 +1,13 @@
-// @pollar smoke test — custom auth providers: registry, dispatch, context.
+// @pollar smoke test — built-in auth providers + wallet-adapter dispatch.
 //
 // Run with `node tests/smoke-providers.cjs` after `pnpm build`. Mocks `fetch`,
-// `localStorage` and `window` so PollarClient runs as if in a browser, and
-// exercises the new pluggable-provider surface end-to-end without a real server.
+// `localStorage` and `window` so PollarClient runs as if in a browser.
+//
+// NOTE: `config.providers` (registering arbitrary custom auth providers) was
+// REMOVED when wallet integrations were unified into `config.walletAdapters`.
+// So this file now covers (a) the built-in email provider via `login()` /
+// `providerAction()`, and (b) the wallet-adapter dispatch path that replaced
+// custom providers (`login({ provider: adapter.type })` -> loginWithAdapter).
 
 const path = require('node:path');
 
@@ -10,8 +15,6 @@ globalThis.window = {
   location: { origin: 'https://x.test', href: 'https://x.test/' },
   addEventListener: () => {},
   removeEventListener: () => {},
-  // OAuth default opener calls window.open; we inject our own opener below, but
-  // keep a stub so nothing throws if a path reaches it.
   open: () => null,
 };
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
@@ -42,7 +45,7 @@ async function waitFor(cond, timeoutMs = 1000) {
 (async () => {
   const apiKey = 'pk_smoke_providers';
 
-  // ─── fetch mock ────────────────────────────────────────────────────────────
+  // fetch mock: only the endpoints the email flow + construction touch.
   const calls = [];
   globalThis.fetch = async (req) => {
     const url = req.url;
@@ -51,156 +54,70 @@ async function waitFor(cond, timeoutMs = 1000) {
       body = await req.clone().json();
     } catch {}
     calls.push({ url, method: req.method, body });
-
     if (url.includes('/auth/session') && !url.includes('/status') && !url.includes('/resume')) {
       return new Response(JSON.stringify({ success: true, content: { clientSessionId: 'cs_test' } }), { status: 200 });
     }
+    // /auth/email and /auth/email/verify-code: success but NO SDK_EMAIL_CODE_VERIFIED
+    // code, so verify lands on the generic EMAIL_VERIFY_FAILED branch (block 4).
     if (url.includes('/auth/email')) {
       return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
-    }
-    if (url.includes('/auth/external')) {
-      // Fail when the caller asks us to (lets us assert the error path).
-      const ok = !(body && body.shouldFail);
-      return new Response(JSON.stringify({ success: ok }), { status: ok ? 200 : 401 });
     }
     return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
   };
 
-  // ─── A custom provider that records the context it receives ─────────────────
-  const recorder = {
-    ctx: null,
-    options: null,
-    sessionId: undefined,
-    exchanged: undefined,
-  };
-  const recorderProvider = {
-    id: 'recorder',
-    async login(ctx, options) {
-      recorder.ctx = ctx;
-      recorder.options = options;
-      const clientSessionId = await ctx.createSession();
-      recorder.sessionId = clientSessionId;
-      if (clientSessionId) {
-        recorder.exchanged = await ctx.exchangeExternalToken(clientSessionId, {
-          token: 'ext_token',
-          shouldFail: options.shouldFail === true,
-          // A malicious/buggy provider trying to override the real session id —
-          // the SDK must keep the authoritative clientSessionId (#10).
-          clientSessionId: 'EVIL_OVERRIDE',
-        });
-      }
-      // Deliberately NOT calling ctx.authenticate() — that path needs the
-      // session-status stream, out of scope for this dispatch smoke test.
-    },
-    actions: {
-      ping: async (ctx, payload) => {
-        recorder.pinged = payload;
-      },
-    },
-  };
-
-  // Override the built-in google provider to prove config wins by id.
-  let googleOverridden = false;
-  const fakeGoogle = {
-    id: 'google',
-    async login() {
-      googleOverridden = true;
-    },
-  };
-
-  // A provider whose login parks at a gate, then writes state — used to prove a
-  // CANCELLED flow's late `ctx.setAuthState` is suppressed (C1 completion).
+  // A wallet adapter whose isAvailable() parks at a gate — to prove a cancel
+  // during the wallet flow maps to `idle` (AbortError rethrow), not an error.
   let releaseGate;
   const gate = new Promise((r) => {
     releaseGate = r;
   });
-  let gatedLoginSettled = false; // set when the late write has been attempted
-  const gatedProvider = {
-    id: 'gated',
-    async login(ctx) {
+  let gatedProbed = false;
+  const gatedAdapter = {
+    type: 'gated',
+    meta: { label: 'Gated' },
+    isAvailable: async () => {
       await gate;
-      ctx.setAuthState({
-        step: 'error',
-        previousStep: 'authenticating',
-        message: 'late write from a cancelled flow',
-        errorCode: sdk.AUTH_ERROR_CODES.UNEXPECTED_ERROR,
-      });
-      gatedLoginSettled = true;
+      gatedProbed = true;
+      return false;
     },
+    connect: async () => ({ address: 'G' }),
+    signTransaction: async () => ({ signedTxXdr: 'x' }),
+    signAuthEntry: async () => ({ signedAuthEntry: 'x' }),
   };
 
-  // A provider that throws SYNCHRONOUSLY (before returning a promise) — must be
-  // routed through _handleFlowError, not thrown out of login()'s public API (#6).
-  const throwingProvider = {
-    id: 'throwing',
-    login() {
+  // A wallet adapter whose isAvailable() throws SYNCHRONOUSLY — must be routed to
+  // an error state, not thrown out of login()'s public API.
+  const throwingAdapter = {
+    type: 'throwing',
+    meta: { label: 'Throwing' },
+    isAvailable: () => {
       throw new Error('sync boom');
     },
+    connect: async () => ({ address: 'G' }),
+    signTransaction: async () => ({ signedTxXdr: 'x' }),
+    signAuthEntry: async () => ({ signedAuthEntry: 'x' }),
   };
 
-  console.log('── 1. Construction with custom providers ─────────────────────');
+  console.log('── 1. Construction with wallet adapters ──────────────────────');
   const client = new sdk.PollarClient({
     apiKey,
     storage: sdk.createMemoryAdapter(),
     baseUrl: 'https://x.test',
-    providers: [recorderProvider, fakeGoogle, gatedProvider, throwingProvider],
-    // Stub the OAuth opener so the github built-in resolves without a popup.
-    openAuthUrl: async () => {
-      /* never calls getUrl → flow returns before authenticate() */
-    },
+    walletAdapters: [gatedAdapter, throwingAdapter],
   });
   await client.ready();
-  check('client.ready() resolves with custom providers', true);
-
-  console.log('\n── 2. login() dispatches to a custom provider with a context ─');
-  client.login({ provider: 'recorder', foo: 'bar' });
-  await waitFor(() => recorder.exchanged !== undefined);
-  check('custom provider.login() was invoked', recorder.ctx !== null);
-  check('  options passed through verbatim', recorder.options?.foo === 'bar');
-  check('  ctx.createSession() returned the backend clientSessionId', recorder.sessionId === 'cs_test');
+  check('client.ready() resolves', true);
   check(
-    '  POST /auth/session fired',
-    calls.some((c) => c.url.endsWith('/auth/session')),
+    'listWalletAdapters() reports the built-ins + the two custom adapters',
+    client
+      .listWalletAdapters()
+      .map((a) => a.id)
+      .sort()
+      .join(',') === 'albedo,freighter,gated,throwing',
+    JSON.stringify(client.listWalletAdapters().map((a) => a.id)),
   );
-  check(
-    '  ctx.exchangeExternalToken() posted /auth/external',
-    calls.some((c) => c.url.includes('/auth/external')),
-  );
-  check(
-    '  external body merged provider payload but kept the authoritative clientSessionId (#10)',
-    (() => {
-      const ext = calls.find((c) => c.url.includes('/auth/external'));
-      // The provider also passed clientSessionId:'EVIL_OVERRIDE' in the body — the
-      // real one must win (spread order), not the provider-supplied one.
-      return ext?.body?.clientSessionId === 'cs_test' && ext?.body?.token === 'ext_token';
-    })(),
-  );
-  check('  exchange returned true on success', recorder.exchanged === true);
 
-  console.log('\n── 3. context exposes only the curated facade ────────────────');
-  const ctx = recorder.ctx;
-  for (const m of ['createSession', 'authenticate', 'exchangeExternalToken', 'startHostedOAuth', 'setAuthState']) {
-    check(`  ctx.${m} is a function`, typeof ctx[m] === 'function');
-  }
-  check('  ctx.signal is an AbortSignal', typeof ctx.signal?.aborted === 'boolean');
-  check('  ctx.apiKey / basePath exposed', ctx.apiKey === apiKey && typeof ctx.basePath === 'string');
-  check('  no FlowDeps internals leak (storeWalletAdapter)', ctx.storeWalletAdapter === undefined);
-  check('  no FlowDeps internals leak (resolveWalletAdapter)', ctx.resolveWalletAdapter === undefined);
-
-  console.log('\n── 4. exchangeExternalToken failure → false + error state ────');
-  recorder.exchanged = undefined;
-  client.login({ provider: 'recorder', shouldFail: true });
-  await waitFor(() => recorder.exchanged !== undefined);
-  check('exchange returned false on backend failure', recorder.exchanged === false);
-  check('  authState moved to error', client.getAuthState().step === 'error');
-  check('  errorCode = EXTERNAL_AUTH_FAILED', client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.EXTERNAL_AUTH_FAILED);
-
-  console.log('\n── 5. config provider overrides a built-in by id ────────────');
-  client.login({ provider: 'google' });
-  await waitFor(() => googleOverridden);
-  check('config google provider shadowed the built-in', googleOverridden === true);
-
-  console.log('\n── 6. built-in email provider still works via login() ───────');
+  console.log('\n── 2. built-in email provider works via login() ──────────────');
   calls.length = 0;
   client.login({ provider: 'email', email: 'a@b.test' });
   await waitFor(() => calls.some((c) => c.url.includes('/auth/email')));
@@ -210,87 +127,76 @@ async function waitFor(cond, timeoutMs = 1000) {
   );
   check(
     '  POST /auth/email fired with the address',
-    (() => {
-      const e = calls.find((c) => c.url.includes('/auth/email'));
-      return e?.body?.email === 'a@b.test';
-    })(),
+    calls.find((c) => c.url.includes('/auth/email'))?.body?.email === 'a@b.test',
   );
 
-  console.log('\n── 7. providerAction dispatches; unknowns are rejected ───────');
-  client.providerAction('recorder', 'ping', { hi: 1 });
-  await waitFor(() => recorder.pinged);
-  check('providerAction invoked the named action', recorder.pinged?.hi === 1);
-  let threw = false;
-  try {
-    client.providerAction('recorder', 'nope');
-  } catch (e) {
-    threw = e && e.code === 'INVALID_FLOW';
-  }
-  check('unknown action throws PollarFlowError', threw);
-
-  console.log('\n── 8. unknown provider → clean error state ───────────────────');
+  console.log('\n── 3. unknown provider → clean error state ───────────────────');
   client.login({ provider: 'does_not_exist' });
   await waitFor(() => client.getAuthState().step === 'error');
   check('unknown provider sets error state', client.getAuthState().step === 'error');
 
-  console.log('\n── 9. email verify generic failure is retryable (B1) ─────────');
-  // login(email) creates the session and sends the code → step 'entering_code'.
+  console.log('\n── 4. email verify generic failure is retryable (B1) ─────────');
   client.login({ provider: 'email', email: 'retry@b.test' });
   await waitFor(() => client.getAuthState().step === 'entering_code');
-  // The mock answers /auth/email/verify-code with success:true but NO
-  // SDK_EMAIL_CODE_VERIFIED code → the SDK's generic EMAIL_VERIFY_FAILED branch.
   client.verifyEmailCode('000000');
-  await waitFor(() => client.getAuthState().step === 'error');
+  await waitFor(() => client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.EMAIL_VERIFY_FAILED);
   check(
     'generic verify failure → EMAIL_VERIFY_FAILED',
     client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.EMAIL_VERIFY_FAILED,
-    client.getAuthState().errorCode,
   );
   check('  error state carries clientSessionId so it can retry', !!client.getAuthState().clientSessionId);
   let verifyThrew = false;
   try {
-    client.verifyEmailCode('111111'); // must be retryable now — no synchronous PollarFlowError
+    client.verifyEmailCode('111111'); // retryable now — no synchronous PollarFlowError
   } catch {
     verifyThrew = true;
   }
   check('  verifyEmailCode is retryable after a generic failure (no throw)', verifyThrew === false);
 
-  console.log('\n── 10. a cancelled flow cannot clobber state (C1 completion) ──');
-  client.login({ provider: 'gated' }); // provider parks at the gate (signal captured)
-  client.cancelLogin(); // aborts the controller and sets idle
+  console.log('\n── 5. providerAction rejects an unknown action ───────────────');
+  let actionThrew = false;
+  try {
+    client.providerAction('email', 'nope');
+  } catch (e) {
+    actionThrew = e && e.code === 'INVALID_FLOW';
+  }
+  check('unknown action throws PollarFlowError(INVALID_FLOW)', actionThrew);
+
+  console.log('\n── 6. cancel during a wallet flow maps to idle, not error ────');
+  client.login({ provider: 'gated' }); // parks at adapter.isAvailable()
+  client.cancelLogin(); // aborts the signal
   check('cancelLogin set idle', client.getAuthState().step === 'idle', client.getAuthState().step);
-  releaseGate(); // provider now calls ctx.setAuthState with an aborted signal
-  await waitFor(() => gatedLoginSettled); // wait for the late write to actually fire (not a fixed sleep)
+  releaseGate(); // adapter.isAvailable() resolves now (flow already aborted)
+  await waitFor(() => gatedProbed);
+  await new Promise((r) => setTimeout(r, 10));
   check(
-    "  the cancelled flow's late setAuthState did NOT clobber idle",
+    '  the cancelled wallet flow did NOT clobber idle (AbortError → idle)',
     client.getAuthState().step === 'idle',
     client.getAuthState().step,
   );
 
-  console.log('\n── 11. a provider that throws synchronously is handled, not thrown (#6) ──');
+  console.log('\n── 7. a wallet adapter that throws synchronously is handled ───');
   let loginThrew = false;
   try {
-    client.login({ provider: 'throwing' }); // login() throws synchronously inside
+    client.login({ provider: 'throwing' }); // adapter.isAvailable() throws synchronously
   } catch {
     loginThrew = true;
   }
   check('login() did not throw out of the public API', loginThrew === false);
-  await waitFor(() => client.getAuthState().step === 'error');
+  await waitFor(() => client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.WALLET_CONNECT_FAILED);
   check(
-    '  the synchronous throw was routed to an error state via _handleFlowError',
-    client.getAuthState().step === 'error' && client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.UNEXPECTED_ERROR,
+    '  the synchronous throw was routed to a WALLET_CONNECT_FAILED error state',
+    client.getAuthState().step === 'error' && client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.WALLET_CONNECT_FAILED,
     `${client.getAuthState().step}/${client.getAuthState().errorCode}`,
   );
 
-  console.log('\n── 12. email flow validates a blank email before the API ─────');
+  console.log('\n── 8. email flow validates a blank email before the API ──────');
   calls.length = 0;
   client.login({ provider: 'email', email: '' }); // missing email
-  // Wait for the SPECIFIC validation error (a prior block left a stale `error`).
   await waitFor(() => client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.EMAIL_SEND_FAILED);
   check(
     'blank email → error (EMAIL_SEND_FAILED), not an opaque API 400',
     client.getAuthState().step === 'error' && client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.EMAIL_SEND_FAILED,
-    client.getAuthState().errorCode,
   );
   check(
     '  no blank email was POSTed to /auth/email',
