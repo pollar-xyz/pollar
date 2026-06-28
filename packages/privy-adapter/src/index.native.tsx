@@ -1,13 +1,7 @@
 import { type ReactNode, useEffect, useRef } from 'react';
-import {
-  PrivyProvider,
-  type PrivyClientConfig,
-  type User,
-  useLoginWithEmail,
-  useLoginWithOAuth,
-  usePrivy,
-} from '@privy-io/react-auth';
-import { useCreateWallet, useSignRawHash } from '@privy-io/react-auth/extended-chains';
+import { PrivyProvider, useLoginWithEmail, useLoginWithOAuth, usePrivy } from '@privy-io/expo';
+import { useCreateWallet, useSignRawHash } from '@privy-io/expo/extended-chains';
+import type { User } from '@privy-io/api-types';
 import type { InteractiveAuthAdapter } from '@pollar/core';
 import type { PollarPrivyConfig } from './config';
 import type { PrivyRuntime } from './runtime';
@@ -24,13 +18,13 @@ const STELLAR_CHAIN = 'stellar';
 /** Find the user's Privy embedded **Stellar** wallet address, if any. */
 function findStellarAddress(user: User | null): string | null {
   if (!user) return null;
-  for (const account of user.linkedAccounts) {
+  for (const account of user.linked_accounts) {
     if (
       account.type === 'wallet' &&
-      account.walletClientType === 'privy' &&
-      // `chainType` is typed to the public chain union (no `stellar`); the
+      account.wallet_client_type === 'privy' &&
+      // `chain_type` is typed to the public chain union (no `stellar`); the
       // extended-chains wallet carries it at runtime, so compare as a string.
-      (account.chainType as string) === STELLAR_CHAIN
+      (account.chain_type as string) === STELLAR_CHAIN
     ) {
       return account.address;
     }
@@ -38,79 +32,41 @@ function findStellarAddress(user: User | null): string | null {
   return null;
 }
 
-/** Map the slim Pollar config onto Privy's `PrivyClientConfig`. */
-function toPrivyClientConfig(config: PollarPrivyConfig): PrivyClientConfig {
-  const cfg: PrivyClientConfig = {
-    loginMethods: config.loginMethods as NonNullable<PrivyClientConfig['loginMethods']>,
-    // We create the Stellar wallet explicitly via `useCreateWallet`, so disable
-    // Privy's automatic EVM/Solana wallet provisioning on login.
-    embeddedWallets: {
-      ethereum: { createOnLogin: 'off' },
-      solana: { createOnLogin: 'off' },
-    },
-  };
-  // Build appearance only from defined fields — `exactOptionalPropertyTypes`
-  // forbids assigning `undefined` to optional props.
-  const a = config.appearance;
-  if (a) {
-    const appearance: NonNullable<PrivyClientConfig['appearance']> = {};
-    if (a.theme) appearance.theme = a.theme;
-    if (a.accentColor) appearance.accentColor = a.accentColor as `#${string}`;
-    if (a.logo) appearance.logo = a.logo;
-    cfg.appearance = appearance;
-  }
-  return cfg;
-}
-
 interface BridgeProps {
   adapter: InteractiveAuthAdapter;
 }
 
 /**
- * Inner bridge: runs inside `<PrivyProvider>`, captures Privy's hooks and
+ * Inner bridge: runs inside Expo's `<PrivyProvider>`, captures Privy's hooks and
  * attaches them to the adapter as a {@link PrivyRuntime}. Renders nothing.
  */
 function PrivyRuntimeBridge({ adapter }: BridgeProps) {
   const handle = getPrivyHandle(adapter);
   const privy = usePrivy();
   const { sendCode, loginWithCode } = useLoginWithEmail();
-  const oauthPending = useRef<{ resolve: () => void; reject: (e: unknown) => void } | null>(null);
-  const { initOAuth } = useLoginWithOAuth({
-    onComplete: () => {
-      oauthPending.current?.resolve();
-      oauthPending.current = null;
-    },
-    onError: (error) => {
-      oauthPending.current?.reject(error);
-      oauthPending.current = null;
-    },
-  });
+  const { login } = useLoginWithOAuth();
   const { createWallet } = useCreateWallet();
   const { signRawHash } = useSignRawHash();
 
   // Hooks return fresh closures each render; keep the latest in a ref so the
   // (stable) runtime object below always calls the current ones.
-  const api = useRef({ privy, sendCode, loginWithCode, initOAuth, createWallet, signRawHash });
-  api.current = { privy, sendCode, loginWithCode, initOAuth, createWallet, signRawHash };
+  const api = useRef({ privy, sendCode, loginWithCode, login, createWallet, signRawHash });
+  api.current = { privy, sendCode, loginWithCode, login, createWallet, signRawHash };
 
   useEffect(() => {
     if (!handle) return;
     const runtime: PrivyRuntime = {
-      sendEmailCode: (email) => api.current.sendCode({ email }),
+      sendEmailCode: async (email) => {
+        await api.current.sendCode({ email });
+      },
       verifyEmailCode: async (code) => {
         await api.current.loginWithCode({ code });
       },
-      loginWithOAuth: (provider) =>
-        new Promise<void>((resolve, reject) => {
-          oauthPending.current = { resolve, reject };
-          // On web, `initOAuth` redirects (or opens a popup); completion arrives
-          // via the onComplete callback above — after the redirect round-trip,
-          // which the Pollar sub-modal resumes once Privy reports authenticated.
-          api.current.initOAuth({ provider }).catch((error) => {
-            oauthPending.current = null;
-            reject(error);
-          });
-        }),
+      loginWithOAuth: async (provider) => {
+        // On RN, Expo opens an in-app browser and resolves in-session (no
+        // redirect round-trip), so the await completes once the user authenticates.
+        await api.current.login({ provider });
+      },
       ensureStellarWallet: async () => {
         const existing = findStellarAddress(api.current.privy.user);
         if (existing) return existing;
@@ -143,9 +99,12 @@ interface PrivyAdapterProviderProps {
 }
 
 /**
- * Mounts `@privy-io/react-auth`'s `PrivyProvider` and the runtime bridge around
- * your app. Place it above `<PollarProvider>`. The `config` defaults to the one
- * passed to {@link createPrivyAdapter}; pass it again only to override.
+ * Mounts `@privy-io/expo`'s `PrivyProvider` and the runtime bridge around your
+ * app. Place it above `<PollarProvider>`. The `config` defaults to the one passed
+ * to {@link createPrivyAdapter}; pass it again only to override.
+ *
+ * Your Expo app must have `@privy-io/expo`'s peer deps installed (including
+ * `react-native-webview`, which hosts Privy's secure signer).
  */
 export function PrivyAdapterProvider({ adapter, config, children }: PrivyAdapterProviderProps) {
   const handle = getPrivyHandle(adapter);
@@ -154,11 +113,7 @@ export function PrivyAdapterProvider({ adapter, config, children }: PrivyAdapter
     throw new Error('[privy-adapter] PrivyAdapterProvider needs a config — pass `config` or an adapter from createPrivyAdapter.');
   }
   return (
-    <PrivyProvider
-      appId={effective.appId}
-      {...(effective.clientId ? { clientId: effective.clientId } : {})}
-      config={toPrivyClientConfig(effective)}
-    >
+    <PrivyProvider appId={effective.appId} {...(effective.clientId ? { clientId: effective.clientId } : {})}>
       <PrivyRuntimeBridge adapter={adapter} />
       {children}
     </PrivyProvider>

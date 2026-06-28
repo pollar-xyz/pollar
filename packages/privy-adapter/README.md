@@ -17,8 +17,12 @@ wire up Privy's hooks yourself.
 | Host | Status | Signing engine |
 |---|---|---|
 | React (web) | ✅ supported | `@privy-io/react-auth` |
-| React Native / Expo | 🚧 in progress | `@privy-io/expo` |
+| React Native / Expo | ✅ supported | `@privy-io/expo` |
 | Angular, Vue, Svelte, vanilla | ❌ not supported | — (Privy ships no SDK) |
+
+The right build is picked automatically: bundlers resolve the default (web) entry,
+and Metro/Expo resolve the `react-native` entry via the package's export condition.
+Your code is the same on both — `createPrivyAdapter` + `PrivyAdapterProvider`.
 
 There is no Privy SDK for Angular or Vue, so the adapter can't run there. If you use
 it in a non-React host it throws a clear `PrivyAdapterUnsupportedError` on first use.
@@ -61,6 +65,28 @@ In the Pollar login modal this renders a **Privy** button that opens a sub-modal
 the `loginMethods` you configured (email, Google, GitHub). The adapter runs the Privy
 login, ensures the user has a Stellar embedded wallet, and resolves the address Pollar
 needs for SEP-10.
+
+## Install & usage (React Native / Expo)
+
+```bash
+npm i @pollar/privy-adapter @pollar/core @stellar/stellar-sdk @privy-io/expo react-native-webview
+# plus @privy-io/expo's own peer deps (expo-secure-store, expo-web-browser, etc.)
+```
+
+The code is identical to web — only the import resolves to the Expo build, which uses
+`@privy-io/expo` (a WebView-hosted secure signer) instead of an iframe:
+
+```tsx
+import { createPrivyAdapter, PrivyAdapterProvider } from '@pollar/privy-adapter';
+
+const privy = createPrivyAdapter({ appId, loginMethods: ['email', 'google'] });
+
+// <PrivyAdapterProvider adapter={privy}>
+//   <PollarProvider config={{ apiKey, walletAdapters: [privy] }}>…</PollarProvider>
+// </PrivyAdapterProvider>
+```
+
+OAuth on Expo opens an in-app browser and resolves in-session (no redirect round-trip).
 
 ## Config
 
