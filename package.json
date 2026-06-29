@@ -6,7 +6,7 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "clean": "turbo clean",
-    "dev:push": "npm run build && for pkg in core react privy-adapter stellar-wallets-kit-adapter; do (cd packages/$pkg && yalc publish) || exit 1; done",
+    "dev:push": "npm run build && for pkg in core react privy-adapter accesly-adapter stellar-wallets-kit-adapter; do (cd packages/$pkg && yalc publish) || exit 1; done",
     "core:publish": "cd packages/core && npm publish --access public",
     "core:publish:rc": "cd packages/core && npm publish --access public --tag next",
     "privy-adapter:publish": "cd packages/privy-adapter && npm publish --access public",
@@ -21,7 +21,8 @@
     "typescript": "^6.0.3"
   },
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "examples/*"
   ],
   "engines": {
     "node": ">=20"
