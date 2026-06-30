@@ -183,7 +183,14 @@ interface PrivyAdapterProviderProps {
   /** The adapter returned by {@link createPrivyAdapter}. */
   adapter: InteractiveAuthAdapter;
   config?: PollarPrivyConfig;
-  children: ReactNode;
+  /**
+   * Optional. In the classic "wrapper" usage you place this above
+   * `<PollarProvider>` and pass your app as children, so they sit inside
+   * `<PrivyProvider>`'s context. In the "sibling" usage you only need Privy +
+   * the runtime bridge mounted (the bridge wires the runtime onto the shared
+   * adapter by reference), so children can be omitted entirely.
+   */
+  children?: ReactNode;
 }
 
 /**
