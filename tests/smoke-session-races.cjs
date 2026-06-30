@@ -1382,6 +1382,52 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     mock.refreshSlowOnce = false;
   }
 
+  // ── LL. an INTERNAL session does NOT re-attach an external adapter from a
+  //       stale walletType row (F-A: only external sessions sign via an adapter)
+  console.log('\n── LL. internal session ignores a stale external walletType row (F-A) ──');
+  {
+    mock.calls = [];
+    const apiKey = 'pk_race_JJ';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    await storage.set(
+      `pollar:${hash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'internal', address: 'Gint' }, // custodial session
+      }),
+    );
+    // A stale row from a PRIOR external login that was switched away from without a logout.
+    await storage.set(`pollar:${hash}:walletType`, 'fake');
+    const fakeAdapter = {
+      type: 'fake',
+      meta: { label: 'Fake' },
+      isAvailable: async () => true,
+      connect: async () => ({ address: 'G' }),
+      signTransaction: async () => ({ signedTxXdr: 'x' }),
+      signAuthEntry: async () => ({ signedAuthEntry: 'x' }),
+    };
+    const client = new sdk.PollarClient({
+      apiKey,
+      storage,
+      baseUrl: 'https://x.test',
+      logLevel: 'silent',
+      walletAdapters: [fakeAdapter],
+    });
+    await client.ready();
+    check('internal session restored fine', client.getAuthState().step === 'authenticated');
+    check(
+      '  did NOT attach the stale external adapter (getWalletType is null, signing stays custodial)',
+      client.getWalletType() === null,
+      client.getWalletType(),
+    );
+    client.destroy();
+  }
+
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
 })().catch((err) => {

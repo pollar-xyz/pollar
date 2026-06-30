@@ -2445,16 +2445,6 @@ export class PollarClient {
     };
   }
 
-  /**
-   * Generic external-provider exchange leg (`POST /auth/external`). Custom
-   * providers call this (via the context) after their own SDK has authenticated
-   * the user and the wallet has counter-signed the SEP-10 challenge
-   * (`{ provider, walletAddress, signedChallengeXdr }`). On success the session
-   * is marked READY server-side and the provider should then call
-   * `ctx.authenticate(clientSessionId)`. Returns `false` (and sets an error
-   * state) on failure.
-   */
-
   private _flowDeps(signal: AbortSignal) {
     return {
       api: this._api,
@@ -2546,11 +2536,15 @@ export class PollarClient {
       if (prevSession && prevSession.clientSessionId !== this._session.clientSessionId) {
         this._sessionGeneration++;
       }
-      // Only restore an external adapter for a session that actually signs via
-      // one. A `smart` session is passkey-signed; restoring an adapter for it
-      // (from a stale walletType row) would leave `_walletAdapter` set on a
-      // smart session and could mis-route signing.
-      const storedType = this._session.wallet?.type === 'smart' ? null : await readWalletType(this._storage, this.apiKeyHash);
+      // Only restore an adapter for an EXTERNAL session — those are the only ones
+      // signed via an adapter. `internal` is custodial (server-signed) and `smart`
+      // is passkey-signed; attaching an adapter to either (from a stale walletType
+      // row left by a prior external login that was switched away from without a
+      // logout) would mis-route their signing to the wrong key. (`_storeSession`
+      // nulls the in-memory adapter on a switch but doesn't remove the persisted
+      // row, so guard on the SESSION type here, not the row's presence.)
+      const storedType =
+        this._session.wallet?.type === 'external' ? await readWalletType(this._storage, this.apiKeyHash) : null;
       if (storedType) {
         // Look the adapter up in the registry. If it's no longer registered
         // (e.g. the consumer dropped the kit-adapter package), the session stays
@@ -2748,6 +2742,12 @@ export class PollarClient {
     if (persisted.wallet.type !== 'external') {
       this._walletAdapter = null;
     }
+    // Account switch without a logout (login-over-login) bypasses _clearSession,
+    // so reset the read/tx stores here too — otherwise the previous user's
+    // balance/history/tx-state would linger and an in-flight fetch could land
+    // their data in the new session's store. On a first login (from idle) the
+    // stores are already idle, so this is a harmless no-op.
+    this._resetReactiveStores();
     // Fresh login/refresh response came straight from the server, so the
     // session is already server-validated → `verified: true`.
     this._setAuthState({ step: 'authenticated', session: persisted, verified: true });
@@ -2774,29 +2774,7 @@ export class PollarClient {
       this._log.warn('[PollarClient] KeyManager reset failed during clearSession', err);
     }
     await removeStorage(this._storage, this.apiKeyHash);
-    // Reset the tx store to idle AND notify subscribers directly. A bare
-    // `= null` only updates the pull-read getTransactionState() and leaves
-    // push-subscribers (e.g. @pollar/react's `usePollar().tx`) showing the
-    // previous session's terminal tx state (a success/hash visible across a
-    // logout into the next login). We dispatch directly instead of via
-    // `_setTransactionState` ON PURPOSE: re-arming `_txStartGen` to defeat that
-    // method's F2 generation guard would ALSO let an in-flight tx's late write
-    // through. This leaves `_txStartGen` untouched, so a tx that resolves after
-    // this logout is still dropped by the guard.
-    this._transactionState = { step: 'idle' };
-    for (const cb of this._transactionStateListeners) cb(this._transactionState);
-    // Reset the reactive read stores so a UI still subscribed after logout shows
-    // no data (not the previous user's balance/assets/history/sessions), and bump
-    // their generations so an in-flight fetch that resolves after this can't
-    // repopulate them.
-    this._txHistoryGen++;
-    this._walletBalanceGen++;
-    this._enabledAssetsGen++;
-    this._sessionsGen++;
-    this._setTxHistoryState({ step: 'idle' });
-    this._setWalletBalanceState({ step: 'idle' });
-    this._setEnabledAssetsState({ step: 'idle' });
-    this._setSessionsState({ step: 'idle' });
+    this._resetReactiveStores();
     this._setAuthState({ step: 'idle' });
   }
 
@@ -2832,6 +2810,33 @@ export class PollarClient {
     this._transactionState = next;
     this._log.debug(`[PollarClient] transaction:${next.step}`);
     for (const cb of this._transactionStateListeners) cb(next);
+  }
+
+  /**
+   * Reset the tx store + the 4 reactive read stores (txHistory / balance /
+   * assets / sessions) to idle and bump their generations. Called on ANY session
+   * change — logout (`_clearSession`) AND login-over-login (`_storeSession`, a
+   * no-logout account switch) — so the previous user's balance/history/sessions
+   * and the last tx's terminal state can't linger or be repopulated by an
+   * in-flight fetch that resolves into the new session's store.
+   *
+   * The tx store is dispatched DIRECTLY (not via `_setTransactionState`) on
+   * purpose: re-arming `_txStartGen` to satisfy that method's F2 generation guard
+   * would also let an in-flight tx's late write through. Leaving `_txStartGen`
+   * untouched keeps a late tx write dropped by the guard. Callers must bump
+   * `_sessionGeneration` BEFORE calling this (both already do).
+   */
+  private _resetReactiveStores(): void {
+    this._transactionState = { step: 'idle' };
+    for (const cb of this._transactionStateListeners) cb(this._transactionState);
+    this._txHistoryGen++;
+    this._walletBalanceGen++;
+    this._enabledAssetsGen++;
+    this._sessionsGen++;
+    this._setTxHistoryState({ step: 'idle' });
+    this._setWalletBalanceState({ step: 'idle' });
+    this._setEnabledAssetsState({ step: 'idle' });
+    this._setSessionsState({ step: 'idle' });
   }
 
   /**
