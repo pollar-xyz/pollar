@@ -102,6 +102,10 @@ const mock = {
   calls: [],
   refreshDelayMs: 0,
   refreshStatus: 200,
+  // When true, the FIRST /auth/refresh hangs for `refreshSlowDelayMs` (default
+  // 3000ms) then later attempts are fast — exercises request-timeout + retry.
+  refreshSlowOnce: false,
+  refreshSlowDelayMs: 3000,
   resumeDelayMs: 0,
   // When set, the next /tx/history responds with a DPoP nonce challenge (401)
   // using the given WWW-Authenticate value, then succeeds on retry.
@@ -156,6 +160,13 @@ globalThis.fetch = async (req) => {
         status: 401,
         headers: { 'WWW-Authenticate': 'DPoP error="use_dpop_nonce"', 'DPoP-Nonce': 'refresh-nonce-1' },
       });
+    }
+    // One-shot stall: the FIRST refresh hangs past the client's request timeout
+    // (so it aborts/times out), then subsequent attempts are fast — used to
+    // exercise the request-timeout + retry behavior.
+    if (mock.refreshSlowOnce) {
+      mock.refreshSlowOnce = false;
+      await delay(mock.refreshSlowDelayMs ?? 3000, req.signal);
     }
     if (mock.refreshDelayMs) await delay(mock.refreshDelayMs, req.signal);
     if (mock.refreshStatus !== 200) {
@@ -1276,6 +1287,99 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
       JSON.stringify(warns),
     );
     client.destroy();
+  }
+
+  // ── JJ. a stalled refresh times out (typed error) and DOES NOT log out ──────
+  //       A transient network stall must not trap the caller forever, nor tear
+  //       down a still-valid session — refresh() rejects with SDK_NETWORK_TIMEOUT
+  //       while the session stays intact for a later retry.
+  console.log('\n── JJ. stalled refresh → SDK_NETWORK_TIMEOUT, session kept ──');
+  {
+    mock.calls = [];
+    mock.refreshSlowOnce = true; // the (only) attempt hangs past the timeout
+    mock.refreshSlowDelayMs = 3000;
+    const apiKey = 'pk_race_JJ';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    await storage.set(
+      `pollar:${hash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'internal', address: 'Gtest' },
+      }),
+    );
+    const client = new sdk.PollarClient({
+      apiKey,
+      storage,
+      baseUrl: 'https://x.test',
+      logLevel: 'silent',
+      requestTimeoutMs: 60, // abort the attempt well before the 3s stall
+      retry: { attempts: 1 }, // disable retry to assert the single-attempt timeout
+    });
+    await client.ready();
+    let caught;
+    const t0 = Date.now();
+    try {
+      await client.refresh();
+    } catch (err) {
+      caught = err;
+    }
+    const elapsed = Date.now() - t0;
+    check('refresh() rejected (did not hang)', !!caught, caught);
+    check('  rejected with SDK_NETWORK_TIMEOUT', sdk.isPollarNetworkError(caught), caught && caught.code);
+    check('  settled fast (~timeout, not the 3s stall)', elapsed < 1500, `${elapsed}ms`);
+    const st = client.getAuthState();
+    check('  session preserved — NOT logged out on a timeout', st.step === 'authenticated', st.step);
+    check('  kept the existing access token', st.session?.token?.accessToken === 'AT', st.session?.token?.accessToken);
+    client.destroy();
+    mock.refreshSlowOnce = false;
+  }
+
+  // ── KK. retry absorbs a single transient stall, then refresh succeeds ────────
+  console.log('\n── KK. retry absorbs a transient stall → refresh succeeds ───');
+  {
+    mock.calls = [];
+    mock.refreshSlowOnce = true; // first attempt stalls → times out
+    mock.refreshSlowDelayMs = 3000;
+    mock.refreshStatus = 200; // the retried attempt succeeds → NEW_AT
+    const apiKey = 'pk_race_KK';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    await storage.set(
+      `pollar:${hash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'internal', address: 'Gtest' },
+      }),
+    );
+    const client = new sdk.PollarClient({
+      apiKey,
+      storage,
+      baseUrl: 'https://x.test',
+      logLevel: 'silent',
+      requestTimeoutMs: 60,
+      retry: { attempts: 2, baseDelayMs: 50 }, // one retry, short backoff
+    });
+    await client.ready();
+    let err;
+    try {
+      await client.refresh();
+    } catch (e) {
+      err = e;
+    }
+    check('refresh() resolved after the retry', !err, err);
+    const st = client.getAuthState();
+    check('  rotated to the refreshed token', st.session?.token?.accessToken === 'NEW_AT', st.session?.token?.accessToken);
+    client.destroy();
+    mock.refreshSlowOnce = false;
   }
 
   console.log(`\n${pass} pass, ${fail} fail`);

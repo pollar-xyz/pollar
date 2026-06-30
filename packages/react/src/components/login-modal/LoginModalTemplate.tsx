@@ -16,11 +16,34 @@ function WalletAdapterButtons({
   walletAdapters,
   onConnect,
   isLoading,
+  variant = 'list',
 }: {
   walletAdapters: WalletAdapterEntry[];
   onConnect: (id: WalletId) => void;
   isLoading: boolean;
+  // 'list'  → borderless rows for inside a group sub-picker (large icon + name).
+  // 'entry' → bordered buttons that match the root-level entries (Google, Wallet,
+  //           Smart Wallet) so a root adapter like Privy doesn't read as bare text.
+  variant?: 'list' | 'entry';
 }) {
+  if (variant === 'entry') {
+    return (
+      <>
+        {walletAdapters.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            disabled={isLoading}
+            className="pollar-wallet-entry-btn"
+            onClick={() => onConnect(a.id)}
+          >
+            {a.meta.iconUrl && <img src={a.meta.iconUrl} alt={a.meta.label} className="pollar-wallet-icon" />}
+            {a.meta.label}
+          </button>
+        ))}
+      </>
+    );
+  }
   return (
     <div className="pollar-wallet-list">
       {walletAdapters.map((a) => (
@@ -336,6 +359,7 @@ export function LoginModalTemplate({
                       walletAdapters={rootAdapters}
                       onConnect={onWalletConnect ?? (() => {})}
                       isLoading={isLoading}
+                      variant="entry"
                     />
                   )}
                 </>

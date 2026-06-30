@@ -3,6 +3,7 @@
 import {
   BuildOutcome,
   EnabledAssetsState,
+  isInteractiveAuthAdapter,
   NetworkState,
   OnStorageDegrade,
   PollarAdapters,
@@ -21,7 +22,7 @@ import {
   WalletBalanceState,
   WalletInfo,
 } from '@pollar/core';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ModalErrorBoundary, setModalErrorLogger } from './components/commons';
 import { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
 import { EnabledAssetsModal } from './components/enabled-assets-modal/EnabledAssetsModal';
@@ -269,6 +270,38 @@ export function PollarProvider({
         setVerified(false);
       }
     });
+  }, [pollarClient]);
+
+  // Auto-login for interactive adapters (e.g. Privy). When the adapter's
+  // provider authenticates *outside* the sub-modal flow — after an OAuth redirect
+  // (the page reloaded, so the sub-modal promise is gone) or a persisted provider
+  // session on load — and Pollar has no session yet, trigger `login({ provider })`
+  // so `connect()` + SEP-10 run. Read the session through a ref so the
+  // subscription is set up once and never re-subscribes on session changes.
+  const sessionRef = useRef(sessionState);
+  sessionRef.current = sessionState;
+  useEffect(() => {
+    const unsubscribes: Array<() => void> = [];
+    for (const { id } of pollarClient.listWalletAdapters()) {
+      const adapter = pollarClient.getWalletAdapter(id);
+      if (!isInteractiveAuthAdapter(adapter) || !adapter.onProviderAuthChange) continue;
+      let triggered = false;
+      unsubscribes.push(
+        adapter.onProviderAuthChange((state) => {
+          // Reset on sign-out so a later re-auth can trigger again (rising edge).
+          if (!state.authenticated || !state.address) {
+            triggered = false;
+            return;
+          }
+          if (triggered || sessionRef.current?.wallet?.address) return;
+          triggered = true;
+          pollarClient.login({ provider: id } as PollarLoginOptions);
+        }),
+      );
+    }
+    return () => {
+      for (const unsubscribe of unsubscribes) unsubscribe();
+    };
   }, [pollarClient]);
 
   // Presence of `appConfig` is the opt-out: if the consumer passes it (even

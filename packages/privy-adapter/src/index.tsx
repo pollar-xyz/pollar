@@ -12,6 +12,7 @@ import type { InteractiveAuthAdapter } from '@pollar/core';
 import type { PollarPrivyConfig } from './config';
 import type { PrivyRuntime } from './runtime';
 import { getPrivyHandle } from './factory';
+import { log } from './log';
 
 export { createPrivyAdapter } from './factory';
 export type { PollarPrivyConfig, PollarPrivyAppearance, PrivyLoginMethod } from './config';
@@ -77,10 +78,12 @@ function PrivyRuntimeBridge({ adapter }: BridgeProps) {
   const oauthPending = useRef<{ resolve: () => void; reject: (e: unknown) => void } | null>(null);
   const { initOAuth } = useLoginWithOAuth({
     onComplete: () => {
+      log('web: useLoginWithOAuth onComplete (OAuth finished)');
       oauthPending.current?.resolve();
       oauthPending.current = null;
     },
     onError: (error) => {
+      log('web: useLoginWithOAuth onError', error);
       oauthPending.current?.reject(error);
       oauthPending.current = null;
     },
@@ -93,8 +96,42 @@ function PrivyRuntimeBridge({ adapter }: BridgeProps) {
   const api = useRef({ privy, sendCode, loginWithCode, initOAuth, createWallet, signRawHash });
   api.current = { privy, sendCode, loginWithCode, initOAuth, createWallet, signRawHash };
 
+  // Trace Privy's auth state. If this logs `authenticated: true` but Pollar still
+  // shows logged-out, the handoff (login({ provider:'privy' })) never ran — e.g.
+  // an OAuth redirect that lost the in-page promise.
+  useEffect(() => {
+    const address = findStellarAddress(privy.user);
+    log('web: privy state', {
+      ready: privy.ready,
+      authenticated: privy.authenticated,
+      userId: privy.user?.id ?? null,
+      stellarAddress: address,
+    });
+    // Notify subscribers (the host auto-login) of the provider's auth state.
+    handle?._notifyAuthState({ authenticated: privy.authenticated, address });
+  }, [privy.ready, privy.authenticated, privy.user, handle]);
+
+  // Keep the host app's URL clean: once authenticated, strip Privy's OAuth
+  // redirect params. react-auth usually does this, but skips it when the user
+  // was already logged in — so we always do it ourselves. `replaceState` does
+  // not reload or add a history entry.
+  useEffect(() => {
+    if (!privy.authenticated || typeof window === 'undefined') return;
+    if (handle?.config.cleanupOAuthRedirect === false) return;
+    const url = new URL(window.location.href);
+    const before = url.search;
+    for (const param of ['privy_oauth_state', 'privy_oauth_provider', 'privy_oauth_code']) {
+      url.searchParams.delete(param);
+    }
+    if (url.search !== before) {
+      log('web: cleaned Privy OAuth params from the URL');
+      window.history.replaceState(window.history.state, '', url.toString());
+    }
+  }, [privy.authenticated, handle]);
+
   useEffect(() => {
     if (!handle) return;
+    log('web: bridge mounted — attaching runtime');
     const runtime: PrivyRuntime = {
       sendEmailCode: (email) => api.current.sendCode({ email }),
       verifyEmailCode: async (code) => {
@@ -106,15 +143,22 @@ function PrivyRuntimeBridge({ adapter }: BridgeProps) {
           // On web, `initOAuth` redirects (or opens a popup); completion arrives
           // via the onComplete callback above — after the redirect round-trip,
           // which the Pollar sub-modal resumes once Privy reports authenticated.
+          log('web: initOAuth invoked (web uses a redirect/popup)', { provider });
           api.current.initOAuth({ provider }).catch((error) => {
+            log('web: initOAuth threw', error);
             oauthPending.current = null;
             reject(error);
           });
         }),
       ensureStellarWallet: async () => {
         const existing = findStellarAddress(api.current.privy.user);
-        if (existing) return existing;
+        if (existing) {
+          log('web: ensureStellarWallet — existing wallet', { address: existing });
+          return existing;
+        }
+        log('web: ensureStellarWallet — none found, creating Stellar wallet');
         const { wallet } = await api.current.createWallet({ chainType: STELLAR_CHAIN });
+        log('web: ensureStellarWallet — created', { address: wallet.address });
         return wallet.address;
       },
       signRawHash: async (address, hashHex) => {

@@ -23,6 +23,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Scroll the overlay (not just clip) when the card is taller than the
+   * viewport; padding keeps the card off the screen edges while scrolling. */
+  overflow-y: auto;
+  padding: 1rem;
+  box-sizing: border-box;
   background-color: rgba(0, 0, 0, 0.5);
 }
 
@@ -37,6 +42,10 @@
   background-color: var(--pollar-bg);
   box-sizing: border-box;
   font-family: inherit;
+  /* Never grow past the viewport; the card scrolls internally instead of being
+   * clipped by the centered overlay when there isn't enough height. */
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
 }
 
 /* ─── Common input ────────────────────────────────────────────────────────────── */
@@ -176,6 +185,7 @@
 
 /* ─── Primary button ──────────────────────────────────────────────────────────── */
 .pollar-btn-primary {
+  width: 100%;
   height: var(--pollar-buttons-height, 44px);
   border: none;
   border-radius: var(--pollar-buttons-border-radius, 0.5rem);

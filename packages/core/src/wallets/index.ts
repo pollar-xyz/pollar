@@ -12,4 +12,5 @@ export type {
   SignAuthEntryResponse,
   AuthOption,
   InteractiveAuthAdapter,
+  ProviderAuthState,
 } from './types';

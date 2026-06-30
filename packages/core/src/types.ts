@@ -103,6 +103,28 @@ export interface PollarClientConfig {
    */
   storage?: Storage;
   /**
+   * Max time (ms) a single SDK HTTP attempt waits before aborting and rejecting
+   * with a {@link PollarNetworkError} (`code: 'SDK_NETWORK_TIMEOUT'`).
+   *
+   * `fetch` has no timeout of its own, so without this a transient connection
+   * stall (e.g. a dropped TCP SYN on a flaky mobile network at cold start) hangs
+   * the request forever — it neither resolves nor rejects, trapping any caller
+   * that `await`s it (a returning user stuck on the splash screen). Bounding it
+   * lets the request fail fast so the caller can recover (retry, or fall back to
+   * a cached token).
+   *
+   * Defaults to `10000` (10s). Set `0` to disable (NOT recommended — restores
+   * the unbounded-hang behavior).
+   */
+  requestTimeoutMs?: number;
+  /**
+   * Automatic retry with backoff for idempotent, transient-failure SDK HTTP
+   * (token refresh + GETs), to absorb a single dropped request before surfacing
+   * an error. Only transport failures retry; an HTTP response is never retried.
+   * Defaults to `{ attempts: 2, baseDelayMs: 300 }`. See {@link PollarRetryConfig}.
+   */
+  retry?: PollarRetryConfig;
+  /**
    * Pluggable DPoP key manager. Defaults to `defaultKeyManager(storage,
    * apiKey)`: WebCrypto in browsers, `@noble/curves` in RN.
    */
@@ -542,6 +564,57 @@ export class PollarFlowError extends Error {
     super(message);
     this.name = 'PollarFlowError';
   }
+}
+
+/**
+ * Thrown when an SDK HTTP request is aborted by the client-side request timeout
+ * (see `PollarClientConfig.requestTimeoutMs`) before the server responded. The
+ * `code` is stable for programmatic handling (e.g. fall back to a cached token
+ * on boot); `cause` carries the underlying abort error.
+ *
+ * This is the difference between "the request failed" and "the request hung
+ * forever": without the timeout a stalled connection neither resolves nor
+ * rejects, so callers can't recover. With it, `refresh()` (and every other SDK
+ * call) settles by rejecting with this error.
+ */
+export class PollarNetworkError extends Error {
+  readonly code = 'SDK_NETWORK_TIMEOUT' as const;
+  readonly cause?: unknown;
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = 'PollarNetworkError';
+    this.cause = cause;
+  }
+}
+
+/** Type guard for {@link PollarNetworkError} (instanceof is unreliable across
+ *  bundle/dual-package boundaries, so match the stable `code` too). */
+export function isPollarNetworkError(err: unknown): err is PollarNetworkError {
+  return (
+    err instanceof PollarNetworkError ||
+    (typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'SDK_NETWORK_TIMEOUT')
+  );
+}
+
+/**
+ * Automatic retry for idempotent, transient-failure SDK HTTP (the token refresh
+ * and GETs). Only transport-level failures (timeouts, dropped connections)
+ * retry — any HTTP response (including 4xx/5xx) is returned as-is and never
+ * retried, so a refresh that's genuinely rejected logs out immediately rather
+ * than after N pointless attempts.
+ */
+export interface PollarRetryConfig {
+  /**
+   * Total attempts, including the first (so `attempts: 2` = one retry, up to two
+   * tries). Each attempt is independently bounded by `requestTimeoutMs`. Set
+   * `1` to disable retries. Defaults to `2`.
+   */
+  attempts?: number;
+  /**
+   * Base backoff delay in ms between attempts; grows exponentially with jitter
+   * (`baseDelayMs * 2^(n-1) * [0.5, 1)`). Defaults to `300`.
+   */
+  baseDelayMs?: number;
 }
 
 // ─── Wallet balance types ─────────────────────────────────────────────────────

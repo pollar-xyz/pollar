@@ -3,6 +3,7 @@ import type {
   AuthOption,
   ConnectWalletResponse,
   InteractiveAuthAdapter,
+  ProviderAuthState,
   SignAuthEntryResponse,
   SignTransactionOptions,
   SignTransactionResponse,
@@ -11,6 +12,7 @@ import type { PollarPrivyConfig, PrivyLoginMethod } from './config';
 
 export type { AuthOption, InteractiveAuthAdapter } from '@pollar/core';
 import { PrivyAdapterUnsupportedError, RUNTIME_ATTACH_TIMEOUT_MS, UNSUPPORTED_MESSAGE } from './environment.ts';
+import { log, setPrivyAdapterDebug } from './log.ts';
 
 export const PRIVY_ID = 'privy';
 
@@ -61,6 +63,8 @@ export interface PrivyAdapterHandle extends InteractiveAuthAdapter {
   _attachRuntime(runtime: PrivyRuntime): void;
   /** @internal Called by the platform bridge on unmount. */
   _detachRuntime(): void;
+  /** @internal Called by the platform bridge when Privy's auth state changes. */
+  _notifyAuthState(state: ProviderAuthState): void;
 }
 
 const LOGIN_METHOD_TO_OPTION: Record<PrivyLoginMethod, AuthOption> = {
@@ -77,21 +81,33 @@ const LOGIN_METHOD_TO_OPTION: Record<PrivyLoginMethod, AuthOption> = {
  * was never mounted.
  */
 export function buildPrivyAdapter(config: PollarPrivyConfig): PrivyAdapterHandle {
+  setPrivyAdapterDebug(config.debug ?? false);
+  log('adapter created', { type: PRIVY_ID, loginMethods: config.loginMethods });
+
   let runtime: PrivyRuntime | null = null;
   let resolveRuntime!: (rt: PrivyRuntime) => void;
   let runtimeReady = new Promise<PrivyRuntime>((resolve) => {
     resolveRuntime = resolve;
   });
 
+  // Provider auth-state subscribers (the host's auto-login listens here).
+  const authListeners = new Set<(state: ProviderAuthState) => void>();
+  let lastAuthState: ProviderAuthState = { authenticated: false, address: null };
+
   /** Wait for a bridge to attach, or fail clearly if none ever does. */
   const requireRuntime = (): Promise<PrivyRuntime> => {
     if (runtime) return Promise.resolve(runtime);
+    log('requireRuntime: no bridge attached yet — waiting (mount <PrivyAdapterProvider>?)');
     let timer: ReturnType<typeof setTimeout>;
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new PrivyAdapterUnsupportedError(UNSUPPORTED_MESSAGE)), RUNTIME_ATTACH_TIMEOUT_MS);
+      timer = setTimeout(() => {
+        log('requireRuntime: timed out — no runtime attached (unsupported host?)');
+        reject(new PrivyAdapterUnsupportedError(UNSUPPORTED_MESSAGE));
+      }, RUNTIME_ATTACH_TIMEOUT_MS);
     });
     const ready = runtimeReady.then((rt) => {
       clearTimeout(timer);
+      log('requireRuntime: bridge attached, proceeding');
       return rt;
     });
     return Promise.race([ready, timeout]);
@@ -117,32 +133,42 @@ export function buildPrivyAdapter(config: PollarPrivyConfig): PrivyAdapterHandle
     getAuthOptions: () => [...authOptions],
 
     sendEmailCode: async (email) => {
+      log('sendEmailCode()', { email });
       const rt = await requireRuntime();
       await rt.sendEmailCode(email);
+      log('sendEmailCode(): code sent');
     },
     verifyEmailCode: async (code) => {
+      log('verifyEmailCode()');
       const rt = await requireRuntime();
       await rt.verifyEmailCode(code);
+      log('verifyEmailCode(): Privy authenticated');
     },
     loginWithOAuth: async (provider) => {
+      log('loginWithOAuth()', { provider });
       const rt = await requireRuntime();
       await rt.loginWithOAuth(provider);
+      log('loginWithOAuth(): resolved (Privy authenticated)');
     },
 
     connect: async (): Promise<ConnectWalletResponse> => {
+      log('connect(): called by core (login flow) — ensuring Stellar wallet');
       const rt = await requireRuntime();
       // The interactive login (email/oauth) has already run via the sub-modal by
       // the time core calls connect(); here we just make sure the Stellar wallet
       // exists and return its address for the SEP-10 flow.
       const address = await rt.ensureStellarWallet();
+      log('connect(): resolved address for SEP-10', { address });
       return { address };
     },
     disconnect: async () => {
+      log('disconnect(): logging out of Privy');
       if (runtime) await runtime.logout();
     },
     getPublicKey: async () => {
-      if (!runtime) return null;
-      return runtime.getAddress();
+      const address = runtime ? runtime.getAddress() : null;
+      log('getPublicKey()', { address });
+      return address;
     },
 
     signTransaction: async (txXdr: string, opts?: SignTransactionOptions): Promise<SignTransactionResponse> => {
@@ -152,6 +178,7 @@ export function buildPrivyAdapter(config: PollarPrivyConfig): PrivyAdapterHandle
       }
       const rt = await requireRuntime();
       const address = rt.getAddress();
+      log('signTransaction(): start', { address });
       if (!address) {
         throw new Error('[privy-adapter] cannot sign: no authenticated Privy Stellar wallet.');
       }
@@ -161,6 +188,7 @@ export function buildPrivyAdapter(config: PollarPrivyConfig): PrivyAdapterHandle
       }
       const classic = tx as Transaction;
       classic.signatures.push(await buildDecorated(address, classic.hash()));
+      log('signTransaction(): signed');
       return { signedTxXdr: classic.toEnvelope().toXDR('base64') };
     },
     signAuthEntry: async (): Promise<SignAuthEntryResponse> => {
@@ -169,11 +197,28 @@ export function buildPrivyAdapter(config: PollarPrivyConfig): PrivyAdapterHandle
       throw new Error('[privy-adapter] signAuthEntry is not supported for Privy external wallets.');
     },
 
+    onProviderAuthChange: (callback) => {
+      authListeners.add(callback);
+      // Replay the latest known state so a late subscriber isn't stuck waiting.
+      callback(lastAuthState);
+      return () => authListeners.delete(callback);
+    },
+
     _attachRuntime: (rt: PrivyRuntime) => {
+      log('runtime attached by platform bridge');
       runtime = rt;
       resolveRuntime(rt);
     },
+    _notifyAuthState: (state: ProviderAuthState) => {
+      if (state.authenticated === lastAuthState.authenticated && state.address === lastAuthState.address) {
+        return;
+      }
+      lastAuthState = state;
+      log('provider auth state changed', state);
+      for (const listener of authListeners) listener(state);
+    },
     _detachRuntime: () => {
+      log('runtime detached (bridge unmounted)');
       runtime = null;
       // Re-arm the gate so a remount can attach a fresh runtime.
       runtimeReady = new Promise<PrivyRuntime>((resolve) => {

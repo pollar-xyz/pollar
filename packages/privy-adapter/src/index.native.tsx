@@ -6,6 +6,7 @@ import type { InteractiveAuthAdapter } from '@pollar/core';
 import type { PollarPrivyConfig } from './config';
 import type { PrivyRuntime } from './runtime';
 import { getPrivyHandle } from './factory';
+import { log } from './log';
 
 export { createPrivyAdapter } from './factory';
 export type { PollarPrivyConfig, PollarPrivyAppearance, PrivyLoginMethod } from './config';
@@ -53,8 +54,17 @@ function PrivyRuntimeBridge({ adapter }: BridgeProps) {
   const api = useRef({ privy, sendCode, loginWithCode, login, createWallet, signRawHash });
   api.current = { privy, sendCode, loginWithCode, login, createWallet, signRawHash };
 
+  // Trace Privy's auth state + notify subscribers (the host auto-login).
+  useEffect(() => {
+    const authenticated = !!privy.user;
+    const address = findStellarAddress(privy.user);
+    log('native: privy state', { authenticated, userId: privy.user?.id ?? null, stellarAddress: address });
+    handle?._notifyAuthState({ authenticated, address });
+  }, [privy.user, handle]);
+
   useEffect(() => {
     if (!handle) return;
+    log('native: bridge mounted — attaching runtime');
     const runtime: PrivyRuntime = {
       sendEmailCode: async (email) => {
         await api.current.sendCode({ email });
@@ -65,12 +75,18 @@ function PrivyRuntimeBridge({ adapter }: BridgeProps) {
       loginWithOAuth: async (provider) => {
         // On RN, Expo opens an in-app browser and resolves in-session (no
         // redirect round-trip), so the await completes once the user authenticates.
+        log('native: login({ provider }) via in-app browser', { provider });
         await api.current.login({ provider });
       },
       ensureStellarWallet: async () => {
         const existing = findStellarAddress(api.current.privy.user);
-        if (existing) return existing;
+        if (existing) {
+          log('native: ensureStellarWallet — existing wallet', { address: existing });
+          return existing;
+        }
+        log('native: ensureStellarWallet — none found, creating Stellar wallet');
         const { wallet } = await api.current.createWallet({ chainType: STELLAR_CHAIN });
+        log('native: ensureStellarWallet — created', { address: wallet.address });
         return wallet.address;
       },
       signRawHash: async (address, hashHex) => {

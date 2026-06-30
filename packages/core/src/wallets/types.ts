@@ -1,17 +1,23 @@
 // Derived from stellar-wallet-kit by Tushar Pamnani (MIT)
 // https://github.com/tusharpamnani/stellar-wallet-kit
 
+// The `-native` suffix keeps these core built-in adapters from colliding with
+// the Stellar Wallets Kit adapter ids, which use the canonical Stellar product
+// ids `'freighter'` / `'albedo'`. Adapters register into a single registry keyed
+// by `type`; without the suffix the kit's freighter/albedo would overwrite these
+// built-ins (or vice versa), so both can't coexist. With distinct ids the native
+// "Wallet" group and the kit group can each list their own Freighter/Albedo.
 export enum WalletType {
-  FREIGHTER = 'freighter',
-  ALBEDO = 'albedo',
+  FREIGHTER = 'freighter-native',
+  ALBEDO = 'albedo-native',
 }
 
 /**
  * A wallet identifier. Accepts the internal `WalletType` enum values
- * (`'freighter'`, `'albedo'`) plus any opaque string id used by external
- * adapter packages (e.g. Stellar Wallets Kit ids like `'xbull'`, `'lobstr'`).
- * The `(string & {})` keeps autocomplete on the enum values without rejecting
- * arbitrary strings.
+ * (`'freighter-native'`, `'albedo-native'`) plus any opaque string id used by
+ * external adapter packages (e.g. Stellar Wallets Kit ids like `'xbull'`,
+ * `'lobstr'`, or its own `'freighter'` / `'albedo'`). The `(string & {})` keeps
+ * autocomplete on the enum values without rejecting arbitrary strings.
  */
 export type WalletId = WalletType | (string & {});
 
@@ -105,6 +111,23 @@ export interface InteractiveAuthAdapter extends WalletAdapter {
   verifyEmailCode(code: string): Promise<void>;
   /** OAuth login; resolves once the provider authenticates. */
   loginWithOAuth(provider: 'google' | 'github'): Promise<void>;
+  /**
+   * Optional: subscribe to the underlying provider's auth state. The host uses
+   * this to auto-trigger `login({ provider })` when the provider authenticates
+   * outside the sub-modal flow — e.g. after an OAuth redirect (the page reloaded,
+   * so the sub-modal promise is gone) or a persisted provider session on load.
+   * Fires on subscribe with the current state, then on changes. Returns an
+   * unsubscribe function.
+   */
+  onProviderAuthChange?(callback: (state: ProviderAuthState) => void): () => void;
+}
+
+/** Auth state of an {@link InteractiveAuthAdapter}'s underlying provider. */
+export interface ProviderAuthState {
+  /** Whether the provider (e.g. Privy) reports an authenticated user. */
+  authenticated: boolean;
+  /** The provider's Stellar address once a wallet exists, else null. */
+  address: string | null;
 }
 
 /** Runtime guard: does this adapter implement the interactive-login capability? */

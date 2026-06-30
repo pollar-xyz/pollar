@@ -49,4 +49,15 @@ export interface PollarPrivyConfig {
    * root button (not collapsed behind a wallet gateway).
    */
   meta?: WalletAdapterMeta;
+  /**
+   * Verbose `[privy-adapter]` console logging of the login/sign flow. Off by
+   * default; turn on to trace why a login isn't reaching Pollar.
+   */
+  debug?: boolean;
+  /**
+   * After a web OAuth redirect returns, strip Privy's `privy_oauth_*` query
+   * params from the URL (via `history.replaceState`, no reload) so the host
+   * app's URL stays clean. On by default; set `false` to keep them.
+   */
+  cleanupOAuthRedirect?: boolean;
 }

@@ -113,7 +113,7 @@ async function waitFor(cond, timeoutMs = 1000) {
       .listWalletAdapters()
       .map((a) => a.id)
       .sort()
-      .join(',') === 'albedo,freighter,gated,throwing',
+      .join(',') === 'albedo-native,freighter-native,gated,throwing',
     JSON.stringify(client.listWalletAdapters().map((a) => a.id)),
   );
 

@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.10.0-rc.9
+
+> Release candidate. Published under the `next` dist-tag (`npm i @pollar/core@next`).
+
+### `@pollar/core` — fixes
+
+- **HTTP requests can no longer hang forever.** Every SDK call now has a
+  client-side request timeout (default **10s**). Previously `fetch` had no
+  timeout, so a transient connection stall (a dropped TCP SYN on a flaky mobile
+  network at cold start) left `client.refresh()` — and every other call —
+  pending indefinitely: it neither resolved nor rejected, trapping callers that
+  `await` it (e.g. a returning user stuck on the splash screen). A stalled
+  request now rejects with a typed `PollarNetworkError` (`code:
+  'SDK_NETWORK_TIMEOUT'`) instead.
+- **A refresh that times out no longer logs the user out.** A transient network
+  timeout during `/auth/refresh` keeps the session intact (the refresh token is
+  almost certainly still valid) and rejects with the typed error so the caller
+  can fall back to a cached token; the next request or proactive timer refreshes
+  once connectivity returns. Genuine refresh failures (4xx/5xx, malformed
+  response) still clear the session as before.
+
+### `@pollar/core` — features
+
+- **New `PollarClient` options.** `requestTimeoutMs` (default `10000`; `0`
+  disables) tunes the per-attempt timeout, and `retry` (default
+  `{ attempts: 2, baseDelayMs: 300 }`) controls automatic backoff retry for
+  idempotent, transient-failure requests (token refresh + GETs). Only
+  transport-level failures retry — an HTTP response is never retried.
+- **Exported `PollarNetworkError` + `isPollarNetworkError`** for programmatic
+  handling of timeouts.
+
 ## 0.10.0-rc.7
 
 > Release candidate. Published under the `next` dist-tag (`npm i @pollar/core@next`).

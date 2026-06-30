@@ -1,4 +1,4 @@
-import { createApiClient, PollarApiClient } from '../api/client';
+import { createApiClient, fetchWithTimeout, PollarApiClient } from '../api/client';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
 import { createOffRamp, createOnRamp, getRampsQuote, getRampTransaction, pollRampTransaction } from '../api/endpoints/ramps';
@@ -35,6 +35,7 @@ import {
   PollarFlowError,
   PollarLoginOptions,
   PollarPersistedSession,
+  isPollarNetworkError,
   PollarUserProfile,
   RampsOfframpBody,
   RampsOfframpResponse,
@@ -174,6 +175,9 @@ export class PollarClient {
   private readonly _deviceLabel: string | undefined;
   private readonly _visibilityProvider: VisibilityProvider;
   private readonly _maxIdleMs: number | undefined;
+  /** Per-attempt HTTP timeout (ms). Also applied to the manual DPoP-nonce retry
+   *  that bypasses openapi-fetch's configured fetch. */
+  private readonly _requestTimeoutMs: number;
   /** Updated by the request middleware. Read by the silent-refresh scheduler
    *  to skip proactive refreshes after `maxIdleMs` of no HTTP activity. */
   private _lastRequestAt: number = Date.now();
@@ -275,6 +279,7 @@ export class PollarClient {
     this._deviceLabel = config.deviceLabel;
     this._visibilityProvider = config.visibilityProvider ?? defaultVisibilityProvider();
     this._maxIdleMs = config.maxIdleMs;
+    this._requestTimeoutMs = config.requestTimeoutMs ?? 10_000;
     this._openAuthUrl = config.openAuthUrl ?? defaultWebOAuthOpener;
     // `window.location` can be absent even when `isBrowser` is true (some
     // webview/SSR shims expose a partial `window`); read it defensively so the
@@ -309,7 +314,10 @@ export class PollarClient {
       this._walletAdapters.set(adapter.type, adapter);
     }
 
-    this._api = createApiClient(this.basePath);
+    this._api = createApiClient(this.basePath, {
+      timeoutMs: this._requestTimeoutMs,
+      retry: config.retry,
+    });
     this._wireMiddlewares();
 
     this._networkState = { step: 'connected', network: config.stellarNetwork ?? 'testnet' };
@@ -737,7 +745,10 @@ export class PollarClient {
       // retried fetch would ignore aborts and could write state after teardown.
       signal: originalRequest.signal,
     });
-    return fetch(retried);
+    // Bound this retry too: it calls `fetch` directly, bypassing the
+    // timeout/retry wrapper openapi-fetch is configured with, so without this a
+    // stalled nonce-retry would hang forever just like the original bug.
+    return fetchWithTimeout(retried, this._requestTimeoutMs);
   }
 
   // ─── Refresh (race-safe singleton) ───────────────────────────────────────
@@ -785,6 +796,17 @@ export class PollarClient {
       data = response.data;
       error = response.error;
     } catch (err) {
+      // A transient transport failure (timeout / dropped connection) must NOT
+      // tear down the session: the refresh token is almost certainly still
+      // valid — the network just hiccuped — so clearing here would log the user
+      // out over a momentary stall. Keep the session and rethrow a catchable
+      // error; the caller can fall back to the cached token, and the next
+      // request (or proactive timer) will refresh once connectivity returns.
+      // Genuine refresh failures (4xx/5xx, malformed) still clear, below.
+      if (isPollarNetworkError(err)) {
+        this._log.warn('[PollarClient] /auth/refresh timed out; keeping session for retry', err);
+        throw err;
+      }
       this._log.error('[PollarClient] /auth/refresh request threw', err);
       await this._clearIfCurrent(gen);
       throw err;
@@ -914,9 +936,10 @@ export class PollarClient {
    *   - the AT still has more than `REFRESH_SKEW_SECONDS` of life — reschedule
    *
    * Otherwise call `refresh()`, which uses the existing in-flight singleton
-   * so we never collide with a reactive 401-triggered refresh. On failure,
-   * `_doRefresh` already calls `_clearSession`, so auth-state listeners see
-   * `step:'idle'` — no extra event dispatch needed here.
+   * so we never collide with a reactive 401-triggered refresh. On a genuine
+   * failure `_doRefresh` clears the session (listeners see `step:'idle'`); on a
+   * transient network timeout it keeps the session and rejects — we just log and
+   * leave it for the next reactive refresh / foreground re-trigger.
    */
   private async _maybeProactiveRefresh(): Promise<void> {
     if (this._destroyed) return;
@@ -931,7 +954,7 @@ export class PollarClient {
     try {
       await this.refresh();
     } catch (err) {
-      this._log.warn('[PollarClient] Proactive refresh failed; session cleared', err);
+      this._log.warn('[PollarClient] Proactive refresh failed', err);
     }
   }
 
