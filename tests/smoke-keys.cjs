@@ -107,6 +107,19 @@ function check(label, ok, extra) {
     }
   }
 
+  console.log('\n── 7. NobleKeyManager.getThumbprint() auto-inits + matches computeJwkThumbprint ──');
+  {
+    const km = new sdk.NobleKeyManager(sdk.createMemoryAdapter(), 'pk_test_thumb');
+    const tp = await km.getThumbprint(); // skip init() — must auto-init like getPublicJwk/sign
+    check(
+      'getThumbprint auto-initialized (base64url SHA-256, ~43 chars)',
+      typeof tp === 'string' && tp.length >= 42 && tp.length <= 44,
+      tp,
+    );
+    const tp2 = await sdk.computeJwkThumbprint(await km.getPublicJwk());
+    check('  getThumbprint() === computeJwkThumbprint(getPublicJwk()) (RFC 7638)', tp === tp2, `${tp} vs ${tp2}`);
+  }
+
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
 })().catch((err) => {

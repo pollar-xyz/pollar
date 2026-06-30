@@ -221,6 +221,18 @@ globalThis.fetch = async (req) => {
       headers: respHeaders,
     });
   }
+  // NOTE: check the compound custodial paths BEFORE /tx/build and /tx/submit —
+  // '/tx/build-sign-submit' contains the substring '/tx/build'.
+  if (req.url.includes('/tx/build-sign-submit')) {
+    return new Response(JSON.stringify({ success: true, content: { hash: 'HASH_BSS', status: 'SUCCESS' } }), { status: 200 });
+  }
+  if (req.url.endsWith('/tx/sign')) {
+    // Custodial signTx: backend returns the signed XDR + an idempotencyKey.
+    return new Response(
+      JSON.stringify({ success: true, content: { signedXdr: 'SIGNED_CUSTODIAL', idempotencyKey: 'IDEM_1' } }),
+      { status: 200 },
+    );
+  }
   if (req.url.includes('/tx/build')) {
     return new Response(JSON.stringify({ success: true, content: { marker: mock.buildMarker, amount: '5' } }), { status: 200 });
   }
@@ -231,7 +243,9 @@ globalThis.fetch = async (req) => {
         status: 200,
       });
     }
-    return new Response(JSON.stringify({ success: true, content: { hash: 'HASH', status: 'SUCCESS' } }), { status: 200 });
+    // mock.txSubmitStatus (default 'SUCCESS') lets a test exercise the PENDING branch.
+    const status = mock.txSubmitStatus ?? 'SUCCESS';
+    return new Response(JSON.stringify({ success: true, content: { hash: 'HASH', status } }), { status: 200 });
   }
   // tx/history, logout, everything else.
   return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
@@ -1425,6 +1439,143 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
       client.getWalletType() === null,
       client.getWalletType(),
     );
+    client.destroy();
+  }
+
+  // ── MM. getWalletAdapter() + isInteractiveAuthAdapter() ───────────────────
+  console.log('\n── MM. getWalletAdapter + isInteractiveAuthAdapter ──────────');
+  {
+    const plain = {
+      type: 'plain',
+      meta: { label: 'Plain' },
+      isAvailable: async () => true,
+      connect: async () => ({ address: 'G' }),
+      signTransaction: async () => ({ signedTxXdr: 'x' }),
+      signAuthEntry: async () => ({ signedAuthEntry: 'x' }),
+    };
+    const interactive = {
+      ...plain,
+      type: 'interactive',
+      getAuthOptions: () => ['email'],
+      sendEmailCode: async () => {},
+      verifyEmailCode: async () => {},
+      loginWithOAuth: async () => {},
+    };
+    const client = new sdk.PollarClient({
+      apiKey: 'pk_race_MM',
+      storage: sdk.createMemoryAdapter(),
+      baseUrl: 'https://x.test',
+      logLevel: 'silent',
+      walletAdapters: [plain, interactive],
+    });
+    await client.ready();
+    check('getWalletAdapter returns the registered instance', client.getWalletAdapter('plain') === plain);
+    check('  getWalletAdapter(unknown) is undefined', client.getWalletAdapter('nope') === undefined);
+    check('isInteractiveAuthAdapter: true for the interactive adapter', sdk.isInteractiveAuthAdapter(interactive) === true);
+    check('  false for a plain adapter', sdk.isInteractiveAuthAdapter(plain) === false);
+    check(
+      '  false for null/undefined',
+      sdk.isInteractiveAuthAdapter(null) === false && sdk.isInteractiveAuthAdapter(undefined) === false,
+    );
+    client.destroy();
+  }
+
+  // ── NN. getWallet() discriminated union per custody type ──────────────────
+  console.log('\n── NN. getWallet() maps custody → provider ──────────────────');
+  {
+    const seed = async (apiKey, wallet) => {
+      const storage = sdk.createMemoryAdapter();
+      const hash = await apiKeyHashOf(apiKey);
+      await storage.set(
+        `pollar:${hash}:session`,
+        JSON.stringify({
+          clientSessionId: 'cs',
+          userId: 'u',
+          status: 'CONSUMED',
+          token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+          user: { ready: true },
+          wallet,
+        }),
+      );
+      const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+      await client.ready();
+      return client;
+    };
+    const ci = await seed('pk_race_NN1', { type: 'internal', address: 'Gint', provider: 'email' });
+    check(
+      'internal → { custody:internal, provider: session.provider }',
+      JSON.stringify(ci.getWallet()) === JSON.stringify({ custody: 'internal', address: 'Gint', provider: 'email' }),
+      JSON.stringify(ci.getWallet()),
+    );
+    ci.destroy();
+    const cs = await seed('pk_race_NN2', { type: 'smart', address: 'Csmart' });
+    check(
+      "smart → { custody:smart, provider:'passkey' }",
+      JSON.stringify(cs.getWallet()) === JSON.stringify({ custody: 'smart', address: 'Csmart', provider: 'passkey' }),
+      JSON.stringify(cs.getWallet()),
+    );
+    cs.destroy();
+    const cn = await seed('pk_race_NN3', { type: 'internal', address: null, provider: 'email' });
+    check('null address → getWallet() is null', cn.getWallet() === null, JSON.stringify(cn.getWallet()));
+    cn.destroy();
+  }
+
+  // ── OO. custodial tx happy paths (signTx / submitTx / buildAndSignAndSubmitTx)
+  console.log('\n── OO. custodial tx: signTx / submitTx SUCCESS+PENDING / b-s-s ──');
+  {
+    mock.calls = [];
+    const apiKey = 'pk_race_OO';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    await storage.set(
+      `pollar:${hash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'internal', address: 'Gint' }, // custodial → server signs
+      }),
+    );
+    const client = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logLevel: 'silent' });
+    await client.ready();
+
+    const txStates = [];
+    client.onTransactionStateChange((s) => txStates.push(s.step));
+
+    const signed = await client.signTx('UNSIGNED');
+    check(
+      'custodial signTx → signed + submissionToken from idempotencyKey',
+      signed?.status === 'signed' && signed.signedXdr === 'SIGNED_CUSTODIAL' && signed.submissionToken === 'IDEM_1',
+      JSON.stringify(signed),
+    );
+
+    const ok = await client.submitTx('SIGNED_CUSTODIAL');
+    check(
+      'custodial submitTx SUCCESS → { status:success, hash }',
+      ok?.status === 'success' && ok.hash === 'HASH',
+      JSON.stringify(ok),
+    );
+
+    mock.txSubmitStatus = 'PENDING';
+    const pend = await client.submitTx('SIGNED_CUSTODIAL');
+    check('custodial submitTx PENDING → { status:pending }', pend?.status === 'pending', JSON.stringify(pend));
+    mock.txSubmitStatus = undefined;
+
+    const bss = await client.buildAndSignAndSubmitTx('payment', { destination: 'Gx', amount: '1' });
+    check(
+      'custodial buildAndSignAndSubmitTx → { status:success, hash }',
+      bss?.status === 'success' && bss.hash === 'HASH_BSS',
+      JSON.stringify(bss),
+    );
+
+    check(
+      '  tx-state emitted submitting + success (not stuck)',
+      txStates.includes('submitting') && txStates.includes('success'),
+      JSON.stringify(txStates),
+    );
+    check('  no smart/custodial routing leaked an adapter call', client.getWalletType() === null);
     client.destroy();
   }
 

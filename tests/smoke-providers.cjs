@@ -47,6 +47,9 @@ async function waitFor(cond, timeoutMs = 1000) {
 
   // fetch mock: only the endpoints the email flow + construction touch.
   const calls = [];
+  // One-shot: when set, the next /auth/email/verify-code answers with this server
+  // error code (e.g. SDK_EMAIL_CODE_EXPIRED / INVALID_EMAIL_CODE).
+  let nextVerifyCode = null;
   globalThis.fetch = async (req) => {
     const url = req.url;
     let body = null;
@@ -56,6 +59,11 @@ async function waitFor(cond, timeoutMs = 1000) {
     calls.push({ url, method: req.method, body });
     if (url.includes('/auth/session') && !url.includes('/status') && !url.includes('/resume')) {
       return new Response(JSON.stringify({ success: true, content: { clientSessionId: 'cs_test' } }), { status: 200 });
+    }
+    if (url.includes('/auth/email/verify-code') && nextVerifyCode) {
+      const code = nextVerifyCode;
+      nextVerifyCode = null;
+      return new Response(JSON.stringify({ success: false, code }), { status: 200 });
     }
     // /auth/email and /auth/email/verify-code: success but NO SDK_EMAIL_CODE_VERIFIED
     // code, so verify lands on the generic EMAIL_VERIFY_FAILED branch (block 4).
@@ -208,6 +216,86 @@ async function waitFor(cond, timeoutMs = 1000) {
     !calls.some((c) => c.url.endsWith('/auth/session')),
     JSON.stringify(calls.map((c) => c.url)),
   );
+
+  console.log('\n── 9. listWalletAdapters sanitizes adapter iconUrl (_safeMeta) ──');
+  {
+    const mk = (type, iconUrl) => ({
+      type,
+      meta: { label: type, iconUrl },
+      isAvailable: async () => true,
+      connect: async () => ({ address: 'G' }),
+      signTransaction: async () => ({ signedTxXdr: 'x' }),
+      signAuthEntry: async () => ({ signedAuthEntry: 'x' }),
+    });
+    const c = new sdk.PollarClient({
+      apiKey: 'pk_safe_meta',
+      storage: sdk.createMemoryAdapter(),
+      baseUrl: 'https://x.test',
+      logLevel: 'silent',
+      walletAdapters: [
+        mk('a-https', 'https://ok/x.png'),
+        mk('b-data', 'data:image/png;base64,AAA'),
+        mk('c-http', 'http://evil/x.png'),
+        mk('d-js', 'javascript:alert(1)'),
+      ],
+    });
+    await c.ready();
+    const byId = Object.fromEntries(c.listWalletAdapters().map((a) => [a.id, a.meta.iconUrl]));
+    check('https: iconUrl kept', byId['a-https'] === 'https://ok/x.png');
+    check('  data:image/ iconUrl kept', byId['b-data'] === 'data:image/png;base64,AAA');
+    check('  http:// iconUrl dropped (anti tracking-beacon)', byId['c-http'] === undefined, byId['c-http']);
+    check('  javascript: iconUrl dropped', byId['d-js'] === undefined, byId['d-js']);
+    c.destroy();
+  }
+
+  console.log('\n── 10. typed email methods throw from the wrong step ─────────');
+  {
+    const gc = new sdk.PollarClient({
+      apiKey: 'pk_guards',
+      storage: sdk.createMemoryAdapter(),
+      baseUrl: 'https://x.test',
+      logLevel: 'silent',
+    });
+    await gc.ready(); // idle, no session
+    let sendThrew = false;
+    try {
+      gc.sendEmailCode('x@y.z');
+    } catch (e) {
+      sendThrew = e && e.code === 'INVALID_FLOW';
+    }
+    check("sendEmailCode() from a non-'entering_email' step throws PollarFlowError", sendThrew, gc.getAuthState().step);
+    let verThrew = false;
+    try {
+      gc.verifyEmailCode('000000');
+    } catch (e) {
+      verThrew = e && e.code === 'INVALID_FLOW';
+    }
+    check("  verifyEmailCode() from a non-'entering_code' step throws PollarFlowError", verThrew, gc.getAuthState().step);
+    gc.destroy();
+  }
+
+  console.log('\n── 11. email verify maps EXPIRED / INVALID server codes ──────');
+  {
+    client.login({ provider: 'email', email: 'exp@b.test' });
+    await waitFor(() => client.getAuthState().step === 'entering_code');
+    nextVerifyCode = 'SDK_EMAIL_CODE_EXPIRED';
+    client.verifyEmailCode('111111');
+    await waitFor(() => client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.EMAIL_CODE_EXPIRED);
+    check(
+      'SDK_EMAIL_CODE_EXPIRED → EMAIL_CODE_EXPIRED',
+      client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.EMAIL_CODE_EXPIRED,
+    );
+
+    client.login({ provider: 'email', email: 'inv@b.test' });
+    await waitFor(() => client.getAuthState().step === 'entering_code');
+    nextVerifyCode = 'INVALID_EMAIL_CODE';
+    client.verifyEmailCode('222222');
+    await waitFor(() => client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.EMAIL_CODE_INVALID);
+    check(
+      '  INVALID_EMAIL_CODE → EMAIL_CODE_INVALID',
+      client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.EMAIL_CODE_INVALID,
+    );
+  }
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} providers smoke: ${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);
