@@ -1,6 +1,6 @@
 {
   "name": "@pollar/stellar-wallets-kit-adapter",
-  "version": "0.10.0-rc.8",
+  "version": "0.10.0-rc.10",
   "description": "Stellar Wallets Kit adapter for @pollar/core — plug additional wallet modules (xBull, Lobstr, WalletConnect, hardware wallets…) into Pollar without bundling them into @pollar/core.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
