@@ -25,6 +25,13 @@ const PROVIDER_LABELS: Record<SwapProvider, string> = {
   sdex: 'Stellar DEX',
 };
 
+/**
+ * Venues with a working backend adapter today. The others render as disabled
+ * "(coming soon)" options so the UI advertises the roadmap without letting a
+ * user pick a route that returns no quote yet (Soroswap/SDEX land in phase 5).
+ */
+const IMPLEMENTED_PROVIDERS: SwapProvider[] = ['auto', 'aquarius'];
+
 function formatAmount(value: string): string {
   const n = parseFloat(value);
   return isNaN(n) ? value : n.toLocaleString(undefined, { maximumFractionDigits: 7 });
@@ -244,11 +251,15 @@ export function SwapModalTemplate({
               value={provider}
               onChange={(e) => onProviderChange(e.target.value as SwapProvider)}
             >
-              {providers.map((p) => (
-                <option key={p} value={p}>
-                  {PROVIDER_LABELS[p]}
-                </option>
-              ))}
+              {providers.map((p) => {
+                const implemented = IMPLEMENTED_PROVIDERS.includes(p);
+                return (
+                  <option key={p} value={p} disabled={!implemented}>
+                    {PROVIDER_LABELS[p]}
+                    {implemented ? '' : ' (coming soon)'}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
