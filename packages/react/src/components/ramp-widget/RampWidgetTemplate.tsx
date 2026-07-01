@@ -1,6 +1,6 @@
 'use client';
 
-import type { RampDirection, RampQuote, RampTxStatus } from '@pollar/core';
+import type { RampCountry, RampDirection, RampQuote, RampTxStatus } from '@pollar/core';
 import type { CSSProperties } from 'react';
 import { RouteDisplay } from './RouteDisplay';
 
@@ -14,6 +14,9 @@ interface RampWidgetTemplateProps {
   amount: string;
   currency: string;
   country: string;
+  countries: RampCountry[];
+  countriesLoading: boolean;
+  refreshing: boolean;
   quotes: RampQuote[];
   isLoading: boolean;
   // status step
@@ -33,19 +36,23 @@ interface RampWidgetTemplateProps {
   onOpenKyc: () => void;
   onCompleteWithdraw: () => void;
   onRetry: () => void;
+  onRefresh: () => void;
   onClose: () => void;
 }
 
 const LOADING_STEPS = ['Detecting your country…', 'Consulting providers…', 'Route found!'];
 
-const COUNTRY_CURRENCIES: Record<string, string> = {
-  MX: 'MXN',
-  BR: 'BRL',
-  CO: 'COP',
-  CL: 'CLP',
-  PE: 'PEN',
-  AR: 'ARS',
-};
+/**
+ * Flag emoji from a 2-letter ISO 3166-1 alpha-2 country code by mapping each
+ * letter to its Regional Indicator Symbol code point (U+1F1E6 = 'A'). Returns an
+ * empty string for anything that isn't a pair of ASCII letters.
+ */
+function flagEmoji(code: string): string {
+  const cc = code.trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(cc)) return '';
+  const base = 0x1f1e6;
+  return String.fromCodePoint(base + (cc.charCodeAt(0) - 65), base + (cc.charCodeAt(1) - 65));
+}
 
 const STATUS_LABEL: Record<RampTxStatus, string> = {
   pending: 'Pending',
@@ -62,6 +69,9 @@ export function RampWidgetTemplate({
   amount,
   currency,
   country,
+  countries,
+  countriesLoading,
+  refreshing,
   quotes,
   isLoading,
   provider,
@@ -80,6 +90,7 @@ export function RampWidgetTemplate({
   onOpenKyc,
   onCompleteWithdraw,
   onRetry,
+  onRefresh,
   onClose,
 }: RampWidgetTemplateProps) {
   const isDark = theme === 'dark';
@@ -123,9 +134,36 @@ export function RampWidgetTemplate({
 
   return (
     <div className="pollar-modal-card pollar-ramp-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
-      <div className="pollar-ramp-header">
-        <h2 className="pollar-ramp-title">{stepTitle[step]}</h2>
-        <p className="pollar-ramp-subtitle">{stepSubtitle[step]}</p>
+      <div className="pollar-modal-header">
+        <div className="pollar-ramp-header-text">
+          <h2 className="pollar-modal-title">{stepTitle[step]}</h2>
+          <p className="pollar-ramp-subtitle">{stepSubtitle[step]}</p>
+        </div>
+        <div className="pollar-modal-header-actions">
+          <button type="button" className="pollar-modal-close" onClick={onRefresh} disabled={refreshing} aria-label="Refresh">
+            <svg
+              className={refreshing ? 'pollar-modal-refresh-icon spinning' : 'pollar-modal-refresh-icon'}
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden
+            >
+              <path
+                d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+              <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {step === 'input' && (
@@ -176,29 +214,32 @@ export function RampWidgetTemplate({
 
           <div className="pollar-ramp-field">
             <label className="pollar-ramp-label">Country</label>
-            <select
-              className="pollar-ramp-input"
-              value={country}
-              onChange={(e) => {
-                const c = e.target.value;
-                onCountryChange(c);
-                if (COUNTRY_CURRENCIES[c]) onCurrencyChange(COUNTRY_CURRENCIES[c]);
-              }}
-            >
-              <option value="MX">🇲🇽 Mexico</option>
-              <option value="BR">🇧🇷 Brazil</option>
-              <option value="CO">🇨🇴 Colombia</option>
-              <option value="CL">🇨🇱 Chile</option>
-              <option value="PE">🇵🇪 Peru</option>
-              <option value="AR">🇦🇷 Argentina</option>
-            </select>
+            {countriesLoading ? (
+              <div className="pollar-ramp-input pollar-ramp-input-loading">Loading countries…</div>
+            ) : countries.length === 0 ? (
+              <div className="pollar-modal-error">No ramp providers available on this network yet.</div>
+            ) : (
+              <select className="pollar-ramp-input" value={country} onChange={(e) => onCountryChange(e.target.value)}>
+                {countries.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {flagEmoji(c.code)} {c.code}
+                    {c.currency ? ` — ${c.currency}` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="pollar-modal-actions">
             <button type="button" className="pollar-btn-secondary" onClick={onClose}>
               Cancel
             </button>
-            <button type="button" className="pollar-btn-primary" disabled={!amount || isLoading} onClick={onFindRoute}>
+            <button
+              type="button"
+              className="pollar-btn-primary"
+              disabled={!amount || isLoading || countriesLoading || countries.length === 0}
+              onClick={onFindRoute}
+            >
               Find best route
             </button>
           </div>
@@ -241,9 +282,7 @@ export function RampWidgetTemplate({
           <div className="pollar-ramp-payment-field">
             <span className="pollar-ramp-payment-label">Status</span>
             <div className="pollar-ramp-payment-value">
-              <code
-                style={{ color: txStatus === 'completed' ? 'var(--pollar-success-text)' : undefined }}
-              >
+              <code style={{ color: txStatus === 'completed' ? 'var(--pollar-success-text)' : undefined }}>
                 {txStatus ? STATUS_LABEL[txStatus] : 'Processing'}
               </code>
             </div>

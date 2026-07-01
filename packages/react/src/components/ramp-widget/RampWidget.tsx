@@ -1,6 +1,6 @@
 'use client';
 
-import type { RampDirection, RampQuote, RampsOfframpBody, RampsOnrampBody, RampTxStatus } from '@pollar/core';
+import type { RampCountry, RampDirection, RampQuote, RampsOfframpBody, RampsOnrampBody, RampTxStatus } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import type { RampStep } from './RampWidgetTemplate';
@@ -33,8 +33,11 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   const [step, setStep] = useState<RampStep>('input');
   const [direction, setDirection] = useState<RampDirection>('onramp');
   const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState('ARS');
-  const [country, setCountry] = useState('AR');
+  const [currency, setCurrency] = useState('');
+  const [country, setCountry] = useState('');
+  const [countries, setCountries] = useState<RampCountry[]>([]);
+  const [countriesLoading, setCountriesLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [quotes, setQuotes] = useState<RampQuote[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -72,6 +75,64 @@ export function RampWidget({ onClose }: RampWidgetProps) {
       clearInterval(id);
     };
   }, [step, txId, txStatus, client]);
+
+  /**
+   * Fetch the ramp countries supported on the app's network. When `resetSelection`
+   * is set (initial load) — or the current selection is no longer offered — pick
+   * the first country and adopt its primary currency.
+   */
+  async function loadCountries(resetSelection: boolean) {
+    setCountriesLoading(true);
+    try {
+      const { countries: list } = await client.getRampCountries();
+      setCountries(list);
+      const first = list[0];
+      const stillValid = list.some((c) => c.code === country);
+      if (first && (resetSelection || !stillValid)) {
+        setCountry(first.code);
+        if (first.currency) setCurrency(first.currency);
+      }
+    } catch {
+      setCountries([]);
+    } finally {
+      setCountriesLoading(false);
+    }
+  }
+
+  // Load the supported countries when the widget opens.
+  useEffect(() => {
+    loadCountries(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleCountryChange(code: string) {
+    setCountry(code);
+    const match = countries.find((c) => c.code === code);
+    if (match?.currency) setCurrency(match.currency);
+  }
+
+  // Refresh the data backing the current step: always the country list, plus the
+  // quotes (select_route) or the anchor transaction (status).
+  async function handleRefresh() {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await loadCountries(false);
+      if (step === 'select_route') {
+        const result = await client.getRampsQuote({ country, amount: Number(amount), currency, direction });
+        setQuotes(result.quotes ?? []);
+      } else if (step === 'status' && txId) {
+        const tx = await client.getRampTransaction(txId);
+        setTxStatus(tx.status);
+        if (tx.stellarTxHash) setStellarTxHash(tx.stellarTxHash);
+        if (tx.kycUrl) setKycUrl(tx.kycUrl);
+      }
+    } catch {
+      /* transient — leave the current data in place */
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   function resetToInput() {
     setStep('input');
@@ -195,6 +256,9 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         amount={amount}
         currency={currency}
         country={country}
+        countries={countries}
+        countriesLoading={countriesLoading}
+        refreshing={refreshing}
         quotes={quotes}
         isLoading={isLoading}
         provider={provider}
@@ -207,12 +271,13 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         onDirectionChange={setDirection}
         onAmountChange={setAmount}
         onCurrencyChange={setCurrency}
-        onCountryChange={setCountry}
+        onCountryChange={handleCountryChange}
         onFindRoute={handleFindRoute}
         onSelectQuote={handleSelectQuote}
         onOpenKyc={handleOpenKyc}
         onCompleteWithdraw={handleCompleteWithdraw}
         onRetry={resetToInput}
+        onRefresh={handleRefresh}
         onClose={onClose}
       />
     </div>
