@@ -62,4 +62,4 @@ export {
 export { listDistributionRules, claimDistributionRule } from './api/endpoints/distribution';
 
 // ─── Swap endpoints ───────────────────────────────────────────────────────────
-export { quoteSwap } from './api/endpoints/swap';
+export { quoteSwap, getSwapConfig } from './api/endpoints/swap';

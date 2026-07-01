@@ -25,12 +25,6 @@ const PROVIDER_LABELS: Record<SwapProvider, string> = {
   sdex: 'Stellar DEX',
 };
 
-/**
- * Venues with a working backend adapter. All routes are wired now; Soroswap only
- * returns quotes when the server has SOROSWAP_API_KEY configured (otherwise it is
- * simply skipped and shows "No route found" for that venue).
- */
-const IMPLEMENTED_PROVIDERS: SwapProvider[] = ['auto', 'aquarius', 'sdex', 'soroswap'];
 
 function formatAmount(value: string): string {
   const n = parseFloat(value);
@@ -55,6 +49,10 @@ export interface SwapModalTemplateProps {
   formError: string;
   isLoadingData: boolean;
   smartUnsupported: boolean;
+  /** Swap config is still loading. */
+  configLoading: boolean;
+  /** Config loaded and this app exposes no swap venues — swap is disabled. */
+  swapUnavailable: boolean;
   transaction: TransactionState;
   showXdr: boolean;
   copied: boolean;
@@ -93,6 +91,8 @@ export function SwapModalTemplate({
   formError,
   isLoadingData,
   smartUnsupported,
+  configLoading,
+  swapUnavailable,
   transaction,
   showXdr,
   copied,
@@ -163,7 +163,13 @@ export function SwapModalTemplate({
         )}
       </div>
 
-      {step === 'form' && (
+      {step === 'form' && configLoading && <div className="pollar-send-hint">Loading swap options…</div>}
+
+      {step === 'form' && !configLoading && swapUnavailable && (
+        <div className="pollar-modal-error">Swap is not available for this app.</div>
+      )}
+
+      {step === 'form' && !configLoading && !swapUnavailable && (
         <>
           {smartUnsupported && (
             <div className="pollar-modal-error">Swaps are not yet available for smart (passkey) wallets.</div>
@@ -251,15 +257,11 @@ export function SwapModalTemplate({
               value={provider}
               onChange={(e) => onProviderChange(e.target.value as SwapProvider)}
             >
-              {providers.map((p) => {
-                const implemented = IMPLEMENTED_PROVIDERS.includes(p);
-                return (
-                  <option key={p} value={p} disabled={!implemented}>
-                    {PROVIDER_LABELS[p]}
-                    {implemented ? '' : ' (coming soon)'}
-                  </option>
-                );
-              })}
+              {providers.map((p) => (
+                <option key={p} value={p}>
+                  {PROVIDER_LABELS[p]}
+                </option>
+              ))}
             </select>
           </div>
 

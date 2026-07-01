@@ -736,6 +736,10 @@ export type SwapProvider = NonNullable<SwapQuoteBody['provider']>;
 /** A concrete venue a returned quote came from (never `auto`). */
 export type SwapVenue = SwapQuote['provider'];
 
+/** Venues this app exposes to end-users (from GET /swap/config). Empty = disabled. */
+export type SwapConfigContent =
+  pollarPaths['/swap/config']['get']['responses'][200]['content']['application/json']['content'];
+
 /** Input to `client.getSwapQuote` — the request body minus wallet/network, which the client fills. */
 export type SwapQuoteParams = {
   sellAsset: SwapQuoteBody['sellAsset'];

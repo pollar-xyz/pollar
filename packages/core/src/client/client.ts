@@ -1,6 +1,6 @@
 import { createApiClient, fetchWithTimeout, PollarApiClient } from '../api/client';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
-import { quoteSwap } from '../api/endpoints/swap';
+import { getSwapConfig, quoteSwap } from '../api/endpoints/swap';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
 import {
   completeWithdraw,
@@ -33,6 +33,7 @@ import {
   SwapQuote,
   SwapQuoteBody,
   SwapQuoteParams,
+  SwapVenue,
   EnabledAssetsState,
   KycLevel,
   KycStartBody,
@@ -2406,6 +2407,17 @@ export class PollarClient {
    * of every available venue); `slippageBps` defaults to 50 (0.5%) and sets the
    * on-chain minimum each quote's `build` will accept.
    */
+  /**
+   * The swap venues this app exposes to end-users (operator's dashboard
+   * selection, intersected with server capability). An empty array means swap is
+   * disabled for this app — hide any swap UI. `'auto'` is not returned here; add
+   * it client-side when the list is non-empty.
+   */
+  async getSwapConfig(): Promise<SwapVenue[]> {
+    const content = await getSwapConfig(this._api, this.getNetwork());
+    return content.venues;
+  }
+
   async getSwapQuote(params: SwapQuoteParams): Promise<SwapQuote[]> {
     const wallet = this.getWallet();
     if (!wallet) throw new Error('No wallet connected');

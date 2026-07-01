@@ -17,6 +17,7 @@ import {
   SubmitOutcome,
   SwapQuote,
   SwapQuoteParams,
+  SwapVenue,
   TrustlineOutcome,
   TransactionState,
   TxBuildBody,
@@ -162,6 +163,11 @@ interface PollarContextValue {
   openSendModal: () => void;
   openReceiveModal: () => void;
   // swap (DEX/AMM)
+  /**
+   * The swap venues this app exposes to end-users (empty = swap disabled, hide
+   * swap UI). Mirrors {@link PollarClient.getSwapConfig}.
+   */
+  getSwapConfig: () => Promise<SwapVenue[]>;
   /**
    * Quote an asset-to-asset swap across the requested venue(s). Read-only;
    * returns quotes ranked best-first. Mirrors {@link PollarClient.getSwapQuote}.
@@ -415,6 +421,7 @@ export function PollarProvider({
       openSendModal: () => setSendModalOpen(true),
       openReceiveModal: () => setReceiveModalOpen(true),
       // swap
+      getSwapConfig: () => pollarClient.getSwapConfig(),
       getSwapQuote: (params) => pollarClient.getSwapQuote(params),
       swap: (quote, opts) => pollarClient.swap(quote, opts),
       openSwapModal: () => setSwapModalOpen(true),

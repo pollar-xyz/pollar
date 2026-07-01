@@ -1,6 +1,6 @@
 'use client';
 
-import { SwapProvider, SwapQuote, SwapQuoteParams } from '@pollar/core';
+import { SwapProvider, SwapQuote, SwapQuoteParams, SwapVenue } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import '../shared.css';
@@ -16,8 +16,6 @@ interface SwapModalProps {
 /** Debounce (ms) before re-quoting as the user edits the amount / assets. */
 const QUOTE_DEBOUNCE_MS = 400;
 
-const ALL_PROVIDERS: SwapProvider[] = ['auto', 'aquarius', 'soroswap', 'sdex'];
-
 type AssetLike = { type: 'native' | 'credit_alphanum4' | 'credit_alphanum12'; code: string; issuer?: string | undefined };
 
 function toRef(a: AssetLike): SwapQuoteParams['sellAsset'] {
@@ -28,6 +26,7 @@ function toRef(a: AssetLike): SwapQuoteParams['sellAsset'] {
 
 export function SwapModal({ onClose }: SwapModalProps) {
   const {
+    getSwapConfig,
     getSwapQuote,
     swap,
     walletBalance,
@@ -49,6 +48,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
   const [selectedBuy, setSelectedBuy] = useState<SwapAssetOption | null>(null);
   const [amount, setAmount] = useState('');
   const [provider, setProvider] = useState<SwapProvider>('auto');
+  const [venues, setVenues] = useState<SwapVenue[] | null>(null); // null = config loading
   const [quotes, setQuotes] = useState<SwapQuote[]>([]);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState('');
@@ -65,6 +65,21 @@ export function SwapModal({ onClose }: SwapModalProps) {
     void refreshWalletBalance();
     void refreshAssets();
   }, [refreshWalletBalance, refreshAssets]);
+
+  // Which venues this app exposes (operator config ∩ server capability).
+  useEffect(() => {
+    let cancelled = false;
+    getSwapConfig()
+      .then((v) => {
+        if (!cancelled) setVenues(v);
+      })
+      .catch(() => {
+        if (!cancelled) setVenues([]); // treat a failed config as "unavailable"
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getSwapConfig]);
 
   useEffect(
     () => () => {
@@ -87,12 +102,15 @@ export function SwapModal({ onClose }: SwapModalProps) {
     .map((a) => ({ ref: toRef(a), code: a.code, issuer: a.issuer, enabledInApp: a.enabledInApp }))
     .filter((o) => `${o.code}:${o.issuer ?? 'native'}` !== buyKeyOfSell);
 
-  const providers = smartUnsupported ? ALL_PROVIDERS.filter((p) => p !== 'sdex') : ALL_PROVIDERS;
+  const configLoading = venues === null;
+  const swapUnavailable = venues !== null && venues.length === 0;
+  // Offer "Auto" (best of the enabled set) plus each configured venue.
+  const providers: SwapProvider[] = venues && venues.length > 0 ? (['auto', ...venues] as SwapProvider[]) : [];
   const quote = quotes[0] ?? null;
 
   // Re-quote (debounced) whenever the pair / amount / route changes.
   useEffect(() => {
-    if (step !== 'form' || !selectedSell || !selectedBuy || !amount || parseFloat(amount) <= 0) {
+    if (step !== 'form' || swapUnavailable || configLoading || !selectedSell || !selectedBuy || !amount || parseFloat(amount) <= 0) {
       setQuotes([]);
       setQuoteError('');
       setQuoteLoading(false);
@@ -124,7 +142,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [step, selectedSell, selectedBuy, amount, provider, getSwapQuote]);
+  }, [step, swapUnavailable, configLoading, selectedSell, selectedBuy, amount, provider, getSwapQuote]);
 
   const hash = transaction.step === 'success' ? transaction.hash : null;
   const buildData = 'buildData' in transaction ? transaction.buildData : null;
@@ -225,6 +243,8 @@ export function SwapModal({ onClose }: SwapModalProps) {
         formError={formError}
         isLoadingData={isLoadingData}
         smartUnsupported={smartUnsupported}
+        configLoading={configLoading}
+        swapUnavailable={swapUnavailable}
         transaction={transaction}
         showXdr={showXdr}
         copied={copied}
