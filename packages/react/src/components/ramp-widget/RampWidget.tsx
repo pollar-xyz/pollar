@@ -14,8 +14,18 @@ interface RampWidgetProps {
 
 const TERMINAL: RampTxStatus[] = ['completed', 'failed'];
 
+// Common shape of the on/off-ramp, complete and signature responses.
+interface RampResult {
+  txId: string;
+  provider: string;
+  status: RampTxStatus;
+  kycUrl?: string;
+  stellarTxHash?: string;
+  pendingSignature?: { unsignedXdr: string; action: 'sep10' | 'withdraw_payment' };
+}
+
 export function RampWidget({ onClose }: RampWidgetProps) {
-  const { getClient, wallet, styles } = usePollar();
+  const { getClient, signTx, wallet, styles } = usePollar();
   const walletAddress = wallet?.address ?? '';
   const client = getClient();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
@@ -74,6 +84,38 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setErrorMsg(null);
   }
 
+  /**
+   * EXTERNAL wallets (Freighter/Albedo): the backend returns an unsigned XDR the
+   * user must sign locally, then we resume the flow. `sep10` yields the anchor
+   * session (kycUrl); `withdraw_payment` broadcasts the on-chain withdrawal.
+   */
+  async function resumeWithSignature(id: string, ps: NonNullable<RampResult['pendingSignature']>) {
+    const outcome = await signTx(ps.unsignedXdr);
+    if (outcome.status !== 'signed') {
+      setErrorMsg(outcome.message ?? outcome.details ?? 'Signing was cancelled.');
+      setStep('error');
+      return;
+    }
+    const result = (await client.submitRampSignature(id, {
+      signedXdr: outcome.signedXdr,
+      action: ps.action,
+    })) as RampResult;
+    await applyResult(result);
+  }
+
+  async function applyResult(result: RampResult) {
+    setTxId(result.txId);
+    setProvider(result.provider);
+    if (result.pendingSignature) {
+      await resumeWithSignature(result.txId, result.pendingSignature);
+      return;
+    }
+    setKycUrl(result.kycUrl ?? null);
+    setTxStatus(result.status);
+    setStellarTxHash(result.stellarTxHash ?? null);
+    setStep('status');
+  }
+
   async function handleFindRoute() {
     setStep('loading_quote');
     setIsLoading(true);
@@ -101,25 +143,12 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setErrorMsg(null);
     try {
       const base = { quoteId: quote.quoteId, amount: Number(amount), currency, country };
-      const result =
+      const result = (
         direction === 'onramp'
           ? await client.createOnRamp({ ...base, ...(walletAddress ? { walletAddress } : {}) } as RampsOnrampBody)
-          : await client.createOffRamp({ ...base, ...(walletAddress ? { walletAddress } : {}) } as RampsOfframpBody);
-
-      if (result.pendingSignature) {
-        // EXTERNAL (user-controlled) wallet — needs client-side signing, not yet
-        // supported in this widget. Custodial wallets return a kycUrl instead.
-        setErrorMsg('This wallet type needs client-side signing, which is not supported in the widget yet.');
-        setStep('error');
-        return;
-      }
-
-      setTxId(result.txId);
-      setProvider(result.provider);
-      setKycUrl(result.kycUrl ?? null);
-      setTxStatus(result.status);
-      setStellarTxHash(result.stellarTxHash ?? null);
-      setStep('status');
+          : await client.createOffRamp({ ...base, ...(walletAddress ? { walletAddress } : {}) } as RampsOfframpBody)
+      ) as RampResult;
+      await applyResult(result);
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : 'Failed to start the ramp.');
       setStep('error');
@@ -137,9 +166,9 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setCompleting(true);
     setErrorMsg(null);
     try {
-      const result = await client.completeWithdraw(txId);
+      const result = (await client.completeWithdraw(txId)) as RampResult;
       if (result.pendingSignature) {
-        setErrorMsg('This wallet type needs client-side signing, which is not supported in the widget yet.');
+        await resumeWithSignature(txId, result.pendingSignature);
         return;
       }
       setTxStatus(result.status);
