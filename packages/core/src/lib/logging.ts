@@ -64,6 +64,18 @@ const SENSITIVE_RESPONSE_KEYS = new Set([...SENSITIVE_BODY_KEYS].filter((k) => k
 export function redactDeep(value: unknown, depth = 0): unknown {
   if (depth > 8 || !value || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map((v) => redactDeep(v, depth + 1));
+  // A thrown `Error` carries its useful data (`name`/`message`/`stack`) on
+  // NON-enumerable props, so `Object.entries` below would yield `{}` and the real
+  // failure reason would vanish from logs. Project those fields explicitly (then
+  // still redact any enumerable custom props the error may carry, e.g. `cause`).
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+      ...(redactDeep({ ...value }, depth + 1) as Record<string, unknown>),
+    };
+  }
   const out: Record<string, unknown> = {};
   for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
     out[key] = SENSITIVE_RESPONSE_KEYS.has(key) ? '[redacted]' : redactDeep(v, depth + 1);

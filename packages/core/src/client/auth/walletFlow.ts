@@ -133,7 +133,11 @@ export async function loginWithAdapter(adapter: WalletAdapter, deps: FlowDeps): 
     // `idle`, instead of mislabeling a user cancel as WALLET_CONNECT_FAILED.
     // (Mirrors how the other flows let AbortError propagate.)
     if ((err as { name?: string })?.name === 'AbortError') throw err;
-    logApiError(logger, 'wallet connect', { error: err });
+    // Tag the route with the phase that actually threw (connect vs sign vs the
+    // /auth/wallet call) so the log pinpoints it without expanding `cause`. The
+    // raw `err` (incl. its non-enumerable Error message/stack) is preserved by
+    // `redactDeep`'s Error handling.
+    logApiError(logger, `wallet connect (${currentStep})`, { error: err });
     setAuthState({
       step: 'error',
       previousStep: currentStep,
