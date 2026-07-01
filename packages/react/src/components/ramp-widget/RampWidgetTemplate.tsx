@@ -1,10 +1,10 @@
 'use client';
 
-import type { PaymentInstructions, RampDirection, RampQuote } from '@pollar/core';
+import type { RampDirection, RampQuote, RampTxStatus } from '@pollar/core';
 import type { CSSProperties } from 'react';
 import { RouteDisplay } from './RouteDisplay';
 
-export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'payment_instructions';
+export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'status' | 'error';
 
 interface RampWidgetTemplateProps {
   theme: string;
@@ -15,15 +15,24 @@ interface RampWidgetTemplateProps {
   currency: string;
   country: string;
   quotes: RampQuote[];
-  paymentInstructions: PaymentInstructions | null;
   isLoading: boolean;
+  // status step
+  provider: string;
+  txStatus: RampTxStatus | null;
+  kycUrl: string | null;
+  stellarTxHash: string | null;
+  canComplete: boolean;
+  completing: boolean;
+  errorMsg: string | null;
   onDirectionChange: (d: RampDirection) => void;
   onAmountChange: (v: string) => void;
   onCurrencyChange: (v: string) => void;
   onCountryChange: (v: string) => void;
   onFindRoute: () => void;
   onSelectQuote: (q: RampQuote) => void;
-  onCopy: (value: string) => void;
+  onOpenKyc: () => void;
+  onCompleteWithdraw: () => void;
+  onRetry: () => void;
   onClose: () => void;
 }
 
@@ -38,6 +47,13 @@ const COUNTRY_CURRENCIES: Record<string, string> = {
   AR: 'ARS',
 };
 
+const STATUS_LABEL: Record<RampTxStatus, string> = {
+  pending: 'Pending',
+  processing: 'Processing',
+  completed: 'Completed',
+  failed: 'Failed',
+};
+
 export function RampWidgetTemplate({
   theme,
   accentColor,
@@ -47,15 +63,23 @@ export function RampWidgetTemplate({
   currency,
   country,
   quotes,
-  paymentInstructions,
   isLoading,
+  provider,
+  txStatus,
+  kycUrl,
+  stellarTxHash,
+  canComplete,
+  completing,
+  errorMsg,
   onDirectionChange,
   onAmountChange,
   onCurrencyChange,
   onCountryChange,
   onFindRoute,
   onSelectQuote,
-  onCopy,
+  onOpenKyc,
+  onCompleteWithdraw,
+  onRetry,
   onClose,
 }: RampWidgetTemplateProps) {
   const isDark = theme === 'dark';
@@ -85,14 +109,16 @@ export function RampWidgetTemplate({
     input: direction === 'onramp' ? 'Buy crypto' : 'Sell crypto',
     loading_quote: 'Finding best route',
     select_route: 'Select provider',
-    payment_instructions: 'Payment instructions',
+    status: direction === 'onramp' ? 'Complete your deposit' : 'Complete your withdrawal',
+    error: 'Something went wrong',
   };
 
   const stepSubtitle: Record<RampStep, string> = {
     input: direction === 'onramp' ? 'Enter the amount you want to deposit' : 'Enter the amount you want to withdraw',
     loading_quote: 'Comparing providers in real time…',
     select_route: 'All prices include fees',
-    payment_instructions: 'Send the exact amount to complete your transaction',
+    status: `Finish the flow at ${provider || 'the provider'} to continue`,
+    error: 'Please try again',
   };
 
   return (
@@ -203,51 +229,74 @@ export function RampWidgetTemplate({
         </>
       )}
 
-      {step === 'payment_instructions' && paymentInstructions && (
+      {step === 'status' && (
         <div className="pollar-ramp-payment">
-          <p className="pollar-ramp-payment-title">{paymentInstructions.type}</p>
-
           <div className="pollar-ramp-payment-field">
-            <span className="pollar-ramp-payment-label">
-              {paymentInstructions.type === 'CLABE'
-                ? 'CLABE number'
-                : paymentInstructions.type === 'PIX'
-                  ? 'PIX key'
-                  : 'Account number'}
-            </span>
+            <span className="pollar-ramp-payment-label">Provider</span>
             <div className="pollar-ramp-payment-value">
-              <code>{paymentInstructions.value}</code>
-              <button type="button" className="pollar-ramp-copy-btn" onClick={() => onCopy(paymentInstructions.value)}>
-                Copy
-              </button>
+              <code>{provider}</code>
             </div>
           </div>
 
           <div className="pollar-ramp-payment-field">
-            <span className="pollar-ramp-payment-label">Amount to send</span>
+            <span className="pollar-ramp-payment-label">Status</span>
             <div className="pollar-ramp-payment-value">
-              <code>
-                {paymentInstructions.amount.toLocaleString()} {paymentInstructions.currency}
-              </code>
-              <button
-                type="button"
-                className="pollar-ramp-copy-btn"
-                onClick={() => onCopy(`${paymentInstructions.amount} ${paymentInstructions.currency}`)}
+              <code
+                style={{ color: txStatus === 'completed' ? 'var(--pollar-success-text)' : undefined }}
               >
-                Copy
-              </button>
+                {txStatus ? STATUS_LABEL[txStatus] : 'Processing'}
+              </code>
             </div>
           </div>
 
-          {paymentInstructions.expiresAt && (
-            <p className="pollar-ramp-payment-note">
-              Instructions expire at {new Date(paymentInstructions.expiresAt).toLocaleTimeString()}
+          {stellarTxHash && (
+            <div className="pollar-ramp-payment-field">
+              <span className="pollar-ramp-payment-label">Stellar tx</span>
+              <div className="pollar-ramp-payment-value">
+                <code>
+                  {stellarTxHash.slice(0, 8)}…{stellarTxHash.slice(-8)}
+                </code>
+              </div>
+            </div>
+          )}
+
+          {kycUrl && txStatus !== 'completed' && (
+            <button type="button" className="pollar-btn-primary" onClick={onOpenKyc}>
+              Continue at {provider}
+            </button>
+          )}
+
+          {canComplete && (
+            <button type="button" className="pollar-btn-primary" disabled={completing} onClick={onCompleteWithdraw}>
+              {completing ? 'Submitting…' : "I've completed KYC — withdraw"}
+            </button>
+          )}
+
+          {errorMsg && (
+            <p className="pollar-ramp-payment-note" style={{ color: 'var(--pollar-error-text)' }}>
+              {errorMsg}
             </p>
           )}
 
-          <button type="button" className="pollar-btn-primary" onClick={onClose}>
-            Done
+          <button type="button" className="pollar-btn-secondary" onClick={onClose}>
+            {txStatus === 'completed' ? 'Done' : 'Close'}
           </button>
+        </div>
+      )}
+
+      {step === 'error' && (
+        <div className="pollar-ramp-payment">
+          <p className="pollar-ramp-payment-note" style={{ color: 'var(--pollar-error-text)' }}>
+            {errorMsg ?? 'Unexpected error.'}
+          </p>
+          <div className="pollar-modal-actions">
+            <button type="button" className="pollar-btn-secondary" onClick={onClose}>
+              Close
+            </button>
+            <button type="button" className="pollar-btn-primary" onClick={onRetry}>
+              Try again
+            </button>
+          </div>
         </div>
       )}
     </div>

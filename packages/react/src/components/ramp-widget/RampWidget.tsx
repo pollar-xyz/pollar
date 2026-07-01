@@ -1,7 +1,7 @@
 'use client';
 
-import { type PaymentInstructions, type RampDirection, type RampQuote, type RampsOnrampBody } from '@pollar/core';
-import { useState } from 'react';
+import type { RampDirection, RampQuote, RampsOfframpBody, RampsOnrampBody, RampTxStatus } from '@pollar/core';
+import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import type { RampStep } from './RampWidgetTemplate';
 import { RampWidgetTemplate } from './RampWidgetTemplate';
@@ -12,163 +12,149 @@ interface RampWidgetProps {
   onClose: () => void;
 }
 
-// ─── Demo fallback data, used when the /ramps/quote and /ramps/onramp calls fail ──
-
-const MOCK_DEFAULT_QUOTES: RampQuote[] = [
-  {
-    quoteId: 'meld-default',
-    provider: 'Meld',
-    fee: 1.2,
-    feeCurrency: 'USD',
-    rate: 1,
-    rail: 'ACH',
-    protocol: 'REST',
-    estimatedTime: '~20 min',
-    recommended: true,
-  },
-];
-
-const MOCK_QUOTES: Partial<Record<string, RampQuote[]>> & { DEFAULT: RampQuote[] } = {
-  MX: [
-    {
-      quoteId: 'etherfuse-mx',
-      provider: 'Etherfuse',
-      fee: 0.5,
-      feeCurrency: 'MXN',
-      rate: 17.2,
-      rail: 'SPEI',
-      protocol: 'SEP-24',
-      estimatedTime: '~10 min',
-      recommended: true,
-    },
-    {
-      quoteId: 'alfredpay-mx',
-      provider: 'AlfredPay',
-      fee: 0.8,
-      feeCurrency: 'MXN',
-      rate: 17.1,
-      rail: 'SPEI',
-      protocol: 'REST',
-      estimatedTime: '~15 min',
-      recommended: false,
-    },
-  ],
-  BR: [
-    {
-      quoteId: 'abroad-br',
-      provider: 'Abroad',
-      fee: 0.6,
-      feeCurrency: 'BRL',
-      rate: 5.1,
-      rail: 'PIX',
-      protocol: 'REST',
-      estimatedTime: '~5 min',
-      recommended: true,
-    },
-  ],
-  CO: [
-    {
-      quoteId: 'abroad-co',
-      provider: 'Abroad',
-      fee: 0.7,
-      feeCurrency: 'COP',
-      rate: 4100,
-      rail: 'PSE',
-      protocol: 'REST',
-      estimatedTime: '~10 min',
-      recommended: true,
-    },
-    {
-      quoteId: 'koywe-co',
-      provider: 'Koywe',
-      fee: 0.9,
-      feeCurrency: 'COP',
-      rate: 4095,
-      rail: 'PSE',
-      protocol: 'REST',
-      estimatedTime: '~15 min',
-      recommended: false,
-    },
-  ],
-  DEFAULT: MOCK_DEFAULT_QUOTES,
-};
-
-const MOCK_PAYMENT: PaymentInstructions = {
-  type: 'CLABE',
-  value: '646180157088723456',
-  amount: 1000,
-  currency: 'MXN',
-  expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-};
-
-// ────────────────────────────────────────────────────────────────────────────────
+const TERMINAL: RampTxStatus[] = ['completed', 'failed'];
 
 export function RampWidget({ onClose }: RampWidgetProps) {
   const { getClient, wallet, styles } = usePollar();
   const walletAddress = wallet?.address ?? '';
+  const client = getClient();
+  const { theme = 'light', accentColor = '#005DB4' } = styles;
 
   const [step, setStep] = useState<RampStep>('input');
   const [direction, setDirection] = useState<RampDirection>('onramp');
   const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState('MXN');
-  const [country, setCountry] = useState('MX');
+  const [currency, setCurrency] = useState('ARS');
+  const [country, setCountry] = useState('AR');
   const [quotes, setQuotes] = useState<RampQuote[]>([]);
-  const [paymentInstructions, setPaymentInstructions] = useState<PaymentInstructions | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const client = getClient();
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  // status step
+  const [txId, setTxId] = useState<string | null>(null);
+  const [provider, setProvider] = useState('');
+  const [kycUrl, setKycUrl] = useState<string | null>(null);
+  const [txStatus, setTxStatus] = useState<RampTxStatus | null>(null);
+  const [stellarTxHash, setStellarTxHash] = useState<string | null>(null);
+  const [completing, setCompleting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const directionRef = useRef(direction);
+  directionRef.current = direction;
+
+  // Poll the anchor transaction status while on the status step until terminal.
+  useEffect(() => {
+    if (step !== 'status' || !txId) return;
+    if (txStatus && TERMINAL.includes(txStatus)) return;
+    let active = true;
+    const id = setInterval(async () => {
+      try {
+        const tx = await client.getRampTransaction(txId);
+        if (!active) return;
+        setTxStatus(tx.status);
+        if (tx.stellarTxHash) setStellarTxHash(tx.stellarTxHash);
+        if (tx.kycUrl) setKycUrl(tx.kycUrl);
+        if (TERMINAL.includes(tx.status)) clearInterval(id);
+      } catch {
+        /* transient — keep polling */
+      }
+    }, 5000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [step, txId, txStatus, client]);
+
+  function resetToInput() {
+    setStep('input');
+    setQuotes([]);
+    setTxId(null);
+    setProvider('');
+    setKycUrl(null);
+    setTxStatus(null);
+    setStellarTxHash(null);
+    setErrorMsg(null);
+  }
 
   async function handleFindRoute() {
     setStep('loading_quote');
     setIsLoading(true);
-
+    setErrorMsg(null);
     try {
-      const result = await client.getRampsQuote({
-        country,
-        amount: Number(amount),
-        currency,
-        direction,
-      });
-      if (result.quotes) setQuotes(result.quotes);
-    } catch {
-      // On any quote error, fall back to demo data so the UI stays usable.
-      await new Promise((r) => setTimeout(r, 1500));
-      setQuotes(MOCK_QUOTES[country] ?? MOCK_DEFAULT_QUOTES);
+      const result = await client.getRampsQuote({ country, amount: Number(amount), currency, direction });
+      const list = result.quotes ?? [];
+      if (list.length === 0) {
+        setErrorMsg(`No ramp providers available for ${country} yet.`);
+        setStep('error');
+        return;
+      }
+      setQuotes(list);
+      setStep('select_route');
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Failed to fetch quotes.');
+      setStep('error');
     } finally {
       setIsLoading(false);
-      setStep('select_route');
     }
   }
 
   async function handleSelectQuote(quote: RampQuote) {
-    if (!walletAddress) return;
     setIsLoading(true);
-
-    const body: RampsOnrampBody = {
-      quoteId: `${quote.provider}-${Date.now()}`,
-      amount: Number(amount),
-      currency,
-      country,
-      walletAddress,
-    };
-
+    setErrorMsg(null);
     try {
-      const result = await client.createOnRamp(body);
-      setPaymentInstructions(result.paymentInstructions);
-    } catch {
-      // On any on-ramp error, fall back to demo data so the UI stays usable.
-      await new Promise((r) => setTimeout(r, 800));
-      setPaymentInstructions({ ...MOCK_PAYMENT, currency });
+      const base = { quoteId: quote.quoteId, amount: Number(amount), currency, country };
+      const result =
+        direction === 'onramp'
+          ? await client.createOnRamp({ ...base, ...(walletAddress ? { walletAddress } : {}) } as RampsOnrampBody)
+          : await client.createOffRamp({ ...base, ...(walletAddress ? { walletAddress } : {}) } as RampsOfframpBody);
+
+      if (result.pendingSignature) {
+        // EXTERNAL (user-controlled) wallet — needs client-side signing, not yet
+        // supported in this widget. Custodial wallets return a kycUrl instead.
+        setErrorMsg('This wallet type needs client-side signing, which is not supported in the widget yet.');
+        setStep('error');
+        return;
+      }
+
+      setTxId(result.txId);
+      setProvider(result.provider);
+      setKycUrl(result.kycUrl ?? null);
+      setTxStatus(result.status);
+      setStellarTxHash(result.stellarTxHash ?? null);
+      setStep('status');
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Failed to start the ramp.');
+      setStep('error');
     } finally {
       setIsLoading(false);
-      setStep('payment_instructions');
     }
   }
 
-  function handleCopy(value: string) {
-    navigator.clipboard.writeText(value).catch(() => {});
+  function handleOpenKyc() {
+    if (kycUrl) window.open(kycUrl, '_blank', 'noopener,noreferrer');
   }
+
+  async function handleCompleteWithdraw() {
+    if (!txId) return;
+    setCompleting(true);
+    setErrorMsg(null);
+    try {
+      const result = await client.completeWithdraw(txId);
+      if (result.pendingSignature) {
+        setErrorMsg('This wallet type needs client-side signing, which is not supported in the widget yet.');
+        return;
+      }
+      setTxStatus(result.status);
+      setStellarTxHash(result.stellarTxHash ?? null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
+      setErrorMsg(
+        msg.includes('KYC') ? 'Finish KYC at the provider first, then try again.' : msg || 'Failed to complete the withdrawal.',
+      );
+    } finally {
+      setCompleting(false);
+    }
+  }
+
+  const canComplete = direction === 'offramp' && step === 'status' && txStatus !== 'completed' && !stellarTxHash;
 
   return (
     <div className="pollar-overlay" onClick={onClose}>
@@ -181,15 +167,23 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         currency={currency}
         country={country}
         quotes={quotes}
-        paymentInstructions={paymentInstructions}
         isLoading={isLoading}
+        provider={provider}
+        txStatus={txStatus}
+        kycUrl={kycUrl}
+        stellarTxHash={stellarTxHash}
+        canComplete={canComplete}
+        completing={completing}
+        errorMsg={errorMsg}
         onDirectionChange={setDirection}
         onAmountChange={setAmount}
         onCurrencyChange={setCurrency}
         onCountryChange={setCountry}
         onFindRoute={handleFindRoute}
         onSelectQuote={handleSelectQuote}
-        onCopy={handleCopy}
+        onOpenKyc={handleOpenKyc}
+        onCompleteWithdraw={handleCompleteWithdraw}
+        onRetry={resetToInput}
         onClose={onClose}
       />
     </div>

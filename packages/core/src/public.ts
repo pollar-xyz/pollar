@@ -48,7 +48,15 @@ export type { StellarNetwork, StellarClientConfig, StellarBalance } from './stel
 export { getKycStatus, getKycProviders, startKyc, resolveKyc, pollKycStatus } from './api/endpoints/kyc';
 
 // ─── Ramps endpoints ──────────────────────────────────────────────────────────
-export { getRampsQuote, createOnRamp, createOffRamp, getRampTransaction, pollRampTransaction } from './api/endpoints/ramps';
+export {
+  getRampsQuote,
+  createOnRamp,
+  createOffRamp,
+  completeWithdraw,
+  submitRampSignature,
+  getRampTransaction,
+  pollRampTransaction,
+} from './api/endpoints/ramps';
 
 // ─── Distribution endpoints ───────────────────────────────────────────────────
 export { listDistributionRules, claimDistributionRule } from './api/endpoints/distribution';

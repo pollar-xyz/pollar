@@ -1,11 +1,14 @@
 import type { PollarApiClient } from '../client';
 import type {
+  RampsCompleteResponse,
   RampsOfframpBody,
   RampsOfframpResponse,
   RampsOnrampBody,
   RampsOnrampResponse,
   RampsQuoteQuery,
   RampsQuoteResponse,
+  RampsSignatureBody,
+  RampsSignatureResponse,
   RampsTransactionResponse,
   RampTxStatus,
 } from '../../types';
@@ -42,6 +45,35 @@ export async function createOnRamp(api: PollarApiClient, body: RampsOnrampBody):
 export async function createOffRamp(api: PollarApiClient, body: RampsOfframpBody): Promise<RampsOfframpResponse> {
   const { data, error } = await api.POST('/ramps/offramp', { body });
   if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to create offramp');
+  return data.content;
+}
+
+/**
+ * POST /ramps/transaction/{txId}/complete
+ * Completes an offramp once anchor KYC is done: builds + signs + submits the
+ * on-chain withdraw payment. Custodial wallets complete server-side and return
+ * `stellarTxHash`; EXTERNAL wallets get a `pendingSignature` to sign and then
+ * resume via {@link submitRampSignature}.
+ */
+export async function completeWithdraw(api: PollarApiClient, txId: string): Promise<RampsCompleteResponse> {
+  const { data, error } = await api.POST('/ramps/transaction/{txId}/complete', { params: { path: { txId } } });
+  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to complete withdrawal');
+  return data.content;
+}
+
+/**
+ * POST /ramps/transaction/{txId}/signature
+ * Resumes an EXTERNAL-wallet flow after the client signs a pending XDR.
+ * `action: 'sep10'` exchanges the signed challenge for the anchor session;
+ * `action: 'withdraw_payment'` broadcasts the signed on-chain withdraw payment.
+ */
+export async function submitRampSignature(
+  api: PollarApiClient,
+  txId: string,
+  body: RampsSignatureBody,
+): Promise<RampsSignatureResponse> {
+  const { data, error } = await api.POST('/ramps/transaction/{txId}/signature', { params: { path: { txId } }, body });
+  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to submit signature');
   return data.content;
 }
 

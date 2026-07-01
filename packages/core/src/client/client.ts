@@ -2,7 +2,15 @@ import { createApiClient, fetchWithTimeout, PollarApiClient } from '../api/clien
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { quoteSwap } from '../api/endpoints/swap';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
-import { createOffRamp, createOnRamp, getRampsQuote, getRampTransaction, pollRampTransaction } from '../api/endpoints/ramps';
+import {
+  completeWithdraw,
+  createOffRamp,
+  createOnRamp,
+  getRampsQuote,
+  getRampTransaction,
+  pollRampTransaction,
+  submitRampSignature,
+} from '../api/endpoints/ramps';
 import { buildProof } from '../dpop';
 import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
@@ -45,8 +53,11 @@ import {
   RampsOfframpResponse,
   RampsOnrampBody,
   RampsOnrampResponse,
+  RampsCompleteResponse,
   RampsQuoteQuery,
   RampsQuoteResponse,
+  RampsSignatureBody,
+  RampsSignatureResponse,
   RampsTransactionResponse,
   RampTxStatus,
   SessionInfo,
@@ -2355,6 +2366,16 @@ export class PollarClient {
 
   createOffRamp(body: RampsOfframpBody): Promise<RampsOfframpResponse> {
     return createOffRamp(this._api, body);
+  }
+
+  /** Complete an offramp once anchor KYC is done (build + sign + submit the withdraw payment). */
+  completeWithdraw(txId: string): Promise<RampsCompleteResponse> {
+    return completeWithdraw(this._api, txId);
+  }
+
+  /** Resume an EXTERNAL-wallet ramp after the client signs a pending XDR (sep10 / withdraw_payment). */
+  submitRampSignature(txId: string, body: RampsSignatureBody): Promise<RampsSignatureResponse> {
+    return submitRampSignature(this._api, txId, body);
   }
 
   getRampTransaction(txId: string): Promise<RampsTransactionResponse> {

@@ -612,6 +612,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/swap/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quote an asset swap (DEX/AMM)
+         * @description Prices a swap of one asset for another across the requested venue(s). Read-only: returns the estimated output, price impact and minimum received (after slippage), plus a ready-to-execute `build` payload to pass to POST /tx/build (operation invoke_contract). With provider "auto" it ranks every available venue by output, best first; an empty `quotes` array means no route exists for the pair on this network. Phase 1 implements the Aquarius AMM; Soroswap and SDEX are added later.
+         */
+        post: operations["postSwapQuote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/charges": {
         parameters: {
             query?: never;
@@ -852,6 +872,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ramps/transaction/{txId}/signature": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a client signature (EXTERNAL wallets)
+         * @description Resume a ramp flow for an EXTERNAL (user-controlled) wallet after the client signs a pending XDR. action=sep10 exchanges the signed challenge for the anchor session and returns the KYC url; action=withdraw_payment broadcasts the signed on-chain withdraw payment.
+         */
+        post: operations["postRampsTransactionByTxIdSignature"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ramps/transaction/{txId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete an offramp (on-chain payment)
+         * @description Once anchor KYC is done and the anchor is awaiting the on-chain transfer, build + sign + submit the withdraw payment. Custodial wallets complete server-side; EXTERNAL wallets get a pendingSignature to sign and submit via the signature endpoint.
+         */
+        post: operations["postRampsTransactionByTxIdComplete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ramps/transaction/{txId}": {
         parameters: {
             query?: never;
@@ -906,26 +966,6 @@ export interface paths {
          * @description Executes a claim against the given rule for the authenticated sdk-user. The server runs the same claimability checks as GET /distribution/rules against fresh counts; only the txHash and amount are returned on success.
          */
         post: operations["postDistributionClaim"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/swap/quote": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Quote an asset swap (DEX/AMM)
-         * @description Prices a swap of one asset for another across the requested venue(s). Read-only: returns ranked quotes (best first) with a ready-to-execute invoke_contract build payload. Empty quotes means no route exists.
-         */
-        post: operations["postSwapQuote"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4007,6 +4047,234 @@ export interface operations {
             };
         };
     };
+    postSwapQuote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    network: "testnet" | "mainnet";
+                    publicKey?: string;
+                    address?: string;
+                    sellAsset: {
+                        /** @constant */
+                        type: "native";
+                    } | {
+                        /** @constant */
+                        type: "credit_alphanum4";
+                        code: string;
+                        issuer: string;
+                    } | {
+                        /** @constant */
+                        type: "credit_alphanum12";
+                        code: string;
+                        issuer: string;
+                    };
+                    buyAsset: {
+                        /** @constant */
+                        type: "native";
+                    } | {
+                        /** @constant */
+                        type: "credit_alphanum4";
+                        code: string;
+                        issuer: string;
+                    } | {
+                        /** @constant */
+                        type: "credit_alphanum12";
+                        code: string;
+                        issuer: string;
+                    };
+                    amount: string;
+                    /**
+                     * @default auto
+                     * @enum {string}
+                     */
+                    provider?: "auto" | "aquarius" | "soroswap" | "sdex";
+                    /** @default 50 */
+                    slippageBps?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Ranked swap quotes (best first); empty when no route exists */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_SWAP_QUOTE";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            quotes: {
+                                /** @enum {string} */
+                                provider: "aquarius" | "soroswap" | "sdex";
+                                sellAsset: {
+                                    /** @constant */
+                                    type: "native";
+                                } | {
+                                    /** @constant */
+                                    type: "credit_alphanum4";
+                                    code: string;
+                                    issuer: string;
+                                } | {
+                                    /** @constant */
+                                    type: "credit_alphanum12";
+                                    code: string;
+                                    issuer: string;
+                                };
+                                buyAsset: {
+                                    /** @constant */
+                                    type: "native";
+                                } | {
+                                    /** @constant */
+                                    type: "credit_alphanum4";
+                                    code: string;
+                                    issuer: string;
+                                } | {
+                                    /** @constant */
+                                    type: "credit_alphanum12";
+                                    code: string;
+                                    issuer: string;
+                                };
+                                amountIn: string;
+                                amountOut: string;
+                                minReceived: string;
+                                priceImpactPct: string;
+                                route: {
+                                    poolAddress?: string;
+                                    hops: string[];
+                                };
+                                build: {
+                                    /** @constant */
+                                    operation: "invoke_contract";
+                                    params: {
+                                        contractId: string;
+                                        method: string;
+                                        args: ({
+                                            /** @constant */
+                                            type: "bool";
+                                            value: boolean;
+                                        } | {
+                                            /** @constant */
+                                            type: "i32";
+                                            value: number;
+                                        } | {
+                                            /** @constant */
+                                            type: "u32";
+                                            value: number;
+                                        } | {
+                                            /** @enum {string} */
+                                            type: "i64" | "u64" | "i128" | "u128" | "i256" | "u256";
+                                            value: string;
+                                        } | {
+                                            /** @constant */
+                                            type: "address";
+                                            value: string;
+                                        } | {
+                                            /** @enum {string} */
+                                            type: "string" | "symbol";
+                                            value: string;
+                                        } | {
+                                            /** @constant */
+                                            type: "bytes";
+                                            /** @description Base64-encoded bytes */
+                                            value: string;
+                                        } | {
+                                            /** @constant */
+                                            type: "vec";
+                                            /** @description Array of ScValArg items */
+                                            value: unknown[];
+                                        } | {
+                                            /** @constant */
+                                            type: "map";
+                                            /** @description Array of {key, val} ScValArg pairs */
+                                            value: {
+                                                key: unknown;
+                                                val: unknown;
+                                            }[];
+                                        } | {
+                                            /** @constant */
+                                            type: "void";
+                                        })[];
+                                    };
+                                };
+                            }[];
+                            /** @enum {string} */
+                            best?: "aquarius" | "soroswap" | "sdex";
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description No route for the pair */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Quote error (Soroban RPC/provider) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
     postCharges: {
         parameters: {
             query?: never;
@@ -4848,7 +5116,7 @@ export interface operations {
                     amount: number;
                     currency: string;
                     country: string;
-                    walletAddress: string;
+                    walletAddress?: string;
                 };
             };
         };
@@ -4869,13 +5137,13 @@ export interface operations {
                             provider: string;
                             /** @enum {string} */
                             status: "pending" | "processing" | "completed" | "failed";
-                            paymentInstructions: {
+                            kycUrl?: string;
+                            anchorTransactionId?: string;
+                            stellarTxHash?: string;
+                            pendingSignature?: {
+                                unsignedXdr: string;
                                 /** @enum {string} */
-                                type: "CLABE" | "PIX" | "PSE" | "ACH";
-                                value: string;
-                                amount: number;
-                                currency: string;
-                                expiresAt?: string;
+                                action: "sep10" | "withdraw_payment";
                             };
                         };
                     };
@@ -4942,8 +5210,8 @@ export interface operations {
                     amount: number;
                     currency: string;
                     country: string;
-                    walletAddress: string;
-                    bankDetails: {
+                    walletAddress?: string;
+                    bankDetails?: {
                         /** @enum {string} */
                         type: "CLABE" | "PIX" | "PSE" | "ACH";
                         value: string;
@@ -4968,6 +5236,14 @@ export interface operations {
                             provider: string;
                             /** @enum {string} */
                             status: "pending" | "processing" | "completed" | "failed";
+                            kycUrl?: string;
+                            anchorTransactionId?: string;
+                            stellarTxHash?: string;
+                            pendingSignature?: {
+                                unsignedXdr: string;
+                                /** @enum {string} */
+                                action: "sep10" | "withdraw_payment";
+                            };
                         };
                     };
                 };
@@ -5019,6 +5295,216 @@ export interface operations {
             };
         };
     };
+    postRampsTransactionByTxIdSignature: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                txId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    signedXdr: string;
+                    /** @enum {string} */
+                    action: "sep10" | "withdraw_payment";
+                };
+            };
+        };
+        responses: {
+            /** @description Signature accepted; flow resumed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_RAMPS_SIGNATURE_ACCEPTED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            txId: string;
+                            provider: string;
+                            /** @enum {string} */
+                            status: "pending" | "processing" | "completed" | "failed";
+                            kycUrl?: string;
+                            anchorTransactionId?: string;
+                            stellarTxHash?: string;
+                            pendingSignature?: {
+                                unsignedXdr: string;
+                                /** @enum {string} */
+                                action: "sep10" | "withdraw_payment";
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postRampsTransactionByTxIdComplete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                txId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Withdraw payment submitted (or pendingSignature for EXTERNAL) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_RAMPS_WITHDRAW_COMPLETED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            txId: string;
+                            provider: string;
+                            /** @enum {string} */
+                            status: "pending" | "processing" | "completed" | "failed";
+                            kycUrl?: string;
+                            anchorTransactionId?: string;
+                            stellarTxHash?: string;
+                            pendingSignature?: {
+                                unsignedXdr: string;
+                                /** @enum {string} */
+                                action: "sep10" | "withdraw_payment";
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Anchor not ready (KYC pending) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
     getRampsTransactionByTxId: {
         parameters: {
             query?: never;
@@ -5051,6 +5537,9 @@ export interface operations {
                             direction: "onramp" | "offramp";
                             amount: number;
                             currency: string;
+                            kycUrl?: string;
+                            anchorTransactionId?: string;
+                            stellarTxHash?: string;
                             updatedAt: string;
                         };
                     };
@@ -5239,234 +5728,6 @@ export interface operations {
             };
             /** @description Rule not claimable (disabled, expired, exhausted, rate-limited) */
             409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-        };
-    };
-    postSwapQuote: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @enum {string} */
-                    network: "testnet" | "mainnet";
-                    publicKey?: string;
-                    address?: string;
-                    sellAsset: {
-                        /** @constant */
-                        type: "native";
-                    } | {
-                        /** @constant */
-                        type: "credit_alphanum4";
-                        code: string;
-                        issuer: string;
-                    } | {
-                        /** @constant */
-                        type: "credit_alphanum12";
-                        code: string;
-                        issuer: string;
-                    };
-                    buyAsset: {
-                        /** @constant */
-                        type: "native";
-                    } | {
-                        /** @constant */
-                        type: "credit_alphanum4";
-                        code: string;
-                        issuer: string;
-                    } | {
-                        /** @constant */
-                        type: "credit_alphanum12";
-                        code: string;
-                        issuer: string;
-                    };
-                    amount: string;
-                    /**
-                     * @default auto
-                     * @enum {string}
-                     */
-                    provider?: "auto" | "aquarius" | "soroswap" | "sdex";
-                    /** @default 50 */
-                    slippageBps?: number;
-                };
-            };
-        };
-        responses: {
-            /** @description Ranked swap quotes (best first); empty when no route exists */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_SWAP_QUOTE";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            quotes: {
-                                /** @enum {string} */
-                                provider: "aquarius" | "soroswap" | "sdex";
-                                sellAsset: {
-                                    /** @constant */
-                                    type: "native";
-                                } | {
-                                    /** @constant */
-                                    type: "credit_alphanum4";
-                                    code: string;
-                                    issuer: string;
-                                } | {
-                                    /** @constant */
-                                    type: "credit_alphanum12";
-                                    code: string;
-                                    issuer: string;
-                                };
-                                buyAsset: {
-                                    /** @constant */
-                                    type: "native";
-                                } | {
-                                    /** @constant */
-                                    type: "credit_alphanum4";
-                                    code: string;
-                                    issuer: string;
-                                } | {
-                                    /** @constant */
-                                    type: "credit_alphanum12";
-                                    code: string;
-                                    issuer: string;
-                                };
-                                amountIn: string;
-                                amountOut: string;
-                                minReceived: string;
-                                priceImpactPct: string;
-                                route: {
-                                    poolAddress?: string;
-                                    hops: string[];
-                                };
-                                build: {
-                                    /** @constant */
-                                    operation: "invoke_contract";
-                                    params: {
-                                        contractId: string;
-                                        method: string;
-                                        args: ({
-                                            /** @constant */
-                                            type: "bool";
-                                            value: boolean;
-                                        } | {
-                                            /** @constant */
-                                            type: "i32";
-                                            value: number;
-                                        } | {
-                                            /** @constant */
-                                            type: "u32";
-                                            value: number;
-                                        } | {
-                                            /** @enum {string} */
-                                            type: "i64" | "u64" | "i128" | "u128" | "i256" | "u256";
-                                            value: string;
-                                        } | {
-                                            /** @constant */
-                                            type: "address";
-                                            value: string;
-                                        } | {
-                                            /** @enum {string} */
-                                            type: "string" | "symbol";
-                                            value: string;
-                                        } | {
-                                            /** @constant */
-                                            type: "bytes";
-                                            /** @description Base64-encoded bytes */
-                                            value: string;
-                                        } | {
-                                            /** @constant */
-                                            type: "vec";
-                                            /** @description Array of ScValArg items */
-                                            value: unknown[];
-                                        } | {
-                                            /** @constant */
-                                            type: "map";
-                                            /** @description Array of {key, val} ScValArg pairs */
-                                            value: {
-                                                key: unknown;
-                                                val: unknown;
-                                            }[];
-                                        } | {
-                                            /** @constant */
-                                            type: "void";
-                                        })[];
-                                    };
-                                };
-                            }[];
-                            /** @enum {string} */
-                            best?: "aquarius" | "soroswap" | "sdex";
-                        };
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description No route for the pair */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Quote error (Soroban RPC/provider) */
-            502: {
                 headers: {
                     [name: string]: unknown;
                 };

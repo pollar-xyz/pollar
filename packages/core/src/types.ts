@@ -686,7 +686,17 @@ export type RampsTransactionResponse =
   pollarPaths['/ramps/transaction/{txId}']['get']['responses'][200]['content']['application/json']['content'];
 export type RampTxStatus = RampsTransactionResponse['status'];
 export type RampDirection = RampsTransactionResponse['direction'];
-export type PaymentInstructions = RampsOnrampResponse['paymentInstructions'];
+
+// SEP-24 anchor flow (e.g. Anclap): custodial wallets get a `kycUrl` to open;
+// EXTERNAL wallets get a `pendingSignature` to sign and resume.
+export type RampsPendingSignature = NonNullable<RampsOnrampResponse['pendingSignature']>;
+export type RampsSignatureBody = NonNullable<
+  pollarPaths['/ramps/transaction/{txId}/signature']['post']['requestBody']
+>['content']['application/json'];
+export type RampsSignatureResponse =
+  pollarPaths['/ramps/transaction/{txId}/signature']['post']['responses'][200]['content']['application/json']['content'];
+export type RampsCompleteResponse =
+  pollarPaths['/ramps/transaction/{txId}/complete']['post']['responses'][200]['content']['application/json']['content'];
 
 // ─── Distribution types ───────────────────────────────────────────────────────
 
