@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.10.0
+
+> Stable release. Published under the default `latest` dist-tag
+> (`npm i @pollar/core`). This is the promotion of the `0.10.0-rc.*` line;
+> the per-rc detail is preserved in the sections below.
+
+### Highlights (since 0.9.0)
+
+- **Unified wallet adapters (breaking).** External wallets are now registered as
+  a `walletAdapters: WalletAdapter[]` array on `PollarClient`; each adapter
+  auto-renders as a login entry and overrides a built-in by its `type`. The old
+  singular `walletAdapter` resolver and `loginWallet(id)` method are gone - enter
+  any wallet through the unified `login({ provider: id })`. See UPGRADE.md.
+- **Multi-venue swaps.** `getSwapQuote()` quotes across SDEX, Soroswap and
+  Aquarius and returns routes ranked best-first (`provider: 'auto'`); `swap()`
+  sets the buy-asset trustline and executes through the existing `runTx`
+  pipeline with on-chain `minReceived` slippage. `@pollar/react` ships a
+  `SwapModal` with a venue route selector.
+- **SEP-24 on/off-ramps.** New `ramps` endpoints drive the anchor
+  deposit/withdraw interactive flow through core, with a `RampWidget` in
+  `@pollar/react` (external wallets sign the SEP-24 pending XDR in the widget).
+- **Self-driving Privy adapter.** `@pollar/privy-adapter` was reworked from a
+  signer skeleton into a full adapter that drives login + embedded-wallet
+  creation + signing, on web and React Native / Expo.
+- **Network resilience.** Every request now has a client-side timeout (default
+  10s) and idempotent-request retry; a refresh timeout no longer logs the user
+  out. New typed `PollarNetworkError` + `isPollarNetworkError`.
+
+### New packages
+
+- **`@pollar/accesly-adapter`** - client-side Accesly smart-wallet adapter.
+- **`@pollar/privy-server-adapter`** - server-side Privy adapter (formerly named
+  `@pollar/privy-adapter` before the client-side rewrite took that name).
+
+### Upgrade notes
+
+- **One-time re-login (SDK only).** The local storage namespace was widened
+  (apiKey hash 8 -> 32 hex chars); every user re-authenticates once after the
+  host app ships this version. No backend change, no action required.
+- See **UPGRADE.md** for migrating off the singular `walletAdapter` / `loginWallet`.
+
 ## 0.10.0-rc.10
 
 > Release candidate. Published under the `next` dist-tag (`npm i @pollar/core@next`).

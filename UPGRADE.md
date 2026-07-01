@@ -1,5 +1,90 @@
 # Upgrade guide
 
+## 0.9.x -> 0.10.0
+
+0.10.0 unifies external wallets into a single `walletAdapters: WalletAdapter[]`
+array and removes the old singular `walletAdapter` resolver, the `loginWallet()`
+method, and the 0.8-era `ui.renderWallets` slot / `/picker` bundle. The login
+modal now renders one login entry per registered adapter automatically.
+
+### 1. `walletAdapter` (singular resolver) -> `walletAdapters` (array)
+
+`PollarClientConfig.walletAdapter` is replaced by `walletAdapters?: WalletAdapter[]`.
+Built-in `FreighterAdapter` / `AlbedoAdapter` still auto-register; pass any extra
+adapters as array entries (an entry overrides a built-in with the same `type`).
+
+```ts
+// BEFORE (0.9.x)
+new PollarClient({ apiKey, walletAdapter: stellarWalletsKit({ network }) });
+
+// AFTER (0.10.0)
+new PollarClient({ apiKey, walletAdapters: stellarWalletsKitAdapters({ network }) });
+```
+
+### 2. `stellarWalletsKit(...)` -> `stellarWalletsKitAdapters(...)`
+
+`@pollar/stellar-wallets-kit-adapter` now exports `stellarWalletsKitAdapters()`,
+which returns a `WalletAdapter[]` (one per module) instead of a resolver. It is
+also SSR-safe: it returns `[]` when there is no `window` and builds the real list
+when it re-runs on the client. Requires `@pollar/core@^0.10.0` /
+`@pollar/react@^0.10.0`.
+
+### 3. `loginWallet(id)` -> `login({ provider: id })`
+
+The dedicated wallet-login method is gone. Enter any wallet through the unified
+login entry point, using the adapter's `type` as the provider id.
+
+```ts
+// BEFORE
+client.loginWallet('xbull');
+// AFTER
+client.login({ provider: 'xbull' });
+```
+
+### 4. `ui.renderWallets` / `/picker` bundle removed
+
+The 0.8 `ui.renderWallets` slot and the `@pollar/stellar-wallets-kit-adapter/picker`
+bundle (`createStellarWalletsKitBundle`) no longer exist. The login modal builds
+the wallet list from the registered `walletAdapters`, so you just pass them:
+
+```tsx
+// BEFORE (0.8/0.9)
+<PollarProvider
+  client={{ apiKey: '…', walletAdapter: bundle.walletAdapter }}
+  ui={{ renderWallets: bundle.renderWallets }}
+>
+
+// AFTER (0.10.0)
+<PollarProvider client={{ apiKey: '…', walletAdapters: stellarWalletsKitAdapters({ network }) }}>
+```
+
+### 5. Custom `WalletAdapter` authors
+
+Adapters now carry display metadata: the constructor / factory takes a
+`meta: WalletAdapterMeta` (at least `{ label }`) so the adapter can render its own
+login entry. For example `new StellarWalletsKitAdapter('freighter', { label: 'Freighter' })`.
+
+### 6. `@pollar/react`: `usePollar().walletAddress` / `walletType` -> `wallet`
+
+The context no longer exposes `walletAddress` or `walletType`. Read the wallet
+through `wallet: WalletInfo | null` instead.
+
+```tsx
+// BEFORE
+const { walletAddress, walletType } = usePollar();
+// AFTER
+const { wallet } = usePollar();
+const address = wallet?.address;
+const custody = wallet?.custody; // 'internal' | 'smart' | 'external'
+```
+
+### 7. One-time re-login (SDK only)
+
+The local storage namespace was widened (the apiKey hash went from 8 to 32 hex
+chars), which orphans sessions persisted by older builds. Every user
+re-authenticates once after the host app ships 0.10.0. No backend change, no
+migration, no action required.
+
 ## 0.8.x → 0.9.0
 
 The SDK surface drops the legacy wallet `publicKey` alias in favor of `address`,
@@ -141,6 +226,10 @@ now logs via `console.error('[PollarProvider] getAppConfig failed', err)`,
 matching how the rest of `@pollar/core` reports unexpected failures.
 
 ### New: `renderWallets` slot
+
+> **Removed in 0.10.0.** The `ui.renderWallets` slot and the `/picker` bundle
+> below were superseded by the `walletAdapters[]` model. See the 0.9.x -> 0.10.0
+> section above. The rest of this section applies only to 0.8.x / 0.9.x.
 
 `<PollarProvider>` accepts a new optional `ui.renderWallets` slot that
 replaces the hardcoded Freighter+Albedo list inside the LoginModal wallet

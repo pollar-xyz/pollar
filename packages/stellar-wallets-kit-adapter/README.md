@@ -1,8 +1,8 @@
 # @pollar/stellar-wallets-kit-adapter
 
-Plug [Stellar Wallets Kit](https://stellarwalletskit.dev) into [`@pollar/core`](../core) as a single wallet adapter, without `@pollar/core` having to depend on the kit. One install gives Pollar access to **every wallet module the kit supports** — Freighter, Albedo, xBull, Lobstr, Rabet, Hana, Bitget, OneKey, Klever, Fordefi, CactusLink, HotWallet, plus Ledger / Trezor / WalletConnect via opt-in.
+Plug [Stellar Wallets Kit](https://stellarwalletskit.dev) into [`@pollar/core`](../core) as a set of wallet adapters, without `@pollar/core` having to depend on the kit. One install gives Pollar access to **every wallet module the kit supports** — Freighter, Albedo, xBull, Lobstr, Rabet, Hana, Bitget, OneKey, Klever, Fordefi, CactusLink, HotWallet, plus Ledger / Trezor / WalletConnect via opt-in.
 
-The adapter is consumed through the `walletAdapter` slot on `PollarClientConfig`, so swapping wallet stacks (built-in adapters → kit, kit → custom resolver) is a one-line change.
+The adapters are registered through the `walletAdapters` slot on `PollarClientConfig`. `stellarWalletsKitAdapters()` returns a `WalletAdapter[]` (one adapter per kit module) that you spread into that array alongside any other adapters you register.
 
 ## Installation
 
@@ -16,46 +16,54 @@ npm install @pollar/stellar-wallets-kit-adapter @creit.tech/stellar-wallets-kit
 
 ```ts
 import { PollarClient } from '@pollar/core';
-import { stellarWalletsKit } from '@pollar/stellar-wallets-kit-adapter';
+import { stellarWalletsKitAdapters } from '@pollar/stellar-wallets-kit-adapter';
 import { Networks } from '@creit.tech/stellar-wallets-kit';
 
 const client = new PollarClient({
   apiKey: 'your-api-key',
-  walletAdapter: stellarWalletsKit({ network: Networks.PUBLIC }),
+  walletAdapters: stellarWalletsKitAdapters({ network: Networks.PUBLIC }),
 });
 
-// Triggers the kit's flow for the picked wallet id
-client.loginWallet('xbull');
+// Log in with one of the registered kit wallets
+client.login({ provider: 'xbull' });
 ```
 
 With React:
 
 ```tsx
 import { PollarProvider } from '@pollar/react';
-import { stellarWalletsKit } from '@pollar/stellar-wallets-kit-adapter';
+import { stellarWalletsKitAdapters } from '@pollar/stellar-wallets-kit-adapter';
 import { Networks } from '@creit.tech/stellar-wallets-kit';
 
 <PollarProvider
   client={{
     apiKey: 'your-api-key',
-    walletAdapter: stellarWalletsKit({ network: Networks.TESTNET }),
+    walletAdapters: stellarWalletsKitAdapters({ network: Networks.TESTNET }),
   }}
 >
   {/* your app */}
 </PollarProvider>;
 ```
 
-This wires the **signing path** but the built-in `LoginModal` still shows
-only Freighter / Albedo. To render the kit's full wallet list (xBull, Lobstr,
-Rabet, …) inside `LoginModal`, also pass the picker — see
-[Wallet picker UI (`/picker`)](#wallet-picker-ui-picker) below.
+Every wallet you register this way renders as its own button inside Pollar's
+`LoginModal` (collapsed behind a shared "Wallet" gateway) - see
+[Login UI](#login-ui) below.
 
-The kit is a global singleton. `stellarWalletsKit(...)` returns a resolver and `StellarWalletsKit.init(...)` is called once on the first `loginWallet` call.
+The kit is a global singleton. `stellarWalletsKitAdapters(...)` returns a
+`WalletAdapter[]` and runs `StellarWalletsKit.init(...)` synchronously at call
+time (via `ensureInit()`), building one `StellarWalletsKitAdapter` per module up
+front. It is not lazy - a later `login({ provider })` just routes to the
+matching adapter that was already built.
 
-> **0.9.0** — `connect()` resolves to `{ address }` only (the duplicate
-> `publicKey` field is gone, matching the new `ConnectWalletResponse`). Requires
-> `@pollar/core@^0.9.0` / `@pollar/react@^0.9.0`. Adds `logLevel` / `logger`
-> options (set once at init — the kit is a global singleton).
+> **0.10.0** - switched to the `walletAdapters[]` array model: the factory is now
+> `stellarWalletsKitAdapters()` (was `stellarWalletsKit()`) and returns a
+> `WalletAdapter[]` for the plural `walletAdapters` config slot instead of a
+> single resolver for `walletAdapter`. SSR-safe: returns `[]` when there is no
+> `window`. Requires `@pollar/core@^0.10.0` / `@pollar/react@^0.10.0`.
+>
+> **0.9.0** - `connect()` resolves to `{ address }` only (the duplicate
+> `publicKey` field is gone, matching the new `ConnectWalletResponse`). Adds
+> `logLevel` / `logger` options (set once at init - the kit is a global singleton).
 >
 > **0.8.0** — `network` is **required**. The previous `Networks.TESTNET`
 > default was removed because the kit is a global singleton, and silently
@@ -64,7 +72,7 @@ The kit is a global singleton. `stellarWalletsKit(...)` returns a resolver and `
 
 ## Default wallets
 
-Calling `stellarWalletsKit({ network })` with no `modules` argument enables every module that loads without extra configuration:
+Calling `stellarWalletsKitAdapters({ network })` with no `modules` argument enables every module that loads without extra configuration (12 in total):
 
 | Module             | Wallet id (`WalletId`) | Type               |
 | ------------------ | ---------------------- | ------------------ |
@@ -88,7 +96,7 @@ Calling `stellarWalletsKit({ network })` with no `modules` argument enables ever
 Pass your own `modules` list. Import from the kit's per-wallet subpaths so unused modules tree-shake out:
 
 ```ts
-import { stellarWalletsKit } from '@pollar/stellar-wallets-kit-adapter';
+import { stellarWalletsKitAdapters } from '@pollar/stellar-wallets-kit-adapter';
 import { Networks } from '@creit.tech/stellar-wallets-kit';
 import { FreighterModule } from '@creit.tech/stellar-wallets-kit/modules/freighter';
 import { xBullModule } from '@creit.tech/stellar-wallets-kit/modules/xbull';
@@ -96,7 +104,7 @@ import { WalletConnectModule } from '@creit.tech/stellar-wallets-kit/modules/wal
 
 const client = new PollarClient({
   apiKey: 'your-api-key',
-  walletAdapter: stellarWalletsKit({
+  walletAdapters: stellarWalletsKitAdapters({
     network: Networks.PUBLIC,
     modules: [
       new FreighterModule(),
@@ -136,11 +144,22 @@ interface StellarWalletsKitAdapterOptions {
   modules?: ModuleInterface[];
 
   /**
-   * Picker-specific options. Only consumed by `<KitWalletPicker>` /
-   * `createStellarWalletsKitBundle` (the `/picker` subpath). The resolver
-   * itself ignores them.
+   * Picker-specific options: which kit wallets to include, label overrides, and
+   * the gateway group label. `wallets`, `labels`, and `groupLabel` are honored by
+   * `stellarWalletsKitAdapters()`; the remaining fields are consumed by the
+   * `/picker` subpath.
    */
   picker?: KitPickerOptions;
+
+  /**
+   * Minimum log severity. `'silent'` disables logging; otherwise
+   * `error` < `warn` < `info` < `debug`. Defaults to `'info'`. Set once at init
+   * since the kit is a global singleton.
+   */
+  logLevel?: LogLevel;
+
+  /** Sink for logs. Defaults to the global `console`. */
+  logger?: PollarLogger;
 }
 
 interface KitPickerOptions {
@@ -152,35 +171,55 @@ interface KitPickerOptions {
   showInstalledOnly?: boolean;
   /** Per-wallet label overrides. Key = wallet id. */
   labels?: Record<string, string>;
+  /**
+   * Label of the gateway button the kit wallets collapse behind in the login UI
+   * (applied as each adapter's `meta.group`). Default `'Wallet'` - the same group
+   * as the built-in Freighter/Albedo, so they share one gateway. Set a distinct
+   * value (e.g. `'More wallets'`) to render the kit wallets as a separate gateway.
+   */
+  groupLabel?: string;
   /** Visual layout. Default `'grid'`. */
   layout?: 'grid' | 'list';
-  /** Theme passthrough — applied as CSS custom properties on the picker root. */
+  /** Theme passthrough - applied as CSS custom properties on the picker root. */
   theme?: { accent?: string; mode?: 'light' | 'dark' };
 }
 ```
 
-The factory returns a `WalletAdapterResolver` from `@pollar/core`:
+`stellarWalletsKitAdapters()` returns `WalletAdapter[]` from `@pollar/core` - one
+adapter per included kit module - which you assign to
+`PollarClientConfig.walletAdapters`. Each adapter's `type` is the kit `WalletId`
+(`WalletType | (string & {})`, so `WalletType.FREIGHTER` keeps autocomplete while
+`'xbull'`, `'lobstr'`, ... are accepted as plain strings) and its `meta` carries
+the module's label/icon for the auto-rendered login button.
 
-```ts
-type WalletAdapterResolver = (id: WalletId) => WalletAdapter | Promise<WalletAdapter>;
-```
+### SSR safety
 
-`WalletId` is `WalletType | (string & {})` — `WalletType.FREIGHTER` / `WalletType.ALBEDO` keep autocomplete, every other kit id (`'xbull'`, `'lobstr'`, …) is accepted as a plain string.
+`stellarWalletsKitAdapters()` returns `[]` when `typeof window === 'undefined'`.
+The kit talks to browser wallet extensions and touches `window` both at
+`StellarWalletsKit.init()` and inside its module constructors, so there are no
+wallets to build server-side. Under Next.js/Remix, construct your `PollarClient`
+and render the wallet UI on the client (e.g. behind a mounted flag or
+`dynamic(..., { ssr: false })`); the real adapters are built when the factory
+re-runs in the browser.
 
 ## How it fits the Pollar wallet contract
 
 The adapter implements `WalletAdapter` from `@pollar/core`:
 
-| `WalletAdapter` method       | Kit call                                       |
-| ---------------------------- | ---------------------------------------------- |
-| `isAvailable()`              | `StellarWalletsKit.setWallet(id)`              |
-| `connect()`                  | `setWallet(id)` → `fetchAddress()`             |
-| `disconnect()`               | `StellarWalletsKit.disconnect()`               |
-| `getPublicKey()`             | `StellarWalletsKit.getAddress()`               |
-| `signTransaction(xdr, opts)` | `setWallet(id)` → `signTransaction(xdr, opts)` |
-| `signAuthEntry(xdr, opts)`   | `setWallet(id)` → `signAuthEntry(xdr, opts)`   |
+| `WalletAdapter` method       | Kit call                                                     |
+| ---------------------------- | ----------------------------------------------------------- |
+| `isAvailable()`              | `refreshSupportedWallets()` then check the wallet's `isAvailable` flag |
+| `connect()`                  | `setWallet(id)` > `fetchAddress()`                          |
+| `disconnect()`               | `StellarWalletsKit.disconnect()`                            |
+| `getPublicKey()`             | `StellarWalletsKit.getAddress()`                            |
+| `signTransaction(xdr, opts)` | `setWallet(id)` > `signTransaction(xdr, opts)`             |
+| `signAuthEntry(xdr, opts)`   | `setWallet(id)` > `signAuthEntry(xdr, opts)`               |
 
-`setWallet` is called before every operation so a single `StellarWalletsKit.init({ modules })` covers many wallets — `PollarClient` resolves a fresh adapter instance per `WalletId`, and the kit routes to the correct module under the hood.
+`setWallet` is called before every signing/connect operation so a single
+`StellarWalletsKit.init({ modules })` covers many wallets. `stellarWalletsKitAdapters()`
+builds one `StellarWalletsKitAdapter` per module up front and returns the array;
+each adapter is bound to its own `WalletId` and the kit routes to the correct
+module under the hood.
 
 ## Login UI
 
@@ -219,33 +258,36 @@ import { StellarWalletsKitAdapter } from '@pollar/stellar-wallets-kit-adapter';
 
 StellarWalletsKit.init({ network: Networks.PUBLIC, modules: [new FreighterModule()] });
 
-const adapter = new StellarWalletsKitAdapter('freighter');
+// The constructor requires a meta arg whose `label` is required.
+const adapter = new StellarWalletsKitAdapter('freighter', { label: 'Freighter' });
 const { address } = await adapter.connect();
 ```
 
-## Writing a custom resolver
+## Composing with other adapters
 
-`walletAdapter` accepts any function matching `WalletAdapterResolver`. Use this to swap between the kit and your own implementation per-id, or to compose multiple adapter packages:
+`walletAdapters` is a plain `WalletAdapter[]`, so you can spread the kit adapters
+alongside adapters from other packages (`@pollar/privy-adapter`, ...) or your own.
+Entries later in the array override an earlier one that reuses the same `type`, and
+each entry also overrides a built-in Freighter/Albedo with a matching `type`:
 
 ```ts
-import { stellarWalletsKit } from '@pollar/stellar-wallets-kit-adapter';
-import { FreighterAdapter, WalletType } from '@pollar/core';
-
-const kit = stellarWalletsKit({ network: Networks.PUBLIC });
+import { PollarClient } from '@pollar/core';
+import { stellarWalletsKitAdapters } from '@pollar/stellar-wallets-kit-adapter';
+import { Networks } from '@creit.tech/stellar-wallets-kit';
+import { MyCustomAdapter } from './my-custom-adapter';
 
 new PollarClient({
   apiKey: 'your-api-key',
-  walletAdapter: (id) => {
-    // Use the in-house Freighter adapter, kit for everything else
-    if (id === WalletType.FREIGHTER) return new FreighterAdapter();
-    return kit(id);
-  },
+  walletAdapters: [
+    ...stellarWalletsKitAdapters({ network: Networks.PUBLIC }),
+    new MyCustomAdapter(),
+  ],
 });
 ```
 
 ## Fallback behaviour
 
-If `walletAdapter` is omitted from `PollarClientConfig`, `@pollar/core` falls back to its built-in `FreighterAdapter` / `AlbedoAdapter`. Installing this package is opt-in — existing apps keep working without changes until they switch the slot.
+If `walletAdapters` is omitted from `PollarClientConfig`, `@pollar/core` falls back to its built-in `FreighterAdapter` / `AlbedoAdapter`. Installing this package is opt-in - existing apps keep working without changes until they add adapters to the slot.
 
 ## License
 

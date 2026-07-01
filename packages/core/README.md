@@ -2,6 +2,16 @@
 
 Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction utilities for Stellar-based applications.
 
+> **0.10.0** adds multi-venue **swaps** (SDEX / Soroswap / Aquarius, via `getSwapQuote` +
+> `swap`), **SEP-24 on/off-ramps** (`getRampsQuote`, `createOnRamp`, `createOffRamp`, and the
+> transaction-lifecycle helpers), and a per-request **network timeout with automatic retry**
+> (`requestTimeoutMs` + `retry`; SDK HTTP now rejects with `PollarNetworkError` /
+> `SDK_NETWORK_TIMEOUT` instead of hanging forever). **Breaking:** external-wallet wiring moved
+> to a unified `walletAdapters: WalletAdapter[]` model - the old singular `walletAdapter`
+> resolver and `client.loginWallet()` are gone. Register adapter instances in `walletAdapters`
+> (built-ins auto-register) and log in with `client.login({ provider: id })`. Read the
+> [CHANGELOG](../../CHANGELOG.md) before upgrading.
+>
 > **0.9.0 (breaking — SDK surface only)** the session wallet drops the legacy
 > `publicKey` alias and exposes only `address`; read `session.wallet.address`.
 > `wallet.type` `'custodial'` is now surfaced as `'internal'`
@@ -86,7 +96,8 @@ import 'react-native-polyfill-globals/auto'; // TextEncoder/TextDecoder + URL
 - Sign every authenticated request with **DPoP** (RFC 9449), making stolen tokens useless to an attacker without the
   per-session keypair
 - Build and submit Stellar transactions
-- Fetch Stellar account balances
+- Fetch wallet balances via `PollarClient` (`refreshBalance()` / `getWalletBalance()`)
+- Swap assets across venues (SDEX / Soroswap / Aquarius) and run SEP-24 on/off-ramps
 - React to real-time authentication state changes
 
 ## Quick Start (web)
@@ -211,7 +222,7 @@ export function useAuth() {
 ### React Native
 
 Same as React (`useSyncExternalStore`), plus the entry-file polyfills and injected adapters shown in the
-React Native sections above. OAuth and external-wallet logins require `openAuthUrl` / `walletAdapter` to be injected
+React Native sections above. OAuth and external-wallet logins require `openAuthUrl` / `walletAdapters` to be injected
 (the built-in popup/extension adapters are web-only).
 
 ## Logging
@@ -313,17 +324,28 @@ const sessions = await client.listSessions();
 | `stellarNetwork`   | `'mainnet' \| 'testnet'` | No       | Target Stellar network (default: `testnet`)                                                                 |
 | `storage`          | `Storage`                | No       | Pluggable storage adapter. Web autodetects `localStorage` with in-memory fallback; RN must inject one       |
 | `keyManager`       | `KeyManager`             | No       | Pluggable DPoP key manager. Web picks `WebCryptoKeyManager`; otherwise `NobleKeyManager`                    |
-| `walletAdapter`    | `WalletAdapterResolver`  | No       | External wallet stack (e.g. Stellar Wallets Kit). Falls back to built-in `FreighterAdapter`/`AlbedoAdapter` |
+| `walletAdapters`   | `WalletAdapter[]`        | No       | Extra wallet adapter instances. Built-in `FreighterAdapter`/`AlbedoAdapter` auto-register; an entry overrides a built-in by reusing its `type` |
+| `requestTimeoutMs` | `number`                 | No       | Max ms a single SDK HTTP attempt waits before aborting with `PollarNetworkError`. Default `10000`; `0` disables |
+| `retry`            | `PollarRetryConfig`      | No       | Retry-with-backoff for idempotent transport failures (refresh + GETs). Default `{ attempts: 2, baseDelayMs: 300 }` |
 | `deviceLabel`      | `string`                 | No       | UI-friendly device label sent at `/auth/login` time and shown in `listSessions()` rows                      |
 | `onStorageDegrade` | `OnStorageDegrade`       | No       | Notified the first time `localStorage` falls back to in-memory mode (SSR, private browsing, quota, …)       |
+| `visibilityProvider` | `VisibilityProvider`   | No       | Foreground-detection signal for the silent-refresh scheduler. Web default; RN should inject an `AppState` provider |
+| `maxIdleMs`        | `number`                 | No       | Stop proactive refreshes after this many ms of no client HTTP activity. Default `undefined` (refresh while visible) |
+| `openAuthUrl`      | `AuthUrlOpener`          | No       | Strategy for opening the hosted OAuth URL. Web defaults to a popup; RN must provide one                     |
+| `oauthRedirectUri` | `string`                 | No       | `redirect_uri` sent to the backend for hosted OAuth. Web defaults to `window.location.origin`; RN = deep link |
+| `passkey`          | `PasskeyCeremony`        | No       | WebAuthn ceremony for Smart Wallet login (injected by `@pollar/react`). Required for `loginSmartWallet()`   |
+| `passkeySign`      | `PasskeySigner`          | No       | Signs smart-account (C-address) transactions with the user's passkey. Required to send from a smart wallet  |
 
 ---
 
 ### Authentication
 
-#### `client.login(options)`
+#### `client.login(options): void`
 
-Initiates a login flow. Returns `{ cancelLogin }` to abort the flow at any point.
+Unified entry point for every login. Fire-and-forget: it returns `void` and drives progress through
+`onAuthStateChange`. To abort an in-flight flow, call `client.cancelLogin()` (below). The `provider` selects the
+flow - a built-in auth provider (`google`, `github`, `email`) or the `type` of any registered wallet adapter. Note
+`'wallet'` is intentionally NOT a provider: the adapter id itself is the provider.
 
 ```ts
 // Social providers
@@ -333,21 +355,24 @@ client.login({ provider: 'github' });
 // Email OTP
 client.login({ provider: 'email', email: 'user@example.com' });
 
-// Stellar wallet
+// Stellar wallet - the adapter's `type` is the provider
 import { WalletType } from '@pollar/core';
 
-client.login({ provider: 'wallet', type: WalletType.FREIGHTER });
-client.login({ provider: 'wallet', type: WalletType.ALBEDO });
+client.login({ provider: WalletType.FREIGHTER }); // WalletType.FREIGHTER === 'freighter-native'
+client.login({ provider: WalletType.ALBEDO }); // WalletType.ALBEDO === 'albedo-native'
+// Adapters registered via `walletAdapters` (e.g. Stellar Wallets Kit):
+client.login({ provider: 'xbull' });
 ```
 
 #### `client.verifyEmailCode(code)`
 
 Submits the OTP code for email authentication. The active `clientSessionId` is tracked internally — no need to pass it.
 
-#### `client.loginWallet(walletId)`
+#### `client.providerAction(provider, action, payload?): void`
 
-Lower-level entry point for wallet flows. Accepts any `WalletId` (`WalletType.FREIGHTER`, `WalletType.ALBEDO`, or an
-opaque string id like `'xbull'` / `'lobstr'` resolved by `walletAdapter`).
+Invokes a named secondary step on a registered auth provider (e.g. an email `sendCode` / `verifyCode`, or a custom
+provider's multi-step continuation). Reuses the in-flight login `AbortController` so the step stays cancellable via
+`cancelLogin()`. For email, prefer the dedicated `verifyEmailCode()` above.
 
 #### `client.cancelLogin()`
 
@@ -370,9 +395,11 @@ await client.logout({ everywhere: true }); // revoke every active session for th
 
 Shorthand for `logout({ everywhere: true })`.
 
-#### `client.isAuthenticated()`
+#### `client.getWallet(): WalletInfo | null`
 
-Returns `true` if a valid session with a wallet public key is present.
+Returns the authenticated user's wallet as a discriminated union over `custody` (`'internal' | 'smart' | 'external'`),
+each carrying `address` and a `provider`, or `null` when there is no wallet. To check whether a session exists, read
+`getAuthState()` (`step === 'authenticated'`) or `getWallet()` - there is no `isAuthenticated()` helper.
 
 #### `client.getUserProfile(): PollarUserProfile | null`
 
@@ -447,6 +474,129 @@ await client.submitTx(signedXdr);
 
 ---
 
+### Swaps
+
+Quote and execute asset swaps across multiple venues (SDEX, Soroswap, Aquarius). `getSwapQuote` returns one priced
+route per venue (each with a ready-to-run `build` payload); pass the chosen quote to `swap`, which establishes any
+missing trustline for the buy asset (unless `autoTrustline: false`) and runs the same transaction pipeline as `runTx`
+(subscribe via `onTransactionStateChange`). Smart (passkey) wallets are not supported yet.
+
+```ts
+const quotes = await client.getSwapQuote({
+  sellAsset: 'XLM',
+  buyAsset: 'USDC:GA5Z...',
+  amount: '25',
+  provider: 'auto', // or a concrete venue; defaults server-side
+  slippageBps: 50,
+});
+
+const outcome = await client.swap(quotes[0]); // SubmitOutcome
+```
+
+Method signatures:
+
+```ts
+client.getSwapQuote(params: SwapQuoteParams): Promise<SwapQuote[]>;
+client.swap(quote: SwapQuote, opts?: { autoTrustline?: boolean }): Promise<SubmitOutcome>;
+```
+
+The standalone `quoteSwap(api, body): Promise<SwapQuoteContent>` export is available for advanced callers that already
+hold a `PollarApiClient`.
+
+---
+
+### Ramps (SEP-24)
+
+On/off-ramp fiat through SEP-24 anchors (e.g. Anclap). Get a quote, create the on- or off-ramp, then drive the
+transaction to completion. Custodial wallets receive a `kycUrl` to open; external wallets receive a `pendingSignature`
+to sign and resume via `submitRampSignature`.
+
+```ts
+const quote = await client.getRampsQuote({
+  /* RampsQuoteQuery */
+});
+const onramp = await client.createOnRamp({
+  /* RampsOnrampBody */
+});
+const status = await client.pollRampTransaction(onramp.txId);
+```
+
+Available methods (all thin wrappers over the ramps endpoints):
+
+```ts
+client.getRampsQuote(query: RampsQuoteQuery): Promise<RampsQuoteResponse>;
+client.createOnRamp(body: RampsOnrampBody): Promise<RampsOnrampResponse>;
+client.createOffRamp(body: RampsOfframpBody): Promise<RampsOfframpResponse>;
+client.completeWithdraw(txId: string): Promise<RampsCompleteResponse>;
+client.submitRampSignature(txId: string, body: RampsSignatureBody): Promise<RampsSignatureResponse>;
+client.getRampTransaction(txId: string): Promise<RampsTransactionResponse>;
+client.pollRampTransaction(txId: string, opts?: { intervalMs?: number; timeoutMs?: number }): Promise<RampTxStatus>;
+```
+
+Each also has a standalone `(api, ...)` export (`getRampsQuote`, `createOnRamp`, …) for callers holding a
+`PollarApiClient`.
+
+---
+
+### KYC
+
+Fetch KYC status/providers and start or resolve a KYC flow:
+
+```ts
+client.getKycStatus(providerId?: string);
+client.getKycProviders(country: string);
+client.startKyc(body: KycStartBody): Promise<KycStartResponse>;
+client.resolveKyc(providerId: string, level?: KycLevel);
+client.pollKycStatus(providerId: string, opts?: { intervalMs?: number; timeoutMs?: number }): Promise<KycStatus>;
+```
+
+---
+
+### Distribution
+
+List and claim distribution (rewards) rules:
+
+```ts
+client.listDistributionRules(): Promise<DistributionRule[]>;
+client.claimDistributionRule(body: DistributionClaimBody): Promise<DistributionClaimContent>;
+```
+
+---
+
+### Smart Wallets (passkey)
+
+Log into (or create) a Soroban smart-account C-address backed by a device passkey. Requires the `passkey` ceremony
+(and `passkeySign` to send transactions) to be injected in the config - `@pollar/react` supplies these with
+`@simplewebauthn/browser`. Both are fire-and-forget and drive `onAuthStateChange`.
+
+```ts
+client.loginSmartWallet(): void; // returning user (WebAuthn get)
+client.createSmartWallet(): void; // new user (WebAuthn create + sponsored deploy)
+```
+
+---
+
+### Network resilience
+
+Every SDK HTTP attempt is bounded by `requestTimeoutMs` (default `10000`; `0` disables) so a stalled connection
+fails fast instead of hanging forever. Idempotent transport failures (token refresh + GETs) are retried per `retry`
+(default `{ attempts: 2, baseDelayMs: 300 }`); HTTP responses (including 4xx/5xx) are never retried. On timeout the
+call rejects with a `PollarNetworkError` (`code: 'SDK_NETWORK_TIMEOUT'`):
+
+```ts
+import { isPollarNetworkError } from '@pollar/core';
+
+try {
+  await client.refresh();
+} catch (err) {
+  if (isPollarNetworkError(err)) {
+    // fall back to a cached token, show a retry, etc.
+  }
+}
+```
+
+---
+
 ### State
 
 Each state domain has its own typed subscriber. All `on*StateChange` methods return an unsubscribe function.
@@ -493,7 +643,8 @@ import { AUTH_ERROR_CODES, type AuthErrorCode } from '@pollar/core';
 
 ### `StellarClient`
 
-Lightweight client to query Stellar account balances via Horizon.
+Lightweight helper to submit a signed transaction straight to Horizon (bypassing the Pollar API). Balance fetching
+lives on `PollarClient` now (`refreshBalance()` / `getWalletBalance(publicKey, network?)`).
 
 ```ts
 import { StellarClient } from '@pollar/core';
@@ -501,13 +652,12 @@ import { StellarClient } from '@pollar/core';
 const stellar = new StellarClient('testnet');
 // or: new StellarClient({ horizonUrl: 'https://horizon.stellar.org' })
 
-const result = await stellar.getBalances('GABC...');
+const result = await stellar.submitTransaction(signedXdr);
 
 if (result.success) {
-  console.log(result.balances);
-  // [{ asset: 'XLM', balance: '100.0000000' }, ...]
+  console.log(result.hash);
 } else {
-  console.error(result.errorCode); // 'ACCOUNT_NOT_FOUND' | 'HORIZON_ERROR' | 'NETWORK_ERROR'
+  console.error(result.errorCode); // 'HORIZON_ERROR' | 'NETWORK_ERROR' (or a Horizon result code)
 }
 ```
 
@@ -527,27 +677,23 @@ if (available) {
 }
 ```
 
-To plug in external wallet stacks (e.g. Stellar Wallets Kit) without `@pollar/core` having to depend on them, pass a
-`WalletAdapterResolver` to the client:
+To plug in external wallet stacks (e.g. Stellar Wallets Kit) without `@pollar/core` having to depend on them, pass an
+array of `WalletAdapter` instances via `walletAdapters`. The built-in `FreighterAdapter` / `AlbedoAdapter` are
+auto-registered; entries you pass are added on top and override a built-in by reusing its `type`. Each registered
+adapter becomes reachable through `login({ provider: adapter.type })`:
 
 ```ts
-import { PollarClient, WalletType } from '@pollar/core';
-import { stellarWalletsKit } from '@pollar/stellar-wallets-kit-adapter';
+import { PollarClient } from '@pollar/core';
+import { stellarWalletsKitAdapters } from '@pollar/stellar-wallets-kit-adapter';
 import { Networks } from '@creit.tech/stellar-wallets-kit';
 
 const client = new PollarClient({
   apiKey: 'pk_...',
-  walletAdapter: stellarWalletsKit({ network: Networks.PUBLIC }),
+  // stellarWalletsKitAdapters() returns a WalletAdapter[] (one per module)
+  walletAdapters: stellarWalletsKitAdapters({ network: Networks.PUBLIC }),
 });
 
-client.loginWallet('xbull'); // any string id the kit understands
-```
-
-The resolver signature is:
-
-```ts
-type WalletAdapterResolver = (id: WalletId) => WalletAdapter | Promise<WalletAdapter>;
-type WalletId = WalletType | (string & {});
+client.login({ provider: 'xbull' }); // any adapter type the kit registers
 ```
 
 ---
@@ -584,8 +730,11 @@ import type {
   PollarLoginOptions,
   PollarPersistedSession,
   PollarUserProfile,
+  PollarRetryConfig,
   AuthState,
   AuthErrorCode,
+  LogLevel,
+  PollarLogger,
 
   // Storage / keys / DPoP
   Storage,
@@ -601,13 +750,48 @@ import type {
   // Wallets
   WalletType,
   WalletId,
+  WalletInfo,
   WalletAdapter,
-  WalletAdapterResolver,
+  WalletAdapterMeta,
+  ConnectWalletResponse,
+  SignTransactionOptions,
+  SignTransactionResponse,
+  SignAuthEntryOptions,
+  SignAuthEntryResponse,
 
   // Adapters (renamed from Escrow*)
   AdapterFn,
   PollarAdapter,
   PollarAdapters,
+
+  // Swaps
+  SwapQuoteParams,
+  SwapQuote,
+  SwapProvider,
+  SwapVenue,
+
+  // Ramps (SEP-24)
+  RampsQuoteQuery,
+  RampsQuoteResponse,
+  RampsOnrampBody,
+  RampsOnrampResponse,
+  RampsOfframpBody,
+  RampsOfframpResponse,
+  RampsTransactionResponse,
+  RampsSignatureBody,
+  RampsSignatureResponse,
+  RampsCompleteResponse,
+
+  // KYC
+  KycLevel,
+  KycStatus,
+  KycStartBody,
+  KycStartResponse,
+
+  // Distribution
+  DistributionRule,
+  DistributionClaimBody,
+  DistributionClaimContent,
 
   // Stellar
   StellarNetwork,
@@ -615,7 +799,7 @@ import type {
   StellarBalance,
 } from '@pollar/core';
 
-import { AUTH_ERROR_CODES } from '@pollar/core';
+import { AUTH_ERROR_CODES, PollarNetworkError, isPollarNetworkError } from '@pollar/core';
 ```
 
 ## License
