@@ -375,11 +375,13 @@ export interface AuthProviderContext {
 }
 
 /**
- * A pluggable login strategy. Built-ins (`google`, `github`, `email`) ship as
- * these; custom ones (Privy, Magic, …) are injected via
- * `PollarClientConfig.providers`. Note: `wallet` is intentionally NOT a provider
- * — it yields a persistent `WalletAdapter` reused for signing, a concern
- * orthogonal to login, so it keeps its own dedicated `loginWallet()` flow.
+ * A pluggable login strategy. The built-ins (`google`, `github`, `email`) are
+ * seeded internally by `PollarClient`; there is currently no public config field
+ * to register additional providers (this contract is reserved for internal use).
+ * Note: `wallet` is intentionally NOT a provider - it yields a persistent
+ * `WalletAdapter` reused for signing, a concern orthogonal to login, so wallets
+ * are registered via `PollarClientConfig.walletAdapters` and entered with
+ * `login({ provider: adapter.type })`.
  *
  * - `login` handles the one-shot entry point (`client.login({ provider: id })`).
  * - `actions` exposes extra named steps for multi-step flows (e.g. email's

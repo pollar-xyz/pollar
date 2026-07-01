@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.10.1-rc.0
+
+> Release candidate. Published under the `next` dist-tag (`npm i @pollar/core@next`).
+
+### `@pollar/core` - features
+
+- **All swap venues wired.** `swap()` now dispatches on the quote's build shape:
+  a prebuilt XDR (Soroswap) goes straight to `signAndSubmitTx`, while an
+  operation + params quote (Aquarius / SDEX) runs through `runTx`. The swap quote
+  build type is a union of `invoke_contract | path_payment_strict_send |
+  { unsignedXdr }`. At 0.10.0 only Aquarius was executable.
+
+### `@pollar/react` - features
+
+- **Soroswap + Stellar DEX enabled in the `SwapModal` route selector.** All three
+  venues (SDEX, Soroswap, Aquarius) are now selectable. (Soroswap only returns
+  quotes when the server has `SOROSWAP_API_KEY` configured.)
+
+### Docs / comments
+
+- **Corrected the "custom auth providers" claim.** The rc.7 note advertised
+  registering providers via a `providers: [...]` config field, but no such field
+  or registration API exists - `PollarAuthProvider` is an internal contract only.
+  Updated the rc.7 CHANGELOG entry and the `PollarAuthProvider` JSDoc
+  (`@pollar/core`) accordingly. Custom login still goes through the built-in
+  providers and `providerAction(...)`; external wallets through `walletAdapters`.
+- **Fixed stale `@pollar/core` JSDoc** that referenced the removed `loginWallet()`
+  method and the non-existent `PollarClientConfig.providers` field.
+- **`@pollar/privy-adapter` config JSDoc** now states that `redirectUri` is
+  reserved / not currently applied, and that `appearance` is web-only (ignored on
+  the React Native / Expo entry) - matching the README.
+
 ## 0.10.0
 
 > Stable release. Published under the default `latest` dist-tag
@@ -75,8 +107,8 @@
 ### `@pollar/react` - features
 
 - **`SwapModal`** - a drop-in swap UI over the core swap API, with a route
-  selector across venues (Soroswap/SDEX routes are disabled for now, leaving the
-  supported venue) and a smart-wallet guard.
+  selector across venues and a smart-wallet guard. (At 0.10.0 only Aquarius was
+  wired; Soroswap and SDEX are enabled in 0.10.1-rc.0.)
 - **`RampWidget`** - SEP-24 deposit/withdraw widget wired to the core ramps flow.
 - **Self-driving login.** `PrivyLoginSubmodal` and a login-modal refactor that
   renders a login entry per registered wallet adapter and drives interactive
@@ -153,10 +185,10 @@
 
 ### `@pollar/core` — features
 
-- **Pluggable custom auth providers** — register your own provider(s) via
-  `providers: [...]` and drive them through `login({ provider, ... })` /
-  `providerAction(...)`, alongside the built-in Google / GitHub / email / wallet
-  flows.
+- **Custom auth provider contract (`PollarAuthProvider`)** - the extension point
+  that backs the built-in Google / GitHub / email flows and `providerAction(...)`.
+  Correction (see 0.10.1-rc.0): this shipped as an internal contract only; there
+  is no public `providers: [...]` config field to register your own providers.
 
 ### `@pollar/core` — fixes
 

@@ -478,8 +478,10 @@ await client.submitTx(signedXdr);
 
 Quote and execute asset swaps across multiple venues (SDEX, Soroswap, Aquarius). `getSwapQuote` returns one priced
 route per venue (each with a ready-to-run `build` payload); pass the chosen quote to `swap`, which establishes any
-missing trustline for the buy asset (unless `autoTrustline: false`) and runs the same transaction pipeline as `runTx`
-(subscribe via `onTransactionStateChange`). Smart (passkey) wallets are not supported yet.
+missing trustline for the buy asset (unless `autoTrustline: false`) and then executes. It dispatches on the quote's
+build shape: a prebuilt XDR (Soroswap) is signed and submitted directly, while an operation + params quote (Aquarius,
+SDEX) runs through the `runTx` pipeline; either way you can subscribe via `onTransactionStateChange`. Smart (passkey)
+wallets are not supported yet.
 
 ```ts
 const quotes = await client.getSwapQuote({
