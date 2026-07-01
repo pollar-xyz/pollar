@@ -4205,6 +4205,58 @@ export interface operations {
                                             type: "void";
                                         })[];
                                     };
+                                } | {
+                                    /** @constant */
+                                    operation: "path_payment_strict_send";
+                                    params: {
+                                        destination: string;
+                                        sendAsset: {
+                                            /** @constant */
+                                            type: "native";
+                                        } | {
+                                            /** @constant */
+                                            type: "credit_alphanum4";
+                                            code: string;
+                                            issuer: string;
+                                        } | {
+                                            /** @constant */
+                                            type: "credit_alphanum12";
+                                            code: string;
+                                            issuer: string;
+                                        };
+                                        sendAmount: string;
+                                        destAsset: {
+                                            /** @constant */
+                                            type: "native";
+                                        } | {
+                                            /** @constant */
+                                            type: "credit_alphanum4";
+                                            code: string;
+                                            issuer: string;
+                                        } | {
+                                            /** @constant */
+                                            type: "credit_alphanum12";
+                                            code: string;
+                                            issuer: string;
+                                        };
+                                        destMin: string;
+                                        path: ({
+                                            /** @constant */
+                                            type: "native";
+                                        } | {
+                                            /** @constant */
+                                            type: "credit_alphanum4";
+                                            code: string;
+                                            issuer: string;
+                                        } | {
+                                            /** @constant */
+                                            type: "credit_alphanum12";
+                                            code: string;
+                                            issuer: string;
+                                        })[];
+                                    };
+                                } | {
+                                    unsignedXdr: string;
                                 };
                             }[];
                             /** @enum {string} */

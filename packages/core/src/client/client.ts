@@ -2471,7 +2471,11 @@ export class PollarClient {
       }
     }
 
-    return this.runTx(quote.build.operation, quote.build.params);
+    // Soroswap returns a prebuilt XDR (submit as-is); Aquarius/SDEX return an
+    // operation + params that runTx re-builds server-side (fresh sequence).
+    const build = quote.build;
+    if ('unsignedXdr' in build) return this.signAndSubmitTx(build.unsignedXdr);
+    return this.runTx(build.operation, build.params);
   }
 
   private _setTxHistoryState(next: TxHistoryState): void {

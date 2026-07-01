@@ -26,11 +26,11 @@ const PROVIDER_LABELS: Record<SwapProvider, string> = {
 };
 
 /**
- * Venues with a working backend adapter today. The others render as disabled
- * "(coming soon)" options so the UI advertises the roadmap without letting a
- * user pick a route that returns no quote yet (Soroswap/SDEX land in phase 5).
+ * Venues with a working backend adapter. All routes are wired now; Soroswap only
+ * returns quotes when the server has SOROSWAP_API_KEY configured (otherwise it is
+ * simply skipped and shows "No route found" for that venue).
  */
-const IMPLEMENTED_PROVIDERS: SwapProvider[] = ['auto', 'aquarius'];
+const IMPLEMENTED_PROVIDERS: SwapProvider[] = ['auto', 'aquarius', 'sdex', 'soroswap'];
 
 function formatAmount(value: string): string {
   const n = parseFloat(value);
