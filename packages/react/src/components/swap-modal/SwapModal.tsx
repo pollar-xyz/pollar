@@ -58,6 +58,8 @@ export function SwapModal({ onClose }: SwapModalProps) {
   const [provider, setProvider] = useState<SwapProvider>('auto');
   const [venues, setVenues] = useState<SwapVenue[] | null>(null); // null = config loading
   const [catalogTokens, setCatalogTokens] = useState<SwapToken[]>([]);
+  // Tokens the user pasted by code+issuer (not in the app catalog). Local only.
+  const [customTokens, setCustomTokens] = useState<SwapAssetOption[]>([]);
   const [quotes, setQuotes] = useState<SwapQuote[]>([]);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState('');
@@ -144,7 +146,24 @@ export function SwapModal({ onClose }: SwapModalProps) {
       enabledInApp: false,
     }))
     .filter((o) => !enabledKeys.has(optKey(o)));
-  const buyOptions: SwapAssetOption[] = [...enabledBuy, ...catalogBuy].filter((o) => optKey(o) !== buyKeyOfSell);
+  const knownKeys = new Set([...enabledKeys, ...catalogBuy.map(optKey)]);
+  const customBuy = customTokens.filter((o) => !knownKeys.has(optKey(o)));
+  const buyOptions: SwapAssetOption[] = [...enabledBuy, ...catalogBuy, ...customBuy].filter(
+    (o) => optKey(o) !== buyKeyOfSell,
+  );
+
+  // Add a user-pasted token (code + issuer) to the buy list and select it.
+  // Returns an error message, or null on success.
+  function addCustomToken(code: string, issuer: string): string | null {
+    const c = code.trim().toUpperCase();
+    const i = issuer.trim();
+    if (c.length < 1 || c.length > 12) return 'Code must be 1-12 characters';
+    if (i.length !== 56 || !i.startsWith('G')) return 'Issuer must be a Stellar address (G..., 56 chars)';
+    const opt: SwapAssetOption = { ref: catalogRef(c, i), code: c, issuer: i, enabledInApp: false };
+    setCustomTokens((prev) => (prev.some((o) => optKey(o) === optKey(opt)) ? prev : [...prev, opt]));
+    setSelectedBuy(opt);
+    return null;
+  }
 
   // Does buying `selectedBuy` require creating a trustline first? Native never;
   // a credit asset the wallet already trusts (in enabledAssets with
@@ -313,6 +332,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
         onRefresh={handleRefresh}
         onSelectSell={setSelectedSell}
         onSelectBuy={setSelectedBuy}
+        onAddCustomToken={addCustomToken}
         onAmountChange={setAmount}
         onProviderChange={setProvider}
         onSwap={() => void handleSwap()}

@@ -1,7 +1,7 @@
 'use client';
 
 import { SwapProvider, SwapQuote, SwapQuoteParams, TransactionState, WalletId } from '@pollar/core';
-import { type CSSProperties } from 'react';
+import { type CSSProperties, useState } from 'react';
 import { PollarModalFooter } from '../commons';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
 
@@ -67,6 +67,8 @@ export interface SwapModalTemplateProps {
   onRefresh: () => void;
   onSelectSell: (o: SwapAssetOption) => void;
   onSelectBuy: (o: SwapAssetOption) => void;
+  /** Add a user-pasted token (code + issuer) to the buy list. Returns an error or null. */
+  onAddCustomToken: (code: string, issuer: string) => string | null;
   onAmountChange: (value: string) => void;
   onProviderChange: (p: SwapProvider) => void;
   onSwap: () => void;
@@ -109,6 +111,7 @@ export function SwapModalTemplate({
   onRefresh,
   onSelectSell,
   onSelectBuy,
+  onAddCustomToken,
   onAmountChange,
   onProviderChange,
   onSwap,
@@ -118,6 +121,23 @@ export function SwapModalTemplate({
   onDone,
 }: SwapModalTemplateProps) {
   const isDark = theme === 'dark';
+
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customCode, setCustomCode] = useState('');
+  const [customIssuer, setCustomIssuer] = useState('');
+  const [customError, setCustomError] = useState('');
+
+  const submitCustomToken = () => {
+    const err = onAddCustomToken(customCode, customIssuer);
+    if (err) {
+      setCustomError(err);
+      return;
+    }
+    setCustomCode('');
+    setCustomIssuer('');
+    setCustomError('');
+    setCustomOpen(false);
+  };
 
   const cssVars = {
     '--pollar-accent': accentColor,
@@ -272,6 +292,45 @@ export function SwapModalTemplate({
                 ))}
               </select>
             )}
+            {!isLoadingData &&
+              (customOpen ? (
+                <div className="pollar-swap-custom">
+                  <input
+                    className="pollar-input"
+                    type="text"
+                    placeholder="Code (e.g. USDC)"
+                    value={customCode}
+                    onChange={(e) => setCustomCode(e.target.value)}
+                  />
+                  <input
+                    className="pollar-input"
+                    type="text"
+                    placeholder="Issuer (G...)"
+                    value={customIssuer}
+                    onChange={(e) => setCustomIssuer(e.target.value)}
+                  />
+                  {customError && <div className="pollar-modal-error">{customError}</div>}
+                  <div className="pollar-swap-custom-actions">
+                    <button type="button" className="pollar-btn-primary" onClick={submitCustomToken}>
+                      Add token
+                    </button>
+                    <button
+                      type="button"
+                      className="pollar-swap-custom-cancel"
+                      onClick={() => {
+                        setCustomOpen(false);
+                        setCustomError('');
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" className="pollar-swap-custom-toggle" onClick={() => setCustomOpen(true)}>
+                  + Add a token by code / issuer
+                </button>
+              ))}
           </div>
 
           {/* Route selector */}
