@@ -1,7 +1,7 @@
 'use client';
 
 import { SwapProvider, SwapQuote, SwapQuoteParams, SwapVenue } from '@pollar/core';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import '../shared.css';
 import '../transaction-modal/TransactionModal.css';
@@ -67,19 +67,23 @@ export function SwapModal({ onClose }: SwapModalProps) {
   }, [refreshWalletBalance, refreshAssets]);
 
   // Which venues this app exposes (operator config ∩ server capability).
-  useEffect(() => {
-    let cancelled = false;
-    getSwapConfig()
-      .then((v) => {
-        if (!cancelled) setVenues(v);
-      })
-      .catch(() => {
-        if (!cancelled) setVenues([]); // treat a failed config as "unavailable"
-      });
-    return () => {
-      cancelled = true;
-    };
+  const loadConfig = useCallback(() => {
+    setVenues(null); // back to loading
+    return getSwapConfig()
+      .then(setVenues)
+      .catch(() => setVenues([])); // treat a failed config as "unavailable"
   }, [getSwapConfig]);
+
+  useEffect(() => {
+    void loadConfig();
+  }, [loadConfig]);
+
+  // Re-pull everything the modal shows: balances, app assets and swap config.
+  function handleRefresh() {
+    void refreshWalletBalance();
+    void refreshAssets();
+    void loadConfig();
+  }
 
   useEffect(
     () => () => {
@@ -254,6 +258,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
         isInProgress={isInProgress}
         onClose={onClose}
         onBack={handleBack}
+        onRefresh={handleRefresh}
         onSelectSell={setSelectedSell}
         onSelectBuy={setSelectedBuy}
         onAmountChange={setAmount}
