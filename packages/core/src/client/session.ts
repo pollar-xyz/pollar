@@ -119,6 +119,10 @@ export function isValidSession(value: unknown, logger: PollarLogger = console): 
     logger.debug('[PollarClient:session] Invalid session — wallet.type must be internal|smart|external');
     return false;
   }
+  if (w['provider'] !== undefined && typeof w['provider'] !== 'string') {
+    logger.debug('[PollarClient:session] Invalid session — wallet.provider must be a string if present');
+    return false;
+  }
   if (w['address'] !== null && !isBoundedString(w['address'], MAX_WALLET_PUBLIC_KEY)) {
     logger.debug('[PollarClient:session] Invalid session — wallet.address must be string|null');
     return false;

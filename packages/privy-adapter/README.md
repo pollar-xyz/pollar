@@ -1,202 +1,117 @@
 # @pollar/privy-adapter
 
-> **⚠️ Server-side only.** This package starts an HTTP server with `@hono/node-server` and reads `PRIVY_APP_SECRET` / `POLLAR_API_SECRET` from the host environment. Importing it in a browser, React Native, or any other client-side bundle will leak credentials. The bundler will also blow up on `node:crypto` / `@hono/node-server`. If you need a browser-side Privy integration, use the Privy client SDK directly — not this package.
+Client-side [Privy](https://privy.io) wallet adapter for [`@pollar/core`](../core).
+It drives the **whole** Privy flow itself — email / Google / GitHub login, creating
+the user's **Privy embedded Stellar wallet**, and raw-hash signing — then hands the
+signature to Pollar, which wraps it into a Stellar `DecoratedSignature` and runs the
+standard SEP-10 login + transaction flow.
 
-Stateless HTTP proxy that lets Pollar sign Stellar transactions through your Privy account, without your Privy `APP_SECRET` ever leaving your infrastructure.
+You configure it once with a slim, `PrivyClientConfig`-shaped object; you do **not**
+wire up Privy's hooks yourself.
 
-You install this package in **your own backend**, point Pollar at your adapter's URL, and it brokers each call to Privy on demand. The adapter holds no state, has no database, and exposes a small set of HTTP endpoints authenticated with a single Bearer token issued by Pollar.
+> Server-side custody (signing through your Privy app secret on your backend) is a
+> different package: [`@pollar/privy-server-adapter`](../privy-server-adapter).
 
-## Install
+## Supported platforms
+
+| Host | Status | Signing engine |
+|---|---|---|
+| React (web) | ✅ supported | `@privy-io/react-auth` |
+| React Native / Expo | ✅ supported | `@privy-io/expo` |
+| Angular, Vue, Svelte, vanilla | ❌ not supported | — (Privy ships no SDK) |
+
+The right build is picked automatically: bundlers resolve the default (web) entry,
+and Metro/Expo resolve the `react-native` entry via the package's export condition.
+Your code is the same on both — `createPrivyAdapter` + `PrivyAdapterProvider`.
+
+There is no Privy SDK for Angular or Vue, so the adapter can't run there. If you use
+it in a non-React host it throws a clear `PrivyAdapterUnsupportedError` on first use.
+For those frameworks, sign server-side with `@pollar/privy-server-adapter` instead.
+
+## Install (web)
 
 ```bash
-npm install @pollar/privy-adapter
+npm i @pollar/privy-adapter @pollar/core @stellar/stellar-sdk @privy-io/react-auth react react-dom
 ```
 
-Requires Node 20+.
+## Usage (web)
 
-## Quick start
+Create the adapter, wrap your app in `PrivyAdapterProvider`, and register it on the
+`PollarClient`. The provider mounts `@privy-io/react-auth` and bridges its hooks into
+the adapter for you.
 
-```ts
-import { createPollarPrivyAdapter } from '@pollar/privy-adapter';
+```tsx
+import { createPrivyAdapter, PrivyAdapterProvider } from '@pollar/privy-adapter';
+import { PollarProvider } from '@pollar/react';
 
-const adapter = createPollarPrivyAdapter({
-  getCredentials: async () => ({
-    appId: process.env.PRIVY_APP_ID!,
-    appSecret: process.env.PRIVY_APP_SECRET!,
-  }),
-  pollarApiSecret: process.env.POLLAR_API_SECRET!,
-  network: 'mainnet',
-  port: 3001,
+const privy = createPrivyAdapter({
+  appId: 'your-privy-app-id',
+  loginMethods: ['email', 'google', 'github'],
+  // appearance?, redirectUri?, meta? are optional
 });
 
-await adapter.start();
-```
-
-## With AWS Secrets Manager
-
-`getCredentials` is async, so any secret manager works.
-
-The secret must be stored as JSON `{"appId": "...", "appSecret": "..."}` — the example below calls `JSON.parse` directly on `SecretString`.
-
-```ts
-import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
-import { createPollarPrivyAdapter } from '@pollar/privy-adapter';
-
-const sm = new SecretsManagerClient({ region: 'us-east-1' });
-
-const adapter = createPollarPrivyAdapter({
-  getCredentials: async () => {
-    const result = await sm.send(new GetSecretValueCommand({ SecretId: 'privy/credentials' }));
-    return JSON.parse(result.SecretString!);
-  },
-  pollarApiSecret: process.env.POLLAR_API_SECRET!,
-  network: 'mainnet',
-});
-
-await adapter.start();
-```
-
-The credentials are cached for 5 minutes by default. If `getCredentials` returns a different `appId`/`appSecret` after the cache expires, the underlying Privy client is rebuilt automatically — so you can rotate `APP_SECRET` without redeploying.
-
-## Graceful shutdown
-
-```ts
-const adapter = createPollarPrivyAdapter({
-  /* ... */
-});
-await adapter.start();
-
-const shutdown = async () => {
-  await adapter.stop();
-  process.exit(0);
-};
-
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
-```
-
-## Configuration
-
-```ts
-interface PollarPrivyAdapterConfig {
-  // ── Required ───────────────────────────────────────────────────────────
-
-  // Async credential resolver. Called on first request and when the cache expires.
-  getCredentials: () => Promise<{ appId: string; appSecret: string }>;
-
-  // Bearer token Pollar uses to authenticate calls. Generate it once, set it
-  // here, and register it in your Pollar dashboard.
-  pollarApiSecret: string;
-
-  // Stellar network used to compute transaction hashes.
-  network: 'mainnet' | 'testnet';
-
-  // ── Optional (with defaults) ──────────────────────────────────────────
-
-  port?: number; // 3001
-  cacheTtlMs?: number; // 5 * 60 * 1000
-  requestTimeoutMs?: number; // 10_000
-  maxBodyBytes?: number; // 64 * 1024
-
-  // ── Operation allowlist (optional) ────────────────────────────────────
-
-  // Restricts which Stellar operations the adapter will sign. Because signing
-  // goes through Privy `rawSign` (only the transaction *hash* reaches Privy),
-  // the adapter is the only place per-operation policy can be enforced.
-
-  // Explicit allowlist of stellar-sdk operation type names. `undefined` (the
-  // default) means no restriction — the legacy behavior, any non-fee-bump tx
-  // is signed. A transaction containing any operation outside the list is
-  // rejected with `TX_OPERATION_NOT_ALLOWED` (403).
-  allowedOperations?: string[]; // undefined
-
-  // Shortcut for trustline-only adapters. When `true`, the trustline preset
-  // — `['changeTrust', 'beginSponsoringFutureReserves',
-  // 'endSponsoringFutureReserves']` — is added to the allowlist AND the
-  // transaction is additionally required to contain at least one `changeTrust`.
-  restrictToTrustlines?: boolean; // false
-
-  // ── Observability hooks ───────────────────────────────────────────────
-
-  onWalletCreated?: (userId: string, address: string) => void;
-  onTransactionSigned?: (walletAddress: string) => void;
-  onError?: (error: Error, ctx: { endpoint: string; body: unknown }) => void;
+export function App() {
+  return (
+    <PrivyAdapterProvider adapter={privy}>
+      <PollarProvider config={{ apiKey: '…', walletAdapters: [privy] }}>
+        {/* your app */}
+      </PollarProvider>
+    </PrivyAdapterProvider>
+  );
 }
 ```
 
-### Restricting signable operations
+In the Pollar login modal this renders a **Privy** button that opens a sub-modal with
+the `loginMethods` you configured (email, Google, GitHub). The adapter runs the Privy
+login, ensures the user has a Stellar embedded wallet, and resolves the address Pollar
+needs for SEP-10.
 
-By default the adapter signs any non-fee-bump transaction. To lock it down to trustline management — the common case for a Pollar deployment — use `restrictToTrustlines`:
+## Install & usage (React Native / Expo)
 
-```ts
-const adapter = createPollarPrivyAdapter({
-  // ...credentials, network, etc.
-  restrictToTrustlines: true,
-});
+```bash
+npm i @pollar/privy-adapter @pollar/core @stellar/stellar-sdk @privy-io/expo react-native-webview
+# plus @privy-io/expo's own peer deps (expo-secure-store, expo-web-browser, etc.)
 ```
 
-This allows `changeTrust` and the optional reserve-sponsorship sandwich (`beginSponsoringFutureReserves` / `endSponsoringFutureReserves`), and additionally **requires** at least one `changeTrust`. Anything else — a `payment`, a `manageData`, a `changeTrust` mixed with a `payment` — is rejected with `TX_OPERATION_NOT_ALLOWED` (403) before any Privy round-trip.
+The code is identical to web — only the import resolves to the Expo build, which uses
+`@privy-io/expo` (a WebView-hosted secure signer) instead of an iframe:
 
-For a custom set, use `allowedOperations` with stellar-sdk operation type names:
+```tsx
+import { createPrivyAdapter, PrivyAdapterProvider } from '@pollar/privy-adapter';
 
-```ts
-allowedOperations: ['changeTrust', 'payment'];
+const privy = createPrivyAdapter({ appId, loginMethods: ['email', 'google'] });
+
+// <PrivyAdapterProvider adapter={privy}>
+//   <PollarProvider config={{ apiKey, walletAdapters: [privy] }}>…</PollarProvider>
+// </PrivyAdapterProvider>
 ```
 
-**Precedence.** If both are set, the effective allowlist is the **union** of `allowedOperations` and the trustline preset, and the `restrictToTrustlines` "at least one `changeTrust`" requirement still applies. If neither is set, there is no restriction (legacy behavior).
+OAuth on Expo opens an in-app browser and resolves in-session (no redirect round-trip).
 
-## Endpoints
+## Config
 
-All endpoints except `/health` require `Authorization: Bearer <pollarApiSecret>`.
+`createPrivyAdapter(config)`:
 
-Responses share the Pollar envelope:
+| field | type | notes |
+|---|---|---|
+| `appId` | `string` | your Privy app id |
+| `loginMethods` | `('email' \| 'google' \| 'github')[]` | options shown in the sub-modal, in order |
+| `clientId?` | `string` | Privy app client id, if your app uses one |
+| `appearance?` | `{ theme?; accentColor?; logo? }` | forwarded to Privy's own surfaces |
+| `redirectUri?` | `string` | OAuth redirect; defaults to the current origin on web |
+| `meta?` | `{ label; iconUrl? }` | login button; defaults to `{ label: 'Privy' }` |
 
-```jsonc
-// success
-{ "content": { /* payload */ }, "code": "<SUCCESS_CODE>", "success": true }
+The returned object is a `@pollar/core` `WalletAdapter` plus interactive-login methods
+(`getAuthOptions`, `sendEmailCode`, `verifyEmailCode`, `loginWithOAuth`) that the Pollar
+login modal drives. `signTransaction` parses the XDR, signs `tx.hash()` via Privy
+(`chainType: 'stellar'`), and appends the decorated signature. `signAuthEntry` throws —
+Privy external wallets are classic G-addresses, not Soroban smart accounts.
 
-// error
-{ "code": "<ERROR_CODE>", "success": false }
+## How it works
 
-// error with extra context (Zod issues or upstream reason)
-{ "code": "VALIDATION_ERROR", "success": false, "issues": { /* ... */ } }
-{ "code": "WALLET_CREATION_FAILED", "success": false, "reason": "Privy API: ..." }
-```
-
-| Method | Path                         | Body                               | Success code                   | HTTP |
-| ------ | ---------------------------- | ---------------------------------- | ------------------------------ | ---- |
-| GET    | `/health`                    | —                                  | `PRIVY_ADAPTER_HEALTH_OK`      | 200  |
-| POST   | `/wallets/create`            | `{ userId }`                       | `PRIVY_ADAPTER_WALLET_CREATED` | 201  |
-| POST   | `/wallets/create` (existing) | `{ userId }`                       | `PRIVY_ADAPTER_WALLET_EXISTS`  | 200  |
-| POST   | `/wallets/sign`              | `{ userId, walletAddress, txXdr }` | `PRIVY_ADAPTER_TX_SIGNED`      | 200  |
-| GET    | `/wallets/:userId/address`   | —                                  | `PRIVY_ADAPTER_WALLET_ADDRESS` | 200  |
-
-`/wallets/create` is idempotent: if the user already has a Stellar wallet, the existing address is returned with code `PRIVY_ADAPTER_WALLET_EXISTS`.
-
-`/wallets/sign` accepts a base64 transaction XDR. The adapter parses it, computes the transaction hash for the configured network, asks Privy to sign the hash (Stellar Tier 2: Ed25519 raw sign), assembles the `DecoratedSignature`, and returns the fully signed XDR.
-
-### Error codes
-
-| Code                       | HTTP | When                                                                                                                                                  |
-| -------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `FORBIDDEN`                | 401  | Missing or wrong Bearer token; response carries `WWW-Authenticate: Bearer …`                                                                          |
-| `VALIDATION_ERROR`         | 400  | Body schema mismatch or invalid JSON                                                                                                                  |
-| `VALIDATION_ERROR`         | 413  | Body exceeded `maxBodyBytes` — response carries `reason: "body too large"`                                                                            |
-| `WALLET_NOT_FOUND`         | 404  | User has no Stellar wallet                                                                                                                            |
-| `WALLET_CREATION_FAILED`   | 502  | Privy upstream error during create                                                                                                                    |
-| `WALLET_LOOKUP_FAILED`     | 502  | Privy upstream error during wallet lookup                                                                                                             |
-| `TX_INVALID_SIGNED_XDR`    | 400  | XDR could not be parsed, or transaction is a fee-bump (unsupported)                                                                                   |
-| `TX_OPERATION_NOT_ALLOWED` | 403  | Transaction contains an operation outside the allowlist (or is missing a `changeTrust` while `restrictToTrustlines` is on); response carries `reason` |
-| `TX_SIGN_FAILED`           | 502  | Privy upstream error during sign                                                                                                                      |
-| `INTERNAL_SERVER_ERROR`    | 500  | Unexpected failure                                                                                                                                    |
-
-## Security notes
-
-- The adapter is the sole holder of `PRIVY_APP_SECRET` in the request path. Pollar only ever sees the Bearer token you issue it.
-- Bearer comparison uses `crypto.timingSafeEqual` (constant time).
-- The adapter holds no persistent state. An in-memory LRU caches `walletAddress → walletId` (10 min TTL, max 1000 entries) to avoid extra Privy round-trips on hot paths; nothing else is retained.
-- Logs are off by default. Pipe `onError` to your own logger.
-
-## License
-
-MIT
+`@privy-io/react-auth` is hook-based and must run inside a React tree, so the adapter is
+inert on its own. `PrivyAdapterProvider` mounts `PrivyProvider` plus a small bridge that
+captures Privy's hooks (`useLoginWithEmail`, `useLoginWithOAuth`, and `useCreateWallet` /
+`useSignRawHash` from `@privy-io/react-auth/extended-chains`) and attaches them to the
+adapter. Until that bridge mounts the adapter has no runtime — which is exactly why a
+non-React host fails fast with a clear, actionable error.

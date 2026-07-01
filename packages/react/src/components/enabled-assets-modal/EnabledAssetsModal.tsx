@@ -16,7 +16,8 @@ function assetKey(record: { code: string; issuer?: string }): string {
 }
 
 export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
-  const { enabledAssets, refreshAssets, setTrustline, walletAddress, styles } = usePollar();
+  const { enabledAssets, refreshAssets, setTrustline, wallet, styles } = usePollar();
+  const walletAddress = wallet?.address ?? '';
   const { theme = 'light', accentColor = '#005DB4' } = styles;
 
   const [view, setView] = useState<'list' | 'custom'>('list');

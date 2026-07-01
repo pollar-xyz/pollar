@@ -175,6 +175,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/wallet/challenge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue a SEP-10 wallet challenge
+         * @description Returns a server-signed SEP-10 challenge transaction (XDR) bound to the client session. The wallet counter-signs it to prove key control, then posts it to /auth/wallet (or /auth/external).
+         */
+        post: operations["postAuthWalletChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/wallet": {
         parameters: {
             query?: never;
@@ -184,8 +204,31 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Authenticate with a Stellar wallet */
+        /**
+         * Authenticate with a Stellar wallet
+         * @description Verifies the SEP-10 counter-signed challenge (from /auth/wallet/challenge) and sets the session ready. During rollout an unsigned legacy request is still accepted unless SDK_WALLET_REQUIRE_SIGNATURE is enabled.
+         */
         post: operations["postAuthWallet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/external": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Authenticate via a custom external provider
+         * @description For custom login providers (Privy, Magic, …) that authenticate the user client-side and surface a Stellar wallet. Control is proven with the same SEP-10 counter-signed challenge (from /auth/wallet/challenge); Pollar needs nothing of the provider itself.
+         */
+        post: operations["postAuthExternal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -463,6 +506,26 @@ export interface paths {
          * @description Sign-only step of the split build/sign/submit flow. For custodial wallets, the signed XDR is returned to the caller so it can be submitted later via POST /tx/submit. External wallets sign client-side and do not call this endpoint.
          */
         post: operations["postTxSign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tx/sign-auth-entry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign a Soroban authorization entry (custodial)
+         * @description Signs a single SorobanAuthorizationEntry with the user's custodial key. Use when a developer's own contract is the transaction source (it sponsors the gas) and only needs the user's address-credentials authorization, not a full signed envelope. sdk-api enforces the app's per-contract/function allowlist and a short validity-ledger window BEFORE signing — an entry touching any contract or function not allowlisted, or with too long an expiration, is rejected. External (user-controlled) wallets sign auth entries client-side and do not call this endpoint.
+         */
+        post: operations["postTxSignAuthEntry"];
         delete?: never;
         options?: never;
         head?: never;
@@ -849,6 +912,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/swap/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quote an asset swap (DEX/AMM)
+         * @description Prices a swap of one asset for another across the requested venue(s). Read-only: returns ranked quotes (best first) with a ready-to-execute invoke_contract build payload. Empty quotes means no route exists.
+         */
+        post: operations["postSwapQuote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -927,6 +1010,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -940,6 +1025,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -953,6 +1040,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1026,6 +1115,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1039,6 +1130,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1074,6 +1167,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1087,6 +1182,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1100,6 +1197,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1113,6 +1212,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1148,6 +1249,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1161,6 +1264,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1174,6 +1279,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1187,6 +1294,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1221,6 +1330,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1234,6 +1345,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1247,6 +1360,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1297,6 +1412,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1310,6 +1427,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1323,6 +1442,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1336,6 +1457,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1349,6 +1472,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1397,6 +1522,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1410,6 +1537,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1423,6 +1552,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1436,6 +1567,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1449,6 +1582,119 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postAuthWalletChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    clientSessionId: string;
+                    walletAddress: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Challenge issued */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_WALLET_CHALLENGE_CREATED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            clientSessionId: string;
+                            challengeXdr: string;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Gone (expired) */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1466,6 +1712,7 @@ export interface operations {
                 "application/json": {
                     clientSessionId: string;
                     walletAddress: string;
+                    signedChallengeXdr?: string;
                 };
             };
         };
@@ -1498,6 +1745,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1511,6 +1760,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1524,6 +1775,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1537,6 +1790,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1550,6 +1805,122 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postAuthExternal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    clientSessionId: string;
+                    provider: string;
+                    walletAddress: string;
+                    signedChallengeXdr: string;
+                };
+            };
+        };
+        responses: {
+            /** @description External provider authenticated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_EXTERNAL_AUTHENTICATED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            clientSessionId: string;
+                            walletAddress: string;
+                            provider: string;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Gone (expired) */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1598,6 +1969,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1611,6 +1984,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1624,6 +1999,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1637,6 +2014,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1650,6 +2029,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1701,6 +2082,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1714,6 +2097,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1727,6 +2112,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1740,6 +2127,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1753,6 +2142,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1804,6 +2195,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1817,6 +2210,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1830,6 +2225,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1843,6 +2240,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1856,6 +2255,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1912,6 +2313,7 @@ export interface operations {
                             wallet: {
                                 /** @enum {string} */
                                 type: "custodial" | "smart" | "external";
+                                provider?: string;
                                 publicKey: string | null;
                                 address: string | null;
                                 existsOnStellar?: boolean;
@@ -1954,6 +2356,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1967,6 +2371,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1980,6 +2386,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -1993,6 +2401,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2006,6 +2416,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2057,6 +2469,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2070,6 +2484,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2083,6 +2499,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2096,6 +2514,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2109,6 +2529,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2156,6 +2578,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2206,6 +2630,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2264,6 +2690,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2307,6 +2735,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2320,6 +2750,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2378,6 +2810,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2391,6 +2825,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2404,6 +2840,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2439,6 +2877,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2697,6 +3137,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2710,6 +3152,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2723,6 +3167,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2778,6 +3224,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2791,6 +3239,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2804,6 +3254,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2817,6 +3269,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2870,6 +3324,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2883,6 +3339,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2896,6 +3354,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2909,6 +3369,107 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postTxSignAuthEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    network: "testnet" | "mainnet";
+                    publicKey?: string;
+                    address?: string;
+                    entryXdr: string;
+                    validUntilLedger: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Base64 XDR of the signed auth entry */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_TX_AUTH_ENTRY_SIGNED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            signedAuthEntry: string;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Policy denial (contract/function not allowlisted, expiration too long) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Signing error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2974,6 +3535,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -2987,6 +3550,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3000,6 +3565,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3257,6 +3824,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3270,6 +3839,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3283,6 +3854,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3332,6 +3905,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3345,6 +3920,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3408,6 +3985,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3421,6 +4000,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3469,6 +4050,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3482,6 +4065,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3495,6 +4080,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3508,6 +4095,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3585,6 +4174,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3598,6 +4189,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3611,6 +4204,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3666,6 +4261,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3679,6 +4276,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3734,6 +4333,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3747,6 +4348,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3810,6 +4413,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3823,6 +4428,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3836,6 +4443,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3895,6 +4504,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3908,6 +4519,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3956,6 +4569,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3969,6 +4584,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -3982,6 +4599,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4031,6 +4650,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4044,6 +4665,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4099,6 +4722,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4112,6 +4737,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4125,6 +4752,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4183,6 +4812,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4196,6 +4827,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4258,6 +4891,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4271,6 +4906,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4284,6 +4921,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4343,6 +4982,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4356,6 +4997,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4369,6 +5012,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4421,6 +5066,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4434,6 +5081,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4447,6 +5096,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4499,6 +5150,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4549,6 +5202,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4562,6 +5217,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4575,6 +5232,8 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -4588,6 +5247,236 @@ export interface operations {
                         /** @constant */
                         success: false;
                         code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postSwapQuote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    network: "testnet" | "mainnet";
+                    publicKey?: string;
+                    address?: string;
+                    sellAsset: {
+                        /** @constant */
+                        type: "native";
+                    } | {
+                        /** @constant */
+                        type: "credit_alphanum4";
+                        code: string;
+                        issuer: string;
+                    } | {
+                        /** @constant */
+                        type: "credit_alphanum12";
+                        code: string;
+                        issuer: string;
+                    };
+                    buyAsset: {
+                        /** @constant */
+                        type: "native";
+                    } | {
+                        /** @constant */
+                        type: "credit_alphanum4";
+                        code: string;
+                        issuer: string;
+                    } | {
+                        /** @constant */
+                        type: "credit_alphanum12";
+                        code: string;
+                        issuer: string;
+                    };
+                    amount: string;
+                    /**
+                     * @default auto
+                     * @enum {string}
+                     */
+                    provider?: "auto" | "aquarius" | "soroswap" | "sdex";
+                    /** @default 50 */
+                    slippageBps?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Ranked swap quotes (best first); empty when no route exists */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_SWAP_QUOTE";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            quotes: {
+                                /** @enum {string} */
+                                provider: "aquarius" | "soroswap" | "sdex";
+                                sellAsset: {
+                                    /** @constant */
+                                    type: "native";
+                                } | {
+                                    /** @constant */
+                                    type: "credit_alphanum4";
+                                    code: string;
+                                    issuer: string;
+                                } | {
+                                    /** @constant */
+                                    type: "credit_alphanum12";
+                                    code: string;
+                                    issuer: string;
+                                };
+                                buyAsset: {
+                                    /** @constant */
+                                    type: "native";
+                                } | {
+                                    /** @constant */
+                                    type: "credit_alphanum4";
+                                    code: string;
+                                    issuer: string;
+                                } | {
+                                    /** @constant */
+                                    type: "credit_alphanum12";
+                                    code: string;
+                                    issuer: string;
+                                };
+                                amountIn: string;
+                                amountOut: string;
+                                minReceived: string;
+                                priceImpactPct: string;
+                                route: {
+                                    poolAddress?: string;
+                                    hops: string[];
+                                };
+                                build: {
+                                    /** @constant */
+                                    operation: "invoke_contract";
+                                    params: {
+                                        contractId: string;
+                                        method: string;
+                                        args: ({
+                                            /** @constant */
+                                            type: "bool";
+                                            value: boolean;
+                                        } | {
+                                            /** @constant */
+                                            type: "i32";
+                                            value: number;
+                                        } | {
+                                            /** @constant */
+                                            type: "u32";
+                                            value: number;
+                                        } | {
+                                            /** @enum {string} */
+                                            type: "i64" | "u64" | "i128" | "u128" | "i256" | "u256";
+                                            value: string;
+                                        } | {
+                                            /** @constant */
+                                            type: "address";
+                                            value: string;
+                                        } | {
+                                            /** @enum {string} */
+                                            type: "string" | "symbol";
+                                            value: string;
+                                        } | {
+                                            /** @constant */
+                                            type: "bytes";
+                                            /** @description Base64-encoded bytes */
+                                            value: string;
+                                        } | {
+                                            /** @constant */
+                                            type: "vec";
+                                            /** @description Array of ScValArg items */
+                                            value: unknown[];
+                                        } | {
+                                            /** @constant */
+                                            type: "map";
+                                            /** @description Array of {key, val} ScValArg pairs */
+                                            value: {
+                                                key: unknown;
+                                                val: unknown;
+                                            }[];
+                                        } | {
+                                            /** @constant */
+                                            type: "void";
+                                        })[];
+                                    };
+                                };
+                            }[];
+                            /** @enum {string} */
+                            best?: "aquarius" | "soroswap" | "sdex";
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description No route for the pair */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Quote error (Soroban RPC/provider) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };

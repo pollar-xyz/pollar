@@ -1,24 +1,42 @@
-import { AUTH_ERROR_CODES } from '../../types';
-import { authenticate } from './authenticate';
-import { createAuthSession, FlowDeps } from './deps';
+import { AUTH_ERROR_CODES, AuthProviderContext } from '../../types';
+import { logApiError } from './logging';
 
-export async function initEmailSession(deps: FlowDeps): Promise<void> {
-  const clientSessionId = await createAuthSession(deps);
-  if (!clientSessionId) return;
-  deps.setAuthState({ step: 'entering_email', clientSessionId });
+/**
+ * Mint an auth session and move to the email-entry step. Returns the
+ * `clientSessionId` so a one-shot caller can chain straight into
+ * {@link sendEmailCode}; returns `null` if session creation failed (the error
+ * state is already set by `ctx.createSession()`).
+ */
+export async function initEmailSession(ctx: AuthProviderContext): Promise<string | null> {
+  const clientSessionId = await ctx.createSession();
+  if (!clientSessionId) return null;
+  ctx.setAuthState({ step: 'entering_email', clientSessionId });
+  return clientSessionId;
 }
 
-export async function sendEmailCode(email: string, clientSessionId: string, deps: FlowDeps): Promise<void> {
-  const { api, signal, setAuthState } = deps;
+export async function sendEmailCode(email: string, clientSessionId: string, ctx: AuthProviderContext): Promise<void> {
+  const { api, logger, signal, setAuthState } = ctx;
+
+  // Validate before hitting the API — an empty email/session (e.g. login()
+  // called without an `email`, or an action with a missing payload) would
+  // otherwise POST blanks to /auth/email and get an opaque 400.
+  if (!email?.trim() || !clientSessionId) {
+    setAuthState({
+      step: 'error',
+      previousStep: 'sending_email',
+      message: 'A valid email address is required',
+      errorCode: AUTH_ERROR_CODES.EMAIL_SEND_FAILED,
+    });
+    return;
+  }
 
   setAuthState({ step: 'sending_email', email });
 
-  const { data, error } = await api.POST('/auth/email', {
-    body: { clientSessionId, email },
-    signal,
-  });
+  const body = { clientSessionId, email };
+  const { data, error } = await api.POST('/auth/email', { body, signal });
 
   if (error || !data?.success) {
+    if (!error) logApiError(logger, 'POST /auth/email', { body, data });
     setAuthState({
       step: 'error',
       previousStep: 'sending_email',
@@ -35,19 +53,29 @@ export async function verifyAndAuthenticate(
   code: string,
   clientSessionId: string,
   email: string,
-  deps: FlowDeps,
+  ctx: AuthProviderContext,
 ): Promise<void> {
-  const { api, signal, setAuthState } = deps;
+  const { api, logger, signal, setAuthState } = ctx;
+
+  // Validate before hitting the API — a blank code/session would otherwise POST
+  // blanks to /auth/email/verify-code for an opaque 400.
+  if (!code?.trim() || !clientSessionId) {
+    setAuthState({
+      step: 'error',
+      previousStep: 'verifying_email_code',
+      message: 'A verification code is required',
+      errorCode: AUTH_ERROR_CODES.EMAIL_CODE_INVALID,
+    });
+    return;
+  }
 
   setAuthState({ step: 'verifying_email_code', clientSessionId, email });
 
-  const { data, error } = await api.POST('/auth/email/verify-code', {
-    body: { clientSessionId, code },
-    signal,
-  });
+  const body = { clientSessionId, code };
+  const { data, error } = await api.POST('/auth/email/verify-code', { body, signal });
 
   if (data?.code === 'SDK_EMAIL_CODE_VERIFIED') {
-    await authenticate(clientSessionId, deps);
+    await ctx.authenticate(clientSessionId);
     return;
   }
 
@@ -56,6 +84,7 @@ export async function verifyAndAuthenticate(
     (error as unknown as { error?: string } | undefined)?.error ?? (data as unknown as { code?: string } | undefined)?.code;
 
   if (errCode === 'SDK_EMAIL_CODE_EXPIRED') {
+    if (!error) logApiError(logger, 'POST /auth/email/verify-code', { body, data });
     setAuthState({
       step: 'error',
       previousStep: 'verifying_email_code',
@@ -68,6 +97,7 @@ export async function verifyAndAuthenticate(
   }
 
   if (errCode === 'INVALID_EMAIL_CODE' || errCode === 'SDK_EMAIL_CODE_INVALID') {
+    if (!error) logApiError(logger, 'POST /auth/email/verify-code', { body, data });
     setAuthState({
       step: 'error',
       previousStep: 'verifying_email_code',
@@ -79,10 +109,17 @@ export async function verifyAndAuthenticate(
     return;
   }
 
+  if (!error) logApiError(logger, 'POST /auth/email/verify-code', { body, data });
+  // Carry `clientSessionId`/`email` so this generic failure (transient 5xx,
+  // contract drift) stays RETRYABLE — the message says "try again" and the
+  // session is usually still alive, so `verifyEmailCode()` must be able to
+  // re-submit without restarting the whole flow.
   setAuthState({
     step: 'error',
     previousStep: 'verifying_email_code',
     message: 'Failed to verify code — try again',
     errorCode: AUTH_ERROR_CODES.EMAIL_VERIFY_FAILED,
+    clientSessionId,
+    email,
   });
 }

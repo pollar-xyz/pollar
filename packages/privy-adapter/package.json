@@ -1,12 +1,22 @@
 {
   "name": "@pollar/privy-adapter",
-  "version": "0.9.0",
-  "description": "Stateless HTTP proxy that lets Pollar sign Stellar transactions through your Privy account, without your Privy app secret leaving your infrastructure.",
+  "version": "0.10.0-rc.8",
+  "description": "Privy client-side wallet adapter for @pollar/core — sign Stellar transactions with a user's Privy embedded Stellar wallet via raw-hash signing.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "react-native": {
+        "import": {
+          "types": "./dist/index.native.d.mts",
+          "default": "./dist/index.native.mjs"
+        },
+        "require": {
+          "types": "./dist/index.native.d.ts",
+          "default": "./dist/index.native.js"
+        }
+      },
       "import": {
         "types": "./dist/index.d.mts",
         "default": "./dist/index.mjs"
@@ -17,6 +27,7 @@
       }
     }
   },
+  "react-native": "./dist/index.native.js",
   "files": [
     "dist"
   ],
@@ -31,17 +42,37 @@
   "engines": {
     "node": ">=20"
   },
-  "dependencies": {
-    "@hono/node-server": "^1.19.9",
-    "@privy-io/node": "~0.18.0",
+  "peerDependencies": {
+    "@pollar/core": "^0.10.0-rc.0",
+    "@privy-io/expo": ">=0.69 <1",
+    "@privy-io/react-auth": "^3",
     "@stellar/stellar-sdk": "^15.1.0",
-    "hono": "^4.12.25",
-    "lru-cache": "^11.5.1",
-    "zod": "^4.4.3"
+    "react": "^18 || ^19",
+    "react-dom": "^18 || ^19",
+    "react-native-webview": ">=13"
+  },
+  "peerDependenciesMeta": {
+    "react-dom": {
+      "optional": true
+    },
+    "@privy-io/react-auth": {
+      "optional": true
+    },
+    "@privy-io/expo": {
+      "optional": true
+    },
+    "react-native-webview": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@pollar/core": "^0.10.0-rc.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^20.11.0",
+    "@privy-io/expo": "^0.69.4",
+    "@privy-io/react-auth": "^3.32.2",
+    "@stellar/stellar-sdk": "^15.1.0",
     "eslint": "^10.5.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",

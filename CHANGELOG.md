@@ -1,5 +1,98 @@
 # Changelog
 
+## 0.10.0-rc.9
+
+> Release candidate. Published under the `next` dist-tag (`npm i @pollar/core@next`).
+
+### `@pollar/core` — fixes
+
+- **HTTP requests can no longer hang forever.** Every SDK call now has a
+  client-side request timeout (default **10s**). Previously `fetch` had no
+  timeout, so a transient connection stall (a dropped TCP SYN on a flaky mobile
+  network at cold start) left `client.refresh()` — and every other call —
+  pending indefinitely: it neither resolved nor rejected, trapping callers that
+  `await` it (e.g. a returning user stuck on the splash screen). A stalled
+  request now rejects with a typed `PollarNetworkError` (`code:
+  'SDK_NETWORK_TIMEOUT'`) instead.
+- **A refresh that times out no longer logs the user out.** A transient network
+  timeout during `/auth/refresh` keeps the session intact (the refresh token is
+  almost certainly still valid) and rejects with the typed error so the caller
+  can fall back to a cached token; the next request or proactive timer refreshes
+  once connectivity returns. Genuine refresh failures (4xx/5xx, malformed
+  response) still clear the session as before.
+
+### `@pollar/core` — features
+
+- **New `PollarClient` options.** `requestTimeoutMs` (default `10000`; `0`
+  disables) tunes the per-attempt timeout, and `retry` (default
+  `{ attempts: 2, baseDelayMs: 300 }`) controls automatic backoff retry for
+  idempotent, transient-failure requests (token refresh + GETs). Only
+  transport-level failures retry — an HTTP response is never retried.
+- **Exported `PollarNetworkError` + `isPollarNetworkError`** for programmatic
+  handling of timeouts.
+
+## 0.10.0-rc.7
+
+> Release candidate. Published under the `next` dist-tag (`npm i @pollar/core@next`).
+>
+> **⚠️ One-time re-login on upgrade (SDK only).** The local storage namespace was
+> widened — the apiKey hash went from 8 to 32 hex chars (128-bit) — which
+> intentionally orphans sessions persisted by older builds. Every user
+> re-authenticates ONCE after the host app ships this version; this also flushes
+> stale/corrupt session state left by older builds. No migration, no backend
+> change, no action required.
+
+### `@pollar/core` — features
+
+- **Pluggable custom auth providers** — register your own provider(s) via
+  `providers: [...]` and drive them through `login({ provider, ... })` /
+  `providerAction(...)`, alongside the built-in Google / GitHub / email / wallet
+  flows.
+
+### `@pollar/core` — fixes
+
+- **React Native token refresh** — the `/auth/refresh` retry after a DPoP
+  `use_dpop_nonce` challenge no longer replays an empty body, and a rotated token
+  is emitted to `onAuthStateChange` (RN consumers reading
+  `getAuthState().session.token` no longer forward a stale access token).
+- **DPoP clock-skew compensation** — proofs self-heal a wrong/changed device clock
+  from the server `Date` header (bounded, sanitized `iat`) instead of looping on
+  `token expired`.
+- **Session-lifecycle race hardening** — logout / login / destroy / cross-tab
+  events landing mid-flight can no longer resurrect a cleared session, clobber a
+  newer one, or write a stale token over it; cancelled logins map cleanly to
+  `idle`; reactive read stores reset on logout.
+- **External-wallet signing** — SEP-10 challenges are validated before signing
+  (including via custom providers); `signAuthEntry` signs on the currently
+  configured network; smart-wallet sessions return an explicit error instead of
+  hitting the custodial endpoint.
+- **Secret redaction** — request/response bodies and error logs no longer print
+  access/refresh tokens, the DPoP key, OTPs, or signed XDRs (while keeping
+  diagnostic error `code`s).
+
+## 0.9.1-rc.0
+
+> Release candidate. Published under the `next` dist-tag (`npm i @pollar/core@next`).
+> No breaking changes since `0.9.0`.
+
+### `@pollar/core` — features
+
+- **All SDK API calls are now logged** — successful requests at `debug`, errors at
+  `error` — to aid integration debugging.
+- **Backend error codes are mapped to friendly auth messages** so failed logins
+  surface human-readable reasons instead of raw codes.
+
+### `@pollar/core` — fixes
+
+- **Native adapter load failures now attach a `cause`**, preserving the original
+  error when an Expo / React Native secure-storage adapter fails to load.
+
+### Internal
+
+- Upgraded tooling to TypeScript 6, ESLint 10, and `eslint-plugin-react-hooks` 7,
+  plus safe minor dependency bumps.
+- Applied Prettier formatting across `core` and `react`.
+
 ## 0.9.0
 
 > **⚠️ BREAKING CHANGES (SDK packages only — the SDK API stays backward-compatible).**

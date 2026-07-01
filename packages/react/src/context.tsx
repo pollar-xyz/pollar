@@ -3,6 +3,7 @@
 import {
   BuildOutcome,
   EnabledAssetsState,
+  isInteractiveAuthAdapter,
   NetworkState,
   OnStorageDegrade,
   PollarAdapters,
@@ -19,9 +20,9 @@ import {
   TxBuildBody,
   TxHistoryState,
   WalletBalanceState,
-  WalletId,
+  WalletInfo,
 } from '@pollar/core';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ModalErrorBoundary, setModalErrorLogger } from './components/commons';
 import { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
 import { EnabledAssetsModal } from './components/enabled-assets-modal/EnabledAssetsModal';
@@ -35,7 +36,7 @@ import { TransactionModal } from './components/transaction-modal/TransactionModa
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 import { browserPasskeyCeremony, browserPasskeySigner } from './lib/passkey-ceremony';
-import type { PollarConfig, PollarStyles, RenderWalletsSlot } from './types';
+import type { PollarConfig, PollarStyles } from './types';
 
 const DEFAULT_APP_CONFIG: PollarConfig = {
   application: { name: '' },
@@ -65,7 +66,14 @@ function sessionsEqual(a: PollarPersistedSession | null, b: PollarPersistedSessi
 }
 
 interface PollarContextValue {
-  walletAddress: string;
+  /**
+   * The authenticated user's wallet as a discriminated union over `custody`
+   * (`internal` | `smart` | `external`), or `null` when unauthenticated. Every
+   * field is meaningful for any login method — `custody` is always present and
+   * strictly determines the shape of `provider`. Use `wallet.address` for the
+   * on-chain address and `wallet.provider` for the wallet/login provider.
+   */
+  wallet: WalletInfo | null;
   getClient: () => PollarClient;
   openLoginModal: () => void;
 
@@ -84,8 +92,6 @@ interface PollarContextValue {
   openSessionsModal: () => void;
   appConfig: PollarConfig;
   styles: PollarStyles;
-  /** UI slot for wallet picker (forwarded from provider props). */
-  renderWallets?: RenderWalletsSlot;
   // transactions
   openTxModal: () => void;
   tx: TransactionState;
@@ -110,7 +116,6 @@ interface PollarContextValue {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ) => Promise<SubmitOutcome>;
-  walletType: WalletId | null;
   // network
   network: StellarNetwork;
   setNetwork: (network: StellarNetwork) => void;
@@ -178,11 +183,6 @@ interface PollarProviderProps {
    * `/applications/config` on mount.
    */
   appConfig?: PollarConfig;
-  /** UI customization slots. */
-  ui?: {
-    /** Replaces the default Freighter/Albedo wallet picker. */
-    renderWallets?: RenderWalletsSlot;
-  };
   adapters?: PollarAdapters;
   /**
    * Notified when persistent storage silently degrades to in-memory mode
@@ -200,7 +200,6 @@ interface PollarProviderProps {
 export function PollarProvider({
   client,
   appConfig: appConfigProp,
-  ui,
   adapters,
   onStorageDegrade,
   children,
@@ -273,6 +272,38 @@ export function PollarProvider({
     });
   }, [pollarClient]);
 
+  // Auto-login for interactive adapters (e.g. Privy). When the adapter's
+  // provider authenticates *outside* the sub-modal flow — after an OAuth redirect
+  // (the page reloaded, so the sub-modal promise is gone) or a persisted provider
+  // session on load — and Pollar has no session yet, trigger `login({ provider })`
+  // so `connect()` + SEP-10 run. Read the session through a ref so the
+  // subscription is set up once and never re-subscribes on session changes.
+  const sessionRef = useRef(sessionState);
+  sessionRef.current = sessionState;
+  useEffect(() => {
+    const unsubscribes: Array<() => void> = [];
+    for (const { id } of pollarClient.listWalletAdapters()) {
+      const adapter = pollarClient.getWalletAdapter(id);
+      if (!isInteractiveAuthAdapter(adapter) || !adapter.onProviderAuthChange) continue;
+      let triggered = false;
+      unsubscribes.push(
+        adapter.onProviderAuthChange((state) => {
+          // Reset on sign-out so a later re-auth can trigger again (rising edge).
+          if (!state.authenticated || !state.address) {
+            triggered = false;
+            return;
+          }
+          if (triggered || sessionRef.current?.wallet?.address) return;
+          triggered = true;
+          pollarClient.login({ provider: id } as PollarLoginOptions);
+        }),
+      );
+    }
+    return () => {
+      for (const unsubscribe of unsubscribes) unsubscribe();
+    };
+  }, [pollarClient]);
+
   // Presence of `appConfig` is the opt-out: if the consumer passes it (even
   // `{}`), we trust them and skip the remote fetch.
   // Route the modal error boundary's logs through the client's level-gated
@@ -329,16 +360,13 @@ export function PollarProvider({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- walletAddress is an intentional re-bind trigger, not read in the body
   const refreshAssets = useCallback(() => pollarClient.refreshAssets(), [pollarClient, walletAddress]);
 
-  const renderWallets = ui?.renderWallets;
-
   const contextValue: PollarContextValue = useMemo(() => {
     const styles: PollarStyles = resolvedConfig.styles ?? {};
     return {
       // session
-      walletAddress,
+      wallet: pollarClient.getWallet(),
       isAuthenticated: !!walletAddress,
       verified,
-      walletType: pollarClient.getWalletType(),
       // client
       getClient,
       // auth
@@ -387,7 +415,6 @@ export function PollarProvider({
       // config
       appConfig: resolvedConfig,
       styles,
-      renderWallets,
       adapters,
     } as PollarContextValue;
   }, [
@@ -405,7 +432,6 @@ export function PollarProvider({
     networkState,
     resolvedConfig,
     adapters,
-    renderWallets,
   ]);
 
   return (

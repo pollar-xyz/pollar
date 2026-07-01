@@ -22,19 +22,22 @@ export { computeJwkThumbprint, canonicalEcJwk } from './keys/thumbprint';
 export { buildProof, normalizeHtu } from './dpop';
 export type { BuildProofArgs } from './dpop';
 
-export { FreighterAdapter, AlbedoAdapter, WalletType } from './wallets';
+export { FreighterAdapter, AlbedoAdapter, WalletType, isInteractiveAuthAdapter } from './wallets';
 export type {
   WalletAdapter,
-  WalletAdapterResolver,
+  WalletAdapterMeta,
   WalletId,
   ConnectWalletResponse,
   SignTransactionOptions,
   SignTransactionResponse,
   SignAuthEntryOptions,
   SignAuthEntryResponse,
+  AuthOption,
+  InteractiveAuthAdapter,
+  ProviderAuthState,
 } from './wallets';
 export type * from './types';
-export { AUTH_ERROR_CODES } from './types';
+export { AUTH_ERROR_CODES, PollarNetworkError, isPollarNetworkError } from './types';
 export { PollarApiClient } from './api/client';
 export type { paths as pollarPaths } from './api/schema';
 export { isValidSession } from './client/session';
@@ -49,3 +52,6 @@ export { getRampsQuote, createOnRamp, createOffRamp, getRampTransaction, pollRam
 
 // ─── Distribution endpoints ───────────────────────────────────────────────────
 export { listDistributionRules, claimDistributionRule } from './api/endpoints/distribution';
+
+// ─── Swap endpoints ───────────────────────────────────────────────────────────
+export { quoteSwap } from './api/endpoints/swap';

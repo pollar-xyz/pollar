@@ -53,32 +53,52 @@ const CATALOG: Record<string, ResolvedAuthError> = {
   },
 
   // ── On-chain transaction failures (surfaced during deploy/transfer) ─────────
+  // These map to the TX_FAILED bucket (not PASSKEY_FAILED) — the precise reason
+  // is the entry key itself, surfaced as the raw `code` on the tx outcome.
   TX_INSUFFICIENT_BALANCE: {
     message: 'Insufficient balance to complete this transaction.',
-    errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED,
+    errorCode: AUTH_ERROR_CODES.TX_FAILED,
+  },
+  TX_INSUFFICIENT_FEE: {
+    message: 'Not enough XLM to cover the network fee. Add more XLM to your wallet and try again.',
+    errorCode: AUTH_ERROR_CODES.TX_FAILED,
+  },
+  TX_FEE_LIMIT_EXCEEDED: {
+    message: 'The transaction fee is above the allowed limit. Please try again.',
+    errorCode: AUTH_ERROR_CODES.TX_FAILED,
+  },
+  TX_CONTRACT_FAILED: {
+    message: 'The contract rejected this operation. Check the operation is allowed right now and try again.',
+    errorCode: AUTH_ERROR_CODES.TX_FAILED,
   },
   TX_DESTINATION_NOT_FOUND: {
     message: "The destination account doesn't exist on the network yet.",
-    errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED,
+    errorCode: AUTH_ERROR_CODES.TX_FAILED,
   },
   TX_NO_TRUSTLINE: {
     message: "The destination can't receive this asset yet (no trustline).",
-    errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED,
+    errorCode: AUTH_ERROR_CODES.TX_FAILED,
   },
   TX_BAD_SEQUENCE: {
     message: 'Something went out of sync. Please try again.',
-    errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED,
+    errorCode: AUTH_ERROR_CODES.TX_FAILED,
   },
 };
 
 /**
  * Resolves a backend error `code` to a friendly message + bucket. Falls back to
- * the supplied default message (and the `PASSKEY_FAILED` bucket) when the code
- * is unknown or absent.
+ * the supplied default message when the code is unknown or absent, bucketing by
+ * the code's domain prefix (`TX_`/`SDK_TX_` → `TX_FAILED`, else `PASSKEY_FAILED`).
  */
 export function resolveAuthError(code: string | undefined, fallbackMessage: string): ResolvedAuthError {
   if (code && CATALOG[code]) return CATALOG[code];
-  return { message: fallbackMessage, errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED };
+  // Bucket an UNKNOWN code by its domain prefix so a transaction code isn't
+  // mislabeled as a passkey failure (the historical default).
+  const errorCode =
+    code && (code.startsWith('TX_') || code.startsWith('SDK_TX_'))
+      ? AUTH_ERROR_CODES.TX_FAILED
+      : AUTH_ERROR_CODES.PASSKEY_FAILED;
+  return { message: fallbackMessage, errorCode };
 }
 
 /**

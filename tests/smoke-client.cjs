@@ -66,7 +66,8 @@ async function waitFor(cond, timeoutMs = 1000) {
   const apiKey = 'pk_smoke_client';
   const storage = sdk.createMemoryAdapter();
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(apiKey));
-  const apiKeyHash = Array.from(new Uint8Array(digest).slice(0, 4))
+  // Namespace width is 16 bytes / 32 hex (see lib/api-key-hash.ts).
+  const apiKeyHash = Array.from(new Uint8Array(digest).slice(0, 16))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
   const sessionKey = `pollar:${apiKeyHash}:session`;
@@ -203,7 +204,7 @@ async function waitFor(cond, timeoutMs = 1000) {
   }
   check('apiKeyHash throws before ready()', threw);
   await client2.ready();
-  check('  apiKeyHash works after ready()', typeof client2.apiKeyHash === 'string' && client2.apiKeyHash.length === 8);
+  check('  apiKeyHash works after ready()', typeof client2.apiKeyHash === 'string' && client2.apiKeyHash.length === 32);
   client2.destroy();
 
   console.log(`\n${pass} pass, ${fail} fail`);

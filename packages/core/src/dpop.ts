@@ -45,6 +45,13 @@ export interface BuildProofArgs {
    * 9449 §8.
    */
   nonce?: string;
+  /**
+   * Seconds to add to the local clock when stamping `iat`, to compensate for a
+   * skewed device clock (`serverTime − localTime`, learned from the `Date`
+   * response header). Defaults to 0. Keeps `iat` inside the server's acceptance
+   * window even when the device clock is wrong, avoiding proof rejections.
+   */
+  clockOffsetSec?: number;
 }
 
 interface ProofHeader {
@@ -75,11 +82,16 @@ export async function buildProof(args: BuildProofArgs, keyManager: KeyManager): 
     jwk,
   };
 
+  // Sanitize the offset before it reaches `iat`: a NaN/Infinity/fractional value
+  // (`Math.max(1, NaN) === NaN`) would serialize to a `null`/invalid `iat` and
+  // break verification. Coerce to a finite integer, else 0.
+  const offsetSec = Number.isFinite(args.clockOffsetSec) ? Math.trunc(args.clockOffsetSec as number) : 0;
   const payload: ProofPayload = {
     jti: randomUUID(),
     htm: args.htm.toUpperCase(),
     htu: normalizeHtu(args.htu),
-    iat: Math.floor(Date.now() / 1000),
+    // Floor at 1 so a pathological offset can never produce a zero/negative iat.
+    iat: Math.max(1, Math.floor(Date.now() / 1000) + offsetSec),
   };
 
   if (args.accessToken !== undefined && args.accessToken !== '') {

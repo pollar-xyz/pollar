@@ -1,9 +1,10 @@
 import { pollarPaths, StellarNetwork } from './index';
+import type { PollarApiClient } from './api/client';
 import type { KeyManager } from './keys/types';
 import type { LogLevel, PollarLogger } from './lib/logger';
 import type { OnStorageDegrade, Storage } from './storage/types';
 import type { VisibilityProvider } from './visibility/types';
-import { WalletAdapterResolver, WalletId } from './wallets';
+import { WalletAdapter, WalletId } from './wallets';
 
 export type PollarApplicationConfigResponse =
   pollarPaths['/auth/login']['post']['responses'][200]['content']['application/json'];
@@ -28,6 +29,14 @@ export interface PollarPersistedSession {
   // C-address for smart/passkey, the connected pubkey for external).
   wallet: {
     type: 'internal' | 'smart' | 'external';
+    // The login method, 1:1 with `type` (fixed at account creation server-side):
+    //   internal → 'email' | 'google' | 'github' | 'oidc'
+    //   smart    → 'passkey'
+    //   external → 'wallet'
+    // Optional: sessions minted by sdk-api < this change won't carry it. For
+    // external wallets the specific on-chain adapter id (freighter/albedo) is
+    // exposed separately via `getWallet().provider`, not here.
+    provider?: string;
     address: string | null;
     existsOnStellar?: boolean;
     // On-chain creation time (smart = deploy; internal = keypair creation).
@@ -39,6 +48,35 @@ export interface PollarPersistedSession {
     deployTxHash?: string | null;
   };
 }
+
+/**
+ * Custodial login methods — the providers that map to an `internal` wallet.
+ * Mirrors the backend `AuthProvider` enum minus passkey (→ smart) and
+ * wallet/external (→ external).
+ */
+export type PollarAuthMethod = 'email' | 'google' | 'github' | 'oidc';
+
+/**
+ * The authenticated user's wallet, as a discriminated union over `custody`.
+ * Every authenticated session has exactly one wallet whose custody is fixed at
+ * account creation, so `custody` strictly determines the shape of `provider`:
+ *
+ *   - `internal` (platform-custodied G-address) → `provider` is the login
+ *     method, or `null` if the session predates provider tracking server-side.
+ *   - `smart` (passkey Soroban C-address) → `provider` is always `'passkey'`.
+ *   - `external` (user-connected wallet) → `provider` is the on-chain adapter
+ *     id (`'freighter'`, `'albedo'`, …), or `null` when no adapter is resolved
+ *     (e.g. a restored session whose adapter could not be re-attached).
+ *
+ * Obtained via {@link PollarClient.getWallet}.
+ */
+export type WalletInfo =
+  // `provider` widened with `(string & {})` so a custom provider id (e.g. a
+  // `privy` integration) survives instead of being lost to the closed enum,
+  // while the known PollarAuthMethod values still autocomplete.
+  | { custody: 'internal'; address: string; provider: PollarAuthMethod | (string & {}) | null }
+  | { custody: 'smart'; address: string; provider: 'passkey' }
+  | { custody: 'external'; address: string; provider: WalletId | (string & {}) | null };
 
 /** In-memory user profile (kept on `PollarClient`, never persisted). */
 export interface PollarUserProfile {
@@ -65,6 +103,28 @@ export interface PollarClientConfig {
    */
   storage?: Storage;
   /**
+   * Max time (ms) a single SDK HTTP attempt waits before aborting and rejecting
+   * with a {@link PollarNetworkError} (`code: 'SDK_NETWORK_TIMEOUT'`).
+   *
+   * `fetch` has no timeout of its own, so without this a transient connection
+   * stall (e.g. a dropped TCP SYN on a flaky mobile network at cold start) hangs
+   * the request forever — it neither resolves nor rejects, trapping any caller
+   * that `await`s it (a returning user stuck on the splash screen). Bounding it
+   * lets the request fail fast so the caller can recover (retry, or fall back to
+   * a cached token).
+   *
+   * Defaults to `10000` (10s). Set `0` to disable (NOT recommended — restores
+   * the unbounded-hang behavior).
+   */
+  requestTimeoutMs?: number;
+  /**
+   * Automatic retry with backoff for idempotent, transient-failure SDK HTTP
+   * (token refresh + GETs), to absorb a single dropped request before surfacing
+   * an error. Only transport failures retry; an HTTP response is never retried.
+   * Defaults to `{ attempts: 2, baseDelayMs: 300 }`. See {@link PollarRetryConfig}.
+   */
+  retry?: PollarRetryConfig;
+  /**
    * Pluggable DPoP key manager. Defaults to `defaultKeyManager(storage,
    * apiKey)`: WebCrypto in browsers, `@noble/curves` in RN.
    */
@@ -89,21 +149,14 @@ export interface PollarClientConfig {
    */
   onStorageDegrade?: OnStorageDegrade;
   /**
-   * Resolves a {@link WalletAdapter} for a given wallet id. If omitted, the
-   * SDK falls back to its built-in `FreighterAdapter` / `AlbedoAdapter`,
-   * which only know `WalletType.FREIGHTER` and `WalletType.ALBEDO`. Inject
-   * `@pollar/stellar-wallets-kit-adapter` (or your own resolver) to support
-   * additional wallets without bundling those dependencies into `@pollar/core`.
+   * Client-side wallet integrations to register. Each renders as its own login
+   * button and is reachable via `login({ provider: adapter.type })`. The built-in
+   * `FreighterAdapter` / `AlbedoAdapter` are auto-registered; entries here are
+   * added on top and override a built-in by reusing its `type`. Import extra
+   * adapters from their own packages (`@pollar/stellar-wallets-kit-adapter`,
+   * `@pollar/privy-adapter`, …) so their deps stay out of `@pollar/core`'s bundle.
    */
-  walletAdapter?: WalletAdapterResolver;
-  /**
-   * Maximum time (ms) the SDK waits for a `walletAdapter` resolver to return.
-   * Guards against a broken extension bridge (e.g. Freighter content-script
-   * down) hanging the login flow forever. The resolver only constructs the
-   * adapter object — it does NOT include the user-facing approval step — so
-   * a few seconds is plenty. Defaults to 5000.
-   */
-  walletResolverTimeoutMs?: number;
+  walletAdapters?: WalletAdapter[];
   /**
    * Optional human-friendly label sent at /auth/login time and recorded on
    * the server-side refresh-token row so the user can identify it in the
@@ -272,11 +325,72 @@ export type TxBuildSignSubmitResponse =
   pollarPaths['/tx/build-sign-submit']['post']['responses'][200]['content']['application/json'];
 export type TxBuildSignSubmitContent = TxBuildSignSubmitResponse['content'];
 
+/**
+ * Discriminated union of every login the SDK understands. The built-ins
+ * (`google`, `github`, `email`) are explicit members; any registered wallet
+ * adapter is reached through the catch-all via `login({ provider: adapter.type })`.
+ */
 export type PollarLoginOptions =
   | { provider: 'google' }
   | { provider: 'github' }
   | { provider: 'email'; email: string }
-  | { provider: 'wallet'; type: WalletId };
+  // Catch-all for any registered wallet adapter (`login({ provider: adapter.type })`,
+  // e.g. 'freighter' | 'albedo' | 'privy' | 'xbull'). `string & {}` keeps the
+  // built-in literals autocompleting. Trade-off: this also makes a bare
+  // `{ provider: 'email' }` (no `email`) type-check — the email flow still
+  // validates `email` at runtime.
+  | ({ provider: string & {} } & Record<string, unknown>);
+
+/**
+ * Curated, stable facade handed to every {@link PollarAuthProvider}. It exposes
+ * only the primitives a login strategy needs — the shared backbone
+ * (`createSession` → drive the session READY → `authenticate`) plus a couple of
+ * ready-made legs — and deliberately keeps `PollarClient` internals (storage,
+ * wallet-adapter resolution, DPoP key manager) private. This is the public
+ * contract a third-party provider (e.g. Privy) builds against.
+ */
+export interface AuthProviderContext {
+  /** Aborts when the host calls `cancelLogin()` (or a new login supersedes this one). */
+  readonly signal: AbortSignal;
+  /** Typed `openapi-fetch` client, already wired with DPoP + refresh middleware. */
+  readonly api: PollarApiClient;
+  /** API origin + version prefix (e.g. `https://sdk.api.pollar.xyz/v1`). */
+  readonly basePath: string;
+  readonly apiKey: string;
+  readonly logger: PollarLogger;
+  /** Drive the SDK's auth state machine (the host's `onAuthStateChange` mirrors it). */
+  setAuthState(state: AuthState): void;
+  /** `POST /auth/session` → `clientSessionId` (null on failure; error state already set). */
+  createSession(): Promise<string | null>;
+  /** Poll the session to READY, then `POST /auth/login` and persist the session. The shared backbone. */
+  authenticate(clientSessionId: string): Promise<void>;
+  /**
+   * `POST /auth/wallet/challenge` → the server-signed SEP-10 challenge transaction
+   * (XDR) the wallet must counter-sign to prove key control. Returns `null` on
+   * failure. Bind the network you sign on to the app's network.
+   */
+  requestChallenge(clientSessionId: string, walletAddress: string): Promise<string | null>;
+  /** Built-in hosted-OAuth dance (popup on web, in-app browser on RN). Backs the google/github providers. */
+  startHostedOAuth(provider: 'google' | 'github'): Promise<void>;
+}
+
+/**
+ * A pluggable login strategy. Built-ins (`google`, `github`, `email`) ship as
+ * these; custom ones (Privy, Magic, …) are injected via
+ * `PollarClientConfig.providers`. Note: `wallet` is intentionally NOT a provider
+ * — it yields a persistent `WalletAdapter` reused for signing, a concern
+ * orthogonal to login, so it keeps its own dedicated `loginWallet()` flow.
+ *
+ * - `login` handles the one-shot entry point (`client.login({ provider: id })`).
+ * - `actions` exposes extra named steps for multi-step flows (e.g. email's
+ *   send-code / verify-code), invoked via `client.providerAction(id, action, payload)`.
+ */
+export interface PollarAuthProvider {
+  /** Matches `PollarLoginOptions.provider` and the key in `providerAction`. */
+  readonly id: string;
+  login?(ctx: AuthProviderContext, options: PollarLoginOptions): Promise<void>;
+  actions?: Record<string, (ctx: AuthProviderContext, payload?: unknown) => Promise<void>>;
+}
 
 export type TxBuildContent = TxBuildResponse['content'];
 
@@ -318,7 +432,15 @@ export type TransactionState =
   // ─── Terminal success (shared) ────────────────────────────────────────
   | { step: 'success'; buildData?: TxBuildContent; hash: string }
   // ─── Terminal failure with phase context ──────────────────────────────
-  | { step: 'error'; phase: TxErrorPhase; details?: string; buildData?: TxBuildContent; signedXdr?: string };
+  | {
+      step: 'error';
+      phase: TxErrorPhase;
+      details?: string;
+      code?: string;
+      message?: string;
+      buildData?: TxBuildContent;
+      signedXdr?: string;
+    };
 
 /**
  * Identifies which phase failed when `TransactionState.step === 'error'`.
@@ -339,12 +461,27 @@ export type BuildOutcome = { status: 'built'; buildData: TxBuildContent } | { st
 
 export type SignOutcome =
   | { status: 'signed'; signedXdr: string; submissionToken?: string; expiresAt?: number }
-  | { status: 'error'; details?: string };
+  | { status: 'error'; details?: string; code?: string; message?: string };
+
+/**
+ * Result of {@link PollarClient.signAuthEntry}. `signedAuthEntry` is the base64
+ * XDR of the signed `SorobanAuthorizationEntry`, ready to be composed into the
+ * caller's transaction envelope (e.g. by a contract that sponsors the gas).
+ */
+export type SignAuthEntryOutcome = { status: 'signed'; signedAuthEntry: string } | { status: 'error'; details?: string };
 
 export type SubmitOutcome =
   | { status: 'success'; hash: string; buildData?: TxBuildContent }
   | { status: 'pending'; hash: string; buildData?: TxBuildContent }
-  | { status: 'error'; hash?: string; details?: string; resultCode?: string; buildData?: TxBuildContent };
+  | {
+      status: 'error';
+      hash?: string;
+      details?: string;
+      resultCode?: string;
+      code?: string;
+      message?: string;
+      buildData?: TxBuildContent;
+    };
 
 /**
  * Result of {@link PollarClient.setTrustline}. Like {@link SubmitOutcome} but the
@@ -361,6 +498,9 @@ export const AUTH_ERROR_CODES = {
   SESSION_CREATE_FAILED: 'SESSION_CREATE_FAILED',
   SESSION_EXPIRED: 'SESSION_EXPIRED',
   SESSION_INVALID: 'SESSION_INVALID',
+  /** The interactive login didn't complete within the overall deadline (e.g. an
+   *  abandoned OAuth popup, or the session stuck in a non-terminal state). */
+  LOGIN_TIMEOUT: 'LOGIN_TIMEOUT',
   EMAIL_SEND_FAILED: 'EMAIL_SEND_FAILED',
   EMAIL_VERIFY_FAILED: 'EMAIL_VERIFY_FAILED',
   EMAIL_CODE_EXPIRED: 'EMAIL_CODE_EXPIRED',
@@ -369,7 +509,11 @@ export const AUTH_ERROR_CODES = {
   WALLET_CONNECT_FAILED: 'WALLET_CONNECT_FAILED',
   WALLET_AUTH_FAILED: 'WALLET_AUTH_FAILED',
   WALLET_RESOLVER_TIMEOUT: 'WALLET_RESOLVER_TIMEOUT',
+  EXTERNAL_AUTH_FAILED: 'EXTERNAL_AUTH_FAILED',
   PASSKEY_FAILED: 'PASSKEY_FAILED',
+  // Generic bucket for on-chain transaction failures; the precise reason is the
+  // backend `code` (e.g. TX_FEE_LIMIT_EXCEEDED) carried alongside on the outcome.
+  TX_FAILED: 'TX_FAILED',
   UNEXPECTED_ERROR: 'UNEXPECTED_ERROR',
 } as const;
 
@@ -384,6 +528,8 @@ export type AuthState =
   | { step: 'verifying_email_code'; clientSessionId: string; email: string }
   | { step: 'opening_oauth'; provider: 'google' | 'github' }
   | { step: 'connecting_wallet'; walletType: WalletId }
+  // SEP-10: the wallet is counter-signing the server challenge to prove key control.
+  | { step: 'signing_wallet_challenge'; walletType: WalletId }
   | { step: 'wallet_not_installed'; walletType: WalletId }
   | { step: 'authenticating_wallet' }
   // Passkey (Smart Wallet) login: device ceremony, then (new user) the
@@ -418,6 +564,57 @@ export class PollarFlowError extends Error {
     super(message);
     this.name = 'PollarFlowError';
   }
+}
+
+/**
+ * Thrown when an SDK HTTP request is aborted by the client-side request timeout
+ * (see `PollarClientConfig.requestTimeoutMs`) before the server responded. The
+ * `code` is stable for programmatic handling (e.g. fall back to a cached token
+ * on boot); `cause` carries the underlying abort error.
+ *
+ * This is the difference between "the request failed" and "the request hung
+ * forever": without the timeout a stalled connection neither resolves nor
+ * rejects, so callers can't recover. With it, `refresh()` (and every other SDK
+ * call) settles by rejecting with this error.
+ */
+export class PollarNetworkError extends Error {
+  readonly code = 'SDK_NETWORK_TIMEOUT' as const;
+  readonly cause?: unknown;
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = 'PollarNetworkError';
+    this.cause = cause;
+  }
+}
+
+/** Type guard for {@link PollarNetworkError} (instanceof is unreliable across
+ *  bundle/dual-package boundaries, so match the stable `code` too). */
+export function isPollarNetworkError(err: unknown): err is PollarNetworkError {
+  return (
+    err instanceof PollarNetworkError ||
+    (typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'SDK_NETWORK_TIMEOUT')
+  );
+}
+
+/**
+ * Automatic retry for idempotent, transient-failure SDK HTTP (the token refresh
+ * and GETs). Only transport-level failures (timeouts, dropped connections)
+ * retry — any HTTP response (including 4xx/5xx) is returned as-is and never
+ * retried, so a refresh that's genuinely rejected logs out immediately rather
+ * than after N pointless attempts.
+ */
+export interface PollarRetryConfig {
+  /**
+   * Total attempts, including the first (so `attempts: 2` = one retry, up to two
+   * tries). Each attempt is independently bounded by `requestTimeoutMs`. Set
+   * `1` to disable retries. Defaults to `2`.
+   */
+  attempts?: number;
+  /**
+   * Base backoff delay in ms between attempts; grows exponentially with jitter
+   * (`baseDelayMs * 2^(n-1) * [0.5, 1)`). Defaults to `300`.
+   */
+  baseDelayMs?: number;
 }
 
 // ─── Wallet balance types ─────────────────────────────────────────────────────
@@ -510,6 +707,31 @@ export type DistributionRulesState =
   | { step: 'loading' }
   | { step: 'loaded'; rules: DistributionRule[] }
   | { step: 'error'; message: string };
+
+// ─── Swap types (DEX/AMM) ──────────────────────────────────────────────────────
+
+export type SwapQuoteBody = NonNullable<pollarPaths['/swap/quote']['post']['requestBody']>['content']['application/json'];
+
+export type SwapQuoteContent =
+  pollarPaths['/swap/quote']['post']['responses'][200]['content']['application/json']['content'];
+
+/** A single priced swap route, including a ready-to-run `build` payload. */
+export type SwapQuote = SwapQuoteContent['quotes'][number];
+
+/** Route the caller requests: `auto` (best of every venue) or a concrete venue. */
+export type SwapProvider = NonNullable<SwapQuoteBody['provider']>;
+
+/** A concrete venue a returned quote came from (never `auto`). */
+export type SwapVenue = SwapQuote['provider'];
+
+/** Input to `client.getSwapQuote` — the request body minus wallet/network, which the client fills. */
+export type SwapQuoteParams = {
+  sellAsset: SwapQuoteBody['sellAsset'];
+  buyAsset: SwapQuoteBody['buyAsset'];
+  amount: string;
+  provider?: SwapProvider;
+  slippageBps?: number;
+};
 
 // ─── Adapter types ────────────────────────────────────────────────────────────
 

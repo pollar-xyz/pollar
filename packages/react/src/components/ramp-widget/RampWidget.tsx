@@ -104,7 +104,8 @@ const MOCK_PAYMENT: PaymentInstructions = {
 // ────────────────────────────────────────────────────────────────────────────────
 
 export function RampWidget({ onClose }: RampWidgetProps) {
-  const { getClient, walletAddress, styles } = usePollar();
+  const { getClient, wallet, styles } = usePollar();
+  const walletAddress = wallet?.address ?? '';
 
   const [step, setStep] = useState<RampStep>('input');
   const [direction, setDirection] = useState<RampDirection>('onramp');

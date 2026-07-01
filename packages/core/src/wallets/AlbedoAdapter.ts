@@ -23,7 +23,10 @@ const TESTNET_PASSPHRASE = 'Test SDF Network ; September 2015';
  * produced on the network configured on `PollarClient`; falls back to the
  * network the adapter was constructed with when options carry nothing.
  */
-function albedoNetwork(options: SignTransactionOptions | undefined, fallback: AlbedoNetwork): AlbedoNetwork {
+function albedoNetwork(
+  options: { network?: string; networkPassphrase?: string } | undefined,
+  fallback: AlbedoNetwork,
+): AlbedoNetwork {
   switch (options?.networkPassphrase) {
     case PUBLIC_PASSPHRASE:
       return 'public';
@@ -69,11 +72,14 @@ function waitForAlbedoPopup(): Promise<Record<string, string>> {
 
 export class AlbedoAdapter implements WalletAdapter {
   readonly type = WalletType.ALBEDO;
+  readonly meta = { label: 'Albedo', group: 'Wallet' };
+  readonly custody = 'external' as const;
 
   /**
-   * Network used for `connect` and `signAuthEntry` (which carry no per-call
-   * network) and as the fallback for `signTransaction`. Defaults to `'testnet'`
-   * to preserve the previous behavior when constructed with no argument.
+   * Network used for `connect` (which carries no per-call network) and as the
+   * fallback for `signTransaction` / `signAuthEntry` when their per-call options
+   * carry none. Defaults to `'testnet'` to preserve the previous behavior when
+   * constructed with no argument.
    */
   constructor(private readonly network: AlbedoNetwork = 'testnet') {}
 
@@ -128,12 +134,14 @@ export class AlbedoAdapter implements WalletAdapter {
     return { signedTxXdr: result.signed_envelope_xdr };
   }
 
-  async signAuthEntry(entryXdr: string, _options?: SignAuthEntryOptions): Promise<SignAuthEntryResponse> {
+  async signAuthEntry(entryXdr: string, options?: SignAuthEntryOptions): Promise<SignAuthEntryResponse> {
     const url = new URL('https://albedo.link');
     url.searchParams.set('intent', 'sign-auth-entry');
     url.searchParams.set('xdr', entryXdr);
     url.searchParams.set('app_name', 'Pollar');
-    url.searchParams.set('network', this.network);
+    // Honor the per-call network (the SDK now passes it) so a `setNetwork()`
+    // after login isn't ignored; fall back to the construction-time network.
+    url.searchParams.set('network', albedoNetwork(options, this.network));
     url.searchParams.set('callback', `${window.location.origin}/albedo-callback`);
     url.searchParams.set('origin', window.location.origin);
 

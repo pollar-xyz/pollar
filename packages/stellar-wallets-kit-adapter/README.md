@@ -182,70 +182,31 @@ The adapter implements `WalletAdapter` from `@pollar/core`:
 
 `setWallet` is called before every operation so a single `StellarWalletsKit.init({ modules })` covers many wallets — `PollarClient` resolves a fresh adapter instance per `WalletId`, and the kit routes to the correct module under the hood.
 
-## Wallet picker UI (`/picker`)
+## Login UI
 
-The `/picker` subpath ships a React component that renders the kit's full
-wallet list inside Pollar's `LoginModal`. It plugs into the
-`ui.renderWallets` slot on `<PollarProvider>` (new in `@pollar/react@0.8.0`).
-
-> **React is an optional peer dep.** Only the `/picker` subpath pulls in
-> `react` / `react-dom` / `@pollar/react`. Headless consumers of
-> `stellarWalletsKit({ network })` keep working with zero React in the bundle.
-
-### Bundle helper
-
-`createStellarWalletsKitBundle` builds both halves of the integration
-(signing resolver + picker slot) from a single options object, so the picker
-can only show wallets that signing actually supports:
+The wallets you register via `stellarWalletsKitAdapters({ network })` render
+automatically inside Pollar's `LoginModal` — one button per wallet, collapsed
+behind a single "Wallet" gateway button (their shared `meta.group`). Pass
+`picker.groupLabel` to give them a distinct gateway, or `picker.labels` to
+override individual button labels.
 
 ```tsx
 import { PollarProvider } from '@pollar/react';
-import { createStellarWalletsKitBundle } from '@pollar/stellar-wallets-kit-adapter/picker';
+import { stellarWalletsKitAdapters } from '@pollar/stellar-wallets-kit-adapter';
 import { Networks } from '@creit.tech/stellar-wallets-kit';
 
-const bundle = createStellarWalletsKitBundle({
-  network: Networks.PUBLIC,
-  // Optional — subset, order, layout, theme, labels: see `KitPickerOptions`
-  picker: { wallets: ['xbull', 'lobstr', 'freighter'], layout: 'list' },
-});
-
 <PollarProvider
-  client={{ apiKey: 'your-api-key', walletAdapter: bundle.walletAdapter }}
-  ui={{ renderWallets: bundle.renderWallets }}
+  client={{
+    apiKey: 'your-api-key',
+    walletAdapters: stellarWalletsKitAdapters({
+      network: Networks.PUBLIC,
+      picker: { wallets: ['xbull', 'lobstr', 'freighter'] },
+    }),
+  }}
 >
   {/* your app */}
 </PollarProvider>;
 ```
-
-### Picker component directly
-
-If you already build the `walletAdapter` yourself (e.g. composing a custom
-resolver), use `<KitWalletPicker>` directly inside a `renderWallets` slot:
-
-```tsx
-import { KitWalletPicker } from '@pollar/stellar-wallets-kit-adapter/picker';
-import { Networks } from '@creit.tech/stellar-wallets-kit';
-
-<PollarProvider
-  client={{ apiKey: '…', walletAdapter: myResolver }}
-  ui={{
-    renderWallets: ({ onConnect, authState }) => (
-      <KitWalletPicker
-        onConnect={onConnect}
-        authState={authState}
-        network={Networks.PUBLIC}
-        picker={{ wallets: ['xbull', 'lobstr'], showInstalledOnly: true }}
-      />
-    ),
-  }}
->
-  {children}
-</PollarProvider>;
-```
-
-`<KitWalletPicker>` will lazily call `ensureInit({ network, modules })` on
-mount, so it works whether or not `stellarWalletsKit(...)` has already been
-called elsewhere — both share the same kit singleton.
 
 ## Direct adapter access
 

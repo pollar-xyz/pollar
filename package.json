@@ -1,18 +1,19 @@
 {
   "name": "polar-auth-monorepo",
-  "version": "0.8.1",
+  "version": "0.10.0-rc.0",
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
     "lint": "turbo lint",
     "clean": "turbo clean",
-    "dev:push": "npm run build && for pkg in core react privy-adapter stellar-wallets-kit-adapter; do (cd packages/$pkg && yalc publish) || exit 1; done",
+    "dev:push": "npm run build && for pkg in core react privy-adapter accesly-adapter stellar-wallets-kit-adapter; do (cd packages/$pkg && yalc publish) || exit 1; done",
     "core:publish": "cd packages/core && npm publish --access public",
+    "core:publish:rc": "cd packages/core && npm publish --access public --tag next",
     "privy-adapter:publish": "cd packages/privy-adapter && npm publish --access public",
     "react:publish": "cd packages/react && npm publish --access public",
     "stellar-wallets-kit-adapter:publish": "cd packages/stellar-wallets-kit-adapter && npm publish --access public",
     "core:update-openapi": "curl -k https://sdk.api.local.pollar.xyz/openapi.json -o /tmp/openapi.json && npx openapi-typescript /tmp/openapi.json -o ./packages/core/src/api/schema.d.ts",
-    "test:smoke": "node tests/smoke-keys.cjs && node tests/smoke-client.cjs"
+    "test:smoke": "node tests/smoke-keys.cjs && node tests/smoke-client.cjs && node tests/smoke-providers.cjs && node tests/smoke-session-races.cjs"
   },
   "devDependencies": {
     "prettier": "^3.8.4",
@@ -20,7 +21,8 @@
     "typescript": "^6.0.3"
   },
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "examples/*"
   ],
   "engines": {
     "node": ">=20"

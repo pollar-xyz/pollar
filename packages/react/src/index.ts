@@ -1,13 +1,9 @@
 export { PollarProvider, usePollar } from './context';
 export { createPollarAdapterHook } from './usePollarAdapter';
-export type {
-  LoginButtonProps,
-  AuthModalProps,
-  PollarStyles,
-  PollarConfig,
-  RenderWalletsProps,
-  RenderWalletsSlot,
-} from './types';
+export type { LoginButtonProps, AuthModalProps, PollarStyles, PollarConfig } from './types';
+// Re-export the custom-provider contracts so consumers can author providers
+// (e.g. a Privy login provider) without importing from `@pollar/core` directly.
+export type { PollarAuthProvider, AuthProviderContext } from '@pollar/core';
 export { WalletButton } from './components/wallet-button/WalletButton';
 export { WalletButtonTemplate, type WalletButtonTemplateProps } from './components/wallet-button/WalletButtonTemplate';
 

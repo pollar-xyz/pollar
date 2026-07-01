@@ -1,37 +1,63 @@
 'use client';
 
-import { AUTH_ERROR_CODES, AuthState, WalletId, WalletType } from '@pollar/core';
+import { AUTH_ERROR_CODES, AuthState, WalletId } from '@pollar/core';
 
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 import { type CSSProperties, useState } from 'react';
-import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
-import type { RenderWalletsSlot } from '../../types';
+import { LOGO_POLLAR } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter } from '../commons';
 import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
 
-function DefaultFreighterAlbedoButtons({ onConnect, isLoading }: { onConnect: (id: WalletId) => void; isLoading: boolean }) {
+type WalletAdapterEntry = { id: WalletId; meta: { label: string; iconUrl?: string; group?: string } };
+
+function WalletAdapterButtons({
+  walletAdapters,
+  onConnect,
+  isLoading,
+  variant = 'list',
+}: {
+  walletAdapters: WalletAdapterEntry[];
+  onConnect: (id: WalletId) => void;
+  isLoading: boolean;
+  // 'list'  → borderless rows for inside a group sub-picker (large icon + name).
+  // 'entry' → bordered buttons that match the root-level entries (Google, Wallet,
+  //           Smart Wallet) so a root adapter like Privy doesn't read as bare text.
+  variant?: 'list' | 'entry';
+}) {
+  if (variant === 'entry') {
+    return (
+      <>
+        {walletAdapters.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            disabled={isLoading}
+            className="pollar-wallet-entry-btn"
+            onClick={() => onConnect(a.id)}
+          >
+            {a.meta.iconUrl && <img src={a.meta.iconUrl} alt={a.meta.label} className="pollar-wallet-icon" />}
+            {a.meta.label}
+          </button>
+        ))}
+      </>
+    );
+  }
   return (
     <div className="pollar-wallet-list">
-      <button
-        type="button"
-        disabled={isLoading}
-        className="pollar-wallet-list-btn"
-        onClick={() => onConnect(WalletType.FREIGHTER)}
-      >
-        <img src={LOGO_FREIGHTER} alt="Freighter" className="pollar-wallet-list-icon" />
-        <span className="pollar-wallet-list-name">Freighter</span>
-      </button>
-      <button
-        type="button"
-        disabled={isLoading}
-        className="pollar-wallet-list-btn"
-        onClick={() => onConnect(WalletType.ALBEDO)}
-      >
-        <img src={LOGO_ALBEDO} alt="Albedo" className="pollar-wallet-list-icon" />
-        <span className="pollar-wallet-list-name">Albedo</span>
-      </button>
+      {walletAdapters.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          disabled={isLoading}
+          className="pollar-wallet-list-btn"
+          onClick={() => onConnect(a.id)}
+        >
+          {a.meta.iconUrl && <img src={a.meta.iconUrl} alt={a.meta.label} className="pollar-wallet-list-icon" />}
+          <span className="pollar-wallet-list-name">{a.meta.label}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -45,6 +71,7 @@ const AUTH_STATE_MESSAGES: Record<AuthState['step'], string> = {
   verifying_email_code: 'Verifying…',
   opening_oauth: 'Redirecting…',
   connecting_wallet: 'Connecting wallet…',
+  signing_wallet_challenge: 'Confirm in your wallet…',
   wallet_not_installed: 'Wallet not installed',
   authenticating_wallet: 'Signing in with wallet…',
   creating_passkey: 'Waiting for passkey…',
@@ -61,6 +88,7 @@ function authStateToStatus(step: AuthState['step']): StateStatus {
     'verifying_email_code',
     'opening_oauth',
     'connecting_wallet',
+    'signing_wallet_challenge',
     'authenticating_wallet',
     'creating_passkey',
     'deploying_smart_account',
@@ -91,6 +119,8 @@ interface LoginModalTemplateProps {
     github: boolean;
     apple: boolean;
   };
+  /** Registered wallet adapters to render as buttons (Freighter, Albedo, Privy, …). */
+  walletAdapters: WalletAdapterEntry[];
   appName: string;
   email?: string;
   onEmailChange?: (email: string) => void;
@@ -101,8 +131,6 @@ interface LoginModalTemplateProps {
   onLoginSmartWallet?: () => void;
   /** Create a new passkey + smart wallet (new user). */
   onCreateSmartWallet?: () => void;
-  /** Optional override for the wallet picker view. Defaults to a Freighter+Albedo list. */
-  renderWallets?: RenderWalletsSlot;
   authState: AuthState;
   codeInputKey?: number;
   onCodeSubmit?: (code: string) => void;
@@ -119,6 +147,7 @@ export function LoginModalTemplate({
   embeddedWallets,
   smartWallet = false,
   providers,
+  walletAdapters,
   appName,
   email = '',
   onEmailChange,
@@ -127,7 +156,6 @@ export function LoginModalTemplate({
   onWalletConnect,
   onLoginSmartWallet,
   onCreateSmartWallet,
-  renderWallets,
   authState,
   codeInputKey,
   onCodeSubmit,
@@ -135,11 +163,27 @@ export function LoginModalTemplate({
   onCancel,
   onRetry,
 }: LoginModalTemplateProps) {
-  const [showWalletPicker, setShowWalletPicker] = useState(false);
   const [showPasskeyChooser, setShowPasskeyChooser] = useState(false);
+  // Which wallet group's sub-picker is open (gateway label), or null for the root view.
+  const [activeGroup, setActiveGroup] = useState<string | null>(null);
 
   const isDark = theme === 'dark';
   const enabledSocial = Object.entries(providers).filter(([, enabled]) => enabled);
+
+  // Split registered adapters into root-level buttons (no `meta.group`, e.g. Privy)
+  // and gateway groups (adapters sharing a `meta.group` collapse behind one button
+  // that opens a sub-picker — e.g. the Stellar Wallets Kit wallets under "Wallet").
+  const rootAdapters = walletAdapters.filter((a) => !a.meta.group);
+  const walletGroups = walletAdapters
+    .filter((a) => a.meta.group)
+    .reduce<{ label: string; adapters: WalletAdapterEntry[] }[]>((acc, a) => {
+      const label = a.meta.group as string;
+      const existing = acc.find((g) => g.label === label);
+      if (existing) existing.adapters.push(a);
+      else acc.push({ label, adapters: [a] });
+      return acc;
+    }, []);
+  const activeGroupAdapters = walletGroups.find((g) => g.label === activeGroup)?.adapters ?? [];
 
   const cssVars = {
     '--pollar-accent': accentColor,
@@ -217,14 +261,14 @@ export function LoginModalTemplate({
           <BackButton onClick={onBack} />
           <EmailCodeInput key={codeInputKey} email={email} onSubmit={onCodeSubmit ?? (() => {})} />
         </>
-      ) : showWalletPicker ? (
+      ) : activeGroup ? (
         <>
-          <BackButton onClick={() => setShowWalletPicker(false)} />
-          {renderWallets ? (
-            renderWallets({ onConnect: onWalletConnect ?? (() => {}), authState })
-          ) : (
-            <DefaultFreighterAlbedoButtons onConnect={onWalletConnect ?? (() => {})} isLoading={isLoading} />
-          )}
+          <BackButton onClick={() => setActiveGroup(null)} />
+          <WalletAdapterButtons
+            walletAdapters={activeGroupAdapters}
+            onConnect={onWalletConnect ?? (() => {})}
+            isLoading={isLoading}
+          />
         </>
       ) : showPasskeyChooser ? (
         <>
@@ -286,26 +330,39 @@ export function LoginModalTemplate({
           {(embeddedWallets || smartWallet) && (
             <div className="pollar-wallet-section">
               {embeddedWallets && (
-                <button
-                  type="button"
-                  disabled={isLoading}
-                  className="pollar-wallet-entry-btn"
-                  onClick={() => setShowWalletPicker(true)}
-                >
-                  <svg
-                    width="18"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                  </svg>
-                  Wallet
-                </button>
+                <>
+                  {walletGroups.map((g) => (
+                    <button
+                      key={g.label}
+                      type="button"
+                      disabled={isLoading}
+                      className="pollar-wallet-entry-btn"
+                      onClick={() => setActiveGroup(g.label)}
+                    >
+                      <svg
+                        width="18"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                      {g.label}
+                    </button>
+                  ))}
+                  {rootAdapters.length > 0 && (
+                    <WalletAdapterButtons
+                      walletAdapters={rootAdapters}
+                      onConnect={onWalletConnect ?? (() => {})}
+                      isLoading={isLoading}
+                      variant="entry"
+                    />
+                  )}
+                </>
               )}
 
               {smartWallet && (
