@@ -708,6 +708,31 @@ export type DistributionRulesState =
   | { step: 'loaded'; rules: DistributionRule[] }
   | { step: 'error'; message: string };
 
+// ─── Swap types (DEX/AMM) ──────────────────────────────────────────────────────
+
+export type SwapQuoteBody = NonNullable<pollarPaths['/swap/quote']['post']['requestBody']>['content']['application/json'];
+
+export type SwapQuoteContent =
+  pollarPaths['/swap/quote']['post']['responses'][200]['content']['application/json']['content'];
+
+/** A single priced swap route, including a ready-to-run `build` payload. */
+export type SwapQuote = SwapQuoteContent['quotes'][number];
+
+/** Route the caller requests: `auto` (best of every venue) or a concrete venue. */
+export type SwapProvider = NonNullable<SwapQuoteBody['provider']>;
+
+/** A concrete venue a returned quote came from (never `auto`). */
+export type SwapVenue = SwapQuote['provider'];
+
+/** Input to `client.getSwapQuote` — the request body minus wallet/network, which the client fills. */
+export type SwapQuoteParams = {
+  sellAsset: SwapQuoteBody['sellAsset'];
+  buyAsset: SwapQuoteBody['buyAsset'];
+  amount: string;
+  provider?: SwapProvider;
+  slippageBps?: number;
+};
+
 // ─── Adapter types ────────────────────────────────────────────────────────────
 
 export type AdapterFn<TParams = unknown> = (params: TParams) => Promise<{ unsignedTransaction: string }>;

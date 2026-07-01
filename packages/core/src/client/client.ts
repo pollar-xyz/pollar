@@ -1,5 +1,6 @@
 import { createApiClient, fetchWithTimeout, PollarApiClient } from '../api/client';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
+import { quoteSwap } from '../api/endpoints/swap';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
 import { createOffRamp, createOnRamp, getRampsQuote, getRampTransaction, pollRampTransaction } from '../api/endpoints/ramps';
 import { buildProof } from '../dpop';
@@ -21,6 +22,9 @@ import {
   DistributionClaimBody,
   DistributionClaimContent,
   DistributionRule,
+  SwapQuote,
+  SwapQuoteBody,
+  SwapQuoteParams,
   EnabledAssetsState,
   KycLevel,
   KycStartBody,
@@ -2369,6 +2373,72 @@ export class PollarClient {
 
   claimDistributionRule(body: DistributionClaimBody): Promise<DistributionClaimContent> {
     return claimDistributionRule(this._api, body);
+  }
+
+  // ─── Swap (DEX/AMM) ───────────────────────────────────────────────────────
+
+  /**
+   * Quote an asset-to-asset swap across the requested venue(s). Read-only: no
+   * funds move. Returns quotes ranked by output (best first) — pick `[0]` for the
+   * best price, or let the user choose a route. An empty array means no route
+   * exists for the pair on this network. `provider` defaults to `'auto'` (the best
+   * of every available venue); `slippageBps` defaults to 50 (0.5%) and sets the
+   * on-chain minimum each quote's `build` will accept.
+   */
+  async getSwapQuote(params: SwapQuoteParams): Promise<SwapQuote[]> {
+    const wallet = this.getWallet();
+    if (!wallet) throw new Error('No wallet connected');
+    const body: SwapQuoteBody = {
+      network: this.getNetwork(),
+      address: wallet.address,
+      sellAsset: params.sellAsset,
+      buyAsset: params.buyAsset,
+      amount: params.amount,
+      ...(params.provider !== undefined && { provider: params.provider }),
+      ...(params.slippageBps !== undefined && { slippageBps: params.slippageBps }),
+    };
+    const content = await quoteSwap(this._api, body);
+    return content.quotes;
+  }
+
+  /**
+   * Execute a swap from a quote returned by {@link getSwapQuote}. When the asset
+   * being received is a credit asset on a classic (G-address) wallet, its
+   * trustline is established first (unless `opts.autoTrustline` is false); native
+   * XLM and smart (C-address) wallets need none. The quote's `build` payload then
+   * runs through the normal tx pipeline, so it re-simulates server-side and the
+   * on-chain `minReceived` enforces slippage. Drives the same transaction state
+   * machine as {@link runTx} — subscribe via {@link onTransactionStateChange}.
+   */
+  async swap(quote: SwapQuote, opts?: { autoTrustline?: boolean }): Promise<SubmitOutcome> {
+    const wallet = this.getWallet();
+    if (!wallet) return { status: 'error', details: 'No wallet connected' };
+
+    const buy = quote.buyAsset;
+    const needsTrustline = (opts?.autoTrustline ?? true) && wallet.custody !== 'smart' && buy.type !== 'native';
+    if (needsTrustline && (buy.type === 'credit_alphanum4' || buy.type === 'credit_alphanum12')) {
+      let assetsState = this.getEnabledAssetsState();
+      if (assetsState.step !== 'loaded') {
+        await this.refreshAssets();
+        assetsState = this.getEnabledAssetsState();
+      }
+      const record =
+        assetsState.step === 'loaded'
+          ? assetsState.data.assets.find((a) => a.code === buy.code && a.issuer === buy.issuer)
+          : undefined;
+      if (!record?.trustlineEstablished) {
+        const tl = await this.setTrustline(
+          { code: buy.code, issuer: buy.issuer },
+          record?.sponsored ? { sponsored: true } : undefined,
+        );
+        if (tl.status === 'error') {
+          return { status: 'error', details: `Trustline for ${buy.code} failed: ${tl.details ?? 'unknown error'}` };
+        }
+        await this.refreshAssets();
+      }
+    }
+
+    return this.runTx(quote.build.operation, quote.build.params);
   }
 
   private _setTxHistoryState(next: TxHistoryState): void {

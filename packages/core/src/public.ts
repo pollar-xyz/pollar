@@ -52,3 +52,6 @@ export { getRampsQuote, createOnRamp, createOffRamp, getRampTransaction, pollRam
 
 // ─── Distribution endpoints ───────────────────────────────────────────────────
 export { listDistributionRules, claimDistributionRule } from './api/endpoints/distribution';
+
+// ─── Swap endpoints ───────────────────────────────────────────────────────────
+export { quoteSwap } from './api/endpoints/swap';
