@@ -109,13 +109,24 @@ function makeRetryingFetch(timeoutMs: number, retry: Required<PollarRetryConfig>
     const method = request.method.toUpperCase();
     const isIdempotent = method === 'GET' || method === 'HEAD';
     const maxAttempts = isIdempotent ? attempts : 1;
+    // Per-request timeout override (set by slow submit-family calls via the
+    // `x-pollar-timeout-ms` header). Read it, then STRIP it so this internal
+    // control header never travels to the server. Fall back to the client
+    // default when absent or malformed.
+    let effectiveTimeoutMs = timeoutMs;
+    const timeoutOverride = request.headers.get('x-pollar-timeout-ms');
+    if (timeoutOverride !== null) {
+      request.headers.delete('x-pollar-timeout-ms');
+      const parsed = Number(timeoutOverride);
+      if (Number.isFinite(parsed) && parsed > 0) effectiveTimeoutMs = parsed;
+    }
     let lastErr: unknown;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       // Clone before each try (except a single-attempt fetch) so the body
       // survives a re-send; the original stays unconsumed for the next clone.
       const attemptReq = maxAttempts > 1 ? request.clone() : request;
       try {
-        return await fetchWithTimeout(attemptReq, timeoutMs);
+        return await fetchWithTimeout(attemptReq, effectiveTimeoutMs);
       } catch (err) {
         lastErr = err;
         // The CALLER aborted (cancellation / destroy) — never retry, propagate.

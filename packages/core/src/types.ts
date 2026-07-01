@@ -118,6 +118,18 @@ export interface PollarClientConfig {
    */
   requestTimeoutMs?: number;
   /**
+   * Per-request timeout (ms) applied to the submit-family tx calls
+   * (`submitTx`, `signAndSubmitTx`, `buildAndSignAndSubmitTx`) instead of
+   * {@link requestTimeoutMs}. These endpoints do real server-side work
+   * (custodial build + sign via wallet-service, then a network submit) that can
+   * take several seconds, so the default 10s request timeout is too tight and
+   * would cut a submit that is actually succeeding. Everything else still uses
+   * `requestTimeoutMs`.
+   *
+   * Defaults to `30000` (30s).
+   */
+  submitTimeoutMs?: number;
+  /**
    * Automatic retry with backoff for idempotent, transient-failure SDK HTTP
    * (token refresh + GETs), to absorb a single dropped request before surfacing
    * an error. Only transport failures retry; an HTTP response is never retried.

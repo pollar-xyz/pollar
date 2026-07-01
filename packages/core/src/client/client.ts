@@ -197,6 +197,10 @@ export class PollarClient {
   /** Per-attempt HTTP timeout (ms). Also applied to the manual DPoP-nonce retry
    *  that bypasses openapi-fetch's configured fetch. */
   private readonly _requestTimeoutMs: number;
+  /** Longer per-request timeout for the submit-family tx calls (see
+   *  PollarClientConfig.submitTimeoutMs). Sent as an `x-pollar-timeout-ms`
+   *  header the request middleware reads to bound just those calls. */
+  private readonly _submitTimeoutMs: number;
   /** Updated by the request middleware. Read by the silent-refresh scheduler
    *  to skip proactive refreshes after `maxIdleMs` of no HTTP activity. */
   private _lastRequestAt: number = Date.now();
@@ -299,6 +303,7 @@ export class PollarClient {
     this._visibilityProvider = config.visibilityProvider ?? defaultVisibilityProvider();
     this._maxIdleMs = config.maxIdleMs;
     this._requestTimeoutMs = config.requestTimeoutMs ?? 10_000;
+    this._submitTimeoutMs = config.submitTimeoutMs ?? 30_000;
     this._openAuthUrl = config.openAuthUrl ?? defaultWebOAuthOpener;
     // `window.location` can be absent even when `isBrowser` is true (some
     // webview/SSR shims expose a partial `window`); read it defensively so the
@@ -766,8 +771,13 @@ export class PollarClient {
     });
     // Bound this retry too: it calls `fetch` directly, bypassing the
     // timeout/retry wrapper openapi-fetch is configured with, so without this a
-    // stalled nonce-retry would hang forever just like the original bug.
-    return fetchWithTimeout(retried, this._requestTimeoutMs);
+    // stalled nonce-retry would hang forever just like the original bug. The
+    // submit-family endpoints get the longer submit budget (the per-request
+    // `x-pollar-timeout-ms` header was already stripped upstream, so key off the
+    // URL here); otherwise a first-submit-after-login nonce retry would fall
+    // back to the 10s default and could cut a submit that is actually working.
+    const isSubmit = /\/tx\/(submit|sign-and-send|build-sign-submit)(\?|$)/.test(originalRequest.url);
+    return fetchWithTimeout(retried, isSubmit ? this._submitTimeoutMs : this._requestTimeoutMs);
   }
 
   // ─── Refresh (race-safe singleton) ───────────────────────────────────────
@@ -1995,6 +2005,9 @@ export class PollarClient {
           // well under the timeout, so it can't trip a transport-retry replay.
           waitForConfirmation: false,
         },
+        // Custodial submit does server-side work (wallet-service sign + network
+        // submit) that can exceed the 10s default; give it the longer budget.
+        headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
       });
       if (!error && data?.success && data.content) {
         const { hash, status: backendStatus, resultCode } = data.content;
@@ -2109,7 +2122,10 @@ export class PollarClient {
       waitForConfirmation: false,
     };
     try {
-      const { data, error } = await this._api.POST('/tx/sign-and-send', { body });
+      const { data, error } = await this._api.POST('/tx/sign-and-send', {
+        body,
+        headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
+      });
       if (!error && data?.success && data.content?.hash) {
         const {
           hash,
@@ -2229,6 +2245,9 @@ export class PollarClient {
           // Async ack + client-side status poll (see submitTx / _awaitTxConfirmation).
           waitForConfirmation: false,
         } as TxBuildBody & { idempotencyKey?: string; waitForConfirmation?: boolean },
+        // Atomic build + sign + submit is the slowest tx call; give it the
+        // longer submit budget so a real success isn't cut at the 10s default.
+        headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
       });
       if (!error && data?.success && data.content) {
         const { hash, status: backendStatus, resultCode } = data.content;
@@ -2369,6 +2388,7 @@ export class PollarClient {
           address,
           smart: { entryXdr: smart.entryXdr, funcXdr: smart.funcXdr, assertion },
         },
+        headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
       });
       if (!error && data?.success && data.content) {
         const { hash, status: backendStatus, resultCode } = data.content;
