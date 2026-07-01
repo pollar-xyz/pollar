@@ -53,6 +53,8 @@ export interface SwapModalTemplateProps {
   configLoading: boolean;
   /** Config loaded and this app exposes no swap venues — swap is disabled. */
   swapUnavailable: boolean;
+  /** Buying the selected asset will create a trustline first (~0.5 XLM reserve). */
+  buyNeedsTrustline: boolean;
   transaction: TransactionState;
   showXdr: boolean;
   copied: boolean;
@@ -94,6 +96,7 @@ export function SwapModalTemplate({
   smartUnsupported,
   configLoading,
   swapUnavailable,
+  buyNeedsTrustline,
   transaction,
   showXdr,
   copied,
@@ -318,11 +321,18 @@ export function SwapModalTemplate({
             <div className="pollar-send-hint">No route found for this pair.</div>
           )}
 
+          {buyNeedsTrustline && selectedBuy && (
+            <div className="pollar-swap-trustline-notice">
+              To receive {selectedBuy.code} your wallet needs a trustline. Swapping will create it
+              first (~0.5 XLM reserve, refundable if you later remove it).
+            </div>
+          )}
+
           {formError && <div className="pollar-modal-error">{formError}</div>}
 
           <div className="pollar-modal-actions">
             <button className="pollar-btn-primary" onClick={onSwap} disabled={!canSwap}>
-              Swap
+              {buyNeedsTrustline ? 'Create trustline & swap' : 'Swap'}
             </button>
           </div>
         </>

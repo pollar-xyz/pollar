@@ -1,11 +1,12 @@
 import { createApiClient, fetchWithTimeout, PollarApiClient } from '../api/client';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
-import { getSwapConfig, quoteSwap } from '../api/endpoints/swap';
+import { getSwapConfig, getSwapTokens, quoteSwap } from '../api/endpoints/swap';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
 import {
   completeWithdraw,
   createOffRamp,
   createOnRamp,
+  getRampCountries,
   getRampsQuote,
   getRampTransaction,
   pollRampTransaction,
@@ -33,6 +34,7 @@ import {
   SwapQuote,
   SwapQuoteBody,
   SwapQuoteParams,
+  SwapToken,
   SwapVenue,
   EnabledAssetsState,
   KycLevel,
@@ -55,6 +57,7 @@ import {
   RampsOnrampBody,
   RampsOnrampResponse,
   RampsCompleteResponse,
+  RampsCountriesResponse,
   RampsQuoteQuery,
   RampsQuoteResponse,
   RampsSignatureBody,
@@ -2361,6 +2364,11 @@ export class PollarClient {
     return getRampsQuote(this._api, query);
   }
 
+  /** Countries (+ fiat currency) the app's enabled ramp anchors support on its network. */
+  getRampCountries(): Promise<RampsCountriesResponse> {
+    return getRampCountries(this._api);
+  }
+
   createOnRamp(body: RampsOnrampBody): Promise<RampsOnrampResponse> {
     return createOnRamp(this._api, body);
   }
@@ -2416,6 +2424,16 @@ export class PollarClient {
   async getSwapConfig(): Promise<SwapVenue[]> {
     const content = await getSwapConfig(this._api, this.getNetwork());
     return content.venues;
+  }
+
+  /**
+   * The curated "buy" tokens this app opted into (admin catalog), for the key's
+   * network. The SDK merges these into the swap buy list on top of the wallet's
+   * balances and the app's enabled assets.
+   */
+  async getSwapTokens(): Promise<SwapToken[]> {
+    const content = await getSwapTokens(this._api);
+    return content.tokens;
   }
 
   async getSwapQuote(params: SwapQuoteParams): Promise<SwapQuote[]> {

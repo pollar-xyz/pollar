@@ -17,6 +17,7 @@ import {
   SubmitOutcome,
   SwapQuote,
   SwapQuoteParams,
+  SwapToken,
   SwapVenue,
   TrustlineOutcome,
   TransactionState,
@@ -169,6 +170,11 @@ interface PollarContextValue {
    */
   getSwapConfig: () => Promise<SwapVenue[]>;
   /**
+   * The curated "buy" tokens this app opted into (admin catalog). Mirrors
+   * {@link PollarClient.getSwapTokens}.
+   */
+  getSwapTokens: () => Promise<SwapToken[]>;
+  /**
    * Quote an asset-to-asset swap across the requested venue(s). Read-only;
    * returns quotes ranked best-first. Mirrors {@link PollarClient.getSwapQuote}.
    */
@@ -235,6 +241,30 @@ export function PollarProvider({
       ? client
       : new PollarClient({ passkey: browserPasskeyCeremony, passkeySign: browserPasskeySigner, ...client }),
   );
+  // Only a client WE constructed is ours to tear down on unmount; a client the
+  // consumer passed in is theirs to manage. Captured once (the useState
+  // initializer above made the same decision).
+  const ownsClientRef = useRef(!(client instanceof PollarClient));
+  const destroyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Tear down the client on a real unmount so its cross-tab storage listener,
+  // refresh timer, and live-client registry entry don't leak — matters when the
+  // provider is keyed (e.g. `key={apiKey}`) and remounts on network change.
+  useEffect(() => {
+    if (!ownsClientRef.current) return;
+    // This mount is live again — cancel any teardown scheduled by a prior
+    // (StrictMode dev) unmount before it can destroy the client we still use.
+    if (destroyTimerRef.current) {
+      clearTimeout(destroyTimerRef.current);
+      destroyTimerRef.current = null;
+    }
+    return () => {
+      // Defer to a macrotask: React StrictMode unmounts then synchronously
+      // remounts in dev, and the remount's effect (above) cancels this before it
+      // runs. On a real unmount nothing re-mounts to cancel it, so it fires.
+      destroyTimerRef.current = setTimeout(() => pollarClient.destroy(), 0);
+    };
+  }, [pollarClient]);
   const [networkState, setNetworkState] = useState<NetworkState>(() => pollarClient.getNetworkState());
   const [sessionState, setSessionState] = useState<PollarPersistedSession | null>(null);
   // `true` once the server has confirmed the restored session (via login,
@@ -422,6 +452,7 @@ export function PollarProvider({
       openReceiveModal: () => setReceiveModalOpen(true),
       // swap
       getSwapConfig: () => pollarClient.getSwapConfig(),
+      getSwapTokens: () => pollarClient.getSwapTokens(),
       getSwapQuote: (params) => pollarClient.getSwapQuote(params),
       swap: (quote, opts) => pollarClient.swap(quote, opts),
       openSwapModal: () => setSwapModalOpen(true),

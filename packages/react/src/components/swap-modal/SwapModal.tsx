@@ -1,6 +1,6 @@
 'use client';
 
-import { SwapProvider, SwapQuote, SwapQuoteParams, SwapVenue } from '@pollar/core';
+import { SwapProvider, SwapQuote, SwapQuoteParams, SwapToken, SwapVenue } from '@pollar/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import '../shared.css';
@@ -24,9 +24,17 @@ function toRef(a: AssetLike): SwapQuoteParams['sellAsset'] {
   return { type: 'credit_alphanum12', code: a.code, issuer: a.issuer! };
 }
 
+/** A catalog token (code + issuer) -> the asset ref, picking the alphanum width. */
+function catalogRef(code: string, issuer: string): SwapQuoteParams['sellAsset'] {
+  return code.length <= 4
+    ? { type: 'credit_alphanum4', code, issuer }
+    : { type: 'credit_alphanum12', code, issuer };
+}
+
 export function SwapModal({ onClose }: SwapModalProps) {
   const {
     getSwapConfig,
+    getSwapTokens,
     getSwapQuote,
     swap,
     walletBalance,
@@ -49,6 +57,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
   const [amount, setAmount] = useState('');
   const [provider, setProvider] = useState<SwapProvider>('auto');
   const [venues, setVenues] = useState<SwapVenue[] | null>(null); // null = config loading
+  const [catalogTokens, setCatalogTokens] = useState<SwapToken[]>([]);
   const [quotes, setQuotes] = useState<SwapQuote[]>([]);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState('');
@@ -78,11 +87,25 @@ export function SwapModal({ onClose }: SwapModalProps) {
     void loadConfig();
   }, [loadConfig]);
 
-  // Re-pull everything the modal shows: balances, app assets and swap config.
+  // Curated "buy" catalog tokens the app opted into (may lack a trustline).
+  const loadCatalog = useCallback(
+    () =>
+      getSwapTokens()
+        .then(setCatalogTokens)
+        .catch(() => setCatalogTokens([])),
+    [getSwapTokens],
+  );
+
+  useEffect(() => {
+    void loadCatalog();
+  }, [loadCatalog]);
+
+  // Re-pull everything the modal shows: balances, app assets, config and catalog.
   function handleRefresh() {
     void refreshWalletBalance();
     void refreshAssets();
     void loadConfig();
+    void loadCatalog();
   }
 
   useEffect(
@@ -102,9 +125,37 @@ export function SwapModal({ onClose }: SwapModalProps) {
     .map((b) => ({ ref: toRef(b), code: b.code, issuer: b.issuer, available: b.available, enabledInApp: b.enabledInApp }));
 
   const buyKeyOfSell = selectedSell ? `${selectedSell.code}:${selectedSell.issuer ?? 'native'}` : '';
-  const buyOptions: SwapAssetOption[] = assetRecords
-    .map((a) => ({ ref: toRef(a), code: a.code, issuer: a.issuer, enabledInApp: a.enabledInApp }))
-    .filter((o) => `${o.code}:${o.issuer ?? 'native'}` !== buyKeyOfSell);
+  const optKey = (o: { code: string; issuer?: string | undefined }) => `${o.code}:${o.issuer ?? 'native'}`;
+  // Buy list = the app's enabled assets, plus curated catalog tokens the app
+  // opted into (deduped; catalog tokens the wallet may not trust yet). Exclude
+  // whatever is being sold.
+  const enabledBuy: SwapAssetOption[] = assetRecords.map((a) => ({
+    ref: toRef(a),
+    code: a.code,
+    issuer: a.issuer,
+    enabledInApp: a.enabledInApp,
+  }));
+  const enabledKeys = new Set(enabledBuy.map(optKey));
+  const catalogBuy: SwapAssetOption[] = catalogTokens
+    .map((tk) => ({
+      ref: catalogRef(tk.code, tk.issuer),
+      code: tk.code,
+      issuer: tk.issuer,
+      enabledInApp: false,
+    }))
+    .filter((o) => !enabledKeys.has(optKey(o)));
+  const buyOptions: SwapAssetOption[] = [...enabledBuy, ...catalogBuy].filter((o) => optKey(o) !== buyKeyOfSell);
+
+  // Does buying `selectedBuy` require creating a trustline first? Native never;
+  // a credit asset the wallet already trusts (in enabledAssets with
+  // trustlineEstablished) doesn't; anything else (incl. catalog tokens) does.
+  // Smart wallets hold SAC tokens (no classic trustlines) so it never applies.
+  const buyNeedsTrustline = (() => {
+    if (!selectedBuy || smartUnsupported) return false;
+    if (selectedBuy.ref.type === 'native') return false;
+    const rec = assetRecords.find((a) => a.code === selectedBuy.code && a.issuer === selectedBuy.issuer);
+    return !rec?.trustlineEstablished;
+  })();
 
   const configLoading = venues === null;
   const swapUnavailable = venues !== null && venues.length === 0;
@@ -249,6 +300,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
         smartUnsupported={smartUnsupported}
         configLoading={configLoading}
         swapUnavailable={swapUnavailable}
+        buyNeedsTrustline={buyNeedsTrustline}
         transaction={transaction}
         showXdr={showXdr}
         copied={copied}

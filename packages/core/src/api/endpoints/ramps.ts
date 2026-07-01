@@ -1,6 +1,7 @@
 import type { PollarApiClient } from '../client';
 import type {
   RampsCompleteResponse,
+  RampsCountriesResponse,
   RampsOfframpBody,
   RampsOfframpResponse,
   RampsOnrampBody,
@@ -12,6 +13,17 @@ import type {
   RampsTransactionResponse,
   RampTxStatus,
 } from '../../types';
+
+/**
+ * GET /ramps/countries
+ * Returns the ISO country codes (+ primary fiat currency) the app's enabled
+ * ramp anchors support on its network. Use it to populate a country selector.
+ */
+export async function getRampCountries(api: PollarApiClient): Promise<RampsCountriesResponse> {
+  const { data, error } = await api.GET('/ramps/countries');
+  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to get ramp countries');
+  return data.content;
+}
 
 /**
  * GET /ramps/quote

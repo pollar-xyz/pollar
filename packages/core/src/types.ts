@@ -699,6 +699,9 @@ export type RampsSignatureResponse =
   pollarPaths['/ramps/transaction/{txId}/signature']['post']['responses'][200]['content']['application/json']['content'];
 export type RampsCompleteResponse =
   pollarPaths['/ramps/transaction/{txId}/complete']['post']['responses'][200]['content']['application/json']['content'];
+export type RampsCountriesResponse =
+  pollarPaths['/ramps/countries']['get']['responses'][200]['content']['application/json']['content'];
+export type RampCountry = RampsCountriesResponse['countries'][number];
 
 // ─── Distribution types ───────────────────────────────────────────────────────
 
@@ -739,6 +742,13 @@ export type SwapVenue = SwapQuote['provider'];
 /** Venues this app exposes to end-users (from GET /swap/config). Empty = disabled. */
 export type SwapConfigContent =
   pollarPaths['/swap/config']['get']['responses'][200]['content']['application/json']['content'];
+
+/** Curated "buy" tokens the app opted into (from GET /swap/tokens). */
+export type SwapTokensContent =
+  pollarPaths['/swap/tokens']['get']['responses'][200]['content']['application/json']['content'];
+
+/** A single curated swap buy token. */
+export type SwapToken = SwapTokensContent['tokens'][number];
 
 /** Input to `client.getSwapQuote` — the request body minus wallet/network, which the client fills. */
 export type SwapQuoteParams = {

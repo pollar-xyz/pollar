@@ -612,6 +612,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/swap/config": {
+        parameters: {
+            query?: {
+                /** @enum {string} */
+                network?: "testnet" | "mainnet";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get enabled swap venues for this app
+         * @description Returns the swap venues the application exposes to end-users (the operator's dashboard selection, intersected with server capability — e.g. Soroswap only appears when the server has an API key). An empty list means swap is disabled for this app and the SDK should render no swap UI.
+         */
+        get: operations["getSwapConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/swap/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the app-curated swap buy tokens
+         * @description The curated 'buy' tokens the app opted into from the platform catalog, for this API key's network. The SDK merges these into the buy list on top of native XLM and the app's enabled assets.
+         */
+        get: operations["getSwapTokens"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/swap/quote": {
         parameters: {
             query?: never;
@@ -626,26 +669,6 @@ export interface paths {
          * @description Prices a swap of one asset for another across the requested venue(s). Read-only: returns the estimated output, price impact and minimum received (after slippage), plus a ready-to-execute `build` payload to pass to POST /tx/build (operation invoke_contract). With provider "auto" it ranks every available venue by output, best first; an empty `quotes` array means no route exists for the pair on this network. Phase 1 implements the Aquarius AMM; Soroswap and SDEX are added later.
          */
         post: operations["postSwapQuote"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/swap/config": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get enabled swap venues for this app
-         * @description Returns the venues the application exposes to end-users (operator's dashboard selection intersected with server capability). An empty list means swap is disabled for this app.
-         */
-        get: operations["getSwapConfig"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -826,6 +849,26 @@ export interface paths {
          * @description Initiates a KYC verification session with the specified provider and level. Returns a sessionId and either a kycUrl (for iframe/redirect flows) or a fields array (for form flows). The session expires in 30 minutes.
          */
         post: operations["postKycStart"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ramps/countries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get supported ramp countries
+         * @description Returns the ISO country codes (with their primary fiat currency) supported by the application's enabled ramp anchors on its network. Use this to populate the country selector before requesting a quote.
+         */
+        get: operations["getRampsCountries"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4067,6 +4110,69 @@ export interface operations {
             };
         };
     };
+    getSwapTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Curated swap buy tokens (possibly empty) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_SWAP_TOKENS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            tokens: {
+                                code: string;
+                                issuer: string;
+                                name: string;
+                                domain: string | null;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
     getSwapConfig: {
         parameters: {
             query?: {
@@ -4091,7 +4197,7 @@ export interface operations {
                         /** @constant */
                         success: true;
                         content: {
-                            venues: ("aquarius" | "sdex" | "soroswap")[];
+                            venues: ("aquarius" | "soroswap" | "sdex")[];
                         };
                     };
                 };
@@ -5145,6 +5251,52 @@ export interface operations {
             };
             /** @description Provider not found or not enabled for this application */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getRampsCountries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Supported countries + their fiat currency. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_RAMPS_COUNTRIES";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            countries: {
+                                code: string;
+                                currency: string | null;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

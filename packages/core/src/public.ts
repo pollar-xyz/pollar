@@ -50,6 +50,7 @@ export { getKycStatus, getKycProviders, startKyc, resolveKyc, pollKycStatus } fr
 // ─── Ramps endpoints ──────────────────────────────────────────────────────────
 export {
   getRampsQuote,
+  getRampCountries,
   createOnRamp,
   createOffRamp,
   completeWithdraw,
@@ -62,4 +63,4 @@ export {
 export { listDistributionRules, claimDistributionRule } from './api/endpoints/distribution';
 
 // ─── Swap endpoints ───────────────────────────────────────────────────────────
-export { quoteSwap, getSwapConfig } from './api/endpoints/swap';
+export { quoteSwap, getSwapConfig, getSwapTokens } from './api/endpoints/swap';

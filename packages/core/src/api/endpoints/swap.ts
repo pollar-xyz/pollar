@@ -1,4 +1,4 @@
-import type { SwapConfigContent, SwapQuoteBody, SwapQuoteContent } from '../../types';
+import type { SwapConfigContent, SwapQuoteBody, SwapQuoteContent, SwapTokensContent } from '../../types';
 import type { StellarNetwork } from '../../stellar/StellarClient';
 import type { PollarApiClient } from '../client';
 
@@ -15,6 +15,23 @@ export async function getSwapConfig(api: PollarApiClient, network?: StellarNetwo
       (error as { code?: string; error?: string } | undefined)?.code ??
         (error as { code?: string; error?: string } | undefined)?.error ??
         'Failed to load swap config',
+    );
+  }
+  return data.content;
+}
+
+/**
+ * GET /swap/tokens
+ * The curated "buy" tokens the app opted into (admin catalog), for this API key's
+ * network. The SDK merges these into the buy list.
+ */
+export async function getSwapTokens(api: PollarApiClient): Promise<SwapTokensContent> {
+  const { data, error } = await api.GET('/swap/tokens');
+  if (!data?.content || error) {
+    throw new Error(
+      (error as { code?: string; error?: string } | undefined)?.code ??
+        (error as { code?: string; error?: string } | undefined)?.error ??
+        'Failed to load swap tokens',
     );
   }
   return data.content;
