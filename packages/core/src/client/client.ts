@@ -2414,8 +2414,20 @@ export class PollarClient {
     const wallet = this.getWallet();
     if (!wallet) return { status: 'error', details: 'No wallet connected' };
 
+    // TODO(phase-4 / C-address swaps): smart (passkey C-address) wallets can't
+    // swap yet. The backend smart-account build path (buildSmartAccountTransfer →
+    // wallet-service prepareTransfer) only supports `payment`, and the AMM router
+    // plus its SAC sub-invocations must be allowlisted in SorobanAuthPolicy.
+    // Fail fast with a clear message until that lands, instead of a confusing
+    // "smart-account build supports only payment" error from runTx.
+    if (wallet.custody === 'smart') {
+      return { status: 'error', details: 'Swaps are not yet supported for smart (passkey) wallets' };
+    }
+
+    // Smart (C-address) wallets already returned above; here custody is G-address
+    // or external, so a credit buy-asset may need a classic trustline first.
     const buy = quote.buyAsset;
-    const needsTrustline = (opts?.autoTrustline ?? true) && wallet.custody !== 'smart' && buy.type !== 'native';
+    const needsTrustline = (opts?.autoTrustline ?? true) && buy.type !== 'native';
     if (needsTrustline && (buy.type === 'credit_alphanum4' || buy.type === 'credit_alphanum12')) {
       let assetsState = this.getEnabledAssetsState();
       if (assetsState.step !== 'loaded') {

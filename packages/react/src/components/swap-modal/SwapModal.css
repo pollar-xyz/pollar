@@ -1,0 +1,19 @@
+.pollar-swap-quote {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius);
+  background: var(--pollar-input-bg);
+  color: var(--pollar-text);
+  font-size: 14px;
+}
+
+.pollar-swap-quote-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}

@@ -15,6 +15,8 @@ import {
   SignOutcome,
   StellarNetwork,
   SubmitOutcome,
+  SwapQuote,
+  SwapQuoteParams,
   TrustlineOutcome,
   TransactionState,
   TxBuildBody,
@@ -31,6 +33,7 @@ import { LoginModal } from './components/login-modal/LoginModal';
 import { RampWidget } from './components/ramp-widget/RampWidget';
 import { ReceiveModal } from './components/receive-modal/ReceiveModal';
 import { SendModal } from './components/send-modal/SendModal';
+import { SwapModal } from './components/swap-modal/SwapModal';
 import { SessionsModal } from './components/sessions-modal/SessionsModal';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
@@ -158,6 +161,19 @@ interface PollarContextValue {
   // send / receive
   openSendModal: () => void;
   openReceiveModal: () => void;
+  // swap (DEX/AMM)
+  /**
+   * Quote an asset-to-asset swap across the requested venue(s). Read-only;
+   * returns quotes ranked best-first. Mirrors {@link PollarClient.getSwapQuote}.
+   */
+  getSwapQuote: (params: SwapQuoteParams) => Promise<SwapQuote[]>;
+  /**
+   * Execute a swap from a quote (establishes the buy-asset trustline first when
+   * needed). Drives the transaction state machine. Mirrors {@link PollarClient.swap}.
+   */
+  swap: (quote: SwapQuote, opts?: { autoTrustline?: boolean }) => Promise<SubmitOutcome>;
+  /** Open the swap modal. */
+  openSwapModal: () => void;
   // distribution
   openDistributionRulesModal: () => void;
   // adapters
@@ -342,6 +358,7 @@ export function PollarProvider({
   const [walletBalanceModalOpen, setWalletBalanceModalOpen] = useState(false);
   const [enabledAssetsModalOpen, setEnabledAssetsModalOpen] = useState(false);
   const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [swapModalOpen, setSwapModalOpen] = useState(false);
   const [receiveModalOpen, setReceiveModalOpen] = useState(false);
   const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
   const [distributionRulesModalOpen, setDistributionRulesModalOpen] = useState(false);
@@ -397,6 +414,10 @@ export function PollarProvider({
       // send / receive
       openSendModal: () => setSendModalOpen(true),
       openReceiveModal: () => setReceiveModalOpen(true),
+      // swap
+      getSwapQuote: (params) => pollarClient.getSwapQuote(params),
+      swap: (quote, opts) => pollarClient.swap(quote, opts),
+      openSwapModal: () => setSwapModalOpen(true),
       // sessions
       sessions,
       openSessionsModal: () => setSessionsModalOpen(true),
@@ -480,6 +501,11 @@ export function PollarProvider({
       {sendModalOpen && (
         <ModalErrorBoundary onClose={() => setSendModalOpen(false)}>
           <SendModal onClose={() => setSendModalOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {swapModalOpen && (
+        <ModalErrorBoundary onClose={() => setSwapModalOpen(false)}>
+          <SwapModal onClose={() => setSwapModalOpen(false)} />
         </ModalErrorBoundary>
       )}
       {receiveModalOpen && (

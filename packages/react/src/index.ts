@@ -15,6 +15,7 @@ export { RouteDisplay } from './components/ramp-widget/RouteDisplay';
 export { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 export { EnabledAssetsModal } from './components/enabled-assets-modal/EnabledAssetsModal';
 export { SendModal } from './components/send-modal/SendModal';
+export { SwapModal } from './components/swap-modal/SwapModal';
 export { ReceiveModal } from './components/receive-modal/ReceiveModal';
 export { SessionsModal } from './components/sessions-modal/SessionsModal';
 export { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
@@ -36,6 +37,8 @@ export { EnabledAssetsModalTemplate } from './components/enabled-assets-modal/En
 export type { EnabledAssetsModalTemplateProps } from './components/enabled-assets-modal/EnabledAssetsModalTemplate';
 export { SendModalTemplate } from './components/send-modal/SendModalTemplate';
 export type { SendModalTemplateProps } from './components/send-modal/SendModalTemplate';
+export { SwapModalTemplate } from './components/swap-modal/SwapModalTemplate';
+export type { SwapModalTemplateProps, SwapAssetOption } from './components/swap-modal/SwapModalTemplate';
 export { ReceiveModalTemplate } from './components/receive-modal/ReceiveModalTemplate';
 export type { ReceiveModalTemplateProps } from './components/receive-modal/ReceiveModalTemplate';
 export { SessionsModalTemplate } from './components/sessions-modal/SessionsModalTemplate';
