@@ -3292,6 +3292,7 @@ export interface operations {
                     publicKey?: string;
                     address?: string;
                     unsignedXdr: string;
+                    waitForConfirmation?: boolean;
                 };
             };
         };
@@ -3603,6 +3604,7 @@ export interface operations {
                         };
                     };
                     idempotencyKey?: string;
+                    waitForConfirmation?: boolean;
                 };
             };
         };
@@ -3885,6 +3887,7 @@ export interface operations {
                     };
                 }) & {
                     idempotencyKey?: string;
+                    waitForConfirmation?: boolean;
                 };
             };
         };

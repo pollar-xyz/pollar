@@ -1897,6 +1897,85 @@ export class PollarClient {
     return { code, message, ...(details && { details }) };
   }
 
+  /**
+   * Fetch a transaction's on-chain status by hash via `GET /tx/status`.
+   * `PENDING` means it is not yet ledger-confirmed (or outside the RPC retention
+   * window). Useful for headless callers polling a `pending` {@link SubmitOutcome}
+   * themselves; the built-in submit flow already polls internally (see
+   * {@link _awaitTxConfirmation}).
+   */
+  async getTxStatus(
+    hash: string,
+  ): Promise<{ hash: string; status: 'PENDING' | 'SUCCESS' | 'FAILED'; resultCode?: string; message?: string; ledger?: number }> {
+    const { data, error } = await this._api.GET('/tx/status', {
+      params: { query: { network: this.getNetwork(), hash } },
+    });
+    if (!error && data?.success && data.content) return data.content;
+    const { details } = this._resolveTxApiError(error, data);
+    throw new Error(details ?? 'Failed to fetch transaction status');
+  }
+
+  /**
+   * A submit endpoint acked the tx (`PENDING`) without waiting for ledger
+   * confirmation, because the SDK sends `waitForConfirmation: false`, so the
+   * one HTTP call returns in ~1-3s instead of blocking up to ~30s (which used to
+   * exceed the request timeout, trip a transport retry, and get rejected as a
+   * DPoP `jti-replay`). We finish the job here by polling `GET /tx/status` with
+   * short, DPoP-authed GETs, driving the state machine `submitted` to `success` /
+   * `error` and returning the final outcome. If the window elapses still-pending,
+   * we leave `submitted` and return `pending` (the tx may yet confirm; the caller
+   * can re-check via {@link getTxStatus}).
+   *
+   * `errorPhase` matches the calling flow so a FAILED tx stamps the right phase.
+   */
+  private async _awaitTxConfirmation(
+    hash: string,
+    errorPhase: 'submitting' | 'signing-submitting' | 'building-signing-submitting',
+    buildData: TxBuildContent | undefined,
+    outcomeExtra: { buildData?: TxBuildContent },
+  ): Promise<SubmitOutcome> {
+    const gen = this._txStartGen;
+    // ~40s window (ledgers close every ~5s). Polls are cheap; poll a bit faster
+    // than ledger cadence so we observe confirmation promptly without hammering.
+    const POLL_INTERVAL_MS = 2_500;
+    const MAX_POLLS = 16;
+    for (let i = 0; i < MAX_POLLS; i++) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      // A logout / new login landed mid-poll; this tx belongs to the old
+      // session. Stop touching state and report the last known status.
+      if (this._sessionGeneration !== gen) return { status: 'pending', hash, ...outcomeExtra };
+      let status: Awaited<ReturnType<PollarClient['getTxStatus']>>;
+      try {
+        status = await this.getTxStatus(hash);
+      } catch {
+        continue; // transient RPC / network blip; keep polling
+      }
+      if (status.status === 'SUCCESS') {
+        this._setTransactionState({ step: 'success', hash, ...(buildData && { buildData }) });
+        return { status: 'success', hash, ...outcomeExtra };
+      }
+      if (status.status === 'FAILED') {
+        this._setTransactionState({
+          step: 'error',
+          phase: errorPhase,
+          ...(buildData && { buildData }),
+          ...(status.resultCode && { details: status.resultCode }),
+          ...(status.message && { message: status.message }),
+        });
+        return {
+          status: 'error',
+          hash,
+          ...outcomeExtra,
+          ...(status.resultCode && { details: status.resultCode, resultCode: status.resultCode }),
+          ...(status.message && { message: status.message }),
+        };
+      }
+      // PENDING: keep polling
+    }
+    // Still pending after the window; leave `submitted`, the tx may yet confirm.
+    return { status: 'pending', hash, ...outcomeExtra };
+  }
+
   async submitTx(signedXdr: string, opts?: { submissionToken?: string }): Promise<SubmitOutcome> {
     this._txStartGen = this._sessionGeneration;
     const buildData = this._currentBuildData();
@@ -1911,6 +1990,10 @@ export class PollarClient {
           address,
           signedXdr,
           ...(opts?.submissionToken && { idempotencyKey: opts.submissionToken }),
+          // Return on network ack (fast) instead of blocking ~30s for ledger
+          // confirmation; we poll GET /tx/status below. Keeps the one request
+          // well under the timeout, so it can't trip a transport-retry replay.
+          waitForConfirmation: false,
         },
       });
       if (!error && data?.success && data.content) {
@@ -1921,7 +2004,7 @@ export class PollarClient {
         }
         if (backendStatus === 'PENDING') {
           this._setTransactionState({ step: 'submitted', hash, ...(buildData && { buildData }) });
-          return { status: 'pending', hash, ...outcomeExtra };
+          return this._awaitTxConfirmation(hash, 'submitting', buildData, outcomeExtra);
         }
         this._setTransactionState({
           step: 'error',
@@ -2022,6 +2105,8 @@ export class PollarClient {
       network: this.getNetwork(),
       address: this._session?.wallet?.address ?? '',
       unsignedXdr,
+      // Async ack + client-side status poll (see submitTx / _awaitTxConfirmation).
+      waitForConfirmation: false,
     };
     try {
       const { data, error } = await this._api.POST('/tx/sign-and-send', { body });
@@ -2041,7 +2126,7 @@ export class PollarClient {
         }
         if (backendStatus === 'PENDING') {
           this._setTransactionState({ step: 'submitted', hash, ...(buildData && { buildData }) });
-          return { status: 'pending', hash, ...outcomeExtra };
+          return this._awaitTxConfirmation(hash, 'signing-submitting', buildData, outcomeExtra);
         }
         // backendStatus === 'FAILED'
         this._setTransactionState({
@@ -2141,7 +2226,9 @@ export class PollarClient {
           operation,
           params,
           options: options ?? {},
-        } as TxBuildBody & { idempotencyKey?: string },
+          // Async ack + client-side status poll (see submitTx / _awaitTxConfirmation).
+          waitForConfirmation: false,
+        } as TxBuildBody & { idempotencyKey?: string; waitForConfirmation?: boolean },
       });
       if (!error && data?.success && data.content) {
         const { hash, status: backendStatus, resultCode } = data.content;
@@ -2151,7 +2238,7 @@ export class PollarClient {
         }
         if (backendStatus === 'PENDING') {
           this._setTransactionState({ step: 'submitted', hash });
-          return { status: 'pending', hash };
+          return this._awaitTxConfirmation(hash, 'building-signing-submitting', undefined, {});
         }
         this._setTransactionState({
           step: 'error',
@@ -2291,7 +2378,7 @@ export class PollarClient {
         }
         if (backendStatus === 'PENDING') {
           this._setTransactionState({ step: 'submitted', hash, buildData });
-          return { status: 'pending', hash, ...outcomeExtra };
+          return this._awaitTxConfirmation(hash, 'submitting', buildData, outcomeExtra);
         }
         this._setTransactionState({
           step: 'error',
