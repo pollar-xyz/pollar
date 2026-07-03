@@ -38,6 +38,10 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('');
   const [country, setCountry] = useState('');
+  // Always collected so REST providers (Bridge) can KYC any user — including
+  // wallet-only logins that have no email on file. SEP-24 ignores them.
+  const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
   const [countries, setCountries] = useState<RampCountry[]>([]);
   const [countriesLoading, setCountriesLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -215,11 +219,19 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      const base = { quoteId: quote.quoteId, amount: Number(amount), currency, country };
+      const base = {
+        quoteId: quote.quoteId,
+        amount: Number(amount),
+        currency,
+        country,
+        ...(email.trim() ? { email: email.trim() } : {}),
+        ...(fullName.trim() ? { fullName: fullName.trim() } : {}),
+        ...(walletAddress ? { walletAddress } : {}),
+      };
       const result = (
         direction === 'onramp'
-          ? await client.createOnRamp({ ...base, ...(walletAddress ? { walletAddress } : {}) } as RampsOnrampBody)
-          : await client.createOffRamp({ ...base, ...(walletAddress ? { walletAddress } : {}) } as RampsOfframpBody)
+          ? await client.createOnRamp(base as RampsOnrampBody)
+          : await client.createOffRamp(base as RampsOfframpBody)
       ) as RampResult;
       await applyResult(result);
     } catch (e) {
@@ -268,6 +280,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         amount={amount}
         currency={currency}
         country={country}
+        email={email}
+        fullName={fullName}
         countries={countries}
         countriesLoading={countriesLoading}
         refreshing={refreshing}
@@ -284,6 +298,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         onDirectionChange={setDirection}
         onAmountChange={setAmount}
         onCurrencyChange={setCurrency}
+        onEmailChange={setEmail}
+        onFullNameChange={setFullName}
         onCountryChange={handleCountryChange}
         onFindRoute={handleFindRoute}
         onSelectQuote={handleSelectQuote}

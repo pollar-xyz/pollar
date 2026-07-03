@@ -14,6 +14,8 @@ interface RampWidgetTemplateProps {
   amount: string;
   currency: string;
   country: string;
+  email: string;
+  fullName: string;
   countries: RampCountry[];
   countriesLoading: boolean;
   refreshing: boolean;
@@ -31,6 +33,8 @@ interface RampWidgetTemplateProps {
   onDirectionChange: (d: RampDirection) => void;
   onAmountChange: (v: string) => void;
   onCurrencyChange: (v: string) => void;
+  onEmailChange: (v: string) => void;
+  onFullNameChange: (v: string) => void;
   onCountryChange: (v: string) => void;
   onFindRoute: () => void;
   onSelectQuote: (q: RampQuote) => void;
@@ -102,6 +106,8 @@ export function RampWidgetTemplate({
   amount,
   currency,
   country,
+  email,
+  fullName,
   countries,
   countriesLoading,
   refreshing,
@@ -118,6 +124,8 @@ export function RampWidgetTemplate({
   onDirectionChange,
   onAmountChange,
   onCurrencyChange,
+  onEmailChange,
+  onFullNameChange,
   onCountryChange,
   onFindRoute,
   onSelectQuote,
@@ -247,6 +255,29 @@ export function RampWidgetTemplate({
           </div>
 
           <div className="pollar-ramp-field">
+            <label className="pollar-ramp-label">Full name</label>
+            <input
+              type="text"
+              className="pollar-ramp-input"
+              placeholder="Jane Doe"
+              value={fullName}
+              onChange={(e) => onFullNameChange(e.target.value)}
+            />
+          </div>
+
+          <div className="pollar-ramp-field">
+            <label className="pollar-ramp-label">Email</label>
+            <input
+              type="email"
+              className="pollar-ramp-input"
+              placeholder="jane@example.com"
+              value={email}
+              autoComplete="email"
+              onChange={(e) => onEmailChange(e.target.value)}
+            />
+          </div>
+
+          <div className="pollar-ramp-field">
             <label className="pollar-ramp-label">Country</label>
             {countriesLoading ? (
               <div className="pollar-ramp-input pollar-ramp-input-loading">Loading countries…</div>
@@ -271,7 +302,14 @@ export function RampWidgetTemplate({
             <button
               type="button"
               className="pollar-btn-primary"
-              disabled={!amount || isLoading || countriesLoading || countries.length === 0}
+              disabled={
+                !amount ||
+                !fullName.trim() ||
+                !email.trim() ||
+                isLoading ||
+                countriesLoading ||
+                countries.length === 0
+              }
               onClick={onFindRoute}
             >
               Find best route
