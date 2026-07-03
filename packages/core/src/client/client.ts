@@ -2567,7 +2567,7 @@ export class PollarClient {
    * it client-side when the list is non-empty.
    */
   async getSwapConfig(): Promise<SwapVenue[]> {
-    const content = await getSwapConfig(this._api, this.getNetwork());
+    const content = await getSwapConfig(this._api);
     return content.venues;
   }
 

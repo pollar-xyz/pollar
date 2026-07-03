@@ -614,10 +614,7 @@ export interface paths {
     };
     "/swap/config": {
         parameters: {
-            query?: {
-                /** @enum {string} */
-                network?: "testnet" | "mainnet";
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -644,7 +641,7 @@ export interface paths {
         };
         /**
          * Get the app-curated swap buy tokens
-         * @description The curated 'buy' tokens the app opted into from the platform catalog, for this API key's network. The SDK merges these into the buy list on top of native XLM and the app's enabled assets.
+         * @description The curated 'buy' tokens the app opted into from the platform catalog, for this API key's network. The SDK merges these into the buy list on top of native XLM and the app's enabled assets. Network comes from the API key (one key per network).
          */
         get: operations["getSwapTokens"];
         put?: never;
@@ -4133,6 +4130,64 @@ export interface operations {
             };
         };
     };
+    getSwapConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enabled venues (possibly empty) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_SWAP_CONFIG";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            venues: ("aquarius" | "soroswap" | "sdex")[];
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Config error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
     getSwapTokens: {
         parameters: {
             query?: never;
@@ -4180,67 +4235,6 @@ export interface operations {
                 };
             };
             /** @description Error */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-        };
-    };
-    getSwapConfig: {
-        parameters: {
-            query?: {
-                /** @enum {string} */
-                network?: "testnet" | "mainnet";
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Enabled venues (possibly empty) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_SWAP_CONFIG";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            venues: ("aquarius" | "soroswap" | "sdex")[];
-                        };
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Config error */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -5454,6 +5448,8 @@ export interface operations {
                                 protocol: "SEP-24" | "REST";
                                 estimatedTime: string;
                                 recommended: boolean;
+                                minAmount?: number;
+                                maxAmount?: number;
                             }[];
                         };
                     };
@@ -5533,6 +5529,9 @@ export interface operations {
                                 unsignedXdr: string;
                                 /** @enum {string} */
                                 action: "sep10" | "withdraw_payment";
+                            };
+                            depositInstructions?: {
+                                [key: string]: unknown;
                             };
                         };
                     };
@@ -5633,6 +5632,9 @@ export interface operations {
                                 /** @enum {string} */
                                 action: "sep10" | "withdraw_payment";
                             };
+                            depositInstructions?: {
+                                [key: string]: unknown;
+                            };
                         };
                     };
                 };
@@ -5726,6 +5728,9 @@ export interface operations {
                                 unsignedXdr: string;
                                 /** @enum {string} */
                                 action: "sep10" | "withdraw_payment";
+                            };
+                            depositInstructions?: {
+                                [key: string]: unknown;
                             };
                         };
                     };
@@ -5828,6 +5833,9 @@ export interface operations {
                                 /** @enum {string} */
                                 action: "sep10" | "withdraw_payment";
                             };
+                            depositInstructions?: {
+                                [key: string]: unknown;
+                            };
                         };
                     };
                 };
@@ -5929,6 +5937,9 @@ export interface operations {
                             kycUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            depositInstructions?: {
+                                [key: string]: unknown;
+                            };
                             updatedAt: string;
                         };
                     };
