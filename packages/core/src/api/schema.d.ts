@@ -775,6 +775,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/wallet/assets/trustline/build": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Build a sponsored trustline for an external wallet to co-sign
+         * @description Builds a sponsored changeTrust for an app-configured asset and signs ONLY the app's sponsor wallet (which covers the 0.5 XLM reserve and the fee), returning the partially-signed XDR. Use this for EXTERNAL / adapter-managed wallets whose key the platform does not hold: the caller adds the trustor signature with its own wallet and broadcasts via POST /tx/submit. Custodial wallets should use POST /wallet/assets/trustline instead. Only valid for the sponsored path — custom assets and apps with trustline sponsoring disabled get a 400 and must sign a plain change_trust client-side. The wallet and network are derived from the session.
+         */
+        post: operations["postWalletAssetsTrustlineBuild"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/wallet/{publicKey}/balance": {
         parameters: {
             query?: never;
@@ -4909,6 +4929,87 @@ export interface operations {
                                 enabledInApp: boolean;
                                 sponsored?: boolean;
                             }[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postWalletAssetsTrustlineBuild: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    code: string;
+                    issuer: string;
+                    limit?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sponsor-signed changeTrust XDR awaiting the trustor signature */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_WALLET_TRUSTLINE_BUILD";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            sponsorSignedXdr: string;
                         };
                     };
                 };

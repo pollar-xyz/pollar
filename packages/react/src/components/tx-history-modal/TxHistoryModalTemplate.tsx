@@ -111,6 +111,9 @@ export function TxHistoryModalTemplate({
               <StatusBadge status={record.status} />
               <span className="pollar-hist-item-meta">
                 <span>{record.operation}</span>
+                {typeof record.details?.sponsored === 'boolean' && (
+                  <span>· {record.details.sponsored ? 'Sponsored' : 'Self-paid'}</span>
+                )}
                 {record.feeXlm && <span>· {record.feeXlm} XLM</span>}
                 <span>· {formatDate(record.createdAt)}</span>
                 <span>·</span>

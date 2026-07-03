@@ -94,7 +94,6 @@ import { emailProvider, oauthProvider } from './auth/providers';
 import { loginWithAdapter, requestWalletChallenge } from './auth/walletFlow';
 import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
 
-
 const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
 /** React Native runtime: `navigator.product === 'ReactNative'` (set by the RN runtime). */
 const isReactNative = typeof navigator !== 'undefined' && (navigator as { product?: string }).product === 'ReactNative';
@@ -1511,14 +1510,20 @@ export class PollarClient {
   /**
    * Establishes (omit `limit`) or removes (`limit: '0'`) a trustline for an asset.
    *
-   * Routing mirrors how the platform pays for the reserve:
-   *  - **Sponsored custodial** (`opts.sponsored` true, internal wallet) → the
-   *    server orchestrates a sponsored `changeTrust`: the app's wallets cover the
-   *    0.5 XLM reserve and the fee, so the user pays nothing. Pass the asset's
-   *    `sponsored` flag (from {@link refreshAssets}) straight through.
-   *  - **Self-paid** (external/adapter wallet, sponsorship disabled, or a custom
-   *    asset not configured in the app) → a plain `change_trust` transaction the
-   *    user's own wallet signs and pays for, via {@link runTx}.
+   * The route is chosen by whether the trustline is **sponsored** — the app pays
+   * the 0.5 XLM reserve + fee, so the user pays nothing — NOT by the wallet type.
+   * Pass the asset's `sponsored` flag (from {@link refreshAssets}) straight
+   * through; it works the same for internal and external wallets, only the
+   * co-signing mechanism differs:
+   *  - **Sponsored, custodial** (internal wallet, no adapter) → the server holds
+   *    the trustor key and orchestrates the sponsored `changeTrust` in one call.
+   *  - **Sponsored, external/adapter** → the server builds the sponsored
+   *    `changeTrust` and signs the sponsor; the user's own wallet adds the
+   *    trustor signature and it's submitted (the backend recognises the
+   *    sponsor-sourced tx and broadcasts it).
+   *  - **Not sponsored** (`sponsored` falsy — sponsorship disabled, or a custom
+   *    asset not configured in the app) → a plain `change_trust` the user's own
+   *    wallet signs and pays for, via {@link runTx}. Same for internal/external.
    *
    * Does not refresh on its own — callers should `refreshAssets()` afterwards.
    */
@@ -1543,26 +1548,53 @@ export class PollarClient {
       return { status: 'error', details: 'Asset code must be 1–12 characters' };
     }
 
-    // Sponsored custodial path: the platform co-signs and the app pays. Only an
-    // app-configured asset on an internal (custodial) wallet qualifies — the
-    // backend re-checks and 400s otherwise.
-    if (opts?.sponsored && !this._walletAdapter && walletType === 'internal') {
+    if (opts?.sponsored) {
+      // Sponsored custodial path: wallet-service holds the trustor key and
+      // co-signs + submits in one server call. Only an app-configured asset on
+      // an internal (custodial) wallet qualifies — the backend re-checks and
+      // 400s otherwise.
+      if (!this._walletAdapter && walletType === 'internal') {
+        try {
+          const { data, error } = await this._api.POST('/wallet/assets/trustline', {
+            body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
+          });
+          if (!error && data?.success) {
+            if (data.content) {
+              // Bump the assets generation so a refreshAssets() that was in flight
+              // can't clobber this post-trustline (fresher) snapshot.
+              ++this._enabledAssetsGen;
+              this._setEnabledAssetsState({ step: 'loaded', data: data.content });
+            }
+            return { status: 'success' };
+          }
+          const details =
+            (error as { details?: string; code?: string } | undefined)?.details ??
+            (error as { code?: string } | undefined)?.code;
+          return { status: 'error', ...(details && { details }) };
+        } catch (err) {
+          const details = err instanceof Error ? err.message : undefined;
+          return { status: 'error', ...(details && { details }) };
+        }
+      }
+
+      // Sponsored external/adapter path: the trustor key lives client-side. The
+      // server builds the sponsored changeTrust and sponsor-signs it; we add the
+      // trustor signature with the user's own wallet and submit.
       try {
-        const { data, error } = await this._api.POST('/wallet/assets/trustline', {
+        const { data, error } = await this._api.POST('/wallet/assets/trustline/build', {
           body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
         });
-        if (!error && data?.success) {
-          if (data.content) {
-            // Bump the assets generation so a refreshAssets() that was in flight
-            // can't clobber this post-trustline (fresher) snapshot.
-            ++this._enabledAssetsGen;
-            this._setEnabledAssetsState({ step: 'loaded', data: data.content });
-          }
-          return { status: 'success' };
+        if (error || !data?.success || !data.content?.sponsorSignedXdr) {
+          const details =
+            (error as { details?: string; code?: string } | undefined)?.details ??
+            (error as { code?: string } | undefined)?.code;
+          return { status: 'error', ...(details && { details }) };
         }
-        const details =
-          (error as { details?: string; code?: string } | undefined)?.details ?? (error as { code?: string } | undefined)?.code;
-        return { status: 'error', ...(details && { details }) };
+        const signed = await this.signTx(data.content.sponsorSignedXdr);
+        if (signed.status === 'error') {
+          return { status: 'error', ...(signed.details && { details: signed.details }) };
+        }
+        return this.submitTx(signed.signedXdr);
       } catch (err) {
         const details = err instanceof Error ? err.message : undefined;
         return { status: 'error', ...(details && { details }) };
@@ -1659,7 +1691,9 @@ export class PollarClient {
     if (!meta.iconUrl) return meta;
     const ok = /^https:\/\//i.test(meta.iconUrl) || /^data:image\//i.test(meta.iconUrl);
     if (ok) return meta;
-    this._log.warn(`[PollarClient] Dropped wallet adapter '${meta.label}' iconUrl with a disallowed scheme (use https: or data:image/).`);
+    this._log.warn(
+      `[PollarClient] Dropped wallet adapter '${meta.label}' iconUrl with a disallowed scheme (use https: or data:image/).`,
+    );
     // Omit iconUrl entirely (exactOptionalPropertyTypes forbids `iconUrl: undefined`).
     const { iconUrl: _dropped, ...safe } = meta;
     return safe;
@@ -1914,9 +1948,13 @@ export class PollarClient {
    * themselves; the built-in submit flow already polls internally (see
    * {@link _awaitTxConfirmation}).
    */
-  async getTxStatus(
-    hash: string,
-  ): Promise<{ hash: string; status: 'PENDING' | 'SUCCESS' | 'FAILED'; resultCode?: string; message?: string; ledger?: number }> {
+  async getTxStatus(hash: string): Promise<{
+    hash: string;
+    status: 'PENDING' | 'SUCCESS' | 'FAILED';
+    resultCode?: string;
+    message?: string;
+    ledger?: number;
+  }> {
     const { data, error } = await this._api.GET('/tx/status', {
       params: { query: { network: this.getNetwork(), hash } },
     });
