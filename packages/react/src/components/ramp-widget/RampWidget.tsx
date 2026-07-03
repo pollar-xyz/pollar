@@ -22,6 +22,9 @@ interface RampResult {
   kycUrl?: string;
   stellarTxHash?: string;
   pendingSignature?: { unsignedXdr: string; action: 'sep10' | 'withdraw_payment' };
+  // REST providers (Bridge) return deposit instructions as data (e.g. a Pix
+  // `br_code` / bank details for on-ramp) instead of an interactive URL.
+  depositInstructions?: Record<string, unknown>;
 }
 
 export function RampWidget({ onClose }: RampWidgetProps) {
@@ -47,6 +50,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   const [kycUrl, setKycUrl] = useState<string | null>(null);
   const [txStatus, setTxStatus] = useState<RampTxStatus | null>(null);
   const [stellarTxHash, setStellarTxHash] = useState<string | null>(null);
+  const [depositInstructions, setDepositInstructions] = useState<Record<string, unknown> | null>(null);
   const [completing, setCompleting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -65,6 +69,10 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         setTxStatus(tx.status);
         if (tx.stellarTxHash) setStellarTxHash(tx.stellarTxHash);
         if (tx.kycUrl) setKycUrl(tx.kycUrl);
+        // depositInstructions is returned by REST providers (Bridge); the generated
+        // core type for the tx endpoint may lag, so read it defensively.
+        const di = (tx as { depositInstructions?: Record<string, unknown> }).depositInstructions;
+        if (di) setDepositInstructions(di);
         if (TERMINAL.includes(tx.status)) clearInterval(id);
       } catch {
         /* transient — keep polling */
@@ -126,6 +134,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         setTxStatus(tx.status);
         if (tx.stellarTxHash) setStellarTxHash(tx.stellarTxHash);
         if (tx.kycUrl) setKycUrl(tx.kycUrl);
+        const di = (tx as { depositInstructions?: Record<string, unknown> }).depositInstructions;
+        if (di) setDepositInstructions(di);
       }
     } catch {
       /* transient — leave the current data in place */
@@ -142,6 +152,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setKycUrl(null);
     setTxStatus(null);
     setStellarTxHash(null);
+    setDepositInstructions(null);
     setErrorMsg(null);
   }
 
@@ -174,6 +185,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setKycUrl(result.kycUrl ?? null);
     setTxStatus(result.status);
     setStellarTxHash(result.stellarTxHash ?? null);
+    setDepositInstructions(result.depositInstructions ?? null);
     setStep('status');
   }
 
@@ -265,6 +277,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         txStatus={txStatus}
         kycUrl={kycUrl}
         stellarTxHash={stellarTxHash}
+        depositInstructions={depositInstructions}
         canComplete={canComplete}
         completing={completing}
         errorMsg={errorMsg}

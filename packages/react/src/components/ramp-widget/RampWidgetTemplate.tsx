@@ -24,6 +24,7 @@ interface RampWidgetTemplateProps {
   txStatus: RampTxStatus | null;
   kycUrl: string | null;
   stellarTxHash: string | null;
+  depositInstructions: Record<string, unknown> | null;
   canComplete: boolean;
   completing: boolean;
   errorMsg: string | null;
@@ -61,6 +62,38 @@ const STATUS_LABEL: Record<RampTxStatus, string> = {
   failed: 'Failed',
 };
 
+// Human labels for the deposit-instruction fields REST providers (Bridge) return
+// (e.g. a Pix `br_code`, or bank details for ACH/SEPA). Unknown keys fall back to
+// the raw key so nothing is silently dropped.
+const INSTRUCTION_LABELS: Record<string, string> = {
+  br_code: 'Pix code',
+  account_holder_name: 'Account holder',
+  bank_name: 'Bank',
+  bank_address: 'Bank address',
+  bank_account_number: 'Account number',
+  bank_routing_number: 'Routing number',
+  iban: 'IBAN',
+  bic: 'BIC',
+  clabe: 'CLABE',
+  amount: 'Amount',
+  currency: 'Currency',
+  payment_rails: 'Rails',
+};
+
+function flattenInstructions(instr: Record<string, unknown>): { key: string; label: string; value: string }[] {
+  const out: { key: string; label: string; value: string }[] = [];
+  for (const [k, v] of Object.entries(instr)) {
+    let value = '';
+    if (typeof v === 'string' || typeof v === 'number') value = String(v);
+    else if (Array.isArray(v))
+      value = v.filter((x) => typeof x === 'string' || typeof x === 'number').join(', ');
+    else continue;
+    if (!value) continue;
+    out.push({ key: k, label: INSTRUCTION_LABELS[k] ?? k, value });
+  }
+  return out;
+}
+
 export function RampWidgetTemplate({
   theme,
   accentColor,
@@ -78,6 +111,7 @@ export function RampWidgetTemplate({
   txStatus,
   kycUrl,
   stellarTxHash,
+  depositInstructions,
   canComplete,
   completing,
   errorMsg,
@@ -298,6 +332,17 @@ export function RampWidgetTemplate({
               </div>
             </div>
           )}
+
+          {depositInstructions &&
+            txStatus !== 'completed' &&
+            flattenInstructions(depositInstructions).map(({ key, label, value }) => (
+              <div key={key} className="pollar-ramp-payment-field">
+                <span className="pollar-ramp-payment-label">{label}</span>
+                <div className="pollar-ramp-payment-value">
+                  <code style={{ wordBreak: 'break-all' }}>{value}</code>
+                </div>
+              </div>
+            ))}
 
           {kycUrl && txStatus !== 'completed' && (
             <button type="button" className="pollar-btn-primary" onClick={onOpenKyc}>
