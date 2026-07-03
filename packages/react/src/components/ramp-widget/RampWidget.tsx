@@ -3,7 +3,7 @@
 import type { RampCountry, RampDirection, RampQuote, RampsOfframpBody, RampsOnrampBody, RampTxStatus } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
-import type { RampStep } from './RampWidgetTemplate';
+import type { RampFieldSpec, RampStep } from './RampWidgetTemplate';
 import { RampWidgetTemplate } from './RampWidgetTemplate';
 import '../shared.css';
 import './RampWidget.css';
@@ -13,6 +13,11 @@ interface RampWidgetProps {
 }
 
 const TERMINAL: RampTxStatus[] = ['completed', 'failed'];
+
+/** Fields the quote declares the client must collect (empty for SEP-24). */
+function requiredFieldsOf(quote: RampQuote): RampFieldSpec[] {
+  return (quote as { requiredFields?: RampFieldSpec[] }).requiredFields ?? [];
+}
 
 // Common shape of the on/off-ramp, complete and signature responses.
 interface RampResult {
@@ -38,10 +43,11 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('');
   const [country, setCountry] = useState('');
-  // Always collected so REST providers (Bridge) can KYC any user — including
-  // wallet-only logins that have no email on file. SEP-24 ignores them.
-  const [email, setEmail] = useState('');
-  const [fullName, setFullName] = useState('');
+  // Values for the fields a provider declares via the quote's `requiredFields`
+  // (e.g. Bridge on-ramp: full name + email; off-ramp: + Pix key). Keyed by
+  // field key; only collected when the selected route needs them.
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const setFieldValue = (key: string, value: string) => setFieldValues((v) => ({ ...v, [key]: value }));
   const [countries, setCountries] = useState<RampCountry[]>([]);
   const [countriesLoading, setCountriesLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -217,14 +223,14 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     }
   }
 
-  // A provider (Bridge/REST) declares via `requiresContact` whether it needs
-  // email + full name to KYC the user. Only then do we collect them (in the
-  // 'contact' step); SEP-24 anchors skip straight to the flow.
+  // Each quote declares the fields it needs (`requiredFields`). If any are unset,
+  // collect them in the 'contact' step first; otherwise start immediately.
   function handleSelectQuote(quote: RampQuote) {
     setSelectedQuote(quote);
     setErrorMsg(null);
-    const requiresContact = (quote as { requiresContact?: boolean }).requiresContact ?? false;
-    if (requiresContact && (!email.trim() || !fullName.trim())) {
+    const fields = requiredFieldsOf(quote);
+    const missing = fields.some((f) => !(fieldValues[f.key] ?? '').trim());
+    if (fields.length > 0 && missing) {
       setStep('contact');
       return;
     }
@@ -239,15 +245,16 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      const base = {
-        quoteId: quote.quoteId,
-        amount: Number(amount),
-        currency,
-        country,
-        ...(email.trim() ? { email: email.trim() } : {}),
-        ...(fullName.trim() ? { fullName: fullName.trim() } : {}),
-        ...(walletAddress ? { walletAddress } : {}),
-      };
+      const base: Record<string, unknown> = { quoteId: quote.quoteId, amount: Number(amount), currency, country };
+      if (walletAddress) base.walletAddress = walletAddress;
+      // Map each declared field to the request body: a field with `bankType`
+      // becomes `bankDetails`; others (email, fullName) are same-named fields.
+      for (const f of requiredFieldsOf(quote)) {
+        const val = (fieldValues[f.key] ?? '').trim();
+        if (!val) continue;
+        if (f.bankType) base.bankDetails = { type: f.bankType, value: val };
+        else base[f.key] = val;
+      }
       const result = (
         direction === 'onramp'
           ? await client.createOnRamp(base as RampsOnrampBody)
@@ -300,8 +307,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         amount={amount}
         currency={currency}
         country={country}
-        email={email}
-        fullName={fullName}
+        requiredFields={selectedQuote ? requiredFieldsOf(selectedQuote) : []}
+        fieldValues={fieldValues}
         countries={countries}
         countriesLoading={countriesLoading}
         refreshing={refreshing}
@@ -317,8 +324,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         errorMsg={errorMsg}
         onDirectionChange={setDirection}
         onAmountChange={setAmount}
-        onEmailChange={setEmail}
-        onFullNameChange={setFullName}
+        onFieldChange={setFieldValue}
         onCountryChange={handleCountryChange}
         onFindRoute={handleFindRoute}
         onSelectQuote={handleSelectQuote}

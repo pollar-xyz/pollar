@@ -6,6 +6,14 @@ import { RouteDisplay } from './RouteDisplay';
 
 export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 'status' | 'error';
 
+/** A field a provider declares (via the quote) that the client must collect. */
+export interface RampFieldSpec {
+  key: string;
+  label: string;
+  type: 'text' | 'email' | 'tel';
+  bankType?: 'CLABE' | 'PIX' | 'PSE' | 'ACH';
+}
+
 interface RampWidgetTemplateProps {
   theme: string;
   accentColor: string;
@@ -14,8 +22,8 @@ interface RampWidgetTemplateProps {
   amount: string;
   currency: string;
   country: string;
-  email: string;
-  fullName: string;
+  requiredFields: RampFieldSpec[];
+  fieldValues: Record<string, string>;
   countries: RampCountry[];
   countriesLoading: boolean;
   refreshing: boolean;
@@ -32,8 +40,7 @@ interface RampWidgetTemplateProps {
   errorMsg: string | null;
   onDirectionChange: (d: RampDirection) => void;
   onAmountChange: (v: string) => void;
-  onEmailChange: (v: string) => void;
-  onFullNameChange: (v: string) => void;
+  onFieldChange: (key: string, value: string) => void;
   onCountryChange: (v: string) => void;
   onFindRoute: () => void;
   onSelectQuote: (q: RampQuote) => void;
@@ -106,8 +113,8 @@ export function RampWidgetTemplate({
   amount,
   currency,
   country,
-  email,
-  fullName,
+  requiredFields,
+  fieldValues,
   countries,
   countriesLoading,
   refreshing,
@@ -123,8 +130,7 @@ export function RampWidgetTemplate({
   errorMsg,
   onDirectionChange,
   onAmountChange,
-  onEmailChange,
-  onFullNameChange,
+  onFieldChange,
   onCountryChange,
   onFindRoute,
   onSelectQuote,
@@ -303,28 +309,18 @@ export function RampWidgetTemplate({
 
       {step === 'contact' && (
         <>
-          <div className="pollar-ramp-field">
-            <label className="pollar-ramp-label">Full name</label>
-            <input
-              type="text"
-              className="pollar-ramp-input"
-              placeholder="Jane Doe"
-              value={fullName}
-              onChange={(e) => onFullNameChange(e.target.value)}
-            />
-          </div>
-
-          <div className="pollar-ramp-field">
-            <label className="pollar-ramp-label">Email</label>
-            <input
-              type="email"
-              className="pollar-ramp-input"
-              placeholder="jane@example.com"
-              value={email}
-              autoComplete="email"
-              onChange={(e) => onEmailChange(e.target.value)}
-            />
-          </div>
+          {requiredFields.map((f) => (
+            <div key={f.key} className="pollar-ramp-field">
+              <label className="pollar-ramp-label">{f.label}</label>
+              <input
+                type={f.type}
+                className="pollar-ramp-input"
+                value={fieldValues[f.key] ?? ''}
+                autoComplete={f.type === 'email' ? 'email' : 'off'}
+                onChange={(e) => onFieldChange(f.key, e.target.value)}
+              />
+            </div>
+          ))}
 
           <div className="pollar-modal-actions">
             <button type="button" className="pollar-btn-secondary" onClick={onRetry}>
@@ -333,7 +329,7 @@ export function RampWidgetTemplate({
             <button
               type="button"
               className="pollar-btn-primary"
-              disabled={!fullName.trim() || !email.trim() || isLoading}
+              disabled={requiredFields.some((f) => !(fieldValues[f.key] ?? '').trim()) || isLoading}
               onClick={onContactContinue}
             >
               {isLoading ? 'Starting…' : 'Continue'}
