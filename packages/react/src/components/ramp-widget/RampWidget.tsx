@@ -46,6 +46,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   const [countriesLoading, setCountriesLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [quotes, setQuotes] = useState<RampQuote[]>([]);
+  const [selectedQuote, setSelectedQuote] = useState<RampQuote | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   // status step
@@ -151,6 +152,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   function resetToInput() {
     setStep('input');
     setQuotes([]);
+    setSelectedQuote(null);
     setTxId(null);
     setProvider('');
     setKycUrl(null);
@@ -215,7 +217,25 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     }
   }
 
-  async function handleSelectQuote(quote: RampQuote) {
+  // A provider (Bridge/REST) declares via `requiresContact` whether it needs
+  // email + full name to KYC the user. Only then do we collect them (in the
+  // 'contact' step); SEP-24 anchors skip straight to the flow.
+  function handleSelectQuote(quote: RampQuote) {
+    setSelectedQuote(quote);
+    setErrorMsg(null);
+    const requiresContact = (quote as { requiresContact?: boolean }).requiresContact ?? false;
+    if (requiresContact && (!email.trim() || !fullName.trim())) {
+      setStep('contact');
+      return;
+    }
+    void startRamp(quote);
+  }
+
+  function handleContactContinue() {
+    if (selectedQuote) void startRamp(selectedQuote);
+  }
+
+  async function startRamp(quote: RampQuote) {
     setIsLoading(true);
     setErrorMsg(null);
     try {
@@ -297,12 +317,12 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         errorMsg={errorMsg}
         onDirectionChange={setDirection}
         onAmountChange={setAmount}
-        onCurrencyChange={setCurrency}
         onEmailChange={setEmail}
         onFullNameChange={setFullName}
         onCountryChange={handleCountryChange}
         onFindRoute={handleFindRoute}
         onSelectQuote={handleSelectQuote}
+        onContactContinue={handleContactContinue}
         onOpenKyc={handleOpenKyc}
         onCompleteWithdraw={handleCompleteWithdraw}
         onRetry={resetToInput}

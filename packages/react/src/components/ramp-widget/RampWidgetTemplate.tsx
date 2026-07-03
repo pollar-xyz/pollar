@@ -4,7 +4,7 @@ import type { RampCountry, RampDirection, RampQuote, RampTxStatus } from '@polla
 import type { CSSProperties } from 'react';
 import { RouteDisplay } from './RouteDisplay';
 
-export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'status' | 'error';
+export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 'status' | 'error';
 
 interface RampWidgetTemplateProps {
   theme: string;
@@ -32,12 +32,12 @@ interface RampWidgetTemplateProps {
   errorMsg: string | null;
   onDirectionChange: (d: RampDirection) => void;
   onAmountChange: (v: string) => void;
-  onCurrencyChange: (v: string) => void;
   onEmailChange: (v: string) => void;
   onFullNameChange: (v: string) => void;
   onCountryChange: (v: string) => void;
   onFindRoute: () => void;
   onSelectQuote: (q: RampQuote) => void;
+  onContactContinue: () => void;
   onOpenKyc: () => void;
   onCompleteWithdraw: () => void;
   onRetry: () => void;
@@ -123,12 +123,12 @@ export function RampWidgetTemplate({
   errorMsg,
   onDirectionChange,
   onAmountChange,
-  onCurrencyChange,
   onEmailChange,
   onFullNameChange,
   onCountryChange,
   onFindRoute,
   onSelectQuote,
+  onContactContinue,
   onOpenKyc,
   onCompleteWithdraw,
   onRetry,
@@ -162,6 +162,7 @@ export function RampWidgetTemplate({
     input: direction === 'onramp' ? 'Buy crypto' : 'Sell crypto',
     loading_quote: 'Finding best route',
     select_route: 'Select provider',
+    contact: 'Your details',
     status: direction === 'onramp' ? 'Complete your deposit' : 'Complete your withdrawal',
     error: 'Something went wrong',
   };
@@ -170,6 +171,7 @@ export function RampWidgetTemplate({
     input: direction === 'onramp' ? 'Enter the amount you want to deposit' : 'Enter the amount you want to withdraw',
     loading_quote: 'Comparing providers in real time…',
     select_route: 'All prices include fees',
+    contact: `${provider || 'This provider'} needs your name and email to verify you`,
     status: `Finish the flow at ${provider || 'the provider'} to continue`,
     error: 'Please try again',
   };
@@ -229,54 +231,6 @@ export function RampWidgetTemplate({
             </button>
           </div>
 
-          <div className="pollar-ramp-input-row">
-            <div className="pollar-ramp-field">
-              <label className="pollar-ramp-label">Amount</label>
-              <input
-                type="number"
-                className="pollar-ramp-input"
-                placeholder="0.00"
-                value={amount}
-                min="0"
-                onChange={(e) => onAmountChange(e.target.value)}
-              />
-            </div>
-            <div className="pollar-ramp-field" style={{ maxWidth: 90 }}>
-              <label className="pollar-ramp-label">Currency</label>
-              <input
-                type="text"
-                className="pollar-ramp-input"
-                placeholder="MXN"
-                value={currency}
-                maxLength={5}
-                onChange={(e) => onCurrencyChange(e.target.value.toUpperCase())}
-              />
-            </div>
-          </div>
-
-          <div className="pollar-ramp-field">
-            <label className="pollar-ramp-label">Full name</label>
-            <input
-              type="text"
-              className="pollar-ramp-input"
-              placeholder="Jane Doe"
-              value={fullName}
-              onChange={(e) => onFullNameChange(e.target.value)}
-            />
-          </div>
-
-          <div className="pollar-ramp-field">
-            <label className="pollar-ramp-label">Email</label>
-            <input
-              type="email"
-              className="pollar-ramp-input"
-              placeholder="jane@example.com"
-              value={email}
-              autoComplete="email"
-              onChange={(e) => onEmailChange(e.target.value)}
-            />
-          </div>
-
           <div className="pollar-ramp-field">
             <label className="pollar-ramp-label">Country</label>
             {countriesLoading ? (
@@ -295,6 +249,18 @@ export function RampWidgetTemplate({
             )}
           </div>
 
+          <div className="pollar-ramp-field">
+            <label className="pollar-ramp-label">Amount{currency ? ` (${currency})` : ''}</label>
+            <input
+              type="number"
+              className="pollar-ramp-input"
+              placeholder="0.00"
+              value={amount}
+              min="0"
+              onChange={(e) => onAmountChange(e.target.value)}
+            />
+          </div>
+
           <div className="pollar-modal-actions">
             <button type="button" className="pollar-btn-secondary" onClick={onClose}>
               Cancel
@@ -302,14 +268,7 @@ export function RampWidgetTemplate({
             <button
               type="button"
               className="pollar-btn-primary"
-              disabled={
-                !amount ||
-                !fullName.trim() ||
-                !email.trim() ||
-                isLoading ||
-                countriesLoading ||
-                countries.length === 0
-              }
+              disabled={!amount || isLoading || countriesLoading || countries.length === 0}
               onClick={onFindRoute}
             >
               Find best route
@@ -339,6 +298,47 @@ export function RampWidgetTemplate({
           <button type="button" className="pollar-btn-secondary" onClick={onClose}>
             Cancel
           </button>
+        </>
+      )}
+
+      {step === 'contact' && (
+        <>
+          <div className="pollar-ramp-field">
+            <label className="pollar-ramp-label">Full name</label>
+            <input
+              type="text"
+              className="pollar-ramp-input"
+              placeholder="Jane Doe"
+              value={fullName}
+              onChange={(e) => onFullNameChange(e.target.value)}
+            />
+          </div>
+
+          <div className="pollar-ramp-field">
+            <label className="pollar-ramp-label">Email</label>
+            <input
+              type="email"
+              className="pollar-ramp-input"
+              placeholder="jane@example.com"
+              value={email}
+              autoComplete="email"
+              onChange={(e) => onEmailChange(e.target.value)}
+            />
+          </div>
+
+          <div className="pollar-modal-actions">
+            <button type="button" className="pollar-btn-secondary" onClick={onRetry}>
+              Back
+            </button>
+            <button
+              type="button"
+              className="pollar-btn-primary"
+              disabled={!fullName.trim() || !email.trim() || isLoading}
+              onClick={onContactContinue}
+            >
+              {isLoading ? 'Starting…' : 'Continue'}
+            </button>
+          </div>
         </>
       )}
 
