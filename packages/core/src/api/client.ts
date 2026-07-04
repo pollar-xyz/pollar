@@ -74,9 +74,7 @@ export async function fetchWithTimeout(request: Request, timeoutMs: number): Pro
     // The timeout fired (not the caller's own cancellation) — normalize the
     // failure to a typed, catchable error so callers can branch on the code.
     if (timeout.signal.aborted && !request.signal?.aborted) {
-      throw err instanceof PollarNetworkError
-        ? err
-        : new PollarNetworkError(`Request timed out after ${timeoutMs}ms`, err);
+      throw err instanceof PollarNetworkError ? err : new PollarNetworkError(`Request timed out after ${timeoutMs}ms`, err);
     }
     throw err;
   } finally {

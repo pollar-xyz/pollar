@@ -26,9 +26,7 @@ function toRef(a: AssetLike): SwapQuoteParams['sellAsset'] {
 
 /** A catalog token (code + issuer) -> the asset ref, picking the alphanum width. */
 function catalogRef(code: string, issuer: string): SwapQuoteParams['sellAsset'] {
-  return code.length <= 4
-    ? { type: 'credit_alphanum4', code, issuer }
-    : { type: 'credit_alphanum12', code, issuer };
+  return code.length <= 4 ? { type: 'credit_alphanum4', code, issuer } : { type: 'credit_alphanum12', code, issuer };
 }
 
 export function SwapModal({ onClose }: SwapModalProps) {
@@ -148,9 +146,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
     .filter((o) => !enabledKeys.has(optKey(o)));
   const knownKeys = new Set([...enabledKeys, ...catalogBuy.map(optKey)]);
   const customBuy = customTokens.filter((o) => !knownKeys.has(optKey(o)));
-  const buyOptions: SwapAssetOption[] = [...enabledBuy, ...catalogBuy, ...customBuy].filter(
-    (o) => optKey(o) !== buyKeyOfSell,
-  );
+  const buyOptions: SwapAssetOption[] = [...enabledBuy, ...catalogBuy, ...customBuy].filter((o) => optKey(o) !== buyKeyOfSell);
 
   // Add a user-pasted token (code + issuer) to the buy list and select it.
   // Returns an error message, or null on success.
@@ -184,7 +180,15 @@ export function SwapModal({ onClose }: SwapModalProps) {
 
   // Re-quote (debounced) whenever the pair / amount / route changes.
   useEffect(() => {
-    if (step !== 'form' || swapUnavailable || configLoading || !selectedSell || !selectedBuy || !amount || parseFloat(amount) <= 0) {
+    if (
+      step !== 'form' ||
+      swapUnavailable ||
+      configLoading ||
+      !selectedSell ||
+      !selectedBuy ||
+      !amount ||
+      parseFloat(amount) <= 0
+    ) {
       setQuotes([]);
       setQuoteError('');
       setQuoteLoading(false);

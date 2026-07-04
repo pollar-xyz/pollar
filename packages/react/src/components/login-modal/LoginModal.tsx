@@ -153,33 +153,33 @@ export function LoginModal({ onClose }: LoginModalProps) {
       ) : (
         <LoginModalTemplate
           theme={theme}
-        accentColor={accentColor}
-        logoUrl={logoUrl ?? null}
-        emailEnabled={!!emailEnabled}
-        embeddedWallets={!!embeddedWallets}
-        smartWallet={smartWalletEnabled}
-        providers={{
-          google: !!providers?.google,
-          discord: !!providers?.discord,
-          x: !!providers?.x,
-          github: !!providers?.github,
-          apple: !!providers?.apple,
-        }}
-        walletAdapters={walletAdapters}
-        appName={config.application?.name ?? 'Pollar'}
-        email={email}
-        onEmailChange={setEmail}
-        onEmailSubmit={handleEmailSubmit}
-        onSocialLogin={handleSocialLogin}
-        onWalletConnect={handleWalletConnect}
-        onLoginSmartWallet={handleLoginSmartWallet}
-        onCreateSmartWallet={handleCreateSmartWallet}
-        authState={authState}
-        codeInputKey={codeInputKey}
-        onCodeSubmit={handleVerifyCode}
-        onBack={handleBack}
-        onCancel={handleClose}
-        onRetry={handleRetry}
+          accentColor={accentColor}
+          logoUrl={logoUrl ?? null}
+          emailEnabled={!!emailEnabled}
+          embeddedWallets={!!embeddedWallets}
+          smartWallet={smartWalletEnabled}
+          providers={{
+            google: !!providers?.google,
+            discord: !!providers?.discord,
+            x: !!providers?.x,
+            github: !!providers?.github,
+            apple: !!providers?.apple,
+          }}
+          walletAdapters={walletAdapters}
+          appName={config.application?.name ?? 'Pollar'}
+          email={email}
+          onEmailChange={setEmail}
+          onEmailSubmit={handleEmailSubmit}
+          onSocialLogin={handleSocialLogin}
+          onWalletConnect={handleWalletConnect}
+          onLoginSmartWallet={handleLoginSmartWallet}
+          onCreateSmartWallet={handleCreateSmartWallet}
+          authState={authState}
+          codeInputKey={codeInputKey}
+          onCodeSubmit={handleVerifyCode}
+          onBack={handleBack}
+          onCancel={handleClose}
+          onRetry={handleRetry}
         />
       )}
     </div>

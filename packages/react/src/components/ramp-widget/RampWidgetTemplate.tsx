@@ -96,8 +96,7 @@ function flattenInstructions(instr: Record<string, unknown>): { key: string; lab
   for (const [k, v] of Object.entries(instr)) {
     let value = '';
     if (typeof v === 'string' || typeof v === 'number') value = String(v);
-    else if (Array.isArray(v))
-      value = v.filter((x) => typeof x === 'string' || typeof x === 'number').join(', ');
+    else if (Array.isArray(v)) value = v.filter((x) => typeof x === 'string' || typeof x === 'number').join(', ');
     else continue;
     if (!value) continue;
     out.push({ key: k, label: INSTRUCTION_LABELS[k] ?? k, value });

@@ -25,7 +25,6 @@ const PROVIDER_LABELS: Record<SwapProvider, string> = {
   sdex: 'Stellar DEX',
 };
 
-
 function formatAmount(value: string): string {
   const n = parseFloat(value);
   return isNaN(n) ? value : n.toLocaleString(undefined, { maximumFractionDigits: 7 });
@@ -165,7 +164,12 @@ export function SwapModalTemplate({
   const title = step === 'form' ? 'Swap' : txTitle;
 
   return (
-    <div className="pollar-modal-card pollar-send-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
+    <div
+      className="pollar-modal-card pollar-send-modal"
+      data-theme={theme}
+      style={cssVars}
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="pollar-modal-header">
         <div className="pollar-send-header-left">
           {showBack && (
@@ -382,8 +386,8 @@ export function SwapModalTemplate({
 
           {buyNeedsTrustline && selectedBuy && (
             <div className="pollar-swap-trustline-notice">
-              To receive {selectedBuy.code} your wallet needs a trustline. Swapping will create it
-              first (~0.5 XLM reserve, refundable if you later remove it).
+              To receive {selectedBuy.code} your wallet needs a trustline. Swapping will create it first (~0.5 XLM reserve,
+              refundable if you later remove it).
             </div>
           )}
 

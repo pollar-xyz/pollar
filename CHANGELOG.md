@@ -10,7 +10,7 @@
   a prebuilt XDR (Soroswap) goes straight to `signAndSubmitTx`, while an
   operation + params quote (Aquarius / SDEX) runs through `runTx`. The swap quote
   build type is a union of `invoke_contract | path_payment_strict_send |
-  { unsignedXdr }`. At 0.10.0 only Aquarius was executable.
+{ unsignedXdr }`. At 0.10.0 only Aquarius was executable.
 
 ### `@pollar/react` - features
 
@@ -85,7 +85,7 @@
 
 - **Multi-venue swaps.** `getSwapQuote(params)` quotes across venues (SDEX,
   Soroswap, Aquarius) and returns `SwapQuote[]` ranked best-first (`provider:
-  'auto'` picks the best of every available venue); `swap(quote)` establishes
+'auto'` picks the best of every available venue); `swap(quote)` establishes
   the buy-asset trustline first (G-address credit assets only) and executes the
   quote through the existing `runTx` transaction state machine, with on-chain
   `minReceived` enforcing slippage.
@@ -154,7 +154,7 @@
   pending indefinitely: it neither resolved nor rejected, trapping callers that
   `await` it (e.g. a returning user stuck on the splash screen). A stalled
   request now rejects with a typed `PollarNetworkError` (`code:
-  'SDK_NETWORK_TIMEOUT'`) instead.
+'SDK_NETWORK_TIMEOUT'`) instead.
 - **A refresh that times out no longer logs the user out.** A transient network
   timeout during `/auth/refresh` keeps the session intact (the refresh token is
   almost certainly still valid) and rejects with the typed error so the caller

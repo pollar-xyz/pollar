@@ -69,7 +69,8 @@ export async function createOffRamp(api: PollarApiClient, body: RampsOfframpBody
  */
 export async function completeWithdraw(api: PollarApiClient, txId: string): Promise<RampsCompleteResponse> {
   const { data, error } = await api.POST('/ramps/transaction/{txId}/complete', { params: { path: { txId } } });
-  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to complete withdrawal');
+  if (!data?.content || error)
+    throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to complete withdrawal');
   return data.content;
 }
 

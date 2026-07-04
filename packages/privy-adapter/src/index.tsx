@@ -202,7 +202,9 @@ export function PrivyAdapterProvider({ adapter, config, children }: PrivyAdapter
   const handle = getPrivyHandle(adapter);
   const effective = config ?? handle?.config;
   if (!effective) {
-    throw new Error('[privy-adapter] PrivyAdapterProvider needs a config — pass `config` or an adapter from createPrivyAdapter.');
+    throw new Error(
+      '[privy-adapter] PrivyAdapterProvider needs a config — pass `config` or an adapter from createPrivyAdapter.',
+    );
   }
   return (
     <PrivyProvider

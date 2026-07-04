@@ -206,14 +206,14 @@ re-runs in the browser.
 
 The adapter implements `WalletAdapter` from `@pollar/core`:
 
-| `WalletAdapter` method       | Kit call                                                     |
-| ---------------------------- | ----------------------------------------------------------- |
+| `WalletAdapter` method       | Kit call                                                               |
+| ---------------------------- | ---------------------------------------------------------------------- |
 | `isAvailable()`              | `refreshSupportedWallets()` then check the wallet's `isAvailable` flag |
-| `connect()`                  | `setWallet(id)` > `fetchAddress()`                          |
-| `disconnect()`               | `StellarWalletsKit.disconnect()`                            |
-| `getPublicKey()`             | `StellarWalletsKit.getAddress()`                            |
-| `signTransaction(xdr, opts)` | `setWallet(id)` > `signTransaction(xdr, opts)`             |
-| `signAuthEntry(xdr, opts)`   | `setWallet(id)` > `signAuthEntry(xdr, opts)`               |
+| `connect()`                  | `setWallet(id)` > `fetchAddress()`                                     |
+| `disconnect()`               | `StellarWalletsKit.disconnect()`                                       |
+| `getPublicKey()`             | `StellarWalletsKit.getAddress()`                                       |
+| `signTransaction(xdr, opts)` | `setWallet(id)` > `signTransaction(xdr, opts)`                         |
+| `signAuthEntry(xdr, opts)`   | `setWallet(id)` > `signAuthEntry(xdr, opts)`                           |
 
 `setWallet` is called before every signing/connect operation so a single
 `StellarWalletsKit.init({ modules })` covers many wallets. `stellarWalletsKitAdapters()`
@@ -278,10 +278,7 @@ import { MyCustomAdapter } from './my-custom-adapter';
 
 new PollarClient({
   apiKey: 'your-api-key',
-  walletAdapters: [
-    ...stellarWalletsKitAdapters({ network: Networks.PUBLIC }),
-    new MyCustomAdapter(),
-  ],
+  walletAdapters: [...stellarWalletsKitAdapters({ network: Networks.PUBLIC }), new MyCustomAdapter()],
 });
 ```
 

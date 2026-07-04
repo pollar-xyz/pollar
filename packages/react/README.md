@@ -244,19 +244,19 @@ provider:
 Every modal mounts itself when its `openXModal()` action is called. You don't need to render these directly — they're
 already wired inside `<PollarProvider>` — but they're exported in case you want to mount them yourself.
 
-| Component              | Purpose                                                                                                                                                                                          |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `<WalletButton>`         | Drop-in button. Opens login when signed out; signed in, shows the wallet address with a dropdown (Send, Receive, copy address, balance, history, ramp, KYC, distribution rules, sessions, sign out). Inline arc spinner during in-progress transactions |
-| `<SendModal>`            | Full send flow: asset picker, amount, destination, inline build > sign > success/error                                                                                                           |
-| `<SwapModal>`            | On-chain asset-to-asset swap: pick from/to assets and amount, quote across venues, execute (auto-trustline on the buy asset when needed)                                                          |
-| `<ReceiveModal>`         | Wallet address as QR code with copy-to-clipboard (no external QR dependency required)                                                                                                            |
-| `<TxHistoryModal>`       | Paginated transaction history with auto-fetch on open and stellar.expert explorer links                                                                                                          |
-| `<WalletBalanceModal>`   | Stellar account balances with refresh button                                                                                                                                                     |
-| `<EnabledAssetsModal>`   | The application's dashboard-enabled assets with per-asset trustline state; establish/remove trustlines                                                                                            |
-| `<DistributionRulesModal>` | Manage the wallet's distribution rules                                                                                                                                                         |
-| `<SessionsModal>`        | **New in 0.7.0.** Lists every active refresh-token family for the current user with device metadata, marks the local session, per-row revoke, and a "Sign out everywhere" button                 |
-| `<KycModal>`             | Identity verification flow - provider selection + status polling _(UI preview - backend coming soon)_                                                                                            |
-| `<RampWidget>`           | Buy/sell crypto via SEP-24 - direction tabs, route comparison, payment instructions (wired to `client.createOnRamp` / `client.createOffRamp`)                                                     |
+| Component                  | Purpose                                                                                                                                                                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<WalletButton>`           | Drop-in button. Opens login when signed out; signed in, shows the wallet address with a dropdown (Send, Receive, copy address, balance, history, ramp, KYC, distribution rules, sessions, sign out). Inline arc spinner during in-progress transactions |
+| `<SendModal>`              | Full send flow: asset picker, amount, destination, inline build > sign > success/error                                                                                                                                                                  |
+| `<SwapModal>`              | On-chain asset-to-asset swap: pick from/to assets and amount, quote across venues, execute (auto-trustline on the buy asset when needed)                                                                                                                |
+| `<ReceiveModal>`           | Wallet address as QR code with copy-to-clipboard (no external QR dependency required)                                                                                                                                                                   |
+| `<TxHistoryModal>`         | Paginated transaction history with auto-fetch on open and stellar.expert explorer links                                                                                                                                                                 |
+| `<WalletBalanceModal>`     | Stellar account balances with refresh button                                                                                                                                                                                                            |
+| `<EnabledAssetsModal>`     | The application's dashboard-enabled assets with per-asset trustline state; establish/remove trustlines                                                                                                                                                  |
+| `<DistributionRulesModal>` | Manage the wallet's distribution rules                                                                                                                                                                                                                  |
+| `<SessionsModal>`          | **New in 0.7.0.** Lists every active refresh-token family for the current user with device metadata, marks the local session, per-row revoke, and a "Sign out everywhere" button                                                                        |
+| `<KycModal>`               | Identity verification flow - provider selection + status polling _(UI preview - backend coming soon)_                                                                                                                                                   |
+| `<RampWidget>`             | Buy/sell crypto via SEP-24 - direction tabs, route comparison, payment instructions (wired to `client.createOnRamp` / `client.createOffRamp`)                                                                                                           |
 
 ```tsx
 import { WalletButton } from '@pollar/react';
@@ -273,21 +273,21 @@ export function Header() {
 Every modal ships a pure presentational "template" companion — same name with a `Template` suffix. Use these when you
 want to swap the chrome but keep the data wiring from `usePollar()`.
 
-| Wrapper                 | Template                       |
-| ----------------------- | ------------------------------ |
-| `<WalletButton>`        | `<WalletButtonTemplate>`       |
-| _(internal LoginModal)_ | `<LoginModalTemplate>`         |
-| `<SendModal>`           | `<SendModalTemplate>`          |
-| `<SwapModal>`           | `<SwapModalTemplate>`          |
-| `<ReceiveModal>`        | `<ReceiveModalTemplate>`       |
-| `<TransactionModal>`    | `<TransactionModalTemplate>`   |
-| `<TxHistoryModal>`      | `<TxHistoryModalTemplate>`     |
-| `<WalletBalanceModal>`  | `<WalletBalanceModalTemplate>` |
-| `<EnabledAssetsModal>`  | `<EnabledAssetsModalTemplate>` |
+| Wrapper                    | Template                           |
+| -------------------------- | ---------------------------------- |
+| `<WalletButton>`           | `<WalletButtonTemplate>`           |
+| _(internal LoginModal)_    | `<LoginModalTemplate>`             |
+| `<SendModal>`              | `<SendModalTemplate>`              |
+| `<SwapModal>`              | `<SwapModalTemplate>`              |
+| `<ReceiveModal>`           | `<ReceiveModalTemplate>`           |
+| `<TransactionModal>`       | `<TransactionModalTemplate>`       |
+| `<TxHistoryModal>`         | `<TxHistoryModalTemplate>`         |
+| `<WalletBalanceModal>`     | `<WalletBalanceModalTemplate>`     |
+| `<EnabledAssetsModal>`     | `<EnabledAssetsModalTemplate>`     |
 | `<DistributionRulesModal>` | `<DistributionRulesModalTemplate>` |
-| `<KycModal>`            | `<KycModalTemplate>`           |
-| `<RampWidget>`          | `<RampWidgetTemplate>`         |
-| `<SessionsModal>`       | `<SessionsModalTemplate>`      |
+| `<KycModal>`               | `<KycModalTemplate>`               |
+| `<RampWidget>`             | `<RampWidgetTemplate>`             |
+| `<SessionsModal>`          | `<SessionsModalTemplate>`          |
 
 `<TxStatusView>` is the shared status component (build → sign → success/error) reused by `TransactionModal` and
 `SendModal`; it's exported on its own for consumers that want to embed the lifecycle elsewhere.

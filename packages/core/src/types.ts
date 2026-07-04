@@ -739,8 +739,7 @@ export type DistributionRulesState =
 
 export type SwapQuoteBody = NonNullable<pollarPaths['/swap/quote']['post']['requestBody']>['content']['application/json'];
 
-export type SwapQuoteContent =
-  pollarPaths['/swap/quote']['post']['responses'][200]['content']['application/json']['content'];
+export type SwapQuoteContent = pollarPaths['/swap/quote']['post']['responses'][200]['content']['application/json']['content'];
 
 /** A single priced swap route, including a ready-to-run `build` payload. */
 export type SwapQuote = SwapQuoteContent['quotes'][number];
@@ -752,12 +751,10 @@ export type SwapProvider = NonNullable<SwapQuoteBody['provider']>;
 export type SwapVenue = SwapQuote['provider'];
 
 /** Venues this app exposes to end-users (from GET /swap/config). Empty = disabled. */
-export type SwapConfigContent =
-  pollarPaths['/swap/config']['get']['responses'][200]['content']['application/json']['content'];
+export type SwapConfigContent = pollarPaths['/swap/config']['get']['responses'][200]['content']['application/json']['content'];
 
 /** Curated "buy" tokens the app opted into (from GET /swap/tokens). */
-export type SwapTokensContent =
-  pollarPaths['/swap/tokens']['get']['responses'][200]['content']['application/json']['content'];
+export type SwapTokensContent = pollarPaths['/swap/tokens']['get']['responses'][200]['content']['application/json']['content'];
 
 /** A single curated swap buy token. */
 export type SwapToken = SwapTokensContent['tokens'][number];

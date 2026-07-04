@@ -14,10 +14,10 @@ wire up Privy's hooks yourself.
 
 ## Supported platforms
 
-| Host | Status | Signing engine |
-|---|---|---|
-| React (web) | ✅ supported | `@privy-io/react-auth` |
-| React Native / Expo | ✅ supported | `@privy-io/expo` |
+| Host                          | Status           | Signing engine         |
+| ----------------------------- | ---------------- | ---------------------- |
+| React (web)                   | ✅ supported     | `@privy-io/react-auth` |
+| React Native / Expo           | ✅ supported     | `@privy-io/expo`       |
 | Angular, Vue, Svelte, vanilla | ❌ not supported | — (Privy ships no SDK) |
 
 The right build is picked automatically: bundlers resolve the default (web) entry,
@@ -53,9 +53,7 @@ const privy = createPrivyAdapter({
 export function App() {
   return (
     <PrivyAdapterProvider adapter={privy}>
-      <PollarProvider client={{ apiKey: '…', walletAdapters: [privy] }}>
-        {/* your app */}
-      </PollarProvider>
+      <PollarProvider client={{ apiKey: '…', walletAdapters: [privy] }}>{/* your app */}</PollarProvider>
     </PrivyAdapterProvider>
   );
 }
@@ -93,16 +91,16 @@ OAuth on Expo opens an in-app browser and resolves in-session (no redirect round
 
 `createPrivyAdapter(config)`:
 
-| field | type | notes |
-|---|---|---|
-| `appId` | `string` | your Privy app id |
-| `loginMethods` | `('email' \| 'google' \| 'github')[]` | options shown in the sub-modal, in order |
-| `clientId?` | `string` | Privy app client id, if your app uses one |
-| `appearance?` | `{ theme?; accentColor?; logo? }` | forwarded to Privy's own surfaces (web only; ignored on React Native) |
-| `redirectUri?` | `string` | reserved; not currently applied to the OAuth flow |
-| `debug?` | `boolean` | verbose `[privy-adapter]` console logging; off by default |
-| `cleanupOAuthRedirect?` | `boolean` | after a web OAuth redirect, strip `privy_oauth_*` params from the URL via `history.replaceState`; on by default |
-| `meta?` | `{ label; iconUrl? }` | login button; defaults to `{ label: 'Privy' }` |
+| field                   | type                                  | notes                                                                                                           |
+| ----------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `appId`                 | `string`                              | your Privy app id                                                                                               |
+| `loginMethods`          | `('email' \| 'google' \| 'github')[]` | options shown in the sub-modal, in order                                                                        |
+| `clientId?`             | `string`                              | Privy app client id, if your app uses one                                                                       |
+| `appearance?`           | `{ theme?; accentColor?; logo? }`     | forwarded to Privy's own surfaces (web only; ignored on React Native)                                           |
+| `redirectUri?`          | `string`                              | reserved; not currently applied to the OAuth flow                                                               |
+| `debug?`                | `boolean`                             | verbose `[privy-adapter]` console logging; off by default                                                       |
+| `cleanupOAuthRedirect?` | `boolean`                             | after a web OAuth redirect, strip `privy_oauth_*` params from the URL via `history.replaceState`; on by default |
+| `meta?`                 | `{ label; iconUrl? }`                 | login button; defaults to `{ label: 'Privy' }`                                                                  |
 
 The returned object is a `@pollar/core` `WalletAdapter` plus interactive-login methods
 (`getAuthOptions`, `sendEmailCode`, `verifyEmailCode`, `loginWithOAuth`) that the Pollar

@@ -317,24 +317,24 @@ const sessions = await client.listSessions();
 
 ### `new PollarClient(config)`
 
-| Option             | Type                     | Required | Description                                                                                                 |
-| ------------------ | ------------------------ | -------- | ----------------------------------------------------------------------------------------------------------- |
-| `apiKey`           | `string`                 | Yes      | Your Pollar API key                                                                                         |
-| `baseUrl`          | `string`                 | No       | Override the default API endpoint                                                                           |
-| `stellarNetwork`   | `'mainnet' \| 'testnet'` | No       | Target Stellar network (default: `testnet`)                                                                 |
-| `storage`          | `Storage`                | No       | Pluggable storage adapter. Web autodetects `localStorage` with in-memory fallback; RN must inject one       |
-| `keyManager`       | `KeyManager`             | No       | Pluggable DPoP key manager. Web picks `WebCryptoKeyManager`; otherwise `NobleKeyManager`                    |
-| `walletAdapters`   | `WalletAdapter[]`        | No       | Extra wallet adapter instances. Built-in `FreighterAdapter`/`AlbedoAdapter` auto-register; an entry overrides a built-in by reusing its `type` |
-| `requestTimeoutMs` | `number`                 | No       | Max ms a single SDK HTTP attempt waits before aborting with `PollarNetworkError`. Default `10000`; `0` disables |
-| `retry`            | `PollarRetryConfig`      | No       | Retry-with-backoff for idempotent transport failures (refresh + GETs). Default `{ attempts: 2, baseDelayMs: 300 }` |
-| `deviceLabel`      | `string`                 | No       | UI-friendly device label sent at `/auth/login` time and shown in `listSessions()` rows                      |
-| `onStorageDegrade` | `OnStorageDegrade`       | No       | Notified the first time `localStorage` falls back to in-memory mode (SSR, private browsing, quota, …)       |
-| `visibilityProvider` | `VisibilityProvider`   | No       | Foreground-detection signal for the silent-refresh scheduler. Web default; RN should inject an `AppState` provider |
-| `maxIdleMs`        | `number`                 | No       | Stop proactive refreshes after this many ms of no client HTTP activity. Default `undefined` (refresh while visible) |
-| `openAuthUrl`      | `AuthUrlOpener`          | No       | Strategy for opening the hosted OAuth URL. Web defaults to a popup; RN must provide one                     |
-| `oauthRedirectUri` | `string`                 | No       | `redirect_uri` sent to the backend for hosted OAuth. Web defaults to `window.location.origin`; RN = deep link |
-| `passkey`          | `PasskeyCeremony`        | No       | WebAuthn ceremony for Smart Wallet login (injected by `@pollar/react`). Required for `loginSmartWallet()`   |
-| `passkeySign`      | `PasskeySigner`          | No       | Signs smart-account (C-address) transactions with the user's passkey. Required to send from a smart wallet  |
+| Option               | Type                     | Required | Description                                                                                                                                    |
+| -------------------- | ------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiKey`             | `string`                 | Yes      | Your Pollar API key                                                                                                                            |
+| `baseUrl`            | `string`                 | No       | Override the default API endpoint                                                                                                              |
+| `stellarNetwork`     | `'mainnet' \| 'testnet'` | No       | Target Stellar network (default: `testnet`)                                                                                                    |
+| `storage`            | `Storage`                | No       | Pluggable storage adapter. Web autodetects `localStorage` with in-memory fallback; RN must inject one                                          |
+| `keyManager`         | `KeyManager`             | No       | Pluggable DPoP key manager. Web picks `WebCryptoKeyManager`; otherwise `NobleKeyManager`                                                       |
+| `walletAdapters`     | `WalletAdapter[]`        | No       | Extra wallet adapter instances. Built-in `FreighterAdapter`/`AlbedoAdapter` auto-register; an entry overrides a built-in by reusing its `type` |
+| `requestTimeoutMs`   | `number`                 | No       | Max ms a single SDK HTTP attempt waits before aborting with `PollarNetworkError`. Default `10000`; `0` disables                                |
+| `retry`              | `PollarRetryConfig`      | No       | Retry-with-backoff for idempotent transport failures (refresh + GETs). Default `{ attempts: 2, baseDelayMs: 300 }`                             |
+| `deviceLabel`        | `string`                 | No       | UI-friendly device label sent at `/auth/login` time and shown in `listSessions()` rows                                                         |
+| `onStorageDegrade`   | `OnStorageDegrade`       | No       | Notified the first time `localStorage` falls back to in-memory mode (SSR, private browsing, quota, …)                                          |
+| `visibilityProvider` | `VisibilityProvider`     | No       | Foreground-detection signal for the silent-refresh scheduler. Web default; RN should inject an `AppState` provider                             |
+| `maxIdleMs`          | `number`                 | No       | Stop proactive refreshes after this many ms of no client HTTP activity. Default `undefined` (refresh while visible)                            |
+| `openAuthUrl`        | `AuthUrlOpener`          | No       | Strategy for opening the hosted OAuth URL. Web defaults to a popup; RN must provide one                                                        |
+| `oauthRedirectUri`   | `string`                 | No       | `redirect_uri` sent to the backend for hosted OAuth. Web defaults to `window.location.origin`; RN = deep link                                  |
+| `passkey`            | `PasskeyCeremony`        | No       | WebAuthn ceremony for Smart Wallet login (injected by `@pollar/react`). Required for `loginSmartWallet()`                                      |
+| `passkeySign`        | `PasskeySigner`          | No       | Signs smart-account (C-address) transactions with the user's passkey. Required to send from a smart wallet                                     |
 
 ---
 
