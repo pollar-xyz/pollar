@@ -4,7 +4,16 @@
 }
 
 /* ---- Address chip ---- */
+.pollar-bal-address-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 .pollar-bal-address {
+  flex: 1;
+  min-width: 0;
   font-size: 0.75rem;
   font-family: monospace;
   color: var(--pollar-muted);
@@ -12,10 +21,41 @@
   border: 1px solid var(--pollar-border);
   border-radius: var(--pollar-card-border-radius, 10px);
   padding: 0.375rem 0.75rem;
-  margin-bottom: 1rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ---- Copy button ---- */
+.pollar-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--pollar-muted);
+  background: var(--pollar-input-bg);
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-buttons-border-radius, 6px);
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.pollar-copy-btn:hover {
+  color: var(--pollar-accent);
+  border-color: var(--pollar-accent);
+}
+
+/* Compact variant used inline next to the issuer address. */
+.pollar-copy-btn-sm {
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
 }
 
 /* ---- Balance list ---- */
@@ -36,10 +76,29 @@
   padding: 0.75rem 1rem;
 }
 
+.pollar-bal-asset-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+  min-width: 0;
+}
+
 .pollar-bal-asset {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--pollar-text);
+}
+
+.pollar-bal-issuer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.pollar-bal-issuer-addr {
+  font-size: 0.6875rem;
+  font-family: monospace;
+  color: var(--pollar-muted);
 }
 
 .pollar-bal-amounts {
@@ -53,11 +112,13 @@
   font-size: 0.9375rem;
   font-weight: 700;
   color: var(--pollar-text);
+  font-family: monospace;
   font-variant-numeric: tabular-nums;
 }
 
 .pollar-bal-available {
   font-size: 0.6875rem;
   color: var(--pollar-muted);
+  font-family: monospace;
   font-variant-numeric: tabular-nums;
 }

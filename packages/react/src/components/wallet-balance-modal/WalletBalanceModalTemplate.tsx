@@ -2,11 +2,13 @@
 
 import { WalletBalanceRecord, WalletBalanceState } from '@pollar/core';
 import { type CSSProperties } from 'react';
-import { PollarModalFooter } from '../commons';
+import { CopyButton, PollarModalFooter } from '../commons';
 
+// Stellar amounts are int64 scaled by 10^7, so 7 decimals is the ledger's exact
+// precision. Always render all 7 (padded) in monospace so columns line up.
 function formatBalance(balance: string): string {
   const n = parseFloat(balance);
-  return isNaN(n) ? balance : n.toLocaleString(undefined, { maximumFractionDigits: 7 });
+  return isNaN(n) ? balance : n.toLocaleString(undefined, { minimumFractionDigits: 7, maximumFractionDigits: 7 });
 }
 
 function cropAddress(address: string): string {
@@ -18,7 +20,15 @@ function BalanceItem({ record }: { record: WalletBalanceRecord }) {
   const balanceDiffers = record.balance !== record.available;
   return (
     <div className="pollar-bal-item">
-      <span className="pollar-bal-asset">{record.code}</span>
+      <div className="pollar-bal-asset-info">
+        <span className="pollar-bal-asset">{record.code}</span>
+        {record.issuer && (
+          <span className="pollar-bal-issuer">
+            <span className="pollar-bal-issuer-addr">{cropAddress(record.issuer)}</span>
+            <CopyButton value={record.issuer} label="Copy issuer address" className="pollar-copy-btn-sm" />
+          </span>
+        )}
+      </div>
       <div className="pollar-bal-amounts">
         <span className="pollar-bal-amount">{formatBalance(record.balance)}</span>
         {balanceDiffers && <span className="pollar-bal-available">{formatBalance(record.available)} available</span>}
@@ -94,7 +104,12 @@ export function WalletBalanceModalTemplate({
         </div>
       </div>
 
-      {walletAddress && <div className="pollar-bal-address">{cropAddress(walletAddress)}</div>}
+      {walletAddress && (
+        <div className="pollar-bal-address-row">
+          <span className="pollar-bal-address">{cropAddress(walletAddress)}</span>
+          <CopyButton value={walletAddress} label="Copy wallet address" />
+        </div>
+      )}
 
       {isLoading && <div className="pollar-modal-empty">Loading…</div>}
 
