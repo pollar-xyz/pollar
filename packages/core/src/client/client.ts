@@ -1634,7 +1634,6 @@ export class PollarClient {
     }
 
     const body = {
-      network: this.getNetwork(),
       address: this._session.wallet.address,
       operation,
       params,
@@ -1799,7 +1798,7 @@ export class PollarClient {
     const address = this._session?.wallet?.address ?? '';
     try {
       const { data, error } = await this._api.POST('/tx/sign', {
-        body: { network: this.getNetwork(), address, unsignedXdr },
+        body: { address, unsignedXdr },
       });
       if (!error && data?.success && data.content?.signedXdr) {
         const { signedXdr, idempotencyKey } = data.content;
@@ -1891,7 +1890,7 @@ export class PollarClient {
     const address = this._session?.wallet?.address ?? '';
     try {
       const { data, error } = await this._api.POST('/tx/sign-auth-entry', {
-        body: { network: this.getNetwork(), address, entryXdr, validUntilLedger: options.validUntilLedger },
+        body: { address, entryXdr, validUntilLedger: options.validUntilLedger },
       });
       if (!error && data?.success && data.content?.signedAuthEntry) {
         return { status: 'signed', signedAuthEntry: data.content.signedAuthEntry };
@@ -1956,7 +1955,7 @@ export class PollarClient {
     ledger?: number;
   }> {
     const { data, error } = await this._api.GET('/tx/status', {
-      params: { query: { network: this.getNetwork(), hash } },
+      params: { query: { hash } },
     });
     if (!error && data?.success && data.content) return data.content;
     const { details } = this._resolveTxApiError(error, data);
@@ -2034,7 +2033,6 @@ export class PollarClient {
     try {
       const { data, error } = await this._api.POST('/tx/submit', {
         body: {
-          network: this.getNetwork(),
           address,
           signedXdr,
           ...(opts?.submissionToken && { idempotencyKey: opts.submissionToken }),
@@ -2153,7 +2151,6 @@ export class PollarClient {
     this._setTransactionState({ step: 'signing-submitting', ...(buildData && { buildData }) });
 
     const body: TxSignAndSendBody = {
-      network: this.getNetwork(),
       address: this._session?.wallet?.address ?? '',
       unsignedXdr,
       // Async ack + client-side status poll (see submitTx / _awaitTxConfirmation).
@@ -2275,7 +2272,6 @@ export class PollarClient {
     try {
       const { data, error } = await this._api.POST('/tx/build-sign-submit', {
         body: {
-          network: this.getNetwork(),
           address: this._session.wallet.address,
           operation,
           params,
@@ -2362,7 +2358,6 @@ export class PollarClient {
     let buildData: TxBuildContent;
     try {
       const body = {
-        network: this.getNetwork(),
         address,
         operation,
         params,
@@ -2422,7 +2417,6 @@ export class PollarClient {
     try {
       const { data, error } = await this._api.POST('/tx/submit', {
         body: {
-          network: this.getNetwork(),
           address,
           smart: { entryXdr: smart.entryXdr, funcXdr: smart.funcXdr, assertion },
         },
@@ -2585,7 +2579,6 @@ export class PollarClient {
     const wallet = this.getWallet();
     if (!wallet) throw new Error('No wallet connected');
     const body: SwapQuoteBody = {
-      network: this.getNetwork(),
       address: wallet.address,
       sellAsset: params.sellAsset,
       buyAsset: params.buyAsset,

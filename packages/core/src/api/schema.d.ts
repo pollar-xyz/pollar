@@ -3014,8 +3014,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @enum {string} */
-                    network: "testnet" | "mainnet";
                     publicKey?: string;
                     address?: string;
                     options?: {
@@ -3304,8 +3302,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @enum {string} */
-                    network: "testnet" | "mainnet";
                     publicKey?: string;
                     address?: string;
                     unsignedXdr: string;
@@ -3407,8 +3403,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @enum {string} */
-                    network: "testnet" | "mainnet";
                     publicKey?: string;
                     address?: string;
                     unsignedXdr: string;
@@ -3507,8 +3501,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @enum {string} */
-                    network: "testnet" | "mainnet";
                     publicKey?: string;
                     address?: string;
                     entryXdr: string;
@@ -3606,8 +3598,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @enum {string} */
-                    network: "testnet" | "mainnet";
                     publicKey?: string;
                     address?: string;
                     signedXdr?: string;
@@ -3704,8 +3694,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @enum {string} */
-                    network: "testnet" | "mainnet";
                     publicKey?: string;
                     address?: string;
                     options?: {
@@ -3987,7 +3975,6 @@ export interface operations {
     getTxStatus: {
         parameters: {
             query: {
-                network: "testnet" | "mainnet";
                 hash: string;
             };
             header?: never;
@@ -4053,7 +4040,6 @@ export interface operations {
     getTxHistory: {
         parameters: {
             query?: {
-                network?: "testnet" | "mainnet";
                 limit?: number;
                 offset?: number;
             };
@@ -4261,8 +4247,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @enum {string} */
-                    network: "testnet" | "mainnet";
                     publicKey?: string;
                     address?: string;
                     sellAsset: {
@@ -5448,6 +5432,15 @@ export interface operations {
                                 protocol: "SEP-24" | "REST";
                                 estimatedTime: string;
                                 recommended: boolean;
+                                /** @default [] */
+                                requiredFields: {
+                                    key: string;
+                                    label: string;
+                                    /** @enum {string} */
+                                    type: "text" | "email" | "tel";
+                                    /** @enum {string} */
+                                    bankType?: "CLABE" | "PIX" | "PSE" | "ACH";
+                                }[];
                                 minAmount?: number;
                                 maxAmount?: number;
                             }[];
@@ -5502,6 +5495,9 @@ export interface operations {
                     currency: string;
                     country: string;
                     walletAddress?: string;
+                    /** Format: email */
+                    email?: string;
+                    fullName?: string;
                 };
             };
         };
@@ -5599,6 +5595,9 @@ export interface operations {
                     currency: string;
                     country: string;
                     walletAddress?: string;
+                    /** Format: email */
+                    email?: string;
+                    fullName?: string;
                     bankDetails?: {
                         /** @enum {string} */
                         type: "CLABE" | "PIX" | "PSE" | "ACH";
