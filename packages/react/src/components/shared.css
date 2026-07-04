@@ -337,3 +337,35 @@
 .pollar-status[data-kind='LOADING'] svg {
   animation: pollar-spin 1s linear infinite;
 }
+
+/* ---- Copy button (shared by every modal that renders <CopyButton/>) ---- */
+.pollar-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--pollar-muted);
+  background: var(--pollar-input-bg);
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-buttons-border-radius, 6px);
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.pollar-copy-btn:hover {
+  color: var(--pollar-accent);
+  border-color: var(--pollar-accent);
+}
+
+/* Compact variant used inline next to an address (issuer, tx counterparty…). */
+.pollar-copy-btn-sm {
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
+}

@@ -2,7 +2,7 @@
 
 import { TxHistoryRecord, TxHistoryState } from '@pollar/core';
 import { type CSSProperties } from 'react';
-import { PollarModalFooter } from '../commons';
+import { CopyButton, PollarModalFooter } from '../commons';
 
 const PAGE_SIZE = 10;
 
@@ -105,6 +105,7 @@ export function TxHistoryModalTemplate({
         {txHistory.step === 'loaded' && records.length === 0 && <div className="pollar-modal-empty">No transactions yet.</div>}
         {records.map((record) => {
           const explorerUrl = `https://stellar.expert/explorer/${record.network === 'testnet' ? 'testnet' : 'public'}/tx/${record.hash}`;
+          const destination = typeof record.details?.destination === 'string' ? record.details.destination : undefined;
           return (
             <div key={record.id} className="pollar-hist-item">
               <span className="pollar-hist-item-summary">{record.summary}</span>
@@ -116,6 +117,12 @@ export function TxHistoryModalTemplate({
                 )}
                 {record.feeXlm && <span>· {record.feeXlm} XLM</span>}
                 <span>· {formatDate(record.createdAt)}</span>
+                {destination && (
+                  <>
+                    <span>·</span>
+                    <CopyButton value={destination} label="Copy wallet address" className="pollar-copy-btn-sm" />
+                  </>
+                )}
                 <span>·</span>
                 <a
                   className="pollar-hist-item-explorer"
