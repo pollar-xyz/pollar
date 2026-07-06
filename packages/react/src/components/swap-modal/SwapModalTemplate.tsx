@@ -213,13 +213,6 @@ export function SwapModalTemplate({
         )}
       </div>
 
-      {step === 'form' && configLoading && (
-        <div className="pollar-loading-block">
-          <div className="pollar-spinner" />
-          <span>Loading swap options…</span>
-        </div>
-      )}
-
       {step === 'form' && !configLoading && swapUnavailable && (
         <div className="pollar-modal-error">Swap is not available for this app.</div>
       )}
@@ -236,7 +229,8 @@ export function SwapModalTemplate({
           <AssetSelect
             label="You pay"
             value={sellKey}
-            loading={isLoadingData}
+            loading={isLoadingData || configLoading}
+            loadingLabel="Loading assets…"
             disabled={configLoading}
             options={sellOptions.map((o) => ({
               key: assetOptionKey(o),
@@ -275,7 +269,8 @@ export function SwapModalTemplate({
           <AssetSelect
             label="You receive"
             value={buyKey}
-            loading={isLoadingData}
+            loading={isLoadingData || configLoading}
+            loadingLabel="Loading assets…"
             disabled={configLoading}
             options={buyOptions.map((o) => ({
               key: assetOptionKey(o),

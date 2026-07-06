@@ -28,8 +28,11 @@ interface AssetSelectProps {
   value: string;
   options: AssetSelectOption[];
   onChange: (key: string) => void;
-  /** Show the skeleton shimmer instead of the select. */
+  /** Show a loading indicator instead of the select. */
   loading?: boolean;
+  /** When set, `loading` renders a centered spinner + this label inside a
+   *  select-shaped box (like the ramp widget) instead of the skeleton shimmer. */
+  loadingLabel?: string;
   disabled?: boolean;
   appGroupLabel?: string;
   otherGroupLabel?: string;
@@ -52,6 +55,7 @@ export function AssetSelect({
   options,
   onChange,
   loading = false,
+  loadingLabel,
   disabled = false,
   appGroupLabel = 'App assets',
   otherGroupLabel = 'Other assets',
@@ -64,7 +68,14 @@ export function AssetSelect({
     <div className="pollar-send-field">
       <label className="pollar-send-label">{label}</label>
       {loading ? (
-        <div className="pollar-send-skeleton" />
+        loadingLabel ? (
+          <div className="pollar-input pollar-select-loading">
+            <span className="pollar-spinner pollar-spinner-sm" />
+            <span>{loadingLabel}</span>
+          </div>
+        ) : (
+          <div className="pollar-send-skeleton" />
+        )
       ) : (
         <select
           className="pollar-input pollar-send-select"
