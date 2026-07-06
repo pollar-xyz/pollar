@@ -93,15 +93,32 @@ const INSTRUCTION_LABELS: Record<string, string> = {
   payment_rails: 'Rails',
 };
 
-function flattenInstructions(instr: Record<string, unknown>): { key: string; label: string; value: string }[] {
-  const out: { key: string; label: string; value: string }[] = [];
+type InstructionKind = 'text' | 'qr' | 'datetime';
+type InstructionField = { key: string; label: string; value: string; kind: InstructionKind };
+
+function flattenInstructions(instr: Record<string, unknown>): InstructionField[] {
+  const out: InstructionField[] = [];
   for (const [k, v] of Object.entries(instr)) {
+    // A base64 QR image (e.g. Stereum's Bolivian bank QR) — render as an <img>,
+    // not raw text.
+    if (k === 'qrBase64') {
+      if (typeof v === 'string' && v) out.push({ key: k, label: INSTRUCTION_LABELS[k] ?? 'Payment QR', value: v, kind: 'qr' });
+      continue;
+    }
+    // Expiry timestamps come as epoch milliseconds — render as a local date/time.
+    if ((k === 'expiresAt' || k === 'expires_at') && (typeof v === 'number' || typeof v === 'string')) {
+      const ms = Number(v);
+      if (Number.isFinite(ms) && ms > 0) {
+        out.push({ key: k, label: INSTRUCTION_LABELS[k] ?? 'Expires', value: new Date(ms).toLocaleString(), kind: 'datetime' });
+      }
+      continue;
+    }
     let value = '';
     if (typeof v === 'string' || typeof v === 'number') value = String(v);
     else if (Array.isArray(v)) value = v.filter((x) => typeof x === 'string' || typeof x === 'number').join(', ');
     else continue;
     if (!value) continue;
-    out.push({ key: k, label: INSTRUCTION_LABELS[k] ?? k, value });
+    out.push({ key: k, label: INSTRUCTION_LABELS[k] ?? k, value, kind: 'text' });
   }
   return out;
 }
@@ -372,11 +389,21 @@ export function RampWidgetTemplate({
 
           {depositInstructions &&
             txStatus !== 'completed' &&
-            flattenInstructions(depositInstructions).map(({ key, label, value }) => (
+            flattenInstructions(depositInstructions).map(({ key, label, value, kind }) => (
               <div key={key} className="pollar-ramp-payment-field">
                 <span className="pollar-ramp-payment-label">{label}</span>
                 <div className="pollar-ramp-payment-value">
-                  <code style={{ wordBreak: 'break-all' }}>{value}</code>
+                  {kind === 'qr' ? (
+                    <img
+                      src={value.startsWith('data:') ? value : `data:image/png;base64,${value}`}
+                      alt={label}
+                      style={{ width: '100%', maxWidth: 220, height: 'auto', display: 'block', margin: '0 auto' }}
+                    />
+                  ) : kind === 'datetime' ? (
+                    <span>{value}</span>
+                  ) : (
+                    <code style={{ wordBreak: 'break-all' }}>{value}</code>
+                  )}
                 </div>
               </div>
             ))}
