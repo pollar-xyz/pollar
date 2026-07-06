@@ -1,6 +1,7 @@
 import { createApiClient, fetchWithTimeout, PollarApiClient } from '../api/client';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { getSwapConfig, getSwapTokens, quoteSwap } from '../api/endpoints/swap';
+import { buildEarnTx, getEarnOpportunities, getEarnPosition, getEarnProviders } from '../api/endpoints/earn';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
 import {
   completeWithdraw,
@@ -36,6 +37,11 @@ import {
   SwapQuoteParams,
   SwapToken,
   SwapVenue,
+  EarnProviderId,
+  EarnOpportunity,
+  EarnPosition,
+  EarnPositionParams,
+  EarnTxParams,
   EnabledAssetsState,
   KycLevel,
   KycStartBody,
@@ -2685,6 +2691,89 @@ export class PollarClient {
     // Soroswap returns a prebuilt XDR (submit as-is); Aquarius/SDEX return an
     // operation + params that runTx re-builds server-side (fresh sequence).
     const build = quote.build;
+    if ('unsignedXdr' in build) return this.signAndSubmitTx(build.unsignedXdr);
+    return this.runTx(build.operation, build.params);
+  }
+
+  // ─── Earn (yield vaults / lending) ──────────────────────────────────────────
+
+  /**
+   * The yield providers this app exposes to end-users (enabled + server-capable).
+   * An empty array means Earn is disabled for this app — hide any Earn UI.
+   */
+  async getEarnProviders(): Promise<EarnProviderId[]> {
+    const content = await getEarnProviders(this._api);
+    return content.providers;
+  }
+
+  /**
+   * The vaults (DeFindex) or pools (Blend) a provider exposes on this app's
+   * network, each with its live APY. Read-only.
+   */
+  async getEarnOpportunities(provider: EarnProviderId): Promise<EarnOpportunity[]> {
+    const content = await getEarnOpportunities(this._api, provider);
+    return content.opportunities;
+  }
+
+  /**
+   * The connected wallet's position (balance + APY) in a specific vault/pool.
+   * Read-only — poll it to show the position updating live. `withdrawUnit` tells
+   * you whether {@link earnWithdraw} expects an asset amount (Blend) or a share
+   * count (DeFindex); `withdrawable` is the max in that unit.
+   */
+  async getEarnPosition(params: EarnPositionParams): Promise<EarnPosition> {
+    const wallet = this.getWallet();
+    if (!wallet) throw new Error('No wallet connected');
+    return getEarnPosition(this._api, {
+      provider: params.provider,
+      opportunity: params.opportunity,
+      address: wallet.address,
+    });
+  }
+
+  /**
+   * Deposit into a vault/pool. The provider builds the unsigned XDR server-side
+   * (contract-direct for Blend, via the DeFindex API for DeFindex) and this signs
+   * + submits it, driving the same transaction state machine as {@link runTx}.
+   *
+   * The `amount` is the underlying asset amount. The deposit asset's trustline
+   * must already exist on classic (G-address) wallets — auto-trustline is a
+   * follow-up (the opportunity does not yet expose the asset's classic issuer).
+   */
+  async earnDeposit(params: EarnTxParams): Promise<SubmitOutcome> {
+    return this._earnBuildAndSubmit('deposit', params);
+  }
+
+  /**
+   * Withdraw from a vault/pool. The `amount` is in the position's `withdrawUnit`
+   * (asset amount for Blend, share count for DeFindex) — read it from
+   * {@link getEarnPosition}. Signs + submits the provider-built XDR.
+   */
+  async earnWithdraw(params: EarnTxParams): Promise<SubmitOutcome> {
+    return this._earnBuildAndSubmit('withdraw', params);
+  }
+
+  private async _earnBuildAndSubmit(action: 'deposit' | 'withdraw', params: EarnTxParams): Promise<SubmitOutcome> {
+    const wallet = this.getWallet();
+    if (!wallet) return { status: 'error', details: 'No wallet connected' };
+
+    // Both providers return a prebuilt XDR, which smart (passkey C-address)
+    // wallets can't sign — their build path must run server-side and return a
+    // passkey digest. Fail fast until that lands (same limitation as swap).
+    if (wallet.custody === 'smart') {
+      return { status: 'error', details: 'Earn is not yet supported for smart (passkey) wallets' };
+    }
+
+    const { build } = await buildEarnTx(this._api, {
+      action,
+      provider: params.provider,
+      opportunity: params.opportunity,
+      amount: params.amount,
+      address: wallet.address,
+    });
+    // Both current providers return a prebuilt XDR (submit as-is); the
+    // invoke_contract shape is reserved for a future provider and runs through
+    // runTx (re-simulated server-side), mirroring swap.
     if ('unsignedXdr' in build) return this.signAndSubmitTx(build.unsignedXdr);
     return this.runTx(build.operation, build.params);
   }

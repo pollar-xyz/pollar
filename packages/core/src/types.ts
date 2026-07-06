@@ -768,6 +768,48 @@ export type SwapQuoteParams = {
   slippageBps?: number;
 };
 
+// ─── Earn types (yield vaults / lending) ───────────────────────────────────────
+
+/** Providers this app exposes (from GET /earn/providers). Empty = Earn disabled. */
+export type EarnProvidersContent = pollarPaths['/earn/providers']['get']['responses'][200]['content']['application/json']['content'];
+
+/** A concrete Earn provider. */
+export type EarnProviderId = EarnProvidersContent['providers'][number];
+
+export type EarnOpportunitiesContent = pollarPaths['/earn/opportunities']['get']['responses'][200]['content']['application/json']['content'];
+
+/** A vault (DeFindex) or pool (Blend) the user can deposit into. */
+export type EarnOpportunity = EarnOpportunitiesContent['opportunities'][number];
+
+/** The user's position (balance + APY) in a vault/pool (from GET /earn/position). */
+export type EarnPosition = pollarPaths['/earn/position']['get']['responses'][200]['content']['application/json']['content'];
+
+/** Which unit a provider's withdraw amount is in: asset (Blend) or shares (DeFindex). */
+export type EarnWithdrawUnit = EarnPosition['withdrawUnit'];
+
+export type EarnBuildBody = NonNullable<pollarPaths['/earn/build']['post']['requestBody']>['content']['application/json'];
+
+export type EarnBuildContent = pollarPaths['/earn/build']['post']['responses'][200]['content']['application/json']['content'];
+
+/** The ready-to-sign payload a build returns. */
+export type EarnBuild = EarnBuildContent['build'];
+
+/** Input to `client.getEarnPosition` — wallet address is filled by the client. */
+export type EarnPositionParams = {
+  provider: EarnProviderId;
+  /** Vault/pool id (an opportunity `id`). */
+  opportunity: string;
+};
+
+/** Input to `client.earnDeposit` / `client.earnWithdraw` — address filled by the client. */
+export type EarnTxParams = {
+  provider: EarnProviderId;
+  /** Vault/pool id (an opportunity `id`). */
+  opportunity: string;
+  /** Decimal amount. Deposit: underlying asset. Withdraw: the position `withdrawUnit`. */
+  amount: string;
+};
+
 // ─── Adapter types ────────────────────────────────────────────────────────────
 
 export type AdapterFn<TParams = unknown> = (params: TParams) => Promise<{ unsignedTransaction: string }>;
