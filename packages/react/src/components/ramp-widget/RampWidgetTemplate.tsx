@@ -3,6 +3,7 @@
 import type { RampCountry, RampDirection, RampQuote, RampTxStatus } from '@pollar/core';
 import type { CSSProperties } from 'react';
 import { RouteDisplay } from './RouteDisplay';
+import { CopyButton } from '../commons';
 
 export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 'status' | 'error';
 
@@ -10,8 +11,10 @@ export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 
 export interface RampFieldSpec {
   key: string;
   label: string;
-  type: 'text' | 'email' | 'tel';
-  bankType?: 'CLABE' | 'PIX' | 'PSE' | 'ACH';
+  type: 'text' | 'email' | 'tel' | 'select';
+  bankType?: 'CLABE' | 'PIX' | 'PSE' | 'ACH' | 'BREB';
+  /** For `type: 'select'` — dropdown choices (e.g. Stereum's Bolivian banks). */
+  options?: { value: string; label: string }[];
 }
 
 interface RampWidgetTemplateProps {
@@ -35,6 +38,8 @@ interface RampWidgetTemplateProps {
   kycUrl: string | null;
   tosUrl: string | null;
   stellarTxHash: string | null;
+  /** Stellar Expert URL for `stellarTxHash` (network-aware); null when unknown. */
+  explorerUrl: string | null;
   depositInstructions: Record<string, unknown> | null;
   canComplete: boolean;
   completing: boolean;
@@ -143,6 +148,7 @@ export function RampWidgetTemplate({
   kycUrl,
   tosUrl,
   stellarTxHash,
+  explorerUrl,
   depositInstructions,
   canComplete,
   completing,
@@ -332,13 +338,30 @@ export function RampWidgetTemplate({
           {requiredFields.map((f) => (
             <div key={f.key} className="pollar-ramp-field">
               <label className="pollar-ramp-label">{f.label}</label>
-              <input
-                type={f.type}
-                className="pollar-ramp-input"
-                value={fieldValues[f.key] ?? ''}
-                autoComplete={f.type === 'email' ? 'email' : 'off'}
-                onChange={(e) => onFieldChange(f.key, e.target.value)}
-              />
+              {f.type === 'select' ? (
+                <select
+                  className="pollar-ramp-input"
+                  value={fieldValues[f.key] ?? ''}
+                  onChange={(e) => onFieldChange(f.key, e.target.value)}
+                >
+                  <option value="" disabled>
+                    Select…
+                  </option>
+                  {(f.options ?? []).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type={f.type}
+                  className="pollar-ramp-input"
+                  value={fieldValues[f.key] ?? ''}
+                  autoComplete={f.type === 'email' ? 'email' : 'off'}
+                  onChange={(e) => onFieldChange(f.key, e.target.value)}
+                />
+              )}
             </div>
           ))}
 
@@ -379,10 +402,26 @@ export function RampWidgetTemplate({
           {stellarTxHash && (
             <div className="pollar-ramp-payment-field">
               <span className="pollar-ramp-payment-label">Stellar tx</span>
-              <div className="pollar-ramp-payment-value">
-                <code>
+              <div className="pollar-ramp-payment-value" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <code style={{ flex: 1, wordBreak: 'break-all' }}>
                   {stellarTxHash.slice(0, 8)}…{stellarTxHash.slice(-8)}
                 </code>
+                <CopyButton value={stellarTxHash} label="Copy transaction hash" />
+                {explorerUrl && (
+                  <a
+                    href={explorerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="pollar-copy-btn"
+                    aria-label="View on Stellar Expert"
+                    title="View on Stellar Expert"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
+                      <path d="M6 3H3v8h8V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M8.5 2.5h3v3M11 3L6.5 7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </a>
+                )}
               </div>
             </div>
           )}

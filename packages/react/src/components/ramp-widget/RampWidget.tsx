@@ -36,7 +36,7 @@ interface RampResult {
 }
 
 export function RampWidget({ onClose }: RampWidgetProps) {
-  const { getClient, signTx, wallet, styles } = usePollar();
+  const { getClient, signTx, wallet, styles, network } = usePollar();
   const walletAddress = wallet?.address ?? '';
   const client = getClient();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
@@ -252,13 +252,19 @@ export function RampWidget({ onClose }: RampWidgetProps) {
       const base: Record<string, unknown> = { quoteId: quote.quoteId, amount: Number(amount), currency, country };
       if (walletAddress) base.walletAddress = walletAddress;
       // Map each declared field to the request body: a field with `bankType`
-      // becomes `bankDetails`; others (email, fullName) are same-named fields.
+      // becomes `bankDetails`; the standard body fields map by name; any other
+      // provider-specific field (e.g. Stereum's bankCode / account holder) goes
+      // into `fields`, which the backend reads per provider.
+      const STANDARD_BODY_KEYS = new Set(['email', 'fullName', 'taxId', 'qrCode']);
+      const extraFields: Record<string, string> = {};
       for (const f of requiredFieldsOf(quote)) {
         const val = (fieldValues[f.key] ?? '').trim();
         if (!val) continue;
         if (f.bankType) base.bankDetails = { type: f.bankType, value: val };
-        else base[f.key] = val;
+        else if (STANDARD_BODY_KEYS.has(f.key)) base[f.key] = val;
+        else extraFields[f.key] = val;
       }
+      if (Object.keys(extraFields).length > 0) base.fields = extraFields;
       const result = (
         direction === 'onramp'
           ? await client.createOnRamp(base as RampsOnrampBody)
@@ -327,6 +333,11 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         kycUrl={kycUrl}
         tosUrl={tosUrl}
         stellarTxHash={stellarTxHash}
+        explorerUrl={
+          stellarTxHash
+            ? `https://stellar.expert/explorer/${network === 'mainnet' ? 'public' : 'testnet'}/tx/${stellarTxHash}`
+            : null
+        }
         depositInstructions={depositInstructions}
         canComplete={canComplete}
         completing={completing}
