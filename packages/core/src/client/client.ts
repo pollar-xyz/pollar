@@ -1388,6 +1388,19 @@ export class PollarClient {
     return () => this._transactionStateListeners.delete(cb);
   }
 
+  /**
+   * Reset the transaction state machine back to `idle`. Modal UIs (send / swap /
+   * earn) call this when they (re)open so a prior terminal state — a `success`
+   * or `error` left over from an earlier flow — can't leak in as a stale "Done!"
+   * or error screen.
+   */
+  resetTransactionState(): void {
+    // Align the tx generation with the live session so the stale-write guard in
+    // `_setTransactionState` doesn't drop this reset.
+    this._txStartGen = this._sessionGeneration;
+    this._setTransactionState({ step: 'idle' });
+  }
+
   // ─── Tx history ──────────────────────────────────────────────────────────
 
   getTxHistoryState(): TxHistoryState {

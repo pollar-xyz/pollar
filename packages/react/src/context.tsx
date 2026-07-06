@@ -430,6 +430,12 @@ export function PollarProvider({
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [swapModalOpen, setSwapModalOpen] = useState(false);
   const [earnModalOpen, setEarnModalOpen] = useState(false);
+  // Bumped every time a tx-driving modal opens, used as its `key` so a re-open
+  // remounts it (local `step` back to the form) even when it was already open on
+  // a terminal "Done!"/error screen. Paired with `resetTransactionState()`.
+  const [sendModalKey, setSendModalKey] = useState(0);
+  const [swapModalKey, setSwapModalKey] = useState(0);
+  const [earnModalKey, setEarnModalKey] = useState(0);
   const [receiveModalOpen, setReceiveModalOpen] = useState(false);
   const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
   const [distributionRulesModalOpen, setDistributionRulesModalOpen] = useState(false);
@@ -483,21 +489,33 @@ export function PollarProvider({
       setTrustline: (asset, opts) => pollarClient.setTrustline(asset, opts),
       openEnabledAssetsModal: () => setEnabledAssetsModalOpen(true),
       // send / receive
-      openSendModal: () => setSendModalOpen(true),
+      openSendModal: () => {
+        pollarClient.resetTransactionState();
+        setSendModalKey((k) => k + 1);
+        setSendModalOpen(true);
+      },
       openReceiveModal: () => setReceiveModalOpen(true),
       // swap
       getSwapConfig: () => pollarClient.getSwapConfig(),
       getSwapTokens: () => pollarClient.getSwapTokens(),
       getSwapQuote: (params) => pollarClient.getSwapQuote(params),
       swap: (quote, opts) => pollarClient.swap(quote, opts),
-      openSwapModal: () => setSwapModalOpen(true),
+      openSwapModal: () => {
+        pollarClient.resetTransactionState();
+        setSwapModalKey((k) => k + 1);
+        setSwapModalOpen(true);
+      },
       // earn
       getEarnProviders: () => pollarClient.getEarnProviders(),
       getEarnOpportunities: (provider) => pollarClient.getEarnOpportunities(provider),
       getEarnPosition: (params) => pollarClient.getEarnPosition(params),
       earnDeposit: (params) => pollarClient.earnDeposit(params),
       earnWithdraw: (params) => pollarClient.earnWithdraw(params),
-      openEarnModal: () => setEarnModalOpen(true),
+      openEarnModal: () => {
+        pollarClient.resetTransactionState();
+        setEarnModalKey((k) => k + 1);
+        setEarnModalOpen(true);
+      },
       // sessions
       sessions,
       openSessionsModal: () => setSessionsModalOpen(true),
@@ -579,17 +597,17 @@ export function PollarProvider({
         </ModalErrorBoundary>
       )}
       {sendModalOpen && (
-        <ModalErrorBoundary onClose={() => setSendModalOpen(false)}>
+        <ModalErrorBoundary key={sendModalKey} onClose={() => setSendModalOpen(false)}>
           <SendModal onClose={() => setSendModalOpen(false)} />
         </ModalErrorBoundary>
       )}
       {swapModalOpen && (
-        <ModalErrorBoundary onClose={() => setSwapModalOpen(false)}>
+        <ModalErrorBoundary key={swapModalKey} onClose={() => setSwapModalOpen(false)}>
           <SwapModal onClose={() => setSwapModalOpen(false)} />
         </ModalErrorBoundary>
       )}
       {earnModalOpen && (
-        <ModalErrorBoundary onClose={() => setEarnModalOpen(false)}>
+        <ModalErrorBoundary key={earnModalKey} onClose={() => setEarnModalOpen(false)}>
           <EarnModal onClose={() => setEarnModalOpen(false)} />
         </ModalErrorBoundary>
       )}

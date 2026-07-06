@@ -46,6 +46,8 @@ export function EarnModal({ onClose }: EarnModalProps) {
     earnWithdraw,
     tx: transaction,
     wallet,
+    walletBalance,
+    refreshWalletBalance,
     network,
     styles,
   } = usePollar();
@@ -84,6 +86,11 @@ export function EarnModal({ onClose }: EarnModalProps) {
   useEffect(() => {
     void loadProviders();
   }, [loadProviders]);
+
+  // The wallet balance drives the Deposit tab's "In your wallet" row + Max.
+  useEffect(() => {
+    void refreshWalletBalance();
+  }, [refreshWalletBalance]);
 
   // ─── Opportunities (per provider) ───────────────────────────────────────────
   useEffect(() => {
@@ -144,6 +151,18 @@ export function EarnModal({ onClose }: EarnModalProps) {
   const assetCode = selectedOpportunity?.asset.code ?? '';
   const amountUnitLabel = tab === 'deposit' ? assetCode : withdrawUnit === 'shares' ? 'shares' : assetCode;
 
+  // The wallet's spendable balance of the selected opportunity's asset (native
+  // XLM matches by type; issued assets by code + issuer). `null` = unknown yet.
+  const walletAvailable = (() => {
+    if (!selectedOpportunity) return null;
+    const balances = walletBalance.step === 'loaded' ? walletBalance.data.balances : [];
+    const issuer = selectedOpportunity.asset.issuer;
+    const rec = balances.find((b) =>
+      issuer === null ? b.type === 'native' : b.code === assetCode && b.issuer === issuer,
+    );
+    return rec ? rec.available : null;
+  })();
+
   const hash = transaction.step === 'success' ? transaction.hash : null;
   const buildData = 'buildData' in transaction ? transaction.buildData : null;
   const explorerNetwork = buildData?.summary.network?.toLowerCase().includes('testnet')
@@ -170,12 +189,22 @@ export function EarnModal({ onClose }: EarnModalProps) {
           : 'Withdraw failed'
         : 'Confirm';
 
+  // Over-spend guard: deposit can't exceed the wallet's available balance;
+  // withdraw can't exceed the position. Skipped while the relevant figure is
+  // still unknown (`null`) so a slow balance read doesn't block a valid amount.
+  const parsedAmount = parseFloat(amount);
+  const exceedsAvailable =
+    tab === 'deposit'
+      ? walletAvailable != null && parsedAmount > parseFloat(walletAvailable)
+      : position != null && parsedAmount > parseFloat(position.withdrawable);
+
   const canSubmit =
     !smartUnsupported &&
     !!provider &&
     !!opportunityId &&
     !!amount &&
-    parseFloat(amount) > 0 &&
+    parsedAmount > 0 &&
+    !exceedsAvailable &&
     !providersLoading &&
     !loadingOpps;
 
@@ -211,6 +240,10 @@ export function EarnModal({ onClose }: EarnModalProps) {
     const parsed = parseFloat(amount);
     if (!amount || isNaN(parsed) || parsed <= 0) {
       setFormError('Enter a valid amount');
+      return;
+    }
+    if (tab === 'deposit' && walletAvailable != null && parsed > parseFloat(walletAvailable)) {
+      setFormError('Amount exceeds your wallet balance');
       return;
     }
     if (tab === 'withdraw' && position && parsed > parseFloat(position.withdrawable)) {
@@ -252,13 +285,15 @@ export function EarnModal({ onClose }: EarnModalProps) {
     refreshPosition();
   }
 
-  // Re-fetch the modal's live data on demand: the opportunities for the current
-  // provider (fresh APYs) plus the wallet's position. Leaves the current data in
-  // place on a transient read error.
+  // Re-fetch everything the modal shows on demand: the opportunities for the
+  // current provider (fresh APYs), the wallet's position, and the wallet balance
+  // ("In your wallet" + Max). Leaves the current data in place on a transient
+  // read error.
   async function handleRefresh() {
     if (refreshing || !provider) return;
     setRefreshing(true);
     try {
+      void refreshWalletBalance();
       const opps = await getEarnOpportunities(provider);
       setOpportunities(opps);
       setOpportunityId((cur) => (opps.some((o) => o.id === cur) ? cur : (opps[0]?.id ?? '')));
@@ -414,6 +449,14 @@ export function EarnModal({ onClose }: EarnModalProps) {
             {/* Live position panel */}
             {selectedOpportunity && (
               <div className="pollar-swap-quote">
+                {tab === 'deposit' && (
+                  <div className="pollar-swap-quote-row">
+                    <span className="pollar-send-hint">In your wallet</span>
+                    <span>
+                      {walletAvailable != null ? formatAmount(walletAvailable) : '…'} {assetCode}
+                    </span>
+                  </div>
+                )}
                 <div className="pollar-swap-quote-row">
                   <span className="pollar-send-hint">Your position</span>
                   <span>
@@ -431,6 +474,11 @@ export function EarnModal({ onClose }: EarnModalProps) {
             <div className="pollar-send-field">
               <div className="pollar-send-label-row">
                 <label className="pollar-send-label">{tab === 'deposit' ? 'Amount' : 'Withdraw amount'}</label>
+                {tab === 'deposit' && walletAvailable != null && (
+                  <button type="button" className="pollar-swap-custom-toggle" onClick={() => setAmount(walletAvailable)}>
+                    Max: {formatAmount(walletAvailable)} {amountUnitLabel}
+                  </button>
+                )}
                 {tab === 'withdraw' && position && (
                   <button type="button" className="pollar-swap-custom-toggle" onClick={() => setAmount(position.withdrawable)}>
                     Max: {formatAmount(position.withdrawable)} {amountUnitLabel}
