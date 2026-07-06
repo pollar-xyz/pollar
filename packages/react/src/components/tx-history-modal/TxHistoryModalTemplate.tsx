@@ -29,6 +29,11 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+/** Shorten a long identifier (issuer, hash, address) to `head…tail`. */
+function truncateMiddle(value: string, head = 4, tail = 4): string {
+  return value.length <= head + tail + 1 ? value : `${value.slice(0, head)}…${value.slice(-tail)}`;
+}
+
 export function TxHistoryModalTemplate({
   theme,
   accentColor,
@@ -104,51 +109,94 @@ export function TxHistoryModalTemplate({
         {txHistory.step === 'error' && <div className="pollar-modal-empty">{txHistory.message}</div>}
         {txHistory.step === 'loaded' && records.length === 0 && <div className="pollar-modal-empty">No transactions yet.</div>}
         {records.map((record) => {
-          const explorerUrl = `https://stellar.expert/explorer/${record.network === 'testnet' ? 'testnet' : 'public'}/tx/${record.hash}`;
+          const hash = typeof record.hash === 'string' && record.hash.length > 0 ? record.hash : undefined;
+          const explorerUrl = hash
+            ? `https://stellar.expert/explorer/${record.network === 'testnet' ? 'testnet' : 'public'}/tx/${hash}`
+            : undefined;
           const destination = typeof record.details?.destination === 'string' ? record.details.destination : undefined;
+          const asset = typeof record.details?.asset === 'string' ? record.details.asset : undefined;
+          // `change_trust` summaries embed the asset as `CODE:ISSUER` — split so
+          // the issuer can be truncated and copied on its own.
+          const colon = asset ? asset.indexOf(':') : -1;
+          const trustline =
+            record.operation === 'change_trust' && asset && colon > 0
+              ? {
+                  prefix: record.summary.split(':')[0],
+                  code: asset.slice(0, colon),
+                  issuer: asset.slice(colon + 1),
+                }
+              : undefined;
           return (
             <div key={record.id} className="pollar-hist-item">
-              <span className="pollar-hist-item-summary">{record.summary}</span>
-              <StatusBadge status={record.status} />
+              <div className="pollar-hist-item-top">
+                <span className="pollar-hist-item-summary">
+                  {trustline ? (
+                    <>
+                      <span className="pollar-hist-item-title">
+                        {trustline.prefix}: {trustline.code}
+                      </span>
+                      <span className="pollar-hist-item-issuer">
+                        {truncateMiddle(trustline.issuer)}
+                        <CopyButton value={trustline.issuer} label="Copy issuer" className="pollar-copy-btn-sm" />
+                      </span>
+                    </>
+                  ) : (
+                    <span className="pollar-hist-item-title">{record.summary}</span>
+                  )}
+                </span>
+                <StatusBadge status={record.status} />
+              </div>
+
               <span className="pollar-hist-item-meta">
                 <span>{record.operation}</span>
                 {typeof record.details?.sponsored === 'boolean' && (
                   <span>· {record.details.sponsored ? 'Sponsored' : 'Self-paid'}</span>
                 )}
                 {record.feeXlm && <span>· {record.feeXlm} XLM</span>}
-                <span>· {formatDate(record.createdAt)}</span>
                 {destination && (
                   <>
                     <span>·</span>
-                    <CopyButton value={destination} label="Copy wallet address" className="pollar-copy-btn-sm" />
+                    <span className="pollar-hist-item-issuer">
+                      {truncateMiddle(destination)}
+                      <CopyButton value={destination} label="Copy wallet address" className="pollar-copy-btn-sm" />
+                    </span>
                   </>
                 )}
-                <span>·</span>
-                <a
-                  className="pollar-hist-item-explorer"
-                  href={explorerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="View on Stellar Explorer"
-                >
-                  <svg width="11" height="11" viewBox="0 0 13 13" fill="none" aria-hidden>
-                    <path
-                      d="M5 2H2a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V8"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M8 1h4m0 0v4m0-4L6 7"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  Explorer
-                </a>
               </span>
+
+              <div className="pollar-hist-item-footer">
+                <span>{formatDate(record.createdAt)}</span>
+                {hash && (
+                  <>
+                    <span className="pollar-hist-item-dot">·</span>
+                    <span className="pollar-hist-item-hash">{truncateMiddle(hash, 6, 6)}</span>
+                    <CopyButton value={hash} label="Copy transaction hash" className="pollar-copy-btn-sm" />
+                    <a
+                      className="pollar-hist-item-explorer"
+                      href={explorerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="View on Stellar Explorer"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 13 13" fill="none" aria-hidden>
+                        <path
+                          d="M5 2H2a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V8"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          d="M8 1h4m0 0v4m0-4L6 7"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </a>
+                  </>
+                )}
+              </div>
             </div>
           );
         })}
