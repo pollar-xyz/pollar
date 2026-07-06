@@ -19,6 +19,11 @@ import {
   SwapQuoteParams,
   SwapToken,
   SwapVenue,
+  EarnProviderId,
+  EarnOpportunity,
+  EarnPosition,
+  EarnPositionParams,
+  EarnTxParams,
   TrustlineOutcome,
   TransactionState,
   TxBuildBody,
@@ -36,6 +41,7 @@ import { RampWidget } from './components/ramp-widget/RampWidget';
 import { ReceiveModal } from './components/receive-modal/ReceiveModal';
 import { SendModal } from './components/send-modal/SendModal';
 import { SwapModal } from './components/swap-modal/SwapModal';
+import { EarnModal } from './components/earn-modal/EarnModal';
 import { SessionsModal } from './components/sessions-modal/SessionsModal';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
@@ -186,6 +192,34 @@ interface PollarContextValue {
   swap: (quote: SwapQuote, opts?: { autoTrustline?: boolean }) => Promise<SubmitOutcome>;
   /** Open the swap modal. */
   openSwapModal: () => void;
+  // earn (yield vaults / lending)
+  /**
+   * The yield providers this app exposes to end-users (empty = Earn disabled,
+   * hide Earn UI). Mirrors {@link PollarClient.getEarnProviders}.
+   */
+  getEarnProviders: () => Promise<EarnProviderId[]>;
+  /**
+   * The vaults (DeFindex) or pools (Blend) a provider exposes, with live APY.
+   * Mirrors {@link PollarClient.getEarnOpportunities}.
+   */
+  getEarnOpportunities: (provider: EarnProviderId) => Promise<EarnOpportunity[]>;
+  /**
+   * The connected wallet's position (balance + APY) in a vault/pool. Read-only.
+   * Mirrors {@link PollarClient.getEarnPosition}.
+   */
+  getEarnPosition: (params: EarnPositionParams) => Promise<EarnPosition>;
+  /**
+   * Deposit into a vault/pool (asset amount). Drives the transaction state
+   * machine. Mirrors {@link PollarClient.earnDeposit}.
+   */
+  earnDeposit: (params: EarnTxParams) => Promise<SubmitOutcome>;
+  /**
+   * Withdraw from a vault/pool (amount in the position `withdrawUnit`). Mirrors
+   * {@link PollarClient.earnWithdraw}.
+   */
+  earnWithdraw: (params: EarnTxParams) => Promise<SubmitOutcome>;
+  /** Open the Earn modal. */
+  openEarnModal: () => void;
   // distribution
   openDistributionRulesModal: () => void;
   // adapters
@@ -395,6 +429,7 @@ export function PollarProvider({
   const [enabledAssetsModalOpen, setEnabledAssetsModalOpen] = useState(false);
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [swapModalOpen, setSwapModalOpen] = useState(false);
+  const [earnModalOpen, setEarnModalOpen] = useState(false);
   const [receiveModalOpen, setReceiveModalOpen] = useState(false);
   const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
   const [distributionRulesModalOpen, setDistributionRulesModalOpen] = useState(false);
@@ -456,6 +491,13 @@ export function PollarProvider({
       getSwapQuote: (params) => pollarClient.getSwapQuote(params),
       swap: (quote, opts) => pollarClient.swap(quote, opts),
       openSwapModal: () => setSwapModalOpen(true),
+      // earn
+      getEarnProviders: () => pollarClient.getEarnProviders(),
+      getEarnOpportunities: (provider) => pollarClient.getEarnOpportunities(provider),
+      getEarnPosition: (params) => pollarClient.getEarnPosition(params),
+      earnDeposit: (params) => pollarClient.earnDeposit(params),
+      earnWithdraw: (params) => pollarClient.earnWithdraw(params),
+      openEarnModal: () => setEarnModalOpen(true),
       // sessions
       sessions,
       openSessionsModal: () => setSessionsModalOpen(true),
@@ -544,6 +586,11 @@ export function PollarProvider({
       {swapModalOpen && (
         <ModalErrorBoundary onClose={() => setSwapModalOpen(false)}>
           <SwapModal onClose={() => setSwapModalOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {earnModalOpen && (
+        <ModalErrorBoundary onClose={() => setEarnModalOpen(false)}>
+          <EarnModal onClose={() => setEarnModalOpen(false)} />
         </ModalErrorBoundary>
       )}
       {receiveModalOpen && (

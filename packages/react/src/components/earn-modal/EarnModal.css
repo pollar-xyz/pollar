@@ -1,0 +1,52 @@
+.pollar-earn-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 4px;
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius);
+  background: var(--pollar-input-bg);
+}
+
+.pollar-earn-tab {
+  flex: 1;
+  height: 36px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--pollar-muted);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pollar-earn-tab-active {
+  background: var(--pollar-bg);
+  color: var(--pollar-accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.pollar-earn-amount {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pollar-earn-amount .pollar-input {
+  width: 100%;
+  padding-right: 64px;
+}
+
+.pollar-earn-amount-unit {
+  position: absolute;
+  right: 12px;
+  color: var(--pollar-muted);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.pollar-earn-live {
+  color: var(--pollar-accent);
+  font-weight: 600;
+}

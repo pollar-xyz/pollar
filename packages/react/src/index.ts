@@ -16,6 +16,7 @@ export { WalletBalanceModal } from './components/wallet-balance-modal/WalletBala
 export { EnabledAssetsModal } from './components/enabled-assets-modal/EnabledAssetsModal';
 export { SendModal } from './components/send-modal/SendModal';
 export { SwapModal } from './components/swap-modal/SwapModal';
+export { EarnModal } from './components/earn-modal/EarnModal';
 export { ReceiveModal } from './components/receive-modal/ReceiveModal';
 export { SessionsModal } from './components/sessions-modal/SessionsModal';
 export { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
