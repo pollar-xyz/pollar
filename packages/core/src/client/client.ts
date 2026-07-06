@@ -1614,6 +1614,49 @@ export class PollarClient {
     } as TxBuildBody['params']);
   }
 
+  /**
+   * Create this wallet's account on the Stellar network when it doesn't exist
+   * yet. For EXTERNAL wallets (Freighter / client-side Privy) whose key the
+   * platform doesn't hold: the server builds a sponsored `createAccount` (the new
+   * account starts at "0" balance; the app's sponsor wallet pays the base reserve
+   * and fee) and signs only the sponsor. This client adds the new-account
+   * signature with the user's own wallet and broadcasts it via the submit path.
+   *
+   * Not applicable to custodial (internal) wallets — those are created on the
+   * server at login — nor to smart (C-address) wallets, which don't use classic
+   * accounts. Trustlines are a separate step: see {@link setTrustline}.
+   */
+  async createAccount(): Promise<SubmitOutcome> {
+    const walletType = this._session?.wallet?.type;
+    if (!this._session?.wallet?.address) {
+      return { status: 'error', details: 'No wallet connected' };
+    }
+    if (walletType === 'smart') {
+      return { status: 'error', details: 'Account creation does not apply to smart wallets' };
+    }
+    if (!this._walletAdapter && walletType === 'internal') {
+      return { status: 'error', details: 'Custodial wallets are created on the server at login' };
+    }
+
+    try {
+      const { data, error } = await this._api.POST('/wallet/account/create/build', {});
+      if (error || !data?.success || !data.content?.sponsorSignedXdr) {
+        const details =
+          (error as { details?: string; code?: string } | undefined)?.details ??
+          (error as { code?: string } | undefined)?.code;
+        return { status: 'error', ...(details && { details }) };
+      }
+      const signed = await this.signTx(data.content.sponsorSignedXdr);
+      if (signed.status === 'error') {
+        return { status: 'error', ...(signed.details && { details: signed.details }) };
+      }
+      return this.submitTx(signed.signedXdr);
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      return { status: 'error', ...(details && { details }) };
+    }
+  }
+
   // ─── Transactions ─────────────────────────────────────────────────────────
 
   /**
