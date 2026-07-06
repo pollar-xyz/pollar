@@ -84,10 +84,9 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         setTxStatus(tx.status);
         if (tx.stellarTxHash) setStellarTxHash(tx.stellarTxHash);
         if (tx.kycUrl) setKycUrl(tx.kycUrl);
-        // depositInstructions is returned by REST providers (Bridge); the generated
-        // core type for the tx endpoint may lag, so read it defensively.
-        const di = (tx as { depositInstructions?: Record<string, unknown> }).depositInstructions;
-        if (di) setDepositInstructions(di);
+        // depositInstructions is returned by REST providers (Bridge) — e.g. a Pix
+        // `br_code` / bank details for on-ramp.
+        if (tx.depositInstructions) setDepositInstructions(tx.depositInstructions);
         if (TERMINAL.includes(tx.status)) clearInterval(id);
       } catch {
         /* transient — keep polling */
@@ -149,8 +148,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         setTxStatus(tx.status);
         if (tx.stellarTxHash) setStellarTxHash(tx.stellarTxHash);
         if (tx.kycUrl) setKycUrl(tx.kycUrl);
-        const di = (tx as { depositInstructions?: Record<string, unknown> }).depositInstructions;
-        if (di) setDepositInstructions(di);
+        if (tx.depositInstructions) setDepositInstructions(tx.depositInstructions);
       }
     } catch {
       /* transient — leave the current data in place */
