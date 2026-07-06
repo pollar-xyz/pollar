@@ -58,10 +58,17 @@ export function SendModal({ onClose }: SendModalProps) {
 
   const balanceData = walletBalance.step === 'loaded' ? walletBalance.data : null;
   const allAssets = balanceData?.balances ?? [];
+  // App assets first, then native XLM (always, even at 0, so the user knows to
+  // fund) and any other non-app asset the wallet actually holds.
   const sortedAssets = [
     ...allAssets.filter((b) => b.enabledInApp),
-    ...allAssets.filter((b) => !b.enabledInApp && parseFloat(b.balance) > 0),
+    ...allAssets.filter((b) => !b.enabledInApp && (b.type === 'native' || parseFloat(b.balance) > 0)),
   ];
+
+  // Auto-select the first asset once balances load (no "Select asset" step).
+  useEffect(() => {
+    if (!selectedAsset && sortedAssets.length > 0) setSelectedAsset(sortedAssets[0]!);
+  }, [sortedAssets, selectedAsset]);
 
   const hash = transaction.step === 'success' ? transaction.hash : null;
   const buildData = 'buildData' in transaction ? transaction.buildData : null;

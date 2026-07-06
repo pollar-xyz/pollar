@@ -119,9 +119,11 @@ export function SwapModal({ onClose }: SwapModalProps) {
   const assetRecords = enabledAssets.step === 'loaded' ? enabledAssets.data.assets : [];
   const isLoadingData = walletBalance.step === 'loading' || enabledAssets.step === 'loading';
 
-  // Sell: assets the wallet actually holds (available > 0). Buy: app-enabled assets.
+  // Sell: native XLM + every asset the wallet has a trustline for, even at a 0
+  // balance — so the user always sees what they hold and knows when to fund
+  // (the amount field guards against overselling). Buy: app-enabled assets.
   const sellOptions: SwapAssetOption[] = balances
-    .filter((b) => parseFloat(b.available) > 0)
+    .filter((b) => b.type === 'native' || !b.trustlineRemoved)
     .map((b) => ({ ref: toRef(b), code: b.code, issuer: b.issuer, available: b.available, enabledInApp: b.enabledInApp }));
 
   const buyKeyOfSell = selectedSell ? `${selectedSell.code}:${selectedSell.issuer ?? 'native'}` : '';
@@ -147,6 +149,22 @@ export function SwapModal({ onClose }: SwapModalProps) {
   const knownKeys = new Set([...enabledKeys, ...catalogBuy.map(optKey)]);
   const customBuy = customTokens.filter((o) => !knownKeys.has(optKey(o)));
   const buyOptions: SwapAssetOption[] = [...enabledBuy, ...catalogBuy, ...customBuy].filter((o) => optKey(o) !== buyKeyOfSell);
+
+  // Auto-select the first sell / buy asset once options are available, and keep a
+  // valid selection if the list changes — so the pickers never sit empty.
+  useEffect(() => {
+    if (sellOptions.length === 0) return;
+    if (!selectedSell || !sellOptions.some((o) => optKey(o) === optKey(selectedSell))) {
+      setSelectedSell(sellOptions[0]!);
+    }
+  }, [sellOptions, selectedSell]);
+
+  useEffect(() => {
+    if (buyOptions.length === 0) return;
+    if (!selectedBuy || !buyOptions.some((o) => optKey(o) === optKey(selectedBuy))) {
+      setSelectedBuy(buyOptions[0]!);
+    }
+  }, [buyOptions, selectedBuy]);
 
   // Add a user-pasted token (code + issuer) to the buy list and select it.
   // Returns an error message, or null on success.

@@ -2,6 +2,7 @@
 
 import { SwapProvider, SwapQuote, SwapQuoteParams, TransactionState, WalletId } from '@pollar/core';
 import { type CSSProperties, useState } from 'react';
+import { AssetSelect } from '../AssetSelect';
 import { PollarModalFooter } from '../commons';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
 
@@ -218,38 +219,31 @@ export function SwapModalTemplate({
         <div className="pollar-modal-error">Swap is not available for this app.</div>
       )}
 
-      {step === 'form' && !configLoading && !swapUnavailable && (
+      {/* Keep the form visible while the config loads — disable the inputs rather
+          than unmounting them, so the modal doesn't visibly collapse/jump. */}
+      {step === 'form' && !swapUnavailable && (
         <>
           {smartUnsupported && (
             <div className="pollar-modal-error">Swaps are not yet available for smart (passkey) wallets.</div>
           )}
 
           {/* Sell asset */}
-          <div className="pollar-send-field">
-            <label className="pollar-send-label">You pay</label>
-            {isLoadingData ? (
-              <div className="pollar-send-skeleton" />
-            ) : (
-              <select
-                className="pollar-input pollar-send-select"
-                value={sellKey}
-                onChange={(e) => {
-                  const found = sellOptions.find((o) => assetOptionKey(o) === e.target.value);
-                  if (found) onSelectSell(found);
-                }}
-              >
-                <option value="" disabled>
-                  Select asset to sell
-                </option>
-                {sellOptions.map((o) => (
-                  <option key={assetOptionKey(o)} value={assetOptionKey(o)}>
-                    {o.code}
-                    {o.available !== undefined ? ` — ${formatAmount(o.available)} available` : ''}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+          <AssetSelect
+            label="You pay"
+            value={sellKey}
+            loading={isLoadingData}
+            disabled={configLoading}
+            options={sellOptions.map((o) => ({
+              key: assetOptionKey(o),
+              code: o.code,
+              available: o.available,
+              enabledInApp: o.enabledInApp,
+            }))}
+            onChange={(key) => {
+              const found = sellOptions.find((o) => assetOptionKey(o) === key);
+              if (found) onSelectSell(found);
+            }}
+          />
 
           {/* Amount */}
           <div className="pollar-send-field">
@@ -267,75 +261,71 @@ export function SwapModalTemplate({
               inputMode="decimal"
               placeholder="0.00"
               value={amount}
+              disabled={configLoading}
               onChange={(e) => onAmountChange(e.target.value)}
             />
           </div>
 
           {/* Buy asset */}
-          <div className="pollar-send-field">
-            <label className="pollar-send-label">You receive</label>
-            {isLoadingData ? (
-              <div className="pollar-send-skeleton" />
-            ) : (
-              <select
-                className="pollar-input pollar-send-select"
-                value={buyKey}
-                onChange={(e) => {
-                  const found = buyOptions.find((o) => assetOptionKey(o) === e.target.value);
-                  if (found) onSelectBuy(found);
-                }}
-              >
-                <option value="" disabled>
-                  Select asset to buy
-                </option>
-                {buyOptions.map((o) => (
-                  <option key={assetOptionKey(o)} value={assetOptionKey(o)}>
-                    {o.code}
-                    {o.enabledInApp ? '' : ' (external)'}
-                  </option>
-                ))}
-              </select>
-            )}
-            {!isLoadingData &&
-              (customOpen ? (
-                <div className="pollar-swap-custom">
-                  <input
-                    className="pollar-input"
-                    type="text"
-                    placeholder="Code (e.g. USDC)"
-                    value={customCode}
-                    onChange={(e) => setCustomCode(e.target.value)}
-                  />
-                  <input
-                    className="pollar-input"
-                    type="text"
-                    placeholder="Issuer (G...)"
-                    value={customIssuer}
-                    onChange={(e) => setCustomIssuer(e.target.value)}
-                  />
-                  {customError && <div className="pollar-modal-error">{customError}</div>}
-                  <div className="pollar-swap-custom-actions">
-                    <button type="button" className="pollar-btn-primary" onClick={submitCustomToken}>
-                      Add token
-                    </button>
-                    <button
-                      type="button"
-                      className="pollar-swap-custom-cancel"
-                      onClick={() => {
-                        setCustomOpen(false);
-                        setCustomError('');
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
+          <AssetSelect
+            label="You receive"
+            value={buyKey}
+            loading={isLoadingData}
+            disabled={configLoading}
+            options={buyOptions.map((o) => ({
+              key: assetOptionKey(o),
+              code: o.code,
+              enabledInApp: o.enabledInApp,
+            }))}
+            onChange={(key) => {
+              const found = buyOptions.find((o) => assetOptionKey(o) === key);
+              if (found) onSelectBuy(found);
+            }}
+          >
+            {customOpen ? (
+              <div className="pollar-swap-custom">
+                <input
+                  className="pollar-input"
+                  type="text"
+                  placeholder="Code (e.g. USDC)"
+                  value={customCode}
+                  onChange={(e) => setCustomCode(e.target.value)}
+                />
+                <input
+                  className="pollar-input"
+                  type="text"
+                  placeholder="Issuer (G...)"
+                  value={customIssuer}
+                  onChange={(e) => setCustomIssuer(e.target.value)}
+                />
+                {customError && <div className="pollar-modal-error">{customError}</div>}
+                <div className="pollar-swap-custom-actions">
+                  <button type="button" className="pollar-btn-primary" onClick={submitCustomToken}>
+                    Add token
+                  </button>
+                  <button
+                    type="button"
+                    className="pollar-swap-custom-cancel"
+                    onClick={() => {
+                      setCustomOpen(false);
+                      setCustomError('');
+                    }}
+                  >
+                    Cancel
+                  </button>
                 </div>
-              ) : (
-                <button type="button" className="pollar-swap-custom-toggle" onClick={() => setCustomOpen(true)}>
-                  + Add a token by code / issuer
-                </button>
-              ))}
-          </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="pollar-swap-custom-toggle"
+                disabled={configLoading}
+                onClick={() => setCustomOpen(true)}
+              >
+                + Add a token by code / issuer
+              </button>
+            )}
+          </AssetSelect>
 
           {/* Route selector */}
           <div className="pollar-send-field">
@@ -343,13 +333,18 @@ export function SwapModalTemplate({
             <select
               className="pollar-input pollar-send-select"
               value={provider}
+              disabled={configLoading || providers.length === 0}
               onChange={(e) => onProviderChange(e.target.value as SwapProvider)}
             >
-              {providers.map((p) => (
-                <option key={p} value={p}>
-                  {PROVIDER_LABELS[p]}
-                </option>
-              ))}
+              {providers.length === 0 ? (
+                <option value={provider}>{configLoading ? 'Loading…' : PROVIDER_LABELS[provider]}</option>
+              ) : (
+                providers.map((p) => (
+                  <option key={p} value={p}>
+                    {PROVIDER_LABELS[p]}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
