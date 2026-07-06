@@ -792,6 +792,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/wallet/account/create/build": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Build a sponsored account creation for an external wallet to co-sign
+         * @description Builds a sponsored createAccount (the new account is created with a "0" starting balance; the app sponsor wallet pays the base reserve and the fee) and signs ONLY the sponsor, returning the partially-signed XDR. Use this for EXTERNAL wallets (Freighter / client-side Privy) whose key the platform does not hold: the caller adds the new-account signature client-side and broadcasts via POST /tx/submit. Custodial wallets are created on the server during login. Trustlines are a separate step — request each via POST /wallet/assets/trustline/build. The wallet and network are derived from the session.
+         */
+        post: operations["postWalletAccountCreateBuild"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/wallet/{publicKey}/balance": {
         parameters: {
             query?: never;
@@ -5039,6 +5059,80 @@ export interface operations {
             };
         };
     };
+    postWalletAccountCreateBuild: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sponsor-signed createAccount XDR awaiting the new-account signature */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_WALLET_ACCOUNT_CREATE_BUILD";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            sponsorSignedXdr: string;
+                            newAccountPublicKey: string;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
     getWalletByPublicKeyBalance: {
         parameters: {
             query: {
@@ -5427,7 +5521,7 @@ export interface operations {
                                 feeCurrency: string;
                                 rate: number;
                                 /** @enum {string} */
-                                rail: "SPEI" | "PIX" | "PSE" | "ACH";
+                                rail: "SPEI" | "PIX" | "PSE" | "ACH" | "BREB" | "QR";
                                 /** @enum {string} */
                                 protocol: "SEP-24" | "REST";
                                 estimatedTime: string;
@@ -5439,7 +5533,7 @@ export interface operations {
                                     /** @enum {string} */
                                     type: "text" | "email" | "tel";
                                     /** @enum {string} */
-                                    bankType?: "CLABE" | "PIX" | "PSE" | "ACH";
+                                    bankType?: "CLABE" | "PIX" | "PSE" | "ACH" | "BREB";
                                 }[];
                                 minAmount?: number;
                                 maxAmount?: number;
@@ -5519,6 +5613,7 @@ export interface operations {
                             /** @enum {string} */
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
+                            tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
                             pendingSignature?: {
@@ -5600,8 +5695,13 @@ export interface operations {
                     fullName?: string;
                     bankDetails?: {
                         /** @enum {string} */
-                        type: "CLABE" | "PIX" | "PSE" | "ACH";
+                        type: "CLABE" | "PIX" | "PSE" | "ACH" | "BREB";
                         value: string;
+                    };
+                    taxId?: string;
+                    qrCode?: string;
+                    fields?: {
+                        [key: string]: string;
                     };
                 };
             };
@@ -5624,6 +5724,7 @@ export interface operations {
                             /** @enum {string} */
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
+                            tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
                             pendingSignature?: {
@@ -5721,6 +5822,7 @@ export interface operations {
                             /** @enum {string} */
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
+                            tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
                             pendingSignature?: {
@@ -5825,6 +5927,7 @@ export interface operations {
                             /** @enum {string} */
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
+                            tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
                             pendingSignature?: {
