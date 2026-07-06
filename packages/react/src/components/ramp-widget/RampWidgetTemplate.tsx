@@ -130,7 +130,7 @@ function flattenInstructions(instr: Record<string, unknown>): InstructionField[]
       }
       continue;
     }
-    let value = '';
+    let value: string;
     if (typeof v === 'string' || typeof v === 'number') value = String(v);
     else if (Array.isArray(v)) value = v.filter((x) => typeof x === 'string' || typeof x === 'number').join(', ');
     else continue;
@@ -230,7 +230,7 @@ export function RampWidgetTemplate({
         <div className="pollar-modal-header-actions">
           <button type="button" className="pollar-modal-close" onClick={onRefresh} disabled={refreshing} aria-label="Refresh">
             <svg
-              className={refreshing ? 'pollar-modal-refresh-icon spinning' : 'pollar-modal-refresh-icon'}
+              className={refreshing ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
               width="16"
               height="16"
               viewBox="0 0 16 16"
@@ -256,10 +256,10 @@ export function RampWidgetTemplate({
 
       {step === 'input' && (
         <>
-          <div className="pollar-ramp-tabs">
+          <div className="pollar-tabs">
             <button
               type="button"
-              className="pollar-ramp-tab"
+              className="pollar-tab"
               data-active={direction === 'onramp'}
               onClick={() => onDirectionChange('onramp')}
             >
@@ -267,7 +267,7 @@ export function RampWidgetTemplate({
             </button>
             <button
               type="button"
-              className="pollar-ramp-tab"
+              className="pollar-tab"
               data-active={direction === 'offramp'}
               onClick={() => onDirectionChange('offramp')}
             >
@@ -278,7 +278,10 @@ export function RampWidgetTemplate({
           <div className="pollar-ramp-field">
             <label className="pollar-ramp-label">Country</label>
             {countriesLoading ? (
-              <div className="pollar-ramp-input pollar-ramp-input-loading">Loading countries…</div>
+              <div className="pollar-ramp-input pollar-ramp-input-loading">
+                <span className="pollar-spinner pollar-spinner-sm" />
+                <span>Loading countries…</span>
+              </div>
             ) : countries.length === 0 ? (
               <div className="pollar-modal-error">No ramp providers available on this network yet.</div>
             ) : (
@@ -323,6 +326,7 @@ export function RampWidgetTemplate({
 
       {step === 'loading_quote' && (
         <div className="pollar-ramp-loading">
+          <div className="pollar-spinner pollar-ramp-loading-spinner" />
           {LOADING_STEPS.map((text, i) => (
             <div key={i} className="pollar-ramp-loading-row">
               <div className="pollar-ramp-loading-dot" />
@@ -390,7 +394,14 @@ export function RampWidgetTemplate({
               disabled={requiredFields.some((f) => !isFieldValid(f, fieldValues[f.key])) || isLoading}
               onClick={onContactContinue}
             >
-              {isLoading ? 'Starting…' : 'Continue'}
+              {isLoading ? (
+                <>
+                  <span className="pollar-spinner pollar-spinner-sm" />
+                  Starting…
+                </>
+              ) : (
+                'Continue'
+              )}
             </button>
           </div>
         </>
@@ -411,6 +422,9 @@ export function RampWidgetTemplate({
               <code style={{ color: txStatus === 'completed' ? 'var(--pollar-success-text)' : undefined }}>
                 {txStatus ? STATUS_LABEL[txStatus] : 'Processing'}
               </code>
+              {txStatus !== 'completed' && txStatus !== 'failed' && (
+                <span className="pollar-spinner pollar-spinner-sm" aria-label="Checking status" />
+              )}
             </div>
           </div>
 
@@ -432,8 +446,20 @@ export function RampWidgetTemplate({
                     title="View on Stellar Expert"
                   >
                     <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
-                      <path d="M6 3H3v8h8V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d="M8.5 2.5h3v3M11 3L6.5 7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      <path
+                        d="M6 3H3v8h8V8"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M8.5 2.5h3v3M11 3L6.5 7.5"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
                     </svg>
                   </a>
                 )}
@@ -482,7 +508,14 @@ export function RampWidgetTemplate({
 
           {canComplete && (
             <button type="button" className="pollar-btn-primary" disabled={completing} onClick={onCompleteWithdraw}>
-              {completing ? 'Submitting…' : "I've completed KYC — withdraw"}
+              {completing ? (
+                <>
+                  <span className="pollar-spinner pollar-spinner-sm" />
+                  Submitting…
+                </>
+              ) : (
+                "I've completed KYC — withdraw"
+              )}
             </button>
           )}
 

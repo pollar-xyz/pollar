@@ -178,7 +178,7 @@ export function PrivyLoginSubmodal({
                 placeholder="you@email.com"
                 value={email}
                 disabled={isLoading}
-                className="pollar-email-input"
+                className="pollar-input"
                 onChange={(e) => setEmail(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleEmailSubmit()}
               />

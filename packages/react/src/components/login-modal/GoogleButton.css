@@ -1,4 +1,4 @@
-.gsi-material-button {
+.pollar-gsi-material-button {
   -moz-user-select: none;
   -webkit-user-select: none;
   -ms-user-select: none;
@@ -33,7 +33,7 @@
   width: 100%;
 }
 
-.gsi-material-button .gsi-material-button-icon {
+.pollar-gsi-material-button .pollar-gsi-material-button-icon {
   height: 20px;
   margin-right: 0;
   min-width: 20px;
@@ -41,7 +41,7 @@
   flex-shrink: 0;
 }
 
-.gsi-material-button .gsi-material-button-content-wrapper {
+.pollar-gsi-material-button .pollar-gsi-material-button-content-wrapper {
   -webkit-align-items: center;
   align-items: center;
   display: flex;
@@ -56,7 +56,7 @@
   width: 100%;
 }
 
-.gsi-material-button .gsi-material-button-contents {
+.pollar-gsi-material-button .pollar-gsi-material-button-contents {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 500;
   overflow: hidden;
@@ -64,7 +64,7 @@
   flex-grow: 0;
 }
 
-.gsi-material-button .gsi-material-button-state {
+.pollar-gsi-material-button .pollar-gsi-material-button-state {
   -webkit-transition: opacity 0.218s;
   transition: opacity 0.218s;
   bottom: 0;
@@ -75,37 +75,37 @@
   top: 0;
 }
 
-.gsi-material-button:disabled {
+.pollar-gsi-material-button:disabled {
   cursor: default;
   background-color: #ffffff61;
   border-color: #1f1f1f1f;
 }
 
-.gsi-material-button:disabled .gsi-material-button-contents {
+.pollar-gsi-material-button:disabled .pollar-gsi-material-button-contents {
   opacity: 38%;
 }
 
-.gsi-material-button:disabled .gsi-material-button-icon {
+.pollar-gsi-material-button:disabled .pollar-gsi-material-button-icon {
   opacity: 38%;
 }
 
-.gsi-material-button:not(:disabled):active .gsi-material-button-state,
-.gsi-material-button:not(:disabled):focus .gsi-material-button-state {
+.pollar-gsi-material-button:not(:disabled):active .pollar-gsi-material-button-state,
+.pollar-gsi-material-button:not(:disabled):focus .pollar-gsi-material-button-state {
   background-color: #303030;
   opacity: 12%;
 }
 
-.gsi-material-button:not(:disabled):hover {
+.pollar-gsi-material-button:not(:disabled):hover {
   border-color: var(--pollar-accent);
   color: var(--pollar-accent);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
-.gsi-material-button:not(:disabled):active {
+.pollar-gsi-material-button:not(:disabled):active {
   transform: scale(0.99);
 }
 
-.gsi-material-button:not(:disabled):hover .gsi-material-button-state {
+.pollar-gsi-material-button:not(:disabled):hover .pollar-gsi-material-button-state {
   background-color: transparent;
   opacity: 0;
 }

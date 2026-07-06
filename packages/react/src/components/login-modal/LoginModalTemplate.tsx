@@ -291,7 +291,7 @@ export function LoginModalTemplate({
                 placeholder="you@email.com"
                 value={email}
                 disabled={isLoading}
-                className="pollar-email-input"
+                className="pollar-input"
                 onChange={(e) => onEmailChange?.(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && onEmailSubmit?.()}
               />

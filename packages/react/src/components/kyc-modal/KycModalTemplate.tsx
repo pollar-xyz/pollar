@@ -17,6 +17,7 @@ interface KycModalTemplateProps {
   isLoading: boolean;
   onSelectProvider: (provider: KycProvider) => void;
   onDoneVerifying: () => void;
+  onRefresh: () => void;
   onClose: () => void;
 }
 
@@ -31,6 +32,7 @@ export function KycModalTemplate({
   isLoading,
   onSelectProvider,
   onDoneVerifying,
+  onRefresh,
   onClose,
 }: KycModalTemplateProps) {
   const isDark = theme === 'dark';
@@ -58,35 +60,77 @@ export function KycModalTemplate({
 
   return (
     <div className="pollar-modal-card pollar-kyc-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
-      <div className="pollar-kyc-header">
-        <h2 className="pollar-kyc-title">Identity verification</h2>
-        <p className="pollar-kyc-subtitle">
-          {step === 'select_provider' && 'Choose your verification provider'}
-          {step === 'verifying' && `Verifying with ${selectedProvider?.name}`}
-          {step === 'polling' && 'Waiting for verification result'}
-          {step === 'done' && 'Verification complete'}
-        </p>
+      <div className="pollar-modal-header">
+        <div className="pollar-kyc-header-text">
+          <h2 className="pollar-modal-title">Identity verification</h2>
+          <p className="pollar-kyc-subtitle">
+            {step === 'select_provider' && 'Choose your verification provider'}
+            {step === 'verifying' && `Verifying with ${selectedProvider?.name}`}
+            {step === 'polling' && 'Waiting for verification result'}
+            {step === 'done' && 'Verification complete'}
+          </p>
+        </div>
+        <div className="pollar-modal-header-actions">
+          {step === 'select_provider' && (
+            <button
+              type="button"
+              className="pollar-modal-close"
+              onClick={onRefresh}
+              disabled={isLoading}
+              aria-label="Refresh"
+              title="Refresh providers"
+            >
+              <svg
+                className={isLoading ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden
+              >
+                <path
+                  d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          )}
+          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+              <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
 
-      {step === 'select_provider' && (
-        <div className="pollar-kyc-providers">
-          {providers.length === 0 && (
-            <p style={{ color: 'var(--pollar-muted)', textAlign: 'center' }}>No providers available for your country.</p>
-          )}
-          {providers.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              className="pollar-kyc-provider-btn"
-              disabled={isLoading}
-              onClick={() => onSelectProvider(p)}
-            >
-              <span className="pollar-kyc-provider-name">{p.name}</span>
-              <span className="pollar-kyc-provider-flow">{p.flow}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {step === 'select_provider' &&
+        (isLoading && providers.length === 0 ? (
+          <div className="pollar-loading-block">
+            <div className="pollar-spinner" />
+            <span>Loading providers…</span>
+          </div>
+        ) : (
+          <div className="pollar-kyc-providers">
+            {providers.length === 0 && (
+              <p style={{ color: 'var(--pollar-muted)', textAlign: 'center' }}>No providers available for your country.</p>
+            )}
+            {providers.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="pollar-kyc-provider-btn"
+                disabled={isLoading}
+                onClick={() => onSelectProvider(p)}
+              >
+                <span className="pollar-kyc-provider-name">{p.name}</span>
+                <span className="pollar-kyc-provider-flow">{p.flow}</span>
+              </button>
+            ))}
+          </div>
+        ))}
 
       {step === 'verifying' && selectedProvider && (
         <>

@@ -38,10 +38,7 @@ export function WalletButton() {
   // it optimistically after a successful create (the session's existsOnStellar
   // only refreshes on the next login/resume).
   const canCreateAccount =
-    !created &&
-    wallet?.custody === 'external' &&
-    wallet.existsOnStellar === false &&
-    wallet.fundingMode === 'IMMEDIATE';
+    !created && wallet?.custody === 'external' && wallet.existsOnStellar === false && wallet.fundingMode === 'IMMEDIATE';
 
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const isDark = theme === 'dark';

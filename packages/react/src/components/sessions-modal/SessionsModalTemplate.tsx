@@ -121,19 +121,30 @@ export function SessionsModalTemplate({
       <div className="pollar-modal-header">
         <h2 className="pollar-modal-title">Active sessions</h2>
         <div className="pollar-modal-header-actions">
-          <button className="pollar-modal-refresh-btn" onClick={onRefresh} disabled={isLoading}>
+          <button
+            type="button"
+            className="pollar-modal-close"
+            onClick={onRefresh}
+            disabled={isLoading}
+            aria-label="Refresh"
+            title="Refresh"
+          >
             <svg
-              className={`pollar-modal-refresh-icon${isLoading ? ' spinning' : ''}`}
-              width="13"
-              height="13"
-              viewBox="0 0 13 13"
+              className={isLoading ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
               fill="none"
               aria-hidden
             >
-              <path d="M11.5 6.5a5 5 0 11-1.5-3.536" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              <path d="M10 1v3h-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
-            Refresh
           </button>
           <button className="pollar-modal-close" onClick={onClose} aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -144,8 +155,12 @@ export function SessionsModalTemplate({
       </div>
 
       <div className="pollar-sessions-list">
-        {state.step === 'idle' && <div className="pollar-modal-empty">Loading…</div>}
-        {isLoading && <div className="pollar-modal-empty">Loading…</div>}
+        {(state.step === 'idle' || isLoading) && (
+          <div className="pollar-loading-block">
+            <div className="pollar-spinner" />
+            <span>Loading…</span>
+          </div>
+        )}
         {state.step === 'error' && <div className="pollar-modal-empty">{state.message}</div>}
         {state.step === 'loaded' && sessions.length === 0 && <div className="pollar-modal-empty">No active sessions.</div>}
         {sessions.map((s) => {
@@ -171,7 +186,14 @@ export function SessionsModalTemplate({
                   onClick={() => onRevoke(s.familyId)}
                   disabled={isRevoking || signingOutEverywhere}
                 >
-                  {isRevoking ? 'Revoking…' : 'Revoke'}
+                  {isRevoking ? (
+                    <>
+                      <span className="pollar-spinner pollar-spinner-sm pollar-spinner-current" />
+                      Revoking…
+                    </>
+                  ) : (
+                    'Revoke'
+                  )}
                 </button>
               )}
             </div>
@@ -187,7 +209,14 @@ export function SessionsModalTemplate({
             disabled={signingOutEverywhere || otherCount === 0}
             title={otherCount === 0 ? 'No other devices to sign out' : undefined}
           >
-            {signingOutEverywhere ? 'Signing out…' : 'Sign out everywhere'}
+            {signingOutEverywhere ? (
+              <>
+                <span className="pollar-spinner pollar-spinner-sm pollar-spinner-current" />
+                Signing out…
+              </>
+            ) : (
+              'Sign out everywhere'
+            )}
           </button>
         </div>
       )}

@@ -1,30 +1,4 @@
-.pollar-earn-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 12px;
-  padding: 4px;
-  border: 1px solid var(--pollar-border);
-  border-radius: var(--pollar-card-border-radius);
-  background: var(--pollar-input-bg);
-}
-
-.pollar-earn-tab {
-  flex: 1;
-  height: 36px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--pollar-muted);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.pollar-earn-tab-active {
-  background: var(--pollar-bg);
-  color: var(--pollar-accent);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-}
+/* Segmented tabs live in shared.css (.pollar-tabs / .pollar-tab). */
 
 .pollar-earn-amount {
   position: relative;

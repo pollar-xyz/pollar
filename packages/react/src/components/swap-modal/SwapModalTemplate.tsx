@@ -213,7 +213,12 @@ export function SwapModalTemplate({
         )}
       </div>
 
-      {step === 'form' && configLoading && <div className="pollar-send-hint">Loading swap options…</div>}
+      {step === 'form' && configLoading && (
+        <div className="pollar-loading-block">
+          <div className="pollar-spinner" />
+          <span>Loading swap options…</span>
+        </div>
+      )}
 
       {step === 'form' && !configLoading && swapUnavailable && (
         <div className="pollar-modal-error">Swap is not available for this app.</div>
@@ -349,7 +354,12 @@ export function SwapModalTemplate({
           </div>
 
           {/* Quote panel */}
-          {quoteLoading && <div className="pollar-send-hint">Fetching best price…</div>}
+          {quoteLoading && (
+            <div className="pollar-send-hint pollar-inline-loading">
+              <span className="pollar-spinner pollar-spinner-sm" />
+              Fetching best price…
+            </div>
+          )}
           {!quoteLoading && quoteError && <div className="pollar-modal-error">{quoteError}</div>}
           {!quoteLoading && !quoteError && quote && selectedBuy && (
             <div className="pollar-swap-quote">

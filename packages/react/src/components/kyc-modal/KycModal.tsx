@@ -1,7 +1,7 @@
 'use client';
 
 import { type KycProvider, type KycStartResponse, type KycStatus as KycStatusValue } from '@pollar/core';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { usePollar } from '../../context';
 import type { KycStep } from './KycModalTemplate';
 import { KycModalTemplate } from './KycModalTemplate';
@@ -31,14 +31,18 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved 
   const client = getClient();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
 
-  useEffect(() => {
+  const loadProviders = useCallback(() => {
     setIsLoading(true);
-    getClient()
+    return getClient()
       .getKycProviders(country)
       .then((result) => setProviders(result.providers))
       .catch(() => setProviders([]))
       .finally(() => setIsLoading(false));
   }, [getClient, country]);
+
+  useEffect(() => {
+    void loadProviders();
+  }, [loadProviders]);
 
   async function handleSelectProvider(provider: KycProvider) {
     setSelectedProvider(provider);
@@ -87,6 +91,7 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved 
         isLoading={isLoading}
         onSelectProvider={handleSelectProvider}
         onDoneVerifying={handleDoneVerifying}
+        onRefresh={() => void loadProviders()}
         onClose={onClose}
       />
     </div>

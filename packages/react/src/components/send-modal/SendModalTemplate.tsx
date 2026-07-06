@@ -35,6 +35,7 @@ export interface SendModalTemplateProps {
   isInProgress: boolean;
   onClose: () => void;
   onBack: () => void;
+  onRefresh: () => void;
   onSelectAsset: (asset: WalletBalanceRecord) => void;
   onAmountChange: (value: string) => void;
   onDestinationChange: (value: string) => void;
@@ -66,6 +67,7 @@ export function SendModalTemplate({
   isInProgress,
   onClose,
   onBack,
+  onRefresh,
   onSelectAsset,
   onAmountChange,
   onDestinationChange,
@@ -122,6 +124,33 @@ export function SendModalTemplate({
         </div>
         {!isInProgress && (
           <div className="pollar-modal-header-actions">
+            {step === 'form' && (
+              <button
+                type="button"
+                className="pollar-modal-close"
+                onClick={onRefresh}
+                disabled={isLoadingBalance}
+                aria-label="Refresh"
+                title="Refresh balances"
+              >
+                <svg
+                  className={isLoadingBalance ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden
+                >
+                  <path
+                    d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            )}
             <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                 <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />

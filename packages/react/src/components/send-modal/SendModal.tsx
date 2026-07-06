@@ -176,6 +176,7 @@ export function SendModal({ onClose }: SendModalProps) {
         isInProgress={isInProgress}
         onClose={onClose}
         onBack={handleBack}
+        onRefresh={() => void refreshWalletBalance()}
         onSelectAsset={setSelectedAsset}
         onAmountChange={setAmount}
         onDestinationChange={setDestination}

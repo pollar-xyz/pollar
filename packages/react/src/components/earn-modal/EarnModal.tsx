@@ -23,7 +23,14 @@ const PROVIDER_LABELS: Record<EarnProviderId, string> = {
   defindex: 'DeFindex',
 };
 
-const IN_FLIGHT_STEPS = ['building', 'signing', 'submitting', 'submitted', 'signing-submitting', 'building-signing-submitting'] as const;
+const IN_FLIGHT_STEPS = [
+  'building',
+  'signing',
+  'submitting',
+  'submitted',
+  'signing-submitting',
+  'building-signing-submitting',
+] as const;
 
 function formatAmount(value: string): string {
   const n = parseFloat(value);
@@ -58,6 +65,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
   const [amount, setAmount] = useState('');
   const [loadingOpps, setLoadingOpps] = useState(false);
   const [formError, setFormError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const [showXdr, setShowXdr] = useState(false);
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -163,7 +171,13 @@ export function EarnModal({ onClose }: EarnModalProps) {
         : 'Confirm';
 
   const canSubmit =
-    !smartUnsupported && !!provider && !!opportunityId && !!amount && parseFloat(amount) > 0 && !providersLoading && !loadingOpps;
+    !smartUnsupported &&
+    !!provider &&
+    !!opportunityId &&
+    !!amount &&
+    parseFloat(amount) > 0 &&
+    !providersLoading &&
+    !loadingOpps;
 
   const cssVars = {
     '--pollar-accent': accentColor,
@@ -238,11 +252,34 @@ export function EarnModal({ onClose }: EarnModalProps) {
     refreshPosition();
   }
 
+  // Re-fetch the modal's live data on demand: the opportunities for the current
+  // provider (fresh APYs) plus the wallet's position. Leaves the current data in
+  // place on a transient read error.
+  async function handleRefresh() {
+    if (refreshing || !provider) return;
+    setRefreshing(true);
+    try {
+      const opps = await getEarnOpportunities(provider);
+      setOpportunities(opps);
+      setOpportunityId((cur) => (opps.some((o) => o.id === cur) ? cur : (opps[0]?.id ?? '')));
+      refreshPosition();
+    } catch {
+      /* transient — keep the current snapshot */
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   const title = step === 'form' ? 'Earn' : txTitle;
 
   return (
     <div className="pollar-overlay" onClick={!isInProgress ? onClose : undefined}>
-      <div className="pollar-modal-card pollar-send-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
+      <div
+        className="pollar-modal-card pollar-send-modal"
+        data-theme={theme}
+        style={cssVars}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="pollar-modal-header">
           <div className="pollar-send-header-left">
             {showBack && (
@@ -254,16 +291,49 @@ export function EarnModal({ onClose }: EarnModalProps) {
             )}
             <h2 className="pollar-modal-title">{title}</h2>
           </div>
-          {!isInProgress && (
-            <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-                <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-            </button>
-          )}
+          <div className="pollar-modal-header-actions">
+            {step === 'form' && !earnUnavailable && !smartUnsupported && (
+              <button
+                type="button"
+                className="pollar-modal-close"
+                onClick={() => void handleRefresh()}
+                disabled={refreshing || providersLoading}
+                aria-label="Refresh"
+              >
+                <svg
+                  className={refreshing ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden
+                >
+                  <path
+                    d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            )}
+            {!isInProgress && (
+              <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                  <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
-        {step === 'form' && providersLoading && <div className="pollar-send-hint">Loading Earn options…</div>}
+        {step === 'form' && providersLoading && (
+          <div className="pollar-loading-block">
+            <div className="pollar-spinner" />
+            <span>Loading Earn options…</span>
+          </div>
+        )}
 
         {step === 'form' && earnUnavailable && <div className="pollar-modal-error">Earn is not available for this app.</div>}
 
@@ -274,10 +344,11 @@ export function EarnModal({ onClose }: EarnModalProps) {
             )}
 
             {/* Deposit / Withdraw tabs */}
-            <div className="pollar-earn-tabs">
+            <div className="pollar-tabs">
               <button
                 type="button"
-                className={`pollar-earn-tab${tab === 'deposit' ? ' pollar-earn-tab-active' : ''}`}
+                className="pollar-tab"
+                data-active={tab === 'deposit'}
                 onClick={() => {
                   setTab('deposit');
                   setFormError('');
@@ -287,7 +358,8 @@ export function EarnModal({ onClose }: EarnModalProps) {
               </button>
               <button
                 type="button"
-                className={`pollar-earn-tab${tab === 'withdraw' ? ' pollar-earn-tab-active' : ''}`}
+                className="pollar-tab"
+                data-active={tab === 'withdraw'}
                 onClick={() => {
                   setTab('withdraw');
                   setFormError('');
@@ -317,7 +389,10 @@ export function EarnModal({ onClose }: EarnModalProps) {
 
             {/* Opportunity */}
             <div className="pollar-send-field">
-              <label className="pollar-send-label">{provider === 'defindex' ? 'Vault' : 'Pool'}</label>
+              <div className="pollar-send-label-row">
+                <label className="pollar-send-label">{provider === 'defindex' ? 'Vault' : 'Pool'}</label>
+                {loadingOpps && <span className="pollar-spinner pollar-spinner-sm" aria-label="Loading options" />}
+              </div>
               <select
                 className="pollar-input pollar-send-select"
                 value={opportunityId}
@@ -357,11 +432,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
               <div className="pollar-send-label-row">
                 <label className="pollar-send-label">{tab === 'deposit' ? 'Amount' : 'Withdraw amount'}</label>
                 {tab === 'withdraw' && position && (
-                  <button
-                    type="button"
-                    className="pollar-swap-custom-toggle"
-                    onClick={() => setAmount(position.withdrawable)}
-                  >
+                  <button type="button" className="pollar-swap-custom-toggle" onClick={() => setAmount(position.withdrawable)}>
                     Max: {formatAmount(position.withdrawable)} {amountUnitLabel}
                   </button>
                 )}

@@ -21,35 +21,11 @@
 .pollar-ramp-input-loading {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
   color: var(--pollar-muted);
 }
 
-/* ─── Direction tabs ────────────────────────────────────────────────────────── */
-.pollar-ramp-tabs {
-  display: flex;
-  gap: 0;
-  border: 1px solid var(--pollar-border);
-  border-radius: var(--pollar-input-border-radius, 0.5rem);
-  overflow: hidden;
-  margin-bottom: 1.25rem;
-}
-
-.pollar-ramp-tab {
-  flex: 1;
-  height: 40px;
-  border: none;
-  background: transparent;
-  color: var(--pollar-muted);
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.pollar-ramp-tab[data-active='true'] {
-  background-color: var(--pollar-accent);
-  color: #fff;
-}
+/* Direction tabs use the shared segmented control (.pollar-tabs / .pollar-tab). */
 
 /* ─── Input group ───────────────────────────────────────────────────────────── */
 .pollar-ramp-field {
@@ -106,6 +82,11 @@
   flex-direction: column;
   gap: 0.625rem;
   padding: 1.5rem 0;
+}
+
+.pollar-ramp-loading-spinner {
+  align-self: center;
+  margin-bottom: 0.5rem;
 }
 
 .pollar-ramp-loading-row {
