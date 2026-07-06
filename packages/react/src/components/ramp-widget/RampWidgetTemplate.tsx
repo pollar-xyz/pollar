@@ -278,7 +278,7 @@ export function RampWidgetTemplate({
           <div className="pollar-ramp-field">
             <label className="pollar-ramp-label">Country</label>
             {countriesLoading ? (
-              <div className="pollar-ramp-input pollar-ramp-input-loading">
+              <div className="pollar-ramp-input pollar-select-loading">
                 <span className="pollar-spinner pollar-spinner-sm" />
                 <span>Loading countries…</span>
               </div>

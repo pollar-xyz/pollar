@@ -255,12 +255,11 @@
   gap: 0.5rem;
 }
 
-/* Loading state shown inside a select-shaped box: centered spinner + label,
+/* Loading state shown inside a select-shaped box: left-aligned spinner + label,
    so a field's loader lives in the field itself (like the ramp country select). */
 .pollar-select-loading {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 0.5rem;
   color: var(--pollar-muted);
 }

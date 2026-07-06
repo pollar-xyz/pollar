@@ -168,6 +168,7 @@ export function SendModalTemplate({
             label="Asset"
             value={selectedKey}
             loading={isLoadingBalance}
+            loadingLabel="Loading assets…"
             options={assets.map((a) => ({
               key: assetKey(a),
               code: a.code,

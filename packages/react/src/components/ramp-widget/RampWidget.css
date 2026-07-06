@@ -17,13 +17,8 @@
   color: var(--pollar-muted);
 }
 
-/* Placeholder shown in place of the country <select> while the list loads. */
-.pollar-ramp-input-loading {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--pollar-muted);
-}
+/* The country <select> loading placeholder uses the shared .pollar-select-loading
+   (spinner + label inside a select-shaped box), consistent with all the modals. */
 
 /* Direction tabs use the shared segmented control (.pollar-tabs / .pollar-tab). */
 
