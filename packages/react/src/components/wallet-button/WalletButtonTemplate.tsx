@@ -19,7 +19,11 @@ export interface WalletButtonTemplateProps {
   wrapperRef: React.RefObject<HTMLDivElement>;
   isInProgress: boolean;
   walletType: WalletId | null;
+  /** Show the "Create account" action (external wallet not yet on-chain, IMMEDIATE funding). */
+  showCreateAccount: boolean;
+  creatingAccount: boolean;
   onToggleOpen: () => void;
+  onCreateAccount: () => void;
   onCopy: () => void;
   onWalletBalance: () => void;
   onTxHistory: () => void;
@@ -48,7 +52,10 @@ export function WalletButtonTemplate({
   itemColor,
   wrapperRef,
   isInProgress,
+  showCreateAccount,
+  creatingAccount,
   onToggleOpen,
+  onCreateAccount,
   onCopy,
   onWalletBalance,
   onTxHistory,
@@ -111,6 +118,34 @@ export function WalletButtonTemplate({
 
       {open && (
         <div className="wallet-dropdown" style={{ backgroundColor: dropdownBg, borderColor: dropdownBorder }}>
+          {showCreateAccount && (
+            <>
+              <button
+                className="wallet-dropdown-item"
+                style={{ color: itemColor }}
+                onClick={onCreateAccount}
+                disabled={creatingAccount}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <line x1="19" y1="8" x2="19" y2="14" />
+                  <line x1="22" y1="11" x2="16" y2="11" />
+                </svg>
+                {creatingAccount ? 'Creating account…' : 'Create account'}
+              </button>
+              <div className="wallet-dropdown-divider" />
+            </>
+          )}
           <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onSend}>
             <svg
               width="14"
