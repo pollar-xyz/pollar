@@ -7,6 +7,18 @@ import { CopyButton } from '../commons';
 
 export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 'status' | 'error';
 
+// Basic client-side email check so an invalid address never round-trips to the
+// provider (which rejects it with a generic VALIDATION_ERROR).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** A collected field is complete when it's non-empty and (for email) well-formed. */
+function isFieldValid(spec: RampFieldSpec, raw: string | undefined): boolean {
+  const value = (raw ?? '').trim();
+  if (!value) return false;
+  if (spec.type === 'email') return EMAIL_RE.test(value);
+  return true;
+}
+
 /** A field a provider declares (via the quote) that the client must collect. */
 export interface RampFieldSpec {
   key: string;
@@ -362,6 +374,9 @@ export function RampWidgetTemplate({
                   onChange={(e) => onFieldChange(f.key, e.target.value)}
                 />
               )}
+              {f.type === 'email' && (fieldValues[f.key] ?? '').trim() !== '' && !isFieldValid(f, fieldValues[f.key]) && (
+                <span className="pollar-ramp-field-error">Enter a valid email address.</span>
+              )}
             </div>
           ))}
 
@@ -372,7 +387,7 @@ export function RampWidgetTemplate({
             <button
               type="button"
               className="pollar-btn-primary"
-              disabled={requiredFields.some((f) => !(fieldValues[f.key] ?? '').trim()) || isLoading}
+              disabled={requiredFields.some((f) => !isFieldValid(f, fieldValues[f.key])) || isLoading}
               onClick={onContactContinue}
             >
               {isLoading ? 'Starting…' : 'Continue'}
@@ -441,7 +456,10 @@ export function RampWidgetTemplate({
                   ) : kind === 'datetime' ? (
                     <span>{value}</span>
                   ) : (
-                    <code style={{ wordBreak: 'break-all' }}>{value}</code>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <code style={{ flex: 1, wordBreak: 'break-all' }}>{value}</code>
+                      <CopyButton value={value} label={`Copy ${label}`} />
+                    </span>
                   )}
                 </div>
               </div>

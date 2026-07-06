@@ -161,6 +161,11 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setStep('input');
     setQuotes([]);
     setSelectedQuote(null);
+    // Clear the collected provider fields (name/email/etc.) so a retry re-shows
+    // the 'contact' step. Otherwise a stale (possibly invalid) value keeps the
+    // field non-empty, `handleSelectQuote` treats it as complete, skips the step
+    // and replays the same failing request.
+    setFieldValues({});
     setTxId(null);
     setProvider('');
     setKycUrl(null);
