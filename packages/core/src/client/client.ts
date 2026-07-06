@@ -1759,13 +1759,18 @@ export class PollarClient {
   getWallet(): WalletInfo | null {
     const w = this._session?.wallet;
     if (!w || !w.address) return null;
+    // Wallet-status extras carried on every custody (see WalletInfo).
+    const extra = {
+      ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
+      ...(w.fundingMode !== undefined ? { fundingMode: w.fundingMode } : {}),
+    };
     switch (w.type) {
       case 'external':
-        return { custody: 'external', address: w.address, provider: this._walletAdapter?.type ?? null };
+        return { custody: 'external', address: w.address, provider: this._walletAdapter?.type ?? null, ...extra };
       case 'smart':
-        return { custody: 'smart', address: w.address, provider: 'passkey' };
+        return { custody: 'smart', address: w.address, provider: 'passkey', ...extra };
       case 'internal':
-        return { custody: 'internal', address: w.address, provider: (w.provider as string | undefined) ?? null };
+        return { custody: 'internal', address: w.address, provider: (w.provider as string | undefined) ?? null, ...extra };
       default:
         return null;
     }
@@ -3112,6 +3117,7 @@ export class PollarClient {
         ...(wireProvider ? { provider: wireProvider } : {}),
         address: w.address ?? w.publicKey ?? null,
         ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
+        ...(w.fundingMode !== undefined ? { fundingMode: w.fundingMode } : {}),
         ...(w.createdAt !== undefined ? { createdAt: w.createdAt } : {}),
         ...(w.linkedAt !== undefined ? { linkedAt: w.linkedAt } : {}),
         ...(w.network !== undefined ? { network: w.network } : {}),

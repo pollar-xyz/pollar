@@ -39,6 +39,10 @@ export interface PollarPersistedSession {
     provider?: string;
     address: string | null;
     existsOnStellar?: boolean;
+    // The app's funding policy: IMMEDIATE = Pollar funds/creates the account at
+    // onboarding; DEFERRED = left to the app. Lets the UI decide whether to offer
+    // on-chain account creation. Optional: older sessions omit it.
+    fundingMode?: 'IMMEDIATE' | 'DEFERRED';
     // On-chain creation time (smart = deploy; internal = keypair creation).
     createdAt?: number;
     // When the wallet was first linked to Pollar (our DB record), not on-chain
@@ -74,9 +78,14 @@ export type WalletInfo =
   // `provider` widened with `(string & {})` so a custom provider id (e.g. a
   // `privy` integration) survives instead of being lost to the closed enum,
   // while the known PollarAuthMethod values still autocomplete.
-  | { custody: 'internal'; address: string; provider: PollarAuthMethod | (string & {}) | null }
-  | { custody: 'smart'; address: string; provider: 'passkey' }
-  | { custody: 'external'; address: string; provider: WalletId | (string & {}) | null };
+  //
+  // `existsOnStellar` (is the account created on-chain) and `fundingMode` (the
+  // app's funding policy) are wallet-status extras carried on every custody so
+  // callers can, e.g., offer on-chain account creation for an external wallet
+  // that isn't on Stellar yet. Optional — absent on sessions that predate them.
+  | { custody: 'internal'; address: string; provider: PollarAuthMethod | (string & {}) | null; existsOnStellar?: boolean; fundingMode?: 'IMMEDIATE' | 'DEFERRED' }
+  | { custody: 'smart'; address: string; provider: 'passkey'; existsOnStellar?: boolean; fundingMode?: 'IMMEDIATE' | 'DEFERRED' }
+  | { custody: 'external'; address: string; provider: WalletId | (string & {}) | null; existsOnStellar?: boolean; fundingMode?: 'IMMEDIATE' | 'DEFERRED' };
 
 /** In-memory user profile (kept on `PollarClient`, never persisted). */
 export interface PollarUserProfile {
