@@ -672,6 +672,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/earn/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get enabled yield providers for this app
+         * @description Returns the Earn providers (yield vaults / lending) this application exposes to end-users, intersected with server capability (a provider only appears when it's configured — Blend needs a pool address, DeFindex needs an API key). An empty list means Earn is disabled and the SDK renders no Earn UI. Network comes from the API key.
+         */
+        get: operations["getEarnProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/earn/opportunities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a provider vaults/pools
+         * @description The vaults (DeFindex) or pools (Blend) the provider exposes on this API key's network, each with its live APY. Read-only. Use an `id` from here as the `opportunity` in the position and build calls.
+         */
+        get: operations["getEarnOpportunities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/earn/position": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the user position + APY in a vault/pool
+         * @description Read-only: the user's balance (in underlying-asset terms), the unit their withdraw amount must be given in (`asset` for Blend, `shares` for DeFindex), the max withdrawable, and the live APY. Poll this to show the position updating.
+         */
+        get: operations["getEarnPosition"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/earn/build": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Build a deposit/withdraw XDR
+         * @description Builds the unsigned Soroban XDR for a deposit or withdraw against the vault/pool. The provider builds it server-side (contract-direct for Blend, via the DeFindex API for DeFindex); the SDK then signs and submits it with `signAndSubmitTx`. For `deposit` the amount is the underlying asset; for `withdraw` it is in the provider `withdrawUnit` (read it from GET /earn/position).
+         */
+        post: operations["postEarnBuild"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/charges": {
         parameters: {
             query?: never;
@@ -2457,6 +2537,8 @@ export interface operations {
                                 publicKey: string | null;
                                 address: string | null;
                                 existsOnStellar?: boolean;
+                                /** @enum {string} */
+                                fundingMode?: "IMMEDIATE" | "DEFERRED";
                                 createdAt?: number;
                                 linkedAt?: number;
                                 network?: string;
@@ -4519,6 +4601,461 @@ export interface operations {
                 };
             };
             /** @description Quote error (Soroban RPC/provider) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getEarnProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enabled providers (possibly empty) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_EARN_PROVIDERS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            providers: ("blend" | "defindex")[];
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getEarnOpportunities: {
+        parameters: {
+            query: {
+                provider: "blend" | "defindex";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Opportunities (possibly empty) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_EARN_OPPORTUNITIES";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            opportunities: {
+                                /** @enum {string} */
+                                provider: "blend" | "defindex";
+                                id: string;
+                                name: string;
+                                symbol: string | null;
+                                /** @enum {string} */
+                                kind: "vault" | "lending";
+                                asset: {
+                                    code: string;
+                                    issuer: string | null;
+                                    contractId: string;
+                                };
+                                apy: number;
+                                metadata?: {
+                                    [key: string]: unknown;
+                                };
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider not configured */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider/RPC error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getEarnPosition: {
+        parameters: {
+            query: {
+                provider: "blend" | "defindex";
+                opportunity: string;
+                publicKey?: string;
+                address?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Position snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_EARN_POSITION";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            /** @enum {string} */
+                            provider: "blend" | "defindex";
+                            opportunityId: string;
+                            address: string;
+                            balance: string;
+                            /** @enum {string} */
+                            withdrawUnit: "asset" | "shares";
+                            withdrawable: string;
+                            apy: number;
+                            metadata?: {
+                                [key: string]: unknown;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Opportunity not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider not configured */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider/RPC error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postEarnBuild: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    action: "deposit" | "withdraw";
+                    /** @enum {string} */
+                    provider: "blend" | "defindex";
+                    opportunity: string;
+                    amount: string;
+                    publicKey?: string;
+                    address?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Unsigned XDR ready to sign+submit */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_EARN_BUILD";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            build: {
+                                unsignedXdr: string;
+                            } | {
+                                /** @constant */
+                                operation: "invoke_contract";
+                                params: {
+                                    contractId: string;
+                                    method: string;
+                                    args: ({
+                                        /** @constant */
+                                        type: "bool";
+                                        value: boolean;
+                                    } | {
+                                        /** @constant */
+                                        type: "i32";
+                                        value: number;
+                                    } | {
+                                        /** @constant */
+                                        type: "u32";
+                                        value: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        type: "i64" | "u64" | "i128" | "u128" | "i256" | "u256";
+                                        value: string;
+                                    } | {
+                                        /** @constant */
+                                        type: "address";
+                                        value: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        type: "string" | "symbol";
+                                        value: string;
+                                    } | {
+                                        /** @constant */
+                                        type: "bytes";
+                                        /** @description Base64-encoded bytes */
+                                        value: string;
+                                    } | {
+                                        /** @constant */
+                                        type: "vec";
+                                        /** @description Array of ScValArg items */
+                                        value: unknown[];
+                                    } | {
+                                        /** @constant */
+                                        type: "map";
+                                        /** @description Array of {key, val} ScValArg pairs */
+                                        value: {
+                                            key: unknown;
+                                            val: unknown;
+                                        }[];
+                                    } | {
+                                        /** @constant */
+                                        type: "void";
+                                    })[];
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Opportunity not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider not configured */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Build error (Soroban RPC/provider) */
             502: {
                 headers: {
                     [name: string]: unknown;
