@@ -1,7 +1,7 @@
 'use client';
 
 import { TxHistoryRecord, TxHistoryState } from '@pollar/core';
-import { type CSSProperties } from 'react';
+import { type CSSProperties, type ReactNode } from 'react';
 import { CopyButton, PollarModalFooter } from '../commons';
 
 const PAGE_SIZE = 10;
@@ -32,6 +32,41 @@ function formatDate(iso: string): string {
 /** Shorten a long identifier (issuer, hash, address) to `head…tail`. */
 function truncateMiddle(value: string, head = 4, tail = 4): string {
   return value.length <= head + tail + 1 ? value : `${value.slice(0, head)}…${value.slice(-tail)}`;
+}
+
+// Stellar account (G) and contract (C) strkeys are 56 base32 chars.
+const STELLAR_ADDRESS = /\b[GC][A-Z2-7]{55}\b/g;
+
+/** Truncated address rendered as a copyable tag (issuer, wallet, contract…). */
+function AddressChip({ value, label }: { value: string; label: string }) {
+  return (
+    <span className="pollar-hist-item-issuer">
+      {truncateMiddle(value)}
+      <CopyButton value={value} label={label} className="pollar-copy-btn-sm" />
+    </span>
+  );
+}
+
+/**
+ * Renders a summary string, swapping every full Stellar address (G… account or
+ * C… contract) for an {@link AddressChip}. Plain-text runs are kept as-is.
+ */
+function renderSummary(summary: string): ReactNode {
+  const parts: ReactNode[] = [];
+  let last = 0;
+  let key = 0;
+  STELLAR_ADDRESS.lastIndex = 0;
+  for (let m = STELLAR_ADDRESS.exec(summary); m !== null; m = STELLAR_ADDRESS.exec(summary)) {
+    if (m.index > last) parts.push(<span key={key++}>{summary.slice(last, m.index)}</span>);
+    const address = m[0];
+    parts.push(
+      <AddressChip key={key++} value={address} label={address[0] === 'C' ? 'Copy contract address' : 'Copy wallet address'} />,
+    );
+    last = m.index + address.length;
+  }
+  if (parts.length === 0) return <span className="pollar-hist-item-title">{summary}</span>;
+  if (last < summary.length) parts.push(<span key={key++}>{summary.slice(last)}</span>);
+  return parts;
 }
 
 export function TxHistoryModalTemplate({
@@ -113,7 +148,6 @@ export function TxHistoryModalTemplate({
           const explorerUrl = hash
             ? `https://stellar.expert/explorer/${record.network === 'testnet' ? 'testnet' : 'public'}/tx/${hash}`
             : undefined;
-          const destination = typeof record.details?.destination === 'string' ? record.details.destination : undefined;
           const asset = typeof record.details?.asset === 'string' ? record.details.asset : undefined;
           // `change_trust` summaries embed the asset as `CODE:ISSUER` — split so
           // the issuer can be truncated and copied on its own.
@@ -126,6 +160,14 @@ export function TxHistoryModalTemplate({
                   issuer: asset.slice(colon + 1),
                 }
               : undefined;
+          // `invoke_contract` summaries carry a server-truncated contract id, so
+          // rebuild the chip from the full id in details instead.
+          const contract =
+            record.operation === 'invoke_contract' &&
+            typeof record.details?.contractId === 'string' &&
+            typeof record.details?.method === 'string'
+              ? { method: record.details.method, contractId: record.details.contractId }
+              : undefined;
           return (
             <div key={record.id} className="pollar-hist-item">
               <div className="pollar-hist-item-top">
@@ -135,13 +177,15 @@ export function TxHistoryModalTemplate({
                       <span className="pollar-hist-item-title">
                         {trustline.prefix}: {trustline.code}
                       </span>
-                      <span className="pollar-hist-item-issuer">
-                        {truncateMiddle(trustline.issuer)}
-                        <CopyButton value={trustline.issuer} label="Copy issuer" className="pollar-copy-btn-sm" />
-                      </span>
+                      <AddressChip value={trustline.issuer} label="Copy issuer" />
+                    </>
+                  ) : contract ? (
+                    <>
+                      <span className="pollar-hist-item-title">Invoke {contract.method}() on</span>
+                      <AddressChip value={contract.contractId} label="Copy contract address" />
                     </>
                   ) : (
-                    <span className="pollar-hist-item-title">{record.summary}</span>
+                    renderSummary(record.summary)
                   )}
                 </span>
                 <StatusBadge status={record.status} />
@@ -153,15 +197,6 @@ export function TxHistoryModalTemplate({
                   <span>· {record.details.sponsored ? 'Sponsored' : 'Self-paid'}</span>
                 )}
                 {record.feeXlm && <span>· {record.feeXlm} XLM</span>}
-                {destination && (
-                  <>
-                    <span>·</span>
-                    <span className="pollar-hist-item-issuer">
-                      {truncateMiddle(destination)}
-                      <CopyButton value={destination} label="Copy wallet address" className="pollar-copy-btn-sm" />
-                    </span>
-                  </>
-                )}
               </span>
 
               <div className="pollar-hist-item-footer">
