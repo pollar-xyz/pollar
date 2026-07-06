@@ -48,6 +48,9 @@ export function EarnModal({ onClose }: EarnModalProps) {
     wallet,
     walletBalance,
     refreshWalletBalance,
+    enabledAssets,
+    refreshAssets,
+    setTrustline,
     network,
     styles,
   } = usePollar();
@@ -87,10 +90,12 @@ export function EarnModal({ onClose }: EarnModalProps) {
     void loadProviders();
   }, [loadProviders]);
 
-  // The wallet balance drives the Deposit tab's "In your wallet" row + Max.
+  // The wallet balance drives the Deposit tab's "In your wallet" row + Max; the
+  // enabled assets drive the deposit-asset trustline check.
   useEffect(() => {
     void refreshWalletBalance();
-  }, [refreshWalletBalance]);
+    void refreshAssets();
+  }, [refreshWalletBalance, refreshAssets]);
 
   // ─── Opportunities (per provider) ───────────────────────────────────────────
   useEffect(() => {
@@ -162,6 +167,22 @@ export function EarnModal({ onClose }: EarnModalProps) {
     );
     return rec ? rec.available : null;
   })();
+
+  // Depositing an issued asset (e.g. USDC) needs the wallet to trust it first.
+  // Native XLM and pure Soroban tokens (no classic issuer) never do; smart
+  // (C-address) wallets hold SAC tokens, so no classic trustline applies. When
+  // needed, the deposit runs as two signatures: trustline, then deposit.
+  const depositAssetRecord = (() => {
+    if (!selectedOpportunity?.asset.issuer || enabledAssets.step !== 'loaded') return undefined;
+    return enabledAssets.data.assets.find(
+      (a) => a.code === assetCode && a.issuer === selectedOpportunity.asset.issuer,
+    );
+  })();
+  const depositNeedsTrustline =
+    tab === 'deposit' &&
+    !smartUnsupported &&
+    !!selectedOpportunity?.asset.issuer &&
+    !depositAssetRecord?.trustlineEstablished;
 
   const hash = transaction.step === 'success' ? transaction.hash : null;
   const buildData = 'buildData' in transaction ? transaction.buildData : null;
@@ -251,6 +272,22 @@ export function EarnModal({ onClose }: EarnModalProps) {
       return;
     }
     setStep('tx');
+
+    // Deposit of an issued asset needs its trustline first (native never does).
+    // Establish it, then deposit — two signatures, like swap.
+    if (tab === 'deposit' && depositNeedsTrustline && selectedOpportunity?.asset.issuer) {
+      const tl = await setTrustline(
+        { code: assetCode, issuer: selectedOpportunity.asset.issuer },
+        depositAssetRecord?.sponsored ? { sponsored: true } : undefined,
+      );
+      if (tl.status === 'error') {
+        setFormError(`Trustline for ${assetCode} failed: ${tl.details ?? 'unknown error'}`);
+        setStep('form');
+        return;
+      }
+      await refreshAssets();
+    }
+
     const params = { provider, opportunity: opportunityId, amount };
     const outcome = tab === 'deposit' ? await earnDeposit(params) : await earnWithdraw(params);
     if (outcome.status === 'success' || outcome.status === 'pending') {
@@ -363,13 +400,6 @@ export function EarnModal({ onClose }: EarnModalProps) {
           </div>
         </div>
 
-        {step === 'form' && providersLoading && (
-          <div className="pollar-loading-block">
-            <div className="pollar-spinner" />
-            <span>Loading Earn options…</span>
-          </div>
-        )}
-
         {step === 'form' && earnUnavailable && <div className="pollar-modal-error">Earn is not available for this app.</div>}
 
         {step === 'form' && !earnUnavailable && (
@@ -424,26 +454,30 @@ export function EarnModal({ onClose }: EarnModalProps) {
 
             {/* Opportunity */}
             <div className="pollar-send-field">
-              <div className="pollar-send-label-row">
-                <label className="pollar-send-label">{provider === 'defindex' ? 'Vault' : 'Pool'}</label>
-                {loadingOpps && <span className="pollar-spinner pollar-spinner-sm" aria-label="Loading options" />}
-              </div>
-              <select
-                className="pollar-input pollar-send-select"
-                value={opportunityId}
-                disabled={loadingOpps || opportunities.length === 0}
-                onChange={(e) => setOpportunityId(e.target.value)}
-              >
-                {opportunities.length === 0 ? (
-                  <option value="">{loadingOpps ? 'Loading…' : 'None available'}</option>
-                ) : (
-                  opportunities.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name} · {o.apy.toFixed(2)}% APY
-                    </option>
-                  ))
-                )}
-              </select>
+              <label className="pollar-send-label">{provider === 'defindex' ? 'Vault' : 'Pool'}</label>
+              {loadingOpps || providersLoading ? (
+                <div className="pollar-input pollar-select-loading">
+                  <span className="pollar-spinner pollar-spinner-sm" />
+                  <span>Loading options…</span>
+                </div>
+              ) : (
+                <select
+                  className="pollar-input pollar-send-select"
+                  value={opportunityId}
+                  disabled={opportunities.length === 0}
+                  onChange={(e) => setOpportunityId(e.target.value)}
+                >
+                  {opportunities.length === 0 ? (
+                    <option value="">None available</option>
+                  ) : (
+                    opportunities.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name} · {o.apy.toFixed(2)}% APY
+                      </option>
+                    ))
+                  )}
+                </select>
+              )}
             </div>
 
             {/* Live position panel */}
@@ -500,9 +534,16 @@ export function EarnModal({ onClose }: EarnModalProps) {
 
             {formError && <div className="pollar-modal-error">{formError}</div>}
 
+            {depositNeedsTrustline && selectedOpportunity && (
+              <div className="pollar-swap-trustline-notice">
+                To deposit {assetCode} your wallet needs a trustline. This will create it first (~0.5 XLM reserve,
+                refundable if you later remove it), then deposit — two signatures.
+              </div>
+            )}
+
             <div className="pollar-modal-actions">
               <button className="pollar-btn-primary" onClick={() => void handleSubmit()} disabled={!canSubmit}>
-                {tab === 'deposit' ? 'Deposit' : 'Withdraw'}
+                {tab === 'deposit' ? (depositNeedsTrustline ? 'Enable trustline & deposit' : 'Deposit') : 'Withdraw'}
               </button>
             </div>
           </>
