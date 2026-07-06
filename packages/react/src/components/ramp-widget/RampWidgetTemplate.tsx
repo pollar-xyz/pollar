@@ -33,6 +33,7 @@ interface RampWidgetTemplateProps {
   provider: string;
   txStatus: RampTxStatus | null;
   kycUrl: string | null;
+  tosUrl: string | null;
   stellarTxHash: string | null;
   depositInstructions: Record<string, unknown> | null;
   canComplete: boolean;
@@ -46,6 +47,7 @@ interface RampWidgetTemplateProps {
   onSelectQuote: (q: RampQuote) => void;
   onContactContinue: () => void;
   onOpenKyc: () => void;
+  onOpenTos: () => void;
   onCompleteWithdraw: () => void;
   onRetry: () => void;
   onRefresh: () => void;
@@ -122,6 +124,7 @@ export function RampWidgetTemplate({
   provider,
   txStatus,
   kycUrl,
+  tosUrl,
   stellarTxHash,
   depositInstructions,
   canComplete,
@@ -135,6 +138,7 @@ export function RampWidgetTemplate({
   onSelectQuote,
   onContactContinue,
   onOpenKyc,
+  onOpenTos,
   onCompleteWithdraw,
   onRetry,
   onRefresh,
@@ -377,7 +381,16 @@ export function RampWidgetTemplate({
               </div>
             ))}
 
-          {kycUrl && txStatus !== 'completed' && (
+          {/* KYC / ToS onboarding steps at the provider. Hidden once deposit
+              instructions exist — by then onboarding is done and the only
+              remaining action is to pay using the instructions above. */}
+          {tosUrl && !depositInstructions && txStatus !== 'completed' && (
+            <button type="button" className="pollar-btn-primary" onClick={onOpenTos}>
+              Accept terms at {provider}
+            </button>
+          )}
+
+          {kycUrl && !depositInstructions && txStatus !== 'completed' && (
             <button type="button" className="pollar-btn-primary" onClick={onOpenKyc}>
               Continue at {provider}
             </button>

@@ -25,6 +25,9 @@ interface RampResult {
   provider: string;
   status: RampTxStatus;
   kycUrl?: string;
+  // Bridge splits onboarding into two hosted steps: KYC (identity) and ToS
+  // acceptance. Both must be completed before the customer activates.
+  tosUrl?: string;
   stellarTxHash?: string;
   pendingSignature?: { unsignedXdr: string; action: 'sep10' | 'withdraw_payment' };
   // REST providers (Bridge) return deposit instructions as data (e.g. a Pix
@@ -59,6 +62,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   const [txId, setTxId] = useState<string | null>(null);
   const [provider, setProvider] = useState('');
   const [kycUrl, setKycUrl] = useState<string | null>(null);
+  const [tosUrl, setTosUrl] = useState<string | null>(null);
   const [txStatus, setTxStatus] = useState<RampTxStatus | null>(null);
   const [stellarTxHash, setStellarTxHash] = useState<string | null>(null);
   const [depositInstructions, setDepositInstructions] = useState<Record<string, unknown> | null>(null);
@@ -162,6 +166,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setTxId(null);
     setProvider('');
     setKycUrl(null);
+    setTosUrl(null);
     setTxStatus(null);
     setStellarTxHash(null);
     setDepositInstructions(null);
@@ -195,6 +200,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
       return;
     }
     setKycUrl(result.kycUrl ?? null);
+    setTosUrl(result.tosUrl ?? null);
     setTxStatus(result.status);
     setStellarTxHash(result.stellarTxHash ?? null);
     setDepositInstructions(result.depositInstructions ?? null);
@@ -273,6 +279,10 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     if (kycUrl) window.open(kycUrl, '_blank', 'noopener,noreferrer');
   }
 
+  function handleOpenTos() {
+    if (tosUrl) window.open(tosUrl, '_blank', 'noopener,noreferrer');
+  }
+
   async function handleCompleteWithdraw() {
     if (!txId) return;
     setCompleting(true);
@@ -317,6 +327,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         provider={provider}
         txStatus={txStatus}
         kycUrl={kycUrl}
+        tosUrl={tosUrl}
         stellarTxHash={stellarTxHash}
         depositInstructions={depositInstructions}
         canComplete={canComplete}
@@ -330,6 +341,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         onSelectQuote={handleSelectQuote}
         onContactContinue={handleContactContinue}
         onOpenKyc={handleOpenKyc}
+        onOpenTos={handleOpenTos}
         onCompleteWithdraw={handleCompleteWithdraw}
         onRetry={resetToInput}
         onRefresh={handleRefresh}
