@@ -8,15 +8,8 @@ Stellar-based applications.
 > live SEP-24 on/off-ramps through `<RampWidget>` (now wired to
 > `client.createOnRamp` / `client.createOffRamp`); and a self-driving Privy
 > adapter (registered interactive adapters are auto-driven to completion before
-> `login({ provider })`). Read the [CHANGELOG](../../CHANGELOG.md) before
-> upgrading.
->
-> **0.8.0 reshapes `<PollarProvider>` props (breaking).** `config` > `client`
-> (now accepts a `PollarClient` instance or a `PollarClientConfig`); `styles`
-> moves under `appConfig.styles`; new `appConfig` prop is the opt-out switch
-> for the remote `/applications/config` fetch (pass it - even `{}` - to skip
-> the fetch). Read the [CHANGELOG](../../CHANGELOG.md) and
-> [UPGRADE.md](../../UPGRADE.md) before upgrading.
+> `login({ provider })`). See the [CHANGELOG](../../CHANGELOG.md) and
+> [UPGRADE.md](../../UPGRADE.md) for the full version history before upgrading.
 
 ## Installation
 
@@ -107,12 +100,6 @@ Context provider that initialises the Pollar client and makes it available to ch
 | `appConfig` | `PollarConfig`                       | No       | Local override of `/applications/config`. **Presence is the opt-out switch**: pass it (even `{}`) and the remote fetch is skipped. Omit it to keep the existing remote-fetch-on-mount behaviour |
 | `adapters`  | `PollarAdapters`                     | No       | Named set of `PollarAdapter` objects (e.g. Trustless Work). See below                                                                                                                           |
 
-> **Renamed in 0.8.0** — `config` → `client`, `styles` → `appConfig.styles`.
-> If you were passing `styles={{ ... }}` directly, move it to
-> `appConfig={{ styles: { ... } }}` (which also opts you out of the remote
-> `/applications/config` fetch). See [UPGRADE.md](../../UPGRADE.md) for the
-> full migration matrix.
-
 ---
 
 ### `usePollar()`
@@ -169,6 +156,14 @@ const {
   swap, // (quote: SwapQuote, opts?) => Promise<SubmitOutcome>
   openSwapModal, // () => void
 
+  // Earn (yield vaults + lending — DeFindex + Blend)
+  getEarnProviders, // () => Promise<EarnProviderId[]>  ([] means Earn is disabled)
+  getEarnOpportunities, // (provider: EarnProviderId) => Promise<EarnOpportunity[]>
+  getEarnPosition, // (params: EarnPositionParams) => Promise<EarnPosition>
+  earnDeposit, // (params: EarnTxParams) => Promise<SubmitOutcome>
+  earnWithdraw, // (params: EarnTxParams) => Promise<SubmitOutcome>
+  openEarnModal, // () => void
+
   // Distribution rules
   openDistributionRulesModal, // () => void
 
@@ -197,9 +192,6 @@ const {
 
 Custody is derived from `wallet`, not a separate field - e.g.
 `wallet?.custody === 'external' ? wallet.provider : null`.
-
-> **0.6.0 renames** - `transaction` > `tx`, `openTransactionModal` > `openTxModal`, `config` > `appConfig`,
-> `openRampWidget` > `openRampModal`, `refreshBalance` > `refreshWalletBalance`. Existing code on 0.5.x must update.
 
 #### Login options
 
@@ -246,15 +238,16 @@ already wired inside `<PollarProvider>` — but they're exported in case you wan
 
 | Component                  | Purpose                                                                                                                                                                                                                                                 |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<WalletButton>`           | Drop-in button. Opens login when signed out; signed in, shows the wallet address with a dropdown (Send, Receive, copy address, balance, history, ramp, KYC, distribution rules, sessions, sign out). Inline arc spinner during in-progress transactions |
+| `<WalletButton>`           | Drop-in button. Opens login when signed out; signed in, shows the wallet address with a dropdown (Send, Receive, copy address, balance, history, ramp, KYC, distribution rules, sessions, sign out, plus a "Create account" action when the external wallet has no on-chain account yet). Inline arc spinner during in-progress transactions |
 | `<SendModal>`              | Full send flow: asset picker, amount, destination, inline build > sign > success/error                                                                                                                                                                  |
-| `<SwapModal>`              | On-chain asset-to-asset swap: pick from/to assets and amount, quote across venues, execute (auto-trustline on the buy asset when needed)                                                                                                                |
+| `<SwapModal>`              | On-chain asset-to-asset swap: pick from/to assets and amount, quote across venues, execute (auto-trustline on the buy asset when needed); paste a custom buy token (code + issuer)                                                                       |
+| `<EarnModal>`              | Deposit/withdraw across DeFindex vaults and Blend pools: provider + opportunity selection with live APY, wallet balance, over-spend guards, and auto-trustline on deposit                                                                                |
 | `<ReceiveModal>`           | Wallet address as QR code with copy-to-clipboard (no external QR dependency required)                                                                                                                                                                   |
 | `<TxHistoryModal>`         | Paginated transaction history with auto-fetch on open and stellar.expert explorer links                                                                                                                                                                 |
 | `<WalletBalanceModal>`     | Stellar account balances with refresh button                                                                                                                                                                                                            |
 | `<EnabledAssetsModal>`     | The application's dashboard-enabled assets with per-asset trustline state; establish/remove trustlines                                                                                                                                                  |
 | `<DistributionRulesModal>` | Manage the wallet's distribution rules                                                                                                                                                                                                                  |
-| `<SessionsModal>`          | **New in 0.7.0.** Lists every active refresh-token family for the current user with device metadata, marks the local session, per-row revoke, and a "Sign out everywhere" button                                                                        |
+| `<SessionsModal>`          | Lists every active refresh-token family for the current user with device metadata, marks the local session, per-row revoke, and a "Sign out everywhere" button                                                                                          |
 | `<KycModal>`               | Identity verification flow - provider selection + status polling _(UI preview - backend coming soon)_                                                                                                                                                   |
 | `<RampWidget>`             | Buy/sell crypto via SEP-24 - direction tabs, route comparison, payment instructions (wired to `client.createOnRamp` / `client.createOffRamp`)                                                                                                           |
 
@@ -292,7 +285,7 @@ want to swap the chrome but keep the data wiring from `usePollar()`.
 `<TxStatusView>` is the shared status component (build → sign → success/error) reused by `TransactionModal` and
 `SendModal`; it's exported on its own for consumers that want to embed the lifecycle elsewhere.
 
-> **0.8.1** — `onWalletConnect` is now **optional** on `<LoginModalTemplate>` (defaults to a no-op).
+> `onWalletConnect` is **optional** on `<LoginModalTemplate>` (defaults to a no-op).
 
 ---
 
@@ -313,9 +306,6 @@ const trustlessWork: PollarAdapter = {
   …
 </PollarProvider>;
 ```
-
-> **Renamed in 0.7.0** — `EscrowFn` → `AdapterFn` and `EscrowAdapter` → `PollarAdapter`. Runtime contract is
-> unchanged; rename your imports.
 
 #### `createPollarAdapterHook(key)`
 

@@ -9,29 +9,8 @@ Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction uti
 > `SDK_NETWORK_TIMEOUT` instead of hanging forever). **Breaking:** external-wallet wiring moved
 > to a unified `walletAdapters: WalletAdapter[]` model - the old singular `walletAdapter`
 > resolver and `client.loginWallet()` are gone. Register adapter instances in `walletAdapters`
-> (built-ins auto-register) and log in with `client.login({ provider: id })`. Read the
-> [CHANGELOG](../../CHANGELOG.md) before upgrading.
->
-> **0.9.0 (breaking — SDK surface only)** the session wallet drops the legacy
-> `publicKey` alias and exposes only `address`; read `session.wallet.address`.
-> `wallet.type` `'custodial'` is now surfaced as `'internal'`
-> (`'internal' | 'smart' | 'external'`), and `ConnectWalletResponse` is
-> `{ address }` only. The `sdk-api` wire is **unchanged** (still emits
-> `'custodial'` + `publicKey`), so SDKs ≤0.8.x keep working and sessions written
-> by older SDKs are migrated transparently on read. Read the
-> [CHANGELOG](../../CHANGELOG.md) before upgrading.
->
-> **0.8.0** routes every `submitTx` (custodial **and** external wallets) through
-> `/tx/submit` so the dashboard sees every transaction and idempotency is
-> tracked end-to-end. Adds proactive token refresh with a visibility-aware
-> scheduler, an `onStorageDegrade` telemetry hook, and a timeout around the
-> wallet adapter resolver. External-wallet callers may now observe `pending`
-> outcomes where they only ever got `success` / `error` before. Read the
-> [CHANGELOG](../../CHANGELOG.md) before upgrading.
->
-> **0.7.0** ships sender-constrained tokens via DPoP (RFC 9449), pluggable
-> storage and key managers, automatic refresh-on-401, and removes PII from
-> persisted storage. Requires HTTPS and `sdk-api` ≥ Phase 5.
+> (built-ins auto-register) and log in with `client.login({ provider: id })`. See the
+> [CHANGELOG](../../CHANGELOG.md) for the full version history before upgrading.
 
 ## Installation
 
@@ -262,7 +241,7 @@ level + sink). `@pollar/stellar-wallets-kit-adapter` accepts the same `logLevel`
 
 ## Preserved-on-disk storage shape
 
-As of 0.9.0 the session persists exactly:
+The session persists exactly:
 
 ```
 clientSessionId, userId, status,
@@ -271,10 +250,9 @@ user { id?, ready },
 wallet { type, address, existsOnStellar?, createdAt?, linkedAt?, network?, deployTxHash? }
 ```
 
-> **0.9.0** — the persisted wallet drops the legacy `publicKey` alias and exposes
-> only `address` (G-address for `internal`, C-address for `smart`, the connected
-> pubkey for `external`). Sessions written by ≤0.8.x are migrated transparently
-> on read (`publicKey` → `address`, `type: 'custodial'` → `'internal'`).
+> The persisted wallet exposes only `address` (G-address for `internal`,
+> C-address for `smart`, the connected pubkey for `external`). Sessions written by
+> older SDKs are migrated transparently on read.
 
 PII (`mail`, `first_name`, `last_name`, `avatar`, `providers.*`) lives **in memory only** on the `PollarClient` instance
 and is fetched after auth. Reach it via:
@@ -388,8 +366,8 @@ await client.logout(); // sign out this device
 await client.logout({ everywhere: true }); // revoke every active session for this user
 ```
 
-> Returns `Promise<void>` (was `void` pre-0.7.0). Existing fire-and-forget call sites keep working, but `await` it if
-> you want to observe server-side revocation.
+> Returns `Promise<void>`. Fire-and-forget call sites work, but `await` it if you want to observe server-side
+> revocation.
 
 #### `client.logoutEverywhere(): Promise<void>`
 
@@ -404,7 +382,7 @@ each carrying `address` and a `provider`, or `null` when there is no wallet. To 
 #### `client.getUserProfile(): PollarUserProfile | null`
 
 Returns the in-memory profile (`mail`, `first_name`, `last_name`, `avatar`, `providers`). `null` until `/auth/login`
-completes. **This is the only way to read PII as of 0.7.0** — PII is no longer persisted to storage.
+completes. **This is the only way to read PII** — PII is not persisted to storage.
 
 #### `client.ready(): Promise<void>`
 
@@ -472,6 +450,15 @@ Submits a signed XDR transaction to the network.
 await client.submitTx(signedXdr);
 ```
 
+#### `client.createAccount(): Promise<SubmitOutcome>`
+
+Puts an **external** wallet's classic account on the Stellar network when it doesn't exist yet. The server builds a
+sponsored `createAccount` (the new account starts at "0" balance; the app's sponsor wallet pays the base reserve and
+fee) and signs only the sponsor; this client adds the new-account signature with the user's own wallet and broadcasts
+via the submit path. Not applicable to custodial (internal) wallets — created on the server at login — nor to smart
+(C-address) wallets. Trustlines are a separate step (`setTrustline`). The wallet exposes `existsOnStellar` +
+`fundingMode` so a UI can decide whether to offer this.
+
 ---
 
 ### Swaps
@@ -537,6 +524,38 @@ client.pollRampTransaction(txId: string, opts?: { intervalMs?: number; timeoutMs
 
 Each also has a standalone `(api, ...)` export (`getRampsQuote`, `createOnRamp`, …) for callers holding a
 `PollarApiClient`.
+
+---
+
+### Earn (yield vaults + lending)
+
+Unified access to DeFindex vaults and Blend pools behind one provider-selected API. `getEarnProviders()` returns the
+yield providers this app exposes (an empty array means Earn is disabled — hide any Earn UI); `getEarnOpportunities()`
+lists a provider's vaults/pools with their live APY; `getEarnPosition()` returns the connected wallet's balance + APY
+and a `withdrawUnit` (asset amount for Blend, share count for DeFindex). `earnDeposit` / `earnWithdraw` build the
+provider's XDR server-side (contract-direct for Blend, via the DeFindex API for DeFindex) and then sign + submit it
+through the same `runTx` transaction state machine (subscribe via `onTransactionStateChange`). The deposit `amount` is
+the underlying asset amount; the withdraw `amount` is in the position's `withdrawUnit`. Smart (passkey) wallets are not
+supported yet.
+
+```ts
+const providers = await client.getEarnProviders(); // e.g. ['blend', 'defindex'] — [] means Earn is off
+const opportunities = await client.getEarnOpportunities('blend'); // each carries a live APY
+const position = await client.getEarnPosition({ provider: 'blend', opportunity: opportunities[0].id });
+
+await client.earnDeposit({ provider: 'blend', opportunity: opportunities[0].id, amount: '100' });
+await client.earnWithdraw({ provider: 'blend', opportunity: opportunities[0].id, amount: position.withdrawable });
+```
+
+Method signatures:
+
+```ts
+client.getEarnProviders(): Promise<EarnProviderId[]>;
+client.getEarnOpportunities(provider: EarnProviderId): Promise<EarnOpportunity[]>;
+client.getEarnPosition(params: EarnPositionParams): Promise<EarnPosition>;
+client.earnDeposit(params: EarnTxParams): Promise<SubmitOutcome>;
+client.earnWithdraw(params: EarnTxParams): Promise<SubmitOutcome>;
+```
 
 ---
 
@@ -716,9 +735,6 @@ const trustlessWork: PollarAdapter = {
 const adapters: PollarAdapters = { trustlessWork };
 ```
 
-> **Renamed in 0.7.0** — `EscrowFn` → `AdapterFn` and `EscrowAdapter` → `PollarAdapter`. Runtime contract is unchanged;
-> rename your imports.
-
 ## TypeScript
 
 `@pollar/core` is written in TypeScript and ships full type declarations.
@@ -761,7 +777,7 @@ import type {
   SignAuthEntryOptions,
   SignAuthEntryResponse,
 
-  // Adapters (renamed from Escrow*)
+  // Adapters
   AdapterFn,
   PollarAdapter,
   PollarAdapters,
@@ -771,6 +787,14 @@ import type {
   SwapQuote,
   SwapProvider,
   SwapVenue,
+
+  // Earn (yield vaults + lending)
+  EarnProviderId,
+  EarnOpportunity,
+  EarnPosition,
+  EarnPositionParams,
+  EarnTxParams,
+  EarnWithdrawUnit,
 
   // Ramps (SEP-24)
   RampsQuoteQuery,

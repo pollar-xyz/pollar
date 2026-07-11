@@ -15,13 +15,11 @@ This repository is managed with [Turborepo](https://turbo.build/repo) and contai
 > adds multi-venue swaps, SEP-24 on/off-ramps, a self-driving `@pollar/privy-adapter`
 > (web + React Native), custom auth providers, and per-request network timeout/retry. Every
 > user re-authenticates once on upgrade (the local storage namespace was widened). Read the
-> [CHANGELOG](./CHANGELOG.md) and [UPGRADE.md](./UPGRADE.md) before upgrading.
->
-> 0.7.0 remains the DPoP baseline - sender-constrained tokens (RFC 9449), no PII in storage, refresh-token rotation.
+> [CHANGELOG](./CHANGELOG.md) and [UPGRADE.md](./UPGRADE.md) for the full version history before upgrading.
 
 ### [`@pollar/core`](./packages/core)
 
-**Version:** `0.10.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/core)
+**Version:** `0.10.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/core)
 
 Framework-agnostic TypeScript SDK. Provides the `PollarClient` class and all lower-level utilities needed to integrate
 Pollar authentication and Stellar transactions into any JavaScript environment.
@@ -40,15 +38,23 @@ Pollar authentication and Stellar transactions into any JavaScript environment.
   `getWalletBalance()` on `PollarClient`
 - Real-time state management with a typed event system (`onAuthStateChange`)
 - **Multi-venue swaps** - `getSwapQuote()` ranks routes across SDEX / Soroswap / Aquarius; `swap()` sets the trustline
-  and executes through the standard tx pipeline with on-chain `minReceived` slippage
+  and executes through the standard tx pipeline with on-chain `minReceived` slippage. All three venues execute; which
+  ones an app offers is driven by its per-app `GET /swap/config`
+- **Earn (yield + lending)** - `getEarnProviders()` / `getEarnOpportunities()` / `getEarnPosition()` /
+  `earnDeposit()` / `earnWithdraw()` unify DeFindex vaults and Blend pools behind one provider-selected API, each
+  opportunity carrying its live APY
 - **SEP-24 on/off-ramps** - anchor deposit/withdraw interactive flow via the `ramps` endpoints
+- **Account creation** - `createAccount()` puts an external wallet's classic account on-chain via a sponsored
+  `createAccount`; the wallet surfaces `existsOnStellar` + `fundingMode`
+- **Sponsored trustlines** - `setTrustline` routes by the asset's `sponsored` flag, so external wallets can set
+  app-sponsored trustlines
 - **Network resilience** - per-request timeout (default 10s) and idempotent-request retry; typed `PollarNetworkError`
 - KYC verification flow - provider selection, session start, and status polling
 - Transaction history - paginated fetch with status tracking
 - Built-in wallet adapters (`FreighterAdapter`, `AlbedoAdapter`) plus a `walletAdapters: WalletAdapter[]` array for
   external wallet stacks (each adapter auto-renders as a login entry and overrides a built-in by its `type`)
 - `AdapterFn`, `PollarAdapter`, and `PollarAdapters` types — generic adapter contract for custom signing flows (e.g.
-  Trustless Work SDK). _(Renamed from `EscrowFn` / `EscrowAdapter` in 0.7.0.)_
+  Trustless Work SDK)
 - Active-session management — `listSessions()` / `revokeSession(familyId)` / `logoutEverywhere()` against the
   refresh-token family on the server
 - `getUserProfile()` for in-memory PII access; `destroy()` to tear down the client cleanly
@@ -83,7 +89,7 @@ const client = new PollarClient({ apiKey: 'pk_...', storage });
 
 ### [`@pollar/react`](./packages/react)
 
-**Version:** `0.10.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react)
+**Version:** `0.10.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react)
 
 React bindings built on top of `@pollar/core`. Provides a context provider, hook, and pre-built UI components for
 drop-in authentication in React applications.
@@ -99,14 +105,16 @@ drop-in authentication in React applications.
   transaction status (build → sign → success/error)
 - `<ReceiveModal>` — displays the connected wallet address as a QR code with copy-to-clipboard; no external QR
   dependency required
-- `<SwapModal>` - multi-venue swap UI over the core swap API, with a route selector across venues
+- `<SwapModal>` - multi-venue swap UI over the core swap API, with a route selector across venues and paste-a-custom-token
+- `<EarnModal>` - deposit/withdraw across DeFindex vaults and Blend pools, with live APY, wallet balance, over-spend
+  guards, and auto-trustline on deposit; `usePollar()` mirrors the earn methods
 - `<RampWidget>` - SEP-24 buy/sell flow wired to the core ramps endpoints (external wallets sign the pending XDR inline)
 - `<KycModal>` - identity verification flow with provider selection and status polling _(UI preview - backend coming
   soon)_
 - `<TxHistoryModal>` — paginated transaction history viewer with auto-fetch on open and stellar.expert explorer links
 - `<WalletBalanceModal>` — Stellar account balance display
 - `<SessionsModal>` — drop-in active-sessions UI: lists every refresh-token family for the current user, per-row
-  revoke, and a "Sign out everywhere" button (new in 0.7.0)
+  revoke, and a "Sign out everywhere" button
 - `createPollarAdapterHook(key)` — factory for fully-typed hooks that wrap custom adapters with automatic XDR signing
 - Template components for every modal — pure presentational layer for fully custom UIs
 - Bundled stylesheet (`@pollar/react/styles.css`) with `pollar-` namespaced class names
@@ -120,7 +128,7 @@ npm install @pollar/react @pollar/core
 
 ### [`@pollar/privy-adapter`](./packages/privy-adapter)
 
-**Version:** `0.10.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-adapter)
+**Version:** `0.10.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-adapter)
 
 Client-side **Privy** wallet adapter for `@pollar/core`. It drives the whole Privy flow itself - email / Google / GitHub
 login, creating the user's Privy embedded Stellar wallet, and raw-hash signing - then hands the signature to Pollar for
@@ -145,7 +153,7 @@ npm install @pollar/privy-adapter @pollar/core @stellar/stellar-sdk @privy-io/re
 
 ### [`@pollar/privy-server-adapter`](./packages/privy-server-adapter)
 
-**Version:** `0.10.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-server-adapter)
+**Version:** `0.10.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-server-adapter)
 
 Server-side Privy adapter. A stateless HTTP proxy that lets Pollar sign Stellar transactions through your **Privy**
 server-wallet account without your `PRIVY_APP_SECRET` ever leaving your infrastructure. You run it in your own backend
@@ -174,7 +182,7 @@ npm install @pollar/privy-server-adapter
 
 ### [`@pollar/accesly-adapter`](./packages/accesly-adapter)
 
-**Version:** `0.10.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/accesly-adapter)
+**Version:** `0.10.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/accesly-adapter)
 
 Client-side **Accesly** smart-account wallet adapter for `@pollar/core`. Signs Stellar transactions with a user's
 Accesly C-address (passkey + MPC) smart wallet, client-side.
@@ -192,7 +200,7 @@ npm install @pollar/accesly-adapter @pollar/core @accesly/react @accesly/core
 
 ### [`@pollar/stellar-wallets-kit-adapter`](./packages/stellar-wallets-kit-adapter)
 
-**Version:** `0.10.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/stellar-wallets-kit-adapter)
+**Version:** `0.10.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/stellar-wallets-kit-adapter)
 
 Plugs [Stellar Wallets Kit](https://stellarwalletskit.dev) into Pollar as a set of wallet adapters, without
 `@pollar/core` having to depend on the kit. One install gives Pollar access to **every wallet module the kit
