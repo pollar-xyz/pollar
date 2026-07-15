@@ -1,6 +1,6 @@
 # @pollar
 
-Official SDK monorepo for [Pollar](https://pollar.xyz) — authentication and transaction infrastructure for Stellar-based
+Official SDK monorepo for [Pollar](https://pollar.xyz) — authentication and transaction infrastructure for Stellar and Solana
 applications.
 
 This repository is managed with [Turborepo](https://turbo.build/repo) and contains the following published packages.
@@ -36,6 +36,9 @@ Pollar authentication and Stellar transactions into any JavaScript environment.
   `DPoP-Nonce` rotation
 - Stellar transaction building and submission through the Pollar API; balances via `refreshBalance()` /
   `getWalletBalance()` on `PollarClient`
+- **Multichain (Stellar + Solana)** - v2 wallet balances are tagged by `chain` and report Solana (SOL) alongside
+  Stellar assets; login supports **Sign In With Solana (SIWS)** and the SDK signs Solana transactions for sponsored
+  external transfers. Solana external-wallet connect ships via `@pollar/solana-wallet-standard-adapter` (preview)
 - Real-time state management with a typed event system (`onAuthStateChange`)
 - **Multi-venue swaps** - `getSwapQuote()` ranks routes across SDEX / Soroswap / Aquarius; `swap()` sets the trustline
   and executes through the standard tx pipeline with on-chain `minReceived` slippage. All three venues execute; which
@@ -112,7 +115,7 @@ drop-in authentication in React applications.
 - `<KycModal>` - identity verification flow with provider selection and status polling _(UI preview - backend coming
   soon)_
 - `<TxHistoryModal>` — paginated transaction history viewer with auto-fetch on open and stellar.expert explorer links
-- `<WalletBalanceModal>` — Stellar account balance display
+- `<WalletBalanceModal>` — multichain wallet balance display (Stellar + Solana), each balance tagged by chain on multichain apps
 - `<SessionsModal>` — drop-in active-sessions UI: lists every refresh-token family for the current user, per-row
   revoke, and a "Sign out everywhere" button
 - `createPollarAdapterHook(key)` — factory for fully-typed hooks that wrap custom adapters with automatic XDR signing
@@ -224,6 +227,33 @@ npm install @pollar/stellar-wallets-kit-adapter @creit.tech/stellar-wallets-kit
 
 ---
 
+### [`@pollar/solana-wallet-standard-adapter`](./packages/solana-wallet-standard-adapter)
+
+**Version:** `0.11.0-rc.0` &nbsp;|&nbsp; **Status:** preview (phase-0 scaffold)
+
+The Solana counterpart to `@pollar/stellar-wallets-kit-adapter`. Connects user-controlled Solana wallets (Phantom,
+Solflare, Backpack, ...) to `@pollar/core` through the [Wallet Standard](https://github.com/wallet-standard/wallet-standard),
+without bundling any wallet SDK into `@pollar/core`. Login uses **SIWS (Sign In With Solana)** via each wallet's native
+`solana:signIn` feature - the Solana analogue of Stellar's SEP-10 challenge.
+
+**Key features:**
+
+- `solanaWalletStandardAdapters(options?)` - discovers every installed Solana wallet and returns one `WalletAdapter`
+  each to pass to `PollarClientConfig.walletAdapters`; SSR-safe (returns `[]` when there is no `window`)
+- `SolanaWalletStandardAdapter` - direct `WalletAdapter` implementation for use outside `PollarClient`
+- Peer deps: `@pollar/core@^0.11.0-rc.0` plus the `@wallet-standard/*` packages and `@solana/wallet-standard-features`
+  (no wallet SDK bundled)
+
+> **Preview:** the client-side adapter (discovery, connect, SIWS, message/transaction signing) is implemented, but
+> wiring into `PollarClient` waits on the chain-aware adapter contract in `@pollar/core` and the SIWS endpoints in the
+> Pollar API.
+
+```bash
+npm install @pollar/solana-wallet-standard-adapter
+```
+
+---
+
 ## Repository Structure
 
 ```
@@ -234,7 +264,8 @@ npm install @pollar/stellar-wallets-kit-adapter @creit.tech/stellar-wallets-kit
 │   ├── privy-adapter/                   # @pollar/privy-adapter - client-side Privy wallet adapter (web + RN)
 │   ├── privy-server-adapter/            # @pollar/privy-server-adapter - server-side Privy signing proxy
 │   ├── accesly-adapter/                 # @pollar/accesly-adapter - client-side Accesly smart-wallet adapter
-│   └── stellar-wallets-kit-adapter/     # @pollar/stellar-wallets-kit-adapter - Stellar Wallets Kit bridge
+│   ├── stellar-wallets-kit-adapter/     # @pollar/stellar-wallets-kit-adapter - Stellar Wallets Kit bridge
+│   └── solana-wallet-standard-adapter/  # @pollar/solana-wallet-standard-adapter - Solana Wallet Standard bridge (preview)
 ├── examples/                            # Example apps (e.g. privy-web)
 ├── docs/                                # API reference documentation
 ├── tests/                                # Smoke tests for the built SDK

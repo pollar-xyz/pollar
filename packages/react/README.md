@@ -1,7 +1,7 @@
 # @pollar/react
 
 React bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI, transaction modals, and hooks for
-Stellar-based applications.
+Stellar and Solana applications.
 
 > **0.10.0** requires `@pollar/core@^0.10.0`. Headline features: on-chain swaps
 > via `<SwapModal>` + `usePollar().swap` / `getSwapQuote` / `openSwapModal`;
@@ -244,7 +244,7 @@ already wired inside `<PollarProvider>` — but they're exported in case you wan
 | `<EarnModal>`              | Deposit/withdraw across DeFindex vaults and Blend pools: provider + opportunity selection with live APY, wallet balance, over-spend guards, and auto-trustline on deposit                                                                                |
 | `<ReceiveModal>`           | Wallet address as QR code with copy-to-clipboard (no external QR dependency required)                                                                                                                                                                   |
 | `<TxHistoryModal>`         | Paginated transaction history with auto-fetch on open and stellar.expert explorer links                                                                                                                                                                 |
-| `<WalletBalanceModal>`     | Stellar account balances with refresh button                                                                                                                                                                                                            |
+| `<WalletBalanceModal>`     | Multichain wallet balances (Stellar + Solana); each balance carries a per-chain tag on multichain apps, with refresh button                                                                                                                                                                                                            |
 | `<EnabledAssetsModal>`     | The application's dashboard-enabled assets with per-asset trustline state; establish/remove trustlines                                                                                                                                                  |
 | `<DistributionRulesModal>` | Manage the wallet's distribution rules                                                                                                                                                                                                                  |
 | `<SessionsModal>`          | Lists every active refresh-token family for the current user with device metadata, marks the local session, per-row revoke, and a "Sign out everywhere" button                                                                                          |

@@ -1,6 +1,6 @@
 # @pollar/core
 
-Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction utilities for Stellar-based applications.
+Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction utilities for Stellar and Solana applications.
 
 > **0.10.0** adds multi-venue **swaps** (SDEX / Soroswap / Aquarius, via `getSwapQuote` +
 > `swap`), **SEP-24 on/off-ramps** (`getRampsQuote`, `createOnRamp`, `createOffRamp`, and the
@@ -75,7 +75,10 @@ import 'react-native-polyfill-globals/auto'; // TextEncoder/TextDecoder + URL
 - Sign every authenticated request with **DPoP** (RFC 9449), making stolen tokens useless to an attacker without the
   per-session keypair
 - Build and submit Stellar transactions
-- Fetch wallet balances via `PollarClient` (`refreshBalance()` / `getWalletBalance()`)
+- Fetch wallet balances via `PollarClient` (`refreshBalance()` / `getWalletBalance()`) - v2 balances are **multichain**,
+  tagged by `chain` and reporting Solana (SOL) alongside Stellar assets
+- **Solana**: log in with **Sign In With Solana (SIWS)** and sign Solana transactions for sponsored external transfers
+  (external-wallet connect via `@pollar/solana-wallet-standard-adapter`, preview)
 - Swap assets across venues (SDEX / Soroswap / Aquarius) and run SEP-24 on/off-ramps
 - React to real-time authentication state changes
 
