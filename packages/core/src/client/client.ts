@@ -99,6 +99,7 @@ import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './auth/e
 import { defaultWebOAuthOpener, loginOAuth } from './auth/oauthFlow';
 import { smartWalletFlow } from './auth/passkeyFlow';
 import { emailProvider, oauthProvider } from './auth/providers';
+import { loginWithSolanaAdapter } from './auth/solanaWalletFlow';
 import { loginWithAdapter, requestWalletChallenge } from './auth/walletFlow';
 import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
 
@@ -1086,15 +1087,16 @@ export class PollarClient {
       warnServerSide('login');
       return;
     }
-    // A registered wallet adapter (freighter/albedo/privy/xbull…): run the
-    // generic SEP-10 wallet flow. It yields a persistent adapter reused for
-    // signing long after login.
+    // A registered wallet adapter (freighter/albedo/privy/xbull/solana…): run the
+    // wallet flow for its chain — SEP-10 for Stellar, SIWS for Solana. It yields a
+    // persistent adapter reused for signing long after login.
     const walletAdapter = this._walletAdapters.get(options.provider);
     if (walletAdapter) {
       const walletController = this._newController();
-      loginWithAdapter(walletAdapter, this._flowDeps(walletController.signal)).catch((err) =>
-        this._handleFlowError(err, walletController.signal),
-      );
+      const deps = this._flowDeps(walletController.signal);
+      const flow =
+        walletAdapter.chain === 'SOLANA' ? loginWithSolanaAdapter(walletAdapter, deps) : loginWithAdapter(walletAdapter, deps);
+      flow.catch((err) => this._handleFlowError(err, walletController.signal));
       return;
     }
 
