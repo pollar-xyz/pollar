@@ -1,6 +1,6 @@
 {
   "name": "@pollar/react",
-  "version": "0.11.0-rc.0",
+  "version": "0.11.0",
   "description": "React components for Pollar authentication",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -34,12 +34,12 @@
     "node": ">=20"
   },
   "peerDependencies": {
-    "@pollar/core": "^0.11.0-rc.0",
+    "@pollar/core": "^0.11.0",
     "react": ">=18",
     "react-dom": ">=18"
   },
   "dependencies": {
-    "@pollar/core": "^0.11.0-rc.0",
+    "@pollar/core": "^0.11.0",
     "@simplewebauthn/browser": "^13.3.0",
     "qr.js": "^0.0.0"
   },
