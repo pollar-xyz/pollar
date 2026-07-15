@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.11.0
+
+> Stable release. Published under the default `latest` dist-tag
+> (`npm i @pollar/core`). Headline: the SDK goes **multichain** - Solana joins
+> Stellar.
+
+### Highlights (since 0.10.1)
+
+- **Multichain balances (Stellar + Solana).** `PollarClient` balances now come
+  from the v2 wallet endpoint: each balance is tagged with its `chain`
+  (`STELLAR` | `SOLANA` | `POLYGON`) and the response flags `multichain`. Solana
+  (SOL) is reported alongside Stellar assets. On non-Stellar chains only the
+  native token is reported for now.
+- **Sign In With Solana (SIWS) contract in `@pollar/core`.** New SIWS login types
+  (`SolanaSignInInput` / `SolanaSignInOutput`, with a raw `signMessage` fallback)
+  and `signSolanaTransaction` on the wallet-adapter contract - the Solana
+  analogue of Stellar's SEP-10 challenge, for login and sponsored external
+  transfers.
+- **Chain-aware `WalletAdapter` contract.** The adapter interface is now
+  chain-aware, so a single `walletAdapters` array can carry Stellar and Solana
+  adapters side by side.
+- **New package `@pollar/solana-wallet-standard-adapter` (preview).** Connects
+  user-controlled Solana wallets (Phantom, Solflare, Backpack, ...) through the
+  Wallet Standard, without bundling a wallet SDK into `@pollar/core`. Phase-0:
+  the client-side adapter (discovery, connect, SIWS, message / transaction
+  signing) is implemented; full `PollarClient` wiring and the SIWS endpoints
+  land next.
+
+### `@pollar/core`
+
+- `WalletChain` type (`STELLAR` | `POLYGON` | `SOLANA`); each balance carries a
+  `chain`, and the balance response exposes `multichain` (v2 wallet endpoint).
+- SIWS types (`SolanaSignInInput`, `SolanaSignInOutput`,
+  `SolanaSignMessageResponse`) and `signSolanaTransaction` on the wallet-adapter
+  contract.
+- Chain-aware `WalletAdapter` contract: adapters declare their chain so Stellar
+  and Solana adapters coexist in one `walletAdapters` array.
+
+### `@pollar/react`
+
+- `WalletBalanceModal` renders multichain balances, tagging each balance with its
+  chain. The tag only appears when the app spans more than one chain, so
+  single-chain (Stellar-only) apps look unchanged.
+
+### `@pollar/solana-wallet-standard-adapter` (new, preview)
+
+- `solanaWalletStandardAdapters(options?)` discovers every installed Solana wallet
+  and returns one `WalletAdapter` each (SSR-safe, returns `[]` without a
+  `window`); `SolanaWalletStandardAdapter` for direct use outside `PollarClient`.
+- Login uses each wallet's native `solana:signIn` (SIWS). Peer deps:
+  `@pollar/core`, the `@wallet-standard/*` packages, and
+  `@solana/wallet-standard-features` - no wallet SDK is bundled.
+
 ## 0.10.1
 
 > Stable release. Published under the default `latest` dist-tag
