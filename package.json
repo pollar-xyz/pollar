@@ -16,9 +16,9 @@
     "test:smoke": "node tests/smoke-keys.cjs && node tests/smoke-client.cjs && node tests/smoke-providers.cjs && node tests/smoke-session-races.cjs"
   },
   "devDependencies": {
-    "prettier": "^3.8.4",
-    "turbo": "^2.9.18",
-    "typescript": "^6.0.3"
+    "prettier": "^3.9.5",
+    "turbo": "^2.10.5",
+    "typescript": "^7.0.2"
   },
   "workspaces": [
     "packages/*",
