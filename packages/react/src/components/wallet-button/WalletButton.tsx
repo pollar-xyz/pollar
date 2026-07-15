@@ -27,9 +27,18 @@ export function WalletButton() {
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [created, setCreated] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInProgress = transaction.step === 'building' || transaction.step === 'signing';
+  // Offer on-chain account creation only for an EXTERNAL wallet Stellar doesn't
+  // have yet, under IMMEDIATE funding. `existsOnStellar === false` (not just
+  // falsy) so an unknown/legacy session doesn't wrongly show it. `created` hides
+  // it optimistically after a successful create (the session's existsOnStellar
+  // only refreshes on the next login/resume).
+  const canCreateAccount =
+    !created && wallet?.custody === 'external' && wallet.existsOnStellar === false && wallet.fundingMode === 'IMMEDIATE';
 
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const isDark = theme === 'dark';
@@ -68,6 +77,23 @@ export function WalletButton() {
   function handleLogout() {
     setOpen(false);
     getClient().logout();
+  }
+
+  async function handleCreateAccount() {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const res = await getClient().createAccount();
+      if (res.status === 'success' || res.status === 'pending') {
+        setCreated(true);
+        setOpen(false);
+        await getClient().refreshBalance();
+      }
+      // On error, keep the item so the user can retry (createAccount surfaces the
+      // reason in res.details; the send/receive modals also report failures).
+    } finally {
+      setCreating(false);
+    }
   }
 
   function handleWalletBalance() {
@@ -122,7 +148,10 @@ export function WalletButton() {
       wrapperRef={wrapperRef}
       isInProgress={isInProgress}
       walletType={walletType}
+      showCreateAccount={canCreateAccount}
+      creatingAccount={creating}
       onToggleOpen={() => setOpen((v) => !v)}
+      onCreateAccount={handleCreateAccount}
       onCopy={handleCopy}
       onWalletBalance={handleWalletBalance}
       onTxHistory={handleTxHistory}

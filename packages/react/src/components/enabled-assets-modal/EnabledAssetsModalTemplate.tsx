@@ -63,16 +63,22 @@ function AssetItem({
         )}
       </div>
       <div className="pollar-asset-actions">
-        <span className={`pollar-asset-trustline${established ? ' established' : ''}`}>
+        <span className={`pollar-asset-trustline${established ? ' pollar-established' : ''}`}>
           {established ? 'Trustline active' : 'Needs trustline'}
         </span>
         {!isNative && (
           <button
-            className={`pollar-asset-btn${established ? ' danger' : ''}`}
+            className={`pollar-asset-btn${established ? ' pollar-danger' : ''}`}
             onClick={() => onToggle(record)}
             disabled={busy || disabled}
           >
-            {busy ? '…' : established ? 'Disable' : 'Enable'}
+            {busy ? (
+              <span className="pollar-spinner pollar-spinner-sm pollar-spinner-current" />
+            ) : established ? (
+              'Disable'
+            ) : (
+              'Enable'
+            )}
           </button>
         )}
       </div>
@@ -122,19 +128,30 @@ export function EnabledAssetsModalTemplate({
       <div className="pollar-modal-header">
         <h2 className="pollar-modal-title">Trustlines</h2>
         <div className="pollar-modal-header-actions">
-          <button className="pollar-modal-refresh-btn" onClick={onRefresh} disabled={isLoading || busy}>
+          <button
+            type="button"
+            className="pollar-modal-close"
+            onClick={onRefresh}
+            disabled={isLoading || busy}
+            aria-label="Refresh"
+            title="Refresh"
+          >
             <svg
-              className={`pollar-modal-refresh-icon${isLoading ? ' spinning' : ''}`}
-              width="13"
-              height="13"
-              viewBox="0 0 13 13"
+              className={isLoading ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
               fill="none"
               aria-hidden
             >
-              <path d="M11.5 6.5a5 5 0 11-1.5-3.536" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              <path d="M10 1v3h-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
-            Refresh
           </button>
           <button className="pollar-modal-close" onClick={onClose} aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -146,7 +163,12 @@ export function EnabledAssetsModalTemplate({
 
       {walletAddress && <div className="pollar-asset-address">{cropAddress(walletAddress)}</div>}
 
-      {isLoading && <div className="pollar-modal-empty">Loading…</div>}
+      {isLoading && (
+        <div className="pollar-loading-block">
+          <div className="pollar-spinner" />
+          <span>Loading…</span>
+        </div>
+      )}
 
       {enabledAssets.step === 'error' && <div className="pollar-modal-error">{enabledAssets.message}</div>}
 
@@ -227,7 +249,7 @@ export function CustomTrustlineModalTemplate({
     >
       <div className="pollar-modal-header">
         <div className="pollar-modal-header-actions">
-          <button className="pollar-modal-back" onClick={onBack} disabled={busy} aria-label="Back">
+          <button className="pollar-modal-close" onClick={onBack} disabled={busy} aria-label="Back">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
               <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -300,9 +322,18 @@ export function CustomTrustlineModalTemplate({
 
       {actionError && <div className="pollar-modal-action-error">{actionError}</div>}
 
-      <button className="pollar-asset-submit" onClick={submit} disabled={!canSubmit}>
-        {busy ? 'Enabling…' : 'Enable trustline'}
-      </button>
+      <div className="pollar-modal-actions">
+        <button type="button" className="pollar-btn-primary" onClick={submit} disabled={!canSubmit}>
+          {busy ? (
+            <>
+              <span className="pollar-spinner pollar-spinner-sm" />
+              Enabling…
+            </>
+          ) : (
+            'Enable trustline'
+          )}
+        </button>
+      </div>
 
       <PollarModalFooter />
     </div>

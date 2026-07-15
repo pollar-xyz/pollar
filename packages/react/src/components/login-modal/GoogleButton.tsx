@@ -3,10 +3,10 @@ import './GoogleButton.css';
 
 export const GoogleButton = ({ disabled, onClick }: { disabled: boolean; onClick: () => void }) => {
   return (
-    <button className="gsi-material-button" disabled={disabled} onClick={onClick}>
-      <div className="gsi-material-button-state"></div>
-      <div className="gsi-material-button-content-wrapper">
-        <div className="gsi-material-button-icon">
+    <button className="pollar-gsi-material-button" disabled={disabled} onClick={onClick}>
+      <div className="pollar-gsi-material-button-state"></div>
+      <div className="pollar-gsi-material-button-content-wrapper">
+        <div className="pollar-gsi-material-button-icon">
           <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" style={{ display: 'block' }}>
             <path
               fill="#EA4335"
@@ -27,7 +27,7 @@ export const GoogleButton = ({ disabled, onClick }: { disabled: boolean; onClick
             <path fill="none" d="M0 0h48v48H0z"></path>
           </svg>
         </div>
-        <span className="gsi-material-button-contents">Google</span>
+        <span className="pollar-gsi-material-button-contents">Google</span>
         <span style={{ display: 'none' }}>Google</span>
       </div>
     </button>

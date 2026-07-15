@@ -48,10 +48,22 @@ export type { StellarNetwork, StellarClientConfig, StellarBalance } from './stel
 export { getKycStatus, getKycProviders, startKyc, resolveKyc, pollKycStatus } from './api/endpoints/kyc';
 
 // ─── Ramps endpoints ──────────────────────────────────────────────────────────
-export { getRampsQuote, createOnRamp, createOffRamp, getRampTransaction, pollRampTransaction } from './api/endpoints/ramps';
+export {
+  getRampsQuote,
+  getRampCountries,
+  createOnRamp,
+  createOffRamp,
+  completeWithdraw,
+  submitRampSignature,
+  getRampTransaction,
+  pollRampTransaction,
+} from './api/endpoints/ramps';
 
 // ─── Distribution endpoints ───────────────────────────────────────────────────
 export { listDistributionRules, claimDistributionRule } from './api/endpoints/distribution';
 
 // ─── Swap endpoints ───────────────────────────────────────────────────────────
-export { quoteSwap } from './api/endpoints/swap';
+export { quoteSwap, getSwapConfig, getSwapTokens } from './api/endpoints/swap';
+
+// ─── Earn endpoints ───────────────────────────────────────────────────────────
+export { getEarnProviders, getEarnOpportunities, getEarnPosition, buildEarnTx } from './api/endpoints/earn';

@@ -140,6 +140,10 @@ const mock = {
   // Delay (ms) before /tx/submit responds — to keep a submit in flight while a
   // logout lands, for the post-logout tx-state guard test.
   txSubmitDelayMs: 0,
+  // When true, the FIRST /tx/history stalls `txHistorySlowDelayMs` (so it times
+  // out), then later attempts are fast — to exercise the GET retry path.
+  txHistorySlowOnce: false,
+  txHistorySlowDelayMs: 3000,
 };
 
 globalThis.fetch = async (req) => {
@@ -197,6 +201,10 @@ globalThis.fetch = async (req) => {
     });
   }
   if (req.url.includes('/tx/history')) {
+    if (mock.txHistorySlowOnce) {
+      mock.txHistorySlowOnce = false; // one-shot stall → the retried GET is fast
+      await delay(mock.txHistorySlowDelayMs ?? 3000, req.signal);
+    }
     if (mock.txHistoryErrorWithToken) {
       mock.txHistoryErrorWithToken = false;
       return new Response(
@@ -1353,13 +1361,16 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     mock.refreshSlowOnce = false;
   }
 
-  // ── KK. retry absorbs a single transient stall, then refresh succeeds ────────
-  console.log('\n── KK. retry absorbs a transient stall → refresh succeeds ───');
+  // ── KK. a stalled refresh (a non-idempotent DPoP-bound POST) is attempted
+  //       EXACTLY ONCE, not retried, despite retry:{attempts:2}. Re-sending it
+  //       would replay the single-use DPoP `jti` (→ jti-replay), so the retry
+  //       layer only retries GET/HEAD. A GET's retry is covered in the next block.
+  console.log('\n── KK. stalled refresh (POST) is attempted once, not retried ──');
   {
     mock.calls = [];
-    mock.refreshSlowOnce = true; // first attempt stalls → times out
+    mock.refreshSlowOnce = true; // the one refresh attempt stalls → times out
     mock.refreshSlowDelayMs = 3000;
-    mock.refreshStatus = 200; // the retried attempt succeeds → NEW_AT
+    mock.refreshStatus = 200;
     const apiKey = 'pk_race_KK';
     const storage = sdk.createMemoryAdapter();
     const hash = await apiKeyHashOf(apiKey);
@@ -1380,18 +1391,27 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
       baseUrl: 'https://x.test',
       logLevel: 'silent',
       requestTimeoutMs: 60,
-      retry: { attempts: 2, baseDelayMs: 50 }, // one retry, short backoff
+      retry: { attempts: 2, baseDelayMs: 50 }, // attempts:2 must be IGNORED for a POST
     });
     await client.ready();
+    mock.calls = [];
     let err;
     try {
       await client.refresh();
     } catch (e) {
       err = e;
     }
-    check('refresh() resolved after the retry', !err, err);
-    const st = client.getAuthState();
-    check('  rotated to the refreshed token', st.session?.token?.accessToken === 'NEW_AT', st.session?.token?.accessToken);
+    check('stalled refresh rejects with SDK_NETWORK_TIMEOUT', sdk.isPollarNetworkError(err), err && err.code);
+    const refreshCalls = mock.calls.filter((c) => c.url.includes('/auth/refresh')).length;
+    check(
+      '  POST /auth/refresh attempted EXACTLY once (not retried; DPoP jti-replay safety)',
+      refreshCalls === 1,
+      refreshCalls,
+    );
+    check(
+      '  session kept (a transient network timeout is not a definitive logout)',
+      client.getAuthState().step === 'authenticated',
+    );
     client.destroy();
     mock.refreshSlowOnce = false;
   }
@@ -1577,6 +1597,48 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     );
     check('  no smart/custodial routing leaked an adapter call', client.getWalletType() === null);
     client.destroy();
+  }
+
+  // ── PP. retry DOES absorb a transient stall on an idempotent GET ──────────
+  console.log('\n── PP. retry absorbs a transient stall on a GET (idempotent) ──');
+  {
+    mock.calls = [];
+    mock.txHistorySlowOnce = true; // first GET stalls → times out → retried
+    mock.txHistorySlowDelayMs = 3000;
+    const apiKey = 'pk_race_PP';
+    const storage = sdk.createMemoryAdapter();
+    const hash = await apiKeyHashOf(apiKey);
+    await storage.set(
+      `pollar:${hash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'internal', address: 'Gtest' },
+      }),
+    );
+    const client = new sdk.PollarClient({
+      apiKey,
+      storage,
+      baseUrl: 'https://x.test',
+      logLevel: 'silent',
+      requestTimeoutMs: 60,
+      retry: { attempts: 2, baseDelayMs: 30 },
+    });
+    await client.ready();
+    mock.calls = [];
+    await client.fetchTxHistory();
+    check(
+      'GET fetchTxHistory reached loaded (retry absorbed the stall)',
+      client.getTxHistoryState().step === 'loaded',
+      client.getTxHistoryState().step,
+    );
+    const historyCalls = mock.calls.filter((c) => c.url.includes('/tx/history')).length;
+    check('  GET /tx/history WAS retried (2 attempts: 1 stalled + 1 fast)', historyCalls === 2, historyCalls);
+    client.destroy();
+    mock.txHistorySlowOnce = false;
   }
 
   console.log(`\n${pass} pass, ${fail} fail`);

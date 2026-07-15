@@ -74,9 +74,7 @@ export async function fetchWithTimeout(request: Request, timeoutMs: number): Pro
     // The timeout fired (not the caller's own cancellation) — normalize the
     // failure to a typed, catchable error so callers can branch on the code.
     if (timeout.signal.aborted && !request.signal?.aborted) {
-      throw err instanceof PollarNetworkError
-        ? err
-        : new PollarNetworkError(`Request timed out after ${timeoutMs}ms`, err);
+      throw err instanceof PollarNetworkError ? err : new PollarNetworkError(`Request timed out after ${timeoutMs}ms`, err);
     }
     throw err;
   } finally {
@@ -93,23 +91,46 @@ export async function fetchWithTimeout(request: Request, timeoutMs: number): Pro
  * by {@link fetchWithTimeout}, and transport failures retry with backoff. The
  * Request is cloned per attempt so a consumed/aborted body can be replayed
  * (a Request body is single-use).
+ *
+ * Only **idempotent** methods (GET/HEAD) are transparently retried. A
+ * transport error (timeout / dropped connection) does not tell us whether the
+ * server received and processed the request — only that we did not get the
+ * response. Re-sending a POST/PUT/PATCH/DELETE that already landed can duplicate
+ * its effect, and for a DPoP-bound request it also replays a single-use proof
+ * (same `jti`), which the server rejects with `SDK_AUTH_DPOP_INVALID` /
+ * `jti-replay`. So a non-idempotent request is attempted exactly once here; a
+ * genuine failure is the caller's to retry (that path rebuilds a fresh proof).
  */
 function makeRetryingFetch(timeoutMs: number, retry: Required<PollarRetryConfig>) {
   const attempts = Math.max(1, retry.attempts);
   return async function retryingFetch(request: Request): Promise<Response> {
+    const method = request.method.toUpperCase();
+    const isIdempotent = method === 'GET' || method === 'HEAD';
+    const maxAttempts = isIdempotent ? attempts : 1;
+    // Per-request timeout override (set by slow submit-family calls via the
+    // `x-pollar-timeout-ms` header). Read it, then STRIP it so this internal
+    // control header never travels to the server. Fall back to the client
+    // default when absent or malformed.
+    let effectiveTimeoutMs = timeoutMs;
+    const timeoutOverride = request.headers.get('x-pollar-timeout-ms');
+    if (timeoutOverride !== null) {
+      request.headers.delete('x-pollar-timeout-ms');
+      const parsed = Number(timeoutOverride);
+      if (Number.isFinite(parsed) && parsed > 0) effectiveTimeoutMs = parsed;
+    }
     let lastErr: unknown;
-    for (let attempt = 1; attempt <= attempts; attempt++) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       // Clone before each try (except a single-attempt fetch) so the body
       // survives a re-send; the original stays unconsumed for the next clone.
-      const attemptReq = attempts > 1 ? request.clone() : request;
+      const attemptReq = maxAttempts > 1 ? request.clone() : request;
       try {
-        return await fetchWithTimeout(attemptReq, timeoutMs);
+        return await fetchWithTimeout(attemptReq, effectiveTimeoutMs);
       } catch (err) {
         lastErr = err;
         // The CALLER aborted (cancellation / destroy) — never retry, propagate.
         if (request.signal?.aborted) throw err;
         // A real HTTP response never lands here; only transport errors do.
-        if (!isRetryableTransportError(err) || attempt >= attempts) throw err;
+        if (!isRetryableTransportError(err) || attempt >= maxAttempts) throw err;
         await new Promise((r) => setTimeout(r, backoffDelay(attempt, retry.baseDelayMs)));
       }
     }

@@ -3,15 +3,18 @@
 React bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI, transaction modals, and hooks for
 Stellar-based applications.
 
-> **0.9.0** requires `@pollar/core@^0.9.0`. `usePollar().walletAddress` is
-> unchanged (now derived from `session.wallet.address` internally — no consumer
-> change), and provider/modal logs route through the client's configured
-> `logLevel` / `logger`. Read the [CHANGELOG](../../CHANGELOG.md) before upgrading.
+> **0.10.0** requires `@pollar/core@^0.10.0`. Headline features: on-chain swaps
+> via `<SwapModal>` + `usePollar().swap` / `getSwapQuote` / `openSwapModal`;
+> live SEP-24 on/off-ramps through `<RampWidget>` (now wired to
+> `client.createOnRamp` / `client.createOffRamp`); and a self-driving Privy
+> adapter (registered interactive adapters are auto-driven to completion before
+> `login({ provider })`). Read the [CHANGELOG](../../CHANGELOG.md) before
+> upgrading.
 >
-> **0.8.0 reshapes `<PollarProvider>` props (breaking).** `config` → `client`
+> **0.8.0 reshapes `<PollarProvider>` props (breaking).** `config` > `client`
 > (now accepts a `PollarClient` instance or a `PollarClientConfig`); `styles`
 > moves under `appConfig.styles`; new `appConfig` prop is the opt-out switch
-> for the remote `/applications/config` fetch (pass it — even `{}` — to skip
+> for the remote `/applications/config` fetch (pass it - even `{}` - to skip
 > the fetch). Read the [CHANGELOG](../../CHANGELOG.md) and
 > [UPGRADE.md](../../UPGRADE.md) before upgrading.
 
@@ -44,18 +47,18 @@ export default function App({ children }: { children: React.ReactNode }) {
 import { usePollar } from '@pollar/react';
 
 export function Profile() {
-  const { isAuthenticated, walletAddress, login, logout, getClient } = usePollar();
+  const { isAuthenticated, wallet, login, logout, getClient } = usePollar();
 
   if (!isAuthenticated) {
     return <button onClick={() => login({ provider: 'google' })}>Sign in with Google</button>;
   }
 
-  // PII (email, name, avatar, providers) lives in memory only — fetch it from the client.
+  // PII (email, name, avatar, providers) lives in memory only - fetch it from the client.
   const profile = getClient().getUserProfile();
 
   return (
     <div>
-      <p>Wallet: {walletAddress}</p>
+      <p>Wallet: {wallet?.address}</p>
       <p>Email: {profile?.mail}</p>
       <button onClick={logout}>Sign out</button>
     </div>
@@ -120,25 +123,30 @@ needed.
 ```ts
 const {
   // Session
-  isAuthenticated, // boolean — true when a wallet public key is present
-  walletAddress, // string — '' until authenticated
-  walletType, // WalletId | null
+  isAuthenticated, // boolean - true when a wallet address is present
+  wallet, // WalletInfo | null - read wallet?.address for the on-chain address
+  verified, // boolean - true once the server has confirmed the session
 
   // Client escape hatch
-  getClient, // () => PollarClient — for getUserProfile(), listSessions(), …
+  getClient, // () => PollarClient - for getUserProfile(), listSessions(), …
 
   // Auth
   login, // (options: PollarLoginOptions) => void
   logout, // () => void  (fire-and-forget; await getClient().logout() if you need the promise)
   openLoginModal, // () => void
 
-  // Sessions (new in 0.7.0)
+  // Sessions
+  sessions, // SessionsState
   openSessionsModal, // () => void
 
   // Transactions
   tx, // TransactionState
-  buildTx, // (operation, params, options?) => Promise<void>
-  signAndSubmitTx, // (unsignedXdr: string) => Promise<void>
+  buildTx, // (operation, params, options?) => Promise<BuildOutcome>
+  signAndSubmitTx, // (unsignedXdr?: string) => Promise<SubmitOutcome>  (custodial; XDR optional)
+  signTx, // (unsignedXdr: string) => Promise<SignOutcome>  (external-wallet only)
+  submitTx, // (signedXdr: string) => Promise<SubmitOutcome>
+  buildAndSignAndSubmitTx, // (operation, params, options?) => Promise<SubmitOutcome>  (one-shot)
+  runTx, // alias of buildAndSignAndSubmitTx
   openTxModal, // () => void
 
   // Transaction history
@@ -150,18 +158,32 @@ const {
   refreshWalletBalance, // () => Promise<void>
   openWalletBalanceModal, // () => void
 
+  // Enabled assets / trustlines
+  enabledAssets, // EnabledAssetsState
+  refreshAssets, // () => Promise<void>
+  setTrustline, // (asset, opts?) => Promise<TrustlineOutcome>
+  openEnabledAssetsModal, // () => void
+
+  // Swap (DEX/AMM)
+  getSwapQuote, // (params: SwapQuoteParams) => Promise<SwapQuote[]>
+  swap, // (quote: SwapQuote, opts?) => Promise<SubmitOutcome>
+  openSwapModal, // () => void
+
+  // Distribution rules
+  openDistributionRulesModal, // () => void
+
   // Send / Receive
   openSendModal, // () => void
   openReceiveModal, // () => void
 
   // Network
-  network, // StellarNetwork — 'mainnet' | 'testnet'
+  network, // StellarNetwork - 'mainnet' | 'testnet'
   setNetwork, // (network: StellarNetwork) => void
 
-  // KYC (UI ready — backend coming soon)
+  // KYC (UI ready - backend coming soon)
   openKycModal, // (options?: { country?, level?, onApproved? }) => void
 
-  // Ramp (UI ready — backend coming soon)
+  // Ramp (SEP-24 on/off-ramps, wired through core)
   openRampModal, // () => void
 
   // App config / styles served by the Pollar API
@@ -173,8 +195,11 @@ const {
 } = usePollar();
 ```
 
-> **0.6.0 renames** — `transaction` → `tx`, `openTransactionModal` → `openTxModal`, `config` → `appConfig`,
-> `openRampWidget` → `openRampModal`, `refreshBalance` → `refreshWalletBalance`. Existing code on 0.5.x must update.
+Custody is derived from `wallet`, not a separate field - e.g.
+`wallet?.custody === 'external' ? wallet.provider : null`.
+
+> **0.6.0 renames** - `transaction` > `tx`, `openTransactionModal` > `openTxModal`, `config` > `appConfig`,
+> `openRampWidget` > `openRampModal`, `refreshBalance` > `refreshWalletBalance`. Existing code on 0.5.x must update.
 
 #### Login options
 
@@ -186,15 +211,31 @@ login({ provider: 'github' });
 // Email OTP
 login({ provider: 'email', email: 'user@example.com' });
 
-// Built-in Stellar wallet adapters
+// Built-in Stellar wallet adapters (the adapter's `type` IS the provider)
 import { WalletType } from '@pollar/core';
-login({ provider: 'wallet', type: WalletType.FREIGHTER });
-login({ provider: 'wallet', type: WalletType.ALBEDO });
+login({ provider: WalletType.FREIGHTER }); // 'freighter-native'
+login({ provider: WalletType.ALBEDO }); // 'albedo-native'
 
-// Any external adapter (e.g. Stellar Wallets Kit) when `walletAdapter` is set on config
-login({ provider: 'wallet', type: 'xbull' });
-login({ provider: 'wallet', type: 'lobstr' });
+// Any external adapter (e.g. Stellar Wallets Kit) registered via `walletAdapters`
+login({ provider: 'xbull' });
+login({ provider: 'lobstr' });
 ```
+
+#### Self-driving interactive adapters (Privy, …)
+
+Registered adapters that opt into the interactive-auth contract
+(`isInteractiveAuthAdapter` + `onProviderAuthChange`) are auto-driven by the
+provider:
+
+- `LoginModal` renders a login entry per registered wallet adapter, so each
+  interactive provider gets its own button.
+- Picking one opens `PrivyLoginSubmodal`, which drives the adapter's own login
+  (email code / OAuth) to completion, then hands off to `login({ provider })`
+  (which runs `connect()` + SEP-10).
+- If the provider authenticates outside the sub-modal - after an OAuth redirect
+  that reloaded the page, or a persisted provider session on load - the
+  provider's `onProviderAuthChange` subscription fires `login({ provider })`
+  automatically when Pollar has no session yet.
 
 ---
 
@@ -203,16 +244,19 @@ login({ provider: 'wallet', type: 'lobstr' });
 Every modal mounts itself when its `openXModal()` action is called. You don't need to render these directly — they're
 already wired inside `<PollarProvider>` — but they're exported in case you want to mount them yourself.
 
-| Component              | Purpose                                                                                                                                                                                          |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `<WalletButton>`       | Drop-in button. Opens login when signed out; signed in, shows the wallet address with a dropdown (Send, Receive, balance, history, sign out). Inline arc spinner during in-progress transactions |
-| `<SendModal>`          | Full send flow: asset picker, amount, destination, inline build → sign → success/error                                                                                                           |
-| `<ReceiveModal>`       | Wallet address as QR code with copy-to-clipboard (no external QR dependency required)                                                                                                            |
-| `<TxHistoryModal>`     | Paginated transaction history with auto-fetch on open and stellar.expert explorer links                                                                                                          |
-| `<WalletBalanceModal>` | Stellar account balances with refresh button                                                                                                                                                     |
-| `<SessionsModal>`      | **New in 0.7.0.** Lists every active refresh-token family for the current user with device metadata, marks the local session, per-row revoke, and a "Sign out everywhere" button                 |
-| `<KycModal>`           | Identity verification flow — provider selection + status polling _(UI preview — backend coming soon)_                                                                                            |
-| `<RampWidget>`         | Buy/sell crypto — direction tabs, route comparison, payment instructions _(UI preview — backend coming soon)_                                                                                    |
+| Component                  | Purpose                                                                                                                                                                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<WalletButton>`           | Drop-in button. Opens login when signed out; signed in, shows the wallet address with a dropdown (Send, Receive, copy address, balance, history, ramp, KYC, distribution rules, sessions, sign out). Inline arc spinner during in-progress transactions |
+| `<SendModal>`              | Full send flow: asset picker, amount, destination, inline build > sign > success/error                                                                                                                                                                  |
+| `<SwapModal>`              | On-chain asset-to-asset swap: pick from/to assets and amount, quote across venues, execute (auto-trustline on the buy asset when needed)                                                                                                                |
+| `<ReceiveModal>`           | Wallet address as QR code with copy-to-clipboard (no external QR dependency required)                                                                                                                                                                   |
+| `<TxHistoryModal>`         | Paginated transaction history with auto-fetch on open and stellar.expert explorer links                                                                                                                                                                 |
+| `<WalletBalanceModal>`     | Stellar account balances with refresh button                                                                                                                                                                                                            |
+| `<EnabledAssetsModal>`     | The application's dashboard-enabled assets with per-asset trustline state; establish/remove trustlines                                                                                                                                                  |
+| `<DistributionRulesModal>` | Manage the wallet's distribution rules                                                                                                                                                                                                                  |
+| `<SessionsModal>`          | **New in 0.7.0.** Lists every active refresh-token family for the current user with device metadata, marks the local session, per-row revoke, and a "Sign out everywhere" button                                                                        |
+| `<KycModal>`               | Identity verification flow - provider selection + status polling _(UI preview - backend coming soon)_                                                                                                                                                   |
+| `<RampWidget>`             | Buy/sell crypto via SEP-24 - direction tabs, route comparison, payment instructions (wired to `client.createOnRamp` / `client.createOffRamp`)                                                                                                           |
 
 ```tsx
 import { WalletButton } from '@pollar/react';
@@ -229,18 +273,21 @@ export function Header() {
 Every modal ships a pure presentational "template" companion — same name with a `Template` suffix. Use these when you
 want to swap the chrome but keep the data wiring from `usePollar()`.
 
-| Wrapper                 | Template                       |
-| ----------------------- | ------------------------------ |
-| `<WalletButton>`        | `<WalletButtonTemplate>`       |
-| _(internal LoginModal)_ | `<LoginModalTemplate>`         |
-| `<SendModal>`           | `<SendModalTemplate>`          |
-| `<ReceiveModal>`        | `<ReceiveModalTemplate>`       |
-| `<TransactionModal>`    | `<TransactionModalTemplate>`   |
-| `<TxHistoryModal>`      | `<TxHistoryModalTemplate>`     |
-| `<WalletBalanceModal>`  | `<WalletBalanceModalTemplate>` |
-| `<KycModal>`            | `<KycModalTemplate>`           |
-| `<RampWidget>`          | `<RampWidgetTemplate>`         |
-| `<SessionsModal>`       | `<SessionsModalTemplate>`      |
+| Wrapper                    | Template                           |
+| -------------------------- | ---------------------------------- |
+| `<WalletButton>`           | `<WalletButtonTemplate>`           |
+| _(internal LoginModal)_    | `<LoginModalTemplate>`             |
+| `<SendModal>`              | `<SendModalTemplate>`              |
+| `<SwapModal>`              | `<SwapModalTemplate>`              |
+| `<ReceiveModal>`           | `<ReceiveModalTemplate>`           |
+| `<TransactionModal>`       | `<TransactionModalTemplate>`       |
+| `<TxHistoryModal>`         | `<TxHistoryModalTemplate>`         |
+| `<WalletBalanceModal>`     | `<WalletBalanceModalTemplate>`     |
+| `<EnabledAssetsModal>`     | `<EnabledAssetsModalTemplate>`     |
+| `<DistributionRulesModal>` | `<DistributionRulesModalTemplate>` |
+| `<KycModal>`               | `<KycModalTemplate>`               |
+| `<RampWidget>`             | `<RampWidgetTemplate>`             |
+| `<SessionsModal>`          | `<SessionsModalTemplate>`          |
 
 `<TxStatusView>` is the shared status component (build → sign → success/error) reused by `TransactionModal` and
 `SendModal`; it's exported on its own for consumers that want to embed the lifecycle elsewhere.
@@ -291,33 +338,10 @@ function MyComponent() {
 
 ### External wallet stacks (Stellar Wallets Kit, …)
 
-Pass a `WalletAdapterResolver` to `client.walletAdapter` so Pollar can reach
-wallets that live outside `@pollar/core`. The signing path alone (no UI
-changes):
-
-```tsx
-import { PollarProvider } from '@pollar/react';
-import { stellarWalletsKit } from '@pollar/stellar-wallets-kit-adapter';
-import { Networks } from '@creit.tech/stellar-wallets-kit';
-
-<PollarProvider
-  client={{
-    apiKey: 'your-api-key',
-    walletAdapter: stellarWalletsKit({ network: Networks.PUBLIC }),
-  }}
->
-  {children}
-</PollarProvider>;
-```
-
-Then any `login({ provider: 'wallet', type: '<kit wallet id>' })` is routed
-through the kit.
-
-#### Showing every kit wallet in `LoginModal`
-
-Register the kit wallets with `walletAdapters` (plural) instead of the
-signing-only resolver, and `LoginModal` auto-renders one button per wallet —
-collapsed behind a single "Wallet" gateway button (their shared `meta.group`):
+Register adapters for wallets that live outside `@pollar/core` by passing a
+`walletAdapters: WalletAdapter[]` array. `LoginModal` auto-renders one button per
+registered adapter, and each is reachable via `login({ provider: adapter.type })`.
+`stellarWalletsKitAdapters()` returns that array (one adapter per kit module):
 
 ```tsx
 import { PollarProvider } from '@pollar/react';
@@ -362,19 +386,25 @@ All class names are prefixed with `pollar-` to avoid conflicts.
 
 ```ts
 import type {
-  AuthProviderProps,
-  AuthContextValue,
   LoginButtonProps,
   AuthModalProps,
   PollarConfig,
   PollarStyles,
 
+  // Custom-provider contracts (re-exported from @pollar/core)
+  PollarAuthProvider,
+  AuthProviderContext,
+
   // Template props
+  WalletButtonTemplateProps,
   SendModalTemplateProps,
+  SwapModalTemplateProps,
+  SwapAssetOption,
   ReceiveModalTemplateProps,
   TransactionModalTemplateProps,
   TxStatusViewProps,
   WalletBalanceModalTemplateProps,
+  EnabledAssetsModalTemplateProps,
   SessionsModalTemplateProps,
   SessionsState,
 

@@ -50,6 +50,8 @@ async function waitFor(cond, timeoutMs = 1000) {
   // One-shot: when set, the next /auth/email/verify-code answers with this server
   // error code (e.g. SDK_EMAIL_CODE_EXPIRED / INVALID_EMAIL_CODE).
   let nextVerifyCode = null;
+  // When set, /auth/wallet/challenge returns this XDR (used by the SEP-10 test).
+  let walletChallengeXdr = null;
   globalThis.fetch = async (req) => {
     const url = req.url;
     let body = null;
@@ -59,6 +61,13 @@ async function waitFor(cond, timeoutMs = 1000) {
     calls.push({ url, method: req.method, body });
     if (url.includes('/auth/session') && !url.includes('/status') && !url.includes('/resume')) {
       return new Response(JSON.stringify({ success: true, content: { clientSessionId: 'cs_test' } }), { status: 200 });
+    }
+    // Order matters: '/auth/wallet/challenge' contains '/auth/wallet'.
+    if (url.includes('/auth/wallet/challenge')) {
+      return new Response(JSON.stringify({ success: true, content: { challengeXdr: walletChallengeXdr } }), { status: 200 });
+    }
+    if (url.includes('/auth/wallet')) {
+      return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
     }
     if (url.includes('/auth/email/verify-code') && nextVerifyCode) {
       const code = nextVerifyCode;
@@ -295,6 +304,124 @@ async function waitFor(cond, timeoutMs = 1000) {
       '  INVALID_EMAIL_CODE → EMAIL_CODE_INVALID',
       client.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.EMAIL_CODE_INVALID,
     );
+  }
+
+  console.log('\n── 12. redactDeep surfaces Error message, redacts secret props ──');
+  {
+    const logs = [];
+    const spyLogger = { error: (...a) => logs.push(a), warn() {}, info() {}, debug() {} };
+    const boomAdapter = {
+      type: 'boom',
+      meta: { label: 'Boom' },
+      isAvailable: () => {
+        const e = new Error('adapter-boom'); // message is a NON-enumerable Error prop
+        e.accessToken = 'SUPERSECRET'; // enumerable sensitive prop → must be redacted
+        e.code = 'ADAPTER_X'; // diagnostic → must be preserved (response-key semantics)
+        throw e;
+      },
+      connect: async () => ({ address: 'G' }),
+      signTransaction: async () => ({ signedTxXdr: 'x' }),
+      signAuthEntry: async () => ({ signedAuthEntry: 'x' }),
+    };
+    const c = new sdk.PollarClient({
+      apiKey: 'pk_redact',
+      storage: sdk.createMemoryAdapter(),
+      baseUrl: 'https://x.test',
+      logger: spyLogger,
+      walletAdapters: [boomAdapter],
+    });
+    await c.ready();
+    logs.length = 0;
+    c.login({ provider: 'boom' });
+    await waitFor(() => c.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.WALLET_CONNECT_FAILED);
+    const dump = JSON.stringify(logs);
+    check('Error.message surfaced from a non-enumerable prop', dump.includes('adapter-boom'), dump.slice(0, 200));
+    check('  enumerable sensitive prop redacted (no token leak)', dump.includes('[redacted]') && !dump.includes('SUPERSECRET'));
+    check('  diagnostic code preserved', dump.includes('ADAPTER_X'));
+    check('  route tagged with the phase', dump.includes('wallet connect (connecting_wallet)'));
+    c.destroy();
+  }
+
+  console.log('\n── 13. client-side SEP-10 validation refuses a non-zero-seq challenge ──');
+  {
+    // Craft a v1 (ENVELOPE_TYPE_TX=2) envelope; the only field the client-side
+    // check reads is the tx seqNum at byte offset 44 — 0 = real challenge, != 0 =
+    // a live submittable tx (must be refused before the wallet signs).
+    const makeChallengeXdr = (seqNonZero) => {
+      const buf = new Uint8Array(60);
+      const dv = new DataView(buf.buffer);
+      dv.setUint32(0, 2, false); // envelopeType = TX (v1)
+      dv.setUint32(4, 0, false); // MuxedAccount keyType = ED25519
+      // 32-byte ed25519 key at 8..40 = zeros
+      dv.setUint32(40, 100, false); // fee
+      dv.setUint32(44, 0, false); // seqNum high word
+      dv.setUint32(48, seqNonZero ? 1 : 0, false); // seqNum low word
+      return Buffer.from(buf).toString('base64');
+    };
+    const adapter = {
+      type: 'sep10',
+      meta: { label: 'S' },
+      isAvailable: async () => true,
+      connect: async () => ({ address: 'Gwallet' }),
+      signTransaction: async () => ({ signedTxXdr: 'SIGNED' }),
+      signAuthEntry: async () => ({ signedAuthEntry: 'x' }),
+    };
+    const c = new sdk.PollarClient({
+      apiKey: 'pk_sep10',
+      storage: sdk.createMemoryAdapter(),
+      baseUrl: 'https://x.test',
+      logLevel: 'silent',
+      walletAdapters: [adapter],
+    });
+    await c.ready();
+    const walletSubmitCalled = () => calls.some((x) => x.url.includes('/auth/wallet') && !x.url.includes('challenge'));
+
+    // Negative: non-zero seq → rejected, wallet never asked to sign.
+    calls.length = 0;
+    walletChallengeXdr = makeChallengeXdr(true);
+    c.login({ provider: 'sep10' });
+    await waitFor(() => c.getAuthState().step === 'error');
+    check(
+      'non-zero-seq challenge → WALLET_AUTH_FAILED error',
+      c.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.WALLET_AUTH_FAILED,
+      c.getAuthState().errorCode,
+    );
+    check('  previousStep = signing_wallet_challenge', c.getAuthState().previousStep === 'signing_wallet_challenge');
+    check('  /auth/wallet NEVER called (wallet not asked to sign a live tx)', !walletSubmitCalled());
+
+    // Positive: seq=0 → validation passes, flow reaches the wallet + POST /auth/wallet.
+    calls.length = 0;
+    walletChallengeXdr = makeChallengeXdr(false);
+    c.login({ provider: 'sep10' });
+    await waitFor(() => walletSubmitCalled());
+    check('seq=0 challenge → flow proceeds to POST /auth/wallet', walletSubmitCalled());
+    c.destroy();
+    walletChallengeXdr = null;
+  }
+
+  console.log('\n── 14. request-body OTP `code` is masked in logs (redactBody) ──');
+  {
+    const logs = [];
+    const spyLogger = { error: (...a) => logs.push(a), warn() {}, info() {}, debug() {} };
+    const c = new sdk.PollarClient({
+      apiKey: 'pk_reqmask',
+      storage: sdk.createMemoryAdapter(),
+      baseUrl: 'https://x.test',
+      logger: spyLogger,
+    });
+    await c.ready();
+    c.login({ provider: 'email', email: 'mask@b.test' });
+    await waitFor(() => c.getAuthState().step === 'entering_code');
+    logs.length = 0;
+    c.verifyEmailCode('987654'); // generic failure path logs the request body {clientSessionId, code}
+    await waitFor(() => c.getAuthState().errorCode === sdk.AUTH_ERROR_CODES.EMAIL_VERIFY_FAILED);
+    const dump = JSON.stringify(logs);
+    check(
+      'the OTP code is masked in the request-body log',
+      dump.includes('"code":"[redacted]"') && !dump.includes('987654'),
+      dump.slice(0, 220),
+    );
+    c.destroy();
   }
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} providers smoke: ${pass} passed, ${fail} failed`);

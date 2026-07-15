@@ -49,9 +49,7 @@ function Home() {
             Connected wallet ({wallet.custody}
             {verified ? ', verified' : ', optimistic'}):
           </p>
-          <pre style={{ background: '#f4f4f5', padding: '0.75rem', borderRadius: 8, overflowX: 'auto' }}>
-            {wallet.address}
-          </pre>
+          <pre style={{ background: '#f4f4f5', padding: '0.75rem', borderRadius: 8, overflowX: 'auto' }}>{wallet.address}</pre>
           <button style={btn} onClick={logout}>
             Log out
           </button>
@@ -69,7 +67,9 @@ function Setup() {
   return (
     <main style={box}>
       <h1>Pollar x Privy — setup needed</h1>
-      <p>Copy <code>.env.example</code> to <code>.env.local</code> and set:</p>
+      <p>
+        Copy <code>.env.example</code> to <code>.env.local</code> and set:
+      </p>
       <ul>
         <li>
           <code>VITE_PRIVY_APP_ID</code> {PRIVY_APP_ID ? '✓' : '— missing'}
@@ -78,7 +78,9 @@ function Setup() {
           <code>VITE_POLLAR_API_KEY</code> {POLLAR_API_KEY ? '✓' : '— missing'}
         </li>
       </ul>
-      <p>Then restart <code>npm run dev</code>. See the README for the Privy dashboard prerequisites.</p>
+      <p>
+        Then restart <code>npm run dev</code>. See the README for the Privy dashboard prerequisites.
+      </p>
     </main>
   );
 }

@@ -39,6 +39,10 @@ export interface PollarPersistedSession {
     provider?: string;
     address: string | null;
     existsOnStellar?: boolean;
+    // The app's funding policy: IMMEDIATE = Pollar funds/creates the account at
+    // onboarding; DEFERRED = left to the app. Lets the UI decide whether to offer
+    // on-chain account creation. Optional: older sessions omit it.
+    fundingMode?: 'IMMEDIATE' | 'DEFERRED';
     // On-chain creation time (smart = deploy; internal = keypair creation).
     createdAt?: number;
     // When the wallet was first linked to Pollar (our DB record), not on-chain
@@ -74,9 +78,14 @@ export type WalletInfo =
   // `provider` widened with `(string & {})` so a custom provider id (e.g. a
   // `privy` integration) survives instead of being lost to the closed enum,
   // while the known PollarAuthMethod values still autocomplete.
-  | { custody: 'internal'; address: string; provider: PollarAuthMethod | (string & {}) | null }
-  | { custody: 'smart'; address: string; provider: 'passkey' }
-  | { custody: 'external'; address: string; provider: WalletId | (string & {}) | null };
+  //
+  // `existsOnStellar` (is the account created on-chain) and `fundingMode` (the
+  // app's funding policy) are wallet-status extras carried on every custody so
+  // callers can, e.g., offer on-chain account creation for an external wallet
+  // that isn't on Stellar yet. Optional — absent on sessions that predate them.
+  | { custody: 'internal'; address: string; provider: PollarAuthMethod | (string & {}) | null; existsOnStellar?: boolean; fundingMode?: 'IMMEDIATE' | 'DEFERRED' }
+  | { custody: 'smart'; address: string; provider: 'passkey'; existsOnStellar?: boolean; fundingMode?: 'IMMEDIATE' | 'DEFERRED' }
+  | { custody: 'external'; address: string; provider: WalletId | (string & {}) | null; existsOnStellar?: boolean; fundingMode?: 'IMMEDIATE' | 'DEFERRED' };
 
 /** In-memory user profile (kept on `PollarClient`, never persisted). */
 export interface PollarUserProfile {
@@ -117,6 +126,18 @@ export interface PollarClientConfig {
    * the unbounded-hang behavior).
    */
   requestTimeoutMs?: number;
+  /**
+   * Per-request timeout (ms) applied to the submit-family tx calls
+   * (`submitTx`, `signAndSubmitTx`, `buildAndSignAndSubmitTx`) instead of
+   * {@link requestTimeoutMs}. These endpoints do real server-side work
+   * (custodial build + sign via wallet-service, then a network submit) that can
+   * take several seconds, so the default 10s request timeout is too tight and
+   * would cut a submit that is actually succeeding. Everything else still uses
+   * `requestTimeoutMs`.
+   *
+   * Defaults to `30000` (30s).
+   */
+  submitTimeoutMs?: number;
   /**
    * Automatic retry with backoff for idempotent, transient-failure SDK HTTP
    * (token refresh + GETs), to absorb a single dropped request before surfacing
@@ -375,11 +396,13 @@ export interface AuthProviderContext {
 }
 
 /**
- * A pluggable login strategy. Built-ins (`google`, `github`, `email`) ship as
- * these; custom ones (Privy, Magic, …) are injected via
- * `PollarClientConfig.providers`. Note: `wallet` is intentionally NOT a provider
- * — it yields a persistent `WalletAdapter` reused for signing, a concern
- * orthogonal to login, so it keeps its own dedicated `loginWallet()` flow.
+ * A pluggable login strategy. The built-ins (`google`, `github`, `email`) are
+ * seeded internally by `PollarClient`; there is currently no public config field
+ * to register additional providers (this contract is reserved for internal use).
+ * Note: `wallet` is intentionally NOT a provider - it yields a persistent
+ * `WalletAdapter` reused for signing, a concern orthogonal to login, so wallets
+ * are registered via `PollarClientConfig.walletAdapters` and entered with
+ * `login({ provider: adapter.type })`.
  *
  * - `login` handles the one-shot entry point (`client.login({ provider: id })`).
  * - `actions` exposes extra named steps for multi-step flows (e.g. email's
@@ -686,7 +709,20 @@ export type RampsTransactionResponse =
   pollarPaths['/ramps/transaction/{txId}']['get']['responses'][200]['content']['application/json']['content'];
 export type RampTxStatus = RampsTransactionResponse['status'];
 export type RampDirection = RampsTransactionResponse['direction'];
-export type PaymentInstructions = RampsOnrampResponse['paymentInstructions'];
+
+// SEP-24 anchor flow (e.g. Anclap): custodial wallets get a `kycUrl` to open;
+// EXTERNAL wallets get a `pendingSignature` to sign and resume.
+export type RampsPendingSignature = NonNullable<RampsOnrampResponse['pendingSignature']>;
+export type RampsSignatureBody = NonNullable<
+  pollarPaths['/ramps/transaction/{txId}/signature']['post']['requestBody']
+>['content']['application/json'];
+export type RampsSignatureResponse =
+  pollarPaths['/ramps/transaction/{txId}/signature']['post']['responses'][200]['content']['application/json']['content'];
+export type RampsCompleteResponse =
+  pollarPaths['/ramps/transaction/{txId}/complete']['post']['responses'][200]['content']['application/json']['content'];
+export type RampsCountriesResponse =
+  pollarPaths['/ramps/countries']['get']['responses'][200]['content']['application/json']['content'];
+export type RampCountry = RampsCountriesResponse['countries'][number];
 
 // ─── Distribution types ───────────────────────────────────────────────────────
 
@@ -712,8 +748,7 @@ export type DistributionRulesState =
 
 export type SwapQuoteBody = NonNullable<pollarPaths['/swap/quote']['post']['requestBody']>['content']['application/json'];
 
-export type SwapQuoteContent =
-  pollarPaths['/swap/quote']['post']['responses'][200]['content']['application/json']['content'];
+export type SwapQuoteContent = pollarPaths['/swap/quote']['post']['responses'][200]['content']['application/json']['content'];
 
 /** A single priced swap route, including a ready-to-run `build` payload. */
 export type SwapQuote = SwapQuoteContent['quotes'][number];
@@ -724,6 +759,15 @@ export type SwapProvider = NonNullable<SwapQuoteBody['provider']>;
 /** A concrete venue a returned quote came from (never `auto`). */
 export type SwapVenue = SwapQuote['provider'];
 
+/** Venues this app exposes to end-users (from GET /swap/config). Empty = disabled. */
+export type SwapConfigContent = pollarPaths['/swap/config']['get']['responses'][200]['content']['application/json']['content'];
+
+/** Curated "buy" tokens the app opted into (from GET /swap/tokens). */
+export type SwapTokensContent = pollarPaths['/swap/tokens']['get']['responses'][200]['content']['application/json']['content'];
+
+/** A single curated swap buy token. */
+export type SwapToken = SwapTokensContent['tokens'][number];
+
 /** Input to `client.getSwapQuote` — the request body minus wallet/network, which the client fills. */
 export type SwapQuoteParams = {
   sellAsset: SwapQuoteBody['sellAsset'];
@@ -731,6 +775,48 @@ export type SwapQuoteParams = {
   amount: string;
   provider?: SwapProvider;
   slippageBps?: number;
+};
+
+// ─── Earn types (yield vaults / lending) ───────────────────────────────────────
+
+/** Providers this app exposes (from GET /earn/providers). Empty = Earn disabled. */
+export type EarnProvidersContent = pollarPaths['/earn/providers']['get']['responses'][200]['content']['application/json']['content'];
+
+/** A concrete Earn provider. */
+export type EarnProviderId = EarnProvidersContent['providers'][number];
+
+export type EarnOpportunitiesContent = pollarPaths['/earn/opportunities']['get']['responses'][200]['content']['application/json']['content'];
+
+/** A vault (DeFindex) or pool (Blend) the user can deposit into. */
+export type EarnOpportunity = EarnOpportunitiesContent['opportunities'][number];
+
+/** The user's position (balance + APY) in a vault/pool (from GET /earn/position). */
+export type EarnPosition = pollarPaths['/earn/position']['get']['responses'][200]['content']['application/json']['content'];
+
+/** Which unit a provider's withdraw amount is in: asset (Blend) or shares (DeFindex). */
+export type EarnWithdrawUnit = EarnPosition['withdrawUnit'];
+
+export type EarnBuildBody = NonNullable<pollarPaths['/earn/build']['post']['requestBody']>['content']['application/json'];
+
+export type EarnBuildContent = pollarPaths['/earn/build']['post']['responses'][200]['content']['application/json']['content'];
+
+/** The ready-to-sign payload a build returns. */
+export type EarnBuild = EarnBuildContent['build'];
+
+/** Input to `client.getEarnPosition` — wallet address is filled by the client. */
+export type EarnPositionParams = {
+  provider: EarnProviderId;
+  /** Vault/pool id (an opportunity `id`). */
+  opportunity: string;
+};
+
+/** Input to `client.earnDeposit` / `client.earnWithdraw` — address filled by the client. */
+export type EarnTxParams = {
+  provider: EarnProviderId;
+  /** Vault/pool id (an opportunity `id`). */
+  opportunity: string;
+  /** Decimal amount. Deposit: underlying asset. Withdraw: the position `withdrawUnit`. */
+  amount: string;
 };
 
 // ─── Adapter types ────────────────────────────────────────────────────────────

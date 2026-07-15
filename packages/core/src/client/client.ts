@@ -1,8 +1,18 @@
 import { createApiClient, fetchWithTimeout, PollarApiClient } from '../api/client';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
-import { quoteSwap } from '../api/endpoints/swap';
+import { getSwapConfig, getSwapTokens, quoteSwap } from '../api/endpoints/swap';
+import { buildEarnTx, getEarnOpportunities, getEarnPosition, getEarnProviders } from '../api/endpoints/earn';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
-import { createOffRamp, createOnRamp, getRampsQuote, getRampTransaction, pollRampTransaction } from '../api/endpoints/ramps';
+import {
+  completeWithdraw,
+  createOffRamp,
+  createOnRamp,
+  getRampCountries,
+  getRampsQuote,
+  getRampTransaction,
+  pollRampTransaction,
+  submitRampSignature,
+} from '../api/endpoints/ramps';
 import { buildProof } from '../dpop';
 import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
@@ -25,6 +35,13 @@ import {
   SwapQuote,
   SwapQuoteBody,
   SwapQuoteParams,
+  SwapToken,
+  SwapVenue,
+  EarnProviderId,
+  EarnOpportunity,
+  EarnPosition,
+  EarnPositionParams,
+  EarnTxParams,
   EnabledAssetsState,
   KycLevel,
   KycStartBody,
@@ -45,8 +62,12 @@ import {
   RampsOfframpResponse,
   RampsOnrampBody,
   RampsOnrampResponse,
+  RampsCompleteResponse,
+  RampsCountriesResponse,
   RampsQuoteQuery,
   RampsQuoteResponse,
+  RampsSignatureBody,
+  RampsSignatureResponse,
   RampsTransactionResponse,
   RampTxStatus,
   SessionInfo,
@@ -78,7 +99,6 @@ import { smartWalletFlow } from './auth/passkeyFlow';
 import { emailProvider, oauthProvider } from './auth/providers';
 import { loginWithAdapter, requestWalletChallenge } from './auth/walletFlow';
 import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
-
 
 const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
 /** React Native runtime: `navigator.product === 'ReactNative'` (set by the RN runtime). */
@@ -182,6 +202,10 @@ export class PollarClient {
   /** Per-attempt HTTP timeout (ms). Also applied to the manual DPoP-nonce retry
    *  that bypasses openapi-fetch's configured fetch. */
   private readonly _requestTimeoutMs: number;
+  /** Longer per-request timeout for the submit-family tx calls (see
+   *  PollarClientConfig.submitTimeoutMs). Sent as an `x-pollar-timeout-ms`
+   *  header the request middleware reads to bound just those calls. */
+  private readonly _submitTimeoutMs: number;
   /** Updated by the request middleware. Read by the silent-refresh scheduler
    *  to skip proactive refreshes after `maxIdleMs` of no HTTP activity. */
   private _lastRequestAt: number = Date.now();
@@ -284,6 +308,7 @@ export class PollarClient {
     this._visibilityProvider = config.visibilityProvider ?? defaultVisibilityProvider();
     this._maxIdleMs = config.maxIdleMs;
     this._requestTimeoutMs = config.requestTimeoutMs ?? 10_000;
+    this._submitTimeoutMs = config.submitTimeoutMs ?? 30_000;
     this._openAuthUrl = config.openAuthUrl ?? defaultWebOAuthOpener;
     // `window.location` can be absent even when `isBrowser` is true (some
     // webview/SSR shims expose a partial `window`); read it defensively so the
@@ -751,8 +776,13 @@ export class PollarClient {
     });
     // Bound this retry too: it calls `fetch` directly, bypassing the
     // timeout/retry wrapper openapi-fetch is configured with, so without this a
-    // stalled nonce-retry would hang forever just like the original bug.
-    return fetchWithTimeout(retried, this._requestTimeoutMs);
+    // stalled nonce-retry would hang forever just like the original bug. The
+    // submit-family endpoints get the longer submit budget (the per-request
+    // `x-pollar-timeout-ms` header was already stripped upstream, so key off the
+    // URL here); otherwise a first-submit-after-login nonce retry would fall
+    // back to the 10s default and could cut a submit that is actually working.
+    const isSubmit = /\/tx\/(submit|sign-and-send|build-sign-submit)(\?|$)/.test(originalRequest.url);
+    return fetchWithTimeout(retried, isSubmit ? this._submitTimeoutMs : this._requestTimeoutMs);
   }
 
   // ─── Refresh (race-safe singleton) ───────────────────────────────────────
@@ -1358,6 +1388,19 @@ export class PollarClient {
     return () => this._transactionStateListeners.delete(cb);
   }
 
+  /**
+   * Reset the transaction state machine back to `idle`. Modal UIs (send / swap /
+   * earn) call this when they (re)open so a prior terminal state — a `success`
+   * or `error` left over from an earlier flow — can't leak in as a stale "Done!"
+   * or error screen.
+   */
+  resetTransactionState(): void {
+    // Align the tx generation with the live session so the stale-write guard in
+    // `_setTransactionState` doesn't drop this reset.
+    this._txStartGen = this._sessionGeneration;
+    this._setTransactionState({ step: 'idle' });
+  }
+
   // ─── Tx history ──────────────────────────────────────────────────────────
 
   getTxHistoryState(): TxHistoryState {
@@ -1486,14 +1529,20 @@ export class PollarClient {
   /**
    * Establishes (omit `limit`) or removes (`limit: '0'`) a trustline for an asset.
    *
-   * Routing mirrors how the platform pays for the reserve:
-   *  - **Sponsored custodial** (`opts.sponsored` true, internal wallet) → the
-   *    server orchestrates a sponsored `changeTrust`: the app's wallets cover the
-   *    0.5 XLM reserve and the fee, so the user pays nothing. Pass the asset's
-   *    `sponsored` flag (from {@link refreshAssets}) straight through.
-   *  - **Self-paid** (external/adapter wallet, sponsorship disabled, or a custom
-   *    asset not configured in the app) → a plain `change_trust` transaction the
-   *    user's own wallet signs and pays for, via {@link runTx}.
+   * The route is chosen by whether the trustline is **sponsored** — the app pays
+   * the 0.5 XLM reserve + fee, so the user pays nothing — NOT by the wallet type.
+   * Pass the asset's `sponsored` flag (from {@link refreshAssets}) straight
+   * through; it works the same for internal and external wallets, only the
+   * co-signing mechanism differs:
+   *  - **Sponsored, custodial** (internal wallet, no adapter) → the server holds
+   *    the trustor key and orchestrates the sponsored `changeTrust` in one call.
+   *  - **Sponsored, external/adapter** → the server builds the sponsored
+   *    `changeTrust` and signs the sponsor; the user's own wallet adds the
+   *    trustor signature and it's submitted (the backend recognises the
+   *    sponsor-sourced tx and broadcasts it).
+   *  - **Not sponsored** (`sponsored` falsy — sponsorship disabled, or a custom
+   *    asset not configured in the app) → a plain `change_trust` the user's own
+   *    wallet signs and pays for, via {@link runTx}. Same for internal/external.
    *
    * Does not refresh on its own — callers should `refreshAssets()` afterwards.
    */
@@ -1518,26 +1567,53 @@ export class PollarClient {
       return { status: 'error', details: 'Asset code must be 1–12 characters' };
     }
 
-    // Sponsored custodial path: the platform co-signs and the app pays. Only an
-    // app-configured asset on an internal (custodial) wallet qualifies — the
-    // backend re-checks and 400s otherwise.
-    if (opts?.sponsored && !this._walletAdapter && walletType === 'internal') {
+    if (opts?.sponsored) {
+      // Sponsored custodial path: wallet-service holds the trustor key and
+      // co-signs + submits in one server call. Only an app-configured asset on
+      // an internal (custodial) wallet qualifies — the backend re-checks and
+      // 400s otherwise.
+      if (!this._walletAdapter && walletType === 'internal') {
+        try {
+          const { data, error } = await this._api.POST('/wallet/assets/trustline', {
+            body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
+          });
+          if (!error && data?.success) {
+            if (data.content) {
+              // Bump the assets generation so a refreshAssets() that was in flight
+              // can't clobber this post-trustline (fresher) snapshot.
+              ++this._enabledAssetsGen;
+              this._setEnabledAssetsState({ step: 'loaded', data: data.content });
+            }
+            return { status: 'success' };
+          }
+          const details =
+            (error as { details?: string; code?: string } | undefined)?.details ??
+            (error as { code?: string } | undefined)?.code;
+          return { status: 'error', ...(details && { details }) };
+        } catch (err) {
+          const details = err instanceof Error ? err.message : undefined;
+          return { status: 'error', ...(details && { details }) };
+        }
+      }
+
+      // Sponsored external/adapter path: the trustor key lives client-side. The
+      // server builds the sponsored changeTrust and sponsor-signs it; we add the
+      // trustor signature with the user's own wallet and submit.
       try {
-        const { data, error } = await this._api.POST('/wallet/assets/trustline', {
+        const { data, error } = await this._api.POST('/wallet/assets/trustline/build', {
           body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
         });
-        if (!error && data?.success) {
-          if (data.content) {
-            // Bump the assets generation so a refreshAssets() that was in flight
-            // can't clobber this post-trustline (fresher) snapshot.
-            ++this._enabledAssetsGen;
-            this._setEnabledAssetsState({ step: 'loaded', data: data.content });
-          }
-          return { status: 'success' };
+        if (error || !data?.success || !data.content?.sponsorSignedXdr) {
+          const details =
+            (error as { details?: string; code?: string } | undefined)?.details ??
+            (error as { code?: string } | undefined)?.code;
+          return { status: 'error', ...(details && { details }) };
         }
-        const details =
-          (error as { details?: string; code?: string } | undefined)?.details ?? (error as { code?: string } | undefined)?.code;
-        return { status: 'error', ...(details && { details }) };
+        const signed = await this.signTx(data.content.sponsorSignedXdr);
+        if (signed.status === 'error') {
+          return { status: 'error', ...(signed.details && { details: signed.details }) };
+        }
+        return this.submitTx(signed.signedXdr);
       } catch (err) {
         const details = err instanceof Error ? err.message : undefined;
         return { status: 'error', ...(details && { details }) };
@@ -1555,6 +1631,49 @@ export class PollarClient {
       },
       ...(limit !== undefined && { limit }),
     } as TxBuildBody['params']);
+  }
+
+  /**
+   * Create this wallet's account on the Stellar network when it doesn't exist
+   * yet. For EXTERNAL wallets (Freighter / client-side Privy) whose key the
+   * platform doesn't hold: the server builds a sponsored `createAccount` (the new
+   * account starts at "0" balance; the app's sponsor wallet pays the base reserve
+   * and fee) and signs only the sponsor. This client adds the new-account
+   * signature with the user's own wallet and broadcasts it via the submit path.
+   *
+   * Not applicable to custodial (internal) wallets — those are created on the
+   * server at login — nor to smart (C-address) wallets, which don't use classic
+   * accounts. Trustlines are a separate step: see {@link setTrustline}.
+   */
+  async createAccount(): Promise<SubmitOutcome> {
+    const walletType = this._session?.wallet?.type;
+    if (!this._session?.wallet?.address) {
+      return { status: 'error', details: 'No wallet connected' };
+    }
+    if (walletType === 'smart') {
+      return { status: 'error', details: 'Account creation does not apply to smart wallets' };
+    }
+    if (!this._walletAdapter && walletType === 'internal') {
+      return { status: 'error', details: 'Custodial wallets are created on the server at login' };
+    }
+
+    try {
+      const { data, error } = await this._api.POST('/wallet/account/create/build', {});
+      if (error || !data?.success || !data.content?.sponsorSignedXdr) {
+        const details =
+          (error as { details?: string; code?: string } | undefined)?.details ??
+          (error as { code?: string } | undefined)?.code;
+        return { status: 'error', ...(details && { details }) };
+      }
+      const signed = await this.signTx(data.content.sponsorSignedXdr);
+      if (signed.status === 'error') {
+        return { status: 'error', ...(signed.details && { details: signed.details }) };
+      }
+      return this.submitTx(signed.signedXdr);
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      return { status: 'error', ...(details && { details }) };
+    }
   }
 
   // ─── Transactions ─────────────────────────────────────────────────────────
@@ -1577,7 +1696,6 @@ export class PollarClient {
     }
 
     const body = {
-      network: this.getNetwork(),
       address: this._session.wallet.address,
       operation,
       params,
@@ -1634,7 +1752,9 @@ export class PollarClient {
     if (!meta.iconUrl) return meta;
     const ok = /^https:\/\//i.test(meta.iconUrl) || /^data:image\//i.test(meta.iconUrl);
     if (ok) return meta;
-    this._log.warn(`[PollarClient] Dropped wallet adapter '${meta.label}' iconUrl with a disallowed scheme (use https: or data:image/).`);
+    this._log.warn(
+      `[PollarClient] Dropped wallet adapter '${meta.label}' iconUrl with a disallowed scheme (use https: or data:image/).`,
+    );
     // Omit iconUrl entirely (exactOptionalPropertyTypes forbids `iconUrl: undefined`).
     const { iconUrl: _dropped, ...safe } = meta;
     return safe;
@@ -1652,13 +1772,18 @@ export class PollarClient {
   getWallet(): WalletInfo | null {
     const w = this._session?.wallet;
     if (!w || !w.address) return null;
+    // Wallet-status extras carried on every custody (see WalletInfo).
+    const extra = {
+      ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
+      ...(w.fundingMode !== undefined ? { fundingMode: w.fundingMode } : {}),
+    };
     switch (w.type) {
       case 'external':
-        return { custody: 'external', address: w.address, provider: this._walletAdapter?.type ?? null };
+        return { custody: 'external', address: w.address, provider: this._walletAdapter?.type ?? null, ...extra };
       case 'smart':
-        return { custody: 'smart', address: w.address, provider: 'passkey' };
+        return { custody: 'smart', address: w.address, provider: 'passkey', ...extra };
       case 'internal':
-        return { custody: 'internal', address: w.address, provider: (w.provider as string | undefined) ?? null };
+        return { custody: 'internal', address: w.address, provider: (w.provider as string | undefined) ?? null, ...extra };
       default:
         return null;
     }
@@ -1740,7 +1865,7 @@ export class PollarClient {
     const address = this._session?.wallet?.address ?? '';
     try {
       const { data, error } = await this._api.POST('/tx/sign', {
-        body: { network: this.getNetwork(), address, unsignedXdr },
+        body: { address, unsignedXdr },
       });
       if (!error && data?.success && data.content?.signedXdr) {
         const { signedXdr, idempotencyKey } = data.content;
@@ -1832,7 +1957,7 @@ export class PollarClient {
     const address = this._session?.wallet?.address ?? '';
     try {
       const { data, error } = await this._api.POST('/tx/sign-auth-entry', {
-        body: { network: this.getNetwork(), address, entryXdr, validUntilLedger: options.validUntilLedger },
+        body: { address, entryXdr, validUntilLedger: options.validUntilLedger },
       });
       if (!error && data?.success && data.content?.signedAuthEntry) {
         return { status: 'signed', signedAuthEntry: data.content.signedAuthEntry };
@@ -1882,6 +2007,89 @@ export class PollarClient {
     return { code, message, ...(details && { details }) };
   }
 
+  /**
+   * Fetch a transaction's on-chain status by hash via `GET /tx/status`.
+   * `PENDING` means it is not yet ledger-confirmed (or outside the RPC retention
+   * window). Useful for headless callers polling a `pending` {@link SubmitOutcome}
+   * themselves; the built-in submit flow already polls internally (see
+   * {@link _awaitTxConfirmation}).
+   */
+  async getTxStatus(hash: string): Promise<{
+    hash: string;
+    status: 'PENDING' | 'SUCCESS' | 'FAILED';
+    resultCode?: string;
+    message?: string;
+    ledger?: number;
+  }> {
+    const { data, error } = await this._api.GET('/tx/status', {
+      params: { query: { hash } },
+    });
+    if (!error && data?.success && data.content) return data.content;
+    const { details } = this._resolveTxApiError(error, data);
+    throw new Error(details ?? 'Failed to fetch transaction status');
+  }
+
+  /**
+   * A submit endpoint acked the tx (`PENDING`) without waiting for ledger
+   * confirmation, because the SDK sends `waitForConfirmation: false`, so the
+   * one HTTP call returns in ~1-3s instead of blocking up to ~30s (which used to
+   * exceed the request timeout, trip a transport retry, and get rejected as a
+   * DPoP `jti-replay`). We finish the job here by polling `GET /tx/status` with
+   * short, DPoP-authed GETs, driving the state machine `submitted` to `success` /
+   * `error` and returning the final outcome. If the window elapses still-pending,
+   * we leave `submitted` and return `pending` (the tx may yet confirm; the caller
+   * can re-check via {@link getTxStatus}).
+   *
+   * `errorPhase` matches the calling flow so a FAILED tx stamps the right phase.
+   */
+  private async _awaitTxConfirmation(
+    hash: string,
+    errorPhase: 'submitting' | 'signing-submitting' | 'building-signing-submitting',
+    buildData: TxBuildContent | undefined,
+    outcomeExtra: { buildData?: TxBuildContent },
+  ): Promise<SubmitOutcome> {
+    const gen = this._txStartGen;
+    // ~40s window (ledgers close every ~5s). Polls are cheap; poll a bit faster
+    // than ledger cadence so we observe confirmation promptly without hammering.
+    const POLL_INTERVAL_MS = 2_500;
+    const MAX_POLLS = 16;
+    for (let i = 0; i < MAX_POLLS; i++) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      // A logout / new login landed mid-poll; this tx belongs to the old
+      // session. Stop touching state and report the last known status.
+      if (this._sessionGeneration !== gen) return { status: 'pending', hash, ...outcomeExtra };
+      let status: Awaited<ReturnType<PollarClient['getTxStatus']>>;
+      try {
+        status = await this.getTxStatus(hash);
+      } catch {
+        continue; // transient RPC / network blip; keep polling
+      }
+      if (status.status === 'SUCCESS') {
+        this._setTransactionState({ step: 'success', hash, ...(buildData && { buildData }) });
+        return { status: 'success', hash, ...outcomeExtra };
+      }
+      if (status.status === 'FAILED') {
+        this._setTransactionState({
+          step: 'error',
+          phase: errorPhase,
+          ...(buildData && { buildData }),
+          ...(status.resultCode && { details: status.resultCode }),
+          ...(status.message && { message: status.message }),
+        });
+        return {
+          status: 'error',
+          hash,
+          ...outcomeExtra,
+          ...(status.resultCode && { details: status.resultCode, resultCode: status.resultCode }),
+          ...(status.message && { message: status.message }),
+        };
+      }
+      // PENDING: keep polling
+    }
+    // Still pending after the window; leave `submitted`, the tx may yet confirm.
+    return { status: 'pending', hash, ...outcomeExtra };
+  }
+
   async submitTx(signedXdr: string, opts?: { submissionToken?: string }): Promise<SubmitOutcome> {
     this._txStartGen = this._sessionGeneration;
     const buildData = this._currentBuildData();
@@ -1892,11 +2100,17 @@ export class PollarClient {
     try {
       const { data, error } = await this._api.POST('/tx/submit', {
         body: {
-          network: this.getNetwork(),
           address,
           signedXdr,
           ...(opts?.submissionToken && { idempotencyKey: opts.submissionToken }),
+          // Return on network ack (fast) instead of blocking ~30s for ledger
+          // confirmation; we poll GET /tx/status below. Keeps the one request
+          // well under the timeout, so it can't trip a transport-retry replay.
+          waitForConfirmation: false,
         },
+        // Custodial submit does server-side work (wallet-service sign + network
+        // submit) that can exceed the 10s default; give it the longer budget.
+        headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
       });
       if (!error && data?.success && data.content) {
         const { hash, status: backendStatus, resultCode } = data.content;
@@ -1906,7 +2120,7 @@ export class PollarClient {
         }
         if (backendStatus === 'PENDING') {
           this._setTransactionState({ step: 'submitted', hash, ...(buildData && { buildData }) });
-          return { status: 'pending', hash, ...outcomeExtra };
+          return this._awaitTxConfirmation(hash, 'submitting', buildData, outcomeExtra);
         }
         this._setTransactionState({
           step: 'error',
@@ -2004,12 +2218,16 @@ export class PollarClient {
     this._setTransactionState({ step: 'signing-submitting', ...(buildData && { buildData }) });
 
     const body: TxSignAndSendBody = {
-      network: this.getNetwork(),
       address: this._session?.wallet?.address ?? '',
       unsignedXdr,
+      // Async ack + client-side status poll (see submitTx / _awaitTxConfirmation).
+      waitForConfirmation: false,
     };
     try {
-      const { data, error } = await this._api.POST('/tx/sign-and-send', { body });
+      const { data, error } = await this._api.POST('/tx/sign-and-send', {
+        body,
+        headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
+      });
       if (!error && data?.success && data.content?.hash) {
         const {
           hash,
@@ -2026,7 +2244,7 @@ export class PollarClient {
         }
         if (backendStatus === 'PENDING') {
           this._setTransactionState({ step: 'submitted', hash, ...(buildData && { buildData }) });
-          return { status: 'pending', hash, ...outcomeExtra };
+          return this._awaitTxConfirmation(hash, 'signing-submitting', buildData, outcomeExtra);
         }
         // backendStatus === 'FAILED'
         this._setTransactionState({
@@ -2121,12 +2339,16 @@ export class PollarClient {
     try {
       const { data, error } = await this._api.POST('/tx/build-sign-submit', {
         body: {
-          network: this.getNetwork(),
           address: this._session.wallet.address,
           operation,
           params,
           options: options ?? {},
-        } as TxBuildBody & { idempotencyKey?: string },
+          // Async ack + client-side status poll (see submitTx / _awaitTxConfirmation).
+          waitForConfirmation: false,
+        } as TxBuildBody & { idempotencyKey?: string; waitForConfirmation?: boolean },
+        // Atomic build + sign + submit is the slowest tx call; give it the
+        // longer submit budget so a real success isn't cut at the 10s default.
+        headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
       });
       if (!error && data?.success && data.content) {
         const { hash, status: backendStatus, resultCode } = data.content;
@@ -2136,7 +2358,7 @@ export class PollarClient {
         }
         if (backendStatus === 'PENDING') {
           this._setTransactionState({ step: 'submitted', hash });
-          return { status: 'pending', hash };
+          return this._awaitTxConfirmation(hash, 'building-signing-submitting', undefined, {});
         }
         this._setTransactionState({
           step: 'error',
@@ -2203,7 +2425,6 @@ export class PollarClient {
     let buildData: TxBuildContent;
     try {
       const body = {
-        network: this.getNetwork(),
         address,
         operation,
         params,
@@ -2263,10 +2484,10 @@ export class PollarClient {
     try {
       const { data, error } = await this._api.POST('/tx/submit', {
         body: {
-          network: this.getNetwork(),
           address,
           smart: { entryXdr: smart.entryXdr, funcXdr: smart.funcXdr, assertion },
         },
+        headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
       });
       if (!error && data?.success && data.content) {
         const { hash, status: backendStatus, resultCode } = data.content;
@@ -2276,7 +2497,7 @@ export class PollarClient {
         }
         if (backendStatus === 'PENDING') {
           this._setTransactionState({ step: 'submitted', hash, buildData });
-          return { status: 'pending', hash, ...outcomeExtra };
+          return this._awaitTxConfirmation(hash, 'submitting', buildData, outcomeExtra);
         }
         this._setTransactionState({
           step: 'error',
@@ -2349,12 +2570,27 @@ export class PollarClient {
     return getRampsQuote(this._api, query);
   }
 
+  /** Countries (+ fiat currency) the app's enabled ramp anchors support on its network. */
+  getRampCountries(): Promise<RampsCountriesResponse> {
+    return getRampCountries(this._api);
+  }
+
   createOnRamp(body: RampsOnrampBody): Promise<RampsOnrampResponse> {
     return createOnRamp(this._api, body);
   }
 
   createOffRamp(body: RampsOfframpBody): Promise<RampsOfframpResponse> {
     return createOffRamp(this._api, body);
+  }
+
+  /** Complete an offramp once anchor KYC is done (build + sign + submit the withdraw payment). */
+  completeWithdraw(txId: string): Promise<RampsCompleteResponse> {
+    return completeWithdraw(this._api, txId);
+  }
+
+  /** Resume an EXTERNAL-wallet ramp after the client signs a pending XDR (sep10 / withdraw_payment). */
+  submitRampSignature(txId: string, body: RampsSignatureBody): Promise<RampsSignatureResponse> {
+    return submitRampSignature(this._api, txId, body);
   }
 
   getRampTransaction(txId: string): Promise<RampsTransactionResponse> {
@@ -2385,11 +2621,31 @@ export class PollarClient {
    * of every available venue); `slippageBps` defaults to 50 (0.5%) and sets the
    * on-chain minimum each quote's `build` will accept.
    */
+  /**
+   * The swap venues this app exposes to end-users (operator's dashboard
+   * selection, intersected with server capability). An empty array means swap is
+   * disabled for this app — hide any swap UI. `'auto'` is not returned here; add
+   * it client-side when the list is non-empty.
+   */
+  async getSwapConfig(): Promise<SwapVenue[]> {
+    const content = await getSwapConfig(this._api);
+    return content.venues;
+  }
+
+  /**
+   * The curated "buy" tokens this app opted into (admin catalog), for the key's
+   * network. The SDK merges these into the swap buy list on top of the wallet's
+   * balances and the app's enabled assets.
+   */
+  async getSwapTokens(): Promise<SwapToken[]> {
+    const content = await getSwapTokens(this._api);
+    return content.tokens;
+  }
+
   async getSwapQuote(params: SwapQuoteParams): Promise<SwapQuote[]> {
     const wallet = this.getWallet();
     if (!wallet) throw new Error('No wallet connected');
     const body: SwapQuoteBody = {
-      network: this.getNetwork(),
       address: wallet.address,
       sellAsset: params.sellAsset,
       buyAsset: params.buyAsset,
@@ -2414,8 +2670,20 @@ export class PollarClient {
     const wallet = this.getWallet();
     if (!wallet) return { status: 'error', details: 'No wallet connected' };
 
+    // TODO(phase-4 / C-address swaps): smart (passkey C-address) wallets can't
+    // swap yet. The backend smart-account build path (buildSmartAccountTransfer →
+    // wallet-service prepareTransfer) only supports `payment`, and the AMM router
+    // plus its SAC sub-invocations must be allowlisted in SorobanAuthPolicy.
+    // Fail fast with a clear message until that lands, instead of a confusing
+    // "smart-account build supports only payment" error from runTx.
+    if (wallet.custody === 'smart') {
+      return { status: 'error', details: 'Swaps are not yet supported for smart (passkey) wallets' };
+    }
+
+    // Smart (C-address) wallets already returned above; here custody is G-address
+    // or external, so a credit buy-asset may need a classic trustline first.
     const buy = quote.buyAsset;
-    const needsTrustline = (opts?.autoTrustline ?? true) && wallet.custody !== 'smart' && buy.type !== 'native';
+    const needsTrustline = (opts?.autoTrustline ?? true) && buy.type !== 'native';
     if (needsTrustline && (buy.type === 'credit_alphanum4' || buy.type === 'credit_alphanum12')) {
       let assetsState = this.getEnabledAssetsState();
       if (assetsState.step !== 'loaded') {
@@ -2438,7 +2706,94 @@ export class PollarClient {
       }
     }
 
-    return this.runTx(quote.build.operation, quote.build.params);
+    // Soroswap returns a prebuilt XDR (submit as-is); Aquarius/SDEX return an
+    // operation + params that runTx re-builds server-side (fresh sequence).
+    const build = quote.build;
+    if ('unsignedXdr' in build) return this.signAndSubmitTx(build.unsignedXdr);
+    return this.runTx(build.operation, build.params);
+  }
+
+  // ─── Earn (yield vaults / lending) ──────────────────────────────────────────
+
+  /**
+   * The yield providers this app exposes to end-users (enabled + server-capable).
+   * An empty array means Earn is disabled for this app — hide any Earn UI.
+   */
+  async getEarnProviders(): Promise<EarnProviderId[]> {
+    const content = await getEarnProviders(this._api);
+    return content.providers;
+  }
+
+  /**
+   * The vaults (DeFindex) or pools (Blend) a provider exposes on this app's
+   * network, each with its live APY. Read-only.
+   */
+  async getEarnOpportunities(provider: EarnProviderId): Promise<EarnOpportunity[]> {
+    const content = await getEarnOpportunities(this._api, provider);
+    return content.opportunities;
+  }
+
+  /**
+   * The connected wallet's position (balance + APY) in a specific vault/pool.
+   * Read-only — poll it to show the position updating live. `withdrawUnit` tells
+   * you whether {@link earnWithdraw} expects an asset amount (Blend) or a share
+   * count (DeFindex); `withdrawable` is the max in that unit.
+   */
+  async getEarnPosition(params: EarnPositionParams): Promise<EarnPosition> {
+    const wallet = this.getWallet();
+    if (!wallet) throw new Error('No wallet connected');
+    return getEarnPosition(this._api, {
+      provider: params.provider,
+      opportunity: params.opportunity,
+      address: wallet.address,
+    });
+  }
+
+  /**
+   * Deposit into a vault/pool. The provider builds the unsigned XDR server-side
+   * (contract-direct for Blend, via the DeFindex API for DeFindex) and this signs
+   * + submits it, driving the same transaction state machine as {@link runTx}.
+   *
+   * The `amount` is the underlying asset amount. The deposit asset's trustline
+   * must already exist on classic (G-address) wallets — auto-trustline is a
+   * follow-up (the opportunity does not yet expose the asset's classic issuer).
+   */
+  async earnDeposit(params: EarnTxParams): Promise<SubmitOutcome> {
+    return this._earnBuildAndSubmit('deposit', params);
+  }
+
+  /**
+   * Withdraw from a vault/pool. The `amount` is in the position's `withdrawUnit`
+   * (asset amount for Blend, share count for DeFindex) — read it from
+   * {@link getEarnPosition}. Signs + submits the provider-built XDR.
+   */
+  async earnWithdraw(params: EarnTxParams): Promise<SubmitOutcome> {
+    return this._earnBuildAndSubmit('withdraw', params);
+  }
+
+  private async _earnBuildAndSubmit(action: 'deposit' | 'withdraw', params: EarnTxParams): Promise<SubmitOutcome> {
+    const wallet = this.getWallet();
+    if (!wallet) return { status: 'error', details: 'No wallet connected' };
+
+    // Both providers return a prebuilt XDR, which smart (passkey C-address)
+    // wallets can't sign — their build path must run server-side and return a
+    // passkey digest. Fail fast until that lands (same limitation as swap).
+    if (wallet.custody === 'smart') {
+      return { status: 'error', details: 'Earn is not yet supported for smart (passkey) wallets' };
+    }
+
+    const { build } = await buildEarnTx(this._api, {
+      action,
+      provider: params.provider,
+      opportunity: params.opportunity,
+      amount: params.amount,
+      address: wallet.address,
+    });
+    // Both current providers return a prebuilt XDR (submit as-is); the
+    // invoke_contract shape is reserved for a future provider and runs through
+    // runTx (re-simulated server-side), mirroring swap.
+    if ('unsignedXdr' in build) return this.signAndSubmitTx(build.unsignedXdr);
+    return this.runTx(build.operation, build.params);
   }
 
   private _setTxHistoryState(next: TxHistoryState): void {
@@ -2775,6 +3130,7 @@ export class PollarClient {
         ...(wireProvider ? { provider: wireProvider } : {}),
         address: w.address ?? w.publicKey ?? null,
         ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
+        ...(w.fundingMode !== undefined ? { fundingMode: w.fundingMode } : {}),
         ...(w.createdAt !== undefined ? { createdAt: w.createdAt } : {}),
         ...(w.linkedAt !== undefined ? { linkedAt: w.linkedAt } : {}),
         ...(w.network !== undefined ? { network: w.network } : {}),

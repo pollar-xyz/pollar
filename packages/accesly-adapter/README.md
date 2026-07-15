@@ -12,7 +12,7 @@ C-address contract, and the user signs via Accesly's SDK (passkey unlock →
 Shamir-reconstructed ed25519 seed). So the adapter reports `custody: 'smart'`, but
 signing/submitting happens **client-side + RPC** — Pollar never holds the key and
 does **not** deploy/sponsor/submit through wallet-service (that path is only for
-Pollar's *own* smart wallets).
+Pollar's _own_ smart wallets).
 
 ## Install
 
@@ -53,11 +53,11 @@ function makeClient(acceslyAddress: string, username: string) {
 
 ### `createAcceslyAdapter(options): WalletAdapter`
 
-| option | type | notes |
-|---|---|---|
-| `address` | `string` | the Accesly Smart Account C-address |
+| option    | type                       | notes                                                |
+| --------- | -------------------------- | ---------------------------------------------------- |
+| `address` | `string`                   | the Accesly Smart Account C-address                  |
 | `signXdr` | `(xdr) => Promise<string>` | signs a full XDR via Accesly; returns the signed XDR |
-| `meta?` | `{ label; iconUrl? }` | login button; defaults to `{ label: 'Accesly' }` |
+| `meta?`   | `{ label; iconUrl? }`      | login button; defaults to `{ label: 'Accesly' }`     |
 
 ## ⚠️ Pending confirmation
 

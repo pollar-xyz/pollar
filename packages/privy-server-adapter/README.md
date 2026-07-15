@@ -1,6 +1,6 @@
-# @pollar/privy-adapter
+# @pollar/privy-server-adapter
 
-> **⚠️ Server-side only.** This package starts an HTTP server with `@hono/node-server` and reads `PRIVY_APP_SECRET` / `POLLAR_API_SECRET` from the host environment. Importing it in a browser, React Native, or any other client-side bundle will leak credentials. The bundler will also blow up on `node:crypto` / `@hono/node-server`. If you need a browser-side Privy integration, use the Privy client SDK directly — not this package.
+> **Server-side only.** This package starts an HTTP server with `@hono/node-server` and reads `PRIVY_APP_SECRET` / `POLLAR_API_SECRET` from the host environment. Importing it in a browser, React Native, or any other client-side bundle will leak credentials. The bundler will also blow up on `node:crypto` / `@hono/node-server`. If you need a browser-side Privy integration, use `@pollar/privy-adapter` (the client-side adapter) or the Privy client SDK directly, not this package.
 
 Stateless HTTP proxy that lets Pollar sign Stellar transactions through your Privy account, without your Privy `APP_SECRET` ever leaving your infrastructure.
 
@@ -9,7 +9,7 @@ You install this package in **your own backend**, point Pollar at your adapter's
 ## Install
 
 ```bash
-npm install @pollar/privy-adapter
+npm install @pollar/privy-server-adapter
 ```
 
 Requires Node 20+.
@@ -17,7 +17,7 @@ Requires Node 20+.
 ## Quick start
 
 ```ts
-import { createPollarPrivyAdapter } from '@pollar/privy-adapter';
+import { createPollarPrivyAdapter } from '@pollar/privy-server-adapter';
 
 const adapter = createPollarPrivyAdapter({
   getCredentials: async () => ({
@@ -40,7 +40,7 @@ The secret must be stored as JSON `{"appId": "...", "appSecret": "..."}` — the
 
 ```ts
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
-import { createPollarPrivyAdapter } from '@pollar/privy-adapter';
+import { createPollarPrivyAdapter } from '@pollar/privy-server-adapter';
 
 const sm = new SecretsManagerClient({ region: 'us-east-1' });
 
@@ -160,7 +160,7 @@ Responses share the Pollar envelope:
 
 // error with extra context (Zod issues or upstream reason)
 { "code": "VALIDATION_ERROR", "success": false, "issues": { /* ... */ } }
-{ "code": "WALLET_CREATION_FAILED", "success": false, "reason": "Privy API: ..." }
+{ "code": "TX_OPERATION_NOT_ALLOWED", "success": false, "reason": "operation not allowed" }
 ```
 
 | Method | Path                         | Body                               | Success code                   | HTTP |

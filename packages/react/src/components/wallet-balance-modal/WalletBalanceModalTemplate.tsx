@@ -2,11 +2,13 @@
 
 import { WalletBalanceRecord, WalletBalanceState } from '@pollar/core';
 import { type CSSProperties } from 'react';
-import { PollarModalFooter } from '../commons';
+import { CopyButton, PollarModalFooter } from '../commons';
 
+// Stellar amounts are int64 scaled by 10^7, so 7 decimals is the ledger's exact
+// precision. Always render all 7 (padded) in monospace so columns line up.
 function formatBalance(balance: string): string {
   const n = parseFloat(balance);
-  return isNaN(n) ? balance : n.toLocaleString(undefined, { maximumFractionDigits: 7 });
+  return isNaN(n) ? balance : n.toLocaleString(undefined, { minimumFractionDigits: 7, maximumFractionDigits: 7 });
 }
 
 function cropAddress(address: string): string {
@@ -18,7 +20,15 @@ function BalanceItem({ record }: { record: WalletBalanceRecord }) {
   const balanceDiffers = record.balance !== record.available;
   return (
     <div className="pollar-bal-item">
-      <span className="pollar-bal-asset">{record.code}</span>
+      <div className="pollar-bal-asset-info">
+        <span className="pollar-bal-asset">{record.code}</span>
+        {record.issuer && (
+          <span className="pollar-bal-issuer">
+            <span className="pollar-bal-issuer-addr">{cropAddress(record.issuer)}</span>
+            <CopyButton value={record.issuer} label="Copy issuer address" className="pollar-copy-btn-sm" />
+          </span>
+        )}
+      </div>
       <div className="pollar-bal-amounts">
         <span className="pollar-bal-amount">{formatBalance(record.balance)}</span>
         {balanceDiffers && <span className="pollar-bal-available">{formatBalance(record.available)} available</span>}
@@ -72,19 +82,30 @@ export function WalletBalanceModalTemplate({
       <div className="pollar-modal-header">
         <h2 className="pollar-modal-title">Wallet Balance</h2>
         <div className="pollar-modal-header-actions">
-          <button className="pollar-modal-refresh-btn" onClick={onRefresh} disabled={isLoading}>
+          <button
+            type="button"
+            className="pollar-modal-close"
+            onClick={onRefresh}
+            disabled={isLoading}
+            aria-label="Refresh"
+            title="Refresh"
+          >
             <svg
-              className={`pollar-modal-refresh-icon${isLoading ? ' spinning' : ''}`}
-              width="13"
-              height="13"
-              viewBox="0 0 13 13"
+              className={isLoading ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
               fill="none"
               aria-hidden
             >
-              <path d="M11.5 6.5a5 5 0 11-1.5-3.536" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              <path d="M10 1v3h-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
-            Refresh
           </button>
           <button className="pollar-modal-close" onClick={onClose} aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -94,9 +115,19 @@ export function WalletBalanceModalTemplate({
         </div>
       </div>
 
-      {walletAddress && <div className="pollar-bal-address">{cropAddress(walletAddress)}</div>}
+      {walletAddress && (
+        <div className="pollar-bal-address-row">
+          <span className="pollar-bal-address">{cropAddress(walletAddress)}</span>
+          <CopyButton value={walletAddress} label="Copy wallet address" />
+        </div>
+      )}
 
-      {isLoading && <div className="pollar-modal-empty">Loading…</div>}
+      {isLoading && (
+        <div className="pollar-loading-block">
+          <div className="pollar-spinner" />
+          <span>Loading…</span>
+        </div>
+      )}
 
       {walletBalance.step === 'error' && <div className="pollar-modal-error">{walletBalance.message}</div>}
 

@@ -35,7 +35,7 @@ Open http://localhost:5173, click **Log in**, choose **Privy**, and complete the
 flow. On success the page shows the connected Stellar wallet address.
 
 > Dev-only: run it with `npm run dev`. A production `vite build` currently fails
-> because `@privy-io/react-auth` references `@solana/kit` (an *optional* peer for a
+> because `@privy-io/react-auth` references `@solana/kit` (an _optional_ peer for a
 > Solana funding feature we never use) and the production bundler validates its
 > exports. The dev server (esbuild) stubs that optional peer, so the app runs fine.
 

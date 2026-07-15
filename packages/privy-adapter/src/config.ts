@@ -35,12 +35,14 @@ export interface PollarPrivyConfig {
    * `PrivyClientConfig.loginMethods`, narrowed to what this adapter drives.
    */
   loginMethods: PrivyLoginMethod[];
-  /** Optional appearance hints. Mirrors `PrivyClientConfig.appearance`. */
+  /**
+   * Optional appearance hints. Mirrors `PrivyClientConfig.appearance`. Applied on
+   * web only; the React Native (Expo) entry does not forward it.
+   */
   appearance?: PollarPrivyAppearance;
   /**
-   * Redirect URI for OAuth (google/github). Defaults to the current origin on
-   * web. Must be allow-listed in your Privy dashboard. On React Native this is
-   * your app's deep-link / scheme.
+   * Reserved. Not currently applied to the OAuth flow (the web bridge uses
+   * Privy's default redirect handling). Kept for forward compatibility.
    */
   redirectUri?: string;
   /**

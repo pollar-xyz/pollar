@@ -1,8 +1,8 @@
 'use client';
 
 import { TxHistoryRecord, TxHistoryState } from '@pollar/core';
-import { type CSSProperties } from 'react';
-import { PollarModalFooter } from '../commons';
+import { type CSSProperties, type ReactNode } from 'react';
+import { CopyButton, PollarModalFooter } from '../commons';
 
 const PAGE_SIZE = 10;
 
@@ -27,6 +27,46 @@ function StatusBadge({ status }: { status: TxHistoryRecord['status'] }) {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/** Shorten a long identifier (issuer, hash, address) to `head…tail`. */
+function truncateMiddle(value: string, head = 4, tail = 4): string {
+  return value.length <= head + tail + 1 ? value : `${value.slice(0, head)}…${value.slice(-tail)}`;
+}
+
+// Stellar account (G) and contract (C) strkeys are 56 base32 chars.
+const STELLAR_ADDRESS = /\b[GC][A-Z2-7]{55}\b/g;
+
+/** Truncated address rendered as a copyable tag (issuer, wallet, contract…). */
+function AddressChip({ value, label }: { value: string; label: string }) {
+  return (
+    <span className="pollar-hist-item-issuer">
+      {truncateMiddle(value)}
+      <CopyButton value={value} label={label} className="pollar-copy-btn-sm" />
+    </span>
+  );
+}
+
+/**
+ * Renders a summary string, swapping every full Stellar address (G… account or
+ * C… contract) for an {@link AddressChip}. Plain-text runs are kept as-is.
+ */
+function renderSummary(summary: string): ReactNode {
+  const parts: ReactNode[] = [];
+  let last = 0;
+  let key = 0;
+  STELLAR_ADDRESS.lastIndex = 0;
+  for (let m = STELLAR_ADDRESS.exec(summary); m !== null; m = STELLAR_ADDRESS.exec(summary)) {
+    if (m.index > last) parts.push(<span key={key++}>{summary.slice(last, m.index)}</span>);
+    const address = m[0];
+    parts.push(
+      <AddressChip key={key++} value={address} label={address[0] === 'C' ? 'Copy contract address' : 'Copy wallet address'} />,
+    );
+    last = m.index + address.length;
+  }
+  if (parts.length === 0) return <span className="pollar-hist-item-title">{summary}</span>;
+  if (last < summary.length) parts.push(<span key={key}>{summary.slice(last)}</span>);
+  return parts;
 }
 
 export function TxHistoryModalTemplate({
@@ -76,19 +116,30 @@ export function TxHistoryModalTemplate({
       <div className="pollar-modal-header">
         <h2 className="pollar-modal-title">Transaction History</h2>
         <div className="pollar-modal-header-actions">
-          <button className="pollar-modal-refresh-btn" onClick={onRefresh} disabled={isLoading}>
+          <button
+            type="button"
+            className="pollar-modal-close"
+            onClick={onRefresh}
+            disabled={isLoading}
+            aria-label="Refresh"
+            title="Refresh"
+          >
             <svg
-              className={`pollar-modal-refresh-icon${isLoading ? ' spinning' : ''}`}
-              width="13"
-              height="13"
-              viewBox="0 0 13 13"
+              className={isLoading ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
               fill="none"
               aria-hidden
             >
-              <path d="M11.5 6.5a5 5 0 11-1.5-3.536" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              <path d="M10 1v3h-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
-            Refresh
           </button>
           <button className="pollar-modal-close" onClick={onClose} aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -100,45 +151,103 @@ export function TxHistoryModalTemplate({
 
       <div className="pollar-hist-list">
         {txHistory.step === 'idle' && <div className="pollar-modal-empty">Click Refresh to load transactions.</div>}
-        {isLoading && <div className="pollar-modal-empty">Loading…</div>}
+        {isLoading && (
+          <div className="pollar-loading-block">
+            <div className="pollar-spinner" />
+            <span>Loading…</span>
+          </div>
+        )}
         {txHistory.step === 'error' && <div className="pollar-modal-empty">{txHistory.message}</div>}
         {txHistory.step === 'loaded' && records.length === 0 && <div className="pollar-modal-empty">No transactions yet.</div>}
         {records.map((record) => {
-          const explorerUrl = `https://stellar.expert/explorer/${record.network === 'testnet' ? 'testnet' : 'public'}/tx/${record.hash}`;
+          const hash = typeof record.hash === 'string' && record.hash.length > 0 ? record.hash : undefined;
+          const explorerUrl = hash
+            ? `https://stellar.expert/explorer/${record.network === 'testnet' ? 'testnet' : 'public'}/tx/${hash}`
+            : undefined;
+          const asset = typeof record.details?.asset === 'string' ? record.details.asset : undefined;
+          // `change_trust` summaries embed the asset as `CODE:ISSUER` — split so
+          // the issuer can be truncated and copied on its own.
+          const colon = asset ? asset.indexOf(':') : -1;
+          const trustline =
+            record.operation === 'change_trust' && asset && colon > 0
+              ? {
+                  prefix: record.summary.split(':')[0],
+                  code: asset.slice(0, colon),
+                  issuer: asset.slice(colon + 1),
+                }
+              : undefined;
+          // `invoke_contract` summaries carry a server-truncated contract id, so
+          // rebuild the chip from the full id in details instead.
+          const contract =
+            record.operation === 'invoke_contract' &&
+            typeof record.details?.contractId === 'string' &&
+            typeof record.details?.method === 'string'
+              ? { method: record.details.method, contractId: record.details.contractId }
+              : undefined;
           return (
             <div key={record.id} className="pollar-hist-item">
-              <span className="pollar-hist-item-summary">{record.summary}</span>
-              <StatusBadge status={record.status} />
+              <div className="pollar-hist-item-top">
+                <span className="pollar-hist-item-summary">
+                  {trustline ? (
+                    <>
+                      <span className="pollar-hist-item-title">
+                        {trustline.prefix}: {trustline.code}
+                      </span>
+                      <AddressChip value={trustline.issuer} label="Copy issuer" />
+                    </>
+                  ) : contract ? (
+                    <>
+                      <span className="pollar-hist-item-title">Invoke {contract.method}() on</span>
+                      <AddressChip value={contract.contractId} label="Copy contract address" />
+                    </>
+                  ) : (
+                    renderSummary(record.summary)
+                  )}
+                </span>
+                <StatusBadge status={record.status} />
+              </div>
+
               <span className="pollar-hist-item-meta">
                 <span>{record.operation}</span>
+                {typeof record.details?.sponsored === 'boolean' && (
+                  <span>· {record.details.sponsored ? 'Sponsored' : 'Self-paid'}</span>
+                )}
                 {record.feeXlm && <span>· {record.feeXlm} XLM</span>}
-                <span>· {formatDate(record.createdAt)}</span>
-                <span>·</span>
-                <a
-                  className="pollar-hist-item-explorer"
-                  href={explorerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="View on Stellar Explorer"
-                >
-                  <svg width="11" height="11" viewBox="0 0 13 13" fill="none" aria-hidden>
-                    <path
-                      d="M5 2H2a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V8"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M8 1h4m0 0v4m0-4L6 7"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  Explorer
-                </a>
               </span>
+
+              <div className="pollar-hist-item-footer">
+                <span>{formatDate(record.createdAt)}</span>
+                {hash && (
+                  <>
+                    <span className="pollar-hist-item-dot">·</span>
+                    <span className="pollar-hist-item-hash">{truncateMiddle(hash, 6, 6)}</span>
+                    <CopyButton value={hash} label="Copy transaction hash" className="pollar-copy-btn-sm" />
+                    <a
+                      className="pollar-hist-item-explorer"
+                      href={explorerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="View on Stellar Explorer"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 13 13" fill="none" aria-hidden>
+                        <path
+                          d="M5 2H2a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V8"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          d="M8 1h4m0 0v4m0-4L6 7"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </a>
+                  </>
+                )}
+              </div>
             </div>
           );
         })}

@@ -52,30 +52,7 @@
   margin-bottom: 1rem;
 }
 
-.pollar-email-input {
-  width: 100%;
-  height: var(--pollar-input-height, 44px);
-  padding: 0 1rem;
-  border-radius: var(--pollar-input-border-radius, 0.5rem);
-  border: 1px solid var(--pollar-border);
-  background-color: var(--pollar-input-bg);
-  font-size: 1rem;
-  color: var(--pollar-text);
-  outline: none;
-  box-sizing: border-box;
-}
-
-.pollar-email-input::placeholder {
-  color: var(--pollar-muted);
-}
-.pollar-email-input:focus {
-  box-shadow: 0 0 0 2px var(--pollar-accent);
-  border-color: transparent;
-}
-.pollar-email-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+/* Email field reuses the shared .pollar-input (see shared.css). */
 
 /* ---- Divider ---- */
 .pollar-divider {

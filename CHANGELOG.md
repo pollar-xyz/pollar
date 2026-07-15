@@ -1,5 +1,146 @@
 # Changelog
 
+## 0.10.1-rc.0
+
+> Release candidate. Published under the `next` dist-tag (`npm i @pollar/core@next`).
+
+### `@pollar/core` - features
+
+- **All swap venues wired.** `swap()` now dispatches on the quote's build shape:
+  a prebuilt XDR (Soroswap) goes straight to `signAndSubmitTx`, while an
+  operation + params quote (Aquarius / SDEX) runs through `runTx`. The swap quote
+  build type is a union of `invoke_contract | path_payment_strict_send |
+{ unsignedXdr }`. At 0.10.0 only Aquarius was executable.
+
+### `@pollar/react` - features
+
+- **Soroswap + Stellar DEX enabled in the `SwapModal` route selector.** All three
+  venues (SDEX, Soroswap, Aquarius) are now selectable. (Soroswap only returns
+  quotes when the server has `SOROSWAP_API_KEY` configured.)
+
+### Docs / comments
+
+- **Corrected the "custom auth providers" claim.** The rc.7 note advertised
+  registering providers via a `providers: [...]` config field, but no such field
+  or registration API exists - `PollarAuthProvider` is an internal contract only.
+  Updated the rc.7 CHANGELOG entry and the `PollarAuthProvider` JSDoc
+  (`@pollar/core`) accordingly. Custom login still goes through the built-in
+  providers and `providerAction(...)`; external wallets through `walletAdapters`.
+- **Fixed stale `@pollar/core` JSDoc** that referenced the removed `loginWallet()`
+  method and the non-existent `PollarClientConfig.providers` field.
+- **`@pollar/privy-adapter` config JSDoc** now states that `redirectUri` is
+  reserved / not currently applied, and that `appearance` is web-only (ignored on
+  the React Native / Expo entry) - matching the README.
+
+## 0.10.0
+
+> Stable release. Published under the default `latest` dist-tag
+> (`npm i @pollar/core`). This is the promotion of the `0.10.0-rc.*` line;
+> the per-rc detail is preserved in the sections below.
+
+### Highlights (since 0.9.0)
+
+- **Unified wallet adapters (breaking).** External wallets are now registered as
+  a `walletAdapters: WalletAdapter[]` array on `PollarClient`; each adapter
+  auto-renders as a login entry and overrides a built-in by its `type`. The old
+  singular `walletAdapter` resolver and `loginWallet(id)` method are gone - enter
+  any wallet through the unified `login({ provider: id })`. See UPGRADE.md.
+- **Multi-venue swaps.** `getSwapQuote()` quotes across SDEX, Soroswap and
+  Aquarius and returns routes ranked best-first (`provider: 'auto'`); `swap()`
+  sets the buy-asset trustline and executes through the existing `runTx`
+  pipeline with on-chain `minReceived` slippage. `@pollar/react` ships a
+  `SwapModal` with a venue route selector.
+- **SEP-24 on/off-ramps.** New `ramps` endpoints drive the anchor
+  deposit/withdraw interactive flow through core, with a `RampWidget` in
+  `@pollar/react` (external wallets sign the SEP-24 pending XDR in the widget).
+- **Self-driving Privy adapter.** `@pollar/privy-adapter` was reworked from a
+  signer skeleton into a full adapter that drives login + embedded-wallet
+  creation + signing, on web and React Native / Expo.
+- **Network resilience.** Every request now has a client-side timeout (default
+  10s) and idempotent-request retry; a refresh timeout no longer logs the user
+  out. New typed `PollarNetworkError` + `isPollarNetworkError`.
+
+### New packages
+
+- **`@pollar/accesly-adapter`** - client-side Accesly smart-wallet adapter.
+- **`@pollar/privy-server-adapter`** - server-side Privy adapter (formerly named
+  `@pollar/privy-adapter` before the client-side rewrite took that name).
+
+### Upgrade notes
+
+- **One-time re-login (SDK only).** The local storage namespace was widened
+  (apiKey hash 8 -> 32 hex chars); every user re-authenticates once after the
+  host app ships this version. No backend change, no action required.
+- See **UPGRADE.md** for migrating off the singular `walletAdapter` / `loginWallet`.
+
+## 0.10.0-rc.10
+
+> Release candidate. Published under the `next` dist-tag (`npm i @pollar/core@next`).
+>
+> This RC bundles every change since the last published build (`rc.8`): the
+> `rc.9` network-timeout/retry work below plus swaps, on/off-ramps, the
+> self-driving Privy adapter, and two newly published packages.
+
+### `@pollar/core` - features
+
+- **Multi-venue swaps.** `getSwapQuote(params)` quotes across venues (SDEX,
+  Soroswap, Aquarius) and returns `SwapQuote[]` ranked best-first (`provider:
+'auto'` picks the best of every available venue); `swap(quote)` establishes
+  the buy-asset trustline first (G-address credit assets only) and executes the
+  quote through the existing `runTx` transaction state machine, with on-chain
+  `minReceived` enforcing slippage.
+- **SEP-24 on/off-ramps.** New `ramps` endpoints wire the anchor deposit/withdraw
+  interactive flow through core so hosts can drive a ramp from the SDK.
+
+### `@pollar/core` - fixes
+
+- **Swaps fail fast on smart (passkey) wallets.** Smart C-address wallets cannot
+  swap yet (the backend smart-account build path only supports `payment`, and the
+  AMM router is not yet allowlisted in `SorobanAuthPolicy`), so `swap` now returns
+  a clear error instead of the confusing "smart-account build supports only
+  payment" from `runTx`.
+- **Auth logs surface the real failure.** `redactDeep` now projects an `Error`'s
+  non-enumerable `name`/`message`/`stack` (previously it logged `{}` and lost the
+  reason) while still redacting enumerable custom props, and the wallet-flow catch
+  tags the failing phase (connect/sign/authenticate).
+
+### `@pollar/react` - features
+
+- **`SwapModal`** - a drop-in swap UI over the core swap API, with a route
+  selector across venues and a smart-wallet guard. (At 0.10.0 only Aquarius was
+  wired; Soroswap and SDEX are enabled in 0.10.1-rc.0.)
+- **`RampWidget`** - SEP-24 deposit/withdraw widget wired to the core ramps flow.
+- **Self-driving login.** `PrivyLoginSubmodal` and a login-modal refactor that
+  renders a login entry per registered wallet adapter and drives interactive
+  adapters (e.g. Privy) to completion before running `login({ provider })`.
+
+### `@pollar/privy-adapter` - features
+
+- **Self-driving adapter.** Reworked from a signer skeleton into a full adapter
+  that drives email/Google/GitHub login, creates the Stellar embedded wallet, and
+  signs via extended-chains `rawSign`. `createPrivyAdapter` + `PrivyAdapterProvider`
+  (children optional, for the sibling-mount pattern); a runtime guard throws
+  `PrivyAdapterUnsupportedError` on non-React hosts.
+- **React Native / Expo support** via `@privy-io/expo` (native entry with in-session
+  OAuth), plus a shared factory and dual `tsup` build.
+- **Auto-sync + URL cleanup.** The adapter emits its provider auth state so
+  `@pollar/react` triggers login on the rising edge (fixes web OAuth redirect and
+  persisted Privy sessions); `cleanupOAuthRedirect` strips `privy_oauth_*` params
+  from the URL. Gated `[privy-adapter]` debug logger.
+
+### `@pollar/stellar-wallets-kit-adapter` - fixes
+
+- **SSR-safe.** `stellarWalletsKitAdapters()` no longer touches `window` on the
+  server (Next.js/Remix); it returns `[]` during SSR and builds the real adapter
+  list when the factory re-runs on the client.
+
+### New packages (first publish under `next`)
+
+- **`@pollar/accesly-adapter`** - client-side Accesly smart-wallet adapter
+  (single-s naming to match the upstream `@accesly/*` brand).
+- **`@pollar/privy-server-adapter`** - server-side Privy adapter (the former
+  `@pollar/privy-adapter` before the client-side rewrite took that name).
+
 ## 0.10.0-rc.9
 
 > Release candidate. Published under the `next` dist-tag (`npm i @pollar/core@next`).
@@ -13,7 +154,7 @@
   pending indefinitely: it neither resolved nor rejected, trapping callers that
   `await` it (e.g. a returning user stuck on the splash screen). A stalled
   request now rejects with a typed `PollarNetworkError` (`code:
-  'SDK_NETWORK_TIMEOUT'`) instead.
+'SDK_NETWORK_TIMEOUT'`) instead.
 - **A refresh that times out no longer logs the user out.** A transient network
   timeout during `/auth/refresh` keeps the session intact (the refresh token is
   almost certainly still valid) and rejects with the typed error so the caller
@@ -44,10 +185,10 @@
 
 ### `@pollar/core` — features
 
-- **Pluggable custom auth providers** — register your own provider(s) via
-  `providers: [...]` and drive them through `login({ provider, ... })` /
-  `providerAction(...)`, alongside the built-in Google / GitHub / email / wallet
-  flows.
+- **Custom auth provider contract (`PollarAuthProvider`)** - the extension point
+  that backs the built-in Google / GitHub / email flows and `providerAction(...)`.
+  Correction (see 0.10.1-rc.0): this shipped as an internal contract only; there
+  is no public `providers: [...]` config field to register your own providers.
 
 ### `@pollar/core` — fixes
 

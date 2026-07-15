@@ -85,7 +85,7 @@
   white-space: nowrap;
 }
 
-.pollar-asset-trustline.established {
+.pollar-asset-trustline.pollar-established {
   color: var(--pollar-success-text);
   border-color: var(--pollar-success-text);
 }
@@ -124,12 +124,12 @@
   color: #fff;
 }
 
-.pollar-asset-btn.danger {
+.pollar-asset-btn.pollar-danger {
   color: var(--pollar-error-text);
   border-color: var(--pollar-error-border);
 }
 
-.pollar-asset-btn.danger:hover:not(:disabled) {
+.pollar-asset-btn.pollar-danger:hover:not(:disabled) {
   background: var(--pollar-error-text);
   color: #fff;
 }
@@ -177,35 +177,7 @@
   margin-bottom: 1rem;
 }
 
-/* ---- Back nav button (matches close-btn base) ---- */
-.pollar-modal-back {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  border-radius: var(--pollar-buttons-border-radius, 6px);
-  border: 1px solid var(--pollar-border);
-  background-color: transparent;
-  color: var(--pollar-muted);
-  cursor: pointer;
-  transition:
-    background-color 0.15s,
-    color 0.15s,
-    border-color 0.15s;
-}
-
-.pollar-modal-back:hover:not(:disabled) {
-  background-color: var(--pollar-input-bg);
-  color: var(--pollar-text);
-  border-color: var(--pollar-text);
-}
-
-.pollar-modal-back:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+/* Back nav button reuses the shared in-header .pollar-modal-close base. */
 
 /* ---- Custom trustline form ---- */
 .pollar-asset-custom-hint {
@@ -238,25 +210,4 @@
   color: var(--pollar-error-text);
 }
 
-.pollar-asset-submit {
-  width: 100%;
-  height: var(--pollar-buttons-height, 44px);
-  border: none;
-  border-radius: var(--pollar-buttons-border-radius, 6px);
-  background-color: var(--pollar-accent);
-  color: #fff;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  cursor: pointer;
-  margin-bottom: 1rem;
-  transition: opacity 0.15s;
-}
-
-.pollar-asset-submit:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.pollar-asset-submit:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+/* Submit button reuses the shared .pollar-btn-primary inside .pollar-modal-actions. */

@@ -1,6 +1,6 @@
 /* ---- Unauthenticated: login button ---- */
 /* flex items-center gap-3 rounded-xl px-6 py-3.5 text-base font-bold text-white shadow-lg transition-all */
-.wallet-login-btn {
+.pollar-wallet-login-btn {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -18,7 +18,7 @@
 }
 
 /* hover:opacity-90 hover:shadow-xl */
-.wallet-login-btn:hover {
+.pollar-wallet-login-btn:hover {
   opacity: 0.9;
   box-shadow:
     0 20px 25px -5px rgba(0, 0, 0, 0.1),
@@ -26,12 +26,12 @@
 }
 
 /* active:scale-[0.98] */
-.wallet-login-btn:active {
+.pollar-wallet-login-btn:active {
   transform: scale(0.98);
 }
 
 /* brightness-0 invert — white logo on colored background */
-.wallet-btn-logo {
+.pollar-wallet-btn-logo {
   width: 22px;
   height: 22px;
   object-fit: contain;
@@ -39,12 +39,12 @@
 }
 
 /* ---- Authenticated: wrapper + dropdown ---- */
-.wallet-wrapper {
+.pollar-wallet-wrapper {
   position: relative;
   display: inline-block;
 }
 
-.wallet-btn {
+.pollar-wallet-btn {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -58,21 +58,21 @@
   transition: background 0.15s;
 }
 
-.wallet-btn:hover {
+.pollar-wallet-btn:hover {
   opacity: 0.9;
 }
 
-.wallet-chevron {
+.pollar-wallet-chevron {
   width: 12px;
   height: 12px;
   transition: transform 0.15s;
 }
 
-.wallet-chevron.open {
+.pollar-wallet-chevron.pollar-open {
   transform: rotate(180deg);
 }
 
-.wallet-dropdown {
+.pollar-wallet-dropdown {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
@@ -84,7 +84,7 @@
   z-index: 50;
 }
 
-.wallet-dropdown-item {
+.pollar-wallet-dropdown-item {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -99,27 +99,27 @@
   transition: background 0.1s;
 }
 
-.wallet-dropdown-item:hover {
+.pollar-wallet-dropdown-item:hover {
   background: rgba(0, 0, 0, 0.05);
 }
 
-.wallet-dropdown-item.danger {
+.pollar-wallet-dropdown-item.pollar-danger {
   color: #dc2626;
 }
 
-.wallet-dropdown-item.danger:hover {
+.pollar-wallet-dropdown-item.pollar-danger:hover {
   background: #fef2f2;
 }
 
 /* ---- Dropdown divider ---- */
-.wallet-dropdown-divider {
+.pollar-wallet-dropdown-divider {
   height: 1px;
   background: rgba(0, 0, 0, 0.08);
   margin: 2px 0;
 }
 
 /* ---- Wallet button label (shrinks to make room for spinner) ---- */
-.wallet-btn-label {
+.pollar-wallet-btn-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -128,12 +128,12 @@
 }
 
 /* ---- In-progress: small inline spinner (same size as chevron) ---- */
-.wallet-btn:disabled {
+.pollar-wallet-btn:disabled {
   cursor: not-allowed;
   opacity: 1;
 }
 
-.wallet-btn-spinner {
+.pollar-wallet-btn-spinner {
   flex-shrink: 0;
   animation: pollar-wallet-spin 1.1s linear infinite;
 }

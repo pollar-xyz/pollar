@@ -2,6 +2,7 @@
 
 import { TransactionState, WalletBalanceRecord, WalletId } from '@pollar/core';
 import { type CSSProperties } from 'react';
+import { AssetSelect } from '../AssetSelect';
 import { PollarModalFooter } from '../commons';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
 
@@ -34,6 +35,7 @@ export interface SendModalTemplateProps {
   isInProgress: boolean;
   onClose: () => void;
   onBack: () => void;
+  onRefresh: () => void;
   onSelectAsset: (asset: WalletBalanceRecord) => void;
   onAmountChange: (value: string) => void;
   onDestinationChange: (value: string) => void;
@@ -65,6 +67,7 @@ export function SendModalTemplate({
   isInProgress,
   onClose,
   onBack,
+  onRefresh,
   onSelectAsset,
   onAmountChange,
   onDestinationChange,
@@ -95,8 +98,6 @@ export function SendModalTemplate({
     '--pollar-card-border-radius': '10px',
   } as CSSProperties;
 
-  const enabledAssets = assets.filter((a) => a.enabledInApp);
-  const otherAssets = assets.filter((a) => !a.enabledInApp);
   const selectedKey = selectedAsset ? assetKey(selectedAsset) : '';
   const canSubmit = !!selectedAsset && !!amount && !!destination.trim() && !isLoadingBalance;
 
@@ -123,6 +124,33 @@ export function SendModalTemplate({
         </div>
         {!isInProgress && (
           <div className="pollar-modal-header-actions">
+            {step === 'form' && (
+              <button
+                type="button"
+                className="pollar-modal-close"
+                onClick={onRefresh}
+                disabled={isLoadingBalance}
+                aria-label="Refresh"
+                title="Refresh balances"
+              >
+                <svg
+                  className={isLoadingBalance ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden
+                >
+                  <path
+                    d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            )}
             <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                 <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -136,44 +164,21 @@ export function SendModalTemplate({
       {step === 'form' && (
         <>
           {/* Asset selector */}
-          <div className="pollar-send-field">
-            <label className="pollar-send-label">Asset</label>
-            {isLoadingBalance ? (
-              <div className="pollar-send-skeleton" />
-            ) : (
-              <select
-                className="pollar-input pollar-send-select"
-                value={selectedKey}
-                onChange={(e) => {
-                  const all = [...enabledAssets, ...otherAssets];
-                  const found = all.find((a) => assetKey(a) === e.target.value);
-                  if (found) onSelectAsset(found);
-                }}
-              >
-                <option value="" disabled>
-                  Select asset
-                </option>
-                {enabledAssets.length > 0 && (
-                  <optgroup label="App assets">
-                    {enabledAssets.map((a) => (
-                      <option key={assetKey(a)} value={assetKey(a)}>
-                        {a.code} — {formatBalance(a.available)} available
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                {otherAssets.length > 0 && (
-                  <optgroup label="Other assets">
-                    {otherAssets.map((a) => (
-                      <option key={assetKey(a)} value={assetKey(a)}>
-                        {a.code} — {formatBalance(a.available)} available
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-            )}
-          </div>
+          <AssetSelect
+            label="Asset"
+            value={selectedKey}
+            loading={isLoadingBalance}
+            options={assets.map((a) => ({
+              key: assetKey(a),
+              code: a.code,
+              available: a.available,
+              enabledInApp: a.enabledInApp,
+            }))}
+            onChange={(key) => {
+              const found = assets.find((a) => assetKey(a) === key);
+              if (found) onSelectAsset(found);
+            }}
+          />
 
           {/* Amount */}
           <div className="pollar-send-field">
