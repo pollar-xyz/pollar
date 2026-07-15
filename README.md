@@ -22,11 +22,12 @@ This repository is managed with [Turborepo](https://turbo.build/repo) and contai
 **Version:** `0.11.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/core)
 
 Framework-agnostic TypeScript SDK. Provides the `PollarClient` class and all lower-level utilities needed to integrate
-Pollar authentication and Stellar transactions into any JavaScript environment.
+Pollar authentication and multichain (Stellar + Solana) transactions into any JavaScript environment.
 
 **Key features:**
 
-- Authentication via Google, GitHub, Email OTP, and Stellar wallets (Freighter, Albedo)
+- Authentication via Google, GitHub, Email OTP, Stellar wallets (Freighter, Albedo), and Solana wallets
+  (Phantom, Solflare, Backpack)
 - **DPoP-bound access + refresh tokens** (RFC 9449) — stolen tokens are useless without the per-session keypair. Web
   keypair is non-extractable; React Native keypair lives in Keychain / EncryptedSharedPreferences
 - **Pluggable `Storage` adapter** — autodetects `localStorage` on web with in-memory fallback; first-class adapters for
@@ -114,7 +115,7 @@ drop-in authentication in React applications.
 - `<RampWidget>` - SEP-24 buy/sell flow wired to the core ramps endpoints (external wallets sign the pending XDR inline)
 - `<KycModal>` - identity verification flow with provider selection and status polling _(UI preview - backend coming
   soon)_
-- `<TxHistoryModal>` — paginated transaction history viewer with auto-fetch on open and stellar.expert explorer links
+- `<TxHistoryModal>` — paginated transaction history viewer with auto-fetch on open and explorer links (stellar.expert for Stellar, Solscan for Solana)
 - `<WalletBalanceModal>` — multichain wallet balance display (Stellar + Solana), each balance tagged by chain on multichain apps
 - `<SessionsModal>` — drop-in active-sessions UI: lists every refresh-token family for the current user, per-row
   revoke, and a "Sign out everywhere" button
@@ -134,8 +135,8 @@ npm install @pollar/react @pollar/core
 **Version:** `0.11.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-adapter)
 
 Client-side **Privy** wallet adapter for `@pollar/core`. It drives the whole Privy flow itself - email / Google / GitHub
-login, creating the user's Privy embedded Stellar wallet, and raw-hash signing - then hands the signature to Pollar for
-the standard SEP-10 login + transaction flow. Self-driving: you configure it once and register it in `walletAdapters`,
+login, creating the user's Privy embedded wallet (Stellar or Solana), and raw-hash signing - then hands the signature to Pollar for
+the standard SEP-10 (Stellar) or SIWS (Solana) login + transaction flow. Self-driving: you configure it once and register it in `walletAdapters`,
 you do not wire up Privy's hooks yourself.
 
 **Key features:**
@@ -158,7 +159,7 @@ npm install @pollar/privy-adapter @pollar/core @stellar/stellar-sdk @privy-io/re
 
 **Version:** `0.11.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-server-adapter)
 
-Server-side Privy adapter. A stateless HTTP proxy that lets Pollar sign Stellar transactions through your **Privy**
+Server-side Privy adapter. A stateless HTTP proxy that lets Pollar sign Stellar or Solana transactions through your **Privy**
 server-wallet account without your `PRIVY_APP_SECRET` ever leaving your infrastructure. You run it in your own backend
 and point Pollar at its URL. (Formerly published as `@pollar/privy-adapter`, before the client-side rewrite took that
 name.)
