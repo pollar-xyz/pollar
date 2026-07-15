@@ -61,14 +61,10 @@ matching adapter that was already built.
 > single resolver for `walletAdapter`. SSR-safe: returns `[]` when there is no
 > `window`. Requires `@pollar/core@^0.10.0` / `@pollar/react@^0.10.0`.
 >
-> **0.9.0** - `connect()` resolves to `{ address }` only (the duplicate
-> `publicKey` field is gone, matching the new `ConnectWalletResponse`). Adds
-> `logLevel` / `logger` options (set once at init - the kit is a global singleton).
->
-> **0.8.0** — `network` is **required**. The previous `Networks.TESTNET`
-> default was removed because the kit is a global singleton, and silently
-> picking testnet for the consumer risked signing real-looking transactions
-> on the wrong chain. Pass `Networks.TESTNET` or `Networks.PUBLIC` explicitly.
+> `connect()` resolves to `{ address }` only, and `network` is **required** (no
+> `Networks.TESTNET` default) — the kit is a global singleton, so silently
+> picking testnet risks signing real-looking transactions on the wrong chain.
+> Pass `Networks.TESTNET` or `Networks.PUBLIC` explicitly.
 
 ## Default wallets
 
@@ -130,7 +126,7 @@ Trimming the default list (e.g. only Freighter + Albedo for a SEP-43 dapp) works
 ```ts
 interface StellarWalletsKitAdapterOptions {
   /**
-   * Stellar network used for signing. **Required** as of 0.8.0 — the kit is a
+   * Stellar network used for signing. **Required** — the kit is a
    * global singleton, so the network must be chosen explicitly to avoid
    * cross-chain signing accidents.
    */

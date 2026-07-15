@@ -57,7 +57,10 @@ export function SendModal({ onClose }: SendModalProps) {
   );
 
   const balanceData = walletBalance.step === 'loaded' ? walletBalance.data : null;
-  const allAssets = balanceData?.balances ?? [];
+  // Send goes through the Stellar tx pipeline, so only offer Stellar assets. On a
+  // multichain balance the non-Stellar rows (SOL/POL) carry a chain tag; the
+  // single-wallet Stellar lookup leaves chain undefined.
+  const allAssets = (balanceData?.balances ?? []).filter((b) => b.chain === undefined || b.chain === 'STELLAR');
   // App assets first, then native XLM (always, even at 0, so the user knows to
   // fund) and any other non-app asset the wallet actually holds.
   const sortedAssets = [

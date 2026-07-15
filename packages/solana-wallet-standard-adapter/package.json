@@ -1,7 +1,7 @@
 {
-  "name": "@pollar/react",
+  "name": "@pollar/solana-wallet-standard-adapter",
   "version": "0.11.0",
-  "description": "React components for Pollar authentication",
+  "description": "Solana Wallet Standard adapter for @pollar/core — connect user-controlled Solana wallets (Phantom, Solflare, Backpack, …) via the Wallet Standard (@wallet-standard/* + @solana/wallet-standard-features), with SIWS login, without bundling any wallet SDK into @pollar/core.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -15,15 +15,12 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       }
-    },
-    "./styles.css": "./dist/index.css"
+    }
   },
   "files": [
     "dist"
   ],
-  "sideEffects": [
-    "**/*.css"
-  ],
+  "sideEffects": false,
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -34,23 +31,18 @@
     "node": ">=20"
   },
   "peerDependencies": {
-    "@pollar/core": "^0.11.0",
-    "react": ">=18",
-    "react-dom": ">=18"
+    "@pollar/core": "^0.11.0"
   },
   "dependencies": {
     "@pollar/core": "^0.11.0",
-    "@simplewebauthn/browser": "^13.3.0",
-    "qr.js": "^0.0.0"
+    "@solana/wallet-standard-features": "^1.4.0",
+    "@wallet-standard/app": "^1.1.1",
+    "@wallet-standard/base": "^1.1.1",
+    "@wallet-standard/features": "^1.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/react": "^18.0.0",
-    "@types/react-dom": "^18.0.0",
     "eslint": "^10.5.0",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.61.0"

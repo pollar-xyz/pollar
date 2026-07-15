@@ -99,6 +99,12 @@ export async function loginWithAdapter(adapter: WalletAdapter, deps: FlowDeps): 
       });
       return;
     }
+    // A STELLAR adapter MUST implement signTransaction (SEP-10 counter-signs the
+    // challenge tx). This flow is only dispatched for Stellar adapters, so a
+    // missing method is a programming error, not a user-facing state.
+    if (!adapter.signTransaction) {
+      throw new Error(`[PollarClient] wallet adapter "${type}" cannot sign a SEP-10 challenge (no signTransaction)`);
+    }
     const { signedTxXdr } = await withSignal(
       adapter.signTransaction(challengeXdr, { networkPassphrase: deps.networkPassphrase }),
       signal,

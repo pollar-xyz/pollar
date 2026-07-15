@@ -330,22 +330,29 @@ export function SwapModalTemplate({
           {/* Route selector */}
           <div className="pollar-send-field">
             <label className="pollar-send-label">Route</label>
-            <select
-              className="pollar-input pollar-send-select"
-              value={provider}
-              disabled={configLoading || providers.length === 0}
-              onChange={(e) => onProviderChange(e.target.value as SwapProvider)}
-            >
-              {providers.length === 0 ? (
-                <option value={provider}>{configLoading ? 'Loading…' : PROVIDER_LABELS[provider]}</option>
-              ) : (
-                providers.map((p) => (
-                  <option key={p} value={p}>
-                    {PROVIDER_LABELS[p]}
-                  </option>
-                ))
-              )}
-            </select>
+            {configLoading ? (
+              <div className="pollar-input pollar-select-loading">
+                <span className="pollar-spinner pollar-spinner-sm" />
+                <span>Loading routes…</span>
+              </div>
+            ) : (
+              <select
+                className="pollar-input pollar-send-select"
+                value={provider}
+                disabled={providers.length === 0}
+                onChange={(e) => onProviderChange(e.target.value as SwapProvider)}
+              >
+                {providers.length === 0 ? (
+                  <option value={provider}>{PROVIDER_LABELS[provider]}</option>
+                ) : (
+                  providers.map((p) => (
+                    <option key={p} value={p}>
+                      {PROVIDER_LABELS[p]}
+                    </option>
+                  ))
+                )}
+              </select>
+            )}
           </div>
 
           {/* Quote panel */}

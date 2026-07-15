@@ -16,12 +16,32 @@ function cropAddress(address: string): string {
   return `${address.slice(0, 8)}...${address.slice(-8)}`;
 }
 
-function BalanceItem({ record }: { record: WalletBalanceRecord }) {
+// Short label + accent per chain for the network tag. Only shown when the app
+// spans more than one chain, so a single-chain (Stellar-only) app looks unchanged.
+const CHAIN_TAG: Record<string, { label: string; color: string }> = {
+  STELLAR: { label: 'Stellar', color: '#7d00ff' },
+  POLYGON: { label: 'Polygon', color: '#8247e5' },
+  SOLANA: { label: 'Solana', color: '#14f195' },
+};
+
+function ChainTag({ chain }: { chain: string }) {
+  const tag = CHAIN_TAG[chain] ?? { label: chain, color: '#6b7280' };
+  return (
+    <span className="pollar-bal-chain-tag" style={{ '--pollar-chain-color': tag.color } as CSSProperties}>
+      {tag.label}
+    </span>
+  );
+}
+
+function BalanceItem({ record, showChain }: { record: WalletBalanceRecord; showChain: boolean }) {
   const balanceDiffers = record.balance !== record.available;
   return (
     <div className="pollar-bal-item">
       <div className="pollar-bal-asset-info">
-        <span className="pollar-bal-asset">{record.code}</span>
+        <span className="pollar-bal-asset-code-row">
+          <span className="pollar-bal-asset">{record.code}</span>
+          {showChain && record.chain && <ChainTag chain={record.chain} />}
+        </span>
         {record.issuer && (
           <span className="pollar-bal-issuer">
             <span className="pollar-bal-issuer-addr">{cropAddress(record.issuer)}</span>
@@ -138,7 +158,7 @@ export function WalletBalanceModalTemplate({
       {data?.exists && data.balances.length > 0 && (
         <div className="pollar-bal-list">
           {data.balances.map((b) => (
-            <BalanceItem key={b.code + (b.issuer ?? '')} record={b} />
+            <BalanceItem key={(b.chain ?? '') + b.code + (b.issuer ?? '')} record={b} showChain={data.multichain === true} />
           ))}
         </div>
       )}

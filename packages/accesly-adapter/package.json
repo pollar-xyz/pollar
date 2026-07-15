@@ -1,6 +1,6 @@
 {
   "name": "@pollar/accesly-adapter",
-  "version": "0.10.1-rc.0",
+  "version": "0.11.0",
   "description": "Accesly Smart Account wallet adapter for @pollar/core — sign Stellar transactions with a user's Accesly C-address (passkey + MPC) smart wallet, client-side.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -31,10 +31,10 @@
     "node": ">=20"
   },
   "peerDependencies": {
-    "@pollar/core": "^0.10.1-rc.0"
+    "@pollar/core": "^0.11.0"
   },
   "dependencies": {
-    "@pollar/core": "^0.10.1-rc.0"
+    "@pollar/core": "^0.11.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

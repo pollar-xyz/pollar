@@ -1,5 +1,153 @@
 # Changelog
 
+## 0.11.0
+
+> Stable release. Published under the default `latest` dist-tag
+> (`npm i @pollar/core`). Headline: the SDK goes **multichain** - Solana joins
+> Stellar.
+
+### Highlights (since 0.10.1)
+
+- **Multichain balances (Stellar + Solana).** `PollarClient` balances now come
+  from the v2 wallet endpoint: each balance is tagged with its `chain`
+  (`STELLAR` | `SOLANA` | `POLYGON`) and the response flags `multichain`. Solana
+  (SOL) is reported alongside Stellar assets. On non-Stellar chains only the
+  native token is reported for now.
+- **Sign In With Solana (SIWS) contract in `@pollar/core`.** New SIWS login types
+  (`SolanaSignInInput` / `SolanaSignInOutput`, with a raw `signMessage` fallback)
+  and `signSolanaTransaction` on the wallet-adapter contract - the Solana
+  analogue of Stellar's SEP-10 challenge, for login and sponsored external
+  transfers.
+- **Chain-aware `WalletAdapter` contract.** The adapter interface is now
+  chain-aware, so a single `walletAdapters` array can carry Stellar and Solana
+  adapters side by side.
+- **New package `@pollar/solana-wallet-standard-adapter` (preview).** Connects
+  user-controlled Solana wallets (Phantom, Solflare, Backpack, ...) through the
+  Wallet Standard, without bundling a wallet SDK into `@pollar/core`. Phase-0:
+  the client-side adapter (discovery, connect, SIWS, message / transaction
+  signing) is implemented; full `PollarClient` wiring and the SIWS endpoints
+  land next.
+
+### `@pollar/core`
+
+- `WalletChain` type (`STELLAR` | `POLYGON` | `SOLANA`); each balance carries a
+  `chain`, and the balance response exposes `multichain` (v2 wallet endpoint).
+- SIWS types (`SolanaSignInInput`, `SolanaSignInOutput`,
+  `SolanaSignMessageResponse`) and `signSolanaTransaction` on the wallet-adapter
+  contract.
+- Chain-aware `WalletAdapter` contract: adapters declare their chain so Stellar
+  and Solana adapters coexist in one `walletAdapters` array.
+
+### `@pollar/react`
+
+- `WalletBalanceModal` renders multichain balances, tagging each balance with its
+  chain. The tag only appears when the app spans more than one chain, so
+  single-chain (Stellar-only) apps look unchanged.
+
+### `@pollar/solana-wallet-standard-adapter` (new, preview)
+
+- `solanaWalletStandardAdapters(options?)` discovers every installed Solana wallet
+  and returns one `WalletAdapter` each (SSR-safe, returns `[]` without a
+  `window`); `SolanaWalletStandardAdapter` for direct use outside `PollarClient`.
+- Login uses each wallet's native `solana:signIn` (SIWS). Peer deps:
+  `@pollar/core`, the `@wallet-standard/*` packages, and
+  `@solana/wallet-standard-features` - no wallet SDK is bundled.
+
+## 0.10.1
+
+> Stable release. Published under the default `latest` dist-tag
+> (`npm i @pollar/core`). This is the promotion of the `0.10.1-rc.*` line
+> (rc.0 -> rc.12); the per-rc detail is preserved in the sections below.
+
+### Highlights (since 0.10.0)
+
+- **Earn - yield vaults + lending.** New `earn` surface in `@pollar/core`
+  (`getEarnProviders` / `getEarnOpportunities` / `getEarnPosition` /
+  `earnDeposit` / `earnWithdraw`) unifies DeFindex vaults and Blend pools behind
+  one provider-selected API; each opportunity carries its live APY. `@pollar/react`
+  ships an `EarnModal` and mirrors the methods on `usePollar()`, with auto-trustline
+  on deposit, wallet-balance display and over-spend guards.
+- **All swap venues executable.** SDEX and Soroswap builds now run end-to-end
+  (`swap()` dispatches on the quote's build shape - a prebuilt XDR goes straight
+  to submit, an operation + params quote runs through `runTx`). At 0.10.0 only
+  Aquarius was wired. Which venues an app offers is driven by its per-app
+  `GET /swap/config`; the `SwapModal` selector enables the available venues and
+  supports pasting a custom buy token (code + issuer).
+- **Account creation for external wallets.** `createAccount()` builds a sponsored
+  `createAccount` (the app sponsor pays the base reserve + fee), the user's own
+  wallet adds the new-account signature, and it broadcasts through the submit
+  path - so a Freighter / client-side Privy wallet that isn't yet on-chain can be
+  funded. The wallet now surfaces `existsOnStellar` + `fundingMode`, and
+  `WalletButton` gains a "Create account" action when applicable.
+- **Sponsored trustlines for external wallets.** `setTrustline` now routes by the
+  asset's `sponsored` flag rather than by wallet type, so external wallets can set
+  app-sponsored trustlines (new `POST /wallet/assets/trustline/build`).
+- **Bridge (SEP-24) ramp maturation.** The `RampWidget` gained Bridge deposit
+  instructions, a ToS step, dynamic required-fields and country lists, a
+  country-first input, email + full-name collection, QR-image + expiry rendering,
+  and copy / explorer affordances on the transaction.
+- **Network derived from the API key.** The SDK no longer sends a `network` field
+  on tx / swap / `GET /swap/config` requests; the backend derives it from the API
+  key. No caller change required.
+- **Async submit + client-side status polling**, a longer per-request timeout for
+  the submit-family calls, and a **modal UI/UX standardization** pass (prefixed
+  every component class, standardized loading indicators, shared `AssetSelect`,
+  copyable address chips, monospace 7-decimal balances).
+
+### `@pollar/core`
+
+- **Earn client methods (Blend + DeFindex).** `getEarnProviders()` returns the
+  yield providers this app exposes (empty = Earn disabled); `getEarnOpportunities(provider)`
+  lists the vaults/pools with live APY; `getEarnPosition(params)` returns the
+  connected wallet's balance + APY and a `withdrawUnit` (asset amount for Blend,
+  share count for DeFindex); `earnDeposit` / `earnWithdraw` build the provider's
+  XDR server-side, then sign + submit through the `runTx` state machine. Smart
+  (passkey) wallets fail fast for now.
+- **`createAccount()`** creates an external wallet's classic account on-chain via a
+  sponsored `createAccount`; not applicable to custodial (server-created) or smart
+  (C-address) wallets.
+- **`existsOnStellar` + `fundingMode` surfaced on the wallet.**
+- **All swap builds executable.** `swap()` dispatches on the quote build union
+  (`invoke_contract | path_payment_strict_send | { unsignedXdr }`); Soroswap XDRs
+  submit as-is, Aquarius/SDEX run through `runTx`.
+- **Sponsored trustlines** - `setTrustline` routes by the `sponsored` flag; new
+  `POST /wallet/assets/trustline/build`.
+- **Async submit + client-side tx status polling**, and a longer per-request
+  timeout for the submit-family calls (they can outlast the default 10s).
+- **`network` dropped from tx / swap / `GET /swap/config` requests** (derived from
+  the API key server-side). Request schema decoupled from the internal type.
+- OpenAPI types regenerated for the new endpoints.
+
+### `@pollar/react`
+
+- **`EarnModal` + `usePollar()` earn methods** (`getEarnProviders`,
+  `getEarnOpportunities`, `getEarnPosition`, `earnDeposit`, `earnWithdraw`,
+  `openEarnModal`). Deposits establish the buy-asset trustline automatically (up to
+  two signatures); the deposit step shows the wallet balance, guards against
+  over-spend, refreshes the balance, and resets tx state when the modal (re)opens.
+- **Swap venues enabled in the `SwapModal` route selector** (SDEX + Soroswap +
+  Aquarius), paste-a-custom-token (code + issuer), a refresh button, and a shared
+  `AssetSelect` used by both the Send and Swap pickers.
+- **`RampWidget` (Bridge) maturation** - Bridge deposit instructions and ToS step,
+  dynamic `requiredFields` in the contact step, dynamic country list with a
+  country-first input, email + full-name collection, QR (`qrBase64`) rendered as an
+  image with `expiresAt` as a date/time, copy / explorer on the tx, select fields,
+  email validation, and retry re-showing the contact step.
+- **"Create account" action in the `WalletButton` dropdown** (shown when the
+  external wallet has no on-chain account yet).
+- **Tx-history polish** - 3-line rows with a copyable hash and issuer, and Stellar
+  addresses rendered as copyable chips.
+- **Wallet-balance modal** - copy buttons, issuer, and monospace 7-decimal balances.
+- **Modal UI/UX standardization** - every component class is now `pollar-`
+  prefixed, loading indicators are standardized (spinner + left-aligned label,
+  moved into the asset selects), and modal headers are consistent (X + reload).
+
+### Upgrade notes
+
+- **Additive, non-breaking on top of 0.10.0.** No API removals; existing call
+  sites keep working. The `network`-field removal is transparent (the backend
+  derives it from the API key).
+
 ## 0.10.1-rc.0
 
 > Release candidate. Published under the `next` dist-tag (`npm i @pollar/core@next`).

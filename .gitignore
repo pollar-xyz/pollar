@@ -3,7 +3,8 @@ dist
 .turbo
 *.tsbuildinfo
 .env
-.env.local
+.env.*
+!.env.example
 
 # IDE
 .idea
