@@ -1,6 +1,8 @@
 // Derived from stellar-wallet-kit by Tushar Pamnani (MIT)
 // https://github.com/tusharpamnani/stellar-wallet-kit
 
+import type { WalletChain } from '../types';
+
 // The `-native` suffix keeps these core built-in adapters from colliding with
 // the Stellar Wallets Kit adapter ids, which use the canonical Stellar product
 // ids `'freighter'` / `'albedo'`. Adapters register into a single registry keyed
@@ -50,6 +52,42 @@ export interface SignAuthEntryResponse {
   signedAuthEntry: string;
 }
 
+// ─── Solana (SIWS) ────────────────────────────────────────────────────────────
+// Structural mirror of the Wallet Standard's `solana:signIn` IO, kept here so
+// `@pollar/core` types the Solana adapter contract WITHOUT depending on
+// `@solana/wallet-standard-features`. `@pollar/solana-wallet-standard-adapter`
+// passes the real types, which are structurally assignable to these.
+
+/** Server-issued Sign In With Solana input. All fields optional per the SIWS spec. */
+export interface SolanaSignInInput {
+  domain?: string;
+  address?: string;
+  statement?: string;
+  uri?: string;
+  version?: string;
+  chainId?: string;
+  nonce?: string;
+  issuedAt?: string;
+  expirationTime?: string;
+  notBefore?: string;
+  requestId?: string;
+  resources?: readonly string[];
+}
+
+/** What the wallet returns after signing a SIWS input: the account + signature. */
+export interface SolanaSignInOutput {
+  account: { address: string; publicKey: Uint8Array };
+  signedMessage: Uint8Array;
+  signature: Uint8Array;
+  signatureType?: 'ed25519';
+}
+
+/** Result of a raw Solana message signature (the SIWS fallback path). */
+export interface SolanaSignMessageResponse {
+  signature: Uint8Array;
+  signedMessage: Uint8Array;
+}
+
 /** UI metadata for the login button auto-rendered per registered adapter. */
 export interface WalletAdapterMeta {
   /** Button label shown in the login UI (e.g. "Freighter", "Privy"). */
@@ -81,12 +119,28 @@ export interface WalletAdapter {
   meta: WalletAdapterMeta;
   /** Where the signing key lives. Defaults to 'external' (client-signed). */
   custody?: 'external' | 'smart';
+  /**
+   * Which chain this adapter authenticates and signs on. Absent means `'STELLAR'`,
+   * so every existing Stellar adapter keeps working unchanged. The login dispatch
+   * branches on this: STELLAR runs the SEP-10 challenge flow, SOLANA runs SIWS.
+   */
+  chain?: WalletChain;
   isAvailable(): Promise<boolean>;
   connect(): Promise<ConnectWalletResponse>;
   disconnect(): Promise<void>;
   getPublicKey(): Promise<string | null>;
-  signTransaction(xdr: string, options?: SignTransactionOptions): Promise<SignTransactionResponse>;
-  signAuthEntry(entryXdr: string, options?: SignAuthEntryOptions): Promise<SignAuthEntryResponse>;
+  // ─── Stellar signing (SEP-10 login + Soroban) ──────────────────────────────
+  // Optional because non-Stellar adapters do not implement them. The Stellar
+  // flows assert their presence (a STELLAR adapter that omits them is a bug).
+  signTransaction?(xdr: string, options?: SignTransactionOptions): Promise<SignTransactionResponse>;
+  signAuthEntry?(entryXdr: string, options?: SignAuthEntryOptions): Promise<SignAuthEntryResponse>;
+  // ─── Solana signing (SIWS login + phase-2 transfers) ───────────────────────
+  /** SIWS: sign the server-issued Sign In With Solana input. Solana adapters only. */
+  signIn?(input: SolanaSignInInput): Promise<SolanaSignInOutput>;
+  /** Raw message signature — the SIWS fallback for wallets without `solana:signIn`. */
+  signMessage?(message: Uint8Array): Promise<SolanaSignMessageResponse>;
+  /** Sign a serialized Solana transaction (phase 2: sponsored external transfers). */
+  signSolanaTransaction?(transaction: Uint8Array, chain?: string): Promise<Uint8Array>;
 }
 
 /** A single login option an {@link InteractiveAuthAdapter} can render. */

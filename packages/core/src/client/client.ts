@@ -1908,6 +1908,11 @@ export class PollarClient {
       const signOpts = accountToSign
         ? { networkPassphrase: this._networkPassphrase(), accountToSign }
         : { networkPassphrase: this._networkPassphrase() };
+      // Stellar XDR signing. A non-Stellar adapter never reaches the /tx pipeline
+      // (Solana uses the atomic transfer), so a missing method is a bug, not flow.
+      if (!this._walletAdapter.signTransaction) {
+        throw new Error(`[PollarClient] wallet adapter "${this._walletAdapter.type}" cannot sign a Stellar transaction`);
+      }
       try {
         const { signedTxXdr } = await this._walletAdapter.signTransaction(unsignedXdr, signOpts);
         this._setTransactionState({
@@ -1993,6 +1998,11 @@ export class PollarClient {
     // hijack signing — consistent with the type-first signing paths.
     if (this._walletAdapter && this._session?.wallet?.type !== 'smart') {
       const accountToSign = this._session?.wallet?.address;
+      // Soroban auth-entry signing is Stellar-only; a non-Stellar adapter never
+      // reaches this path.
+      if (!this._walletAdapter.signAuthEntry) {
+        throw new Error(`[PollarClient] wallet adapter "${this._walletAdapter.type}" cannot sign a Soroban auth entry`);
+      }
       try {
         const { signedAuthEntry } = await this._walletAdapter.signAuthEntry(entryXdr, {
           // Pass the CURRENT network (like signTx) so an external adapter signs

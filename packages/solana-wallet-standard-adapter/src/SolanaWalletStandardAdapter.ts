@@ -1,11 +1,18 @@
-import type { ConnectWalletResponse, WalletAdapterMeta, WalletChain, WalletId } from '@pollar/core';
+import type {
+  ConnectWalletResponse,
+  SolanaSignInInput,
+  SolanaSignInOutput,
+  SolanaSignMessageResponse,
+  WalletAdapter,
+  WalletAdapterMeta,
+  WalletChain,
+  WalletId,
+} from '@pollar/core';
 import {
   SolanaSignIn,
   SolanaSignMessage,
   SolanaSignTransaction,
   type SolanaSignInFeature,
-  type SolanaSignInInput,
-  type SolanaSignInOutput,
   type SolanaSignMessageFeature,
   type SolanaSignTransactionFeature,
 } from '@solana/wallet-standard-features';
@@ -36,7 +43,7 @@ function isSolanaChain(chain: string): boolean {
  * `@pollar/core` grows a chain-aware adapter contract (see the design doc) this
  * slots into `PollarClientConfig.walletAdapters`.
  */
-export class SolanaWalletStandardAdapter {
+export class SolanaWalletStandardAdapter implements WalletAdapter {
   readonly type: WalletId;
   readonly meta: WalletAdapterMeta;
   readonly custody = 'external' as const;
@@ -103,17 +110,25 @@ export class SolanaWalletStandardAdapter {
     const [output] = await feature.signIn(input);
     if (!output) throw new Error(`[SolanaWalletStandardAdapter] "${this.type}" returned no SIWS output`);
     this._account = output.account;
-    return output;
+    // The Wallet Standard hands back readonly byte views; copy into real
+    // Uint8Arrays so `@pollar/core` (which base64-encodes them for the server)
+    // gets mutable, standard arrays.
+    return {
+      account: { address: output.account.address, publicKey: Uint8Array.from(output.account.publicKey) },
+      signedMessage: Uint8Array.from(output.signedMessage),
+      signature: Uint8Array.from(output.signature),
+      ...(output.signatureType ? { signatureType: output.signatureType } : {}),
+    };
   }
 
   /** Raw message signing — the SIWS fallback for wallets without `solana:signIn`. */
-  async signMessage(message: Uint8Array): Promise<{ signature: Uint8Array; signedMessage: Uint8Array }> {
+  async signMessage(message: Uint8Array): Promise<SolanaSignMessageResponse> {
     const account = this._requireAccount();
     const feature = this._wallet.features[SolanaSignMessage] as SolanaSignMessageFeature[typeof SolanaSignMessage] | undefined;
     if (!feature) throw new Error(`[SolanaWalletStandardAdapter] "${this.type}" does not support solana:signMessage`);
     const [output] = await feature.signMessage({ account, message });
     if (!output) throw new Error(`[SolanaWalletStandardAdapter] "${this.type}" returned no signature`);
-    return { signature: output.signature, signedMessage: output.signedMessage };
+    return { signature: Uint8Array.from(output.signature), signedMessage: Uint8Array.from(output.signedMessage) };
   }
 
   /**
@@ -121,15 +136,16 @@ export class SolanaWalletStandardAdapter {
    * transfers), where Pollar builds a durable-nonce transfer whose fee payer is
    * the app GAS wallet and the user signs their part here.
    */
-  async signTransaction(transaction: Uint8Array, chain?: SolanaChainId): Promise<Uint8Array> {
+  async signSolanaTransaction(transaction: Uint8Array, chain?: string): Promise<Uint8Array> {
     const account = this._requireAccount();
     const feature = this._wallet.features[SolanaSignTransaction] as
       | SolanaSignTransactionFeature[typeof SolanaSignTransaction]
       | undefined;
     if (!feature) throw new Error(`[SolanaWalletStandardAdapter] "${this.type}" does not support solana:signTransaction`);
-    const [output] = await feature.signTransaction({ account, transaction, ...(chain ? { chain } : {}) });
+    const solanaChain = chain && chain.startsWith('solana:') ? (chain as SolanaChainId) : undefined;
+    const [output] = await feature.signTransaction({ account, transaction, ...(solanaChain ? { chain: solanaChain } : {}) });
     if (!output) throw new Error(`[SolanaWalletStandardAdapter] "${this.type}" returned no signed transaction`);
-    return output.signedTransaction;
+    return Uint8Array.from(output.signedTransaction);
   }
 
   private _requireAccount(): WalletAccount {
