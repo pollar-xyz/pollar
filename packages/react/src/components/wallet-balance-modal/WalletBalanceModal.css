@@ -53,10 +53,31 @@
   min-width: 0;
 }
 
+.pollar-bal-asset-code-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+}
+
 .pollar-bal-asset {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--pollar-text);
+}
+
+/* Per-asset network tag, shown only when the app spans more than one chain. The
+   accent is passed in per chain via --pollar-chain-color. */
+.pollar-bal-chain-tag {
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.1875rem 0.375rem;
+  border-radius: 4px;
+  color: var(--pollar-chain-color, var(--pollar-muted));
+  background: color-mix(in srgb, var(--pollar-chain-color, #6b7280) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pollar-chain-color, #6b7280) 34%, transparent);
 }
 
 .pollar-bal-issuer {

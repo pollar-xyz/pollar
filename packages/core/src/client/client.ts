@@ -83,7 +83,9 @@ import {
   TxHistoryState,
   TxSignAndSendBody,
   WalletBalanceContent,
+  WalletBalanceRecord,
   WalletBalanceState,
+  WalletChain,
   WalletInfo,
 } from '../types';
 import { POLLAR_CORE_VERSION } from '../version';
@@ -276,7 +278,11 @@ export class PollarClient {
   constructor(config: PollarClientConfig) {
     this.apiKey = config.apiKey;
     this.id = randomUUID();
-    this.basePath = `${config.baseUrl || 'https://sdk.api.pollar.xyz'}/v1`;
+    // v2 is the multichain SDK surface. It is a superset of v1 — every v1 route is
+    // re-exposed unchanged, with a `chain` discriminator added where a feature went
+    // multichain (today: wallet balance/tokens/transfer). So the whole client rides
+    // /v2 and only the shapes that actually changed are handled specially.
+    this.basePath = `${config.baseUrl || 'https://sdk.api.pollar.xyz'}/v2`;
     this._log = createLogger(config.logLevel ?? 'info', config.logger);
 
     this._storage =
@@ -686,11 +692,11 @@ export class PollarClient {
     });
   }
 
-  /** Strips origin + `/v1` version prefix from a request URL for compact logs. */
+  /** Strips origin + the `/vN` version prefix from a request URL for compact logs. */
   private _httpPath(url: string): string {
     try {
       const { pathname } = new URL(url);
-      return pathname.startsWith('/v1/') ? pathname.slice(3) : pathname;
+      return /^\/v\d+\//.test(pathname) ? pathname.slice(pathname.indexOf('/', 1)) : pathname;
     } catch {
       return url;
     }
@@ -1460,7 +1466,12 @@ export class PollarClient {
       const { data, error } = await this._api.GET('/wallet/balance');
       if (gen !== this._walletBalanceGen) return; // a newer refresh superseded this one
       if (!error && data?.success && data.content) {
-        this._setWalletBalanceState({ step: 'loaded', data: data.content });
+        // v2 returns one entry per chain the app is provisioned on; flatten into a
+        // single asset list tagged with each asset's chain (see _flattenBalances).
+        this._setWalletBalanceState({
+          step: 'loaded',
+          data: this._flattenBalances(data.content, this._session?.wallet?.address ?? ''),
+        });
       } else {
         this._setWalletBalanceState({ step: 'error', message: 'Failed to load balance' });
       }
@@ -1468,6 +1479,62 @@ export class PollarClient {
       if (gen !== this._walletBalanceGen) return;
       this._setWalletBalanceState({ step: 'error', message: 'Failed to load balance' });
     }
+  }
+
+  /**
+   * Collapses the v2 multichain balance (`{ balances: [{ chain, ... }] }`) into the
+   * flat, chain-tagged {@link WalletBalanceContent} the UI consumes. Stellar carries
+   * its full asset list; other chains report only their native token (SOL, POL) for
+   * now. `multichain` is set when more than one chain came back — the modal uses it
+   * to decide whether to show a per-asset network tag.
+   */
+  private _flattenBalances(content: unknown, ownAddress: string): WalletBalanceContent {
+    const chains = (content as { balances?: unknown[] })?.balances ?? [];
+    const flat: WalletBalanceRecord[] = [];
+    let exists = false;
+    let network = this.getNetwork() as string;
+
+    for (const entry of chains as Array<Record<string, unknown>>) {
+      const chain = entry.chain as WalletChain | undefined;
+      if (chain === 'STELLAR') {
+        if (entry.exists) exists = true;
+        if (typeof entry.network === 'string') network = entry.network;
+        for (const b of (entry.balances as Array<Record<string, unknown>>) ?? []) {
+          flat.push({
+            chain: 'STELLAR',
+            ...(typeof b.type === 'string'
+              ? { type: b.type as 'native' | 'credit_alphanum4' | 'credit_alphanum12' }
+              : {}),
+            code: String(b.code ?? ''),
+            ...(typeof b.issuer === 'string' ? { issuer: b.issuer } : {}),
+            balance: String(b.balance ?? '0'),
+            available: String(b.available ?? b.balance ?? '0'),
+            ...(typeof b.enabledInApp === 'boolean' ? { enabledInApp: b.enabledInApp } : {}),
+            ...(typeof b.trustlineRemoved === 'boolean' ? { trustlineRemoved: b.trustlineRemoved } : {}),
+          });
+        }
+      } else if (chain === 'POLYGON' || chain === 'SOLANA') {
+        // Non-Stellar chains report only the native token from /balance for now.
+        const native = entry.native as { formatted?: string; symbol?: string } | null | undefined;
+        if (native?.symbol) {
+          exists = true;
+          flat.push({
+            chain,
+            code: native.symbol,
+            balance: String(native.formatted ?? '0'),
+            available: String(native.formatted ?? '0'),
+          });
+        }
+      }
+    }
+
+    return {
+      publicKey: ownAddress,
+      network,
+      exists,
+      multichain: chains.length > 1,
+      balances: flat,
+    };
   }
 
   /**

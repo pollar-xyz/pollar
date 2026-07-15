@@ -122,8 +122,13 @@ export function SwapModal({ onClose }: SwapModalProps) {
   // Sell: native XLM + every asset the wallet has a trustline for, even at a 0
   // balance — so the user always sees what they hold and knows when to fund
   // (the amount field guards against overselling). Buy: app-enabled assets.
+  // Swap is Stellar-only, so drop any non-Stellar balance (SOL/POL carry no
+  // `type`) — the guard both filters them and narrows `type` for toRef().
   const sellOptions: SwapAssetOption[] = balances
-    .filter((b) => b.type === 'native' || !b.trustlineRemoved)
+    .filter(
+      (b): b is typeof b & { type: 'native' | 'credit_alphanum4' | 'credit_alphanum12' } =>
+        b.type != null && (b.type === 'native' || !b.trustlineRemoved),
+    )
     .map((b) => ({ ref: toRef(b), code: b.code, issuer: b.issuer, available: b.available, enabledInApp: b.enabledInApp }));
 
   const buyKeyOfSell = selectedSell ? `${selectedSell.code}:${selectedSell.issuer ?? 'native'}` : '';

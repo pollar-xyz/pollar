@@ -642,9 +642,43 @@ export interface PollarRetryConfig {
 
 // ─── Wallet balance types ─────────────────────────────────────────────────────
 
-export type WalletBalanceContent =
-  pollarPaths['/wallet/balance']['get']['responses'][200]['content']['application/json']['content'];
-export type WalletBalanceRecord = WalletBalanceContent['balances'][number];
+/** A chain a wallet can live on. Mirrors the platform's WalletNetwork enum. */
+export type WalletChain = 'STELLAR' | 'POLYGON' | 'SOLANA';
+
+/**
+ * One asset the wallet holds, tagged with the chain it lives on. `chain` is
+ * populated on the multichain own-wallet balance (`GET /v2/wallet/balance`); the
+ * single-wallet lookup (`GET /v2/wallet/{publicKey}/balance`, Stellar-only) omits
+ * it. On non-Stellar chains only the native token (SOL, POL) is reported for now,
+ * so `issuer`/`type`/trustline fields are Stellar-only.
+ */
+export interface WalletBalanceRecord {
+  chain?: WalletChain;
+  type?: 'native' | 'credit_alphanum4' | 'credit_alphanum12';
+  code: string;
+  issuer?: string;
+  balance: string;
+  available: string;
+  limit?: string;
+  enabledInApp?: boolean;
+  trustlineRemoved?: boolean;
+}
+
+/**
+ * The authenticated user's balances. v2 is multichain: `balances` is the flat
+ * list of assets across every chain the app is provisioned on, each tagged with
+ * its `chain`. `multichain` is true when more than one chain is present, which is
+ * the signal the UI uses to show a per-asset network tag. `exists` is true when
+ * any chain holds an account/balance; `network` / `publicKey` reflect the Stellar
+ * wallet (the primary chain).
+ */
+export interface WalletBalanceContent {
+  publicKey: string;
+  network: string;
+  exists: boolean;
+  multichain?: boolean;
+  balances: WalletBalanceRecord[];
+}
 
 export type WalletBalanceState =
   | { step: 'idle' }
