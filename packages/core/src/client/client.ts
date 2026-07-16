@@ -1904,7 +1904,7 @@ export class PollarClient {
     return null;
   }
 
-  async signTx(unsignedXdr: string): Promise<SignOutcome> {
+  async signTx(unsignedXdr: string, options?: { skipSponsorship?: boolean }): Promise<SignOutcome> {
     this._txStartGen = this._sessionGeneration;
     const noSigner = this._externalSignerMissing();
     if (noSigner) return noSigner;
@@ -1952,21 +1952,24 @@ export class PollarClient {
       }
     }
 
-    // Custodial path: backend signs and returns the XDR + idempotencyKey.
+    // Custodial path: backend signs and returns the XDR + idempotencyKey. By
+    // default the backend also applies sponsorship (per the app's dashboard
+    // config), returning a fee-bumped envelope the caller can broadcast directly
+    // — the app pays the fee. Pass `skipSponsorship` to force the user to pay.
     const address = this._session?.wallet?.address ?? '';
     try {
       const { data, error } = await this._api.POST('/tx/sign', {
-        body: { address, unsignedXdr },
+        body: { address, unsignedXdr, ...(options?.skipSponsorship && { skipSponsorship: true }) },
       });
       if (!error && data?.success && data.content?.signedXdr) {
-        const { signedXdr, idempotencyKey } = data.content;
+        const { signedXdr, idempotencyKey, sponsored } = data.content;
         this._setTransactionState({
           step: 'signed',
           signedXdr,
           submissionToken: idempotencyKey,
           ...(buildData && { buildData }),
         });
-        return { status: 'signed', signedXdr, submissionToken: idempotencyKey };
+        return { status: 'signed', signedXdr, submissionToken: idempotencyKey, sponsored };
       }
       const { details, code, message } = this._resolveTxApiError(error, data);
       this._setTransactionState({

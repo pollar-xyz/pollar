@@ -3509,6 +3509,8 @@ export interface operations {
                     address?: string;
                     unsignedXdr: string;
                     idempotencyKey?: string;
+                    /** @description Opt out of sponsorship. Default follows the app's dashboard config; set true to force the user to pay their own fee. */
+                    skipSponsorship?: boolean;
                 };
             };
         };
@@ -3527,6 +3529,8 @@ export interface operations {
                         content: {
                             signedXdr: string;
                             idempotencyKey: string;
+                            /** @description True when signedXdr is a sponsor-paid fee bump (the app pays the fee). */
+                            sponsored: boolean;
                         };
                     };
                 };

@@ -483,7 +483,7 @@ export type TxErrorPhase = 'building' | 'signing' | 'submitting' | 'signing-subm
 export type BuildOutcome = { status: 'built'; buildData: TxBuildContent } | { status: 'error'; details?: string };
 
 export type SignOutcome =
-  | { status: 'signed'; signedXdr: string; submissionToken?: string; expiresAt?: number }
+  | { status: 'signed'; signedXdr: string; submissionToken?: string; expiresAt?: number; sponsored?: boolean }
   | { status: 'error'; details?: string; code?: string; message?: string };
 
 /**
