@@ -24,19 +24,13 @@ function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
  * counterpart of {@link loginWithAdapter} (which is SEP-10, Stellar). Solana has no
  * challenge TRANSACTION (its signature binds an expiring blockhash), so the server
  * issues a SIWS INPUT, the wallet signs the rendered message (`solana:signIn`), and
- * the server verifies the ed25519 signature. The two new endpoints
- * (`/auth/wallet/solana/challenge` and `/auth/wallet/solana`) are not in the typed
- * openapi paths yet, so this uses a loosely-typed view of the same api client (it
- * still runs the DPoP / auth / retry middleware).
+ * the server verifies the ed25519 signature. Both endpoints
+ * (`/auth/wallet/solana/challenge` and `/auth/wallet/solana`) are part of the typed
+ * openapi paths, so the shared api client is used directly (it runs the DPoP / auth
+ * / retry middleware on both).
  */
 export async function loginWithSolanaAdapter(adapter: WalletAdapter, deps: FlowDeps): Promise<void> {
-  const { logger, signal, setAuthState } = deps;
-  const api = deps.api as unknown as {
-    POST(
-      path: string,
-      init: { body?: unknown; signal?: AbortSignal },
-    ): Promise<{ data?: { success?: boolean; content?: { input?: unknown } }; error?: unknown }>;
-  };
+  const { api, logger, signal, setAuthState } = deps;
   const type = adapter.type;
 
   let connectedWallet: string;
@@ -93,7 +87,7 @@ export async function loginWithSolanaAdapter(adapter: WalletAdapter, deps: FlowD
     }
 
     // 2. The wallet renders + signs the SIWS message.
-    const output = await withSignal(adapter.signIn(input as Parameters<NonNullable<WalletAdapter['signIn']>>[0]), signal);
+    const output = await withSignal(adapter.signIn(input), signal);
 
     currentStep = 'authenticating_wallet';
     setAuthState({ step: 'authenticating_wallet' });

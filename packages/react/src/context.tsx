@@ -50,7 +50,7 @@ import { browserPasskeyCeremony, browserPasskeySigner } from './lib/passkey-cere
 import type { PollarConfig, PollarStyles } from './types';
 
 const DEFAULT_APP_CONFIG: PollarConfig = {
-  application: { name: '' },
+  application: { name: '', network: 'testnet', chains: [] },
   styles: {},
 };
 
