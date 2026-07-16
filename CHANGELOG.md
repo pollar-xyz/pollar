@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.1-rc.0
+
+> Release candidate. Published under the `next` dist-tag
+> (`npm i @pollar/core@next`). Opens the 0.11.1 cycle on top of 0.11.0.
+
+### Highlights (since 0.11.0)
+
+- _None yet._
+
 ## 0.11.0
 
 > Stable release. Published under the default `latest` dist-tag
