@@ -103,6 +103,15 @@ interface PollarContextValue {
   openSessionsModal: () => void;
   appConfig: PollarConfig;
   styles: PollarStyles;
+  /** Remote app-config load state. 'loading' while the initial fetch is in
+   *  flight, 'error' if it failed (styles fall back to empty defaults), 'ready'
+   *  once resolved — or immediately 'ready' when `appConfig` is passed as a prop.
+   *  The login modal shows a spinner/retry instead of an empty shell until this
+   *  is 'ready'. */
+  configStatus: 'loading' | 'ready' | 'error';
+  /** Re-run the remote app-config fetch after an error. No-op when `appConfig`
+   *  was supplied as a prop. */
+  retryConfig: () => void;
   // transactions
   openTxModal: () => void;
   tx: TransactionState;
@@ -311,6 +320,11 @@ export function PollarProvider({
   const [walletBalance, setWalletBalance] = useState<WalletBalanceState>({ step: 'idle' });
   const [enabledAssets, setEnabledAssets] = useState<EnabledAssetsState>({ step: 'idle' });
   const [resolvedConfig, setResolvedConfig] = useState<PollarConfig>(() => appConfigProp ?? DEFAULT_APP_CONFIG);
+  const [configStatus, setConfigStatus] = useState<'loading' | 'ready' | 'error'>(
+    appConfigProp !== undefined ? 'ready' : 'loading',
+  );
+  const [configRetry, setConfigRetry] = useState(0);
+  const retryConfig = useCallback(() => setConfigRetry((n) => n + 1), []);
 
   useEffect(() => {
     return pollarClient.onTransactionStateChange(setTransaction);
@@ -399,21 +413,33 @@ export function PollarProvider({
   }, [pollarClient]);
 
   useEffect(() => {
-    if (appConfigProp !== undefined) return;
+    // A consumer-supplied appConfig opts out of the remote fetch; it's ready as-is.
+    if (appConfigProp !== undefined) {
+      setConfigStatus('ready');
+      return;
+    }
     let cancelled = false;
+    setConfigStatus('loading');
     pollarClient
       .getAppConfig()
       .then((fetched) => {
-        if (cancelled || !fetched) return;
+        if (cancelled) return;
+        if (!fetched) {
+          setConfigStatus('error');
+          return;
+        }
         setResolvedConfig(fetched as PollarConfig);
+        setConfigStatus('ready');
       })
       .catch((err) => {
+        if (cancelled) return;
         pollarClient.getLogger().error('[PollarProvider] getAppConfig failed', err);
+        setConfigStatus('error');
       });
     return () => {
       cancelled = true;
     };
-  }, [pollarClient, appConfigProp]);
+  }, [pollarClient, appConfigProp, configRetry]);
 
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [transactionModalOpen, setTransactionModalOpen] = useState(false);
@@ -534,6 +560,8 @@ export function PollarProvider({
       // config
       appConfig: resolvedConfig,
       styles,
+      configStatus,
+      retryConfig,
       adapters,
     } as PollarContextValue;
   }, [
@@ -550,6 +578,8 @@ export function PollarProvider({
     refreshAssets,
     networkState,
     resolvedConfig,
+    configStatus,
+    retryConfig,
     adapters,
   ]);
 
