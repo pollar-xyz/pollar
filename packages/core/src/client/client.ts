@@ -1273,6 +1273,23 @@ export class PollarClient {
       }
     }
 
+    // Tear down the active wallet adapter's own provider session (e.g. Privy)
+    // on an explicit logout. `_clearSession()` only drops the in-memory adapter
+    // reference; without this, the provider session persists across a reload and
+    // the auto-login effect in `@pollar/react` (which subscribes to
+    // `onProviderAuthChange`) silently re-authenticates the user. Only done here,
+    // in the user-initiated logout path — not inside `_clearSession()`, which
+    // also runs on transient refresh/resume failures where the provider session
+    // must survive. Best-effort: a disconnect failure must not block the clear.
+    const adapter = this._walletAdapter;
+    if (adapter) {
+      try {
+        await adapter.disconnect();
+      } catch (err) {
+        this._log.warn('[PollarClient] Wallet adapter disconnect during logout failed', err);
+      }
+    }
+
     try {
       await this._clearSession();
     } catch (err) {
