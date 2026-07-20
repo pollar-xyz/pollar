@@ -1,5 +1,67 @@
 # Changelog
 
+## Unreleased
+
+> Headline: **Solana custodial wallets can send.** The atomic tx endpoint became
+> multichain, and the Send / Receive modals gained the network picker the
+> balance and asset modals already had.
+
+### `@pollar/core` — BREAKING (types only)
+
+- **`TxBuildSignSubmitBody` and `TxBuildSignSubmitContent` are now unions.**
+  `POST /v2/tx/build-sign-submit` accepts a `chain` (absent = `STELLAR`) and
+  answers with a per-chain shape, so both generated types gained a non-Stellar
+  member. Any code that reads a Stellar-only field off them — `resultCode`,
+  `estimatedFee`, `options`, the `operation` union — must narrow first:
+
+  ```ts
+  const resultCode = 'resultCode' in content ? content.resultCode : undefined;
+  ```
+
+  Worth calling out because it does not look like a breaking change from the
+  API side: nothing was removed, and the request stays backward-compatible
+  (omit `chain` and the endpoint behaves exactly as before). But adding a member
+  to a union removes guarantees from whoever reads it. This bit the SDK's own
+  `buildAndSignAndSubmitTx`, which is how it was found.
+
+  No runtime behaviour changed, and nothing under `/v1` is affected.
+
+### `@pollar/core`
+
+- New `sendPayment(params)` — one entry point for sending on any chain the user
+  holds a wallet on. Stellar routes through `buildAndSignAndSubmitTx`, so
+  external adapters and passkey wallets keep the split build → sign → submit
+  flow; chains whose signature expires (a Solana blockhash lapses in ~60s) do
+  the whole thing in one server-side call and are **custodial-only** for now.
+  An `idempotencyKey` is minted per call, because a Solana submit is a single
+  non-idempotent shot and a transport retry would otherwise transfer twice.
+- New `toBaseUnits(amount, decimals)` / `fromBaseUnits(base, decimals)`.
+  Balances are reported formatted (`"1.5"`) while base-unit chains take integer
+  amounts (`1500000000` lamports), so anything sending to those chains must
+  convert. The arithmetic is string + `BigInt`, never float —
+  `parseFloat('0.1') * 1e9` is `100000000.00000001`, and at 18 decimals a float
+  cannot represent the value at all. More fractional digits than the asset has
+  is an error, not a silent truncation, which would send less than was typed.
+- New exported type `SendPaymentParams`.
+- `getWallets()` is surfaced through `@pollar/react`'s context (see below).
+
+### `@pollar/react`
+
+- `wallets` (one `WalletInfo` per chain) is on the Pollar context, backing every
+  network picker.
+- `SendModal` and `ReceiveModal` gained the network picker. The address, assets
+  and balances all scope to the selected chain, and Send converts the amount on
+  base-unit chains and links to that chain's explorer. Polygon is still blocked
+  in Send — the backend has no transfer path for it yet.
+- `ChainSelect` hides itself when the user holds a wallet on only one chain, so
+  a Stellar-only app sees no new control.
+- The Assets modal's trustline status pill and Enable/Disable button collapsed
+  into a single `Toggle`. Native XLM renders as a locked-on switch: its
+  trustline is implicit and cannot be removed.
+- Refreshing the Balance and Assets modals no longer blanks the list. The
+  previous data stays rendered under a `BusyOverlay` that blocks interaction,
+  instead of the list collapsing and reflowing on every refresh.
+
 ## 0.11.1
 
 > Stable release. Published under the default `latest` dist-tag
