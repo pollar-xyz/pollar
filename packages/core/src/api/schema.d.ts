@@ -32,7 +32,7 @@ export interface paths {
         put?: never;
         /**
          * Build an unsigned Stellar transaction
-         * @description Stellar only. Returns an unsigned XDR to sign and submit via /v2/tx/submit. Other chains: /v2/wallet/transfer.
+         * @description Stellar only. Returns an unsigned XDR to sign and submit via /v2/tx/submit. Other chains: /v2/tx/build-sign-submit.
          */
         post: operations["postTxBuild"];
         delete?: never;
@@ -118,7 +118,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Atomic build + sign + submit (Stellar, one round-trip) */
+        /**
+         * Atomic build + sign + submit (multichain, one round-trip)
+         * @description Custodial wallets only. `chain` defaults to STELLAR, which behaves exactly as v1. SOLANA takes an SPL/SOL transfer with integer base-unit amounts and a required idempotencyKey.
+         */
         post: operations["postTxBuildSignSubmit"];
         delete?: never;
         options?: never;
@@ -209,7 +212,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Send a transfer on a chain */
+        /**
+         * Send a transfer on a chain (deprecated)
+         * @deprecated
+         * @description Deprecated. Use POST /v2/tx/build-sign-submit, which is multichain and records the tx.
+         */
         post: operations["postWalletTransfer"];
         delete?: never;
         options?: never;
@@ -1942,6 +1949,18 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @constant */
+                    chain: "SOLANA";
+                    /** @constant */
+                    operation: "payment";
+                    params: {
+                        destination: string;
+                        amount: string;
+                        mint?: string | null;
+                    };
+                    idempotencyKey: string;
+                    waitForConfirmation?: boolean;
+                } | ({
                     publicKey?: string;
                     address?: string;
                     options?: {
@@ -2141,11 +2160,11 @@ export interface operations {
                 }) & {
                     idempotencyKey?: string;
                     waitForConfirmation?: boolean;
-                };
+                });
             };
         };
         responses: {
-            /** @description Submit result */
+            /** @description Submit result. Stellar carries `estimatedFee`; non-Stellar carries `sponsored`. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2169,6 +2188,17 @@ export interface operations {
                                 fee: string;
                             };
                             estimatedFee: string;
+                        } | {
+                            hash: string;
+                            /** @enum {string} */
+                            status: "PENDING" | "SUCCESS" | "FAILED";
+                            summary: {
+                                title: string;
+                                lines: string[];
+                                network: string;
+                                fee: string;
+                            };
+                            sponsored: boolean;
                         };
                     };
                 };
@@ -2190,6 +2220,21 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
