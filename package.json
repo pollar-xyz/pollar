@@ -1,6 +1,6 @@
 {
   "name": "polar-auth-monorepo",
-  "version": "0.11.1-rc.0",
+  "version": "0.11.1",
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
@@ -12,7 +12,7 @@
     "privy-adapter:publish": "cd packages/privy-adapter && npm publish --access public",
     "react:publish": "cd packages/react && npm publish --access public",
     "stellar-wallets-kit-adapter:publish": "cd packages/stellar-wallets-kit-adapter && npm publish --access public",
-    "core:update-openapi": "curl -k https://sdk.api.local.pollar.xyz/openapi.json -o /tmp/openapi.json && npx openapi-typescript /tmp/openapi.json -o ./packages/core/src/api/schema.d.ts",
+    "core:update-openapi": "curl -k https://sdk.api.local.pollar.xyz/openapi.v2.json -o /tmp/openapi.json && npx openapi-typescript /tmp/openapi.json -o ./packages/core/src/api/schema.d.ts",
     "test:smoke": "node tests/smoke-keys.cjs && node tests/smoke-client.cjs && node tests/smoke-providers.cjs && node tests/smoke-session-races.cjs"
   },
   "devDependencies": {

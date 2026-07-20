@@ -174,8 +174,13 @@ export function EarnModal({ onClose }: EarnModalProps) {
   // needed, the deposit runs as two signatures: trustline, then deposit.
   const depositAssetRecord = (() => {
     if (!selectedOpportunity?.asset.issuer || enabledAssets.step !== 'loaded') return undefined;
+    // Stellar-only: the catalog is multichain now, and Earn (DeFindex/Blend)
+    // settles on Stellar. Chain is undefined on the v1 shape, so absent = Stellar.
     return enabledAssets.data.assets.find(
-      (a) => a.code === assetCode && a.issuer === selectedOpportunity.asset.issuer,
+      (a) =>
+        (a.chain === undefined || a.chain === 'STELLAR') &&
+        a.code === assetCode &&
+        a.issuer === selectedOpportunity.asset.issuer,
     );
   })();
   const depositNeedsTrustline =

@@ -1,8 +1,9 @@
 'use client';
 
-import { EnabledAssetRecord } from '@pollar/core';
-import { useCallback, useEffect, useState } from 'react';
+import { EnabledAssetRecord, WalletChain } from '@pollar/core';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePollar } from '../../context';
+import { addressForChain, chainsOf } from '../ChainSelect';
 import '../shared.css';
 import './EnabledAssetsModal.css';
 import { CustomTrustlineModalTemplate, EnabledAssetsModalTemplate } from './EnabledAssetsModalTemplate';
@@ -16,9 +17,18 @@ function assetKey(record: { code: string; issuer?: string }): string {
 }
 
 export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
-  const { enabledAssets, refreshAssets, setTrustline, wallet, styles } = usePollar();
-  const walletAddress = wallet?.address ?? '';
+  const { enabledAssets, refreshAssets, setTrustline, wallets, styles } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
+
+  const chains = useMemo(() => chainsOf(wallets), [wallets]);
+  const [selectedChain, setSelectedChain] = useState<WalletChain | null>(null);
+  // Default to the first network the user holds a wallet on. Runs as an effect
+  // because `wallets` is empty on the first render of a cold-start session.
+  useEffect(() => {
+    if (selectedChain === null && chains.length > 0) setSelectedChain(chains[0]!);
+  }, [chains, selectedChain]);
+
+  const walletAddress = addressForChain(wallets, selectedChain);
 
   const [view, setView] = useState<'list' | 'custom'>('list');
   // Key of the in-flight asset (`code+issuer`), or 'custom' for the custom form.
@@ -83,6 +93,9 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
           accentColor={accentColor}
           enabledAssets={enabledAssets}
           walletAddress={walletAddress}
+          chains={chains}
+          selectedChain={selectedChain}
+          onSelectChain={setSelectedChain}
           busyKey={busyKey}
           actionError={actionError}
           onRefresh={() => refreshAssets()}

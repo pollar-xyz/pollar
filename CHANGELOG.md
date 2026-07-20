@@ -1,13 +1,55 @@
 # Changelog
 
-## 0.11.1-rc.0
+## 0.11.1
 
-> Release candidate. Published under the `next` dist-tag
-> (`npm i @pollar/core@next`). Opens the 0.11.1 cycle on top of 0.11.0.
+> Stable release. Published under the default `latest` dist-tag
+> (`npm i @pollar/core`). This is the promotion of the `0.11.1-rc.*` line
+> (rc.0 -> rc.3) plus the per-chain wallet rework.
 
 ### Highlights (since 0.11.0)
 
-- _None yet._
+- **Every chain reports a full asset list.** The v2 wallet responses moved to a
+  `chains` envelope, and each chain now returns its native coin plus every token
+  the app enabled - so one loop handles Stellar, Polygon and Solana alike. At
+  0.11.0 the non-Stellar chains reported only their native token. Balances gained
+  `decimals`, `limit` and `sponsored`.
+- **A chain that fails to resolve no longer reads as empty.** A chain carrying
+  `error` contributes nothing to the flattened list, and an unreadable balance
+  stays `null` instead of being coerced to `'0'`, so the UI can tell
+  "unavailable" from "zero". `WalletBalanceRecord.balance` is therefore
+  `string | null`.
+- **Network picker across the asset modals.** New `ChainSelect` in
+  `@pollar/react`; the wallet-balance and enabled-assets modals filter by the
+  selected network locally (the backend returns every chain in one payload, so
+  switching networks costs no request).
+- **`skipSponsorship` on `signTx`** and a **login modal that surfaces
+  loading / error state** when the app config fails to load.
+
+### `@pollar/core`
+
+- `GET /v2/wallet/balance` and `GET /v2/wallet/assets` are read through the
+  `chains` envelope (`_flattenBalances` / new `_flattenAssets`), both collapsing
+  the per-chain answer into one chain-tagged list. Only Stellar restates the
+  session `network`; the other chains ride the same testnet/mainnet choice.
+- `WalletBalanceRecord.balance` and `.available` are now `string | null`
+  (`null` = the chain could not be read). Callers that parse the balance need a
+  null check.
+- New exported types: `WalletAssetsContent`, `EnabledAssetRecord`,
+  `PollarPersistedWallet`.
+- `signTx` accepts `skipSponsorship`.
+- Solana wallet endpoints added to the OpenAPI schema and wired into the client.
+- The wallet adapter is disconnected on explicit logout.
+
+### `@pollar/react`
+
+- New `ChainSelect` component; `WalletBalanceModal` and `EnabledAssetsModal`
+  render a network picker and scope their rows to the selected chain. Row keys
+  are chain-qualified, since the same code + issuer can exist on two chains.
+- Balances format against each token's own `decimals` (Stellar keeps 7), and a
+  `null` balance renders as a dash rather than `0`.
+- Stellar-only affordances (trustlines) are gated on the selected chain being
+  Stellar.
+- The login modal shows loading / error state when the app config request fails.
 
 ## 0.11.0
 

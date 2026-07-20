@@ -4,19 +4,7 @@
 }
 
 /* ---- Address chip ---- */
-.pollar-asset-address {
-  font-size: 0.75rem;
-  font-family: monospace;
-  color: var(--pollar-muted);
-  background: var(--pollar-input-bg);
-  border: 1px solid var(--pollar-border);
-  border-radius: var(--pollar-card-border-radius, 10px);
-  padding: 0.375rem 0.75rem;
-  margin-bottom: 1rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* Address chip styles live in shared.css (shared with the balance modal). */
 
 /* ---- Asset list ---- */
 .pollar-asset-list {

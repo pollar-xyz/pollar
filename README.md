@@ -19,7 +19,7 @@ This repository is managed with [Turborepo](https://turbo.build/repo) and contai
 
 ### [`@pollar/core`](./packages/core)
 
-**Version:** `0.11.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/core)
+**Version:** `0.11.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/core)
 
 Framework-agnostic TypeScript SDK. Provides the `PollarClient` class and all lower-level utilities needed to integrate
 Pollar authentication and multichain (Stellar + Solana) transactions into any JavaScript environment.
@@ -93,7 +93,7 @@ const client = new PollarClient({ apiKey: 'pk_...', storage });
 
 ### [`@pollar/react`](./packages/react)
 
-**Version:** `0.11.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react)
+**Version:** `0.11.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react)
 
 React bindings built on top of `@pollar/core`. Provides a context provider, hook, and pre-built UI components for
 drop-in authentication in React applications.
@@ -132,7 +132,7 @@ npm install @pollar/react @pollar/core
 
 ### [`@pollar/privy-adapter`](./packages/privy-adapter)
 
-**Version:** `0.11.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-adapter)
+**Version:** `0.11.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-adapter)
 
 Client-side **Privy** wallet adapter for `@pollar/core`. It drives the whole Privy flow itself - email / Google / GitHub
 login, creating the user's Privy embedded wallet (Stellar or Solana), and raw-hash signing - then hands the signature to Pollar for
@@ -157,7 +157,7 @@ npm install @pollar/privy-adapter @pollar/core @stellar/stellar-sdk @privy-io/re
 
 ### [`@pollar/privy-server-adapter`](./packages/privy-server-adapter)
 
-**Version:** `0.11.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-server-adapter)
+**Version:** `0.11.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-server-adapter)
 
 Server-side Privy adapter. A stateless HTTP proxy that lets Pollar sign Stellar or Solana transactions through your **Privy**
 server-wallet account without your `PRIVY_APP_SECRET` ever leaving your infrastructure. You run it in your own backend
@@ -186,7 +186,7 @@ npm install @pollar/privy-server-adapter
 
 ### [`@pollar/accesly-adapter`](./packages/accesly-adapter)
 
-**Version:** `0.11.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/accesly-adapter)
+**Version:** `0.11.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/accesly-adapter)
 
 Client-side **Accesly** smart-account wallet adapter for `@pollar/core`. Signs Stellar transactions with a user's
 Accesly C-address (passkey + MPC) smart wallet, client-side.
@@ -204,7 +204,7 @@ npm install @pollar/accesly-adapter @pollar/core @accesly/react @accesly/core
 
 ### [`@pollar/stellar-wallets-kit-adapter`](./packages/stellar-wallets-kit-adapter)
 
-**Version:** `0.11.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/stellar-wallets-kit-adapter)
+**Version:** `0.11.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/stellar-wallets-kit-adapter)
 
 Plugs [Stellar Wallets Kit](https://stellarwalletskit.dev) into Pollar as a set of wallet adapters, without
 `@pollar/core` having to depend on the kit. One install gives Pollar access to **every wallet module the kit
@@ -230,7 +230,7 @@ npm install @pollar/stellar-wallets-kit-adapter @creit.tech/stellar-wallets-kit
 
 ### [`@pollar/solana-wallet-standard-adapter`](./packages/solana-wallet-standard-adapter)
 
-**Version:** `0.11.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/solana-wallet-standard-adapter)
+**Version:** `0.11.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/solana-wallet-standard-adapter)
 
 The Solana counterpart to `@pollar/stellar-wallets-kit-adapter`. Connects user-controlled Solana wallets (Phantom,
 Solflare, Backpack, ...) to `@pollar/core` through the [Wallet Standard](https://github.com/wallet-standard/wallet-standard),
@@ -242,7 +242,7 @@ without bundling any wallet SDK into `@pollar/core`. Login uses **SIWS (Sign In 
 - `solanaWalletStandardAdapters(options?)` - discovers every installed Solana wallet and returns one `WalletAdapter`
   each to pass to `PollarClientConfig.walletAdapters`; SSR-safe (returns `[]` when there is no `window`)
 - `SolanaWalletStandardAdapter` - direct `WalletAdapter` implementation for use outside `PollarClient`
-- Peer deps: `@pollar/core@^0.11.0-rc.0` plus the `@wallet-standard/*` packages and `@solana/wallet-standard-features`
+- Peer deps: `@pollar/core@^0.11.1` plus the `@wallet-standard/*` packages and `@solana/wallet-standard-features`
   (no wallet SDK bundled)
 
 ```bash

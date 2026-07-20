@@ -12,6 +12,45 @@ export type PollarApplicationConfigResponse =
 export type PollarApplicationConfigContent = PollarApplicationConfigResponse['content'];
 
 /**
+ * One persisted wallet. Shared by the session's back-compat `wallet` field and
+ * every entry of `wallets`, so the two can never drift apart in shape.
+ *
+ * `type` discriminates custody:
+ *   - 'internal' → platform-managed (custodial) account (G-address, 0x…, …)
+ *   - 'smart'    → Soroban smart-account / passkey (C-address)
+ *   - 'external' → user-connected wallet (Freighter/Albedo)
+ * `address` is the on-chain address for every type.
+ */
+export interface PollarPersistedWallet {
+  type: 'internal' | 'smart' | 'external';
+  // The login method, 1:1 with `type` (fixed at account creation server-side):
+  //   internal → 'email' | 'google' | 'github' | 'oidc'
+  //   smart    → 'passkey'
+  //   external → 'wallet'
+  // Optional: sessions minted by sdk-api < this change won't carry it. For
+  // external wallets the specific on-chain adapter id (freighter/albedo) is
+  // exposed separately via `getWallet().provider`, not here.
+  provider?: string;
+  address: string | null;
+  // The CHAIN this address lives on — NOT testnet-vs-mainnet, which is
+  // `network` below. Optional: the back-compat `wallet` field and sessions
+  // minted before multi-chain omit it (those are always STELLAR).
+  chain?: WalletChain;
+  existsOnStellar?: boolean;
+  // The app's funding policy: IMMEDIATE = Pollar funds/creates the account at
+  // onboarding; DEFERRED = left to the app. Lets the UI decide whether to offer
+  // on-chain account creation. Optional: older sessions omit it.
+  fundingMode?: 'IMMEDIATE' | 'DEFERRED';
+  // On-chain creation time (smart = deploy; internal = keypair creation).
+  createdAt?: number;
+  // When the wallet was first linked to Pollar (our DB record), not on-chain
+  // creation. Used for external wallets.
+  linkedAt?: number;
+  network?: string;
+  deployTxHash?: string | null;
+}
+
+/**
  * What we actually write to `Storage`. Drops the PII subtree (`data.*`)
  * which is held in memory only on `PollarClient._profile` after auth.
  */
@@ -21,36 +60,20 @@ export interface PollarPersistedSession {
   status: string;
   token: { accessToken: string; refreshToken: string; expiresAt: number };
   user: { id?: string; ready: boolean };
-  // The user's on-chain wallet, discriminated by `type`:
-  //   - 'internal' → platform-managed (custodial) Stellar account (G-address)
-  //   - 'smart'    → Soroban smart-account / passkey (C-address)
-  //   - 'external' → user-connected wallet (Freighter/Albedo)
-  // `address` is the on-chain address for every type (G-address for internal,
-  // C-address for smart/passkey, the connected pubkey for external).
-  wallet: {
-    type: 'internal' | 'smart' | 'external';
-    // The login method, 1:1 with `type` (fixed at account creation server-side):
-    //   internal → 'email' | 'google' | 'github' | 'oidc'
-    //   smart    → 'passkey'
-    //   external → 'wallet'
-    // Optional: sessions minted by sdk-api < this change won't carry it. For
-    // external wallets the specific on-chain adapter id (freighter/albedo) is
-    // exposed separately via `getWallet().provider`, not here.
-    provider?: string;
-    address: string | null;
-    existsOnStellar?: boolean;
-    // The app's funding policy: IMMEDIATE = Pollar funds/creates the account at
-    // onboarding; DEFERRED = left to the app. Lets the UI decide whether to offer
-    // on-chain account creation. Optional: older sessions omit it.
-    fundingMode?: 'IMMEDIATE' | 'DEFERRED';
-    // On-chain creation time (smart = deploy; internal = keypair creation).
-    createdAt?: number;
-    // When the wallet was first linked to Pollar (our DB record), not on-chain
-    // creation. Used for external wallets.
-    linkedAt?: number;
-    network?: string;
-    deployTxHash?: string | null;
-  };
+  /**
+   * BACK-COMPAT — the user's STELLAR wallet (or their smart account). Always
+   * present, always Stellar. Mirrors the entry in `wallets` with
+   * `chain: 'STELLAR'` when there is one.
+   */
+  wallet: PollarPersistedWallet;
+  /**
+   * Every wallet the user holds, one per chain. Superset of `wallet`.
+   *
+   * Optional because sessions persisted before this field existed (and logins
+   * against an sdk-api that predates `wallets[]`) have none — treat an absent
+   * array as "only `wallet` is known", not as "the user has no wallets".
+   */
+  wallets?: PollarPersistedWallet[];
 }
 
 /**
@@ -72,7 +95,8 @@ export type PollarAuthMethod = 'email' | 'google' | 'github' | 'oidc';
  *     id (`'freighter'`, `'albedo'`, …), or `null` when no adapter is resolved
  *     (e.g. a restored session whose adapter could not be re-attached).
  *
- * Obtained via {@link PollarClient.getWallet}.
+ * Obtained via {@link PollarClient.getWallet} (the Stellar wallet) or
+ * {@link PollarClient.getWallets} (every chain).
  */
 export type WalletInfo =
   // `provider` widened with `(string & {})` so a custom provider id (e.g. a
@@ -83,9 +107,14 @@ export type WalletInfo =
   // app's funding policy) are wallet-status extras carried on every custody so
   // callers can, e.g., offer on-chain account creation for an external wallet
   // that isn't on Stellar yet. Optional — absent on sessions that predate them.
-  | { custody: 'internal'; address: string; provider: PollarAuthMethod | (string & {}) | null; existsOnStellar?: boolean; fundingMode?: 'IMMEDIATE' | 'DEFERRED' }
-  | { custody: 'smart'; address: string; provider: 'passkey'; existsOnStellar?: boolean; fundingMode?: 'IMMEDIATE' | 'DEFERRED' }
-  | { custody: 'external'; address: string; provider: WalletId | (string & {}) | null; existsOnStellar?: boolean; fundingMode?: 'IMMEDIATE' | 'DEFERRED' };
+  //
+  // `chain` says which chain `address` lives on — NOT testnet-vs-mainnet.
+  // Optional: `getWallet()` omits it (it is always STELLAR by definition), and
+  // sessions minted before multi-chain don't carry it either. `getWallets()`
+  // sets it whenever the backend reported it.
+  | { custody: 'internal'; address: string; provider: PollarAuthMethod | (string & {}) | null; chain?: WalletChain; existsOnStellar?: boolean; fundingMode?: 'IMMEDIATE' | 'DEFERRED' }
+  | { custody: 'smart'; address: string; provider: 'passkey'; chain?: WalletChain; existsOnStellar?: boolean; fundingMode?: 'IMMEDIATE' | 'DEFERRED' }
+  | { custody: 'external'; address: string; provider: WalletId | (string & {}) | null; chain?: WalletChain; existsOnStellar?: boolean; fundingMode?: 'IMMEDIATE' | 'DEFERRED' };
 
 /** In-memory user profile (kept on `PollarClient`, never persisted). */
 export interface PollarUserProfile {
@@ -649,19 +678,30 @@ export type WalletChain = 'STELLAR' | 'POLYGON' | 'SOLANA';
  * One asset the wallet holds, tagged with the chain it lives on. `chain` is
  * populated on the multichain own-wallet balance (`GET /v2/wallet/balance`); the
  * single-wallet lookup (`GET /v2/wallet/{publicKey}/balance`, Stellar-only) omits
- * it. On non-Stellar chains only the native token (SOL, POL) is reported for now,
- * so `issuer`/`type`/trustline fields are Stellar-only.
+ * it.
+ *
+ * Every chain reports its native coin plus each token the app enabled. `type` is
+ * `'token'` for ERC-20 and SPL alike: the alphanum4/12 split is a Stellar XDR
+ * encoding detail, so only Stellar uses those two. `limit` and `trustlineRemoved`
+ * describe trustlines and stay Stellar-only; `decimals` is carried by Polygon and
+ * Solana tokens, which need it to format raw amounts.
+ *
+ * `balance` is null when the chain could not be read — an unreachable RPC, not an
+ * empty wallet. Render it as unavailable rather than as zero.
  */
 export interface WalletBalanceRecord {
   chain?: WalletChain;
-  type?: 'native' | 'credit_alphanum4' | 'credit_alphanum12';
+  type?: 'native' | 'token' | 'credit_alphanum4' | 'credit_alphanum12';
   code: string;
   issuer?: string;
-  balance: string;
-  available: string;
+  decimals?: number;
+  balance: string | null;
+  available: string | null;
   limit?: string;
   enabledInApp?: boolean;
   trustlineRemoved?: boolean;
+  /** Solana only: the app fronts this token's transfer fee (`sponsor_transfer`). */
+  sponsored?: boolean;
 }
 
 /**
@@ -688,9 +728,50 @@ export type WalletBalanceState =
 
 // ─── Enabled-asset types ──────────────────────────────────────────────────────
 
-export type WalletAssetsContent =
-  pollarPaths['/wallet/assets']['get']['responses'][200]['content']['application/json']['content'];
-export type EnabledAssetRecord = WalletAssetsContent['assets'][number];
+/**
+ * One asset the app offers, tagged with the chain it lives on.
+ *
+ * Hand-written rather than derived from `pollarPaths['/wallet/assets']`: that
+ * generated type describes v1's Stellar-only shape, while v2 answers for every
+ * chain the app is provisioned on. Mirrors {@link WalletBalanceRecord}, which is
+ * hand-written for the same reason.
+ *
+ * `trustlineEstablished`, `limit` and `sponsored` are Stellar-only — a trustline
+ * is a Stellar concept, so an ERC-20 or SPL token needs no per-user opt-in to be
+ * held and carries none of them. `decimals` is the mirror case: Polygon and
+ * Solana tokens carry it, Stellar does not (every Stellar asset is 7-decimal).
+ *
+ * This is the app's CATALOG, not the user's holdings — amounts come from
+ * {@link WalletBalanceRecord} via `refreshBalance`.
+ */
+export interface EnabledAssetRecord {
+  chain?: WalletChain;
+  type?: 'native' | 'token' | 'credit_alphanum4' | 'credit_alphanum12';
+  code: string;
+  issuer?: string;
+  decimals?: number;
+  /** The app's display label for this asset, when it set one. */
+  name?: string;
+  /** Stellar only: does the wallet already hold this trustline? */
+  trustlineEstablished?: boolean;
+  limit?: string;
+  enabledInApp?: boolean;
+  /** Stellar only: the app pays this trustline's reserve + fee. */
+  sponsored?: boolean;
+}
+
+/**
+ * The app's enabled assets across every chain it is provisioned on, flattened
+ * into one list. `multichain` is true when more than one chain answered — the UI
+ * uses it to decide whether to show a per-asset network tag.
+ */
+export interface WalletAssetsContent {
+  publicKey: string;
+  network: string;
+  exists: boolean;
+  multichain?: boolean;
+  assets: EnabledAssetRecord[];
+}
 
 export type EnabledAssetsState =
   | { step: 'idle' }

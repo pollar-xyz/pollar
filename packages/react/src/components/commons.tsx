@@ -1,7 +1,15 @@
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 
 import type { PollarLogger } from '@pollar/core';
-import { Component, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import {
+  Component,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react';
 import { LOGO_POLLAR } from '../constants';
 
 declare const __POLLAR_VERSION__: string;
@@ -154,4 +162,33 @@ export function ModalStatusBanner({ message, status, onCancel, onRetry }: ModalS
       )}
     </div>
   );
+}
+
+/**
+ * The chain an asset lives on, as a short accented tag.
+ *
+ * Shared by the balance and asset lists: both render per-chain rows and must
+ * agree on the label and colour, so the palette lives in one place. Callers show
+ * it only when the app spans more than one chain — a Stellar-only app would just
+ * see the same tag on every row.
+ */
+const CHAIN_TAG: Record<string, { label: string; color: string }> = {
+  STELLAR: { label: 'Stellar', color: '#7d00ff' },
+  POLYGON: { label: 'Polygon', color: '#8247e5' },
+  SOLANA: { label: 'Solana', color: '#14f195' },
+};
+
+export function ChainTag({ chain }: { chain: string }) {
+  const tag = CHAIN_TAG[chain] ?? { label: chain, color: '#6b7280' };
+  return (
+    <span className="pollar-chain-tag" style={{ '--pollar-chain-color': tag.color } as CSSProperties}>
+      {tag.label}
+    </span>
+  );
+}
+
+/** Middle-truncates an on-chain address (issuer, ERC-20 contract, SPL mint). */
+export function cropAddress(address: string): string {
+  if (address.length <= 16) return address;
+  return `${address.slice(0, 8)}...${address.slice(-8)}`;
 }

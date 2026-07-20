@@ -42,6 +42,7 @@ import {
   EarnPosition,
   EarnPositionParams,
   EarnTxParams,
+  EnabledAssetRecord,
   EnabledAssetsState,
   KycLevel,
   KycStartBody,
@@ -56,6 +57,7 @@ import {
   PollarFlowError,
   PollarLoginOptions,
   PollarPersistedSession,
+  PollarPersistedWallet,
   isPollarNetworkError,
   PollarUserProfile,
   RampsOfframpBody,
@@ -82,6 +84,7 @@ import {
   TxHistoryParams,
   TxHistoryState,
   TxSignAndSendBody,
+  WalletAssetsContent,
   WalletBalanceContent,
   WalletBalanceRecord,
   WalletBalanceState,
@@ -1502,48 +1505,46 @@ export class PollarClient {
 
   /**
    * Collapses the v2 multichain balance (`{ balances: [{ chain, ... }] }`) into the
-   * flat, chain-tagged {@link WalletBalanceContent} the UI consumes. Stellar carries
-   * its full asset list; other chains report only their native token (SOL, POL) for
-   * now. `multichain` is set when more than one chain came back — the modal uses it
-   * to decide whether to show a per-asset network tag.
+   * flat, chain-tagged {@link WalletBalanceContent} the UI consumes.
+   *
+   * Every chain reports the same `balances` array — its native coin plus each token
+   * the app enabled — so one loop handles all three. `multichain` is set when more
+   * than one chain came back: the modal uses it to decide whether to show a
+   * per-asset network tag. A chain that failed to resolve carries `error` instead
+   * of `balances` and contributes nothing.
    */
   private _flattenBalances(content: unknown, ownAddress: string): WalletBalanceContent {
-    const chains = (content as { balances?: unknown[] })?.balances ?? [];
+    const chains = (content as { chains?: unknown[] })?.chains ?? [];
     const flat: WalletBalanceRecord[] = [];
     let exists = false;
     let network = this.getNetwork() as string;
 
     for (const entry of chains as Array<Record<string, unknown>>) {
       const chain = entry.chain as WalletChain | undefined;
-      if (chain === 'STELLAR') {
-        if (entry.exists) exists = true;
-        if (typeof entry.network === 'string') network = entry.network;
-        for (const b of (entry.balances as Array<Record<string, unknown>>) ?? []) {
-          flat.push({
-            chain: 'STELLAR',
-            ...(typeof b.type === 'string'
-              ? { type: b.type as 'native' | 'credit_alphanum4' | 'credit_alphanum12' }
-              : {}),
-            code: String(b.code ?? ''),
-            ...(typeof b.issuer === 'string' ? { issuer: b.issuer } : {}),
-            balance: String(b.balance ?? '0'),
-            available: String(b.available ?? b.balance ?? '0'),
-            ...(typeof b.enabledInApp === 'boolean' ? { enabledInApp: b.enabledInApp } : {}),
-            ...(typeof b.trustlineRemoved === 'boolean' ? { trustlineRemoved: b.trustlineRemoved } : {}),
-          });
-        }
-      } else if (chain === 'POLYGON' || chain === 'SOLANA') {
-        // Non-Stellar chains report only the native token from /balance for now.
-        const native = entry.native as { formatted?: string; symbol?: string } | null | undefined;
-        if (native?.symbol) {
-          exists = true;
-          flat.push({
-            chain,
-            code: native.symbol,
-            balance: String(native.formatted ?? '0'),
-            available: String(native.formatted ?? '0'),
-          });
-        }
+      if (!chain || entry.error) continue;
+      if (entry.exists) exists = true;
+      // Only Stellar's entry carries the session's network; the other chains ride
+      // the same testnet/mainnet choice and don't restate it.
+      if (chain === 'STELLAR' && typeof entry.network === 'string') network = entry.network;
+
+      for (const b of (entry.balances as Array<Record<string, unknown>>) ?? []) {
+        // null balance = the chain could not be read. Preserved, never coerced to
+        // '0', so the UI can tell "unavailable" from "empty".
+        const balance = typeof b.balance === 'string' ? b.balance : null;
+        const available = typeof b.available === 'string' ? b.available : balance;
+        flat.push({
+          chain,
+          ...(typeof b.type === 'string' ? { type: b.type as NonNullable<WalletBalanceRecord['type']> } : {}),
+          code: String(b.code ?? ''),
+          ...(typeof b.issuer === 'string' ? { issuer: b.issuer } : {}),
+          ...(typeof b.decimals === 'number' ? { decimals: b.decimals } : {}),
+          balance,
+          available,
+          ...(typeof b.limit === 'string' ? { limit: b.limit } : {}),
+          ...(typeof b.enabledInApp === 'boolean' ? { enabledInApp: b.enabledInApp } : {}),
+          ...(typeof b.trustlineRemoved === 'boolean' ? { trustlineRemoved: b.trustlineRemoved } : {}),
+          ...(typeof b.sponsored === 'boolean' ? { sponsored: b.sponsored } : {}),
+        });
       }
     }
 
@@ -1554,6 +1555,43 @@ export class PollarClient {
       multichain: chains.length > 1,
       balances: flat,
     };
+  }
+
+  /**
+   * The {@link _flattenBalances} twin for `/wallet/assets`: collapses the v2
+   * per-chain answer into one chain-tagged catalog. Same envelope (`chains`),
+   * same rules — a chain carrying `error` contributes nothing, and only Stellar
+   * restates the network.
+   */
+  private _flattenAssets(content: unknown, ownAddress: string): WalletAssetsContent {
+    const chains = (content as { chains?: unknown[] })?.chains ?? [];
+    const flat: EnabledAssetRecord[] = [];
+    let exists = false;
+    let network = this.getNetwork() as string;
+
+    for (const entry of chains as Array<Record<string, unknown>>) {
+      const chain = entry.chain as WalletChain | undefined;
+      if (!chain || entry.error) continue;
+      if (entry.exists) exists = true;
+      if (chain === 'STELLAR' && typeof entry.network === 'string') network = entry.network;
+
+      for (const a of (entry.assets as Array<Record<string, unknown>>) ?? []) {
+        flat.push({
+          chain,
+          ...(typeof a.type === 'string' ? { type: a.type as NonNullable<EnabledAssetRecord['type']> } : {}),
+          code: String(a.code ?? ''),
+          ...(typeof a.issuer === 'string' ? { issuer: a.issuer } : {}),
+          ...(typeof a.decimals === 'number' ? { decimals: a.decimals } : {}),
+          ...(typeof a.name === 'string' ? { name: a.name } : {}),
+          ...(typeof a.trustlineEstablished === 'boolean' ? { trustlineEstablished: a.trustlineEstablished } : {}),
+          ...(typeof a.limit === 'string' ? { limit: a.limit } : {}),
+          ...(typeof a.enabledInApp === 'boolean' ? { enabledInApp: a.enabledInApp } : {}),
+          ...(typeof a.sponsored === 'boolean' ? { sponsored: a.sponsored } : {}),
+        });
+      }
+    }
+
+    return { publicKey: ownAddress, network, exists, multichain: chains.length > 1, assets: flat };
   }
 
   /**
@@ -1602,7 +1640,12 @@ export class PollarClient {
       const { data, error } = await this._api.GET('/wallet/assets');
       if (gen !== this._enabledAssetsGen) return; // a newer refresh superseded this one
       if (!error && data?.success && data.content) {
-        this._setEnabledAssetsState({ step: 'loaded', data: data.content });
+        // v2 answers per chain; flatten into one chain-tagged list (see
+        // _flattenAssets), the same way refreshBalance does.
+        this._setEnabledAssetsState({
+          step: 'loaded',
+          data: this._flattenAssets(data.content, this._session?.wallet?.address ?? ''),
+        });
       } else {
         this._setEnabledAssetsState({ step: 'error', message: 'Failed to load assets' });
       }
@@ -1856,15 +1899,52 @@ export class PollarClient {
    * the login method the backend recorded (`null` for pre-provider sessions).
    */
   getWallet(): WalletInfo | null {
-    const w = this._session?.wallet;
+    // `chain` is omitted: this field is Stellar by definition, and saying so
+    // explicitly would imply the caller can find a non-Stellar value here.
+    return this._toWalletInfo(this._session?.wallet, { includeChain: false });
+  }
+
+  /**
+   * Every wallet the user holds, one per chain, as {@link WalletInfo} values —
+   * a superset of {@link getWallet}. Each entry carries `chain` when the
+   * backend reported it.
+   *
+   * Returns `[]` when there is no session. A session that predates the
+   * backend's multi-chain `wallets[]` has nothing to enumerate, so this falls
+   * back to the single Stellar wallet rather than reporting `[]` and making a
+   * funded user look walletless. Entries with no address yet (e.g. a smart
+   * account mid-deploy) are dropped, matching `getWallet()`'s `null`.
+   */
+  getWallets(): WalletInfo[] {
+    const session = this._session;
+    if (!session) return [];
+
+    const source = session.wallets ?? [session.wallet];
+    return source
+      .map((w) => this._toWalletInfo(w, { includeChain: true }))
+      .filter((w): w is WalletInfo => w !== null);
+  }
+
+  /**
+   * Maps a persisted wallet to the public {@link WalletInfo} union. Shared by
+   * `getWallet` and `getWallets` so the two can never disagree about how a
+   * given custody is presented.
+   */
+  private _toWalletInfo(
+    w: PollarPersistedWallet | undefined,
+    opts: { includeChain: boolean },
+  ): WalletInfo | null {
     if (!w || !w.address) return null;
     // Wallet-status extras carried on every custody (see WalletInfo).
     const extra = {
+      ...(opts.includeChain && w.chain !== undefined ? { chain: w.chain } : {}),
       ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
       ...(w.fundingMode !== undefined ? { fundingMode: w.fundingMode } : {}),
     };
     switch (w.type) {
       case 'external':
+        // The on-chain adapter id is only known client-side, from the adapter
+        // currently attached — it is never persisted.
         return { custody: 'external', address: w.address, provider: this._walletAdapter?.type ?? null, ...extra };
       case 'smart':
         return { custody: 'smart', address: w.address, provider: 'passkey', ...extra };
@@ -3209,32 +3289,40 @@ export class PollarClient {
   private async _storeSession(session: PollarApplicationConfigContent): Promise<void> {
     this._log.info('[PollarClient] Session stored');
 
-    const w = session.wallet;
-    // `provider` (the login method) was added to the wire after the generated
-    // OpenAPI types were last cut, so read it defensively until they're regen'd.
-    const wireProvider = (w as { provider?: string }).provider;
+    // The wire response still carries the legacy `publicKey` alias (kept for
+    // older SDKs); the persisted session standardizes on `address` only.
+    // `type` needs no remap: the wire speaks the same vocabulary as the SDK
+    // surface ('internal' | 'smart' | 'external').
+    //
+    // Applied identically to `wallet` and to every entry of `wallets[]` so the
+    // back-compat field and the array can't end up describing the same wallet
+    // differently.
+    const toPersistedWallet = (w: PollarApplicationConfigContent['wallet']): PollarPersistedWallet => ({
+      type: w.type,
+      // `provider` (the login method) was added to the wire after the generated
+      // OpenAPI types were last cut, so read it defensively until they're regen'd.
+      ...((w as { provider?: string }).provider ? { provider: (w as { provider?: string }).provider as string } : {}),
+      address: w.address ?? w.publicKey ?? null,
+      ...(w.chain !== undefined ? { chain: w.chain } : {}),
+      ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
+      ...(w.fundingMode !== undefined ? { fundingMode: w.fundingMode } : {}),
+      ...(w.createdAt !== undefined ? { createdAt: w.createdAt } : {}),
+      ...(w.linkedAt !== undefined ? { linkedAt: w.linkedAt } : {}),
+      ...(w.network !== undefined ? { network: w.network } : {}),
+      ...(w.deployTxHash !== undefined ? { deployTxHash: w.deployTxHash } : {}),
+    });
+
     const persisted: PollarPersistedSession = {
       clientSessionId: session.clientSessionId,
       userId: session.userId ?? null,
       status: session.status,
       token: session.token,
       user: session.user,
-      // The wire response still carries the legacy `publicKey` alias (kept for
-      // older SDKs); the persisted session standardizes on `address` only.
-      // The wire also still emits the legacy type `'custodial'` (unchanged for
-      // SDKs ≤0.8.x); we remap it to `'internal'` here so the SDK surface and
-      // persisted session speak one vocabulary while the wire stays compatible.
-      wallet: {
-        type: w.type === 'custodial' ? 'internal' : w.type,
-        ...(wireProvider ? { provider: wireProvider } : {}),
-        address: w.address ?? w.publicKey ?? null,
-        ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
-        ...(w.fundingMode !== undefined ? { fundingMode: w.fundingMode } : {}),
-        ...(w.createdAt !== undefined ? { createdAt: w.createdAt } : {}),
-        ...(w.linkedAt !== undefined ? { linkedAt: w.linkedAt } : {}),
-        ...(w.network !== undefined ? { network: w.network } : {}),
-        ...(w.deployTxHash !== undefined ? { deployTxHash: w.deployTxHash } : {}),
-      },
+      wallet: toPersistedWallet(session.wallet),
+      // Absent on logins against an sdk-api that predates `wallets[]` — persist
+      // nothing rather than an empty array, so consumers can tell "not reported"
+      // apart from "genuinely none".
+      ...(session.wallets ? { wallets: session.wallets.map(toPersistedWallet) } : {}),
     };
     // A fresh login replaces the session: invalidate any refresh/resume still
     // in flight against the previous one.

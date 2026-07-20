@@ -85,6 +85,13 @@ interface PollarContextValue {
    * on-chain address and `wallet.provider` for the wallet/login provider.
    */
   wallet: WalletInfo | null;
+  /**
+   * Every wallet the user holds, one per chain — a superset of {@link wallet},
+   * with `chain` populated. `[]` when unauthenticated. Drives the network
+   * selector in the Send / Wallet Balance / Assets modals: each entry is a
+   * network the user can switch to, and the first one is the default.
+   */
+  wallets: WalletInfo[];
   getClient: () => PollarClient;
   openLoginModal: () => void;
 
@@ -485,6 +492,7 @@ export function PollarProvider({
     return {
       // session
       wallet: pollarClient.getWallet(),
+      wallets: pollarClient.getWallets(),
       isAuthenticated: !!walletAddress,
       verified,
       // client

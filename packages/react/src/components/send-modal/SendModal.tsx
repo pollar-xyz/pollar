@@ -1,8 +1,9 @@
 'use client';
 
-import { WalletBalanceRecord } from '@pollar/core';
-import { useEffect, useRef, useState } from 'react';
+import { WalletBalanceRecord, WalletChain } from '@pollar/core';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { addressForChain, chainsOf, resolveChain } from '../ChainSelect';
 import '../shared.css';
 import '../transaction-modal/TransactionModal.css';
 import './SendModal.css';
@@ -28,6 +29,7 @@ export function SendModal({ onClose }: SendModalProps) {
     signAndSubmitTx,
     tx: transaction,
     wallet,
+    wallets,
     network,
     styles,
   } = usePollar();
@@ -45,6 +47,19 @@ export function SendModal({ onClose }: SendModalProps) {
   const [formError, setFormError] = useState('');
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const chains = useMemo(() => chainsOf(wallets), [wallets]);
+  const [selectedChain, setSelectedChain] = useState<WalletChain | null>(null);
+  // Default to the first network the user holds a wallet on. Runs as an effect
+  // because `wallets` is empty on the first render of a cold-start session.
+  useEffect(() => {
+    if (selectedChain === null && chains.length > 0) setSelectedChain(chains[0]!);
+  }, [chains, selectedChain]);
+
+  const walletAddress = addressForChain(wallets, selectedChain);
+  // The payment pipeline (buildTx + the Stellar asset param below) is
+  // Stellar-only, so a non-Stellar network can be browsed but not sent from.
+  const canSendOnChain = selectedChain === 'STELLAR';
+
   useEffect(() => {
     void refreshWalletBalance();
   }, [refreshWalletBalance]);
@@ -57,21 +72,28 @@ export function SendModal({ onClose }: SendModalProps) {
   );
 
   const balanceData = walletBalance.step === 'loaded' ? walletBalance.data : null;
-  // Send goes through the Stellar tx pipeline, so only offer Stellar assets. On a
-  // multichain balance the non-Stellar rows (SOL/POL) carry a chain tag; the
-  // single-wallet Stellar lookup leaves chain undefined.
-  const allAssets = (balanceData?.balances ?? []).filter((b) => b.chain === undefined || b.chain === 'STELLAR');
+  // Only the picked network's assets. The backend returns every chain in one
+  // payload, so this is a local filter — switching networks costs no request.
+  const allAssets = (balanceData?.balances ?? []).filter((b) => resolveChain(b.chain) === selectedChain);
   // App assets first, then native XLM (always, even at 0, so the user knows to
   // fund) and any other non-app asset the wallet actually holds.
   const sortedAssets = [
     ...allAssets.filter((b) => b.enabledInApp),
-    ...allAssets.filter((b) => !b.enabledInApp && (b.type === 'native' || parseFloat(b.balance) > 0)),
+    // An unreadable balance (null) is not a positive one, so it stays out.
+    ...allAssets.filter((b) => !b.enabledInApp && (b.type === 'native' || parseFloat(b.balance ?? '0') > 0)),
   ];
 
   // Auto-select the first asset once balances load (no "Select asset" step).
+  // Switching networks strands the previous chain's asset, so it is dropped and
+  // re-picked here rather than leaving a selection the form can't spend.
   useEffect(() => {
+    const stranded = selectedAsset !== null && resolveChain(selectedAsset.chain) !== selectedChain;
+    if (stranded) {
+      setSelectedAsset(sortedAssets[0] ?? null);
+      return;
+    }
     if (!selectedAsset && sortedAssets.length > 0) setSelectedAsset(sortedAssets[0]!);
-  }, [sortedAssets, selectedAsset]);
+  }, [sortedAssets, selectedAsset, selectedChain]);
 
   const hash = transaction.step === 'success' ? transaction.hash : null;
   const buildData = 'buildData' in transaction ? transaction.buildData : null;
@@ -105,6 +127,10 @@ export function SendModal({ onClose }: SendModalProps) {
 
   async function handleSubmit() {
     setFormError('');
+    if (!canSendOnChain) {
+      setFormError('Sending is not available on this network yet.');
+      return;
+    }
     if (!selectedAsset) {
       setFormError('Select an asset');
       return;
@@ -114,7 +140,9 @@ export function SendModal({ onClose }: SendModalProps) {
       setFormError('Enter a valid amount');
       return;
     }
-    if (parsed > parseFloat(selectedAsset.available)) {
+    // A null `available` means the chain could not be read, so it floors to 0 and
+    // blocks the send: never let an unreadable balance pass as "enough".
+    if (parsed > parseFloat(selectedAsset.available ?? '0')) {
       setFormError('Insufficient balance');
       return;
     }
@@ -166,6 +194,11 @@ export function SendModal({ onClose }: SendModalProps) {
         txTitle={txTitle}
         assets={sortedAssets}
         selectedAsset={selectedAsset}
+        chains={chains}
+        selectedChain={selectedChain}
+        walletAddress={walletAddress}
+        canSendOnChain={canSendOnChain}
+        onSelectChain={setSelectedChain}
         amount={amount}
         destination={destination}
         formError={formError}
