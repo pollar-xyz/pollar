@@ -3,7 +3,7 @@
 import { WalletBalanceRecord, WalletBalanceState, WalletChain } from '@pollar/core';
 import { type CSSProperties } from 'react';
 import { ChainSelect, resolveChain } from '../ChainSelect';
-import { CopyButton, cropAddress, PollarModalFooter } from '../commons';
+import { BusyOverlay, CopyButton, cropAddress, PollarModalFooter, useStickyData } from '../commons';
 
 // Stellar amounts are int64 scaled by 10^7, so 7 decimals is the ledger's exact
 // precision and the default. A Polygon/Solana token carries its own `decimals`
@@ -92,13 +92,17 @@ export function WalletBalanceModalTemplate({
   } as CSSProperties;
 
   const isLoading = walletBalance.step === 'loading';
-  const data = walletBalance.step === 'loaded' ? walletBalance.data : null;
+  // Keep the previous payload on screen while refreshing; the overlay below
+  // blocks interaction so nothing is read against data that is changing.
+  const data = useStickyData(walletBalance.step === 'loaded' ? walletBalance.data : null);
   // Only the picked network's balances. The backend returns every chain in one
   // payload, so this is a local filter — switching networks costs no request.
   const balances = (data?.balances ?? []).filter((b) => resolveChain(b.chain) === selectedChain);
 
   return (
     <div className="pollar-modal-card pollar-bal-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
+      {isLoading && data && <BusyOverlay label="Refreshing balances…" />}
+
       <div className="pollar-modal-header">
         <h2 className="pollar-modal-title">Wallet Balance</h2>
         <div className="pollar-modal-header-actions">
@@ -144,7 +148,8 @@ export function WalletBalanceModalTemplate({
         </div>
       )}
 
-      {isLoading && (
+      {/* First load only — a refresh keeps the old list under the overlay. */}
+      {isLoading && !data && (
         <div className="pollar-loading-block">
           <div className="pollar-spinner" />
           <span>Loading…</span>

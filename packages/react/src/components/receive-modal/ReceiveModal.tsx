@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { WalletChain } from '@pollar/core';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { addressForChain, chainsOf } from '../ChainSelect';
 import '../shared.css';
 import './ReceiveModal.css';
 import { ReceiveModalTemplate } from './ReceiveModalTemplate';
@@ -11,11 +13,20 @@ interface ReceiveModalProps {
 }
 
 export function ReceiveModal({ onClose }: ReceiveModalProps) {
-  const { wallet, styles } = usePollar();
-  const walletAddress = wallet?.address ?? '';
+  const { wallets, styles } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const chains = useMemo(() => chainsOf(wallets), [wallets]);
+  const [selectedChain, setSelectedChain] = useState<WalletChain | null>(null);
+  // Default to the first network the user holds a wallet on. Runs as an effect
+  // because `wallets` is empty on the first render of a cold-start session.
+  useEffect(() => {
+    if (selectedChain === null && chains.length > 0) setSelectedChain(chains[0]!);
+  }, [chains, selectedChain]);
+
+  const walletAddress = addressForChain(wallets, selectedChain);
 
   useEffect(
     () => () => {
@@ -42,6 +53,14 @@ export function ReceiveModal({ onClose }: ReceiveModalProps) {
         theme={theme}
         accentColor={accentColor}
         walletAddress={walletAddress}
+        chains={chains}
+        selectedChain={selectedChain}
+        // The tick belongs to the address that was copied, so switching
+        // networks clears it rather than vouching for the new address.
+        onSelectChain={(chain) => {
+          setCopied(false);
+          setSelectedChain(chain);
+        }}
         copied={copied}
         onCopy={handleCopy}
         onClose={onClose}

@@ -192,3 +192,63 @@ export function cropAddress(address: string): string {
   if (address.length <= 16) return address;
   return `${address.slice(0, 8)}...${address.slice(-8)}`;
 }
+
+/**
+ * Remembers the last non-null value it was given.
+ *
+ * The balance/assets state machines drop their payload while a refresh is in
+ * flight (`step` leaves `'loaded'`), which would blank the list on every
+ * refresh. Holding the previous data lets the modal keep rendering it under a
+ * {@link BusyOverlay} instead — the list never collapses and then reflows.
+ */
+export function useStickyData<T>(data: T | null): T | null {
+  const lastRef = useRef<T | null>(null);
+  if (data !== null) lastRef.current = data;
+  return data ?? lastRef.current;
+}
+
+/**
+ * Blocks a modal while a refresh is in flight, keeping the stale data visible
+ * (and readable) underneath. Covers the whole card, so nothing can be clicked
+ * against data that is about to change.
+ */
+export function BusyOverlay({ label = 'Loading…' }: { label?: string }) {
+  return (
+    <div className="pollar-busy-overlay" aria-busy="true" aria-live="polite">
+      <div className="pollar-busy-overlay-inner">
+        <div className="pollar-spinner" />
+        <span>{label}</span>
+      </div>
+    </div>
+  );
+}
+
+interface ToggleProps {
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+  busy?: boolean;
+  label: string;
+}
+
+/**
+ * On/off switch. Used for trustlines, where the state is binary and the old
+ * "status pill + Enable/Disable button" pair said the same thing twice.
+ */
+export function Toggle({ checked, onChange, disabled = false, busy = false, label }: ToggleProps) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      className={`pollar-switch${checked ? ' pollar-switch-on' : ''}${busy ? ' pollar-switch-busy' : ''}`}
+      onClick={onChange}
+      disabled={disabled || busy}
+    >
+      <span className="pollar-switch-knob">
+        {busy && <span className="pollar-spinner pollar-spinner-sm pollar-spinner-current" />}
+      </span>
+    </button>
+  );
+}

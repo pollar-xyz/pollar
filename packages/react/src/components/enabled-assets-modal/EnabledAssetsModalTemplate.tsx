@@ -3,7 +3,7 @@
 import { EnabledAssetRecord, EnabledAssetsState, WalletChain } from '@pollar/core';
 import { useState, type CSSProperties } from 'react';
 import { ChainSelect, resolveChain } from '../ChainSelect';
-import { CopyButton, cropAddress, PollarModalFooter } from '../commons';
+import { BusyOverlay, CopyButton, cropAddress, PollarModalFooter, Toggle, useStickyData } from '../commons';
 
 function cssVarsFor(theme: string, accentColor: string): CSSProperties {
   const isDark = theme === 'dark';
@@ -46,10 +46,12 @@ function AssetItem({
   disabled: boolean;
   onToggle: (record: EnabledAssetRecord) => void;
 }) {
-  const established = record.trustlineEstablished;
+  // Absent means "not established": an unknown trustline must never render as
+  // an on switch, which would read as already enabled.
+  const established = record.trustlineEstablished ?? false;
   const isNative = record.type === 'native';
   // A trustline is a Stellar concept. On Polygon/Solana a token is simply held,
-  // so those rows are informational: no status pill, no enable/disable button.
+  // so those rows are informational: no label, no switch.
   const isStellar = resolveChain(record.chain) === 'STELLAR';
 
   return (
@@ -74,24 +76,16 @@ function AssetItem({
       </div>
       {isStellar && (
         <div className="pollar-asset-actions">
-          <span className={`pollar-asset-trustline${established ? ' pollar-established' : ''}`}>
-            {established ? 'Trustline active' : 'Needs trustline'}
-          </span>
-          {!isNative && (
-            <button
-              className={`pollar-asset-btn${established ? ' pollar-danger' : ''}`}
-              onClick={() => onToggle(record)}
-              disabled={busy || disabled}
-            >
-              {busy ? (
-                <span className="pollar-spinner pollar-spinner-sm pollar-spinner-current" />
-              ) : established ? (
-                'Disable'
-              ) : (
-                'Enable'
-              )}
-            </button>
-          )}
+          <span className="pollar-asset-trustline-label">Trustline</span>
+          {/* Native XLM needs no trustline — it is implicit and can't be removed,
+              so the switch shows the state but stays locked on. */}
+          <Toggle
+            checked={established}
+            busy={busy}
+            disabled={isNative || disabled}
+            onChange={() => onToggle(record)}
+            label={`${established ? 'Disable' : 'Enable'} ${record.code} trustline`}
+          />
         </div>
       )}
     </div>
@@ -135,7 +129,9 @@ export function EnabledAssetsModalTemplate({
   const cssVars = cssVarsFor(theme, accentColor);
 
   const isLoading = enabledAssets.step === 'loading';
-  const data = enabledAssets.step === 'loaded' ? enabledAssets.data : null;
+  // Keep the previous payload on screen while refreshing; the overlay below
+  // blocks interaction so nothing is acted on against data that is changing.
+  const data = useStickyData(enabledAssets.step === 'loaded' ? enabledAssets.data : null);
   const busy = busyKey !== null;
   // Only the picked network's assets. The backend returns every chain in one
   // payload, so this is a local filter — switching networks costs no request.
@@ -151,6 +147,8 @@ export function EnabledAssetsModalTemplate({
       style={cssVars}
       onClick={(e) => e.stopPropagation()}
     >
+      {isLoading && data && <BusyOverlay label="Refreshing assets…" />}
+
       <div className="pollar-modal-header">
         <h2 className="pollar-modal-title">Assets</h2>
         <div className="pollar-modal-header-actions">
@@ -196,7 +194,8 @@ export function EnabledAssetsModalTemplate({
         </div>
       )}
 
-      {isLoading && (
+      {/* First load only — a refresh keeps the old list under the overlay. */}
+      {isLoading && !data && (
         <div className="pollar-loading-block">
           <div className="pollar-spinner" />
           <span>Loading…</span>

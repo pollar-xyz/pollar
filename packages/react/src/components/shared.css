@@ -457,6 +457,86 @@
   color: var(--pollar-muted);
 }
 
+/* ─── Busy overlay ───────────────────────────────────────────────────────────
+   Covers the card while a refresh is in flight so the stale data underneath
+   stays readable but untouchable. The card is the scroll container, so `inset:0`
+   spans the whole scrollable height; the inner box is sticky to stay on screen
+   however far the list is scrolled. */
+.pollar-busy-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  cursor: wait;
+  background: color-mix(in srgb, var(--pollar-bg) 62%, transparent);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+}
+
+.pollar-busy-overlay-inner {
+  position: sticky;
+  top: 45%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.625rem;
+  color: var(--pollar-muted);
+  font-size: 0.8125rem;
+}
+
+/* ─── On/off switch ──────────────────────────────────────────────────────────
+   One control for a binary state (currently trustlines), replacing the old
+   status-pill-plus-button pair. */
+.pollar-switch {
+  flex: none;
+  width: 38px;
+  height: 22px;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--pollar-border);
+  background: var(--pollar-input-bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.pollar-switch-on {
+  justify-content: flex-end;
+  background: var(--pollar-accent);
+  border-color: var(--pollar-accent);
+}
+
+.pollar-switch-knob {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--pollar-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s;
+}
+
+.pollar-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pollar-switch-busy {
+  cursor: wait;
+}
+
+/* The spinner sits inside the knob, so the switch keeps its footprint and the
+   row never reflows mid-request. */
+.pollar-switch-busy .pollar-switch-knob {
+  color: var(--pollar-muted);
+}
+
 /* ─── Network picker, shared by the send / balance / assets modals ───────────
    Sits directly above the address chip and drives what the rest of the modal
    shows, so it hugs the chip instead of keeping the full field gap. */
