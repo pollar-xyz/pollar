@@ -112,9 +112,30 @@ export type WalletInfo =
   // Optional: `getWallet()` omits it (it is always STELLAR by definition), and
   // sessions minted before multi-chain don't carry it either. `getWallets()`
   // sets it whenever the backend reported it.
-  | { custody: 'internal'; address: string; provider: PollarAuthMethod | (string & {}) | null; chain?: WalletChain; existsOnStellar?: boolean; fundingMode?: 'IMMEDIATE' | 'DEFERRED' }
-  | { custody: 'smart'; address: string; provider: 'passkey'; chain?: WalletChain; existsOnStellar?: boolean; fundingMode?: 'IMMEDIATE' | 'DEFERRED' }
-  | { custody: 'external'; address: string; provider: WalletId | (string & {}) | null; chain?: WalletChain; existsOnStellar?: boolean; fundingMode?: 'IMMEDIATE' | 'DEFERRED' };
+  | {
+      custody: 'internal';
+      address: string;
+      provider: PollarAuthMethod | (string & {}) | null;
+      chain?: WalletChain;
+      existsOnStellar?: boolean;
+      fundingMode?: 'IMMEDIATE' | 'DEFERRED';
+    }
+  | {
+      custody: 'smart';
+      address: string;
+      provider: 'passkey';
+      chain?: WalletChain;
+      existsOnStellar?: boolean;
+      fundingMode?: 'IMMEDIATE' | 'DEFERRED';
+    }
+  | {
+      custody: 'external';
+      address: string;
+      provider: WalletId | (string & {}) | null;
+      chain?: WalletChain;
+      existsOnStellar?: boolean;
+      fundingMode?: 'IMMEDIATE' | 'DEFERRED';
+    };
 
 /** In-memory user profile (kept on `PollarClient`, never persisted). */
 export interface PollarUserProfile {
@@ -522,6 +543,40 @@ export type SignOutcome =
  */
 export type SignAuthEntryOutcome = { status: 'signed'; signedAuthEntry: string } | { status: 'error'; details?: string };
 
+/**
+ * A payment, addressed per chain.
+ *
+ * The asset is the one part that cannot be unified: Stellar identifies it by
+ * code + issuer, Solana by SPL mint. Amounts differ too — Stellar takes a
+ * decimal string, Solana integer base units (lamports / mint units), because
+ * that is what each chain's signer actually consumes.
+ */
+export type SendPaymentParams =
+  | {
+      chain?: 'STELLAR' | undefined;
+      destination: string;
+      /** Decimal string, e.g. "1.5". */
+      amount: string;
+      asset: { type: 'native' } | { type: 'credit_alphanum4' | 'credit_alphanum12'; code: string; issuer: string };
+      options?: TxBuildBody['options'];
+    }
+  | {
+      chain: 'SOLANA';
+      destination: string;
+      /** Integer base units: lamports for SOL, the mint's smallest unit for SPL. */
+      amount: string;
+      /** Omit for native SOL; otherwise the SPL mint to transfer. */
+      mint?: string | null;
+      options?: undefined;
+    }
+  | {
+      chain: 'POLYGON';
+      destination: string;
+      amount: string;
+      mint?: string | null;
+      options?: undefined;
+    };
+
 export type SubmitOutcome =
   | { status: 'success'; hash: string; buildData?: TxBuildContent }
   | { status: 'pending'; hash: string; buildData?: TxBuildContent }
@@ -895,12 +950,14 @@ export type SwapQuoteParams = {
 // ─── Earn types (yield vaults / lending) ───────────────────────────────────────
 
 /** Providers this app exposes (from GET /earn/providers). Empty = Earn disabled. */
-export type EarnProvidersContent = pollarPaths['/earn/providers']['get']['responses'][200]['content']['application/json']['content'];
+export type EarnProvidersContent =
+  pollarPaths['/earn/providers']['get']['responses'][200]['content']['application/json']['content'];
 
 /** A concrete Earn provider. */
 export type EarnProviderId = EarnProvidersContent['providers'][number];
 
-export type EarnOpportunitiesContent = pollarPaths['/earn/opportunities']['get']['responses'][200]['content']['application/json']['content'];
+export type EarnOpportunitiesContent =
+  pollarPaths['/earn/opportunities']['get']['responses'][200]['content']['application/json']['content'];
 
 /** A vault (DeFindex) or pool (Blend) the user can deposit into. */
 export type EarnOpportunity = EarnOpportunitiesContent['opportunities'][number];

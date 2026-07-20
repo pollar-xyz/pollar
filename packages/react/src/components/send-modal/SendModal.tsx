@@ -1,6 +1,6 @@
 'use client';
 
-import { WalletBalanceRecord, WalletChain } from '@pollar/core';
+import { toBaseUnits, WalletBalanceRecord, WalletChain } from '@pollar/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { addressForChain, chainsOf, resolveChain } from '../ChainSelect';
@@ -26,6 +26,7 @@ export function SendModal({ onClose }: SendModalProps) {
     walletBalance,
     refreshWalletBalance,
     buildTx,
+    sendPayment,
     signAndSubmitTx,
     tx: transaction,
     wallet,
@@ -56,9 +57,11 @@ export function SendModal({ onClose }: SendModalProps) {
   }, [chains, selectedChain]);
 
   const walletAddress = addressForChain(wallets, selectedChain);
-  // The payment pipeline (buildTx + the Stellar asset param below) is
-  // Stellar-only, so a non-Stellar network can be browsed but not sent from.
-  const canSendOnChain = selectedChain === 'STELLAR';
+  // Solana joined Stellar via the atomic endpoint; Polygon has no transfer path
+  // in the backend yet, so it can be browsed but not sent from.
+  const canSendOnChain = selectedChain === 'STELLAR' || selectedChain === 'SOLANA';
+  // Solana amounts are integer base units (lamports / mint units), not decimals.
+  const isBaseUnitChain = selectedChain === 'SOLANA';
 
   useEffect(() => {
     void refreshWalletBalance();
@@ -104,7 +107,12 @@ export function SendModal({ onClose }: SendModalProps) {
       : network === 'testnet'
         ? 'testnet'
         : 'public';
-  const explorerUrl = hash ? `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}` : null;
+  // Each chain has its own explorer, and its own way of saying "testnet".
+  const explorerUrl = !hash
+    ? null
+    : selectedChain === 'SOLANA'
+      ? `https://explorer.solana.com/tx/${hash}${explorerNetwork === 'testnet' ? '?cluster=devnet' : ''}`
+      : `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}`;
 
   const IN_FLIGHT_STEPS = [
     'building',
@@ -151,7 +159,32 @@ export function SendModal({ onClose }: SendModalProps) {
       return;
     }
 
+    // Solana takes integer base units while the form (like the balance above it)
+    // is in decimals, so convert before sending — with the asset's own decimals,
+    // and via strings so a 9-decimal amount is not rounded by a float.
+    let sendAmount = amount;
+    if (isBaseUnitChain) {
+      try {
+        sendAmount = toBaseUnits(amount, selectedAsset.decimals ?? 9);
+      } catch (e) {
+        setFormError(e instanceof Error ? e.message : 'Invalid amount');
+        return;
+      }
+    }
+
     setStep('tx');
+
+    if (selectedChain === 'SOLANA') {
+      await sendPayment({
+        chain: 'SOLANA',
+        destination: destination.trim(),
+        amount: sendAmount,
+        // Native SOL carries no mint; an SPL token's mint rides in `issuer`.
+        ...(selectedAsset.type === 'native' ? {} : { mint: selectedAsset.issuer ?? null }),
+      });
+      return;
+    }
+
     await buildTx('payment', { destination: destination.trim(), amount, asset: assetParam(selectedAsset) });
   }
 

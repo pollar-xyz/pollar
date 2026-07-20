@@ -11,6 +11,7 @@ import {
   PollarClientConfig,
   PollarLoginOptions,
   PollarPersistedSession,
+  SendPaymentParams,
   SessionsState,
   SignOutcome,
   StellarNetwork,
@@ -143,6 +144,12 @@ interface PollarContextValue {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ) => Promise<SubmitOutcome>;
+  /**
+   * Send a payment on any chain the user holds a wallet on. Stellar keeps the
+   * split flow (so external adapters and passkeys still work); a chain whose
+   * signature expires goes through one server-side call and is custodial-only.
+   */
+  sendPayment: (params: SendPaymentParams) => Promise<SubmitOutcome>;
   // network
   network: StellarNetwork;
   setNetwork: (network: StellarNetwork) => void;
@@ -509,6 +516,7 @@ export function PollarProvider({
       submitTx: (signedXdr: string) => pollarClient.submitTx(signedXdr),
       buildAndSignAndSubmitTx: (operation, params, options) => pollarClient.buildAndSignAndSubmitTx(operation, params, options),
       runTx: (operation, params, options) => pollarClient.runTx(operation, params, options),
+      sendPayment: (params) => pollarClient.sendPayment(params),
       openTxModal: () => setTransactionModalOpen(true),
       // tx history
       txHistory,

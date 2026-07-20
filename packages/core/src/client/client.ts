@@ -76,6 +76,7 @@ import {
   SessionsState,
   SignAuthEntryOutcome,
   SignOutcome,
+  SendPaymentParams,
   SubmitOutcome,
   TransactionState,
   TrustlineOutcome,
@@ -1790,8 +1791,7 @@ export class PollarClient {
       const { data, error } = await this._api.POST('/wallet/account/create/build', {});
       if (error || !data?.success || !data.content?.sponsorSignedXdr) {
         const details =
-          (error as { details?: string; code?: string } | undefined)?.details ??
-          (error as { code?: string } | undefined)?.code;
+          (error as { details?: string; code?: string } | undefined)?.details ?? (error as { code?: string } | undefined)?.code;
         return { status: 'error', ...(details && { details }) };
       }
       const signed = await this.signTx(data.content.sponsorSignedXdr);
@@ -1920,9 +1920,7 @@ export class PollarClient {
     if (!session) return [];
 
     const source = session.wallets ?? [session.wallet];
-    return source
-      .map((w) => this._toWalletInfo(w, { includeChain: true }))
-      .filter((w): w is WalletInfo => w !== null);
+    return source.map((w) => this._toWalletInfo(w, { includeChain: true })).filter((w): w is WalletInfo => w !== null);
   }
 
   /**
@@ -1930,10 +1928,7 @@ export class PollarClient {
    * `getWallet` and `getWallets` so the two can never disagree about how a
    * given custody is presented.
    */
-  private _toWalletInfo(
-    w: PollarPersistedWallet | undefined,
-    opts: { includeChain: boolean },
-  ): WalletInfo | null {
+  private _toWalletInfo(w: PollarPersistedWallet | undefined, opts: { includeChain: boolean }): WalletInfo | null {
     if (!w || !w.address) return null;
     // Wallet-status extras carried on every custody (see WalletInfo).
     const extra = {
@@ -2530,7 +2525,11 @@ export class PollarClient {
         headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
       });
       if (!error && data?.success && data.content) {
-        const { hash, status: backendStatus, resultCode } = data.content;
+        // This endpoint is multichain now, so its 200 is a union and only the
+        // Stellar member carries `resultCode`. This call always sends a Stellar
+        // body, but the type still has to be narrowed to say so.
+        const { hash, status: backendStatus } = data.content;
+        const resultCode = 'resultCode' in data.content ? data.content.resultCode : undefined;
         if (backendStatus === 'SUCCESS') {
           this._setTransactionState({ step: 'success', hash });
           return { status: 'success', hash };
@@ -2562,6 +2561,87 @@ export class PollarClient {
         phase: 'building-signing-submitting',
         ...(details && { details }),
       });
+      return { status: 'error', ...(details && { details }) };
+    }
+  }
+
+  /**
+   * Send a payment on any chain the user holds a wallet on.
+   *
+   * One entry point, two mechanisms, because the chains genuinely differ:
+   * Stellar routes through {@link buildAndSignAndSubmitTx} (which still handles
+   * external adapters and passkey wallets via the split flow), while a chain
+   * whose signature expires does the whole thing in one server-side call.
+   *
+   * Custodial-only outside Stellar: a non-Stellar external wallet would have to
+   * sign client-side, and that path is not wired yet.
+   */
+  async sendPayment(params: SendPaymentParams): Promise<SubmitOutcome> {
+    if (params.chain === undefined || params.chain === 'STELLAR') {
+      return this.buildAndSignAndSubmitTx(
+        'payment',
+        { destination: params.destination, amount: params.amount, asset: params.asset },
+        params.options,
+      );
+    }
+
+    if (params.chain !== 'SOLANA') {
+      return { status: 'error', details: `Sending on ${params.chain} is not supported yet.` };
+    }
+
+    this._txStartGen = this._sessionGeneration;
+    if (!this._session?.wallet?.address) {
+      this._setTransactionState({ step: 'error', phase: 'building-signing-submitting', details: 'No wallet connected' });
+      return { status: 'error', details: 'No wallet connected' };
+    }
+
+    this._setTransactionState({ step: 'building-signing-submitting' });
+    try {
+      const { data, error } = await this._api.POST('/tx/build-sign-submit', {
+        body: {
+          chain: 'SOLANA',
+          operation: 'payment',
+          params: {
+            destination: params.destination,
+            amount: params.amount,
+            ...(params.mint ? { mint: params.mint } : {}),
+          },
+          // Required on Solana: its submit is a single non-idempotent shot, so
+          // the backend dedupes on this key. Minted per call so a transport
+          // retry converges on the original transfer instead of sending twice.
+          idempotencyKey: randomUUID(),
+          waitForConfirmation: false,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the generated body type is a union; this branch is the Solana member
+        } as any,
+        headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
+      });
+
+      if (!error && data?.success && data.content) {
+        const { hash, status: backendStatus } = data.content as { hash: string; status: string };
+        if (backendStatus === 'SUCCESS') {
+          this._setTransactionState({ step: 'success', hash });
+          return { status: 'success', hash };
+        }
+        if (backendStatus === 'PENDING') {
+          this._setTransactionState({ step: 'submitted', hash });
+          return this._awaitTxConfirmation(hash, 'building-signing-submitting', undefined, {});
+        }
+        this._setTransactionState({ step: 'error', phase: 'building-signing-submitting' });
+        return { status: 'error', hash };
+      }
+
+      const { details, code, message } = this._resolveTxApiError(error, data);
+      this._setTransactionState({
+        step: 'error',
+        phase: 'building-signing-submitting',
+        ...(details && { details }),
+        ...(code && { code }),
+        ...(message && { message }),
+      });
+      return { status: 'error', ...(details && { details }), ...(code && { code }), ...(message && { message }) };
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      this._setTransactionState({ step: 'error', phase: 'building-signing-submitting', ...(details && { details }) });
       return { status: 'error', ...(details && { details }) };
     }
   }
