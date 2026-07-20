@@ -1,6 +1,12 @@
 {
   "name": "@pollar/react",
   "version": "0.11.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pollar-xyz/pollar.git",
+    "directory": "packages/react"
+  },
   "description": "React components for Pollar authentication",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

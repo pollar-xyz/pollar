@@ -104,14 +104,40 @@
 
 ### `@pollar/react`
 
-- New `ChainSelect` component; `WalletBalanceModal` and `EnabledAssetsModal`
-  render a network picker and scope their rows to the selected chain. Row keys
-  are chain-qualified, since the same code + issuer can exist on two chains.
+- New `ChainSelect` component, exported alongside `resolveChain` / `chainsOf` /
+  `addressForChain`. The wallet-balance, enabled-assets, send and receive
+  templates all require `chains` / `selectedChain` / `onSelectChain`, so these
+  helpers are what make mounting a template yourself possible. Row keys are
+  chain-qualified, since the same code + issuer can exist on two chains.
+- `CustomTrustlineModalTemplateProps` is now exported.
 - Balances format against each token's own `decimals` (Stellar keeps 7), and a
   `null` balance renders as a dash rather than `0`.
 - Stellar-only affordances (trustlines) are gated on the selected chain being
   Stellar.
 - The login modal shows loading / error state when the app config request fails.
+
+### `@pollar/solana-wallet-standard-adapter`
+
+- **First published release.** The adapter was already implemented at 0.11.0 but
+  never shipped to npm. Login is wired end to end: the adapter declares
+  `chain: 'SOLANA'`, which routes `login({ provider })` through SIWS instead of
+  Stellar's SEP-10 challenge.
+
+### Packaging and docs
+
+- Every package now declares `license: MIT` and a `repository` with its
+  `directory`, so relative README links resolve on npmjs.com. Publish scripts
+  added for the four packages that lacked one.
+- `docs/1 Pollar react.md` and `docs/2 Pollar core.md` were removed. They were
+  hand-maintained copies of the two package READMEs, had drifted to the 0.8/0.9
+  API, and contained examples that no longer compile (`pollar.loginWallet()`,
+  `<PollarProvider config={...}>`, `new StellarClient({ network })`). The package
+  READMEs are the single source of truth; `docs/README.md` points at them.
+- Corrected in the READMEs: `/v1` auth endpoint paths (the SDK has been on `/v2`
+  since 0.11.0), the `AuthState.step` union, the persisted-wallet shape, and the
+  claim that non-Stellar chains report only their native token.
+- `UPGRADE.md` gained the missing `0.10.x -> 0.11.0` and `0.11.0 -> 0.11.1`
+  sections.
 
 ## 0.11.0
 

@@ -2,14 +2,18 @@
 
 Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction utilities for Stellar and Solana applications.
 
-> **0.10.0** adds multi-venue **swaps** (SDEX / Soroswap / Aquarius, via `getSwapQuote` +
-> `swap`), **SEP-24 on/off-ramps** (`getRampsQuote`, `createOnRamp`, `createOffRamp`, and the
-> transaction-lifecycle helpers), and a per-request **network timeout with automatic retry**
-> (`requestTimeoutMs` + `retry`; SDK HTTP now rejects with `PollarNetworkError` /
-> `SDK_NETWORK_TIMEOUT` instead of hanging forever). **Breaking:** external-wallet wiring moved
-> to a unified `walletAdapters: WalletAdapter[]` model - the old singular `walletAdapter`
-> resolver and `client.loginWallet()` are gone. Register adapter instances in `walletAdapters`
-> (built-ins auto-register) and log in with `client.login({ provider: id })`. See the
+> **0.11.1** reworks the multichain wallet responses. **Breaking:** `WalletBalanceRecord.balance`
+> and `.available` are now `string | null` - `null` means the chain could not be read, and must
+> render as unavailable rather than as `0`. Every chain now reports its native coin plus each
+> token the app enabled (0.11.0 reported only the native token off Stellar), and balances gained
+> `decimals`, `limit` and `sponsored`. `signTx` accepts `skipSponsorship`. New exported types:
+> `WalletAssetsContent`, `EnabledAssetRecord`, `PollarPersistedWallet`.
+>
+> Earlier: **0.11.0** went multichain (Solana joins Stellar) and moved every request to the
+> **`/v2`** API. **0.10.0** unified external wallets into `walletAdapters: WalletAdapter[]` and
+> removed the singular `walletAdapter` resolver and `client.loginWallet()`.
+>
+> See [UPGRADE.md](../../UPGRADE.md) for migration steps and the
 > [CHANGELOG](../../CHANGELOG.md) for the full version history before upgrading.
 
 ## Installation
@@ -71,12 +75,14 @@ import 'react-native-polyfill-globals/auto'; // TextEncoder/TextDecoder + URL
 
 `@pollar/core` provides the `PollarClient` class and utilities to:
 
-- Authenticate users via **Google**, **GitHub**, **Email (OTP)**, or **Stellar wallets** (Freighter, Albedo)
+- Authenticate users via **Google**, **GitHub**, **OIDC**, **Email (OTP)**, **passkey** (smart wallets), **Stellar
+  wallets** (Freighter, Albedo) or **Solana wallets** (SIWS)
 - Sign every authenticated request with **DPoP** (RFC 9449), making stolen tokens useless to an attacker without the
   per-session keypair
 - Build and submit Stellar transactions
 - Fetch wallet balances via `PollarClient` (`refreshBalance()` / `getWalletBalance()`) - v2 balances are **multichain**,
-  tagged by `chain` and reporting Solana (SOL) alongside Stellar assets
+  tagged by `chain`; every chain reports its native coin plus each token the app enabled. A balance is `null` when the
+  chain could not be read, which must render as unavailable rather than as zero
 - **Solana**: log in with **Sign In With Solana (SIWS)** and sign Solana transactions for sponsored external transfers
   (external-wallet connect via `@pollar/solana-wallet-standard-adapter`, preview)
 - Swap assets across venues (SDEX / Soroswap / Aquarius) and run SEP-24 on/off-ramps
@@ -250,12 +256,25 @@ The session persists exactly:
 clientSessionId, userId, status,
 token { accessToken, refreshToken, expiresAt },
 user { id?, ready },
-wallet { type, address, existsOnStellar?, createdAt?, linkedAt?, network?, deployTxHash? }
+wallet   PollarPersistedWallet          // back-compat: always the Stellar one
+wallets? PollarPersistedWallet[]        // every wallet the user holds, one per chain
+```
+
+where `PollarPersistedWallet` is:
+
+```
+{ type, provider?, address, chain?, existsOnStellar?, fundingMode?,
+  createdAt?, linkedAt?, network?, deployTxHash? }
 ```
 
 > The persisted wallet exposes only `address` (G-address for `internal`,
-> C-address for `smart`, the connected pubkey for `external`). Sessions written by
-> older SDKs are migrated transparently on read.
+> C-address for `smart`, the connected pubkey for `external`), and it is
+> `string | null` — null when the wallet has no address yet. `chain` is the
+> chain the address lives on, **not** testnet-vs-mainnet, which is `network`;
+> it is absent on sessions minted before multi-chain, which are always Stellar.
+> `wallets` is likewise absent on older sessions: treat that as "only `wallet`
+> is known", not as "the user has no wallets". Sessions written by older SDKs
+> are migrated transparently on read.
 
 PII (`mail`, `first_name`, `last_name`, `avatar`, `providers.*`) lives **in memory only** on the `PollarClient` instance
 and is fetched after auth. Reach it via:
@@ -361,7 +380,7 @@ Aborts any in-flight login flow and resets `authState` to `idle`. Safe to call f
 
 #### `client.logout(options?): Promise<void>`
 
-Server-side revokes the refresh-token family via `POST /v1/auth/logout`, then clears local storage and resets the
+Server-side revokes the refresh-token family via `POST /v2/auth/logout`, then clears local storage and resets the
 keypair. Server revocation is best-effort: a failed POST still clears local state.
 
 ```ts
@@ -399,7 +418,7 @@ environments that re-instantiate `PollarClient`.
 
 #### `client.refresh(): Promise<void>`
 
-Forces an access-token refresh. Race-safe: concurrent calls coalesce into a single `/v1/auth/refresh` request.
+Forces an access-token refresh. Race-safe: concurrent calls coalesce into a single `/v2/auth/refresh` request.
 Request middleware also calls this automatically on 401 with `DPoP-Nonce` rotation.
 
 ---
@@ -444,6 +463,20 @@ await client.buildTx('payment', {
   asset: 'XLM',
 });
 ```
+
+#### `client.signTx(unsignedXdr, options?): Promise<SignOutcome>`
+
+Signs an unsigned XDR. On a **custodial** session the backend signs and, by default, also applies sponsorship per the
+app's dashboard config - it returns a fee-bumped envelope the caller can broadcast directly, with the app paying the
+fee. Pass `skipSponsorship: true` to force the user to pay their own fee instead.
+
+```ts
+const outcome = await client.signTx(unsignedXdr);
+const unsponsored = await client.signTx(unsignedXdr, { skipSponsorship: true });
+```
+
+> Smart-wallet (C-address / passkey) sessions do not use `signTx` - they sign through
+> `signAndSubmitTx`, which runs the passkey ceremony.
 
 #### `client.submitTx(signedXdr)`
 
@@ -627,9 +660,15 @@ Each state domain has its own typed subscriber. All `on*StateChange` methods ret
 
 ```ts
 const unsubAuth = client.onAuthStateChange((state) => {
-  // state.step    — 'idle' | 'oauth' | 'email' | 'wallet' | 'success' | 'error'
-  // state.session — PollarPersistedSession (when step === 'success')
-  // state.errorCode — AuthErrorCode (when step === 'error')
+  // state.step — one of:
+  //   'idle' | 'creating_session' | 'entering_email' | 'sending_email' |
+  //   'entering_code' | 'verifying_email_code' | 'opening_oauth' |
+  //   'connecting_wallet' | 'signing_wallet_challenge' | 'wallet_not_installed' |
+  //   'authenticating_wallet' | 'creating_passkey' | 'deploying_smart_account' |
+  //   'authenticating' | 'authenticated' | 'error'
+  // state.session  — PollarPersistedSession (when step === 'authenticated')
+  // state.verified — boolean            (when step === 'authenticated')
+  // state.errorCode / .message / .previousStep   (when step === 'error')
 });
 
 const unsubTx = client.onTransactionStateChange((s) => {
@@ -769,7 +808,6 @@ import type {
   SessionInfo,
 
   // Wallets
-  WalletType,
   WalletId,
   WalletInfo,
   WalletAdapter,
@@ -779,6 +817,21 @@ import type {
   SignTransactionResponse,
   SignAuthEntryOptions,
   SignAuthEntryResponse,
+
+  // Multichain wallet state (v2)
+  WalletChain,
+  PollarPersistedWallet,
+  WalletBalanceRecord,
+  WalletBalanceContent,
+  WalletBalanceState,
+  WalletAssetsContent,
+  EnabledAssetRecord,
+  EnabledAssetsState,
+
+  // Solana wallet adapters (SIWS)
+  SolanaSignInInput,
+  SolanaSignInOutput,
+  SolanaSignMessageResponse,
 
   // Adapters
   AdapterFn,
@@ -828,7 +881,17 @@ import type {
   StellarBalance,
 } from '@pollar/core';
 
-import { AUTH_ERROR_CODES, PollarNetworkError, isPollarNetworkError } from '@pollar/core';
+// Runtime values (NOT type-only — `WalletType` is an enum, so it cannot be
+// imported with `import type` and then used as `WalletType.FREIGHTER`).
+import {
+  WalletType,
+  POLLAR_CORE_VERSION,
+  AUTH_ERROR_CODES,
+  PollarNetworkError,
+  isPollarNetworkError,
+  toBaseUnits,
+  fromBaseUnits,
+} from '@pollar/core';
 ```
 
 ## License

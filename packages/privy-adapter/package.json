@@ -1,6 +1,12 @@
 {
   "name": "@pollar/privy-adapter",
   "version": "0.11.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pollar-xyz/pollar.git",
+    "directory": "packages/privy-adapter"
+  },
   "description": "Privy client-side wallet adapter for @pollar/core — sign Stellar transactions with a user's Privy embedded Stellar wallet via raw-hash signing.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

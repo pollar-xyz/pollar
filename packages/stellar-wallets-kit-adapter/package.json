@@ -1,6 +1,12 @@
 {
   "name": "@pollar/stellar-wallets-kit-adapter",
   "version": "0.11.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pollar-xyz/pollar.git",
+    "directory": "packages/stellar-wallets-kit-adapter"
+  },
   "description": "Stellar Wallets Kit adapter for @pollar/core — plug additional wallet modules (xBull, Lobstr, WalletConnect, hardware wallets…) into Pollar without bundling them into @pollar/core.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

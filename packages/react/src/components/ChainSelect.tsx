@@ -47,7 +47,7 @@ export function addressForChain(wallets: WalletInfo[], chain: WalletChain | null
   return wallets.find((w) => resolveChain(w.chain) === chain)?.address ?? '';
 }
 
-interface ChainSelectProps {
+export interface ChainSelectProps {
   label?: string;
   value: WalletChain | null;
   options: WalletChain[];

@@ -7,6 +7,14 @@ export type { PollarAuthProvider, AuthProviderContext } from '@pollar/core';
 export { WalletButton } from './components/wallet-button/WalletButton';
 export { WalletButtonTemplate, type WalletButtonTemplateProps } from './components/wallet-button/WalletButtonTemplate';
 
+// ─── Network picker ───────────────────────────────────────────────────────────
+// Exported alongside the templates: every template that takes `chains` /
+// `selectedChain` / `onSelectChain` needs these to build those props, so a
+// consumer mounting a template itself would otherwise have to reimplement the
+// `chain ?? 'STELLAR'` legacy fold by hand.
+export { ChainSelect, resolveChain, chainsOf, addressForChain } from './components/ChainSelect';
+export type { ChainSelectProps } from './components/ChainSelect';
+
 // ─── Modals ───────────────────────────────────────────────────────────────────
 export { KycModal } from './components/kyc-modal/KycModal';
 export { KycStatus } from './components/kyc-modal/KycStatus';
@@ -35,7 +43,10 @@ export { TxHistoryModalTemplate } from './components/tx-history-modal/TxHistoryM
 export { WalletBalanceModalTemplate } from './components/wallet-balance-modal/WalletBalanceModalTemplate';
 export type { WalletBalanceModalTemplateProps } from './components/wallet-balance-modal/WalletBalanceModalTemplate';
 export { EnabledAssetsModalTemplate } from './components/enabled-assets-modal/EnabledAssetsModalTemplate';
-export type { EnabledAssetsModalTemplateProps } from './components/enabled-assets-modal/EnabledAssetsModalTemplate';
+export type {
+  EnabledAssetsModalTemplateProps,
+  CustomTrustlineModalTemplateProps,
+} from './components/enabled-assets-modal/EnabledAssetsModalTemplate';
 export { SendModalTemplate } from './components/send-modal/SendModalTemplate';
 export type { SendModalTemplateProps } from './components/send-modal/SendModalTemplate';
 export { SwapModalTemplate } from './components/swap-modal/SwapModalTemplate';

@@ -1,6 +1,12 @@
 {
   "name": "@pollar/privy-server-adapter",
   "version": "0.11.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pollar-xyz/pollar.git",
+    "directory": "packages/privy-server-adapter"
+  },
   "description": "Stateless HTTP proxy that lets Pollar sign Stellar transactions through your Privy account, without your Privy app secret leaving your infrastructure.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

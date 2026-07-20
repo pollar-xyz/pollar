@@ -425,7 +425,7 @@ export interface AuthProviderContext {
   readonly signal: AbortSignal;
   /** Typed `openapi-fetch` client, already wired with DPoP + refresh middleware. */
   readonly api: PollarApiClient;
-  /** API origin + version prefix (e.g. `https://sdk.api.pollar.xyz/v1`). */
+  /** API origin + version prefix (e.g. `https://sdk.api.pollar.xyz/v2`). */
   readonly basePath: string;
   readonly apiKey: string;
   readonly logger: PollarLogger;

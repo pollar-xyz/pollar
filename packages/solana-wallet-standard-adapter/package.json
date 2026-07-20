@@ -1,6 +1,12 @@
 {
   "name": "@pollar/solana-wallet-standard-adapter",
   "version": "0.11.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pollar-xyz/pollar.git",
+    "directory": "packages/solana-wallet-standard-adapter"
+  },
   "description": "Solana Wallet Standard adapter for @pollar/core — connect user-controlled Solana wallets (Phantom, Solflare, Backpack, …) via the Wallet Standard (@wallet-standard/* + @solana/wallet-standard-features), with SIWS login, without bundling any wallet SDK into @pollar/core.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

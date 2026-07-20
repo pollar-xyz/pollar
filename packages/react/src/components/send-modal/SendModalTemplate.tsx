@@ -31,7 +31,7 @@ export interface SendModalTemplateProps {
   selectedChain: WalletChain | null;
   /** Address of the wallet on {@link selectedChain}, shown under the picker. */
   walletAddress: string;
-  /** Can a payment be built on {@link selectedChain}? Stellar-only for now. */
+  /** Can a payment be built on {@link selectedChain}? Stellar and Solana only. */
   canSendOnChain: boolean;
   onSelectChain: (chain: WalletChain) => void;
   amount: string;
