@@ -166,13 +166,17 @@ interface PollarContextValue {
   refreshAssets: () => Promise<void>;
   /**
    * Establishes (omit `limit`) or removes (`limit: '0'`) a trustline for an
-   * asset. Pass the asset's `sponsored` flag so the app covers the reserve + fee
-   * when eligible; otherwise the user's own wallet pays. Mirrors
-   * {@link PollarClient.setTrustline}.
+   * asset. Sponsorship is derived automatically from the app's dashboard config
+   * (the app covers the reserve + fee when eligible); pass `skipSponsorship` to
+   * force the user's own wallet to pay. Mirrors {@link PollarClient.setTrustline}.
    */
   setTrustline: (
     asset: { code: string; issuer: string },
-    opts?: { limit?: string; sponsored?: boolean },
+    opts?: {
+      limit?: string;
+      /** Force self-pay even when the app would sponsor the trustline. */
+      skipSponsorship?: boolean;
+    },
   ) => Promise<TrustlineOutcome>;
   /** Open the enabled-assets / trustline-state modal. */
   openEnabledAssetsModal: () => void;
@@ -272,14 +276,14 @@ interface PollarProviderProps {
    * bypass the type anyway (plain JS, or a cast), each missing field lands on a
    * default scattered across the components rather than on anything central:
    *
-   *   chains       absent -> the chain order/filter falls back to the order the
-   *                          session listed the user's wallets in (see useChains)
-   *   name         absent -> 'Pollar'
-   *   theme        absent -> 'light'
-   *   accentColor  absent -> '#005DB4'
+   *   chains       absent → the chain order/filter falls back to the order the
+   *                         session listed the user's wallets in (see useChains)
+   *   name         absent → 'Pollar'
+   *   theme        absent → 'light'
+   *   accentColor  absent → '#005DB4'
    *   emailEnabled, providers, embeddedWallets, smartWallet
-   *                absent -> false. NOTE: that means EVERY login method is off
-   *                          and the login modal renders with no way in.
+   *                absent → false. NOTE: that means EVERY login method is off
+   *                         and the login modal renders with no way in.
    *
    * Leave this `undefined` to have the SDK fetch `/applications/config` on
    * mount, which is also what keeps branding, login methods and chains current:

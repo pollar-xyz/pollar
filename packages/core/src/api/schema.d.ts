@@ -136,7 +136,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get transaction status */
+        /**
+         * Get transaction status
+         * @description Multichain. `hash` is a Stellar transaction hash (64 hex chars) or a Solana signature (base58, 86-88 chars); the format selects the chain. `ledger` is the Stellar ledger sequence or the Solana slot.
+         */
         get: operations["getTxStatus"];
         put?: never;
         post?: never;
@@ -2765,7 +2768,9 @@ export interface operations {
                         /** @constant */
                         success: true;
                         content: {
-                            sponsorSignedXdr: string;
+                            sponsorSignedXdr?: string;
+                            unsignedXdr?: string;
+                            sponsored: boolean;
                         };
                     };
                 };

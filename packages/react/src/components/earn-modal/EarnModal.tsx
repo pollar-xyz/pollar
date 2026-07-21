@@ -281,10 +281,8 @@ export function EarnModal({ onClose }: EarnModalProps) {
     // Deposit of an issued asset needs its trustline first (native never does).
     // Establish it, then deposit — two signatures, like swap.
     if (tab === 'deposit' && depositNeedsTrustline && selectedOpportunity?.asset.issuer) {
-      const tl = await setTrustline(
-        { code: assetCode, issuer: selectedOpportunity.asset.issuer },
-        depositAssetRecord?.sponsored ? { sponsored: true } : undefined,
-      );
+      // Sponsorship is derived automatically from the app config now — no flag.
+      const tl = await setTrustline({ code: assetCode, issuer: selectedOpportunity.asset.issuer });
       if (tl.status === 'error') {
         setFormError(`Trustline for ${assetCode} failed: ${tl.details ?? 'unknown error'}`);
         setStep('form');

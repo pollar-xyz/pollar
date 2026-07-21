@@ -1726,41 +1726,21 @@ export class PollarClient {
   }
 
   /**
-   * The server's sponsorship verdict for an asset's trustline, read from the
-   * enabled-assets catalog (`GET /wallet/assets`, driven by the app's dashboard
-   * config). Loads the catalog on demand when it isn't cached yet. Falls back to
-   * self-pay (`false`) when the asset isn't a configured, sponsorable app asset —
-   * so a missing or failed catalog never silently charges the app.
-   */
-  private async _isTrustlineSponsored(asset: { code: string; issuer: string }): Promise<boolean> {
-    if (this._enabledAssetsState.step !== 'loaded') {
-      await this.refreshAssets();
-    }
-    const state = this._enabledAssetsState;
-    if (state.step !== 'loaded') return false;
-    const record = state.data.assets.find((a) => a.code === asset.code && a.issuer === asset.issuer);
-    return record?.sponsored === true;
-  }
-
-  /**
    * Establishes (omit `limit`) or removes (`limit: '0'`) a trustline for an asset.
    *
-   * Sponsorship is decided the way the fee-bump surfaces (payment / swap /
-   * contract) decide it: **on by default** when the app covers the 0.5 XLM
-   * reserve + fee, and the caller opts out with `skipSponsorship`. The per-asset
-   * verdict is computed server-side from the dashboard config and delivered on
-   * the enabled-assets catalog ({@link refreshAssets}); this method reads it for
-   * you (loading the catalog on demand), so callers no longer pass a flag. The
-   * route is chosen by that verdict, NOT by the wallet type:
-   *  - **Sponsored, custodial** (internal wallet, no adapter) → the server holds
-   *    the trustor key and orchestrates the sponsored `changeTrust` in one call.
-   *  - **Sponsored, external/adapter** → the server builds the sponsored
-   *    `changeTrust` and signs the sponsor; the user's own wallet adds the
-   *    trustor signature and it's submitted (the backend recognises the
-   *    sponsor-sourced tx and broadcasts it).
-   *  - **Not sponsored** (the app doesn't cover it, a custom asset not
-   *    configured in the app, or `skipSponsorship`) → a plain `change_trust` the
-   *    user's own wallet signs and pays for, via {@link runTx}.
+   * The app config decides who pays, server-side — the SDK never pre-decides.
+   * Sponsorship is **on by default** (the app covers the 0.5 XLM reserve + fee
+   * when eligible); pass `skipSponsorship` to force the user's own wallet to pay,
+   * mirroring the opt-out on the payment / swap / contract fee-bump surfaces. The
+   * route is by wallet type, and each server endpoint sponsors-or-self-pays:
+   *  - **Custodial** (internal wallet, no adapter) → one call to
+   *    `/wallet/assets/trustline`: the server holds the trustor key and either
+   *    sponsors or self-pays, then submits, returning the refreshed asset list.
+   *  - **External/adapter** → `/wallet/assets/trustline/build` returns a
+   *    `changeTrust` XDR (sponsor-signed when covered, or a plain self-pay one
+   *    otherwise); the user's own wallet adds the trustor signature and submits.
+   *  - **`skipSponsorship`** → a plain self-pay `change_trust` via {@link runTx},
+   *    bypassing the sponsoring endpoints for both wallet types.
    *
    * Does not refresh on its own — callers should `refreshAssets()` afterwards.
    */
@@ -1793,76 +1773,75 @@ export class PollarClient {
       return { status: 'error', details: 'Asset code must be 1–12 characters' };
     }
 
-    // Sponsorship mirrors the fee-bump surfaces (payment / swap / contract): on
-    // by default when the app covers it, opt out with `skipSponsorship`. The
-    // per-asset verdict is computed server-side from the dashboard config and
-    // relayed on the enabled-assets catalog — the client never decides policy.
-    const useSponsor = !opts?.skipSponsorship && (await this._isTrustlineSponsored(asset));
-
-    if (useSponsor) {
-      // Sponsored custodial path: wallet-service holds the trustor key and
-      // co-signs + submits in one server call. Only an app-configured asset on
-      // an internal (custodial) wallet qualifies — the backend re-checks and
-      // 400s otherwise.
-      if (!this._walletAdapter && walletType === 'internal') {
-        try {
-          const { data, error } = await this._api.POST('/wallet/assets/trustline', {
-            body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
-          });
-          if (!error && data?.success) {
-            if (data.content) {
-              // Bump the assets generation so a refreshAssets() that was in flight
-              // can't clobber this post-trustline (fresher) snapshot.
-              ++this._enabledAssetsGen;
-              this._setEnabledAssetsState({ step: 'loaded', data: data.content });
-            }
-            return { status: 'success' };
-          }
-          const details =
-            (error as { details?: string; code?: string } | undefined)?.details ??
-            (error as { code?: string } | undefined)?.code;
-          return { status: 'error', ...(details && { details }) };
-        } catch (err) {
-          const details = err instanceof Error ? err.message : undefined;
-          return { status: 'error', ...(details && { details }) };
-        }
-      }
-
-      // Sponsored external/adapter path: the trustor key lives client-side. The
-      // server builds the sponsored changeTrust and sponsor-signs it; we add the
-      // trustor signature with the user's own wallet and submit.
-      try {
-        const { data, error } = await this._api.POST('/wallet/assets/trustline/build', {
-          body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
-        });
-        if (error || !data?.success || !data.content?.sponsorSignedXdr) {
-          const details =
-            (error as { details?: string; code?: string } | undefined)?.details ??
-            (error as { code?: string } | undefined)?.code;
-          return { status: 'error', ...(details && { details }) };
-        }
-        const signed = await this.signTx(data.content.sponsorSignedXdr);
-        if (signed.status === 'error') {
-          return { status: 'error', ...(signed.details && { details: signed.details }) };
-        }
-        return this.submitTx(signed.signedXdr);
-      } catch (err) {
-        const details = err instanceof Error ? err.message : undefined;
-        return { status: 'error', ...(details && { details }) };
-      }
-    }
-
-    // Self-paid path: the user's own wallet signs and covers the reserve + fee.
     // The backend's change_trust schema is a discriminated union on `type`, so
     // derive it from the code length (1–4 → alphanum4, 5–12 → alphanum12).
-    return this.runTx('change_trust', {
+    const changeTrustParams = {
       asset: {
         type: asset.code.length <= 4 ? 'credit_alphanum4' : 'credit_alphanum12',
         code: asset.code,
         issuer: asset.issuer,
       },
       ...(limit !== undefined && { limit }),
-    } as TxBuildBody['params']);
+    } as TxBuildBody['params'];
+
+    // Client-forced self-pay: bypass the sponsoring endpoints and sign a plain
+    // change_trust with the user's own wallet.
+    if (opts?.skipSponsorship) {
+      return this.runTx('change_trust', changeTrustParams);
+    }
+
+    // Custodial: one server call. The server sponsors when the app config allows
+    // and self-pays otherwise, submitting either way and returning the refreshed
+    // asset list — the client no longer decides the route.
+    if (!this._walletAdapter && walletType === 'internal') {
+      try {
+        const { data, error } = await this._api.POST('/wallet/assets/trustline', {
+          body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
+        });
+        if (!error && data?.success) {
+          if (data.content) {
+            // Bump the assets generation so a refreshAssets() that was in flight
+            // can't clobber this post-trustline (fresher) snapshot.
+            ++this._enabledAssetsGen;
+            this._setEnabledAssetsState({ step: 'loaded', data: data.content });
+          }
+          return { status: 'success' };
+        }
+        const details =
+          (error as { details?: string; code?: string } | undefined)?.details ??
+          (error as { code?: string } | undefined)?.code;
+        return { status: 'error', ...(details && { details }) };
+      } catch (err) {
+        const details = err instanceof Error ? err.message : undefined;
+        return { status: 'error', ...(details && { details }) };
+      }
+    }
+
+    // External/adapter: the trustor key lives client-side. The server returns a
+    // changeTrust XDR — sponsor-signed when the app covers it, or a plain self-pay
+    // one otherwise — and we add the trustor signature with the user's own wallet
+    // and submit either way.
+    try {
+      const { data, error } = await this._api.POST('/wallet/assets/trustline/build', {
+        body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
+      });
+      // Sponsor-signed when the app covers it, plain self-pay otherwise; sign + submit either.
+      const xdr = data?.content?.sponsorSignedXdr ?? data?.content?.unsignedXdr;
+      if (error || !data?.success || !xdr) {
+        const details =
+          (error as { details?: string; code?: string } | undefined)?.details ??
+          (error as { code?: string } | undefined)?.code;
+        return { status: 'error', ...(details && { details }) };
+      }
+      const signed = await this.signTx(xdr);
+      if (signed.status === 'error') {
+        return { status: 'error', ...(signed.details && { details: signed.details }) };
+      }
+      return this.submitTx(signed.signedXdr);
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      return { status: 'error', ...(details && { details }) };
+    }
   }
 
   /**
