@@ -19,9 +19,26 @@ function formatBalance(balance: string | null, decimals = 7): string {
   return isNaN(n) ? balance : n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
+/** A testnet faucet for a given asset: where to top it up, and the link text. */
+interface FaucetHint {
+  url: string;
+  label: string;
+}
+
+/**
+ * The faucet for a balance row, or null when none applies. Testnet-only: the
+ * caller passes `null` on mainnet, where these faucets don't fund. Solana's
+ * native SOL points at the Solana faucet; USDC (an SPL token) at Circle's.
+ */
+function faucetFor(record: WalletBalanceRecord): FaucetHint | null {
+  if (record.type === 'native') return { url: 'https://faucet.solana.com/', label: 'Get test SOL' };
+  if (record.code === 'USDC') return { url: 'https://faucet.circle.com/', label: 'Get test USDC' };
+  return null;
+}
+
 // The chain is no longer tagged per row: the list is filtered to the network
 // picked in the header, so every row would carry the same tag.
-function BalanceItem({ record, showSolanaFaucet }: { record: WalletBalanceRecord; showSolanaFaucet: boolean }) {
+function BalanceItem({ record, faucet }: { record: WalletBalanceRecord; faucet: FaucetHint | null }) {
   const balanceDiffers = record.balance !== record.available;
   return (
     <div className="pollar-bal-item">
@@ -35,11 +52,11 @@ function BalanceItem({ record, showSolanaFaucet }: { record: WalletBalanceRecord
             <CopyButton value={record.issuer} label="Copy issuer address" className="pollar-copy-btn-sm" />
           </span>
         )}
-        {showSolanaFaucet && (
+        {faucet && (
           <span className="pollar-bal-faucet-hint">
             Need more?{' '}
-            <a href="https://faucet.solana.com/" target="_blank" rel="noopener noreferrer">
-              Get test SOL
+            <a href={faucet.url} target="_blank" rel="noopener noreferrer">
+              {faucet.label}
             </a>
           </span>
         )}
@@ -109,10 +126,8 @@ export function WalletBalanceModalTemplate({
   // Only the picked network's balances. The backend returns every chain in one
   // payload, so this is a local filter — switching networks costs no request.
   const balances = (data?.balances ?? []).filter((b) => resolveChain(b.chain) === selectedChain);
-  // The faucet only funds devnet/testnet, so mainnet gets no hint. Shown on the
-  // native SOL row only — it is where you top up the gas, and where the user
-  // looks when a send fails for lack of it.
-  const showSolanaFaucet = selectedChain === 'SOLANA' && network === 'testnet';
+  // These faucets fund devnet/testnet only, so mainnet gets no hint at all.
+  const showFaucets = selectedChain === 'SOLANA' && network === 'testnet';
 
   return (
     <div className="pollar-modal-card pollar-bal-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
@@ -183,7 +198,7 @@ export function WalletBalanceModalTemplate({
             <BalanceItem
               key={(b.chain ?? '') + b.code + (b.issuer ?? '')}
               record={b}
-              showSolanaFaucet={showSolanaFaucet && b.type === 'native'}
+              faucet={showFaucets ? faucetFor(b) : null}
             />
           ))}
         </div>
