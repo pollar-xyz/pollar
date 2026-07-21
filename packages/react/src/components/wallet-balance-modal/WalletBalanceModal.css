@@ -60,6 +60,12 @@
   text-decoration: underline;
 }
 
+/* Even smaller than the hint: which cluster the faucet funds. */
+.pollar-bal-faucet-net {
+  font-size: 0.625rem;
+  opacity: 0.8;
+}
+
 /* Per-asset network tag, shown only when the app spans more than one chain. The
    accent is passed in per chain via --pollar-chain-color. */
 .pollar-bal-chain-tag {

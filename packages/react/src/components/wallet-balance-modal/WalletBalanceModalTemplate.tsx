@@ -58,6 +58,9 @@ function BalanceItem({ record, faucet }: { record: WalletBalanceRecord; faucet: 
             <a href={faucet.url} target="_blank" rel="noopener noreferrer">
               {faucet.label}
             </a>
+            {/* Pollar's Solana testnet is the devnet cluster, and both faucets
+                fund devnet — spell it out so nobody requests on the wrong one. */}
+            <span className="pollar-bal-faucet-net"> (devnet)</span>
           </span>
         )}
       </div>
