@@ -357,6 +357,10 @@ export class PollarClient {
     this._api = createApiClient(this.basePath, {
       timeoutMs: this._requestTimeoutMs,
       retry: config.retry,
+      // A DPoP proof is single-use, so the transport-level retry cannot replay
+      // the cloned request's header — it hands each new attempt back here to be
+      // signed afresh. See `_resignForRetry`.
+      resignRetry: (request) => this._resignForRetry(request),
     });
     this._wireMiddlewares();
 
@@ -614,17 +618,25 @@ export class PollarClient {
         const wwwAuth = response.headers.get('WWW-Authenticate') ?? '';
         const isNonceChallenge = wwwAuth.toLowerCase().includes('use_dpop_nonce');
 
+        // A replayed proof is not an expired token, and refreshing cannot fix
+        // it: the server rejected the `jti`, having never processed the request.
+        // Treating it as an expiry (the default 401 path) burns a refresh per
+        // occurrence, which on a polling loop is enough to hit the /auth/refresh
+        // rate limit and take the session down with it. Retrying is all it
+        // needs — `_retryRequest` mints a brand-new proof.
+        const isProofReplay = !isNonceChallenge && (await self._isDpopReplay(response));
+
         // The refresh endpoint has special handling: don't recursively trigger
         // refresh from inside itself. But DO honor a nonce challenge — the
         // fresh `DPoP-Nonce` was already captured above, so a single retry
         // with the new nonce succeeds. Any other 401 (RT expired, reused,
         // invalid) propagates to `_doRefresh` which clears the session.
         if (request.url.includes('/auth/refresh')) {
-          if (isNonceChallenge) return self._logHttp(request, await self._retryRequest(request));
+          if (isNonceChallenge || isProofReplay) return self._logHttp(request, await self._retryRequest(request));
           return self._logHttp(request, response);
         }
 
-        if (!isNonceChallenge) {
+        if (!isNonceChallenge && !isProofReplay) {
           try {
             await self.refresh();
           } catch {
@@ -635,9 +647,10 @@ export class PollarClient {
           // server-side before auth was rejected — replaying could duplicate
           // effects (double-create a transaction, etc.). The original 401
           // bubbles up so the caller decides; the access token is now fresh,
-          // so a manual retry by the caller will succeed. Nonce-challenge
-          // 401s don't go through this branch (server didn't process the
-          // request), so any method retries safely above.
+          // so a manual retry by the caller will succeed. Nonce-challenge and
+          // replayed-proof 401s don't go through this branch (the server
+          // rejected the proof before the handler ran, so it processed
+          // nothing), which is why any method retries safely above.
           const method = request.method.toUpperCase();
           if (method !== 'GET' && method !== 'HEAD') {
             return self._logHttp(request, response);
@@ -724,6 +737,62 @@ export class PollarClient {
       this._log.warn('[PollarClient] DPoP proof build failed', err);
       return null;
     }
+  }
+
+  /**
+   * Is this 401 a rejected DPoP proof REPLAY (`jti` already seen)?
+   *
+   * The distinction matters because the default 401 path assumes an expired
+   * access token and spends a `/auth/refresh` on it. A replay is neither: the
+   * server refused the proof and never ran the handler, so the token is fine and
+   * a refresh only burns rate-limit budget. Narrowed to the replay `reason`
+   * specifically — every other DPoP failure (thumbprint mismatch, `ath`
+   * mismatch) genuinely can be fixed by re-issuing a token bound to the current
+   * key, so those keep the refresh.
+   *
+   * Reads a `clone()`, so the caller's body stays untouched. Any parse failure
+   * answers `false` and leaves the existing behaviour in place.
+   */
+  private async _isDpopReplay(response: Response): Promise<boolean> {
+    try {
+      const body = (await response.clone().json()) as { code?: unknown; reason?: unknown };
+      return body?.code === 'SDK_AUTH_DPOP_INVALID' && body?.reason === 'jti-replay';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Mints a fresh DPoP proof for a request the transport layer is about to
+   * re-send after a network failure (see `resignRetry` in `api/client.ts`).
+   *
+   * The retry there is a `request.clone()`, which copies the `DPoP` header the
+   * failed attempt already spent; re-sending it is a `jti` replay and the server
+   * rejects it with 401 even though the original failure was purely a dropped
+   * connection. Rebuilding the proof (and re-reading the access token, which a
+   * concurrent refresh may have rotated in the meantime) is what makes the retry
+   * actually retry.
+   *
+   * Returns `null` when the request can no longer be signed — no session (a
+   * concurrent logout) or no DPoP key — so the caller drops the retry instead of
+   * replaying revoked credentials. Only reached for GET/HEAD, so there is no
+   * body to carry over.
+   */
+  private async _resignForRetry(request: Request): Promise<Request | null> {
+    // Not proof-bound (public endpoint, or Bearer fallback on an HTTP origin):
+    // nothing is single-use, so the clone can be replayed as-is.
+    if (!request.headers.has('DPoP')) return request;
+
+    const accessToken = this._session?.token?.accessToken;
+    if (!accessToken) return null;
+
+    const proof = await this._buildProofForRequest(request, accessToken);
+    if (!proof) return null;
+
+    const headers = new Headers(request.headers);
+    headers.set('Authorization', `DPoP ${accessToken}`);
+    headers.set('DPoP', proof);
+    return new Request(request, { headers });
   }
 
   private async _retryRequest(originalRequest: Request): Promise<Response> {
@@ -1657,28 +1726,55 @@ export class PollarClient {
   }
 
   /**
+   * The server's sponsorship verdict for an asset's trustline, read from the
+   * enabled-assets catalog (`GET /wallet/assets`, driven by the app's dashboard
+   * config). Loads the catalog on demand when it isn't cached yet. Falls back to
+   * self-pay (`false`) when the asset isn't a configured, sponsorable app asset —
+   * so a missing or failed catalog never silently charges the app.
+   */
+  private async _isTrustlineSponsored(asset: { code: string; issuer: string }): Promise<boolean> {
+    if (this._enabledAssetsState.step !== 'loaded') {
+      await this.refreshAssets();
+    }
+    const state = this._enabledAssetsState;
+    if (state.step !== 'loaded') return false;
+    const record = state.data.assets.find((a) => a.code === asset.code && a.issuer === asset.issuer);
+    return record?.sponsored === true;
+  }
+
+  /**
    * Establishes (omit `limit`) or removes (`limit: '0'`) a trustline for an asset.
    *
-   * The route is chosen by whether the trustline is **sponsored** — the app pays
-   * the 0.5 XLM reserve + fee, so the user pays nothing — NOT by the wallet type.
-   * Pass the asset's `sponsored` flag (from {@link refreshAssets}) straight
-   * through; it works the same for internal and external wallets, only the
-   * co-signing mechanism differs:
+   * Sponsorship is decided the way the fee-bump surfaces (payment / swap /
+   * contract) decide it: **on by default** when the app covers the 0.5 XLM
+   * reserve + fee, and the caller opts out with `skipSponsorship`. The per-asset
+   * verdict is computed server-side from the dashboard config and delivered on
+   * the enabled-assets catalog ({@link refreshAssets}); this method reads it for
+   * you (loading the catalog on demand), so callers no longer pass a flag. The
+   * route is chosen by that verdict, NOT by the wallet type:
    *  - **Sponsored, custodial** (internal wallet, no adapter) → the server holds
    *    the trustor key and orchestrates the sponsored `changeTrust` in one call.
    *  - **Sponsored, external/adapter** → the server builds the sponsored
    *    `changeTrust` and signs the sponsor; the user's own wallet adds the
    *    trustor signature and it's submitted (the backend recognises the
    *    sponsor-sourced tx and broadcasts it).
-   *  - **Not sponsored** (`sponsored` falsy — sponsorship disabled, or a custom
-   *    asset not configured in the app) → a plain `change_trust` the user's own
-   *    wallet signs and pays for, via {@link runTx}. Same for internal/external.
+   *  - **Not sponsored** (the app doesn't cover it, a custom asset not
+   *    configured in the app, or `skipSponsorship`) → a plain `change_trust` the
+   *    user's own wallet signs and pays for, via {@link runTx}.
    *
    * Does not refresh on its own — callers should `refreshAssets()` afterwards.
    */
   async setTrustline(
     asset: { code: string; issuer: string },
-    opts?: { limit?: string; sponsored?: boolean },
+    opts?: {
+      limit?: string;
+      /**
+       * Force self-pay even when the app would sponsor the trustline — the
+       * opt-out that mirrors `skipSponsorship` on the payment / swap / contract
+       * fee-bump surfaces.
+       */
+      skipSponsorship?: boolean;
+    },
   ): Promise<TrustlineOutcome> {
     const limit = opts?.limit;
     const walletType = this._session?.wallet?.type;
@@ -1697,7 +1793,13 @@ export class PollarClient {
       return { status: 'error', details: 'Asset code must be 1–12 characters' };
     }
 
-    if (opts?.sponsored) {
+    // Sponsorship mirrors the fee-bump surfaces (payment / swap / contract): on
+    // by default when the app covers it, opt out with `skipSponsorship`. The
+    // per-asset verdict is computed server-side from the dashboard config and
+    // relayed on the enabled-assets catalog — the client never decides policy.
+    const useSponsor = !opts?.skipSponsorship && (await this._isTrustlineSponsored(asset));
+
+    if (useSponsor) {
       // Sponsored custodial path: wallet-service holds the trustor key and
       // co-signs + submits in one server call. Only an app-configured asset on
       // an internal (custodial) wallet qualifies — the backend re-checks and
@@ -2954,10 +3056,8 @@ export class PollarClient {
           ? assetsState.data.assets.find((a) => a.code === buy.code && a.issuer === buy.issuer)
           : undefined;
       if (!record?.trustlineEstablished) {
-        const tl = await this.setTrustline(
-          { code: buy.code, issuer: buy.issuer },
-          record?.sponsored ? { sponsored: true } : undefined,
-        );
+        // Sponsorship is derived automatically from the app config now — no flag.
+        const tl = await this.setTrustline({ code: buy.code, issuer: buy.issuer });
         if (tl.status === 'error') {
           return { status: 'error', details: `Trustline for ${buy.code} failed: ${tl.details ?? 'unknown error'}` };
         }
