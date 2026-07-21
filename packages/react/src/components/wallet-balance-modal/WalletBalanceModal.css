@@ -44,6 +44,22 @@
   color: var(--pollar-text);
 }
 
+/* Small print under the native SOL row on testnet: where to top up test funds. */
+.pollar-bal-faucet-hint {
+  font-size: 0.6875rem;
+  color: var(--pollar-muted);
+}
+
+.pollar-bal-faucet-hint a {
+  color: var(--pollar-accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.pollar-bal-faucet-hint a:hover {
+  text-decoration: underline;
+}
+
 /* Per-asset network tag, shown only when the app spans more than one chain. The
    accent is passed in per chain via --pollar-chain-color. */
 .pollar-bal-chain-tag {

@@ -13,7 +13,7 @@ interface WalletBalanceModalProps {
 }
 
 export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
-  const { walletBalance, refreshWalletBalance, wallets, styles } = usePollar();
+  const { walletBalance, refreshWalletBalance, wallets, network, styles } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
 
   const chains = useMemo(() => chainsOf(wallets), [wallets]);
@@ -39,6 +39,7 @@ export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
         walletAddress={walletAddress}
         chains={chains}
         selectedChain={selectedChain}
+        network={network}
         onSelectChain={setSelectedChain}
         onRefresh={() => refreshWalletBalance()}
         onClose={onClose}
