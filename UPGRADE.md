@@ -46,21 +46,57 @@ and `ReceiveModalTemplate` now take `chains`, `selectedChain` and
 exported helpers:
 
 ```tsx
-import { ChainSelect, chainsOf, addressForChain, usePollar } from '@pollar/react';
+import { ChainSelect, addressForChain, useChains, usePollar } from '@pollar/react';
 
 const { wallets } = usePollar();
-const chains = chainsOf(wallets);
-const [selectedChain, setSelectedChain] = useState(chains[0] ?? null);
+// useChains() applies the app's configured chain order from /config; prefer it
+// over chainsOf(wallets) alone, which cannot know that order.
+const { chains, primaryChain } = useChains();
+const [selectedChain, setSelectedChain] = useState(primaryChain);
 const walletAddress = addressForChain(wallets, selectedChain);
 ```
 
 The wrapper components (`<WalletBalanceModal>` and friends) do this for you — no
 change needed if you use those.
 
-### 5. New exported types
+### 5. `setTrustline` drops the `sponsored` opt-in flag
 
-`WalletAssetsContent`, `EnabledAssetRecord` and `PollarPersistedWallet` are now
-public.
+`setTrustline(asset, { sponsored: true })` no longer type-checks. Who pays is now
+decided server-side from the app config, not by a caller flag: custodial wallets
+hit `POST /wallet/assets/trustline` (the server sponsors or self-pays, then
+submits) and external wallets co-sign whichever XDR the build endpoint returns.
+The only knob left is the opt-out `skipSponsorship`, which forces a self-pay
+`change_trust` — the same shape as `skipSponsorship` on `signTx` / payments.
+
+```ts
+// BEFORE (0.11.0)
+await setTrustline(asset, { sponsored: true });
+
+// AFTER (0.11.1) — drop the flag; the app config decides
+await setTrustline(asset);
+// ...or force the user to pay their own reserve + fee:
+await setTrustline(asset, { skipSponsorship: true });
+```
+
+### 6. `TxBuildSignSubmitBody` / `TxBuildSignSubmitContent` became unions (types only)
+
+`POST /v2/tx/build-sign-submit` gained a `chain` field (absent = `STELLAR`) and
+answers per-chain, so both generated types now carry a non-Stellar member. Reading
+a Stellar-only field (`resultCode`, `estimatedFee`, `options`, the `operation`
+union) off the bare type no longer compiles — narrow first:
+
+```ts
+const resultCode = 'resultCode' in content ? content.resultCode : undefined;
+```
+
+No runtime behaviour changed and the request stays backward-compatible (omit
+`chain` and the endpoint behaves exactly as before); only the static types are
+stricter.
+
+### 7. New exported types
+
+`WalletAssetsContent`, `EnabledAssetRecord`, `PollarPersistedWallet` and
+`SendPaymentParams` are now public.
 
 ## 0.10.x -> 0.11.0
 

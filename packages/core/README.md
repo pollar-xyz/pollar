@@ -419,7 +419,9 @@ environments that re-instantiate `PollarClient`.
 #### `client.refresh(): Promise<void>`
 
 Forces an access-token refresh. Race-safe: concurrent calls coalesce into a single `/v2/auth/refresh` request.
-Request middleware also calls this automatically on 401 with `DPoP-Nonce` rotation.
+Request middleware calls this automatically on a **token-expiry 401**, then retries idempotent GET/HEAD requests. A
+**DPoP-Nonce challenge** or a **replayed-proof 401** does not refresh — it is retried with a freshly re-signed proof
+carrying the new nonce, so a polling loop can't burn the refresh rate limit on nonce rotation.
 
 ---
 
@@ -433,12 +435,12 @@ Returns one row per active refresh-token family for the authenticated user:
 interface SessionInfo {
   familyId: string;
   createdAt: string;
-  lastUsedAt: string;
-  userAgent: string;
-  ipHash: string;
-  deviceLabel?: string;
-  expiresAt: string;
+  lastUsedAt: string | null; // null until the family is used a second time
+  userAgent: string | null;
+  ipHash: string | null;
+  deviceLabel: string | null; // required key, nullable
   current: boolean; // true for the family backing this client
+  expiresAt: string;
 }
 ```
 

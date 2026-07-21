@@ -55,10 +55,10 @@ The class behind the factory, exported for direct use outside `PollarClient`.
 Beyond the shared `WalletAdapter` contract it carries the Solana-specific
 surface:
 
-| Member                      | Purpose                                                       |
-| --------------------------- | ------------------------------------------------------------- |
-| `chain`                     | Always `'SOLANA'` - what routes login through SIWS            |
-| `supportsSignIn`            | Whether the wallet exposes the native `solana:signIn` feature |
-| `signIn(input)`             | SIWS login; falls back to `signMessage` on wallets without it |
-| `signMessage(message)`      | Raw message signing                                           |
-| `signSolanaTransaction(tx)` | Signs a Solana transaction (sponsored external transfers)     |
+| Member                      | Purpose                                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `chain`                     | Always `'SOLANA'` - what routes login through SIWS                                                            |
+| `supportsSignIn`            | Whether the wallet exposes the native `solana:signIn` feature                                                 |
+| `signIn(input)`             | SIWS login; throws if the wallet lacks `solana:signIn` (check `supportsSignIn` first, then use `signMessage`) |
+| `signMessage(message)`      | Raw message signing                                                                                           |
+| `signSolanaTransaction(tx)` | Signs a Solana transaction (sponsored external transfers)                                                     |

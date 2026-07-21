@@ -58,8 +58,9 @@ Pollar authentication and multichain (Stellar + Solana) transactions into any Ja
 - **SEP-24 on/off-ramps** - anchor deposit/withdraw interactive flow via the `ramps` endpoints
 - **Account creation** - `createAccount()` puts an external wallet's classic account on-chain via a sponsored
   `createAccount`; the wallet surfaces `existsOnStellar` + `fundingMode`
-- **Sponsored trustlines** - `setTrustline` routes by the asset's `sponsored` flag, so external wallets can set
-  app-sponsored trustlines
+- **Sponsored trustlines** - `setTrustline` lets the app config decide who pays (server-side): custodial wallets hit
+  the sponsored/self-pay trustline endpoint, external wallets co-sign whichever XDR the server returns. Pass
+  `skipSponsorship` to force the user's own wallet to pay via `change_trust`
 - **Network resilience** - per-request timeout (default 10s) and idempotent-request retry; typed `PollarNetworkError`
 - KYC verification flow - provider selection, session start, and status polling
 - Transaction history - paginated fetch with status tracking
@@ -130,6 +131,8 @@ drop-in authentication in React applications.
 - `<DistributionRulesModal>` — manage the wallet's distribution rules
 - `<ChainSelect>` — the shared network picker, exported alongside `chainsOf()` / `addressForChain()` / `resolveChain()`
   so you can drive the templates that take `chains` / `selectedChain` / `onSelectChain` yourself
+- `useChains()` — the recommended hook for the app's configured chain order and primary address (returns
+  `{ chains, primaryChain, primaryAddress, ready }`); what the built-in wallet button and pickers read from
 - `<SessionsModal>` — drop-in active-sessions UI: lists every refresh-token family for the current user, per-row
   revoke, and a "Sign out everywhere" button
 - `createPollarAdapterHook(key)` — factory for fully-typed hooks that wrap custom adapters with automatic XDR signing
@@ -255,8 +258,8 @@ without bundling any wallet SDK into `@pollar/core`. Login uses **SIWS (Sign In 
 - `solanaWalletStandardAdapters(options?)` - discovers every installed Solana wallet and returns one `WalletAdapter`
   each to pass to `PollarClientConfig.walletAdapters`; SSR-safe (returns `[]` when there is no `window`)
 - `SolanaWalletStandardAdapter` - direct `WalletAdapter` implementation for use outside `PollarClient`
-- Peer deps: `@pollar/core@^0.11.1` plus the `@wallet-standard/*` packages and `@solana/wallet-standard-features`
-  (no wallet SDK bundled)
+- Peer dep: `@pollar/core@^0.11.1` only. The `@wallet-standard/*` packages and `@solana/wallet-standard-features` are
+  bundled as regular dependencies, so consumers don't install them; no wallet SDK is bundled
 
 ```bash
 npm install @pollar/solana-wallet-standard-adapter @pollar/core
