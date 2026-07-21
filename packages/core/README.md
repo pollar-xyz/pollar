@@ -497,6 +497,76 @@ via the submit path. Not applicable to custodial (internal) wallets — created 
 (C-address) wallets. Trustlines are a separate step (`setTrustline`). The wallet exposes `existsOnStellar` +
 `fundingMode` so a UI can decide whether to offer this.
 
+#### `client.signAndSubmitTx(unsignedXdr?): Promise<SubmitOutcome>`
+
+Signs and submits in one call. This is the path smart-wallet (passkey) sessions use - it runs the passkey ceremony -
+and the argument is optional (it defaults to the transaction currently in `TransactionState`). Custodial and external
+sessions can call it too.
+
+#### `client.buildAndSignAndSubmitTx(operation, params, options?): Promise<SubmitOutcome>`
+
+Build + sign + submit in one call. External and passkey wallets keep the granular `building → built → signing →
+submitting → success` transitions (each composed call emits its own); custodial wallets take a single round-trip to
+`/tx/build-sign-submit` and emit the compound `building-signing-submitting` step. For separate "Building…" / "Signing…"
+/ "Submitting…" indicators on a custodial flow, call `buildTx` / `signTx` / `submitTx` yourself instead.
+
+`client.runTx(...)` is an alias with the same signature - a shorter "just do the thing" name.
+
+#### `client.sendPayment(params): Promise<SubmitOutcome>`
+
+One entry point for a payment on any chain the user holds a wallet on. A Stellar payment routes through
+`buildAndSignAndSubmitTx` (so external adapters and passkey wallets keep the split flow); a Solana payment is a single
+server-side call and is **custodial-only** for now. `SendPaymentParams` is a per-chain union - a Stellar member with a
+decimal `amount` and an `asset`, a Solana member with an integer base-unit `amount` and an optional `mint`.
+
+```ts
+// Stellar
+await client.sendPayment({ destination: 'G...', amount: '1.5', asset: { type: 'native' } });
+// Solana (custodial): amount in lamports; omit `mint` for native SOL
+await client.sendPayment({ chain: 'SOLANA', destination: '...', amount: '1500000000' });
+```
+
+#### `client.getTxStatus(hash): Promise<{ hash; status; resultCode? }>`
+
+Polls the network status of a submitted transaction - `status` is `'PENDING' | 'SUCCESS' | 'FAILED'`.
+
+#### `client.signAuthEntry(entryXdr, { validUntilLedger }): Promise<SignAuthEntryOutcome>`
+
+Signs a Soroban authorization entry (external adapters sign it directly). Emits no transaction state, so a UI subscribed
+to `onTransactionStateChange` is not stranded on `signing`.
+
+---
+
+### Balances & assets
+
+#### `client.refreshBalance(): Promise<void>`
+
+Refreshes the authenticated user's OWN multichain balances and pushes the result to `WalletBalanceState`
+(`onWalletBalanceStateChange`). No argument - always the current session's wallets. See the multichain notes on
+`WalletBalanceRecord` above (a `null` balance is an unreadable chain, not zero).
+
+#### `client.getWalletBalance(publicKey, network?): Promise<WalletBalanceContent>`
+
+General-purpose balance lookup for ANY wallet on ANY network - not scoped to this application, and it does not touch
+`WalletBalanceState`. Use `refreshBalance()` for the session's own wallet.
+
+#### `client.getWallets(): WalletInfo[]`
+
+Every wallet the user holds, one per chain (`getWallet()` returns only the primary Stellar one). Returns `[]` when there
+is no session, or when the session predates the backend's multichain `wallets[]`.
+
+#### `client.refreshAssets(): Promise<void>` / `client.getEnabledAssetsState()`
+
+`refreshAssets()` loads the app's enabled assets paired with the wallet's on-chain trustline state and pushes it to
+`EnabledAssetsState` (`getEnabledAssetsState()` / `onEnabledAssetsStateChange()`).
+
+#### `client.setTrustline(asset, opts?): Promise<TrustlineOutcome>`
+
+Establishes (omit `limit`) or removes (`limit: '0'`) a trustline for `{ code, issuer }`. Who pays is decided
+**server-side** from the app config: custodial wallets hit `POST /wallet/assets/trustline` (the server sponsors or
+self-pays, then submits), external wallets co-sign whichever XDR `/wallet/assets/trustline/build` returns. Pass
+`opts.skipSponsorship` to force a self-pay `change_trust`. Smart (passkey) wallets don't use classic trustlines.
+
 ---
 
 ### Swaps
@@ -552,6 +622,7 @@ Available methods (all thin wrappers over the ramps endpoints):
 
 ```ts
 client.getRampsQuote(query: RampsQuoteQuery): Promise<RampsQuoteResponse>;
+client.getRampCountries(): Promise<RampsCountriesResponse>;
 client.createOnRamp(body: RampsOnrampBody): Promise<RampsOnrampResponse>;
 client.createOffRamp(body: RampsOfframpBody): Promise<RampsOfframpResponse>;
 client.completeWithdraw(txId: string): Promise<RampsCompleteResponse>;
@@ -682,6 +753,12 @@ const unsubHistory = client.onTxHistoryStateChange((s) => {
 const unsubBalance = client.onWalletBalanceStateChange((s) => {
   /* balances */
 });
+const unsubAssets = client.onEnabledAssetsStateChange((s) => {
+  /* enabled assets + trustline state */
+});
+const unsubSessions = client.onSessionsStateChange((s) => {
+  /* active refresh-token families */
+});
 const unsubNetwork = client.onNetworkStateChange((s) => {
   /* mainnet / testnet */
 });
@@ -690,7 +767,10 @@ unsubAuth();
 ```
 
 Snapshot getters are also available: `getAuthState()`, `getTransactionState()`, `getTxHistoryState()`,
-`getWalletBalanceState()`, `getNetworkState()`.
+`getWalletBalanceState()`, `getEnabledAssetsState()`, `getSessionsState()`, `getNetworkState()`, `getLogger()`.
+
+`fetchSessions()` refreshes `SessionsState` from the server (the same data `listSessions()` returns, pushed through the
+subscriber instead of returned).
 
 Error codes for the auth flow are surfaced via `AUTH_ERROR_CODES` / `AuthErrorCode`:
 
@@ -760,6 +840,10 @@ const client = new PollarClient({
 
 client.login({ provider: 'xbull' }); // any adapter type the kit registers
 ```
+
+To introspect what is registered: `client.listWalletAdapters()` returns `{ id, meta }[]` (meta sanitized),
+`client.getWalletAdapter(id)` returns one adapter instance, and `client.getWalletType()` returns the connected wallet's
+id (or `null`).
 
 ---
 
