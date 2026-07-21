@@ -262,10 +262,29 @@ interface PollarProviderProps {
    */
   client: PollarClient | PollarClientConfig;
   /**
-   * Local override of the `/applications/config` response. If provided (even
-   * `{}`), the remote fetch is skipped and missing fields fall back to the
-   * defaults in `LoginModalTemplate`. If `undefined`, the SDK fetches
-   * `/applications/config` on mount.
+   * Local REPLACEMENT for the `/applications/config` response, not a patch over
+   * it. Passing anything at all skips the remote fetch entirely; what you pass
+   * is used verbatim and is never merged with the server's answer, so there is
+   * no "fill in the fields I left out".
+   *
+   * `styles` may be partial (every field in it is optional), but `application`
+   * may not: `name`, `network` and `chains` are all required by the type. If you
+   * bypass the type anyway (plain JS, or a cast), each missing field lands on a
+   * default scattered across the components rather than on anything central:
+   *
+   *   chains       absent -> the chain order/filter falls back to the order the
+   *                          session listed the user's wallets in (see useChains)
+   *   name         absent -> 'Pollar'
+   *   theme        absent -> 'light'
+   *   accentColor  absent -> '#005DB4'
+   *   emailEnabled, providers, embeddedWallets, smartWallet
+   *                absent -> false. NOTE: that means EVERY login method is off
+   *                          and the login modal renders with no way in.
+   *
+   * Leave this `undefined` to have the SDK fetch `/applications/config` on
+   * mount, which is also what keeps branding, login methods and chains current:
+   * that fetch re-runs on every mount, so dashboard changes land on the next
+   * page load. Supplying this prop opts out of that too.
    */
   appConfig?: PollarConfig;
   adapters?: PollarAdapters;
@@ -418,8 +437,6 @@ export function PollarProvider({
     };
   }, [pollarClient]);
 
-  // Presence of `appConfig` is the opt-out: if the consumer passes it (even
-  // `{}`), we trust them and skip the remote fetch.
   // Route the modal error boundary's logs through the client's level-gated
   // logger (it's a class component that can't read context directly).
   useEffect(() => {
@@ -427,7 +444,14 @@ export function PollarProvider({
   }, [pollarClient]);
 
   useEffect(() => {
-    // A consumer-supplied appConfig opts out of the remote fetch; it's ready as-is.
+    // PRESENCE of `appConfig` is the opt-out, not its contents: any value at all
+    // means the consumer owns the config, so the remote fetch never runs and
+    // what they passed is used as-is. It is 'ready' immediately because there is
+    // nothing to wait for.
+    //
+    // Otherwise this runs on every mount, which is what keeps branding, login
+    // methods and chains current: a change in the dashboard lands on the next
+    // page load with no re-login.
     if (appConfigProp !== undefined) {
       setConfigStatus('ready');
       return;

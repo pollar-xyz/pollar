@@ -14,6 +14,12 @@ export { WalletButtonTemplate, type WalletButtonTemplateProps } from './componen
 // `chain ?? 'STELLAR'` legacy fold by hand.
 export { ChainSelect, resolveChain, chainsOf, addressForChain } from './components/ChainSelect';
 export type { ChainSelectProps } from './components/ChainSelect';
+// The chain order every built-in component reads, straight from the app's
+// `/applications/config`. A consumer building its own wallet button or picker
+// should use this rather than `chainsOf(wallets)` on its own, which cannot know
+// the configured order.
+export { useChains } from './useChains';
+export type { UseChainsResult } from './useChains';
 
 // ─── Modals ───────────────────────────────────────────────────────────────────
 export { KycModal } from './components/kyc-modal/KycModal';

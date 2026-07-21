@@ -28,17 +28,33 @@ export function resolveChain(chain: WalletChain | undefined): WalletChain {
 }
 
 /**
- * The selectable chains, in the order the backend returned the wallets — the
- * first is the default. De-duplicated because two wallets on one chain (e.g. a
- * custodial and a linked external Stellar wallet) are still one network choice.
+ * The selectable chains — the first is the default everywhere (network picker,
+ * the address the wallet button shows). De-duplicated because two wallets on one
+ * chain (e.g. a custodial and a linked external Stellar wallet) are still one
+ * network choice.
+ *
+ * `order` is the app's chain list from `/applications/config`, as arranged in the
+ * dashboard. When passed it both ORDERS and FILTERS: a chain missing from it is
+ * dropped, because the app switched it off and must stop appearing everywhere.
+ *
+ * Filtering here and not only in the backend is deliberate. `wallets` comes from
+ * the session, which is written at login and then persisted for as long as the
+ * session lives; `/config` is refetched on every page load. So a chain disabled
+ * today disappears on the next reload even for a user who logged in last week
+ * and still carries it in their stored session.
+ *
+ * Without `order` (config still loading) the fallback is the order the backend
+ * listed the wallets in.
  */
-export function chainsOf(wallets: WalletInfo[]): WalletChain[] {
-  const seen: WalletChain[] = [];
+export function chainsOf(wallets: WalletInfo[], order?: readonly WalletChain[]): WalletChain[] {
+  const held: WalletChain[] = [];
   for (const w of wallets) {
     const chain = resolveChain(w.chain);
-    if (!seen.includes(chain)) seen.push(chain);
+    if (!held.includes(chain)) held.push(chain);
   }
-  return seen;
+  if (!order || order.length === 0) return held;
+
+  return order.filter((c) => held.includes(c));
 }
 
 /** The address to show for `chain`, or '' when the user has no wallet there. */

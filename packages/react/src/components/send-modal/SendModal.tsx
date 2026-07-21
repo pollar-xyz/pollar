@@ -1,9 +1,10 @@
 'use client';
 
 import { toBaseUnits, WalletBalanceRecord, WalletChain } from '@pollar/core';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
-import { addressForChain, chainsOf, resolveChain } from '../ChainSelect';
+import { useChains } from '../../useChains';
+import { addressForChain, resolveChain } from '../ChainSelect';
 import '../shared.css';
 import '../transaction-modal/TransactionModal.css';
 import './SendModal.css';
@@ -48,10 +49,10 @@ export function SendModal({ onClose }: SendModalProps) {
   const [formError, setFormError] = useState('');
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const chains = useMemo(() => chainsOf(wallets), [wallets]);
+  const { chains } = useChains();
   const [selectedChain, setSelectedChain] = useState<WalletChain | null>(null);
-  // Default to the first network the user holds a wallet on. Runs as an effect
-  // because `wallets` is empty on the first render of a cold-start session.
+  // Default to the app's first configured network. Runs as an effect because
+  // `wallets` is empty on the first render of a cold-start session.
   useEffect(() => {
     if (selectedChain === null && chains.length > 0) setSelectedChain(chains[0]!);
   }, [chains, selectedChain]);
