@@ -1,5 +1,152 @@
 # Changelog
 
+## 0.11.1
+
+> Stable release. Published under the default `latest` dist-tag
+> (`npm i @pollar/core`). Headline: the per-chain wallet rework plus **Solana
+> custodial wallets can send** — the atomic tx endpoint went multichain and the
+> Send / Receive modals gained the network picker the balance and asset modals
+> already had.
+
+### Highlights (since 0.11.0)
+
+- **Every chain reports a full asset list.** The v2 wallet responses moved to a
+  `chains` envelope, and each chain now returns its native coin plus every token
+  the app enabled - so one loop handles Stellar, Polygon and Solana alike. At
+  0.11.0 the non-Stellar chains reported only their native token. Balances gained
+  `decimals`, `limit` and `sponsored`.
+- **A chain that fails to resolve no longer reads as empty.** A chain carrying
+  `error` contributes nothing to the flattened list, and an unreadable balance
+  stays `null` instead of being coerced to `'0'`, so the UI can tell
+  "unavailable" from "zero". `WalletBalanceRecord.balance` is therefore
+  `string | null`.
+- **Send on any chain the user holds.** `sendPayment()` is one entry point across
+  chains; Solana custodial sends land through the multichain atomic endpoint, and
+  the Send / Receive modals carry the network picker.
+- **Network picker across every wallet modal.** New `ChainSelect` component and
+  `useChains()` hook in `@pollar/react`; the balance, assets, send and receive
+  modals filter to the selected chain, and the chain order plus primary address
+  come from the app's `/applications/config`.
+- **Trustline sponsorship decided server-side.** `setTrustline` drops the
+  `sponsored` opt-in flag; the app config decides who pays, with `skipSponsorship`
+  to force self-pay (the same opt-out shape as `signTx`).
+- **`skipSponsorship` on `signTx`** and a **login modal that surfaces
+  loading / error state** when the app config fails to load.
+
+### `@pollar/core` — BREAKING (types only)
+
+- **`TxBuildSignSubmitBody` and `TxBuildSignSubmitContent` are now unions.**
+  `POST /v2/tx/build-sign-submit` accepts a `chain` (absent = `STELLAR`) and
+  answers with a per-chain shape, so both generated types gained a non-Stellar
+  member. Any code that reads a Stellar-only field off them — `resultCode`,
+  `estimatedFee`, `options`, the `operation` union — must narrow first:
+
+  ```ts
+  const resultCode = 'resultCode' in content ? content.resultCode : undefined;
+  ```
+
+  Worth calling out because it does not look like a breaking change from the
+  API side: nothing was removed, and the request stays backward-compatible
+  (omit `chain` and the endpoint behaves exactly as before). But adding a member
+  to a union removes guarantees from whoever reads it. This bit the SDK's own
+  `buildAndSignAndSubmitTx`, which is how it was found.
+
+  No runtime behaviour changed, and nothing under `/v1` is affected.
+
+### `@pollar/core`
+
+- `GET /v2/wallet/balance` and `GET /v2/wallet/assets` are read through the
+  `chains` envelope (`_flattenBalances` / new `_flattenAssets`), both collapsing
+  the per-chain answer into one chain-tagged list. Only Stellar restates the
+  session `network`; the other chains ride the same testnet/mainnet choice.
+- `WalletBalanceRecord.balance` and `.available` are now `string | null`
+  (`null` = the chain could not be read). Callers that parse the balance need a
+  null check.
+- New `sendPayment(params)` — one entry point for sending on any chain the user
+  holds a wallet on. Stellar routes through `buildAndSignAndSubmitTx`, so
+  external adapters and passkey wallets keep the split build → sign → submit
+  flow; chains whose signature expires (a Solana blockhash lapses in ~60s) do
+  the whole thing in one server-side call and are **custodial-only** for now.
+  An `idempotencyKey` is minted per call, because a Solana submit is a single
+  non-idempotent shot and a transport retry would otherwise transfer twice.
+- New `toBaseUnits(amount, decimals)` / `fromBaseUnits(base, decimals)`.
+  Balances are reported formatted (`"1.5"`) while base-unit chains take integer
+  amounts (`1500000000` lamports), so anything sending to those chains must
+  convert. The arithmetic is string + `BigInt`, never float —
+  `parseFloat('0.1') * 1e9` is `100000000.00000001`, and at 18 decimals a float
+  cannot represent the value at all. More fractional digits than the asset has
+  is an error, not a silent truncation, which would send less than was typed.
+- `setTrustline` no longer takes a `sponsored` opt-in flag. The app config
+  decides who pays server-side: custodial wallets hit `POST /wallet/assets/trustline`
+  (the server sponsors or self-pays, then submits), external wallets hit
+  `/wallet/assets/trustline/build` and co-sign whichever XDR comes back
+  (`sponsorSignedXdr` or a plain `unsignedXdr`). Pass `skipSponsorship` to force
+  a self-pay `change_trust`.
+- New exported types: `WalletAssetsContent`, `EnabledAssetRecord`,
+  `PollarPersistedWallet`, `SendPaymentParams`.
+- `signTx` accepts `skipSponsorship`.
+- Solana wallet endpoints added to the OpenAPI schema and wired into the client.
+- `getWallets()` returns one `WalletInfo` per chain and is surfaced through
+  `@pollar/react`'s context.
+- The wallet adapter is disconnected on explicit logout.
+
+### `@pollar/react`
+
+- New `ChainSelect` component and `useChains()` hook, exported alongside
+  `resolveChain` / `chainsOf` / `addressForChain`. `useChains()` is the single
+  source of truth for the app's configured chain order and primary address (from
+  `/applications/config`), so the wallet button and every picker agree on which
+  chain leads. The wallet-balance, enabled-assets, send and receive templates all
+  require `chains` / `selectedChain` / `onSelectChain`; these helpers build them.
+  Row keys are chain-qualified, since the same code + issuer can exist on two
+  chains.
+- `wallets` (one `WalletInfo` per chain) is on the Pollar context, backing every
+  network picker.
+- `SendModal` and `ReceiveModal` gained the network picker. The address, assets
+  and balances all scope to the selected chain, and Send converts the amount on
+  base-unit chains and links to that chain's explorer. Polygon is still blocked
+  in Send — the backend has no transfer path for it yet.
+- `ChainSelect` hides itself when the user holds a wallet on only one chain, so
+  a Stellar-only app sees no new control.
+- On Solana testnet the wallet-balance modal shows faucet hints: a Solana devnet
+  faucet on the native SOL row and Circle's USDC faucet on the USDC row.
+- The Assets modal's trustline status pill and Enable/Disable button collapsed
+  into a single `Toggle`. Native XLM renders as a locked-on switch: its
+  trustline is implicit and cannot be removed.
+- Refreshing the Balance and Assets modals no longer blanks the list. The
+  previous data stays rendered under a `BusyOverlay` that blocks interaction,
+  instead of the list collapsing and reflowing on every refresh.
+- `CustomTrustlineModalTemplateProps` is now exported.
+- Balances format against each token's own `decimals` (Stellar keeps 7), and a
+  `null` balance renders as a dash rather than `0`.
+- Stellar-only affordances (trustlines) are gated on the selected chain being
+  Stellar.
+- The login modal shows loading / error state when the app config request fails.
+
+### `@pollar/solana-wallet-standard-adapter`
+
+- **First published release.** The adapter was already implemented at 0.11.0 but
+  never shipped to npm. Login is wired end to end: the adapter declares
+  `chain: 'SOLANA'`, which routes `login({ provider })` through SIWS instead of
+  Stellar's SEP-10 challenge.
+
+### Packaging and docs
+
+- Every package now declares `license: MIT` and a `repository` with its
+  `directory`, so relative README links resolve on npmjs.com. Publish scripts
+  added for the four packages that lacked one.
+- `docs/1 Pollar react.md` and `docs/2 Pollar core.md` were removed. They were
+  hand-maintained copies of the two package READMEs, had drifted to the 0.8/0.9
+  API, and contained examples that no longer compile (`pollar.loginWallet()`,
+  `<PollarProvider config={...}>`, `new StellarClient({ network })`). The package
+  READMEs are the single source of truth; `docs/README.md` points at them.
+- Corrected in the READMEs: `/v1` auth endpoint paths (the SDK has been on `/v2`
+  since 0.11.0), the `AuthState.step` union, the persisted-wallet shape, the
+  `setTrustline` sponsorship model, and the claim that non-Stellar chains report
+  only their native token.
+- `UPGRADE.md` gained the missing `0.10.x -> 0.11.0` and `0.11.0 -> 0.11.1`
+  sections.
+
 ## 0.11.0
 
 > Stable release. Published under the default `latest` dist-tag

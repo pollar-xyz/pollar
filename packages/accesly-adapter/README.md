@@ -17,8 +17,13 @@ Pollar's _own_ smart wallets).
 ## Install
 
 ```bash
-npm i @pollar/accesly-adapter @pollar/core @accesly/react @accesly/core
+npm i @pollar/accesly-adapter @pollar/core
 ```
+
+`@pollar/core` is this adapter's only peer dependency. The Accesly SDK reaches it
+purely through the `signXdr` callback you inject, so nothing from `@accesly/*` is
+imported here - install `@accesly/react` / `@accesly/core` because **your own**
+code calls `useAccesly()`, not because the adapter needs them.
 
 ## Usage
 
@@ -26,14 +31,18 @@ npm i @pollar/accesly-adapter @pollar/core @accesly/react @accesly/core
 and hand the adapter a bound `signXdr`:
 
 ```tsx
+import { useState } from 'react';
 import { useAccesly } from '@accesly/react';
 import { createAcceslyAdapter } from '@pollar/accesly-adapter';
 import { PollarClient } from '@pollar/core';
+import { PollarProvider } from '@pollar/react';
 
-function makeClient(acceslyAddress: string, username: string) {
+// A hook: `useAccesly()` makes this a hook, so it must be called from a
+// component or another hook — never at module scope.
+function useAcceslyAdapter(acceslyAddress: string, username: string) {
   const { wallet, tx } = useAccesly();
 
-  const accesly = createAcceslyAdapter({
+  return createAcceslyAdapter({
     address: acceslyAddress, // the Accesly C-address
     signXdr: async (transactionXdr) => {
       const { ed25519Seed, expectedPublicKey } = await wallet.unlockForSigning(username);
@@ -41,11 +50,20 @@ function makeClient(acceslyAddress: string, username: string) {
       return signedXdr;
     },
   });
+}
 
-  return new PollarClient({
-    apiKey: '…',
-    walletAdapters: [accesly], // shows an "Accesly" button; login({ provider: 'accesly' })
-  });
+function App() {
+  const accesly = useAcceslyAdapter('C…', 'alice');
+  // Build the client once — `<PollarProvider>` locks it at first render.
+  const [client] = useState(
+    () =>
+      new PollarClient({
+        apiKey: '…',
+        walletAdapters: [accesly], // shows an "Accesly" button; login({ provider: 'accesly' })
+      }),
+  );
+
+  return <PollarProvider client={client}>{/* … */}</PollarProvider>;
 }
 ```
 

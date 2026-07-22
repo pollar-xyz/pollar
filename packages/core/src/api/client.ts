@@ -11,6 +11,21 @@ export interface ApiClientOptions {
   timeoutMs?: number | undefined;
   /** Retry policy for transport-level failures. */
   retry?: PollarRetryConfig | undefined;
+  /**
+   * Re-signs a request that is about to be RE-SENT by the transport retry below.
+   *
+   * A DPoP proof is single-use: the server remembers each `jti` and answers a
+   * replay with `SDK_AUTH_DPOP_INVALID` / `jti-replay` (401). A retry built with
+   * `request.clone()` carries the very same `DPoP` header, so without this hook
+   * the retry of a proof-carrying request is guaranteed to fail — and its 401
+   * then looks like an expired token, triggering a pointless refresh.
+   *
+   * Returns a request with a freshly-minted proof, or `null` when it cannot be
+   * signed (no session / no key), in which case the retry is abandoned and the
+   * original transport error propagates. Only ever called for GET/HEAD, so it
+   * never has to carry a body across.
+   */
+  resignRetry?: ((request: Request) => Promise<Request | null>) | undefined;
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -100,13 +115,27 @@ export async function fetchWithTimeout(request: Request, timeoutMs: number): Pro
  * (same `jti`), which the server rejects with `SDK_AUTH_DPOP_INVALID` /
  * `jti-replay`. So a non-idempotent request is attempted exactly once here; a
  * genuine failure is the caller's to retry (that path rebuilds a fresh proof).
+ *
+ * The same proof-replay applies to the GET/HEAD retries this function DOES make:
+ * a clone copies the `DPoP` header verbatim. So a proof-carrying request is only
+ * retried when `resignRetry` can mint a fresh proof for the new attempt;
+ * without that hook it is attempted exactly once, like a POST.
  */
-function makeRetryingFetch(timeoutMs: number, retry: Required<PollarRetryConfig>) {
+function makeRetryingFetch(
+  timeoutMs: number,
+  retry: Required<PollarRetryConfig>,
+  resignRetry?: ApiClientOptions['resignRetry'],
+) {
   const attempts = Math.max(1, retry.attempts);
   return async function retryingFetch(request: Request): Promise<Response> {
     const method = request.method.toUpperCase();
     const isIdempotent = method === 'GET' || method === 'HEAD';
-    const maxAttempts = isIdempotent ? attempts : 1;
+    // A replayed proof is a guaranteed 401, so retrying without re-signing would
+    // turn a recoverable network blip into an auth failure (and, upstream, into
+    // a spurious token refresh).
+    const carriesProof = request.headers.has('DPoP');
+    const canRetry = isIdempotent && (!carriesProof || resignRetry !== undefined);
+    const maxAttempts = canRetry ? attempts : 1;
     // Per-request timeout override (set by slow submit-family calls via the
     // `x-pollar-timeout-ms` header). Read it, then STRIP it so this internal
     // control header never travels to the server. Fall back to the client
@@ -122,7 +151,16 @@ function makeRetryingFetch(timeoutMs: number, retry: Required<PollarRetryConfig>
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       // Clone before each try (except a single-attempt fetch) so the body
       // survives a re-send; the original stays unconsumed for the next clone.
-      const attemptReq = maxAttempts > 1 ? request.clone() : request;
+      let attemptReq = maxAttempts > 1 ? request.clone() : request;
+      // Re-sign every attempt after the first: the clone above still carries the
+      // proof the previous attempt already spent.
+      if (attempt > 1 && carriesProof && resignRetry) {
+        const resigned = await resignRetry(attemptReq);
+        // Cannot re-sign (session gone, key unavailable): abandon the retry
+        // rather than replay stale credentials.
+        if (!resigned) throw lastErr;
+        attemptReq = resigned;
+      }
       try {
         return await fetchWithTimeout(attemptReq, effectiveTimeoutMs);
       } catch (err) {
@@ -145,5 +183,5 @@ export function createApiClient(baseUrl: string, options: ApiClientOptions = {})
     attempts: options.retry?.attempts ?? DEFAULT_ATTEMPTS,
     baseDelayMs: options.retry?.baseDelayMs ?? DEFAULT_BASE_DELAY_MS,
   };
-  return createClient<paths>({ baseUrl, fetch: makeRetryingFetch(timeoutMs, retry) });
+  return createClient<paths>({ baseUrl, fetch: makeRetryingFetch(timeoutMs, retry, options.resignRetry) });
 }

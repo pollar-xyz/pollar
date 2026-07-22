@@ -1,12 +1,16 @@
 'use client';
 
-import { TransactionState, WalletBalanceRecord, WalletId } from '@pollar/core';
+import { TransactionState, WalletBalanceRecord, WalletChain, WalletId } from '@pollar/core';
 import { type CSSProperties } from 'react';
 import { AssetSelect } from '../AssetSelect';
-import { PollarModalFooter } from '../commons';
+import { ChainSelect } from '../ChainSelect';
+import { CopyButton, cropAddress, PollarModalFooter } from '../commons';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
 
-function formatBalance(balance: string): string {
+// A null balance means the chain could not be read; it shows as a dash rather
+// than as 0, so an unreadable wallet never looks empty.
+function formatBalance(balance: string | null): string {
+  if (balance === null) return '—';
   const n = parseFloat(balance);
   return isNaN(n) ? balance : n.toLocaleString(undefined, { maximumFractionDigits: 7 });
 }
@@ -22,6 +26,14 @@ export interface SendModalTemplateProps {
   txTitle: string;
   assets: WalletBalanceRecord[];
   selectedAsset: WalletBalanceRecord | null;
+  /** Networks the user holds a wallet on; the first one is the default. */
+  chains: WalletChain[];
+  selectedChain: WalletChain | null;
+  /** Address of the wallet on {@link selectedChain}, shown under the picker. */
+  walletAddress: string;
+  /** Can a payment be built on {@link selectedChain}? Stellar and Solana only. */
+  canSendOnChain: boolean;
+  onSelectChain: (chain: WalletChain) => void;
   amount: string;
   destination: string;
   formError: string;
@@ -54,6 +66,11 @@ export function SendModalTemplate({
   txTitle,
   assets,
   selectedAsset,
+  chains,
+  selectedChain,
+  walletAddress,
+  canSendOnChain,
+  onSelectChain,
   amount,
   destination,
   formError,
@@ -99,7 +116,7 @@ export function SendModalTemplate({
   } as CSSProperties;
 
   const selectedKey = selectedAsset ? assetKey(selectedAsset) : '';
-  const canSubmit = !!selectedAsset && !!amount && !!destination.trim() && !isLoadingBalance;
+  const canSubmit = canSendOnChain && !!selectedAsset && !!amount && !!destination.trim() && !isLoadingBalance;
 
   const title = step === 'form' ? 'Send' : txTitle;
 
@@ -163,6 +180,18 @@ export function SendModalTemplate({
       {/* Form step */}
       {step === 'form' && (
         <>
+          {/* Network selector — drives the address and the asset list below */}
+          <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoadingBalance} />
+
+          {walletAddress && (
+            <div className="pollar-address-row">
+              <span className="pollar-address">{cropAddress(walletAddress)}</span>
+              <CopyButton value={walletAddress} label="Copy wallet address" />
+            </div>
+          )}
+
+          {!canSendOnChain && <div className="pollar-modal-empty">Sending is not available on this network yet.</div>}
+
           {/* Asset selector */}
           <AssetSelect
             label="Asset"
@@ -172,7 +201,9 @@ export function SendModalTemplate({
             options={assets.map((a) => ({
               key: assetKey(a),
               code: a.code,
-              available: a.available,
+              // Unreadable (null) drops the "— X available" suffix instead of
+              // claiming a zero balance.
+              available: a.available ?? undefined,
               enabledInApp: a.enabledInApp,
             }))}
             onChange={(key) => {

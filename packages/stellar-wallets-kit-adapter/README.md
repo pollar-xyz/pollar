@@ -7,7 +7,7 @@ The adapters are registered through the `walletAdapters` slot on `PollarClientCo
 ## Installation
 
 ```bash
-npm install @pollar/stellar-wallets-kit-adapter @creit.tech/stellar-wallets-kit
+npm install @pollar/stellar-wallets-kit-adapter @pollar/core @creit.tech/stellar-wallets-kit
 ```
 
 `@pollar/core` and `@creit.tech/stellar-wallets-kit` are peer dependencies — install whichever versions match the rest of your app. Requires Node 20+ when running in toolchains.
@@ -55,11 +55,13 @@ time (via `ensureInit()`), building one `StellarWalletsKitAdapter` per module up
 front. It is not lazy - a later `login({ provider })` just routes to the
 matching adapter that was already built.
 
+> **0.11.1** requires `@pollar/core@^0.11.1` / `@pollar/react@^0.11.1`.
+>
 > **0.10.0** - switched to the `walletAdapters[]` array model: the factory is now
 > `stellarWalletsKitAdapters()` (was `stellarWalletsKit()`) and returns a
 > `WalletAdapter[]` for the plural `walletAdapters` config slot instead of a
 > single resolver for `walletAdapter`. SSR-safe: returns `[]` when there is no
-> `window`. Requires `@pollar/core@^0.10.0` / `@pollar/react@^0.10.0`.
+> `window`.
 >
 > `connect()` resolves to `{ address }` only, and `network` is **required** (no
 > `Networks.TESTNET` default) — the kit is a global singleton, so silently
@@ -92,11 +94,12 @@ Calling `stellarWalletsKitAdapters({ network })` with no `modules` argument enab
 Pass your own `modules` list. Import from the kit's per-wallet subpaths so unused modules tree-shake out:
 
 ```ts
+import { PollarClient } from '@pollar/core';
 import { stellarWalletsKitAdapters } from '@pollar/stellar-wallets-kit-adapter';
-import { Networks } from '@creit.tech/stellar-wallets-kit';
+import { Networks, WalletNetwork } from '@creit.tech/stellar-wallets-kit';
 import { FreighterModule } from '@creit.tech/stellar-wallets-kit/modules/freighter';
 import { xBullModule } from '@creit.tech/stellar-wallets-kit/modules/xbull';
-import { WalletConnectModule } from '@creit.tech/stellar-wallets-kit/modules/wallet-connect';
+import { WalletConnectAllowedMethods, WalletConnectModule } from '@creit.tech/stellar-wallets-kit/modules/wallet-connect';
 
 const client = new PollarClient({
   apiKey: 'your-api-key',

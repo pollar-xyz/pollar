@@ -1,5 +1,137 @@
 # Upgrade guide
 
+## 0.11.0 -> 0.11.1
+
+0.11.1 reworks the multichain wallet responses. The wire format moved to a
+`chains` envelope and an unreadable chain is now represented explicitly instead
+of being flattened away, which changes two public types.
+
+### 1. `balance` and `available` are now `string | null`
+
+`WalletBalanceRecord.balance` and `.available` were `string`. They are now
+nullable: `null` means **the chain could not be read** (an unreachable RPC), not
+an empty wallet. It is never coerced to `'0'`, precisely so the UI can tell the
+two apart.
+
+```ts
+// BEFORE (0.11.0) — always a string
+const n = parseFloat(record.balance);
+
+// AFTER (0.11.1) — null is "unavailable", not zero
+const n = record.balance === null ? null : parseFloat(record.balance);
+```
+
+Render `null` as a dash or an "unavailable" state. Rendering it as `0` tells the
+user their funds are gone.
+
+### 2. Every chain reports a full asset list
+
+At 0.11.0 the non-Stellar chains reported only their native token. Now every
+chain returns its native coin **plus each token the app enabled**, so one loop
+handles Stellar, Polygon and Solana alike. If you special-cased "Solana only has
+SOL", drop that branch.
+
+### 3. New balance fields
+
+`decimals?: number`, `limit?: string` and `sponsored?: boolean` join the record,
+and `type` gained `'token'` alongside the Stellar classic values. Format amounts
+against each token's own `decimals` (Stellar stays at 7) rather than assuming 7
+everywhere. An exhaustive `switch` on `type` needs a `'token'` arm.
+
+### 4. `@pollar/react`: templates require the chain props
+
+`WalletBalanceModalTemplate`, `EnabledAssetsModalTemplate`, `SendModalTemplate`
+and `ReceiveModalTemplate` now take `chains`, `selectedChain` and
+`onSelectChain`. If you mount a template yourself, build them with the newly
+exported helpers:
+
+```tsx
+import { ChainSelect, addressForChain, useChains, usePollar } from '@pollar/react';
+
+const { wallets } = usePollar();
+// useChains() applies the app's configured chain order from /config; prefer it
+// over chainsOf(wallets) alone, which cannot know that order.
+const { chains, primaryChain } = useChains();
+const [selectedChain, setSelectedChain] = useState(primaryChain);
+const walletAddress = addressForChain(wallets, selectedChain);
+```
+
+The wrapper components (`<WalletBalanceModal>` and friends) do this for you — no
+change needed if you use those.
+
+### 5. `setTrustline` drops the `sponsored` opt-in flag
+
+`setTrustline(asset, { sponsored: true })` no longer type-checks. Who pays is now
+decided server-side from the app config, not by a caller flag: custodial wallets
+hit `POST /wallet/assets/trustline` (the server sponsors or self-pays, then
+submits) and external wallets co-sign whichever XDR the build endpoint returns.
+The only knob left is the opt-out `skipSponsorship`, which forces a self-pay
+`change_trust` — the same shape as `skipSponsorship` on `signTx` / payments.
+
+```ts
+// BEFORE (0.11.0)
+await setTrustline(asset, { sponsored: true });
+
+// AFTER (0.11.1) — drop the flag; the app config decides
+await setTrustline(asset);
+// ...or force the user to pay their own reserve + fee:
+await setTrustline(asset, { skipSponsorship: true });
+```
+
+### 6. `TxBuildSignSubmitBody` / `TxBuildSignSubmitContent` became unions (types only)
+
+`POST /v2/tx/build-sign-submit` gained a `chain` field (absent = `STELLAR`) and
+answers per-chain, so both generated types now carry a non-Stellar member. Reading
+a Stellar-only field (`resultCode`, `estimatedFee`, `options`, the `operation`
+union) off the bare type no longer compiles — narrow first:
+
+```ts
+const resultCode = 'resultCode' in content ? content.resultCode : undefined;
+```
+
+No runtime behaviour changed and the request stays backward-compatible (omit
+`chain` and the endpoint behaves exactly as before); only the static types are
+stricter.
+
+### 7. New exported types
+
+`WalletAssetsContent`, `EnabledAssetRecord`, `PollarPersistedWallet` and
+`SendPaymentParams` are now public.
+
+## 0.10.x -> 0.11.0
+
+0.11.0 is the multichain release: Solana joins Stellar, and **every SDK request
+moved from `/v1` to `/v2`**.
+
+### 1. The SDK now calls `/v2`
+
+`basePath` is built as `${baseUrl}/v2`. If you pass a custom `baseUrl`, keep
+passing the **origin only** (`https://sdk.api.example.com`) — the SDK appends the
+version prefix itself. Your backend must serve the `/v2` routes; an sdk-api that
+only has `/v1` will 404 across the board.
+
+### 2. Balances are multichain
+
+`WalletBalanceRecord` gained `chain` (`'STELLAR' | 'POLYGON' | 'SOLANA'`), and
+the balance response gained `multichain`, set when more than one chain came back.
+Records minted before multichain carry no `chain`; treat absent as `'STELLAR'`
+rather than as unknown.
+
+### 3. The `WalletAdapter` contract is chain-aware
+
+Adapters may declare `chain`. **Absent means `'STELLAR'`**, so existing Stellar
+adapters need no change. A single `walletAdapters` array can now carry Stellar
+and Solana adapters side by side. `signTransaction` and `signAuthEntry` became
+**optional** on the contract, because non-Stellar adapters do not implement them
+— if you consume an adapter directly, guard those calls.
+
+### 4. Sign In With Solana (SIWS)
+
+New types `SolanaSignInInput` / `SolanaSignInOutput` (with a raw `signMessage`
+fallback) and `signSolanaTransaction`. An adapter declaring `chain: 'SOLANA'` is
+routed through SIWS instead of Stellar's SEP-10 challenge. Connect
+user-controlled Solana wallets with `@pollar/solana-wallet-standard-adapter`.
+
 ## 0.9.x -> 0.10.0
 
 0.10.0 unifies external wallets into a single `walletAdapters: WalletAdapter[]`

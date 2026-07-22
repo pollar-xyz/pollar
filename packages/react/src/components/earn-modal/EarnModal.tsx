@@ -174,8 +174,13 @@ export function EarnModal({ onClose }: EarnModalProps) {
   // needed, the deposit runs as two signatures: trustline, then deposit.
   const depositAssetRecord = (() => {
     if (!selectedOpportunity?.asset.issuer || enabledAssets.step !== 'loaded') return undefined;
+    // Stellar-only: the catalog is multichain now, and Earn (DeFindex/Blend)
+    // settles on Stellar. Chain is undefined on the v1 shape, so absent = Stellar.
     return enabledAssets.data.assets.find(
-      (a) => a.code === assetCode && a.issuer === selectedOpportunity.asset.issuer,
+      (a) =>
+        (a.chain === undefined || a.chain === 'STELLAR') &&
+        a.code === assetCode &&
+        a.issuer === selectedOpportunity.asset.issuer,
     );
   })();
   const depositNeedsTrustline =
@@ -276,10 +281,8 @@ export function EarnModal({ onClose }: EarnModalProps) {
     // Deposit of an issued asset needs its trustline first (native never does).
     // Establish it, then deposit — two signatures, like swap.
     if (tab === 'deposit' && depositNeedsTrustline && selectedOpportunity?.asset.issuer) {
-      const tl = await setTrustline(
-        { code: assetCode, issuer: selectedOpportunity.asset.issuer },
-        depositAssetRecord?.sponsored ? { sponsored: true } : undefined,
-      );
+      // Sponsorship is derived automatically from the app config now — no flag.
+      const tl = await setTrustline({ code: assetCode, issuer: selectedOpportunity.asset.issuer });
       if (tl.status === 'error') {
         setFormError(`Trustline for ${assetCode} failed: ${tl.details ?? 'unknown error'}`);
         setStep('form');

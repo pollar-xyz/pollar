@@ -3,13 +3,16 @@
 React bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI, transaction modals, and hooks for
 Stellar and Solana applications.
 
-> **0.10.0** requires `@pollar/core@^0.10.0`. Headline features: on-chain swaps
-> via `<SwapModal>` + `usePollar().swap` / `getSwapQuote` / `openSwapModal`;
-> live SEP-24 on/off-ramps through `<RampWidget>` (now wired to
-> `client.createOnRamp` / `client.createOffRamp`); and a self-driving Privy
-> adapter (registered interactive adapters are auto-driven to completion before
-> `login({ provider })`). See the [CHANGELOG](../../CHANGELOG.md) and
-> [UPGRADE.md](../../UPGRADE.md) for the full version history before upgrading.
+> **0.11.1** requires `@pollar/core@^0.11.1`. Headline feature: a **network
+> picker** (`<ChainSelect>`) across the wallet-balance, enabled-assets, send and
+> receive modals - each scopes its rows to the selected chain instead of tagging
+> every row, and the filter is local (the backend returns every chain in one
+> payload, so switching networks costs no request). Balances now format against
+> each token's own `decimals`, and a `null` balance renders as a dash rather than
+> as `0`, because `null` means the chain could not be read. The login modal shows
+> loading / error state when the app config fails to load. See the
+> [CHANGELOG](../../CHANGELOG.md) and [UPGRADE.md](../../UPGRADE.md) for the full
+> version history before upgrading.
 
 ## Installation
 
@@ -69,11 +72,11 @@ Context provider that initialises the Pollar client and makes it available to ch
 <PollarProvider
   client={{
     apiKey: 'your-api-key',
-    baseUrl: 'https://sdk.api.pollar.xyz', // optional
+    baseUrl: 'https://sdk.api.pollar.xyz', // optional, origin only — the SDK appends /v2
     stellarNetwork: 'testnet', // optional, default: 'testnet'
     storage, // optional, RN apps inject this
     keyManager, // optional, autodetects on web
-    walletAdapter, // optional, external wallet stack
+    walletAdapters, // optional, WalletAdapter[] — external wallet stacks
     deviceLabel: 'iPhone — Safari', // optional, shown in SessionsModal
     onStorageDegrade, // optional, telemetry hook
   }}
@@ -112,7 +115,14 @@ const {
   // Session
   isAuthenticated, // boolean - true when a wallet address is present
   wallet, // WalletInfo | null - read wallet?.address for the on-chain address
+  wallets, // WalletInfo[] - every wallet the user holds, one per chain. To drive
+  //          a network picker, prefer the useChains() hook (below) over reading
+  //          this directly - it applies the app's configured chain order
   verified, // boolean - true once the server has confirmed the session
+
+  // App config (the remote /config fetch behind the login modal)
+  configStatus, // 'loading' | 'ready' | 'error'
+  retryConfig, // () => void - re-runs the fetch after an error
 
   // Client escape hatch
   getClient, // () => PollarClient - for getUserProfile(), listSessions(), …
@@ -131,6 +141,7 @@ const {
   buildTx, // (operation, params, options?) => Promise<BuildOutcome>
   signAndSubmitTx, // (unsignedXdr?: string) => Promise<SubmitOutcome>  (custodial; XDR optional)
   signTx, // (unsignedXdr: string) => Promise<SignOutcome>  (external-wallet only)
+  sendPayment, // (params: SendPaymentParams) => Promise<SubmitOutcome>
   submitTx, // (signedXdr: string) => Promise<SubmitOutcome>
   buildAndSignAndSubmitTx, // (operation, params, options?) => Promise<SubmitOutcome>  (one-shot)
   runTx, // alias of buildAndSignAndSubmitTx
@@ -148,12 +159,14 @@ const {
   // Enabled assets / trustlines
   enabledAssets, // EnabledAssetsState
   refreshAssets, // () => Promise<void>
-  setTrustline, // (asset, opts?) => Promise<TrustlineOutcome>
+  setTrustline, // (asset, opts?: { limit?, skipSponsorship? }) => Promise<TrustlineOutcome>  (sponsorship decided server-side)
   openEnabledAssetsModal, // () => void
 
   // Swap (DEX/AMM)
   getSwapQuote, // (params: SwapQuoteParams) => Promise<SwapQuote[]>
   swap, // (quote: SwapQuote, opts?) => Promise<SubmitOutcome>
+  getSwapConfig, // () => Promise<SwapVenue[]>  (which venues this app offers)
+  getSwapTokens, // () => Promise<SwapToken[]>
   openSwapModal, // () => void
 
   // Earn (yield vaults + lending — DeFindex + Blend)
@@ -213,6 +226,14 @@ login({ provider: 'xbull' });
 login({ provider: 'lobstr' });
 ```
 
+#### When the app config fails to load
+
+The login modal is gated on the remote app-config fetch. While it runs the modal shows a spinner; if it fails, it shows
+"Could not load sign-in options. Check your connection and try again." plus a **Try again** button wired to
+`retryConfig()`. Both states are readable from `usePollar().configStatus` (`'loading' | 'ready' | 'error'`) if you are
+driving `<LoginModalTemplate>` yourself. Passing `appConfig` to `<PollarProvider>` opts out of the fetch entirely, so
+neither state can occur.
+
 #### Self-driving interactive adapters (Privy, …)
 
 Registered adapters that opt into the interactive-auth contract
@@ -231,25 +252,57 @@ provider:
 
 ---
 
+### `useChains()`
+
+The single source of truth for "which chains, in what order, and which address to
+show". Every built-in component (`<WalletButton>`, the network pickers) reads from
+it, so they can never disagree about which chain leads. Use it when you build your
+own wallet button or picker instead of calling `chainsOf(wallets)` yourself —
+`chainsOf` alone cannot know the app's configured order.
+
+```ts
+import { useChains } from '@pollar/react';
+
+const { chains, primaryChain, primaryAddress, ready } = useChains();
+```
+
+| Field            | Type                  | Description                                                                                                             |
+| ---------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `chains`         | `WalletChain[]`       | Chains to offer, in the app's configured order: those the app serves **and** the user holds. `[]` until config resolves |
+| `primaryChain`   | `WalletChain \| null` | The app's first configured chain the user holds. `null` until ready                                                     |
+| `primaryAddress` | `string`              | The address on `primaryChain`. Falls back to the session's first wallet while config is in flight                       |
+| `ready`          | `boolean`             | `false` while `/config` is loading or failed — gate any chain UI on it                                                  |
+
+The order and membership come from the app's `/applications/config`
+(`appConfig.application.chains`), not from the session's `wallets`: a chain the app
+switched off stops appearing on the next page load even for a user whose stored
+session still carries it.
+
+---
+
 ### Components
 
 Every modal mounts itself when its `openXModal()` action is called. You don't need to render these directly — they're
-already wired inside `<PollarProvider>` — but they're exported in case you want to mount them yourself.
+already wired inside `<PollarProvider>` — and most are exported in case you want to mount them yourself.
 
-| Component                  | Purpose                                                                                                                                                                                                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<WalletButton>`           | Drop-in button. Opens login when signed out; signed in, shows the wallet address with a dropdown (Send, Receive, copy address, balance, history, ramp, KYC, distribution rules, sessions, sign out, plus a "Create account" action when the external wallet has no on-chain account yet). Inline arc spinner during in-progress transactions |
-| `<SendModal>`              | Full send flow: asset picker, amount, destination, inline build > sign > success/error                                                                                                                                                                  |
-| `<SwapModal>`              | On-chain asset-to-asset swap: pick from/to assets and amount, quote across venues, execute (auto-trustline on the buy asset when needed); paste a custom buy token (code + issuer)                                                                       |
-| `<EarnModal>`              | Deposit/withdraw across DeFindex vaults and Blend pools: provider + opportunity selection with live APY, wallet balance, over-spend guards, and auto-trustline on deposit                                                                                |
-| `<ReceiveModal>`           | Wallet address as QR code with copy-to-clipboard (no external QR dependency required)                                                                                                                                                                   |
-| `<TxHistoryModal>`         | Paginated transaction history with auto-fetch on open and stellar.expert explorer links                                                                                                                                                                 |
-| `<WalletBalanceModal>`     | Multichain wallet balances (Stellar + Solana); each balance carries a per-chain tag on multichain apps, with refresh button                                                                                                                                                                                                            |
-| `<EnabledAssetsModal>`     | The application's dashboard-enabled assets with per-asset trustline state; establish/remove trustlines                                                                                                                                                  |
-| `<DistributionRulesModal>` | Manage the wallet's distribution rules                                                                                                                                                                                                                  |
-| `<SessionsModal>`          | Lists every active refresh-token family for the current user with device metadata, marks the local session, per-row revoke, and a "Sign out everywhere" button                                                                                          |
-| `<KycModal>`               | Identity verification flow - provider selection + status polling _(UI preview - backend coming soon)_                                                                                                                                                   |
-| `<RampWidget>`             | Buy/sell crypto via SEP-24 - direction tabs, route comparison, payment instructions (wired to `client.createOnRamp` / `client.createOffRamp`)                                                                                                           |
+> Two wrappers are **not** exported: `<TxHistoryModal>` and `<TransactionModal>`. Only their templates
+> (`TxHistoryModalTemplate` / `TransactionModalTemplate`) are public. Mount those instead if you need to drive them
+> yourself.
+
+| Component                  | Purpose                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<WalletButton>`           | Drop-in button. Opens login when signed out; signed in, shows the wallet address with a dropdown (Send, Receive, copy address, balance, history, ramp, KYC, distribution rules, sessions, sign out, plus a "Create account" action when the external wallet has no on-chain account yet). Inline arc spinner during in-progress transactions                                             |
+| `<SendModal>`              | Full send flow: network picker, asset picker, amount, destination, inline build > sign > success/error. Sending is available on Stellar and Solana; Polygon can be browsed but not sent from                                                                                                                                                                                             |
+| `<SwapModal>`              | On-chain asset-to-asset swap: pick from/to assets and amount, quote across venues, execute (auto-trustline on the buy asset when needed); paste a custom buy token (code + issuer)                                                                                                                                                                                                       |
+| `<EarnModal>`              | Deposit/withdraw across DeFindex vaults and Blend pools: provider + opportunity selection with live APY, wallet balance, over-spend guards, and auto-trustline on deposit                                                                                                                                                                                                                |
+| `<ReceiveModal>`           | Wallet address as QR code with copy-to-clipboard (no external QR dependency required)                                                                                                                                                                                                                                                                                                    |
+| `<TxHistoryModal>`         | Paginated transaction history with auto-fetch on open and stellar.expert explorer links                                                                                                                                                                                                                                                                                                  |
+| `<WalletBalanceModal>`     | Multichain wallet balances (Stellar, Polygon, Solana). A `<ChainSelect>` in the header picks the network and the rows are filtered to it; shows that chain's address plus a refresh button. An unreadable chain's balance renders as a dash, never as `0`. On Solana testnet each row offers a faucet hint — a devnet SOL faucet on the native row, Circle's USDC faucet on the USDC row |
+| `<EnabledAssetsModal>`     | The application's dashboard-enabled assets for the network picked in the header, with per-asset trustline state; establish/remove trustlines (Stellar only - other chains are informational)                                                                                                                                                                                             |
+| `<DistributionRulesModal>` | Manage the wallet's distribution rules                                                                                                                                                                                                                                                                                                                                                   |
+| `<SessionsModal>`          | Lists every active refresh-token family for the current user with device metadata, marks the local session, per-row revoke, and a "Sign out everywhere" button                                                                                                                                                                                                                           |
+| `<KycModal>`               | Identity verification flow - provider selection + status polling _(UI preview - backend coming soon)_                                                                                                                                                                                                                                                                                    |
+| `<RampWidget>`             | Buy/sell crypto via SEP-24 - direction tabs, route comparison, payment instructions (wired to `client.createOnRamp` / `client.createOffRamp`)                                                                                                                                                                                                                                            |
 
 ```tsx
 import { WalletButton } from '@pollar/react';
@@ -263,8 +316,15 @@ export function Header() {
 
 ### Template components
 
-Every modal ships a pure presentational "template" companion — same name with a `Template` suffix. Use these when you
-want to swap the chrome but keep the data wiring from `usePollar()`.
+Almost every modal ships a pure presentational "template" companion — same name with a `Template` suffix. Use these when
+you want to swap the chrome but keep the data wiring from `usePollar()`. (`<EarnModal>` is the exception: it has no
+template yet.)
+
+> The wallet-balance, enabled-assets, send and receive templates each require `chains`, `selectedChain` and
+> `onSelectChain`. Get `chains` (in the app's configured order) from `useChains()`, keep `selectedChain` in your own
+> state, and render `<ChainSelect>` for the stock picker. `useChains()` is preferred over `chainsOf(wallets)` on its
+> own, which cannot know the configured order; if you do call `chainsOf` directly, pass the order as its second
+> argument. `addressForChain(wallets, selectedChain)` gives the address for the picked chain.
 
 | Wrapper                    | Template                           |
 | -------------------------- | ---------------------------------- |
@@ -384,6 +444,10 @@ import type {
   // Custom-provider contracts (re-exported from @pollar/core)
   PollarAuthProvider,
   AuthProviderContext,
+
+  // Network picker
+  ChainSelectProps,
+  UseChainsResult,
 
   // Template props
   WalletButtonTemplateProps,

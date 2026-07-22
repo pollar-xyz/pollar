@@ -1,7 +1,15 @@
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 
 import type { PollarLogger } from '@pollar/core';
-import { Component, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import {
+  Component,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react';
 import { LOGO_POLLAR } from '../constants';
 
 declare const __POLLAR_VERSION__: string;
@@ -153,5 +161,94 @@ export function ModalStatusBanner({ message, status, onCancel, onRetry }: ModalS
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * The chain an asset lives on, as a short accented tag.
+ *
+ * Shared by the balance and asset lists: both render per-chain rows and must
+ * agree on the label and colour, so the palette lives in one place. Callers show
+ * it only when the app spans more than one chain — a Stellar-only app would just
+ * see the same tag on every row.
+ */
+const CHAIN_TAG: Record<string, { label: string; color: string }> = {
+  STELLAR: { label: 'Stellar', color: '#7d00ff' },
+  POLYGON: { label: 'Polygon', color: '#8247e5' },
+  SOLANA: { label: 'Solana', color: '#14f195' },
+};
+
+export function ChainTag({ chain }: { chain: string }) {
+  const tag = CHAIN_TAG[chain] ?? { label: chain, color: '#6b7280' };
+  return (
+    <span className="pollar-chain-tag" style={{ '--pollar-chain-color': tag.color } as CSSProperties}>
+      {tag.label}
+    </span>
+  );
+}
+
+/** Middle-truncates an on-chain address (issuer, ERC-20 contract, SPL mint). */
+export function cropAddress(address: string): string {
+  if (address.length <= 16) return address;
+  return `${address.slice(0, 8)}...${address.slice(-8)}`;
+}
+
+/**
+ * Remembers the last non-null value it was given.
+ *
+ * The balance/assets state machines drop their payload while a refresh is in
+ * flight (`step` leaves `'loaded'`), which would blank the list on every
+ * refresh. Holding the previous data lets the modal keep rendering it under a
+ * {@link BusyOverlay} instead — the list never collapses and then reflows.
+ */
+export function useStickyData<T>(data: T | null): T | null {
+  const lastRef = useRef<T | null>(null);
+  if (data !== null) lastRef.current = data;
+  return data ?? lastRef.current;
+}
+
+/**
+ * Blocks a modal while a refresh is in flight, keeping the stale data visible
+ * (and readable) underneath. Covers the whole card, so nothing can be clicked
+ * against data that is about to change.
+ */
+export function BusyOverlay({ label = 'Loading…' }: { label?: string }) {
+  return (
+    <div className="pollar-busy-overlay" aria-busy="true" aria-live="polite">
+      <div className="pollar-busy-overlay-inner">
+        <div className="pollar-spinner" />
+        <span>{label}</span>
+      </div>
+    </div>
+  );
+}
+
+interface ToggleProps {
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+  busy?: boolean;
+  label: string;
+}
+
+/**
+ * On/off switch. Used for trustlines, where the state is binary and the old
+ * "status pill + Enable/Disable button" pair said the same thing twice.
+ */
+export function Toggle({ checked, onChange, disabled = false, busy = false, label }: ToggleProps) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      className={`pollar-switch${checked ? ' pollar-switch-on' : ''}${busy ? ' pollar-switch-busy' : ''}`}
+      onClick={onChange}
+      disabled={disabled || busy}
+    >
+      <span className="pollar-switch-knob">
+        {busy && <span className="pollar-spinner pollar-spinner-sm pollar-spinner-current" />}
+      </span>
+    </button>
   );
 }

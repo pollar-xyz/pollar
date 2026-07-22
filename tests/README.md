@@ -11,12 +11,10 @@ From the repo root:
 
 ```bash
 # Build the SDK first — the tests import dist/index.js, not src/
-pnpm build
-# or:  npm run build
+npm run build
 
 # Run all smoke tests
-pnpm test:smoke
-# or:  npm run test:smoke
+npm run test:smoke
 ```
 
 To run an individual file:
@@ -24,6 +22,8 @@ To run an individual file:
 ```bash
 node tests/smoke-keys.cjs
 node tests/smoke-client.cjs
+node tests/smoke-providers.cjs
+node tests/smoke-session-races.cjs
 ```
 
 ## What each file covers
@@ -57,6 +57,33 @@ node tests/smoke-client.cjs
 - Storage keys are namespaced by `apiKeyHash`
 - `client.logout()` clears storage and resets the keypair
 
+### `smoke-providers.cjs`
+
+Built-in auth providers + wallet-adapter dispatch (custom `config.providers` was
+removed when wallets were unified into `config.walletAdapters`):
+
+- The built-in email provider drives through `login()` / `providerAction()`;
+  blank-email and wrong-step guards fire before the API is hit
+- Wallet-adapter dispatch (`login({ provider: adapter.type })`): an unknown
+  provider maps to a clean error, `cancel` during a wallet flow maps to `idle`
+  not `error`, and a synchronously-throwing adapter is handled
+- `listWalletAdapters` sanitizes adapter `iconUrl`; email verify maps the
+  server's `EXPIRED` / `INVALID` codes; client-side SEP-10 refuses a non-zero-seq
+  challenge
+
+### `smoke-session-races.cjs`
+
+Session-lifecycle race safety (each block exercises one concurrency fix):
+
+- `destroy()` mid-refresh discards the rotated token; `refresh()` no-ops after
+  `destroy()`; `getAuthState()` returns a defensive clone
+- `logout()` aborts an in-flight session resume so it can't re-emit
+  `authenticated` after going `idle`; a concurrent request survives a rejecting
+  refresh
+- DPoP nonce challenge is classified case-insensitively; cross-tab rotation keeps
+  `verified` without re-resuming; a legacy 8-hex session is not restored;
+  cross-tab logout propagates even when this tab's storage is degraded
+
 ## What's not covered
 
 - Real network requests (`fetch` is mocked).
@@ -68,5 +95,5 @@ node tests/smoke-client.cjs
 ## Requirements
 
 - Node ≥ 20 (the SDK runtime floor)
-- Built `dist/` (run `pnpm build` first)
+- Built `dist/` (run `npm run build` first)
 - No external services — tests are fully self-contained

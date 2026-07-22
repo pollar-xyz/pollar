@@ -42,6 +42,7 @@ import {
   EarnPosition,
   EarnPositionParams,
   EarnTxParams,
+  EnabledAssetRecord,
   EnabledAssetsState,
   KycLevel,
   KycStartBody,
@@ -56,6 +57,7 @@ import {
   PollarFlowError,
   PollarLoginOptions,
   PollarPersistedSession,
+  PollarPersistedWallet,
   isPollarNetworkError,
   PollarUserProfile,
   RampsOfframpBody,
@@ -74,6 +76,7 @@ import {
   SessionsState,
   SignAuthEntryOutcome,
   SignOutcome,
+  SendPaymentParams,
   SubmitOutcome,
   TransactionState,
   TrustlineOutcome,
@@ -82,6 +85,7 @@ import {
   TxHistoryParams,
   TxHistoryState,
   TxSignAndSendBody,
+  WalletAssetsContent,
   WalletBalanceContent,
   WalletBalanceRecord,
   WalletBalanceState,
@@ -353,6 +357,10 @@ export class PollarClient {
     this._api = createApiClient(this.basePath, {
       timeoutMs: this._requestTimeoutMs,
       retry: config.retry,
+      // A DPoP proof is single-use, so the transport-level retry cannot replay
+      // the cloned request's header — it hands each new attempt back here to be
+      // signed afresh. See `_resignForRetry`.
+      resignRetry: (request) => this._resignForRetry(request),
     });
     this._wireMiddlewares();
 
@@ -610,17 +618,25 @@ export class PollarClient {
         const wwwAuth = response.headers.get('WWW-Authenticate') ?? '';
         const isNonceChallenge = wwwAuth.toLowerCase().includes('use_dpop_nonce');
 
+        // A replayed proof is not an expired token, and refreshing cannot fix
+        // it: the server rejected the `jti`, having never processed the request.
+        // Treating it as an expiry (the default 401 path) burns a refresh per
+        // occurrence, which on a polling loop is enough to hit the /auth/refresh
+        // rate limit and take the session down with it. Retrying is all it
+        // needs — `_retryRequest` mints a brand-new proof.
+        const isProofReplay = !isNonceChallenge && (await self._isDpopReplay(response));
+
         // The refresh endpoint has special handling: don't recursively trigger
         // refresh from inside itself. But DO honor a nonce challenge — the
         // fresh `DPoP-Nonce` was already captured above, so a single retry
         // with the new nonce succeeds. Any other 401 (RT expired, reused,
         // invalid) propagates to `_doRefresh` which clears the session.
         if (request.url.includes('/auth/refresh')) {
-          if (isNonceChallenge) return self._logHttp(request, await self._retryRequest(request));
+          if (isNonceChallenge || isProofReplay) return self._logHttp(request, await self._retryRequest(request));
           return self._logHttp(request, response);
         }
 
-        if (!isNonceChallenge) {
+        if (!isNonceChallenge && !isProofReplay) {
           try {
             await self.refresh();
           } catch {
@@ -631,9 +647,10 @@ export class PollarClient {
           // server-side before auth was rejected — replaying could duplicate
           // effects (double-create a transaction, etc.). The original 401
           // bubbles up so the caller decides; the access token is now fresh,
-          // so a manual retry by the caller will succeed. Nonce-challenge
-          // 401s don't go through this branch (server didn't process the
-          // request), so any method retries safely above.
+          // so a manual retry by the caller will succeed. Nonce-challenge and
+          // replayed-proof 401s don't go through this branch (the server
+          // rejected the proof before the handler ran, so it processed
+          // nothing), which is why any method retries safely above.
           const method = request.method.toUpperCase();
           if (method !== 'GET' && method !== 'HEAD') {
             return self._logHttp(request, response);
@@ -720,6 +737,62 @@ export class PollarClient {
       this._log.warn('[PollarClient] DPoP proof build failed', err);
       return null;
     }
+  }
+
+  /**
+   * Is this 401 a rejected DPoP proof REPLAY (`jti` already seen)?
+   *
+   * The distinction matters because the default 401 path assumes an expired
+   * access token and spends a `/auth/refresh` on it. A replay is neither: the
+   * server refused the proof and never ran the handler, so the token is fine and
+   * a refresh only burns rate-limit budget. Narrowed to the replay `reason`
+   * specifically — every other DPoP failure (thumbprint mismatch, `ath`
+   * mismatch) genuinely can be fixed by re-issuing a token bound to the current
+   * key, so those keep the refresh.
+   *
+   * Reads a `clone()`, so the caller's body stays untouched. Any parse failure
+   * answers `false` and leaves the existing behaviour in place.
+   */
+  private async _isDpopReplay(response: Response): Promise<boolean> {
+    try {
+      const body = (await response.clone().json()) as { code?: unknown; reason?: unknown };
+      return body?.code === 'SDK_AUTH_DPOP_INVALID' && body?.reason === 'jti-replay';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Mints a fresh DPoP proof for a request the transport layer is about to
+   * re-send after a network failure (see `resignRetry` in `api/client.ts`).
+   *
+   * The retry there is a `request.clone()`, which copies the `DPoP` header the
+   * failed attempt already spent; re-sending it is a `jti` replay and the server
+   * rejects it with 401 even though the original failure was purely a dropped
+   * connection. Rebuilding the proof (and re-reading the access token, which a
+   * concurrent refresh may have rotated in the meantime) is what makes the retry
+   * actually retry.
+   *
+   * Returns `null` when the request can no longer be signed — no session (a
+   * concurrent logout) or no DPoP key — so the caller drops the retry instead of
+   * replaying revoked credentials. Only reached for GET/HEAD, so there is no
+   * body to carry over.
+   */
+  private async _resignForRetry(request: Request): Promise<Request | null> {
+    // Not proof-bound (public endpoint, or Bearer fallback on an HTTP origin):
+    // nothing is single-use, so the clone can be replayed as-is.
+    if (!request.headers.has('DPoP')) return request;
+
+    const accessToken = this._session?.token?.accessToken;
+    if (!accessToken) return null;
+
+    const proof = await this._buildProofForRequest(request, accessToken);
+    if (!proof) return null;
+
+    const headers = new Headers(request.headers);
+    headers.set('Authorization', `DPoP ${accessToken}`);
+    headers.set('DPoP', proof);
+    return new Request(request, { headers });
   }
 
   private async _retryRequest(originalRequest: Request): Promise<Response> {
@@ -1273,6 +1346,23 @@ export class PollarClient {
       }
     }
 
+    // Tear down the active wallet adapter's own provider session (e.g. Privy)
+    // on an explicit logout. `_clearSession()` only drops the in-memory adapter
+    // reference; without this, the provider session persists across a reload and
+    // the auto-login effect in `@pollar/react` (which subscribes to
+    // `onProviderAuthChange`) silently re-authenticates the user. Only done here,
+    // in the user-initiated logout path — not inside `_clearSession()`, which
+    // also runs on transient refresh/resume failures where the provider session
+    // must survive. Best-effort: a disconnect failure must not block the clear.
+    const adapter = this._walletAdapter;
+    if (adapter) {
+      try {
+        await adapter.disconnect();
+      } catch (err) {
+        this._log.warn('[PollarClient] Wallet adapter disconnect during logout failed', err);
+      }
+    }
+
     try {
       await this._clearSession();
     } catch (err) {
@@ -1485,48 +1575,46 @@ export class PollarClient {
 
   /**
    * Collapses the v2 multichain balance (`{ balances: [{ chain, ... }] }`) into the
-   * flat, chain-tagged {@link WalletBalanceContent} the UI consumes. Stellar carries
-   * its full asset list; other chains report only their native token (SOL, POL) for
-   * now. `multichain` is set when more than one chain came back — the modal uses it
-   * to decide whether to show a per-asset network tag.
+   * flat, chain-tagged {@link WalletBalanceContent} the UI consumes.
+   *
+   * Every chain reports the same `balances` array — its native coin plus each token
+   * the app enabled — so one loop handles all three. `multichain` is set when more
+   * than one chain came back: the modal uses it to decide whether to show a
+   * per-asset network tag. A chain that failed to resolve carries `error` instead
+   * of `balances` and contributes nothing.
    */
   private _flattenBalances(content: unknown, ownAddress: string): WalletBalanceContent {
-    const chains = (content as { balances?: unknown[] })?.balances ?? [];
+    const chains = (content as { chains?: unknown[] })?.chains ?? [];
     const flat: WalletBalanceRecord[] = [];
     let exists = false;
     let network = this.getNetwork() as string;
 
     for (const entry of chains as Array<Record<string, unknown>>) {
       const chain = entry.chain as WalletChain | undefined;
-      if (chain === 'STELLAR') {
-        if (entry.exists) exists = true;
-        if (typeof entry.network === 'string') network = entry.network;
-        for (const b of (entry.balances as Array<Record<string, unknown>>) ?? []) {
-          flat.push({
-            chain: 'STELLAR',
-            ...(typeof b.type === 'string'
-              ? { type: b.type as 'native' | 'credit_alphanum4' | 'credit_alphanum12' }
-              : {}),
-            code: String(b.code ?? ''),
-            ...(typeof b.issuer === 'string' ? { issuer: b.issuer } : {}),
-            balance: String(b.balance ?? '0'),
-            available: String(b.available ?? b.balance ?? '0'),
-            ...(typeof b.enabledInApp === 'boolean' ? { enabledInApp: b.enabledInApp } : {}),
-            ...(typeof b.trustlineRemoved === 'boolean' ? { trustlineRemoved: b.trustlineRemoved } : {}),
-          });
-        }
-      } else if (chain === 'POLYGON' || chain === 'SOLANA') {
-        // Non-Stellar chains report only the native token from /balance for now.
-        const native = entry.native as { formatted?: string; symbol?: string } | null | undefined;
-        if (native?.symbol) {
-          exists = true;
-          flat.push({
-            chain,
-            code: native.symbol,
-            balance: String(native.formatted ?? '0'),
-            available: String(native.formatted ?? '0'),
-          });
-        }
+      if (!chain || entry.error) continue;
+      if (entry.exists) exists = true;
+      // Only Stellar's entry carries the session's network; the other chains ride
+      // the same testnet/mainnet choice and don't restate it.
+      if (chain === 'STELLAR' && typeof entry.network === 'string') network = entry.network;
+
+      for (const b of (entry.balances as Array<Record<string, unknown>>) ?? []) {
+        // null balance = the chain could not be read. Preserved, never coerced to
+        // '0', so the UI can tell "unavailable" from "empty".
+        const balance = typeof b.balance === 'string' ? b.balance : null;
+        const available = typeof b.available === 'string' ? b.available : balance;
+        flat.push({
+          chain,
+          ...(typeof b.type === 'string' ? { type: b.type as NonNullable<WalletBalanceRecord['type']> } : {}),
+          code: String(b.code ?? ''),
+          ...(typeof b.issuer === 'string' ? { issuer: b.issuer } : {}),
+          ...(typeof b.decimals === 'number' ? { decimals: b.decimals } : {}),
+          balance,
+          available,
+          ...(typeof b.limit === 'string' ? { limit: b.limit } : {}),
+          ...(typeof b.enabledInApp === 'boolean' ? { enabledInApp: b.enabledInApp } : {}),
+          ...(typeof b.trustlineRemoved === 'boolean' ? { trustlineRemoved: b.trustlineRemoved } : {}),
+          ...(typeof b.sponsored === 'boolean' ? { sponsored: b.sponsored } : {}),
+        });
       }
     }
 
@@ -1537,6 +1625,43 @@ export class PollarClient {
       multichain: chains.length > 1,
       balances: flat,
     };
+  }
+
+  /**
+   * The {@link _flattenBalances} twin for `/wallet/assets`: collapses the v2
+   * per-chain answer into one chain-tagged catalog. Same envelope (`chains`),
+   * same rules — a chain carrying `error` contributes nothing, and only Stellar
+   * restates the network.
+   */
+  private _flattenAssets(content: unknown, ownAddress: string): WalletAssetsContent {
+    const chains = (content as { chains?: unknown[] })?.chains ?? [];
+    const flat: EnabledAssetRecord[] = [];
+    let exists = false;
+    let network = this.getNetwork() as string;
+
+    for (const entry of chains as Array<Record<string, unknown>>) {
+      const chain = entry.chain as WalletChain | undefined;
+      if (!chain || entry.error) continue;
+      if (entry.exists) exists = true;
+      if (chain === 'STELLAR' && typeof entry.network === 'string') network = entry.network;
+
+      for (const a of (entry.assets as Array<Record<string, unknown>>) ?? []) {
+        flat.push({
+          chain,
+          ...(typeof a.type === 'string' ? { type: a.type as NonNullable<EnabledAssetRecord['type']> } : {}),
+          code: String(a.code ?? ''),
+          ...(typeof a.issuer === 'string' ? { issuer: a.issuer } : {}),
+          ...(typeof a.decimals === 'number' ? { decimals: a.decimals } : {}),
+          ...(typeof a.name === 'string' ? { name: a.name } : {}),
+          ...(typeof a.trustlineEstablished === 'boolean' ? { trustlineEstablished: a.trustlineEstablished } : {}),
+          ...(typeof a.limit === 'string' ? { limit: a.limit } : {}),
+          ...(typeof a.enabledInApp === 'boolean' ? { enabledInApp: a.enabledInApp } : {}),
+          ...(typeof a.sponsored === 'boolean' ? { sponsored: a.sponsored } : {}),
+        });
+      }
+    }
+
+    return { publicKey: ownAddress, network, exists, multichain: chains.length > 1, assets: flat };
   }
 
   /**
@@ -1585,7 +1710,12 @@ export class PollarClient {
       const { data, error } = await this._api.GET('/wallet/assets');
       if (gen !== this._enabledAssetsGen) return; // a newer refresh superseded this one
       if (!error && data?.success && data.content) {
-        this._setEnabledAssetsState({ step: 'loaded', data: data.content });
+        // v2 answers per chain; flatten into one chain-tagged list (see
+        // _flattenAssets), the same way refreshBalance does.
+        this._setEnabledAssetsState({
+          step: 'loaded',
+          data: this._flattenAssets(data.content, this._session?.wallet?.address ?? ''),
+        });
       } else {
         this._setEnabledAssetsState({ step: 'error', message: 'Failed to load assets' });
       }
@@ -1598,26 +1728,33 @@ export class PollarClient {
   /**
    * Establishes (omit `limit`) or removes (`limit: '0'`) a trustline for an asset.
    *
-   * The route is chosen by whether the trustline is **sponsored** — the app pays
-   * the 0.5 XLM reserve + fee, so the user pays nothing — NOT by the wallet type.
-   * Pass the asset's `sponsored` flag (from {@link refreshAssets}) straight
-   * through; it works the same for internal and external wallets, only the
-   * co-signing mechanism differs:
-   *  - **Sponsored, custodial** (internal wallet, no adapter) → the server holds
-   *    the trustor key and orchestrates the sponsored `changeTrust` in one call.
-   *  - **Sponsored, external/adapter** → the server builds the sponsored
-   *    `changeTrust` and signs the sponsor; the user's own wallet adds the
-   *    trustor signature and it's submitted (the backend recognises the
-   *    sponsor-sourced tx and broadcasts it).
-   *  - **Not sponsored** (`sponsored` falsy — sponsorship disabled, or a custom
-   *    asset not configured in the app) → a plain `change_trust` the user's own
-   *    wallet signs and pays for, via {@link runTx}. Same for internal/external.
+   * The app config decides who pays, server-side — the SDK never pre-decides.
+   * Sponsorship is **on by default** (the app covers the 0.5 XLM reserve + fee
+   * when eligible); pass `skipSponsorship` to force the user's own wallet to pay,
+   * mirroring the opt-out on the payment / swap / contract fee-bump surfaces. The
+   * route is by wallet type, and each server endpoint sponsors-or-self-pays:
+   *  - **Custodial** (internal wallet, no adapter) → one call to
+   *    `/wallet/assets/trustline`: the server holds the trustor key and either
+   *    sponsors or self-pays, then submits, returning the refreshed asset list.
+   *  - **External/adapter** → `/wallet/assets/trustline/build` returns a
+   *    `changeTrust` XDR (sponsor-signed when covered, or a plain self-pay one
+   *    otherwise); the user's own wallet adds the trustor signature and submits.
+   *  - **`skipSponsorship`** → a plain self-pay `change_trust` via {@link runTx},
+   *    bypassing the sponsoring endpoints for both wallet types.
    *
    * Does not refresh on its own — callers should `refreshAssets()` afterwards.
    */
   async setTrustline(
     asset: { code: string; issuer: string },
-    opts?: { limit?: string; sponsored?: boolean },
+    opts?: {
+      limit?: string;
+      /**
+       * Force self-pay even when the app would sponsor the trustline — the
+       * opt-out that mirrors `skipSponsorship` on the payment / swap / contract
+       * fee-bump surfaces.
+       */
+      skipSponsorship?: boolean;
+    },
   ): Promise<TrustlineOutcome> {
     const limit = opts?.limit;
     const walletType = this._session?.wallet?.type;
@@ -1636,70 +1773,75 @@ export class PollarClient {
       return { status: 'error', details: 'Asset code must be 1–12 characters' };
     }
 
-    if (opts?.sponsored) {
-      // Sponsored custodial path: wallet-service holds the trustor key and
-      // co-signs + submits in one server call. Only an app-configured asset on
-      // an internal (custodial) wallet qualifies — the backend re-checks and
-      // 400s otherwise.
-      if (!this._walletAdapter && walletType === 'internal') {
-        try {
-          const { data, error } = await this._api.POST('/wallet/assets/trustline', {
-            body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
-          });
-          if (!error && data?.success) {
-            if (data.content) {
-              // Bump the assets generation so a refreshAssets() that was in flight
-              // can't clobber this post-trustline (fresher) snapshot.
-              ++this._enabledAssetsGen;
-              this._setEnabledAssetsState({ step: 'loaded', data: data.content });
-            }
-            return { status: 'success' };
-          }
-          const details =
-            (error as { details?: string; code?: string } | undefined)?.details ??
-            (error as { code?: string } | undefined)?.code;
-          return { status: 'error', ...(details && { details }) };
-        } catch (err) {
-          const details = err instanceof Error ? err.message : undefined;
-          return { status: 'error', ...(details && { details }) };
-        }
-      }
-
-      // Sponsored external/adapter path: the trustor key lives client-side. The
-      // server builds the sponsored changeTrust and sponsor-signs it; we add the
-      // trustor signature with the user's own wallet and submit.
-      try {
-        const { data, error } = await this._api.POST('/wallet/assets/trustline/build', {
-          body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
-        });
-        if (error || !data?.success || !data.content?.sponsorSignedXdr) {
-          const details =
-            (error as { details?: string; code?: string } | undefined)?.details ??
-            (error as { code?: string } | undefined)?.code;
-          return { status: 'error', ...(details && { details }) };
-        }
-        const signed = await this.signTx(data.content.sponsorSignedXdr);
-        if (signed.status === 'error') {
-          return { status: 'error', ...(signed.details && { details: signed.details }) };
-        }
-        return this.submitTx(signed.signedXdr);
-      } catch (err) {
-        const details = err instanceof Error ? err.message : undefined;
-        return { status: 'error', ...(details && { details }) };
-      }
-    }
-
-    // Self-paid path: the user's own wallet signs and covers the reserve + fee.
     // The backend's change_trust schema is a discriminated union on `type`, so
     // derive it from the code length (1–4 → alphanum4, 5–12 → alphanum12).
-    return this.runTx('change_trust', {
+    const changeTrustParams = {
       asset: {
         type: asset.code.length <= 4 ? 'credit_alphanum4' : 'credit_alphanum12',
         code: asset.code,
         issuer: asset.issuer,
       },
       ...(limit !== undefined && { limit }),
-    } as TxBuildBody['params']);
+    } as TxBuildBody['params'];
+
+    // Client-forced self-pay: bypass the sponsoring endpoints and sign a plain
+    // change_trust with the user's own wallet.
+    if (opts?.skipSponsorship) {
+      return this.runTx('change_trust', changeTrustParams);
+    }
+
+    // Custodial: one server call. The server sponsors when the app config allows
+    // and self-pays otherwise, submitting either way and returning the refreshed
+    // asset list — the client no longer decides the route.
+    if (!this._walletAdapter && walletType === 'internal') {
+      try {
+        const { data, error } = await this._api.POST('/wallet/assets/trustline', {
+          body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
+        });
+        if (!error && data?.success) {
+          if (data.content) {
+            // Bump the assets generation so a refreshAssets() that was in flight
+            // can't clobber this post-trustline (fresher) snapshot.
+            ++this._enabledAssetsGen;
+            this._setEnabledAssetsState({ step: 'loaded', data: data.content });
+          }
+          return { status: 'success' };
+        }
+        const details =
+          (error as { details?: string; code?: string } | undefined)?.details ??
+          (error as { code?: string } | undefined)?.code;
+        return { status: 'error', ...(details && { details }) };
+      } catch (err) {
+        const details = err instanceof Error ? err.message : undefined;
+        return { status: 'error', ...(details && { details }) };
+      }
+    }
+
+    // External/adapter: the trustor key lives client-side. The server returns a
+    // changeTrust XDR — sponsor-signed when the app covers it, or a plain self-pay
+    // one otherwise — and we add the trustor signature with the user's own wallet
+    // and submit either way.
+    try {
+      const { data, error } = await this._api.POST('/wallet/assets/trustline/build', {
+        body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
+      });
+      // Sponsor-signed when the app covers it, plain self-pay otherwise; sign + submit either.
+      const xdr = data?.content?.sponsorSignedXdr ?? data?.content?.unsignedXdr;
+      if (error || !data?.success || !xdr) {
+        const details =
+          (error as { details?: string; code?: string } | undefined)?.details ??
+          (error as { code?: string } | undefined)?.code;
+        return { status: 'error', ...(details && { details }) };
+      }
+      const signed = await this.signTx(xdr);
+      if (signed.status === 'error') {
+        return { status: 'error', ...(signed.details && { details: signed.details }) };
+      }
+      return this.submitTx(signed.signedXdr);
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      return { status: 'error', ...(details && { details }) };
+    }
   }
 
   /**
@@ -1730,8 +1872,7 @@ export class PollarClient {
       const { data, error } = await this._api.POST('/wallet/account/create/build', {});
       if (error || !data?.success || !data.content?.sponsorSignedXdr) {
         const details =
-          (error as { details?: string; code?: string } | undefined)?.details ??
-          (error as { code?: string } | undefined)?.code;
+          (error as { details?: string; code?: string } | undefined)?.details ?? (error as { code?: string } | undefined)?.code;
         return { status: 'error', ...(details && { details }) };
       }
       const signed = await this.signTx(data.content.sponsorSignedXdr);
@@ -1839,15 +1980,47 @@ export class PollarClient {
    * the login method the backend recorded (`null` for pre-provider sessions).
    */
   getWallet(): WalletInfo | null {
-    const w = this._session?.wallet;
+    // `chain` is omitted: this field is Stellar by definition, and saying so
+    // explicitly would imply the caller can find a non-Stellar value here.
+    return this._toWalletInfo(this._session?.wallet, { includeChain: false });
+  }
+
+  /**
+   * Every wallet the user holds, one per chain, as {@link WalletInfo} values —
+   * a superset of {@link getWallet}. Each entry carries `chain` when the
+   * backend reported it.
+   *
+   * Returns `[]` when there is no session. A session that predates the
+   * backend's multi-chain `wallets[]` has nothing to enumerate, so this falls
+   * back to the single Stellar wallet rather than reporting `[]` and making a
+   * funded user look walletless. Entries with no address yet (e.g. a smart
+   * account mid-deploy) are dropped, matching `getWallet()`'s `null`.
+   */
+  getWallets(): WalletInfo[] {
+    const session = this._session;
+    if (!session) return [];
+
+    const source = session.wallets ?? [session.wallet];
+    return source.map((w) => this._toWalletInfo(w, { includeChain: true })).filter((w): w is WalletInfo => w !== null);
+  }
+
+  /**
+   * Maps a persisted wallet to the public {@link WalletInfo} union. Shared by
+   * `getWallet` and `getWallets` so the two can never disagree about how a
+   * given custody is presented.
+   */
+  private _toWalletInfo(w: PollarPersistedWallet | undefined, opts: { includeChain: boolean }): WalletInfo | null {
     if (!w || !w.address) return null;
     // Wallet-status extras carried on every custody (see WalletInfo).
     const extra = {
+      ...(opts.includeChain && w.chain !== undefined ? { chain: w.chain } : {}),
       ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
       ...(w.fundingMode !== undefined ? { fundingMode: w.fundingMode } : {}),
     };
     switch (w.type) {
       case 'external':
+        // The on-chain adapter id is only known client-side, from the adapter
+        // currently attached — it is never persisted.
         return { custody: 'external', address: w.address, provider: this._walletAdapter?.type ?? null, ...extra };
       case 'smart':
         return { custody: 'smart', address: w.address, provider: 'passkey', ...extra };
@@ -1887,7 +2060,7 @@ export class PollarClient {
     return null;
   }
 
-  async signTx(unsignedXdr: string): Promise<SignOutcome> {
+  async signTx(unsignedXdr: string, options?: { skipSponsorship?: boolean }): Promise<SignOutcome> {
     this._txStartGen = this._sessionGeneration;
     const noSigner = this._externalSignerMissing();
     if (noSigner) return noSigner;
@@ -1935,21 +2108,24 @@ export class PollarClient {
       }
     }
 
-    // Custodial path: backend signs and returns the XDR + idempotencyKey.
+    // Custodial path: backend signs and returns the XDR + idempotencyKey. By
+    // default the backend also applies sponsorship (per the app's dashboard
+    // config), returning a fee-bumped envelope the caller can broadcast directly
+    // — the app pays the fee. Pass `skipSponsorship` to force the user to pay.
     const address = this._session?.wallet?.address ?? '';
     try {
       const { data, error } = await this._api.POST('/tx/sign', {
-        body: { address, unsignedXdr },
+        body: { address, unsignedXdr, ...(options?.skipSponsorship && { skipSponsorship: true }) },
       });
       if (!error && data?.success && data.content?.signedXdr) {
-        const { signedXdr, idempotencyKey } = data.content;
+        const { signedXdr, idempotencyKey, sponsored } = data.content;
         this._setTransactionState({
           step: 'signed',
           signedXdr,
           submissionToken: idempotencyKey,
           ...(buildData && { buildData }),
         });
-        return { status: 'signed', signedXdr, submissionToken: idempotencyKey };
+        return { status: 'signed', signedXdr, submissionToken: idempotencyKey, sponsored };
       }
       const { details, code, message } = this._resolveTxApiError(error, data);
       this._setTransactionState({
@@ -2430,7 +2606,11 @@ export class PollarClient {
         headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
       });
       if (!error && data?.success && data.content) {
-        const { hash, status: backendStatus, resultCode } = data.content;
+        // This endpoint is multichain now, so its 200 is a union and only the
+        // Stellar member carries `resultCode`. This call always sends a Stellar
+        // body, but the type still has to be narrowed to say so.
+        const { hash, status: backendStatus } = data.content;
+        const resultCode = 'resultCode' in data.content ? data.content.resultCode : undefined;
         if (backendStatus === 'SUCCESS') {
           this._setTransactionState({ step: 'success', hash });
           return { status: 'success', hash };
@@ -2462,6 +2642,87 @@ export class PollarClient {
         phase: 'building-signing-submitting',
         ...(details && { details }),
       });
+      return { status: 'error', ...(details && { details }) };
+    }
+  }
+
+  /**
+   * Send a payment on any chain the user holds a wallet on.
+   *
+   * One entry point, two mechanisms, because the chains genuinely differ:
+   * Stellar routes through {@link buildAndSignAndSubmitTx} (which still handles
+   * external adapters and passkey wallets via the split flow), while a chain
+   * whose signature expires does the whole thing in one server-side call.
+   *
+   * Custodial-only outside Stellar: a non-Stellar external wallet would have to
+   * sign client-side, and that path is not wired yet.
+   */
+  async sendPayment(params: SendPaymentParams): Promise<SubmitOutcome> {
+    if (params.chain === undefined || params.chain === 'STELLAR') {
+      return this.buildAndSignAndSubmitTx(
+        'payment',
+        { destination: params.destination, amount: params.amount, asset: params.asset },
+        params.options,
+      );
+    }
+
+    if (params.chain !== 'SOLANA') {
+      return { status: 'error', details: `Sending on ${params.chain} is not supported yet.` };
+    }
+
+    this._txStartGen = this._sessionGeneration;
+    if (!this._session?.wallet?.address) {
+      this._setTransactionState({ step: 'error', phase: 'building-signing-submitting', details: 'No wallet connected' });
+      return { status: 'error', details: 'No wallet connected' };
+    }
+
+    this._setTransactionState({ step: 'building-signing-submitting' });
+    try {
+      const { data, error } = await this._api.POST('/tx/build-sign-submit', {
+        body: {
+          chain: 'SOLANA',
+          operation: 'payment',
+          params: {
+            destination: params.destination,
+            amount: params.amount,
+            ...(params.mint ? { mint: params.mint } : {}),
+          },
+          // Required on Solana: its submit is a single non-idempotent shot, so
+          // the backend dedupes on this key. Minted per call so a transport
+          // retry converges on the original transfer instead of sending twice.
+          idempotencyKey: randomUUID(),
+          waitForConfirmation: false,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the generated body type is a union; this branch is the Solana member
+        } as any,
+        headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
+      });
+
+      if (!error && data?.success && data.content) {
+        const { hash, status: backendStatus } = data.content as { hash: string; status: string };
+        if (backendStatus === 'SUCCESS') {
+          this._setTransactionState({ step: 'success', hash });
+          return { status: 'success', hash };
+        }
+        if (backendStatus === 'PENDING') {
+          this._setTransactionState({ step: 'submitted', hash });
+          return this._awaitTxConfirmation(hash, 'building-signing-submitting', undefined, {});
+        }
+        this._setTransactionState({ step: 'error', phase: 'building-signing-submitting' });
+        return { status: 'error', hash };
+      }
+
+      const { details, code, message } = this._resolveTxApiError(error, data);
+      this._setTransactionState({
+        step: 'error',
+        phase: 'building-signing-submitting',
+        ...(details && { details }),
+        ...(code && { code }),
+        ...(message && { message }),
+      });
+      return { status: 'error', ...(details && { details }), ...(code && { code }), ...(message && { message }) };
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      this._setTransactionState({ step: 'error', phase: 'building-signing-submitting', ...(details && { details }) });
       return { status: 'error', ...(details && { details }) };
     }
   }
@@ -2774,10 +3035,8 @@ export class PollarClient {
           ? assetsState.data.assets.find((a) => a.code === buy.code && a.issuer === buy.issuer)
           : undefined;
       if (!record?.trustlineEstablished) {
-        const tl = await this.setTrustline(
-          { code: buy.code, issuer: buy.issuer },
-          record?.sponsored ? { sponsored: true } : undefined,
-        );
+        // Sponsorship is derived automatically from the app config now — no flag.
+        const tl = await this.setTrustline({ code: buy.code, issuer: buy.issuer });
         if (tl.status === 'error') {
           return { status: 'error', details: `Trustline for ${buy.code} failed: ${tl.details ?? 'unknown error'}` };
         }
@@ -3189,32 +3448,40 @@ export class PollarClient {
   private async _storeSession(session: PollarApplicationConfigContent): Promise<void> {
     this._log.info('[PollarClient] Session stored');
 
-    const w = session.wallet;
-    // `provider` (the login method) was added to the wire after the generated
-    // OpenAPI types were last cut, so read it defensively until they're regen'd.
-    const wireProvider = (w as { provider?: string }).provider;
+    // The wire response still carries the legacy `publicKey` alias (kept for
+    // older SDKs); the persisted session standardizes on `address` only.
+    // `type` needs no remap: the wire speaks the same vocabulary as the SDK
+    // surface ('internal' | 'smart' | 'external').
+    //
+    // Applied identically to `wallet` and to every entry of `wallets[]` so the
+    // back-compat field and the array can't end up describing the same wallet
+    // differently.
+    const toPersistedWallet = (w: PollarApplicationConfigContent['wallet']): PollarPersistedWallet => ({
+      type: w.type,
+      // `provider` (the login method) was added to the wire after the generated
+      // OpenAPI types were last cut, so read it defensively until they're regen'd.
+      ...((w as { provider?: string }).provider ? { provider: (w as { provider?: string }).provider as string } : {}),
+      address: w.address ?? w.publicKey ?? null,
+      ...(w.chain !== undefined ? { chain: w.chain } : {}),
+      ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
+      ...(w.fundingMode !== undefined ? { fundingMode: w.fundingMode } : {}),
+      ...(w.createdAt !== undefined ? { createdAt: w.createdAt } : {}),
+      ...(w.linkedAt !== undefined ? { linkedAt: w.linkedAt } : {}),
+      ...(w.network !== undefined ? { network: w.network } : {}),
+      ...(w.deployTxHash !== undefined ? { deployTxHash: w.deployTxHash } : {}),
+    });
+
     const persisted: PollarPersistedSession = {
       clientSessionId: session.clientSessionId,
       userId: session.userId ?? null,
       status: session.status,
       token: session.token,
       user: session.user,
-      // The wire response still carries the legacy `publicKey` alias (kept for
-      // older SDKs); the persisted session standardizes on `address` only.
-      // The wire also still emits the legacy type `'custodial'` (unchanged for
-      // SDKs ≤0.8.x); we remap it to `'internal'` here so the SDK surface and
-      // persisted session speak one vocabulary while the wire stays compatible.
-      wallet: {
-        type: w.type === 'custodial' ? 'internal' : w.type,
-        ...(wireProvider ? { provider: wireProvider } : {}),
-        address: w.address ?? w.publicKey ?? null,
-        ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
-        ...(w.fundingMode !== undefined ? { fundingMode: w.fundingMode } : {}),
-        ...(w.createdAt !== undefined ? { createdAt: w.createdAt } : {}),
-        ...(w.linkedAt !== undefined ? { linkedAt: w.linkedAt } : {}),
-        ...(w.network !== undefined ? { network: w.network } : {}),
-        ...(w.deployTxHash !== undefined ? { deployTxHash: w.deployTxHash } : {}),
-      },
+      wallet: toPersistedWallet(session.wallet),
+      // Absent on logins against an sdk-api that predates `wallets[]` — persist
+      // nothing rather than an empty array, so consumers can tell "not reported"
+      // apart from "genuinely none".
+      ...(session.wallets ? { wallets: session.wallets.map(toPersistedWallet) } : {}),
     };
     // A fresh login replaces the session: invalidate any refresh/resume still
     // in flight against the previous one.

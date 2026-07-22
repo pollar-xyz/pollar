@@ -35,6 +35,9 @@ const MAX_CLIENT_SESSION_ID = 64;
 const MAX_STATUS = 64;
 const MAX_WALLET_PUBLIC_KEY = 128;
 const MAX_WALLET_TYPE = 32;
+// One wallet per supported chain, with headroom. Bounds the persisted blob so a
+// hostile or buggy `wallets[]` can't blow up storage or the validation loop.
+const MAX_WALLETS = 16;
 
 function isBoundedString(v: unknown, max: number, allowEmpty = false): v is string {
   if (typeof v !== 'string') return false;
@@ -100,46 +103,75 @@ export function isValidSession(value: unknown, logger: PollarLogger = console): 
   // platform-custodied), smart/passkey (C), and external wallets. `address` is
   // the on-chain address for all types.
   //
-  // This guard runs against BOTH the persisted shape (vocabulary `internal`)
-  // and the raw `/auth/login` wire response (vocabulary `custodial`) — the login
-  // flow validates the wire body here *before* `_storeSession` remaps
-  // `custodial → internal`. So we tolerate `'custodial'` as the transitional
-  // wire alias for `'internal'`; callers remap it (`_storeSession` on fresh
-  // login, `readStorage` for legacy persisted sessions) before it reaches app
-  // code. (Sessions persisted by older SDKs also carry a legacy `publicKey`
-  // alias — `readStorage` backfills `address` from it before validation, so the
-  // field is tolerated but no longer required.)
-  const wallet = s['wallet'];
-  if (typeof wallet !== 'object' || wallet === null) {
-    logger.debug('[PollarClient:session] Invalid session — wallet missing or not an object');
+  // This guard runs against BOTH the persisted shape and the raw `/auth/login`
+  // wire response; both speak the same vocabulary (`internal`), so no alias is
+  // accepted here. Sessions persisted by older SDKs carry the legacy
+  // `'custodial'` type and a legacy `publicKey` alias — `readStorage` remaps
+  // the type and backfills `address` before validation, so those upgrade
+  // instead of being rejected.
+  if (!isValidWallet(s['wallet'], 'wallet', logger)) return false;
+
+  // `wallets` is optional — sessions persisted before the field existed, and
+  // logins against an sdk-api that predates it, simply have none. When present
+  // it must be a bounded array whose entries satisfy the same shape as
+  // `wallet`, so a caller reading either field gets the same guarantees.
+  const wallets = s['wallets'];
+  if (wallets !== undefined) {
+    if (!Array.isArray(wallets)) {
+      logger.debug('[PollarClient:session] Invalid session — wallets must be an array if present');
+      return false;
+    }
+    if (wallets.length > MAX_WALLETS) {
+      logger.debug('[PollarClient:session] Invalid session — wallets exceeds the maximum entry count');
+      return false;
+    }
+    for (let i = 0; i < wallets.length; i++) {
+      if (!isValidWallet(wallets[i], `wallets[${i}]`, logger)) return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Shape guard for a single persisted wallet, used for both the back-compat
+ * `wallet` field and every entry of `wallets[]`. `label` only names the field
+ * in the debug log.
+ */
+function isValidWallet(value: unknown, label: string, logger: PollarLogger): boolean {
+  if (typeof value !== 'object' || value === null) {
+    logger.debug(`[PollarClient:session] Invalid session — ${label} missing or not an object`);
     return false;
   }
-  const w = wallet as Record<string, unknown>;
-  if (w['type'] !== 'internal' && w['type'] !== 'smart' && w['type'] !== 'external' && w['type'] !== 'custodial') {
-    logger.debug('[PollarClient:session] Invalid session — wallet.type must be internal|smart|external');
+  const w = value as Record<string, unknown>;
+  if (w['type'] !== 'internal' && w['type'] !== 'smart' && w['type'] !== 'external') {
+    logger.debug(`[PollarClient:session] Invalid session — ${label}.type must be internal|smart|external`);
     return false;
   }
   if (w['provider'] !== undefined && typeof w['provider'] !== 'string') {
-    logger.debug('[PollarClient:session] Invalid session — wallet.provider must be a string if present');
+    logger.debug(`[PollarClient:session] Invalid session — ${label}.provider must be a string if present`);
     return false;
   }
   if (w['address'] !== null && !isBoundedString(w['address'], MAX_WALLET_PUBLIC_KEY)) {
-    logger.debug('[PollarClient:session] Invalid session — wallet.address must be string|null');
+    logger.debug(`[PollarClient:session] Invalid session — ${label}.address must be string|null`);
+    return false;
+  }
+  if (w['chain'] !== undefined && w['chain'] !== 'STELLAR' && w['chain'] !== 'POLYGON' && w['chain'] !== 'SOLANA') {
+    logger.debug(`[PollarClient:session] Invalid session — ${label}.chain must be STELLAR|POLYGON|SOLANA if present`);
     return false;
   }
   if (w['existsOnStellar'] !== undefined && typeof w['existsOnStellar'] !== 'boolean') {
-    logger.debug('[PollarClient:session] Invalid session — wallet.existsOnStellar must be boolean if present');
+    logger.debug(`[PollarClient:session] Invalid session — ${label}.existsOnStellar must be boolean if present`);
     return false;
   }
   if (w['createdAt'] !== undefined && (typeof w['createdAt'] !== 'number' || !Number.isFinite(w['createdAt']))) {
-    logger.debug('[PollarClient:session] Invalid session — wallet.createdAt must be a finite number if present');
+    logger.debug(`[PollarClient:session] Invalid session — ${label}.createdAt must be a finite number if present`);
     return false;
   }
   if (w['linkedAt'] !== undefined && (typeof w['linkedAt'] !== 'number' || !Number.isFinite(w['linkedAt']))) {
-    logger.debug('[PollarClient:session] Invalid session — wallet.linkedAt must be a finite number if present');
+    logger.debug(`[PollarClient:session] Invalid session — ${label}.linkedAt must be a finite number if present`);
     return false;
   }
-
   return true;
 }
 
@@ -154,10 +186,10 @@ export async function readStorage(
   try {
     const session = JSON.parse(raw) as unknown;
     // Migrate sessions persisted by older SDKs (≤0.8.x): they stored the wallet
-    // address under the legacy `publicKey` key, and persisted the wire type
-    // `'custodial'` (now remapped to `'internal'` at the client boundary).
-    // Backfill `address` and remap the type so they pass validation and survive
-    // the upgrade instead of forcing a re-login.
+    // address under the legacy `publicKey` key, and persisted the old wire type
+    // `'custodial'` (the wire now emits `'internal'` directly). Backfill
+    // `address` and remap the type so they pass validation and survive the
+    // upgrade instead of forcing a re-login.
     if (typeof session === 'object' && session !== null) {
       const w = (session as { wallet?: Record<string, unknown> }).wallet;
       if (w && w['address'] == null && typeof w['publicKey'] === 'string') {

@@ -9,15 +9,25 @@ This is the Solana counterpart to `@pollar/stellar-wallets-kit-adapter`. Login u
 **SIWS (Sign In With Solana)** via the wallet's native `solana:signIn` feature -
 the Solana analogue of Stellar's SEP-10 challenge.
 
-> Status: phase-0 scaffold. The client-side adapter (discovery, connect, SIWS,
-> message/transaction signing) is implemented against the Wallet Standard. Wiring
-> into `PollarClient` waits on the chain-aware adapter contract in `@pollar/core`
-> and the SIWS endpoints in sdk-api. See
-> `system/docs/2026-07-15-solana-external-wallet-adapter-siws-plan.md`.
+> **0.11.1** is the first published release. The adapter declares
+> `chain: 'SOLANA'`, which is what routes `login({ provider })` through the SIWS
+> flow instead of Stellar's SEP-10 challenge - end to end, discovery through
+> login. Requires `@pollar/core@^0.11.1`.
 
-## Usage (target API)
+## Installation
+
+```bash
+npm install @pollar/solana-wallet-standard-adapter @pollar/core
+```
+
+`@pollar/core` is the only peer dependency. The `@wallet-standard/*` packages and
+`@solana/wallet-standard-features` are real dependencies of this adapter, so you
+do not install them yourself.
+
+## Usage
 
 ```ts
+import { PollarClient } from '@pollar/core';
 import { solanaWalletStandardAdapters } from '@pollar/solana-wallet-standard-adapter';
 import { stellarWalletsKitAdapters } from '@pollar/stellar-wallets-kit-adapter';
 import { Networks } from '@creit.tech/stellar-wallets-kit';
@@ -38,3 +48,17 @@ the `PollarClient` on the client.
 - `labels?: Record<string, string>` - per-wallet button-label overrides.
 - `groupLabel?: string` - the login-UI gateway label these wallets share
   (default `'Solana Wallet'`).
+
+### `SolanaWalletStandardAdapter`
+
+The class behind the factory, exported for direct use outside `PollarClient`.
+Beyond the shared `WalletAdapter` contract it carries the Solana-specific
+surface:
+
+| Member                      | Purpose                                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `chain`                     | Always `'SOLANA'` - what routes login through SIWS                                                            |
+| `supportsSignIn`            | Whether the wallet exposes the native `solana:signIn` feature                                                 |
+| `signIn(input)`             | SIWS login; throws if the wallet lacks `solana:signIn` (check `supportsSignIn` first, then use `signMessage`) |
+| `signMessage(message)`      | Raw message signing                                                                                           |
+| `signSolanaTransaction(tx)` | Signs a Solana transaction (sponsored external transfers)                                                     |
