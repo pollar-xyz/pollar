@@ -10,7 +10,7 @@ import {
 } from '@pollar/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
-import { LoginModalTemplate } from './LoginModalTemplate';
+import { LoginModalStatus, LoginModalTemplate } from './LoginModalTemplate';
 import { PrivyLoginSubmodal } from './PrivyLoginSubmodal';
 import '../shared.css';
 import './LoginModal.css';
@@ -23,7 +23,7 @@ interface LoginModalProps {
 
 export function LoginModal({ onClose }: LoginModalProps) {
   const [email, setEmail] = useState('');
-  const { getClient, styles, appConfig: config } = usePollar();
+  const { getClient, styles, appConfig: config, configStatus, retryConfig } = usePollar();
   const [authState, setAuthState] = useState<AuthState>(() => getClient().getAuthState());
   // Registered wallet adapters (built-ins + config) → one login button each.
   const walletAdapters = useMemo(() => getClient().listWalletAdapters(), [getClient]);
@@ -139,7 +139,17 @@ export function LoginModal({ onClose }: LoginModalProps) {
 
   return (
     <div className="pollar-overlay" onClick={handleClose}>
-      {interactiveAdapter ? (
+      {configStatus !== 'ready' ? (
+        <LoginModalStatus
+          status={configStatus === 'error' ? 'error' : 'loading'}
+          theme={theme}
+          accentColor={accentColor}
+          logoUrl={logoUrl ?? null}
+          appName={config.application?.name ?? 'Pollar'}
+          onRetry={retryConfig}
+          onCancel={handleClose}
+        />
+      ) : interactiveAdapter ? (
         <PrivyLoginSubmodal
           adapter={interactiveAdapter}
           theme={theme}

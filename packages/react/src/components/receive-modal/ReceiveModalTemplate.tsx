@@ -1,13 +1,27 @@
 'use client';
 
+import { WalletChain } from '@pollar/core';
 import { type CSSProperties } from 'react';
 import { QRCode } from '../../lib/qr-code';
+import { ChainSelect } from '../ChainSelect';
 import { PollarModalFooter } from '../commons';
+
+/** Network name as it reads in a sentence ("Share your Stellar address"). */
+const CHAIN_NAME: Record<string, string> = {
+  STELLAR: 'Stellar',
+  POLYGON: 'Polygon',
+  SOLANA: 'Solana',
+};
 
 export interface ReceiveModalTemplateProps {
   theme: string;
   accentColor: string;
+  /** Address of the wallet on {@link selectedChain}. */
   walletAddress: string;
+  /** Networks the user holds a wallet on; the first one is the default. */
+  chains: WalletChain[];
+  selectedChain: WalletChain | null;
+  onSelectChain: (chain: WalletChain) => void;
   copied: boolean;
   onCopy: () => void;
   onClose: () => void;
@@ -17,6 +31,9 @@ export function ReceiveModalTemplate({
   theme,
   accentColor,
   walletAddress,
+  chains,
+  selectedChain,
+  onSelectChain,
   copied,
   onCopy,
   onClose,
@@ -41,6 +58,8 @@ export function ReceiveModalTemplate({
     '--pollar-card-border-radius': '10px',
   } as CSSProperties;
 
+  const chainName = selectedChain ? (CHAIN_NAME[selectedChain] ?? selectedChain) : 'wallet';
+
   return (
     <div
       className="pollar-modal-card pollar-receive-modal"
@@ -60,6 +79,8 @@ export function ReceiveModalTemplate({
         </div>
       </div>
 
+      <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} />
+
       {/* QR code */}
       {walletAddress ? (
         <>
@@ -68,7 +89,8 @@ export function ReceiveModalTemplate({
           </div>
 
           <p className="pollar-receive-instructions">
-            Share your Stellar address to receive any asset. Only send Stellar assets to this address.
+            Share your {chainName} address to receive any asset. Only send {chainName} assets to this address. Funds sent from
+            another network are lost.
           </p>
 
           {/* Address + copy */}

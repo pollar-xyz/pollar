@@ -3,28 +3,7 @@
   max-width: 380px;
 }
 
-/* ---- Address chip ---- */
-.pollar-bal-address-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.pollar-bal-address {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.75rem;
-  font-family: monospace;
-  color: var(--pollar-muted);
-  background: var(--pollar-input-bg);
-  border: 1px solid var(--pollar-border);
-  border-radius: var(--pollar-card-border-radius, 10px);
-  padding: 0.375rem 0.75rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* Address chip + copy button styles live in shared.css (shared with the asset modal). */
 
 /* Copy button styles live in shared.css (used by every modal via <CopyButton/>). */
 
@@ -63,6 +42,28 @@
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--pollar-text);
+}
+
+/* Small print under the native SOL row on testnet: where to top up test funds. */
+.pollar-bal-faucet-hint {
+  font-size: 0.6875rem;
+  color: var(--pollar-muted);
+}
+
+.pollar-bal-faucet-hint a {
+  color: var(--pollar-accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.pollar-bal-faucet-hint a:hover {
+  text-decoration: underline;
+}
+
+/* Even smaller than the hint: which cluster the faucet funds. */
+.pollar-bal-faucet-net {
+  font-size: 0.625rem;
+  opacity: 0.8;
 }
 
 /* Per-asset network tag, shown only when the app spans more than one chain. The

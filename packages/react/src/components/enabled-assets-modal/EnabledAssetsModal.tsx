@@ -1,8 +1,10 @@
 'use client';
 
-import { EnabledAssetRecord } from '@pollar/core';
+import { EnabledAssetRecord, WalletChain } from '@pollar/core';
 import { useCallback, useEffect, useState } from 'react';
 import { usePollar } from '../../context';
+import { useChains } from '../../useChains';
+import { addressForChain } from '../ChainSelect';
 import '../shared.css';
 import './EnabledAssetsModal.css';
 import { CustomTrustlineModalTemplate, EnabledAssetsModalTemplate } from './EnabledAssetsModalTemplate';
@@ -16,9 +18,18 @@ function assetKey(record: { code: string; issuer?: string }): string {
 }
 
 export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
-  const { enabledAssets, refreshAssets, setTrustline, wallet, styles } = usePollar();
-  const walletAddress = wallet?.address ?? '';
+  const { enabledAssets, refreshAssets, setTrustline, wallets, styles } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
+
+  const { chains } = useChains();
+  const [selectedChain, setSelectedChain] = useState<WalletChain | null>(null);
+  // Default to the app's first configured network. Runs as an effect because
+  // `wallets` is empty on the first render of a cold-start session.
+  useEffect(() => {
+    if (selectedChain === null && chains.length > 0) setSelectedChain(chains[0]!);
+  }, [chains, selectedChain]);
+
+  const walletAddress = addressForChain(wallets, selectedChain);
 
   const [view, setView] = useState<'list' | 'custom'>('list');
   // Key of the in-flight asset (`code+issuer`), or 'custom' for the custom form.
@@ -33,7 +44,7 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
     async (
       key: string,
       asset: { code: string; issuer: string },
-      opts: { limit?: string; sponsored?: boolean },
+      opts: { limit?: string; skipSponsorship?: boolean },
     ): Promise<boolean> => {
       setBusyKey(key);
       setActionError(null);
@@ -53,10 +64,11 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
   const handleToggle = useCallback(
     (record: EnabledAssetRecord) => {
       const removing = record.trustlineEstablished;
+      // Sponsorship is derived automatically from the app config now — no flag.
       void runAction(
         assetKey(record),
         { code: record.code, issuer: record.issuer ?? '' },
-        { ...(removing ? { limit: '0' } : {}), sponsored: record.sponsored ?? false },
+        { ...(removing ? { limit: '0' } : {}) },
       );
     },
     [runAction],
@@ -68,7 +80,7 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
       const ok = await runAction(
         'custom',
         { code: input.code, issuer: input.issuer },
-        { ...(input.limit ? { limit: input.limit } : {}), sponsored: false },
+        { ...(input.limit ? { limit: input.limit } : {}), skipSponsorship: true },
       );
       if (ok) setView('list');
     },
@@ -83,6 +95,9 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
           accentColor={accentColor}
           enabledAssets={enabledAssets}
           walletAddress={walletAddress}
+          chains={chains}
+          selectedChain={selectedChain}
+          onSelectChain={setSelectedChain}
           busyKey={busyKey}
           actionError={actionError}
           onRefresh={() => refreshAssets()}

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useChains } from '../../useChains';
 import { WalletButtonTemplate } from './WalletButtonTemplate';
 import './WalletButton.css';
 
@@ -21,7 +22,13 @@ export function WalletButton() {
     openDistributionRulesModal,
     tx: transaction,
   } = usePollar();
-  const walletAddress = wallet?.address ?? '';
+  // The address shown (and copied) is the one on the app's FIRST configured
+  // chain, not `wallet.address` — that field is the Stellar wallet by definition
+  // in core, so this button used to say "Stellar" to an app whose users live on
+  // Polygon. Falls back to it while `/config` loads and for a legacy session that
+  // enumerates no wallets.
+  const { primaryAddress } = useChains();
+  const walletAddress = primaryAddress || (wallet?.address ?? '');
   // External-wallet signing-adapter id (freighter/albedo) drives the wallet logo;
   // null for custodial/smart, which fall back to the Pollar logo.
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;

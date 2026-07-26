@@ -148,7 +148,7 @@ async function waitFor(cond, timeoutMs = 1000) {
   check('  x-pollar-api-key set', first?.headers['x-pollar-api-key'] === apiKey);
   const proof = decodeJwt(first.headers.dpop);
   check('  proof.htm = GET', proof.htm === 'GET');
-  check('  proof.htu = full URL no query', proof.htu === 'https://x.test/v1/tx/history');
+  check('  proof.htu = full URL no query', proof.htu === 'https://x.test/v2/tx/history');
   check('  proof.iat ≈ now', Math.abs(proof.iat - Math.floor(Date.now() / 1000)) < 5);
   check('  proof.ath present on resource request', typeof proof.ath === 'string');
   check('  proof.nonce absent on first call', proof.nonce === undefined);

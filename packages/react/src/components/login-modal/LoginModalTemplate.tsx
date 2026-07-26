@@ -139,6 +139,33 @@ interface LoginModalTemplateProps {
   onRetry: () => void;
 }
 
+/** Theme-derived CSS custom properties shared by the login modal and its
+ *  loading/error status card. Kept as a standalone helper so both render paths
+ *  stay visually in lockstep. */
+export function buildModalCssVars(theme: string, accentColor: string): CSSProperties {
+  const isDark = theme === 'dark';
+  return {
+    '--pollar-accent': accentColor,
+    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
+    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
+    '--pollar-text': isDark ? '#ffffff' : '#111827',
+    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
+    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
+    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
+    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
+    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
+    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
+    '--pollar-buttons-border-radius': '6px',
+    '--pollar-buttons-height': '44px',
+    '--pollar-input-height': '44px',
+    '--pollar-input-border-radius': '0.5rem',
+    '--pollar-card-border-radius': '10px',
+    '--pollar-modal-padding': '2rem',
+    '--pollar-modal-heading-size': '1.375rem',
+    '--pollar-modal-subtitle-size': '0.9rem',
+  } as CSSProperties;
+}
+
 export function LoginModalTemplate({
   theme,
   accentColor,
@@ -167,7 +194,6 @@ export function LoginModalTemplate({
   // Which wallet group's sub-picker is open (gateway label), or null for the root view.
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
 
-  const isDark = theme === 'dark';
   const enabledSocial = Object.entries(providers).filter(([, enabled]) => enabled);
 
   // Split registered adapters into root-level buttons (no `meta.group`, e.g. Privy)
@@ -185,26 +211,7 @@ export function LoginModalTemplate({
     }, []);
   const activeGroupAdapters = walletGroups.find((g) => g.label === activeGroup)?.adapters ?? [];
 
-  const cssVars = {
-    '--pollar-accent': accentColor,
-    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': isDark ? '#ffffff' : '#111827',
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
-    '--pollar-input-height': '44px',
-    '--pollar-input-border-radius': '0.5rem',
-    '--pollar-card-border-radius': '10px',
-    '--pollar-modal-padding': '2rem',
-    '--pollar-modal-heading-size': '1.375rem',
-    '--pollar-modal-subtitle-size': '0.9rem',
-  } as CSSProperties;
+  const cssVars = buildModalCssVars(theme, accentColor);
 
   const status = authStateToStatus(authState.step);
   const isLoading = status === 'LOADING';
@@ -398,6 +405,71 @@ export function LoginModalTemplate({
         onCancel={onCancel}
         onRetry={isEmailCodeError ? undefined : onRetry}
       />
+
+      <PollarModalFooter />
+    </div>
+  );
+}
+
+/** Placeholder shown inside the login modal while the app config is loading, or
+ *  when its remote fetch failed — instead of the empty shell that renders when
+ *  `styles` is still the default `{}`. Mirrors the template's card chrome (logo,
+ *  title, footer) so the swap to the real form isn't jarring. */
+export function LoginModalStatus({
+  status,
+  theme,
+  accentColor,
+  logoUrl,
+  appName,
+  onRetry,
+  onCancel,
+}: {
+  status: 'loading' | 'error';
+  theme: string;
+  accentColor: string;
+  logoUrl: string | null;
+  appName: string;
+  onRetry: () => void;
+  onCancel: () => void;
+}) {
+  const cssVars = buildModalCssVars(theme, accentColor);
+  return (
+    <div className="pollar-modal-card pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
+      <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label="Close">
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M18 6L6 18M6 6l12 12" />
+        </svg>
+      </button>
+      <div className="pollar-header">
+        <div className="pollar-logo-wrap">
+          <img src={logoUrl ?? LOGO_POLLAR} alt="Logo" className="pollar-logo" />
+        </div>
+        <h2 className="pollar-title">{appName}</h2>
+        <p className="pollar-subtitle">Log in or sign up</p>
+      </div>
+
+      {status === 'loading' ? (
+        <div className="pollar-loading-block">
+          <div className="pollar-spinner" />
+          <span>Loading...</span>
+        </div>
+      ) : (
+        <div className="pollar-wallet-section">
+          <p className="pollar-modal-error">Could not load sign-in options. Check your connection and try again.</p>
+          <button type="button" className="pollar-btn-primary" onClick={onRetry}>
+            Try again
+          </button>
+        </div>
+      )}
 
       <PollarModalFooter />
     </div>

@@ -1,5 +1,5 @@
 /**
- * @pollar/privy-adapter — SERVER-SIDE ONLY.
+ * @pollar/privy-server-adapter — SERVER-SIDE ONLY.
  *
  * This package binds an HTTP listener via `@hono/node-server` and consumes
  * `PRIVY_APP_SECRET` + `POLLAR_API_SECRET` from the host environment. Do not

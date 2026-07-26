@@ -129,19 +129,36 @@ export function SwapModal({ onClose }: SwapModalProps) {
       (b): b is typeof b & { type: 'native' | 'credit_alphanum4' | 'credit_alphanum12' } =>
         b.type != null && (b.type === 'native' || !b.trustlineRemoved),
     )
-    .map((b) => ({ ref: toRef(b), code: b.code, issuer: b.issuer, available: b.available, enabledInApp: b.enabledInApp }));
+    // A null `available` (chain unreadable) maps to undefined — "unknown", which
+    // the option already models — rather than to a 0 that would read as "empty".
+    .map((b) => ({
+      ref: toRef(b),
+      code: b.code,
+      issuer: b.issuer,
+      available: b.available ?? undefined,
+      enabledInApp: b.enabledInApp,
+    }));
 
   const buyKeyOfSell = selectedSell ? `${selectedSell.code}:${selectedSell.issuer ?? 'native'}` : '';
   const optKey = (o: { code: string; issuer?: string | undefined }) => `${o.code}:${o.issuer ?? 'native'}`;
   // Buy list = the app's enabled assets, plus curated catalog tokens the app
   // opted into (deduped; catalog tokens the wallet may not trust yet). Exclude
   // whatever is being sold.
-  const enabledBuy: SwapAssetOption[] = assetRecords.map((a) => ({
-    ref: toRef(a),
-    code: a.code,
-    issuer: a.issuer,
-    enabledInApp: a.enabledInApp,
-  }));
+  // Same Stellar-only guard as the sell list: the enabled-asset catalog is now
+  // multichain, and a Polygon/Solana token (type 'token') has no Stellar asset
+  // ref to swap with. The predicate both drops them and narrows `type` for toRef().
+  const enabledBuy: SwapAssetOption[] = assetRecords
+    .filter(
+      (a): a is typeof a & { type: 'native' | 'credit_alphanum4' | 'credit_alphanum12' } =>
+        (a.chain === undefined || a.chain === 'STELLAR') &&
+        (a.type === 'native' || a.type === 'credit_alphanum4' || a.type === 'credit_alphanum12'),
+    )
+    .map((a) => ({
+      ref: toRef(a),
+      code: a.code,
+      issuer: a.issuer,
+      enabledInApp: a.enabledInApp,
+    }));
   const enabledKeys = new Set(enabledBuy.map(optKey));
   const catalogBuy: SwapAssetOption[] = catalogTokens
     .map((tk) => ({

@@ -76,7 +76,7 @@ export class StellarWalletsKitAdapter implements WalletAdapter {
   async signTransaction(xdr: string, options?: SignTransactionOptions): Promise<SignTransactionResponse> {
     if (options?.networkPassphrase !== undefined && options.networkPassphrase !== getInitNetwork()) {
       throw new Error(
-        `[StellarWalletsKit] networkPassphrase override "${options.networkPassphrase}" does not match the network configured at init ("${getInitNetwork()}"). The kit is a global singleton — configure one network at \`stellarWalletsKit({ network })\` and use that for every call.`,
+        `[StellarWalletsKit] networkPassphrase override "${options.networkPassphrase}" does not match the network configured at init ("${getInitNetwork()}"). The kit is a global singleton — configure one network at \`stellarWalletsKitAdapters({ network })\` and use that for every call.`,
       );
     }
     StellarWalletsKit.setWallet(String(this.type));
@@ -91,7 +91,7 @@ export class StellarWalletsKitAdapter implements WalletAdapter {
     // network at init, so reject a per-call network override that doesn't match.
     if (options?.networkPassphrase !== undefined && options.networkPassphrase !== getInitNetwork()) {
       throw new Error(
-        `[StellarWalletsKit] networkPassphrase override "${options.networkPassphrase}" does not match the network configured at init ("${getInitNetwork()}"). The kit is a global singleton — configure one network at \`stellarWalletsKit({ network })\` and use that for every call.`,
+        `[StellarWalletsKit] networkPassphrase override "${options.networkPassphrase}" does not match the network configured at init ("${getInitNetwork()}"). The kit is a global singleton — configure one network at \`stellarWalletsKitAdapters({ network })\` and use that for every call.`,
       );
     }
     StellarWalletsKit.setWallet(String(this.type));

@@ -11,6 +11,7 @@ import {
   PollarClientConfig,
   PollarLoginOptions,
   PollarPersistedSession,
+  SendPaymentParams,
   SessionsState,
   SignOutcome,
   StellarNetwork,
@@ -50,7 +51,7 @@ import { browserPasskeyCeremony, browserPasskeySigner } from './lib/passkey-cere
 import type { PollarConfig, PollarStyles } from './types';
 
 const DEFAULT_APP_CONFIG: PollarConfig = {
-  application: { name: '' },
+  application: { name: '', network: 'testnet', chains: [] },
   styles: {},
 };
 
@@ -85,6 +86,13 @@ interface PollarContextValue {
    * on-chain address and `wallet.provider` for the wallet/login provider.
    */
   wallet: WalletInfo | null;
+  /**
+   * Every wallet the user holds, one per chain — a superset of {@link wallet},
+   * with `chain` populated. `[]` when unauthenticated. Drives the network
+   * selector in the Send / Wallet Balance / Assets modals: each entry is a
+   * network the user can switch to, and the first one is the default.
+   */
+  wallets: WalletInfo[];
   getClient: () => PollarClient;
   openLoginModal: () => void;
 
@@ -103,6 +111,15 @@ interface PollarContextValue {
   openSessionsModal: () => void;
   appConfig: PollarConfig;
   styles: PollarStyles;
+  /** Remote app-config load state. 'loading' while the initial fetch is in
+   *  flight, 'error' if it failed (styles fall back to empty defaults), 'ready'
+   *  once resolved — or immediately 'ready' when `appConfig` is passed as a prop.
+   *  The login modal shows a spinner/retry instead of an empty shell until this
+   *  is 'ready'. */
+  configStatus: 'loading' | 'ready' | 'error';
+  /** Re-run the remote app-config fetch after an error. No-op when `appConfig`
+   *  was supplied as a prop. */
+  retryConfig: () => void;
   // transactions
   openTxModal: () => void;
   tx: TransactionState;
@@ -127,6 +144,12 @@ interface PollarContextValue {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ) => Promise<SubmitOutcome>;
+  /**
+   * Send a payment on any chain the user holds a wallet on. Stellar keeps the
+   * split flow (so external adapters and passkeys still work); a chain whose
+   * signature expires goes through one server-side call and is custodial-only.
+   */
+  sendPayment: (params: SendPaymentParams) => Promise<SubmitOutcome>;
   // network
   network: StellarNetwork;
   setNetwork: (network: StellarNetwork) => void;
@@ -143,13 +166,17 @@ interface PollarContextValue {
   refreshAssets: () => Promise<void>;
   /**
    * Establishes (omit `limit`) or removes (`limit: '0'`) a trustline for an
-   * asset. Pass the asset's `sponsored` flag so the app covers the reserve + fee
-   * when eligible; otherwise the user's own wallet pays. Mirrors
-   * {@link PollarClient.setTrustline}.
+   * asset. Sponsorship is derived automatically from the app's dashboard config
+   * (the app covers the reserve + fee when eligible); pass `skipSponsorship` to
+   * force the user's own wallet to pay. Mirrors {@link PollarClient.setTrustline}.
    */
   setTrustline: (
     asset: { code: string; issuer: string },
-    opts?: { limit?: string; sponsored?: boolean },
+    opts?: {
+      limit?: string;
+      /** Force self-pay even when the app would sponsor the trustline. */
+      skipSponsorship?: boolean;
+    },
   ) => Promise<TrustlineOutcome>;
   /** Open the enabled-assets / trustline-state modal. */
   openEnabledAssetsModal: () => void;
@@ -239,10 +266,29 @@ interface PollarProviderProps {
    */
   client: PollarClient | PollarClientConfig;
   /**
-   * Local override of the `/applications/config` response. If provided (even
-   * `{}`), the remote fetch is skipped and missing fields fall back to the
-   * defaults in `LoginModalTemplate`. If `undefined`, the SDK fetches
-   * `/applications/config` on mount.
+   * Local REPLACEMENT for the `/applications/config` response, not a patch over
+   * it. Passing anything at all skips the remote fetch entirely; what you pass
+   * is used verbatim and is never merged with the server's answer, so there is
+   * no "fill in the fields I left out".
+   *
+   * `styles` may be partial (every field in it is optional), but `application`
+   * may not: `name`, `network` and `chains` are all required by the type. If you
+   * bypass the type anyway (plain JS, or a cast), each missing field lands on a
+   * default scattered across the components rather than on anything central:
+   *
+   *   chains       absent → the chain order/filter falls back to the order the
+   *                         session listed the user's wallets in (see useChains)
+   *   name         absent → 'Pollar'
+   *   theme        absent → 'light'
+   *   accentColor  absent → '#005DB4'
+   *   emailEnabled, providers, embeddedWallets, smartWallet
+   *                absent → false. NOTE: that means EVERY login method is off
+   *                         and the login modal renders with no way in.
+   *
+   * Leave this `undefined` to have the SDK fetch `/applications/config` on
+   * mount, which is also what keeps branding, login methods and chains current:
+   * that fetch re-runs on every mount, so dashboard changes land on the next
+   * page load. Supplying this prop opts out of that too.
    */
   appConfig?: PollarConfig;
   adapters?: PollarAdapters;
@@ -311,6 +357,11 @@ export function PollarProvider({
   const [walletBalance, setWalletBalance] = useState<WalletBalanceState>({ step: 'idle' });
   const [enabledAssets, setEnabledAssets] = useState<EnabledAssetsState>({ step: 'idle' });
   const [resolvedConfig, setResolvedConfig] = useState<PollarConfig>(() => appConfigProp ?? DEFAULT_APP_CONFIG);
+  const [configStatus, setConfigStatus] = useState<'loading' | 'ready' | 'error'>(
+    appConfigProp !== undefined ? 'ready' : 'loading',
+  );
+  const [configRetry, setConfigRetry] = useState(0);
+  const retryConfig = useCallback(() => setConfigRetry((n) => n + 1), []);
 
   useEffect(() => {
     return pollarClient.onTransactionStateChange(setTransaction);
@@ -390,8 +441,6 @@ export function PollarProvider({
     };
   }, [pollarClient]);
 
-  // Presence of `appConfig` is the opt-out: if the consumer passes it (even
-  // `{}`), we trust them and skip the remote fetch.
   // Route the modal error boundary's logs through the client's level-gated
   // logger (it's a class component that can't read context directly).
   useEffect(() => {
@@ -399,21 +448,40 @@ export function PollarProvider({
   }, [pollarClient]);
 
   useEffect(() => {
-    if (appConfigProp !== undefined) return;
+    // PRESENCE of `appConfig` is the opt-out, not its contents: any value at all
+    // means the consumer owns the config, so the remote fetch never runs and
+    // what they passed is used as-is. It is 'ready' immediately because there is
+    // nothing to wait for.
+    //
+    // Otherwise this runs on every mount, which is what keeps branding, login
+    // methods and chains current: a change in the dashboard lands on the next
+    // page load with no re-login.
+    if (appConfigProp !== undefined) {
+      setConfigStatus('ready');
+      return;
+    }
     let cancelled = false;
+    setConfigStatus('loading');
     pollarClient
       .getAppConfig()
       .then((fetched) => {
-        if (cancelled || !fetched) return;
+        if (cancelled) return;
+        if (!fetched) {
+          setConfigStatus('error');
+          return;
+        }
         setResolvedConfig(fetched as PollarConfig);
+        setConfigStatus('ready');
       })
       .catch((err) => {
+        if (cancelled) return;
         pollarClient.getLogger().error('[PollarProvider] getAppConfig failed', err);
+        setConfigStatus('error');
       });
     return () => {
       cancelled = true;
     };
-  }, [pollarClient, appConfigProp]);
+  }, [pollarClient, appConfigProp, configRetry]);
 
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [transactionModalOpen, setTransactionModalOpen] = useState(false);
@@ -459,6 +527,7 @@ export function PollarProvider({
     return {
       // session
       wallet: pollarClient.getWallet(),
+      wallets: pollarClient.getWallets(),
       isAuthenticated: !!walletAddress,
       verified,
       // client
@@ -475,6 +544,7 @@ export function PollarProvider({
       submitTx: (signedXdr: string) => pollarClient.submitTx(signedXdr),
       buildAndSignAndSubmitTx: (operation, params, options) => pollarClient.buildAndSignAndSubmitTx(operation, params, options),
       runTx: (operation, params, options) => pollarClient.runTx(operation, params, options),
+      sendPayment: (params) => pollarClient.sendPayment(params),
       openTxModal: () => setTransactionModalOpen(true),
       // tx history
       txHistory,
@@ -534,6 +604,8 @@ export function PollarProvider({
       // config
       appConfig: resolvedConfig,
       styles,
+      configStatus,
+      retryConfig,
       adapters,
     } as PollarContextValue;
   }, [
@@ -550,6 +622,8 @@ export function PollarProvider({
     refreshAssets,
     networkState,
     resolvedConfig,
+    configStatus,
+    retryConfig,
     adapters,
   ]);
 

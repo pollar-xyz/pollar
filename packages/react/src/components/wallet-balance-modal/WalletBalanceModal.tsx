@@ -1,7 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { WalletChain } from '@pollar/core';
+import { useEffect, useState } from 'react';
 import { usePollar } from '../../context';
+import { useChains } from '../../useChains';
+import { addressForChain } from '../ChainSelect';
 import '../shared.css';
 import './WalletBalanceModal.css';
 import { WalletBalanceModalTemplate } from './WalletBalanceModalTemplate';
@@ -11,9 +14,18 @@ interface WalletBalanceModalProps {
 }
 
 export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
-  const { walletBalance, refreshWalletBalance, wallet, styles } = usePollar();
-  const walletAddress = wallet?.address ?? '';
+  const { walletBalance, refreshWalletBalance, wallets, network, styles } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
+
+  const { chains } = useChains();
+  const [selectedChain, setSelectedChain] = useState<WalletChain | null>(null);
+  // Default to the app's first configured network. Runs as an effect because
+  // `wallets` is empty on the first render of a cold-start session.
+  useEffect(() => {
+    if (selectedChain === null && chains.length > 0) setSelectedChain(chains[0]!);
+  }, [chains, selectedChain]);
+
+  const walletAddress = addressForChain(wallets, selectedChain);
 
   useEffect(() => {
     void refreshWalletBalance();
@@ -26,6 +38,10 @@ export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
         accentColor={accentColor}
         walletBalance={walletBalance}
         walletAddress={walletAddress}
+        chains={chains}
+        selectedChain={selectedChain}
+        network={network}
+        onSelectChain={setSelectedChain}
         onRefresh={() => refreshWalletBalance()}
         onClose={onClose}
       />
