@@ -9,10 +9,13 @@ This is the Solana counterpart to `@pollar/stellar-wallets-kit-adapter`. Login u
 **SIWS (Sign In With Solana)** via the wallet's native `solana:signIn` feature -
 the Solana analogue of Stellar's SEP-10 challenge.
 
-> **0.11.1** is the first published release. The adapter declares
+> **0.11.2** requires `@pollar/core@^0.11.2` (peer range bump only; no adapter
+> changes).
+>
+> **0.11.1** was the first published release. The adapter declares
 > `chain: 'SOLANA'`, which is what routes `login({ provider })` through the SIWS
 > flow instead of Stellar's SEP-10 challenge - end to end, discovery through
-> login. Requires `@pollar/core@^0.11.1`.
+> login.
 
 ## Installation
 

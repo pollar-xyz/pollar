@@ -1,5 +1,14 @@
 # Upgrade guide
 
+## 0.11.1 -> 0.11.2
+
+No breaking changes and no migration steps. 0.11.2 is additive: the
+`client.stellar` namespace (SEP-53 message + SEP-10 challenge ownership
+proofs), a multichain Transaction History modal in `@pollar/react`, and the
+Freighter adapter migrated to `@stellar/freighter-api` 6.0.0. Existing call
+sites compile and behave unchanged. See the [CHANGELOG](./CHANGELOG.md) for
+the details.
+
 ## 0.11.0 -> 0.11.1
 
 0.11.1 reworks the multichain wallet responses. The wire format moved to a

@@ -1,6 +1,6 @@
 {
   "name": "@pollar/solana-wallet-standard-adapter",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -37,10 +37,10 @@
     "node": ">=20"
   },
   "peerDependencies": {
-    "@pollar/core": "^0.11.1"
+    "@pollar/core": "^0.11.2"
   },
   "dependencies": {
-    "@pollar/core": "^0.11.1",
+    "@pollar/core": "^0.11.2",
     "@solana/wallet-standard-features": "^1.4.0",
     "@wallet-standard/app": "^1.1.1",
     "@wallet-standard/base": "^1.1.1",

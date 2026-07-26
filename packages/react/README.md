@@ -3,14 +3,20 @@
 React bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI, transaction modals, and hooks for
 Stellar and Solana applications.
 
-> **0.11.1** requires `@pollar/core@^0.11.1`. Headline feature: a **network
-> picker** (`<ChainSelect>`) across the wallet-balance, enabled-assets, send and
-> receive modals - each scopes its rows to the selected chain instead of tagging
-> every row, and the filter is local (the backend returns every chain in one
-> payload, so switching networks costs no request). Balances now format against
-> each token's own `decimals`, and a `null` balance renders as a dash rather than
-> as `0`, because `null` means the chain could not be read. The login modal shows
-> loading / error state when the app config fails to load. See the
+> **0.11.2** requires `@pollar/core@^0.11.2`. The **Transaction History modal
+> goes multichain**: the same network picker and address chip as the Balance /
+> Send modals, a server-side chain filter (pagination is server-side, so
+> switching networks refetches and resets to page 1), per-chain explorer links
+> (stellar.expert for Stellar, explorer.solana.com for Solana), and the unified
+> `{ amount, unit }` fee, so a Solana row reads "5000 lamports". The picker
+> hides itself on a single-chain app. Non-breaking.
+>
+> Earlier: **0.11.1** added the network picker (`<ChainSelect>`) across the
+> wallet-balance, enabled-assets, send and receive modals - each scopes its rows
+> to the selected chain instead of tagging every row, with a local filter (the
+> backend returns every chain in one payload). Balances format against each
+> token's own `decimals`, and a `null` balance renders as a dash rather than as
+> `0`, because `null` means the chain could not be read. See the
 > [CHANGELOG](../../CHANGELOG.md) and [UPGRADE.md](../../UPGRADE.md) for the full
 > version history before upgrading.
 
@@ -97,11 +103,11 @@ Context provider that initialises the Pollar client and makes it available to ch
 </PollarProvider>
 ```
 
-| Prop        | Type                                 | Required | Description                                                                                                                                                                                     |
-| ----------- | ------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `client`    | `PollarClient \| PollarClientConfig` | Yes      | Either a pre-built `PollarClient` (testing, reuse outside React) or a `PollarClientConfig` the provider will construct one from. **Locked at first render** — swapping after mount is ignored   |
-| `appConfig` | `PollarConfig`                       | No       | Local override of `/applications/config`. **Presence is the opt-out switch**: pass it (even `{}`) and the remote fetch is skipped. Omit it to keep the existing remote-fetch-on-mount behaviour |
-| `adapters`  | `PollarAdapters`                     | No       | Named set of `PollarAdapter` objects (e.g. Trustless Work). See below                                                                                                                           |
+| Prop        | Type                                 | Required | Description                                                                                                                                                                                                                                                                                                                                   |
+| ----------- | ------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client`    | `PollarClient \| PollarClientConfig` | Yes      | Either a pre-built `PollarClient` (testing, reuse outside React) or a `PollarClientConfig` the provider will construct one from. **Locked at first render** — swapping after mount is ignored                                                                                                                                                 |
+| `appConfig` | `PollarConfig`                       | No       | Local override of `/applications/config`. **Presence is the opt-out switch**: pass it (even `{}`) and the remote fetch is skipped. Omit it to keep the existing remote-fetch-on-mount behaviour. Unlike `client`, it can be added or swapped after mount — the context re-applies it (compared by value, so an inline object literal is fine) |
+| `adapters`  | `PollarAdapters`                     | No       | Named set of `PollarAdapter` objects (e.g. Trustless Work). See below                                                                                                                                                                                                                                                                         |
 
 ---
 
@@ -296,7 +302,7 @@ already wired inside `<PollarProvider>` — and most are exported in case you wa
 | `<SwapModal>`              | On-chain asset-to-asset swap: pick from/to assets and amount, quote across venues, execute (auto-trustline on the buy asset when needed); paste a custom buy token (code + issuer)                                                                                                                                                                                                       |
 | `<EarnModal>`              | Deposit/withdraw across DeFindex vaults and Blend pools: provider + opportunity selection with live APY, wallet balance, over-spend guards, and auto-trustline on deposit                                                                                                                                                                                                                |
 | `<ReceiveModal>`           | Wallet address as QR code with copy-to-clipboard (no external QR dependency required)                                                                                                                                                                                                                                                                                                    |
-| `<TxHistoryModal>`         | Paginated transaction history with auto-fetch on open and stellar.expert explorer links                                                                                                                                                                                                                                                                                                  |
+| `<TxHistoryModal>`         | Paginated multichain transaction history with auto-fetch on open. A `<ChainSelect>` in the header filters server-side (switching networks refetches and resets to page 1); rows link to their own chain's explorer (stellar.expert for Stellar, explorer.solana.com for Solana) and show the unified `{ amount, unit }` fee                                                              |
 | `<WalletBalanceModal>`     | Multichain wallet balances (Stellar, Polygon, Solana). A `<ChainSelect>` in the header picks the network and the rows are filtered to it; shows that chain's address plus a refresh button. An unreadable chain's balance renders as a dash, never as `0`. On Solana testnet each row offers a faucet hint — a devnet SOL faucet on the native row, Circle's USDC faucet on the USDC row |
 | `<EnabledAssetsModal>`     | The application's dashboard-enabled assets for the network picked in the header, with per-asset trustline state; establish/remove trustlines (Stellar only - other chains are informational)                                                                                                                                                                                             |
 | `<DistributionRulesModal>` | Manage the wallet's distribution rules                                                                                                                                                                                                                                                                                                                                                   |
