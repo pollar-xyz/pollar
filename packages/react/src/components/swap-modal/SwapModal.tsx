@@ -122,12 +122,16 @@ export function SwapModal({ onClose }: SwapModalProps) {
   // Sell: native XLM + every asset the wallet has a trustline for, even at a 0
   // balance — so the user always sees what they hold and knows when to fund
   // (the amount field guards against overselling). Buy: app-enabled assets.
-  // Swap is Stellar-only, so drop any non-Stellar balance (SOL/POL carry no
-  // `type`) — the guard both filters them and narrows `type` for toRef().
+  // Swap is Stellar-only, so the guard drops every non-Stellar balance and
+  // narrows `type` for toRef(). It has to test `chain`, not `type`: SOL/POL
+  // report `type: 'native'` exactly like XLM, and a Solana/Polygon token reports
+  // `type: 'token'` with no `trustlineRemoved`, so neither can be told apart
+  // from a Stellar row by `type` alone.
   const sellOptions: SwapAssetOption[] = balances
     .filter(
       (b): b is typeof b & { type: 'native' | 'credit_alphanum4' | 'credit_alphanum12' } =>
-        b.type != null && (b.type === 'native' || !b.trustlineRemoved),
+        (b.chain === undefined || b.chain === 'STELLAR') &&
+        (b.type === 'native' || ((b.type === 'credit_alphanum4' || b.type === 'credit_alphanum12') && !b.trustlineRemoved)),
     )
     // A null `available` (chain unreadable) maps to undefined — "unknown", which
     // the option already models — rather than to a 0 that would read as "empty".
