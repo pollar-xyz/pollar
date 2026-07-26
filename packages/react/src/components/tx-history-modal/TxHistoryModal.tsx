@@ -16,7 +16,7 @@ interface TxHistoryModalProps {
 }
 
 export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
-  const { getClient, styles, txHistory, wallets, network } = usePollar();
+  const { getClient, styles, txHistory, wallets } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const [offset, setOffset] = useState(0);
 
@@ -61,7 +61,6 @@ export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
         chains={chains}
         selectedChain={selectedChain}
         walletAddress={walletAddress}
-        network={network}
         onSelectChain={onSelectChain}
         onRefresh={() => paged(offset)}
         onPrev={() => paged(Math.max(0, offset - PAGE_SIZE))}

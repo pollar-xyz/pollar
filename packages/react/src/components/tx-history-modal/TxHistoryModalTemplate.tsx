@@ -17,8 +17,6 @@ interface TxHistoryModalTemplateProps {
   selectedChain: WalletChain | null;
   /** Address of the wallet on {@link selectedChain}. */
   walletAddress: string;
-  /** testnet vs mainnet — picks the explorer's cluster. */
-  network: StellarNetwork;
   onSelectChain: (chain: WalletChain) => void;
   onRefresh: () => void;
   onPrev: () => void;
@@ -94,7 +92,6 @@ export function TxHistoryModalTemplate({
   chains,
   selectedChain,
   walletAddress,
-  network,
   onSelectChain,
   onRefresh,
   onPrev,
