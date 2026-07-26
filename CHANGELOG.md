@@ -20,9 +20,11 @@
   stays `null` instead of being coerced to `'0'`, so the UI can tell
   "unavailable" from "zero". `WalletBalanceRecord.balance` is therefore
   `string | null`.
-- **Send on any chain the user holds.** `sendPayment()` is one entry point across
+- **Send on Stellar and Solana.** `sendPayment()` is one entry point across
   chains; Solana custodial sends land through the multichain atomic endpoint, and
-  the Send / Receive modals carry the network picker.
+  the Send / Receive modals carry the network picker. Polygon is browse-only: it
+  has no transfer path yet, so the Send modal blocks it and `sendPayment()`
+  returns an error for it.
 - **Network picker across every wallet modal.** New `ChainSelect` component and
   `useChains()` hook in `@pollar/react`; the balance, assets, send and receive
   modals filter to the selected chain, and the chain order plus primary address
@@ -62,13 +64,15 @@
 - `WalletBalanceRecord.balance` and `.available` are now `string | null`
   (`null` = the chain could not be read). Callers that parse the balance need a
   null check.
-- New `sendPayment(params)` — one entry point for sending on any chain the user
-  holds a wallet on. Stellar routes through `buildAndSignAndSubmitTx`, so
-  external adapters and passkey wallets keep the split build → sign → submit
-  flow; chains whose signature expires (a Solana blockhash lapses in ~60s) do
-  the whole thing in one server-side call and are **custodial-only** for now.
-  An `idempotencyKey` is minted per call, because a Solana submit is a single
-  non-idempotent shot and a transport retry would otherwise transfer twice.
+- New `sendPayment(params)` — one entry point for sending, on Stellar and on
+  Solana. Stellar routes through `buildAndSignAndSubmitTx`, so external adapters
+  and passkey wallets keep the split build → sign → submit flow; chains whose
+  signature expires (a Solana blockhash lapses in ~60s) do the whole thing in
+  one server-side call and are **custodial-only** for now. An `idempotencyKey`
+  is minted per call, because a Solana submit is a single non-idempotent shot
+  and a transport retry would otherwise transfer twice. `SendPaymentParams`
+  carries a `POLYGON` member for the shape, but there is no transfer path for it
+  yet and the call returns an error.
 - New `toBaseUnits(amount, decimals)` / `fromBaseUnits(base, decimals)`.
   Balances are reported formatted (`"1.5"`) while base-unit chains take integer
   amounts (`1500000000` lamports), so anything sending to those chains must

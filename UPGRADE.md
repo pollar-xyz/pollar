@@ -46,13 +46,25 @@ and `ReceiveModalTemplate` now take `chains`, `selectedChain` and
 exported helpers:
 
 ```tsx
+import type { WalletChain } from '@pollar/core';
+import { useEffect, useState } from 'react';
 import { ChainSelect, addressForChain, useChains, usePollar } from '@pollar/react';
 
 const { wallets } = usePollar();
 // useChains() applies the app's configured chain order from /config; prefer it
 // over chainsOf(wallets) alone, which cannot know that order.
-const { chains, primaryChain } = useChains();
-const [selectedChain, setSelectedChain] = useState(primaryChain);
+const { chains } = useChains();
+
+// Start at null and settle on the first configured chain in an effect - the
+// same thing the built-in modals do. Seeding with useState(primaryChain) would
+// pin the picker to null forever: /config is still in flight on the first
+// render, primaryChain is null until it resolves, and useState only reads its
+// argument once.
+const [selectedChain, setSelectedChain] = useState<WalletChain | null>(null);
+useEffect(() => {
+  if (selectedChain === null && chains.length > 0) setSelectedChain(chains[0]!);
+}, [chains, selectedChain]);
+
 const walletAddress = addressForChain(wallets, selectedChain);
 ```
 

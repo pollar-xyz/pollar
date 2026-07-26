@@ -29,6 +29,31 @@ do not install them yourself.
 ```ts
 import { PollarClient } from '@pollar/core';
 import { solanaWalletStandardAdapters } from '@pollar/solana-wallet-standard-adapter';
+
+const client = new PollarClient({
+  apiKey: '...',
+  walletAdapters: [...solanaWalletStandardAdapters()],
+});
+```
+
+`solanaWalletStandardAdapters()` discovers every installed Solana wallet and returns one
+adapter each. It is SSR-safe (returns `[]` when `window` is undefined), so build
+the `PollarClient` on the client.
+
+### Alongside Stellar wallets
+
+`walletAdapters` is one flat list, so Stellar and Solana wallets coexist in it.
+That needs two packages the install command above does not cover -
+`@pollar/stellar-wallets-kit-adapter` and its own peer
+`@creit.tech/stellar-wallets-kit`:
+
+```bash
+npm install @pollar/stellar-wallets-kit-adapter @creit.tech/stellar-wallets-kit
+```
+
+```ts
+import { PollarClient } from '@pollar/core';
+import { solanaWalletStandardAdapters } from '@pollar/solana-wallet-standard-adapter';
 import { stellarWalletsKitAdapters } from '@pollar/stellar-wallets-kit-adapter';
 import { Networks } from '@creit.tech/stellar-wallets-kit';
 
@@ -37,10 +62,6 @@ const client = new PollarClient({
   walletAdapters: [...stellarWalletsKitAdapters({ network: Networks.PUBLIC }), ...solanaWalletStandardAdapters()],
 });
 ```
-
-`solanaWalletStandardAdapters()` discovers every installed Solana wallet and returns one
-adapter each. It is SSR-safe (returns `[]` when `window` is undefined), so build
-the `PollarClient` on the client.
 
 ### Options
 

@@ -514,10 +514,12 @@ submitting → success` transitions (each composed call emits its own); custodia
 
 #### `client.sendPayment(params): Promise<SubmitOutcome>`
 
-One entry point for a payment on any chain the user holds a wallet on. A Stellar payment routes through
-`buildAndSignAndSubmitTx` (so external adapters and passkey wallets keep the split flow); a Solana payment is a single
-server-side call and is **custodial-only** for now. `SendPaymentParams` is a per-chain union - a Stellar member with a
-decimal `amount` and an `asset`, a Solana member with an integer base-unit `amount` and an optional `mint`.
+One entry point for a payment on Stellar or Solana. A Stellar payment routes through `buildAndSignAndSubmitTx` (so
+external adapters and passkey wallets keep the split flow); a Solana payment is a single server-side call and is
+**custodial-only** for now. `SendPaymentParams` is a per-chain union - a Stellar member with a decimal `amount` and an
+`asset`, a Solana member with an integer base-unit `amount` and an optional `mint`. The union also carries a `POLYGON`
+member for the shape, but there is no transfer path for it yet: the call returns
+`{ status: 'error', details: 'Sending on POLYGON is not supported yet.' }`.
 
 ```ts
 // Stellar
@@ -913,6 +915,7 @@ import type {
   WalletAssetsContent,
   EnabledAssetRecord,
   EnabledAssetsState,
+  SendPaymentParams,
 
   // Solana wallet adapters (SIWS)
   SolanaSignInInput,
