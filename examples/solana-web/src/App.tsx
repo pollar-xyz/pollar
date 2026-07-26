@@ -40,9 +40,7 @@ function Home() {
       <h1>Pollar x Solana</h1>
       <p>Click log in, choose your Solana wallet, and approve the Sign In With Solana request.</p>
       {solanaAdapters.length === 0 && (
-        <p style={{ color: '#b45309' }}>
-          No Solana wallet detected. Install Phantom, Solflare, or Backpack, then reload.
-        </p>
+        <p style={{ color: '#b45309' }}>No Solana wallet detected. Install Phantom, Solflare, or Backpack, then reload.</p>
       )}
       {isAuthenticated && wallet ? (
         <>
@@ -69,8 +67,8 @@ function Setup() {
     <main style={box}>
       <h1>Pollar x Solana — setup needed</h1>
       <p>
-        Copy <code>.env.example</code> to <code>.env.local</code> and set{' '}
-        <code>VITE_POLLAR_API_KEY</code> (an app with SOLANA enabled). Then restart <code>npm run dev</code>.
+        Copy <code>.env.example</code> to <code>.env.local</code> and set <code>VITE_POLLAR_API_KEY</code> (an app with SOLANA
+        enabled). Then restart <code>npm run dev</code>.
       </p>
     </main>
   );
