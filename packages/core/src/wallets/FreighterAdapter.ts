@@ -8,13 +8,17 @@ import {
   isConnected,
   requestAccess,
   signAuthEntry,
+  signMessage,
   signTransaction,
 } from '@stellar/freighter-api';
 
+import { base64urlEncode } from '../lib/base64url';
 import type {
   ConnectWalletResponse,
   SignAuthEntryOptions,
   SignAuthEntryResponse,
+  SignMessageOptions,
+  SignMessageResponse,
   SignTransactionOptions,
   SignTransactionResponse,
   WalletAdapter,
@@ -106,11 +110,34 @@ export class FreighterAdapter implements WalletAdapter {
     }
     return { signedAuthEntry };
   }
+
+  async signStellarMessage(message: string, options?: SignMessageOptions): Promise<SignMessageResponse> {
+    // Freighter v6 applies the SEP-53 framing itself and returns the signature as
+    // `signedMessage` (raw bytes, or a base64 string on some platforms).
+    const { signedMessage, signerAddress } = unwrap(await signMessage(message, freighterOpts(options)), 'signMessage');
+    if (!signedMessage) {
+      throw new Error('Invalid response from Freighter');
+    }
+    const signature = typeof signedMessage === 'string' ? signedMessage : bytesToBase64(new Uint8Array(signedMessage));
+    return { signature, signerAddress };
+  }
+}
+
+/** Standard base64 (padded) via the pure-JS base64url encoder — no `Buffer`, no
+ *  `btoa`, so it works in browser and RN alike. Matches the custodial path's
+ *  `signature.toString('base64')` so both proof paths return one format. */
+function bytesToBase64(bytes: Uint8Array): string {
+  const b64 = base64urlEncode(bytes).replace(/-/g, '+').replace(/_/g, '/');
+  const remainder = b64.length % 4;
+  return remainder === 0 ? b64 : b64 + '='.repeat(4 - remainder);
 }
 
 /** Map our `{ networkPassphrase, accountToSign }` options onto freighter-api v6's
  *  `{ networkPassphrase?, address? }`, omitting undefined keys. */
-function freighterOpts(options?: SignTransactionOptions | SignAuthEntryOptions): { networkPassphrase?: string; address?: string } {
+function freighterOpts(options?: SignTransactionOptions | SignAuthEntryOptions | SignMessageOptions): {
+  networkPassphrase?: string;
+  address?: string;
+} {
   const opts: { networkPassphrase?: string; address?: string } = {};
   if (options?.networkPassphrase) opts.networkPassphrase = options.networkPassphrase;
   if (options?.accountToSign) opts.address = options.accountToSign;

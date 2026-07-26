@@ -543,6 +543,46 @@ export type SignOutcome =
  */
 export type SignAuthEntryOutcome = { status: 'signed'; signedAuthEntry: string } | { status: 'error'; details?: string };
 
+// ─── Stellar SEP ownership proofs (client.stellar.*) ────────────────────────────
+
+/**
+ * Result of {@link StellarSepApi.sep53}.signMessage — a SEP-53 message signature.
+ * `signature` is base64 ed25519 over SHA-256("Stellar Signed Message:\n" + message),
+ * the same digest external wallets (Freighter/SWK) and the custodial signer both
+ * produce, so `scheme` is always `sep53`.
+ */
+export type StellarMessageProof =
+  | { status: 'signed'; signature: string; signerAddress: string; scheme: 'sep53' }
+  | { status: 'error'; details?: string; code?: string };
+
+/** Input to {@link StellarSepApi.sep10}.sign — a verifier-issued SEP-10 challenge. */
+export interface Sep10SignParams {
+  /** The SEP-10 challenge transaction (unsigned XDR) built by the verifier. */
+  challengeXdr: string;
+  /** Verifier home domain(s); when present, the custodial signer runs full SEP-10 validation. */
+  homeDomains?: string | string[];
+  /** Verifier web-auth domain; enables full SEP-10 validation on the custodial path. */
+  webAuthDomain?: string;
+}
+
+/** Result of {@link StellarSepApi.sep10}.sign — the challenge with the user's signature. */
+export type Sep10Proof =
+  | { status: 'signed'; signedXdr: string; signerAddress: string }
+  | { status: 'error'; details?: string; code?: string };
+
+/**
+ * Stellar Ecosystem Proposal ownership-proof surface, exposed as `client.stellar`.
+ * These are Stellar-specific standards, namespaced so the multichain client stays
+ * clean. Each method dispatches by wallet type: external wallets sign client-side
+ * via their adapter, custodial wallets sign server-side through sdk-api.
+ */
+export interface StellarSepApi {
+  /** SEP-53: sign an arbitrary message (message ownership proof). */
+  sep53: { signMessage(message: string): Promise<StellarMessageProof> };
+  /** SEP-10: sign a web-auth challenge transaction (transaction ownership proof). */
+  sep10: { sign(params: Sep10SignParams): Promise<Sep10Proof> };
+}
+
 /**
  * A payment, addressed per chain.
  *

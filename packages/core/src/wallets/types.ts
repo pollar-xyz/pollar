@@ -52,6 +52,20 @@ export interface SignAuthEntryResponse {
   signedAuthEntry: string;
 }
 
+/** Options for {@link WalletAdapter.signStellarMessage} (SEP-53). */
+export interface SignMessageOptions {
+  networkPassphrase?: string;
+  accountToSign?: string;
+}
+
+/** Result of a SEP-53 message signature. */
+export interface SignMessageResponse {
+  /** base64 ed25519 signature over the SEP-53 digest. */
+  signature: string;
+  /** The signer's public key (`G...`). Absent if the wallet doesn't report it. */
+  signerAddress?: string;
+}
+
 // ─── Solana (SIWS) ────────────────────────────────────────────────────────────
 // Structural mirror of the Wallet Standard's `solana:signIn` IO, kept here so
 // `@pollar/core` types the Solana adapter contract WITHOUT depending on
@@ -134,6 +148,13 @@ export interface WalletAdapter {
   // flows assert their presence (a STELLAR adapter that omits them is a bug).
   signTransaction?(xdr: string, options?: SignTransactionOptions): Promise<SignTransactionResponse>;
   signAuthEntry?(entryXdr: string, options?: SignAuthEntryOptions): Promise<SignAuthEntryResponse>;
+  /**
+   * SEP-53: sign an arbitrary message and return the base64 signature + signer
+   * address. Stellar adapters only, and optional even among them — not every
+   * wallet exposes message signing (e.g. Albedo does not). Used by the
+   * `client.stellar.sep53` ownership-proof flow for external wallets.
+   */
+  signStellarMessage?(message: string, options?: SignMessageOptions): Promise<SignMessageResponse>;
   // ─── Solana signing (SIWS login + phase-2 transfers) ───────────────────────
   /** SIWS: sign the server-issued Sign In With Solana input. Solana adapters only. */
   signIn?(input: SolanaSignInInput): Promise<SolanaSignInOutput>;
