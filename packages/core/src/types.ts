@@ -991,6 +991,23 @@ export type EarnTxParams = {
   amount: string;
 };
 
+export type JupiterEarnExecuteBody = {
+  action: 'deposit' | 'withdraw';
+  provider: 'jupiter';
+  opportunity: string;
+  amount: string;
+  publicKey: string;
+  idempotencyKey: string;
+  waitForConfirmation?: boolean;
+};
+
+export type JupiterEarnExecuteContent = {
+  requestId: string;
+  hash: string;
+  status: 'PENDING' | 'SUCCESS' | 'FAILED';
+  feeLamports: string;
+};
+
 // ─── Adapter types ────────────────────────────────────────────────────────────
 
 export type AdapterFn<TParams = unknown> = (params: TParams) => Promise<{ unsignedTransaction: string }>;

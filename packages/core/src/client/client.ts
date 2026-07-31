@@ -1,7 +1,13 @@
 import { createApiClient, fetchWithTimeout, PollarApiClient } from '../api/client';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { getSwapConfig, getSwapTokens, quoteSwap } from '../api/endpoints/swap';
-import { buildEarnTx, getEarnOpportunities, getEarnPosition, getEarnProviders } from '../api/endpoints/earn';
+import {
+  buildEarnTx,
+  executeJupiterEarn,
+  getEarnOpportunities,
+  getEarnPosition,
+  getEarnProviders,
+} from '../api/endpoints/earn';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
 import {
   completeWithdraw,
@@ -1808,8 +1814,7 @@ export class PollarClient {
           return { status: 'success' };
         }
         const details =
-          (error as { details?: string; code?: string } | undefined)?.details ??
-          (error as { code?: string } | undefined)?.code;
+          (error as { details?: string; code?: string } | undefined)?.details ?? (error as { code?: string } | undefined)?.code;
         return { status: 'error', ...(details && { details }) };
       } catch (err) {
         const details = err instanceof Error ? err.message : undefined;
@@ -1829,8 +1834,7 @@ export class PollarClient {
       const xdr = data?.content?.sponsorSignedXdr ?? data?.content?.unsignedXdr;
       if (error || !data?.success || !xdr) {
         const details =
-          (error as { details?: string; code?: string } | undefined)?.details ??
-          (error as { code?: string } | undefined)?.code;
+          (error as { details?: string; code?: string } | undefined)?.details ?? (error as { code?: string } | undefined)?.code;
         return { status: 'error', ...(details && { details }) };
       }
       const signed = await this.signTx(xdr);
@@ -3113,6 +3117,35 @@ export class PollarClient {
     const wallet = this.getWallet();
     if (!wallet) return { status: 'error', details: 'No wallet connected' };
 
+    if (params.provider === 'jupiter') {
+      this._setTransactionState({ step: 'building-signing-submitting' });
+      try {
+        const result = await executeJupiterEarn(this._api, {
+          action,
+          provider: 'jupiter',
+          opportunity: params.opportunity,
+          amount: params.amount,
+          publicKey: wallet.address,
+          idempotencyKey: randomUUID(),
+          waitForConfirmation: false,
+        });
+        if (result.status === 'SUCCESS') {
+          this._setTransactionState({ step: 'success', hash: result.hash });
+          return { status: 'success', hash: result.hash };
+        }
+        if (result.status === 'PENDING') {
+          this._setTransactionState({ step: 'submitted', hash: result.hash });
+          return this._awaitTxConfirmation(result.hash, 'building-signing-submitting', undefined, {});
+        }
+        this._setTransactionState({ step: 'error', phase: 'building-signing-submitting' });
+        return { status: 'error', hash: result.hash };
+      } catch (error) {
+        const details = error instanceof Error ? error.message : String(error);
+        this._setTransactionState({ step: 'error', phase: 'building-signing-submitting', details });
+        return { status: 'error', details };
+      }
+    }
+
     // Both providers return a prebuilt XDR, which smart (passkey C-address)
     // wallets can't sign — their build path must run server-side and return a
     // passkey digest. Fail fast until that lands (same limitation as swap).
@@ -3131,6 +3164,7 @@ export class PollarClient {
     // invoke_contract shape is reserved for a future provider and runs through
     // runTx (re-simulated server-side), mirroring swap.
     if ('unsignedXdr' in build) return this.signAndSubmitTx(build.unsignedXdr);
+    if ('unsignedSolanaTransaction' in build) return { status: 'error', details: 'Unexpected Solana Earn build' };
     return this.runTx(build.operation, build.params);
   }
 

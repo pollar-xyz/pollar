@@ -5,6 +5,8 @@ import type {
   EarnPosition,
   EarnProviderId,
   EarnProvidersContent,
+  JupiterEarnExecuteBody,
+  JupiterEarnExecuteContent,
 } from '../../types';
 import type { PollarApiClient } from '../client';
 
@@ -58,4 +60,16 @@ export async function buildEarnTx(api: PollarApiClient, body: EarnBuildBody): Pr
   const { data, error } = await api.POST('/earn/build', { body });
   if (!data?.content || error) throw new Error(errMessage(error, 'Failed to build earn transaction'));
   return data.content;
+}
+
+/** Atomic Jupiter execution through the Pollar-custodied Solana wallet. */
+export async function executeJupiterEarn(
+  api: PollarApiClient,
+  body: JupiterEarnExecuteBody,
+): Promise<JupiterEarnExecuteContent> {
+  // Kept local until the published OpenAPI snapshot is regenerated from the
+  // updated sdk-api; the runtime client supports the route immediately.
+  const { data, error } = await (api as any).POST('/earn/execute', { body });
+  if (!data?.content || error) throw new Error(errMessage(error, 'Failed to execute Jupiter Earn operation'));
+  return data.content as JupiterEarnExecuteContent;
 }
