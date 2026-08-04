@@ -8,6 +8,7 @@ import { addressForChain } from '../ChainSelect';
 import '../shared.css';
 import './EnabledAssetsModal.css';
 import { CustomTrustlineModalTemplate, EnabledAssetsModalTemplate } from './EnabledAssetsModalTemplate';
+import { modalChrome } from '../modal-theme';
 
 interface EnabledAssetsModalProps {
   onClose: () => void;
@@ -19,7 +20,7 @@ function assetKey(record: { code: string; issuer?: string }): string {
 
 export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
   const { enabledAssets, refreshAssets, setTrustline, wallets, styles } = usePollar();
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const { chains } = useChains();
   const [selectedChain, setSelectedChain] = useState<WalletChain | null>(null);
@@ -88,11 +89,12 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
   );
 
   return (
-    <div className="pollar-overlay" onClick={onClose}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
       {view === 'list' ? (
         <EnabledAssetsModalTemplate
           theme={theme}
           accentColor={accentColor}
+          styleOverrides={styleOverrides}
           enabledAssets={enabledAssets}
           walletAddress={walletAddress}
           chains={chains}
@@ -112,6 +114,7 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
         <CustomTrustlineModalTemplate
           theme={theme}
           accentColor={accentColor}
+          styleOverrides={styleOverrides}
           busy={busyKey === 'custom'}
           actionError={actionError}
           onBack={() => {

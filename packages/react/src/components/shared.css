@@ -19,7 +19,7 @@
 .pollar-overlay {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: var(--pollar-overlay-z-index, 50);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -35,7 +35,7 @@
 .pollar-modal-card {
   position: relative;
   width: 100%;
-  border-radius: 1rem;
+  border-radius: var(--pollar-modal-border-radius, 1rem);
   border: 1px solid var(--pollar-border);
   padding: var(--pollar-modal-padding, 1.75rem);
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
@@ -163,7 +163,9 @@
   border: none;
   border-radius: var(--pollar-buttons-border-radius, 0.5rem);
   background-color: var(--pollar-accent);
-  color: #fff;
+  /* Falls back to white — the hardcoded value this replaced — so a consumer
+   * mounting a template without the button vars keeps the original look. */
+  color: var(--pollar-btn-primary-fg, #fff);
   font-size: 0.9375rem;
   font-weight: 700;
   cursor: pointer;
@@ -188,8 +190,9 @@
   padding: 0 1rem;
   border: 1px solid var(--pollar-border);
   border-radius: var(--pollar-buttons-border-radius, 0.5rem);
-  background-color: transparent;
-  color: var(--pollar-muted);
+  /* Stays a ghost button unless a secondary fill was configured. */
+  background-color: var(--pollar-btn-secondary-bg, transparent);
+  color: var(--pollar-btn-secondary-fg, var(--pollar-muted));
   font-size: 0.9375rem;
   font-weight: 600;
   cursor: pointer;
@@ -221,11 +224,13 @@
   border-width: 2px;
 }
 
-/* When a spinner sits on an accent-filled surface (e.g. inside a primary
- * button) its accent-colored ring is invisible — recolor it to white. */
+/* When a spinner sits on the primary button's accent-filled surface its
+ * accent-colored ring is invisible — recolor it to the button's own label color,
+ * which follows the accent's luminance (white on a dark accent, dark on a pale
+ * one). */
 .pollar-btn-primary .pollar-spinner {
-  border-color: rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
+  border-color: color-mix(in srgb, var(--pollar-btn-primary-fg, #fff) 35%, transparent);
+  border-top-color: var(--pollar-btn-primary-fg, #fff);
 }
 
 /* Spinner that inherits the current text color — for inline use inside custom /

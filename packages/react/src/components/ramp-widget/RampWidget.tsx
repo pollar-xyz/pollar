@@ -7,6 +7,7 @@ import type { RampFieldSpec, RampStep } from './RampWidgetTemplate';
 import { RampWidgetTemplate } from './RampWidgetTemplate';
 import '../shared.css';
 import './RampWidget.css';
+import { modalChrome } from '../modal-theme';
 
 interface RampWidgetProps {
   onClose: () => void;
@@ -39,7 +40,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   const { getClient, signTx, wallet, styles, network } = usePollar();
   const walletAddress = wallet?.address ?? '';
   const client = getClient();
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<RampStep>('input');
   const [direction, setDirection] = useState<RampDirection>('onramp');
@@ -317,10 +318,11 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   const canComplete = direction === 'offramp' && step === 'status' && txStatus !== 'completed' && !stellarTxHash;
 
   return (
-    <div className="pollar-overlay" onClick={onClose}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
       <RampWidgetTemplate
         theme={theme}
         accentColor={accentColor}
+        styleOverrides={styleOverrides}
         step={step}
         direction={direction}
         amount={amount}

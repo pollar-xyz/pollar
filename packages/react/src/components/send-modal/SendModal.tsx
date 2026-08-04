@@ -9,6 +9,7 @@ import '../shared.css';
 import '../transaction-modal/TransactionModal.css';
 import './SendModal.css';
 import { SendModalTemplate } from './SendModalTemplate';
+import { modalChrome } from '../modal-theme';
 
 interface SendModalProps {
   onClose: () => void;
@@ -38,7 +39,7 @@ export function SendModal({ onClose }: SendModalProps) {
   // External-wallet signing-adapter id (freighter/albedo) drives the wallet logo;
   // null for custodial/smart, which fall back to the Pollar logo.
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<'form' | 'tx'>('form');
   const [amount, setAmount] = useState('');
@@ -235,10 +236,11 @@ export function SendModal({ onClose }: SendModalProps) {
   }
 
   return (
-    <div className="pollar-overlay" onClick={!isInProgress ? onClose : undefined}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
       <SendModalTemplate
         theme={theme}
         accentColor={accentColor}
+        styleOverrides={styleOverrides}
         step={step}
         txTitle={txTitle}
         assets={sortedAssets}

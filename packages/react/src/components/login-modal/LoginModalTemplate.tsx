@@ -3,12 +3,18 @@
 import { AUTH_ERROR_CODES, AuthState, WalletId } from '@pollar/core';
 
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
-import { type CSSProperties, useState } from 'react';
+import { useState } from 'react';
 import { LOGO_POLLAR } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter } from '../commons';
+import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
+
+// Re-exported from its old home so consumers that imported it from this module
+// (the dashboard's branding preview, among others) keep working.
+export { buildModalCssVars } from '../modal-theme';
+export type { ModalStyleOverrides } from '../modal-theme';
 
 type WalletAdapterEntry = { id: WalletId; meta: { label: string; iconUrl?: string; group?: string } };
 
@@ -106,6 +112,8 @@ function authStateToStatus(step: AuthState['step']): StateStatus {
 interface LoginModalTemplateProps {
   theme: string;
   accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
   logoUrl: string | null;
   emailEnabled: boolean;
   embeddedWallets: boolean;
@@ -139,36 +147,10 @@ interface LoginModalTemplateProps {
   onRetry: () => void;
 }
 
-/** Theme-derived CSS custom properties shared by the login modal and its
- *  loading/error status card. Kept as a standalone helper so both render paths
- *  stay visually in lockstep. */
-export function buildModalCssVars(theme: string, accentColor: string): CSSProperties {
-  const isDark = theme === 'dark';
-  return {
-    '--pollar-accent': accentColor,
-    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': isDark ? '#ffffff' : '#111827',
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
-    '--pollar-input-height': '44px',
-    '--pollar-input-border-radius': '0.5rem',
-    '--pollar-card-border-radius': '10px',
-    '--pollar-modal-padding': '2rem',
-    '--pollar-modal-heading-size': '1.375rem',
-    '--pollar-modal-subtitle-size': '0.9rem',
-  } as CSSProperties;
-}
-
 export function LoginModalTemplate({
   theme,
   accentColor,
+  styleOverrides,
   logoUrl,
   emailEnabled,
   embeddedWallets,
@@ -211,7 +193,7 @@ export function LoginModalTemplate({
     }, []);
   const activeGroupAdapters = walletGroups.find((g) => g.label === activeGroup)?.adapters ?? [];
 
-  const cssVars = buildModalCssVars(theme, accentColor);
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
 
   const status = authStateToStatus(authState.step);
   const isLoading = status === 'LOADING';
@@ -419,6 +401,7 @@ export function LoginModalStatus({
   status,
   theme,
   accentColor,
+  styleOverrides,
   logoUrl,
   appName,
   onRetry,
@@ -427,12 +410,13 @@ export function LoginModalStatus({
   status: 'loading' | 'error';
   theme: string;
   accentColor: string;
+  styleOverrides?: ModalStyleOverrides;
   logoUrl: string | null;
   appName: string;
   onRetry: () => void;
   onCancel: () => void;
 }) {
-  const cssVars = buildModalCssVars(theme, accentColor);
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
   return (
     <div className="pollar-modal-card pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
       <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label="Close">

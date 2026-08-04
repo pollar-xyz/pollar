@@ -5,6 +5,7 @@ import { usePollar } from '../../context';
 import '../shared.css';
 import './SessionsModal.css';
 import { SessionsModalTemplate } from './SessionsModalTemplate';
+import { modalChrome } from '../modal-theme';
 
 interface SessionsModalProps {
   onClose: () => void;
@@ -12,7 +13,7 @@ interface SessionsModalProps {
 
 export function SessionsModal({ onClose }: SessionsModalProps) {
   const { getClient, styles, sessions } = usePollar();
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   // Only the per-action button spinners are local UI state. The list itself
   // (idle/loading/loaded/error) lives in the client's observable `sessions`
@@ -73,10 +74,11 @@ export function SessionsModal({ onClose }: SessionsModalProps) {
   }, [getClient, onClose]);
 
   return (
-    <div className="pollar-overlay" onClick={onClose}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
       <SessionsModalTemplate
         theme={theme}
         accentColor={accentColor}
+        styleOverrides={styleOverrides}
         state={sessions}
         revokingFamilyId={revokingFamilyId}
         signingOutEverywhere={signingOutEverywhere}

@@ -10,6 +10,7 @@ import {
 } from '@pollar/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { modalChrome } from '../modal-theme';
 import { LoginModalStatus, LoginModalTemplate } from './LoginModalTemplate';
 import { PrivyLoginSubmodal } from './PrivyLoginSubmodal';
 import '../shared.css';
@@ -69,10 +70,14 @@ export function LoginModal({ onClose }: LoginModalProps) {
     };
   }, [getClient]);
 
-  const { theme = 'light', accentColor = '#005DB4', logoUrl, emailEnabled, embeddedWallets, smartWallet, providers } = styles;
+  const { logoUrl, emailEnabled, embeddedWallets, smartWallet, providers } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   // Opt-in: the Smart Wallet (passkey) option only shows when the dashboard
   // explicitly enables it. Absent → hidden.
   const smartWalletEnabled = smartWallet ?? false;
+  // The heading is the app's name unless Branding set a custom one. Blank counts
+  // as unset, which is what the dashboard sends when the field is cleared.
+  const modalTitle = styles.modalTitle?.trim() || config.application?.name || 'Pollar';
 
   function handleClose() {
     setEmail('');
@@ -138,14 +143,15 @@ export function LoginModal({ onClose }: LoginModalProps) {
   }
 
   return (
-    <div className="pollar-overlay" onClick={handleClose}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={handleClose}>
       {configStatus !== 'ready' ? (
         <LoginModalStatus
           status={configStatus === 'error' ? 'error' : 'loading'}
           theme={theme}
           accentColor={accentColor}
+          styleOverrides={styleOverrides}
           logoUrl={logoUrl ?? null}
-          appName={config.application?.name ?? 'Pollar'}
+          appName={modalTitle}
           onRetry={retryConfig}
           onCancel={handleClose}
         />
@@ -154,8 +160,9 @@ export function LoginModal({ onClose }: LoginModalProps) {
           adapter={interactiveAdapter}
           theme={theme}
           accentColor={accentColor}
+          styleOverrides={styleOverrides}
           logoUrl={logoUrl ?? null}
-          appName={config.application?.name ?? 'Pollar'}
+          appName={modalTitle}
           onBack={() => setInteractiveAdapter(null)}
           onCancel={handleClose}
           onAuthenticated={handleInteractiveAuthenticated}
@@ -164,6 +171,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
         <LoginModalTemplate
           theme={theme}
           accentColor={accentColor}
+          styleOverrides={styleOverrides}
           logoUrl={logoUrl ?? null}
           emailEnabled={!!emailEnabled}
           embeddedWallets={!!embeddedWallets}
@@ -176,7 +184,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
             apple: !!providers?.apple,
           }}
           walletAdapters={walletAdapters}
-          appName={config.application?.name ?? 'Pollar'}
+          appName={modalTitle}
           email={email}
           onEmailChange={setEmail}
           onEmailSubmit={handleEmailSubmit}

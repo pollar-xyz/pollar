@@ -1,9 +1,9 @@
 'use client';
 
 import { StellarNetwork, WalletBalanceRecord, WalletBalanceState, WalletChain } from '@pollar/core';
-import { type CSSProperties } from 'react';
 import { ChainSelect, resolveChain } from '../ChainSelect';
 import { BusyOverlay, CopyButton, cropAddress, PollarModalFooter, useStickyData } from '../commons';
+import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 // Stellar amounts are int64 scaled by 10^7, so 7 decimals is the ledger's exact
 // precision and the default. A Polygon/Solana token carries its own `decimals`
@@ -77,6 +77,8 @@ function BalanceItem({ record, faucet }: { record: WalletBalanceRecord; faucet: 
 export interface WalletBalanceModalTemplateProps {
   theme: string;
   accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
   walletBalance: WalletBalanceState;
   /** Address of the wallet on {@link selectedChain}. */
   walletAddress: string;
@@ -93,6 +95,7 @@ export interface WalletBalanceModalTemplateProps {
 export function WalletBalanceModalTemplate({
   theme,
   accentColor,
+  styleOverrides,
   walletBalance,
   walletAddress,
   chains,
@@ -102,25 +105,7 @@ export function WalletBalanceModalTemplate({
   onRefresh,
   onClose,
 }: WalletBalanceModalTemplateProps) {
-  const isDark = theme === 'dark';
-
-  const cssVars = {
-    '--pollar-accent': accentColor,
-    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': isDark ? '#ffffff' : '#111827',
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
-    '--pollar-input-height': '44px',
-    '--pollar-input-border-radius': '0.5rem',
-    '--pollar-card-border-radius': '10px',
-  } as CSSProperties;
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
   const isLoading = walletBalance.step === 'loading';
   // Keep the previous payload on screen while refreshing; the overlay below

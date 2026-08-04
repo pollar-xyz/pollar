@@ -1,9 +1,10 @@
 'use client';
 
 import { EarnOpportunity, EarnPosition, EarnProviderId } from '@pollar/core';
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { PollarModalFooter } from '../commons';
+import { buildModalCssVars, modalChrome } from '../modal-theme';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
 import '../shared.css';
 import '../transaction-modal/TransactionModal.css';
@@ -57,8 +58,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
 
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;
   const smartUnsupported = wallet?.custody === 'smart';
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
-  const isDark = theme === 'dark';
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<'form' | 'tx'>('form');
   const [tab, setTab] = useState<'deposit' | 'withdraw'>('deposit');
@@ -229,23 +229,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
     !providersLoading &&
     !loadingOpps;
 
-  const cssVars = {
-    '--pollar-accent': accentColor,
-    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': isDark ? '#ffffff' : '#111827',
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
-    '--pollar-input-height': '44px',
-    '--pollar-input-border-radius': '0.5rem',
-    '--pollar-card-border-radius': '10px',
-  } as CSSProperties;
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
   // ─── Actions ────────────────────────────────────────────────────────────────
   async function handleSubmit() {
@@ -343,7 +327,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
   const title = step === 'form' ? 'Earn' : txTitle;
 
   return (
-    <div className="pollar-overlay" onClick={!isInProgress ? onClose : undefined}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
       <div
         className="pollar-modal-card pollar-send-modal"
         data-theme={theme}

@@ -8,6 +8,7 @@ import { addressForChain } from '../ChainSelect';
 import '../shared.css';
 import './ReceiveModal.css';
 import { ReceiveModalTemplate } from './ReceiveModalTemplate';
+import { modalChrome } from '../modal-theme';
 
 interface ReceiveModalProps {
   onClose: () => void;
@@ -15,7 +16,7 @@ interface ReceiveModalProps {
 
 export function ReceiveModal({ onClose }: ReceiveModalProps) {
   const { wallets, styles } = usePollar();
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -49,10 +50,11 @@ export function ReceiveModal({ onClose }: ReceiveModalProps) {
   }
 
   return (
-    <div className="pollar-overlay" onClick={onClose}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
       <ReceiveModalTemplate
         theme={theme}
         accentColor={accentColor}
+        styleOverrides={styleOverrides}
         walletAddress={walletAddress}
         chains={chains}
         selectedChain={selectedChain}

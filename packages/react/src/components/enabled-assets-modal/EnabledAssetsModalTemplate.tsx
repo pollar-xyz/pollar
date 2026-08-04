@@ -1,30 +1,10 @@
 'use client';
 
 import { EnabledAssetRecord, EnabledAssetsState, WalletChain } from '@pollar/core';
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import { ChainSelect, resolveChain } from '../ChainSelect';
 import { BusyOverlay, CopyButton, cropAddress, PollarModalFooter, Toggle, useStickyData } from '../commons';
-
-function cssVarsFor(theme: string, accentColor: string): CSSProperties {
-  const isDark = theme === 'dark';
-  return {
-    '--pollar-accent': accentColor,
-    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': isDark ? '#ffffff' : '#111827',
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
-    '--pollar-input-height': '44px',
-    '--pollar-input-border-radius': '0.5rem',
-    '--pollar-card-border-radius': '10px',
-  } as CSSProperties;
-}
+import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 function assetKey(record: { code: string; issuer?: string }): string {
   return record.code + (record.issuer ?? '');
@@ -95,6 +75,8 @@ function AssetItem({
 export interface EnabledAssetsModalTemplateProps {
   theme: string;
   accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
   enabledAssets: EnabledAssetsState;
   /** Address of the wallet on {@link selectedChain}. */
   walletAddress: string;
@@ -114,6 +96,7 @@ export interface EnabledAssetsModalTemplateProps {
 export function EnabledAssetsModalTemplate({
   theme,
   accentColor,
+  styleOverrides,
   enabledAssets,
   walletAddress,
   chains,
@@ -126,7 +109,7 @@ export function EnabledAssetsModalTemplate({
   onToggleTrustline,
   onAddCustom,
 }: EnabledAssetsModalTemplateProps) {
-  const cssVars = cssVarsFor(theme, accentColor);
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
   const isLoading = enabledAssets.step === 'loading';
   // Keep the previous payload on screen while refreshing; the overlay below
@@ -238,6 +221,8 @@ export function EnabledAssetsModalTemplate({
 export interface CustomTrustlineModalTemplateProps {
   theme: string;
   accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
   busy: boolean;
   actionError: string | null;
   onBack: () => void;
@@ -252,13 +237,14 @@ function isValidIssuer(issuer: string): boolean {
 export function CustomTrustlineModalTemplate({
   theme,
   accentColor,
+  styleOverrides,
   busy,
   actionError,
   onBack,
   onClose,
   onSubmit,
 }: CustomTrustlineModalTemplateProps) {
-  const cssVars = cssVarsFor(theme, accentColor);
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
   const [code, setCode] = useState('');
   const [issuer, setIssuer] = useState('');

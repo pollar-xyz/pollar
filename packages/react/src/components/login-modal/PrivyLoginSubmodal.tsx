@@ -1,12 +1,13 @@
 'use client';
 
-import { type CSSProperties, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { InteractiveAuthAdapter } from '@pollar/core';
 import { LOGO_POLLAR } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter } from '../commons';
 import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
+import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 
@@ -15,6 +16,8 @@ interface PrivyLoginSubmodalProps {
   adapter: InteractiveAuthAdapter;
   theme: string;
   accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
   logoUrl: string | null;
   appName: string;
   /** Return to the root login view. */
@@ -38,6 +41,7 @@ export function PrivyLoginSubmodal({
   adapter,
   theme,
   accentColor,
+  styleOverrides,
   logoUrl,
   appName,
   onBack,
@@ -50,29 +54,9 @@ export function PrivyLoginSubmodal({
   const [status, setStatus] = useState<StateStatus>('NONE');
   const [message, setMessage] = useState('');
 
-  const isDark = theme === 'dark';
   const isLoading = status === 'LOADING';
 
-  const cssVars = {
-    '--pollar-accent': accentColor,
-    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': isDark ? '#ffffff' : '#111827',
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
-    '--pollar-input-height': '44px',
-    '--pollar-input-border-radius': '0.5rem',
-    '--pollar-card-border-radius': '10px',
-    '--pollar-modal-padding': '2rem',
-    '--pollar-modal-heading-size': '1.375rem',
-    '--pollar-modal-subtitle-size': '0.9rem',
-  } as CSSProperties;
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
 
   function fail(error: unknown) {
     setStatus('ERROR');

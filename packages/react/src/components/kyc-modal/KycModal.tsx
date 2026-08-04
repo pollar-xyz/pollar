@@ -7,6 +7,7 @@ import type { KycStep } from './KycModalTemplate';
 import { KycModalTemplate } from './KycModalTemplate';
 import '../shared.css';
 import './KycModal.css';
+import { modalChrome } from '../modal-theme';
 
 interface KycModalProps {
   onClose: () => void;
@@ -29,7 +30,7 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved 
   const [isLoading, setIsLoading] = useState(false);
 
   const client = getClient();
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const loadProviders = useCallback(() => {
     setIsLoading(true);
@@ -79,10 +80,11 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved 
   }
 
   return (
-    <div className="pollar-overlay" onClick={onClose}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
       <KycModalTemplate
         theme={theme}
         accentColor={accentColor}
+        styleOverrides={styleOverrides}
         step={step}
         providers={providers}
         selectedProvider={selectedProvider}

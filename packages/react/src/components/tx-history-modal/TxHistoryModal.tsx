@@ -8,6 +8,7 @@ import { addressForChain } from '../ChainSelect';
 import '../shared.css';
 import './TxHistoryModal.css';
 import { TxHistoryModalTemplate } from './TxHistoryModalTemplate';
+import { modalChrome } from '../modal-theme';
 
 const PAGE_SIZE = 10;
 
@@ -17,7 +18,7 @@ interface TxHistoryModalProps {
 
 export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
   const { getClient, styles, txHistory, wallets } = usePollar();
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   const [offset, setOffset] = useState(0);
 
   const { chains } = useChains();
@@ -52,10 +53,11 @@ export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
   };
 
   return (
-    <div className="pollar-overlay" onClick={onClose}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
       <TxHistoryModalTemplate
         theme={theme}
         accentColor={accentColor}
+        styleOverrides={styleOverrides}
         txHistory={txHistory}
         offset={offset}
         chains={chains}

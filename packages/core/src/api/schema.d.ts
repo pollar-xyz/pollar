@@ -5355,6 +5355,13 @@ export interface operations {
                                 theme?: string;
                                 accentColor?: string;
                                 logoUrl?: string;
+                                modalTitle?: string;
+                                backgroundColor?: string;
+                                textColor?: string;
+                                buttonColor?: string;
+                                modalBorderRadius?: number;
+                                buttonBorderRadius?: number;
+                                modalZIndex?: number;
                                 emailEnabled?: boolean;
                                 embeddedWallets?: boolean;
                                 smartWallet?: boolean;

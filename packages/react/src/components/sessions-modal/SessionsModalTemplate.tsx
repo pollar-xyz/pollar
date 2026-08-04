@@ -1,14 +1,16 @@
 'use client';
 
 import type { SessionInfo, SessionsState } from '@pollar/core';
-import { type CSSProperties } from 'react';
 import { PollarModalFooter } from '../commons';
+import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 export type { SessionsState };
 
 export interface SessionsModalTemplateProps {
   theme: string;
   accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
   state: SessionsState;
   revokingFamilyId: string | null;
   signingOutEverywhere: boolean;
@@ -80,6 +82,7 @@ function shortIp(hash: string | null): string {
 export function SessionsModalTemplate({
   theme,
   accentColor,
+  styleOverrides,
   state,
   revokingFamilyId,
   signingOutEverywhere,
@@ -88,24 +91,7 @@ export function SessionsModalTemplate({
   onLogoutEverywhere,
   onClose,
 }: SessionsModalTemplateProps) {
-  const isDark = theme === 'dark';
-  const cssVars = {
-    '--pollar-accent': accentColor,
-    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': isDark ? '#ffffff' : '#111827',
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
-    '--pollar-input-height': '44px',
-    '--pollar-input-border-radius': '0.5rem',
-    '--pollar-card-border-radius': '10px',
-  } as CSSProperties;
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
   const isLoading = state.step === 'loading';
   const sessions = state.step === 'loaded' ? state.sessions : [];

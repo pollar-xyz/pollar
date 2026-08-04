@@ -56,7 +56,7 @@
   padding: 0.875rem 1rem;
   border-radius: var(--pollar-card-border-radius, 10px);
   border: 1px solid var(--pollar-border);
-  background-color: var(--pollar-input-bg);
+  background-color: var(--pollar-btn-secondary-bg, var(--pollar-input-bg));
   cursor: pointer;
   transition: all 0.15s;
   box-sizing: border-box;
@@ -75,7 +75,7 @@
 .pollar-kyc-provider-name {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: var(--pollar-text);
+  color: var(--pollar-btn-secondary-fg, var(--pollar-text));
 }
 
 .pollar-kyc-provider-flow {

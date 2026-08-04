@@ -8,6 +8,7 @@ import '../transaction-modal/TransactionModal.css';
 import '../send-modal/SendModal.css';
 import './SwapModal.css';
 import { SwapAssetOption, SwapModalTemplate } from './SwapModalTemplate';
+import { modalChrome } from '../modal-theme';
 
 interface SwapModalProps {
   onClose: () => void;
@@ -47,7 +48,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
 
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;
   const smartUnsupported = wallet?.custody === 'smart';
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<'form' | 'tx'>('form');
   const [selectedSell, setSelectedSell] = useState<SwapAssetOption | null>(null);
@@ -346,10 +347,11 @@ export function SwapModal({ onClose }: SwapModalProps) {
   }
 
   return (
-    <div className="pollar-overlay" onClick={!isInProgress ? onClose : undefined}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
       <SwapModalTemplate
         theme={theme}
         accentColor={accentColor}
+        styleOverrides={styleOverrides}
         step={step}
         txTitle={txTitle}
         sellOptions={sellOptions}

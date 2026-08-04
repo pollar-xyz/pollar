@@ -1,10 +1,11 @@
 'use client';
 
 import { SwapProvider, SwapQuote, SwapQuoteParams, TransactionState, WalletId } from '@pollar/core';
-import { type CSSProperties, useState } from 'react';
+import { useState } from 'react';
 import { AssetSelect } from '../AssetSelect';
 import { PollarModalFooter } from '../commons';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
+import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 /** A selectable asset in the sell/buy pickers, normalized across balance/enabled records. */
 export interface SwapAssetOption {
@@ -34,6 +35,8 @@ function formatAmount(value: string): string {
 export interface SwapModalTemplateProps {
   theme: string;
   accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
   step: 'form' | 'tx';
   txTitle: string;
   sellOptions: SwapAssetOption[];
@@ -81,6 +84,7 @@ export interface SwapModalTemplateProps {
 export function SwapModalTemplate({
   theme,
   accentColor,
+  styleOverrides,
   step,
   txTitle,
   sellOptions,
@@ -120,8 +124,6 @@ export function SwapModalTemplate({
   onRetry,
   onDone,
 }: SwapModalTemplateProps) {
-  const isDark = theme === 'dark';
-
   const [customOpen, setCustomOpen] = useState(false);
   const [customCode, setCustomCode] = useState('');
   const [customIssuer, setCustomIssuer] = useState('');
@@ -139,23 +141,7 @@ export function SwapModalTemplate({
     setCustomOpen(false);
   };
 
-  const cssVars = {
-    '--pollar-accent': accentColor,
-    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': isDark ? '#ffffff' : '#111827',
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
-    '--pollar-input-height': '44px',
-    '--pollar-input-border-radius': '0.5rem',
-    '--pollar-card-border-radius': '10px',
-  } as CSSProperties;
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
   const sellKey = selectedSell ? assetOptionKey(selectedSell) : '';
   const buyKey = selectedBuy ? assetOptionKey(selectedBuy) : '';
