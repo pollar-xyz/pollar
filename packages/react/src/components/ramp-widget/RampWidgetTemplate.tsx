@@ -51,6 +51,10 @@ interface RampWidgetTemplateProps {
   txStatus: RampTxStatus | null;
   kycUrl: string | null;
   tosUrl: string | null;
+  /** Provider gated the flow on KYC and published no link; nothing was signed. */
+  kycBlocking: boolean;
+  /** The gate has since cleared — the user needs a fresh quote to continue. */
+  kycJustApproved: boolean;
   stellarTxHash: string | null;
   /** Stellar Expert URL for `stellarTxHash` (network-aware); null when unknown. */
   explorerUrl: string | null;
@@ -162,6 +166,8 @@ export function RampWidgetTemplate({
   txStatus,
   kycUrl,
   tosUrl,
+  kycBlocking,
+  kycJustApproved,
   stellarTxHash,
   explorerUrl,
   depositInstructions,
@@ -486,6 +492,22 @@ export function RampWidgetTemplate({
             <button type="button" className="pollar-btn-primary" onClick={onOpenKyc}>
               Continue at {provider}
             </button>
+          )}
+
+          {/* Link-less KYC gate: there is nowhere to send the user, so say what
+              is blocking and keep the withdraw button out of reach. No funds
+              have moved and nothing was signed. */}
+          {kycBlocking && (
+            <p className="pollar-ramp-payment-note">
+              {provider} needs to verify your identity before this payout. Nothing has been sent yet — complete verification
+              with {provider}, and this will update on its own.
+            </p>
+          )}
+
+          {kycJustApproved && (
+            <p className="pollar-ramp-payment-note">
+              {provider} approved your verification. Request a new quote to continue — the previous one was consumed.
+            </p>
           )}
 
           {canComplete && (

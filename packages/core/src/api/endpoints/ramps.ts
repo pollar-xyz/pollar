@@ -1,11 +1,15 @@
 import type { PollarApiClient } from '../client';
 import type {
+  RampRail,
   RampsCompleteResponse,
   RampsCountriesResponse,
+  RampsKycStatusResponse,
+  RampsLiquidityResponse,
   RampsOfframpBody,
   RampsOfframpResponse,
   RampsOnrampBody,
   RampsOnrampResponse,
+  RampsPixDecodeResponse,
   RampsQuoteQuery,
   RampsQuoteResponse,
   RampsSignatureBody,
@@ -97,6 +101,45 @@ export async function submitRampSignature(
 export async function getRampTransaction(api: PollarApiClient, txId: string): Promise<RampsTransactionResponse> {
   const { data, error } = await api.GET('/ramps/transaction/{txId}', { params: { path: { txId } } });
   if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to get transaction');
+  return data.content;
+}
+
+/**
+ * GET /ramps/liquidity
+ * Live liquidity on a payout rail. `available: false` means the rail cannot be
+ * served right now — quoting it succeeds and then fails downstream, so check
+ * before offering the corridor.
+ */
+export async function getRampLiquidity(api: PollarApiClient, rail: RampRail): Promise<RampsLiquidityResponse> {
+  const { data, error } = await api.GET('/ramps/liquidity', { params: { query: { rail } } });
+  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to get ramp liquidity');
+  return data.content;
+}
+
+/**
+ * GET /ramps/kyc-status
+ * Where the authenticated user stands with the ramp provider's identity checks.
+ * Poll after an off-ramp answered `kycRequired: true`: nothing was signed and no
+ * funds moved, so wait for `hasApproved` and then request a fresh quote.
+ */
+export async function getRampKycStatus(api: PollarApiClient): Promise<RampsKycStatusResponse> {
+  const { data, error } = await api.GET('/ramps/kyc-status');
+  if (!data?.content || error)
+    throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to get ramp KYC status');
+  return data.content;
+}
+
+/**
+ * GET /ramps/pix/decode
+ * Reads a Pix "copia e cola" payload into payee + amount. `decoded: null` means
+ * the code no longer resolves: dynamic Pix QRs carry a per-charge id and go
+ * stale once used or expired. Decode immediately before quoting, quote the
+ * amount it returns, and send the ORIGINAL payload as `qrCode` on the off-ramp —
+ * paying the bare key it decodes to gets rejected by the payee's bank.
+ */
+export async function decodePixQr(api: PollarApiClient, qrCode: string): Promise<RampsPixDecodeResponse> {
+  const { data, error } = await api.GET('/ramps/pix/decode', { params: { query: { qrCode } } });
+  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to decode Pix QR');
   return data.content;
 }
 

@@ -29,6 +29,10 @@ interface RampResult {
   // Bridge splits onboarding into two hosted steps: KYC (identity) and ToS
   // acceptance. Both must be completed before the customer activates.
   tosUrl?: string;
+  // The provider gated the flow on identity verification and offers no hosted
+  // URL (Abroad). Nothing was built or signed — the user clears KYC with the
+  // provider directly, and we poll `getRampKycStatus` until they do.
+  kycRequired?: boolean;
   stellarTxHash?: string;
   pendingSignature?: { unsignedXdr: string; action: 'sep10' | 'withdraw_payment' };
   // REST providers (Bridge) return deposit instructions as data (e.g. a Pix
@@ -64,6 +68,10 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   const [provider, setProvider] = useState('');
   const [kycUrl, setKycUrl] = useState<string | null>(null);
   const [tosUrl, setTosUrl] = useState<string | null>(null);
+  // Link-less KYC gate (Abroad): `kycPending` is what the provider told us on
+  // start; `kycApproved` is what polling has since learned.
+  const [kycPending, setKycPending] = useState(false);
+  const [kycApproved, setKycApproved] = useState(false);
   const [txStatus, setTxStatus] = useState<RampTxStatus | null>(null);
   const [stellarTxHash, setStellarTxHash] = useState<string | null>(null);
   const [depositInstructions, setDepositInstructions] = useState<Record<string, unknown> | null>(null);
@@ -98,6 +106,27 @@ export function RampWidget({ onClose }: RampWidgetProps) {
       clearInterval(id);
     };
   }, [step, txId, txStatus, client]);
+
+  // A link-less KYC gate has nothing to open, so poll the provider until the user
+  // clears it elsewhere. Stops as soon as it's approved.
+  useEffect(() => {
+    if (step !== 'status' || !kycPending || kycApproved) return;
+    let active = true;
+    const check = async () => {
+      try {
+        const { hasApproved } = await client.getRampKycStatus();
+        if (active && hasApproved) setKycApproved(true);
+      } catch {
+        /* transient — keep polling */
+      }
+    };
+    void check();
+    const id = setInterval(check, 10000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [step, kycPending, kycApproved, client]);
 
   /**
    * Fetch the ramp countries supported on the app's network. When `resetSelection`
@@ -205,6 +234,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     }
     setKycUrl(result.kycUrl ?? null);
     setTosUrl(result.tosUrl ?? null);
+    setKycPending(result.kycRequired === true);
+    if (result.kycRequired) setKycApproved(false);
     setTxStatus(result.status);
     setStellarTxHash(result.stellarTxHash ?? null);
     setDepositInstructions(result.depositInstructions ?? null);
@@ -315,7 +346,12 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     }
   }
 
-  const canComplete = direction === 'offramp' && step === 'status' && txStatus !== 'completed' && !stellarTxHash;
+  // A pending link-less KYC gate blocks the withdraw: the provider has no payment
+  // context to pay into yet, so completing would either fail or — worse — move
+  // real funds into a deposit it cannot pay out.
+  const kycBlocking = kycPending && !kycApproved;
+  const canComplete =
+    direction === 'offramp' && step === 'status' && txStatus !== 'completed' && !stellarTxHash && !kycBlocking;
 
   return (
     <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
@@ -339,6 +375,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         txStatus={txStatus}
         kycUrl={kycUrl}
         tosUrl={tosUrl}
+        kycBlocking={kycBlocking}
+        kycJustApproved={kycPending && kycApproved}
         stellarTxHash={stellarTxHash}
         explorerUrl={
           stellarTxHash

@@ -934,6 +934,21 @@ export type RampsCountriesResponse =
   pollarPaths['/ramps/countries']['get']['responses'][200]['content']['application/json']['content'];
 export type RampCountry = RampsCountriesResponse['countries'][number];
 
+// Provider utilities: reads that inform a ramp before or during a quote.
+export type RampsLiquidityResponse =
+  pollarPaths['/ramps/liquidity']['get']['responses'][200]['content']['application/json']['content'];
+export type RampRail = RampsLiquidityResponse['rail'];
+/**
+ * Where the user stands with the provider's identity checks. Polled after an
+ * off-ramp answered `kycRequired: true` — that provider (Abroad) publishes no
+ * hosted KYC link, so the client waits for `hasApproved` and re-quotes.
+ */
+export type RampsKycStatusResponse =
+  pollarPaths['/ramps/kyc-status']['get']['responses'][200]['content']['application/json']['content'];
+export type RampsPixDecodeResponse =
+  pollarPaths['/ramps/pix/decode']['get']['responses'][200]['content']['application/json']['content'];
+export type RampsPixDecoded = NonNullable<RampsPixDecodeResponse['decoded']>;
+
 // ─── Distribution types ───────────────────────────────────────────────────────
 
 export type DistributionRule =

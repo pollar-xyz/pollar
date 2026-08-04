@@ -63,6 +63,9 @@ export {
   submitRampSignature,
   getRampTransaction,
   pollRampTransaction,
+  getRampLiquidity,
+  getRampKycStatus,
+  decodePixQr,
 } from './api/endpoints/ramps';
 
 // ─── Distribution endpoints ───────────────────────────────────────────────────

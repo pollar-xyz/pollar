@@ -7,7 +7,10 @@ import {
   completeWithdraw,
   createOffRamp,
   createOnRamp,
+  decodePixQr,
   getRampCountries,
+  getRampKycStatus,
+  getRampLiquidity,
   getRampsQuote,
   getRampTransaction,
   pollRampTransaction,
@@ -66,8 +69,12 @@ import {
   RampsOnrampResponse,
   RampsCompleteResponse,
   RampsCountriesResponse,
+  RampsKycStatusResponse,
+  RampsLiquidityResponse,
+  RampsPixDecodeResponse,
   RampsQuoteQuery,
   RampsQuoteResponse,
+  RampRail,
   RampsSignatureBody,
   RampsSignatureResponse,
   RampsTransactionResponse,
@@ -3086,6 +3093,33 @@ export class PollarClient {
 
   pollRampTransaction(txId: string, opts?: { intervalMs?: number; timeoutMs?: number }): Promise<RampTxStatus> {
     return pollRampTransaction(this._api, txId, opts);
+  }
+
+  /**
+   * Live liquidity on a payout rail. `available: false` means the rail cannot be
+   * served right now — check before offering the corridor, because quoting it
+   * succeeds and only fails much further downstream.
+   */
+  getRampLiquidity(rail: RampRail): Promise<RampsLiquidityResponse> {
+    return getRampLiquidity(this._api, rail);
+  }
+
+  /**
+   * Where the user stands with the ramp provider's identity checks. Poll after an
+   * off-ramp answered `kycRequired: true`: nothing was signed and no funds moved,
+   * so wait for `hasApproved` and then request a fresh quote.
+   */
+  getRampKycStatus(): Promise<RampsKycStatusResponse> {
+    return getRampKycStatus(this._api);
+  }
+
+  /**
+   * Decode a Pix "copia e cola" payload into payee + amount. `decoded: null` means
+   * the code went stale (dynamic Pix QRs are per-charge). Quote the amount it
+   * returns and pass the ORIGINAL payload as `qrCode` on {@link createOffRamp}.
+   */
+  decodePixQr(qrCode: string): Promise<RampsPixDecodeResponse> {
+    return decodePixQr(this._api, qrCode);
   }
 
   // ─── Distribution ─────────────────────────────────────────────────────────
