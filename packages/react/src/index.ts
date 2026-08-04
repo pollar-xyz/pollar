@@ -4,6 +4,10 @@ export type { LoginButtonProps, AuthModalProps, PollarStyles, PollarConfig } fro
 // Re-export the custom-provider contracts so consumers can author providers
 // (e.g. a Privy login provider) without importing from `@pollar/core` directly.
 export type { PollarAuthProvider, AuthProviderContext } from '@pollar/core';
+// The web WebAuthn implementations `PollarProvider` installs by default. Exported
+// for consumers who build their own `PollarClient` and want the ceremony wired at
+// construction, and for anyone wrapping it (logging, custom rpId).
+export { browserPasskeyCeremony, browserPasskeySigner } from './lib/passkey-ceremony';
 export { WalletButton } from './components/wallet-button/WalletButton';
 export { WalletButtonTemplate, type WalletButtonTemplateProps } from './components/wallet-button/WalletButtonTemplate';
 
@@ -34,6 +38,13 @@ export { EarnModal } from './components/earn-modal/EarnModal';
 export { ReceiveModal } from './components/receive-modal/ReceiveModal';
 export { SessionsModal } from './components/sessions-modal/SessionsModal';
 export { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
+
+// ─── Modal theming ────────────────────────────────────────────────────────────
+// Exported alongside the templates: a consumer mounting a template itself needs
+// these to reproduce the exact CSS custom properties the built-in modals set,
+// and to forward the app's Branding overrides into them.
+export { buildModalCssVars, modalChrome, readableTextOn } from './components/modal-theme';
+export type { ModalStyleOverrides, ModalVariant, ModalChrome } from './components/modal-theme';
 
 // ─── Templates ────────────────────────────────────────────────────────────────
 export { LoginModalTemplate } from './components/login-modal/LoginModalTemplate';

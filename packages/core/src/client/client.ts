@@ -267,8 +267,11 @@ export class PollarClient {
   /** Registered wallet adapters, keyed by id. Seeded with the built-in
    *  Freighter/Albedo, then any `config.walletAdapters` (override by `type`). */
   private readonly _walletAdapters = new Map<WalletId, WalletAdapter>();
-  private readonly _passkey: PasskeyCeremony | null;
-  private readonly _passkeySign: PasskeySigner | null;
+  // Not readonly: `setPasskeyDefaults()` may fill these in after construction
+  // when the consumer built the client themselves and handed it to a UI layer
+  // that knows the platform ceremony (see the method's docblock).
+  private _passkey: PasskeyCeremony | null;
+  private _passkeySign: PasskeySigner | null;
   /**
    * Stellar SEP ownership-proof surface (`client.stellar.sep53`, `.sep10`). Set
    * in the constructor so it exists on both client and server runtimes.
@@ -1318,6 +1321,22 @@ export class PollarClient {
     smartWalletFlow(this._flowDeps(controller.signal), 'register').catch((err) =>
       this._handleFlowError(err, controller.signal),
     );
+  }
+
+  /**
+   * Fills in the passkey ceremony/signer when they were not configured at
+   * construction. Called by the UI layer that knows the platform ceremony
+   * (`@pollar/react` on web); core stays platform-agnostic and ships no
+   * WebAuthn implementation of its own, so React Native can keep injecting its
+   * native provider through the constructor.
+   *
+   * Only fills gaps — an explicitly configured ceremony is never replaced.
+   * Reading `_passkey`/`_passkeySign` happens per login/signature (never
+   * latched at construction), so filling them later takes effect immediately.
+   */
+  setPasskeyDefaults(defaults: { passkey?: PasskeyCeremony; passkeySign?: PasskeySigner }): void {
+    if (!this._passkey && defaults.passkey) this._passkey = defaults.passkey;
+    if (!this._passkeySign && defaults.passkeySign) this._passkeySign = defaults.passkeySign;
   }
 
   // ─── Cancel ───────────────────────────────────────────────────────────────

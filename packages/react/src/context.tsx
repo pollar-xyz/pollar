@@ -263,6 +263,11 @@ interface PollarProviderProps {
    *
    * The client is locked at first render: changing this prop afterwards is
    * ignored. To swap clients, unmount and remount the provider.
+   *
+   * Either form gets the web passkey ceremony installed (a pre-built instance
+   * is filled in via `setPasskeyDefaults`), so the "Smart Wallet" login works
+   * without the consumer wiring WebAuthn. A ceremony you configured yourself is
+   * always kept.
    */
   client: PollarClient | PollarClientConfig;
   /**
@@ -312,15 +317,23 @@ export function PollarProvider({
   onStorageDegrade,
   children,
 }: PollarProviderProps) {
-  // When the consumer passes a config (not a ready client), inject the browser
-  // passkey ceremony so `loginSmartWallet()` works out of the box on web. The
-  // consumer can override it (e.g. a React Native native provider) via
-  // `client.passkey`.
-  const [pollarClient] = useState<PollarClient>(() =>
-    client instanceof PollarClient
-      ? client
-      : new PollarClient({ passkey: browserPasskeyCeremony, passkeySign: browserPasskeySigner, ...client }),
-  );
+  // Inject the browser passkey ceremony so `loginSmartWallet()` /
+  // `createSmartWallet()` work out of the box on web, whichever way the client
+  // arrives: built here from a config, or handed over ready-made (a consumer
+  // singleton shared with non-React code). The consumer can override it (e.g. a
+  // React Native native provider) via `client.passkey`; `??` keeps an explicit
+  // ceremony winning while an absent/undefined one still gets the default.
+  const [pollarClient] = useState<PollarClient>(() => {
+    if (client instanceof PollarClient) {
+      client.setPasskeyDefaults({ passkey: browserPasskeyCeremony, passkeySign: browserPasskeySigner });
+      return client;
+    }
+    return new PollarClient({
+      ...client,
+      passkey: client.passkey ?? browserPasskeyCeremony,
+      passkeySign: client.passkeySign ?? browserPasskeySigner,
+    });
+  });
   // Only a client WE constructed is ours to tear down on unmount; a client the
   // consumer passed in is theirs to manage. Captured once (the useState
   // initializer above made the same decision).

@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.11.3 (unreleased)
+
+> Patch release. Headline: the **Smart Wallet passkey ceremony is now installed
+> however the client reaches `PollarProvider`**, so a consumer-built
+> `PollarClient` no longer silently loses passkey login. Additive, non-breaking
+> on top of 0.11.2.
+
+### `@pollar/core`
+
+- New `client.setPasskeyDefaults({ passkey?, passkeySign? })`. Fills in the
+  passkey ceremony and signer when they were not supplied at construction, and
+  never replaces ones that were, so React Native keeps injecting its native
+  provider through the constructor. Core still ships no WebAuthn implementation
+  of its own and stays platform-agnostic; the web implementation lives in
+  `@pollar/react`. `_passkey` / `_passkeySign` stop being `readonly` to allow
+  this. Both are read per login and per signature, never latched at
+  construction, so filling them in later takes effect immediately.
+
+### `@pollar/react`
+
+- **Fix: a pre-built `PollarClient` no longer loses passkey support.**
+  `PollarProvider` injected `browserPasskeyCeremony` only on the branch that
+  builds the client from a config object. A consumer passing a ready instance
+  (a module singleton shared with non-React code, say) got a client with no
+  ceremony, so `createSmartWallet()` / `loginSmartWallet()` failed at the first
+  step with `passkey ceremony not configured` and the "Passkey support is not
+  configured" error in the login modal. Smart-wallet `signAndSubmitTx` failed
+  the same way, since `passkeySign` was missing too. The provider now calls
+  `setPasskeyDefaults()` on an instance it receives.
+- **Fix: an explicit `passkey: undefined` no longer wipes the default.** The
+  config branch spread `...client` after the defaults, so a config carrying the
+  key with an undefined value (an optional ceremony that resolved to nothing)
+  overrode `browserPasskeyCeremony`. Defaults now apply with `??`: an
+  explicitly configured ceremony still wins, an absent one still falls back.
+- `browserPasskeyCeremony` and `browserPasskeySigner` are now exported, for
+  consumers who build their own `PollarClient` and want the ceremony wired at
+  construction, or who want to wrap it (logging, a custom `rpId`).
+
+### Before publishing this version
+
+- Bump `@pollar/react`'s `@pollar/core` dependency to `^0.11.3`.
+  `setPasskeyDefaults()` is new in core, and the current `^0.11.2` range lets a
+  resolver pair new react with old core, which throws
+  `client.setPasskeyDefaults is not a function` when the provider mounts.
+- Consumers that pin both packages to an exact version must bump them together.
+  Mixing versions installs a second copy of core, and `client instanceof
+  PollarClient` then compares against a different class object, so the provider
+  takes the config branch and spreads an instance into the constructor instead
+  of failing outright.
+
 ## 0.11.2
 
 > Stable release. Published under the default `latest` dist-tag
