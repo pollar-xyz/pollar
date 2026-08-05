@@ -35,6 +35,14 @@ interface RampWidgetTemplateProps {
   /** Per-app modal chrome overrides (background, card + button radius). */
   styleOverrides?: ModalStyleOverrides;
   step: RampStep;
+  /** Labels of the steps this run goes through. Length varies by route: only
+   *  providers that collect fields add a 'Details' step. */
+  flowSteps: string[];
+  /** Index into `flowSteps`, or -1 when the current step is outside the flow
+   *  (the error step) and the progress bar should be hidden. */
+  flowStepIndex: number;
+  /** Quote whose start request is in flight, so its row can show it. */
+  startingQuoteId: string | null;
   direction: RampDirection;
   amount: string;
   currency: string;
@@ -72,6 +80,9 @@ interface RampWidgetTemplateProps {
   onOpenKyc: () => void;
   onOpenTos: () => void;
   onCompleteWithdraw: () => void;
+  /** Step back to the amount, keeping what was entered. Distinct from `onRetry`
+   *  (which restarts a failed flow) so a "Back" button reads as navigation. */
+  onBack: () => void;
   onRetry: () => void;
   onRefresh: () => void;
   onClose: () => void;
@@ -151,6 +162,9 @@ export function RampWidgetTemplate({
   accentColor,
   styleOverrides,
   step,
+  flowSteps,
+  flowStepIndex,
+  startingQuoteId,
   direction,
   amount,
   currency,
@@ -184,6 +198,7 @@ export function RampWidgetTemplate({
   onOpenKyc,
   onOpenTos,
   onCompleteWithdraw,
+  onBack,
   onRetry,
   onRefresh,
   onClose,
@@ -242,6 +257,29 @@ export function RampWidgetTemplate({
         </div>
       </div>
 
+      {/* How far along the run is. The segment count comes from the route, not
+          from a constant: a provider that collects no fields genuinely has one
+          step fewer. Hidden on the error step, which is not part of the flow. */}
+      {flowStepIndex >= 0 && flowSteps.length > 0 && (
+        <div className="pollar-ramp-steps">
+          <span className="pollar-ramp-steps-label">
+            Step {flowStepIndex + 1} of {flowSteps.length}
+          </span>
+          <div
+            className="pollar-ramp-steps-track"
+            role="progressbar"
+            aria-valuenow={flowStepIndex + 1}
+            aria-valuemin={1}
+            aria-valuemax={flowSteps.length}
+            aria-label={flowSteps[flowStepIndex]}
+          >
+            {flowSteps.map((label, i) => (
+              <span key={label} className="pollar-ramp-steps-segment" data-done={i <= flowStepIndex || undefined} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {step === 'input' && (
         <>
           <div className="pollar-tabs">
@@ -294,6 +332,9 @@ export function RampWidgetTemplate({
               min="0"
               onChange={(e) => onAmountChange(e.target.value)}
             />
+            {/* Why the user was sent back here (e.g. the route's minimum), kept
+                under the field they came to fix. Clears as soon as they type. */}
+            {errorMsg && <span className="pollar-ramp-field-error">{errorMsg}</span>}
           </div>
 
           <div className="pollar-modal-actions">
@@ -328,7 +369,13 @@ export function RampWidgetTemplate({
         <>
           <div className="pollar-ramp-route-list">
             {quotes.map((q, i) => (
-              <RouteDisplay key={i} quote={q} onSelect={onSelectQuote} />
+              <RouteDisplay
+                key={i}
+                quote={q}
+                busy={startingQuoteId != null && q.quoteId === startingQuoteId}
+                disabled={startingQuoteId != null && q.quoteId !== startingQuoteId}
+                onSelect={onSelectQuote}
+              />
             ))}
           </div>
           {/* A route whose limits the amount breaks reports it here, so the user
@@ -339,8 +386,11 @@ export function RampWidgetTemplate({
               {errorMsg}
             </p>
           )}
-          <button type="button" className="pollar-btn-secondary" onClick={onClose}>
-            Cancel
+          {/* Back returns to the amount, which is the only way out of a route
+              whose minimum the amount misses — so it takes the primary weight
+              while that message is up. The header's ✕ still closes the modal. */}
+          <button type="button" className={errorMsg ? 'pollar-btn-primary' : 'pollar-btn-secondary'} onClick={onBack}>
+            Back
           </button>
         </>
       )}
@@ -381,7 +431,7 @@ export function RampWidgetTemplate({
           ))}
 
           <div className="pollar-modal-actions">
-            <button type="button" className="pollar-btn-secondary" onClick={onRetry}>
+            <button type="button" className="pollar-btn-secondary" onClick={onBack}>
               Back
             </button>
             <button

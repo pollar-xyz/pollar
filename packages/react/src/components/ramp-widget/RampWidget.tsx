@@ -20,6 +20,31 @@ function requiredFieldsOf(quote: RampQuote): RampFieldSpec[] {
   return (quote as { requiredFields?: RampFieldSpec[] }).requiredFields ?? [];
 }
 
+/**
+ * The steps a run actually goes through. Not fixed: 'Details' only exists when
+ * the chosen route asks for fields (Bridge wants a name and email; SEP-24
+ * anchors collect everything on their own hosted page), so a progress bar that
+ * always said "of 4" would lie to half the providers.
+ *
+ * Before a route is picked the total is a forecast: if any offered route would
+ * ask for details, the step is shown, and choosing one settles it.
+ */
+function flowStepsOf(quotes: RampQuote[], selected: RampQuote | null): string[] {
+  const needsDetails =
+    selected != null ? requiredFieldsOf(selected).length > 0 : quotes.some((q) => requiredFieldsOf(q).length > 0);
+  return needsDetails ? ['Amount', 'Provider', 'Details', 'Complete'] : ['Amount', 'Provider', 'Complete'];
+}
+
+/** Which of those steps the current widget step sits on. `error` belongs to no
+ *  step — the flow stopped rather than advanced — so the bar hides there. */
+const STEP_LABEL: Partial<Record<RampStep, string>> = {
+  input: 'Amount',
+  loading_quote: 'Amount',
+  select_route: 'Provider',
+  contact: 'Details',
+  status: 'Complete',
+};
+
 /** A bound the amount broke, or null when it fits. Providers declare their
  *  limits on the quote (`minAmount` / `maxAmount`); the ones that don't simply
  *  never trip this, and the backend stays the last word either way. */
@@ -236,7 +261,10 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     }
   }
 
-  function resetToInput() {
+  /** Back to the amount step. `keepMessage` carries the reason forward: when the
+   *  user steps back because the amount missed a route's minimum, dropping the
+   *  figure would leave them correcting it blind. A plain retry clears it. */
+  function resetToInput({ keepMessage = false }: { keepMessage?: boolean } = {}) {
     setStep('input');
     setQuotes([]);
     setSelectedQuote(null);
@@ -252,7 +280,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setTxStatus(null);
     setStellarTxHash(null);
     setDepositInstructions(null);
-    setErrorMsg(null);
+    if (!keepMessage) setErrorMsg(null);
   }
 
   /**
@@ -410,6 +438,9 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   const canComplete =
     direction === 'offramp' && step === 'status' && txStatus !== 'completed' && !stellarTxHash && !kycBlocking;
 
+  const flowSteps = flowStepsOf(quotes, selectedQuote);
+  const flowStepIndex = flowSteps.indexOf(STEP_LABEL[step] ?? '');
+
   return (
     <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
       <RampWidgetTemplate
@@ -417,6 +448,9 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         accentColor={accentColor}
         styleOverrides={styleOverrides}
         step={step}
+        flowSteps={flowSteps}
+        flowStepIndex={flowStepIndex}
+        startingQuoteId={isLoading && selectedQuote ? selectedQuote.quoteId : null}
         direction={direction}
         amount={amount}
         currency={currency}
@@ -445,7 +479,12 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         completing={completing}
         errorMsg={errorMsg}
         onDirectionChange={setDirection}
-        onAmountChange={setAmount}
+        onAmountChange={(next) => {
+          // Editing the amount is the user acting on the limit message, so it
+          // stops applying the moment they type.
+          setAmount(next);
+          setErrorMsg(null);
+        }}
         onFieldChange={setFieldValue}
         onCountryChange={handleCountryChange}
         onFindRoute={handleFindRoute}
@@ -454,7 +493,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         onOpenKyc={handleOpenKyc}
         onOpenTos={handleOpenTos}
         onCompleteWithdraw={handleCompleteWithdraw}
-        onRetry={resetToInput}
+        onBack={() => resetToInput({ keepMessage: true })}
+        onRetry={() => resetToInput()}
         onRefresh={handleRefresh}
         onClose={onClose}
       />
