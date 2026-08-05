@@ -1,6 +1,13 @@
 'use client';
 
-import type { RampCountry, RampDirection, RampQuote, RampTxStatus } from '@pollar/core';
+import type {
+  RampCountry,
+  RampDepositInstructions,
+  RampDirection,
+  RampInstructionField,
+  RampQuote,
+  RampTxStatus,
+} from '@pollar/core';
 import { RouteDisplay } from './RouteDisplay';
 import { CopyButton } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
@@ -100,7 +107,7 @@ interface RampWidgetTemplateProps {
   stellarTxHash: string | null;
   /** Stellar Expert URL for `stellarTxHash` (network-aware); null when unknown. */
   explorerUrl: string | null;
-  depositInstructions: Record<string, unknown> | null;
+  depositInstructions: RampDepositInstructions | null;
   canComplete: boolean;
   completing: boolean;
   errorMsg: string | null;
@@ -143,52 +150,15 @@ const STATUS_LABEL: Record<RampTxStatus, string> = {
   failed: 'Failed',
 };
 
-// Human labels for the deposit-instruction fields REST providers (Bridge) return
-// (e.g. a Pix `br_code`, or bank details for ACH/SEPA). Unknown keys fall back to
-// the raw key so nothing is silently dropped.
-const INSTRUCTION_LABELS: Record<string, string> = {
-  br_code: 'Pix code',
-  account_holder_name: 'Account holder',
-  bank_name: 'Bank',
-  bank_address: 'Bank address',
-  bank_account_number: 'Account number',
-  bank_routing_number: 'Routing number',
-  iban: 'IBAN',
-  bic: 'BIC',
-  clabe: 'CLABE',
-  amount: 'Amount',
-  currency: 'Currency',
-  payment_rails: 'Rails',
-};
-
-type InstructionKind = 'text' | 'qr' | 'datetime';
-type InstructionField = { key: string; label: string; value: string; kind: InstructionKind };
-
-function flattenInstructions(instr: Record<string, unknown>): InstructionField[] {
-  const out: InstructionField[] = [];
-  for (const [k, v] of Object.entries(instr)) {
-    // A base64 QR image (e.g. Stereum's Bolivian bank QR) — render as an <img>,
-    // not raw text.
-    if (k === 'qrBase64') {
-      if (typeof v === 'string' && v) out.push({ key: k, label: INSTRUCTION_LABELS[k] ?? 'Payment QR', value: v, kind: 'qr' });
-      continue;
-    }
-    // Expiry timestamps come as epoch milliseconds — render as a local date/time.
-    if ((k === 'expiresAt' || k === 'expires_at') && (typeof v === 'number' || typeof v === 'string')) {
-      const ms = Number(v);
-      if (Number.isFinite(ms) && ms > 0) {
-        out.push({ key: k, label: INSTRUCTION_LABELS[k] ?? 'Expires', value: new Date(ms).toLocaleString(), kind: 'datetime' });
-      }
-      continue;
-    }
-    let value: string;
-    if (typeof v === 'string' || typeof v === 'number') value = String(v);
-    else if (Array.isArray(v)) value = v.filter((x) => typeof x === 'string' || typeof x === 'number').join(', ');
-    else continue;
-    if (!value) continue;
-    out.push({ key: k, label: INSTRUCTION_LABELS[k] ?? k, value, kind: 'text' });
-  }
-  return out;
+/**
+ * A timestamp field arrives as ISO-8601 (the server no longer guesses at epoch
+ * milliseconds); render it in the viewer's locale. Anything unparseable falls
+ * back to the raw string rather than showing "Invalid Date".
+ */
+function displayValue(field: RampInstructionField): string {
+  if (field.type !== 'datetime') return field.value;
+  const at = new Date(field.value);
+  return Number.isNaN(at.getTime()) ? field.value : at.toLocaleString();
 }
 
 export function RampWidgetTemplate({
@@ -556,25 +526,70 @@ export function RampWidgetTemplate({
             </div>
           )}
 
+          {/* The code to scan. The server sends it rendered, so there is no QR
+              library here and no per-provider branch: a Pollar-made SVG is
+              inlined (it uses `currentColor`, so it follows the modal's theme),
+              and a provider's own bitmap goes through an <img>. */}
+          {depositInstructions?.scannable && txStatus !== 'completed' && (
+            <div className="pollar-ramp-payment-field">
+              <span className="pollar-ramp-payment-label">Payment QR</span>
+              <div className="pollar-ramp-payment-value">
+                {depositInstructions.scannable.image.inlineSafe ? (
+                  <div
+                    className="pollar-ramp-qr"
+                    aria-label="Payment QR"
+                    dangerouslySetInnerHTML={{ __html: depositInstructions.scannable.image.data }}
+                  />
+                ) : (
+                  <img
+                    src={`data:${depositInstructions.scannable.image.mediaType};base64,${depositInstructions.scannable.image.data}`}
+                    alt="Payment QR"
+                    style={{ width: '100%', maxWidth: 220, height: 'auto', display: 'block', margin: '0 auto' }}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* The payload as text, when it is worth pasting. On the phone holding
+              the screen there is nothing to scan, and a Pix code is designed to
+              be pasted. The server decides by setting `payloadLabel`. */}
+          {depositInstructions?.scannable?.payload &&
+            depositInstructions.scannable.payloadLabel &&
+            txStatus !== 'completed' && (
+              <div className="pollar-ramp-payment-field">
+                <span className="pollar-ramp-payment-label">{depositInstructions.scannable.payloadLabel}</span>
+                <div className="pollar-ramp-payment-value">
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <code style={{ flex: 1, wordBreak: 'break-all' }}>{depositInstructions.scannable.payload}</code>
+                    <CopyButton
+                      value={depositInstructions.scannable.payload}
+                      label={`Copy ${depositInstructions.scannable.payloadLabel}`}
+                    />
+                  </span>
+                </div>
+              </div>
+            )}
+
+          {/* Everything else. Labelled and formatted server-side, so this only
+              iterates — it knows nothing about which provider served the route. */}
           {depositInstructions &&
             txStatus !== 'completed' &&
-            flattenInstructions(depositInstructions).map(({ key, label, value, kind }) => (
-              <div key={key} className="pollar-ramp-payment-field">
-                <span className="pollar-ramp-payment-label">{label}</span>
+            depositInstructions.fields.map((f) => (
+              <div key={f.key} className="pollar-ramp-payment-field">
+                <span className="pollar-ramp-payment-label">{f.label}</span>
                 <div className="pollar-ramp-payment-value">
-                  {kind === 'qr' ? (
-                    <img
-                      src={value.startsWith('data:') ? value : `data:image/png;base64,${value}`}
-                      alt={label}
-                      style={{ width: '100%', maxWidth: 220, height: 'auto', display: 'block', margin: '0 auto' }}
-                    />
-                  ) : kind === 'datetime' ? (
-                    <span>{value}</span>
-                  ) : (
+                  {f.copyable ? (
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <code style={{ flex: 1, wordBreak: 'break-all' }}>{value}</code>
-                      <CopyButton value={value} label={`Copy ${label}`} />
+                      <code style={{ flex: 1, wordBreak: 'break-all' }}>{f.value}</code>
+                      <CopyButton value={f.value} label={`Copy ${f.label}`} />
                     </span>
+                  ) : f.type === 'url' ? (
+                    <a href={f.value} target="_blank" rel="noopener noreferrer">
+                      {f.value}
+                    </a>
+                  ) : (
+                    <span>{displayValue(f)}</span>
                   )}
                 </div>
               </div>

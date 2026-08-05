@@ -6907,7 +6907,12 @@ export interface operations {
                                     options?: {
                                         value: string;
                                         label: string;
+                                        placeholder?: string;
                                     }[];
+                                    placeholderFrom?: string;
+                                    optional?: boolean;
+                                    placeholder?: string;
+                                    hint?: string;
                                 }[];
                                 minAmount?: number;
                                 maxAmount?: number;
@@ -7219,7 +7224,29 @@ export interface operations {
                                 action: "sep10" | "withdraw_payment";
                             };
                             depositInstructions?: {
-                                [key: string]: unknown;
+                                scannable?: {
+                                    /** @enum {string} */
+                                    kind: "pix" | "stellar" | "url" | "opaque";
+                                    payload: string | null;
+                                    payloadLabel: string | null;
+                                    image: {
+                                        /** @enum {string} */
+                                        mediaType: "image/svg+xml" | "image/png";
+                                        /** @enum {string} */
+                                        encoding: "utf8" | "base64";
+                                        data: string;
+                                        inlineSafe: boolean;
+                                    };
+                                };
+                                fields: {
+                                    /** @enum {string} */
+                                    key: "amount" | "currency" | "rail" | "reference" | "expires_at" | "status_page" | "account_holder" | "bank_name" | "bank_address" | "bank_account" | "bank_routing" | "iban" | "bic" | "clabe" | "deposit_address" | "memo";
+                                    label: string;
+                                    value: string;
+                                    /** @enum {string} */
+                                    type: "text" | "code" | "amount" | "datetime" | "url";
+                                    copyable: boolean;
+                                }[];
                             };
                         };
                     };
@@ -7331,7 +7358,29 @@ export interface operations {
                                 action: "sep10" | "withdraw_payment";
                             };
                             depositInstructions?: {
-                                [key: string]: unknown;
+                                scannable?: {
+                                    /** @enum {string} */
+                                    kind: "pix" | "stellar" | "url" | "opaque";
+                                    payload: string | null;
+                                    payloadLabel: string | null;
+                                    image: {
+                                        /** @enum {string} */
+                                        mediaType: "image/svg+xml" | "image/png";
+                                        /** @enum {string} */
+                                        encoding: "utf8" | "base64";
+                                        data: string;
+                                        inlineSafe: boolean;
+                                    };
+                                };
+                                fields: {
+                                    /** @enum {string} */
+                                    key: "amount" | "currency" | "rail" | "reference" | "expires_at" | "status_page" | "account_holder" | "bank_name" | "bank_address" | "bank_account" | "bank_routing" | "iban" | "bic" | "clabe" | "deposit_address" | "memo";
+                                    label: string;
+                                    value: string;
+                                    /** @enum {string} */
+                                    type: "text" | "code" | "amount" | "datetime" | "url";
+                                    copyable: boolean;
+                                }[];
                             };
                         };
                     };
@@ -7430,7 +7479,29 @@ export interface operations {
                                 action: "sep10" | "withdraw_payment";
                             };
                             depositInstructions?: {
-                                [key: string]: unknown;
+                                scannable?: {
+                                    /** @enum {string} */
+                                    kind: "pix" | "stellar" | "url" | "opaque";
+                                    payload: string | null;
+                                    payloadLabel: string | null;
+                                    image: {
+                                        /** @enum {string} */
+                                        mediaType: "image/svg+xml" | "image/png";
+                                        /** @enum {string} */
+                                        encoding: "utf8" | "base64";
+                                        data: string;
+                                        inlineSafe: boolean;
+                                    };
+                                };
+                                fields: {
+                                    /** @enum {string} */
+                                    key: "amount" | "currency" | "rail" | "reference" | "expires_at" | "status_page" | "account_holder" | "bank_name" | "bank_address" | "bank_account" | "bank_routing" | "iban" | "bic" | "clabe" | "deposit_address" | "memo";
+                                    label: string;
+                                    value: string;
+                                    /** @enum {string} */
+                                    type: "text" | "code" | "amount" | "datetime" | "url";
+                                    copyable: boolean;
+                                }[];
                             };
                         };
                     };
@@ -7536,7 +7607,29 @@ export interface operations {
                                 action: "sep10" | "withdraw_payment";
                             };
                             depositInstructions?: {
-                                [key: string]: unknown;
+                                scannable?: {
+                                    /** @enum {string} */
+                                    kind: "pix" | "stellar" | "url" | "opaque";
+                                    payload: string | null;
+                                    payloadLabel: string | null;
+                                    image: {
+                                        /** @enum {string} */
+                                        mediaType: "image/svg+xml" | "image/png";
+                                        /** @enum {string} */
+                                        encoding: "utf8" | "base64";
+                                        data: string;
+                                        inlineSafe: boolean;
+                                    };
+                                };
+                                fields: {
+                                    /** @enum {string} */
+                                    key: "amount" | "currency" | "rail" | "reference" | "expires_at" | "status_page" | "account_holder" | "bank_name" | "bank_address" | "bank_account" | "bank_routing" | "iban" | "bic" | "clabe" | "deposit_address" | "memo";
+                                    label: string;
+                                    value: string;
+                                    /** @enum {string} */
+                                    type: "text" | "code" | "amount" | "datetime" | "url";
+                                    copyable: boolean;
+                                }[];
                             };
                         };
                     };
@@ -7640,7 +7733,29 @@ export interface operations {
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
                             depositInstructions?: {
-                                [key: string]: unknown;
+                                scannable?: {
+                                    /** @enum {string} */
+                                    kind: "pix" | "stellar" | "url" | "opaque";
+                                    payload: string | null;
+                                    payloadLabel: string | null;
+                                    image: {
+                                        /** @enum {string} */
+                                        mediaType: "image/svg+xml" | "image/png";
+                                        /** @enum {string} */
+                                        encoding: "utf8" | "base64";
+                                        data: string;
+                                        inlineSafe: boolean;
+                                    };
+                                };
+                                fields: {
+                                    /** @enum {string} */
+                                    key: "amount" | "currency" | "rail" | "reference" | "expires_at" | "status_page" | "account_holder" | "bank_name" | "bank_address" | "bank_account" | "bank_routing" | "iban" | "bic" | "clabe" | "deposit_address" | "memo";
+                                    label: string;
+                                    value: string;
+                                    /** @enum {string} */
+                                    type: "text" | "code" | "amount" | "datetime" | "url";
+                                    copyable: boolean;
+                                }[];
                             };
                             updatedAt: string;
                         };

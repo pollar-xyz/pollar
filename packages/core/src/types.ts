@@ -954,6 +954,23 @@ export type RampsTransactionResponse =
 export type RampTxStatus = RampsTransactionResponse['status'];
 export type RampDirection = RampsTransactionResponse['direction'];
 
+/**
+ * How to pay, in one shape for every provider. Named so a consumer that renders
+ * its own payment screen can type it without reaching into the generated schema.
+ *
+ * `fields` arrive labelled and formatted: iterate and display, no per-provider
+ * knowledge needed. `scannable` carries the code the user points a camera at,
+ * with the image already rendered so no QR encoder is required — Pollar-made
+ * SVGs (`image.inlineSafe`) use `currentColor` and can be injected as markup to
+ * follow the host's theme; a provider's own bitmap must go through
+ * `<img src="data:...">`. `scannable.payload` is the raw string behind the code:
+ * show it as text when `payloadLabel` is set, since a user on the phone that
+ * holds the screen has nothing to scan.
+ */
+export type RampDepositInstructions = NonNullable<RampsTransactionResponse['depositInstructions']>;
+export type RampScannable = NonNullable<RampDepositInstructions['scannable']>;
+export type RampInstructionField = RampDepositInstructions['fields'][number];
+
 // SEP-24 anchor flow (e.g. Anclap): custodial wallets get a `kycUrl` to open;
 // EXTERNAL wallets get a `pendingSignature` to sign and resume.
 export type RampsPendingSignature = NonNullable<RampsOnrampResponse['pendingSignature']>;

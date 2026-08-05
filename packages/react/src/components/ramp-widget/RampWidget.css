@@ -297,6 +297,22 @@
   font-family: monospace;
 }
 
+/* Pollar-rendered QR. The SVG paints with `currentColor`, so setting the text
+   colour here is what makes it legible in both themes without a second asset. */
+.pollar-ramp-qr {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  color: var(--pollar-text);
+}
+
+.pollar-ramp-qr svg {
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+  display: block;
+}
+
 .pollar-ramp-copy-btn {
   padding: 0.25rem 0.625rem;
   border-radius: var(--pollar-buttons-border-radius, 6px);

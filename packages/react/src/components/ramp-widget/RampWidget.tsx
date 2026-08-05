@@ -1,6 +1,14 @@
 'use client';
 
-import type { RampCountry, RampDirection, RampQuote, RampsOfframpBody, RampsOnrampBody, RampTxStatus } from '@pollar/core';
+import type {
+  RampCountry,
+  RampDepositInstructions,
+  RampDirection,
+  RampQuote,
+  RampsOfframpBody,
+  RampsOnrampBody,
+  RampTxStatus,
+} from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import type { RampFieldSpec, RampStep } from './RampWidgetTemplate';
@@ -111,7 +119,7 @@ interface RampResult {
   pendingSignature?: { unsignedXdr: string; action: 'sep10' | 'withdraw_payment' };
   // REST providers (Bridge) return deposit instructions as data (e.g. a Pix
   // `br_code` / bank details for on-ramp) instead of an interactive URL.
-  depositInstructions?: Record<string, unknown>;
+  depositInstructions?: RampDepositInstructions;
 }
 
 export function RampWidget({ onClose }: RampWidgetProps) {
@@ -148,7 +156,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   const [kycApproved, setKycApproved] = useState(false);
   const [txStatus, setTxStatus] = useState<RampTxStatus | null>(null);
   const [stellarTxHash, setStellarTxHash] = useState<string | null>(null);
-  const [depositInstructions, setDepositInstructions] = useState<Record<string, unknown> | null>(null);
+  const [depositInstructions, setDepositInstructions] = useState<RampDepositInstructions | null>(null);
   const [completing, setCompleting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
