@@ -20,6 +20,55 @@ function requiredFieldsOf(quote: RampQuote): RampFieldSpec[] {
   return (quote as { requiredFields?: RampFieldSpec[] }).requiredFields ?? [];
 }
 
+/** A bound the amount broke, or null when it fits. Providers declare their
+ *  limits on the quote (`minAmount` / `maxAmount`); the ones that don't simply
+ *  never trip this, and the backend stays the last word either way. */
+function brokenLimitOf(amount: number, quote: RampQuote): { limit: 'min' | 'max'; value: number } | null {
+  const { minAmount, maxAmount } = quote as { minAmount?: number; maxAmount?: number };
+  if (!Number.isFinite(amount)) return null;
+  if (minAmount != null && amount < minAmount) return { limit: 'min', value: minAmount };
+  if (maxAmount != null && amount > maxAmount) return { limit: 'max', value: maxAmount };
+  return null;
+}
+
+/** "The minimum amount is 11 ARS" — one phrasing, used both when we catch the
+ *  limit before submitting and when the backend is the one to report it. */
+function limitMessage(limit: 'min' | 'max', value: number, currency: string): string {
+  return `The ${limit === 'min' ? 'minimum' : 'maximum'} amount for this route is ${value} ${currency}.`;
+}
+
+/** Ramp failures a user can act on. Anything unlisted keeps the raw code, which
+ *  is still the most useful thing to show for a cause we can't phrase. */
+const RAMP_ERROR_MESSAGES: Record<string, string> = {
+  SDK_RAMPS_QUOTE_EXPIRED: 'This quote expired. Request a new one and try again.',
+  SDK_RAMPS_ASSET_NOT_ENABLED: 'This currency is not available for that route right now.',
+  SDK_RAMPS_KYC_REQUIRED: 'The provider needs to verify your identity before continuing.',
+  SDK_RAMPS_WALLET_UNSUPPORTED: 'This wallet type cannot be used for this ramp.',
+  SDK_RAMPS_PROVIDER_NOT_CONFIGURED: 'This ramp provider is not configured for this app yet.',
+  SDK_RAMPS_ANCHOR_ERROR: 'The provider rejected the request. Please try again in a moment.',
+  SDK_RAMPS_BRIDGE_ERROR: 'The provider rejected the request. Please try again in a moment.',
+};
+
+/**
+ * Turn a thrown ramp error into something worth reading. An out-of-range amount
+ * arrives with the bound as fields (`limit` / `limitAmount` / `limitCurrency`),
+ * so the exact figure gets stated rather than the bare code the modal used to
+ * show. Every provider that reports the range gets this for free.
+ */
+function rampErrorMessage(e: unknown, fallback: string): string {
+  const body = (e as { body?: Record<string, unknown> } | undefined)?.body;
+  const code = (e as { code?: unknown } | undefined)?.code;
+  if (typeof code !== 'string') return e instanceof Error ? e.message : fallback;
+
+  const limit = body?.limit;
+  const value = body?.limitAmount;
+  const currency = body?.limitCurrency;
+  if ((limit === 'min' || limit === 'max') && typeof value === 'number' && typeof currency === 'string') {
+    return limitMessage(limit, value, currency);
+  }
+  return RAMP_ERROR_MESSAGES[code] ?? (e instanceof Error ? e.message : fallback);
+}
+
 // Common shape of the on/off-ramp, complete and signature responses.
 interface RampResult {
   txId: string;
@@ -257,7 +306,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
       setQuotes(list);
       setStep('select_route');
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : 'Failed to fetch quotes.');
+      setErrorMsg(rampErrorMessage(e, 'Failed to fetch quotes.'));
       setStep('error');
     } finally {
       setIsLoading(false);
@@ -269,6 +318,14 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   function handleSelectQuote(quote: RampQuote) {
     setSelectedQuote(quote);
     setErrorMsg(null);
+    // The limits are per route, and the amount was typed before the routes were
+    // known — so this is the first moment we can check it. Catching it here
+    // states the figure without spending a round trip on a certain rejection.
+    const broken = brokenLimitOf(Number(amount), quote);
+    if (broken) {
+      setErrorMsg(limitMessage(broken.limit, broken.value, currency));
+      return;
+    }
     const fields = requiredFieldsOf(quote);
     const missing = fields.some((f) => !(fieldValues[f.key] ?? '').trim());
     if (fields.length > 0 && missing) {
@@ -309,7 +366,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
       ) as RampResult;
       await applyResult(result);
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : 'Failed to start the ramp.');
+      setErrorMsg(rampErrorMessage(e, 'Failed to start the ramp.'));
       setStep('error');
     } finally {
       setIsLoading(false);

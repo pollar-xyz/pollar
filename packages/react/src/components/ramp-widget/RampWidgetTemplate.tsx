@@ -331,6 +331,14 @@ export function RampWidgetTemplate({
               <RouteDisplay key={i} quote={q} onSelect={onSelectQuote} />
             ))}
           </div>
+          {/* A route whose limits the amount breaks reports it here, so the user
+              can pick another route or go back and edit — without leaving the
+              list for the error step. */}
+          {errorMsg && (
+            <p className="pollar-ramp-payment-note" style={{ color: 'var(--pollar-error-text)' }}>
+              {errorMsg}
+            </p>
+          )}
           <button type="button" className="pollar-btn-secondary" onClick={onClose}>
             Cancel
           </button>

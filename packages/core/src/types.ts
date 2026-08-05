@@ -734,6 +734,40 @@ export class PollarNetworkError extends Error {
   }
 }
 
+/**
+ * Thrown when the API answers with an error body. Endpoint helpers used to
+ * collapse that body into `new Error(code)`, which threw away everything the
+ * server said about WHY — so a caller could only ever show the bare code.
+ *
+ * `code` is the stable machine-readable one (e.g. `SDK_RAMPS_AMOUNT_OUT_OF_RANGE`);
+ * `details` is the server's human reason when it sends one; `body` is the whole
+ * payload, for the fields a specific error adds on top (an out-of-range amount
+ * carries `limit` / `limitAmount` / `limitCurrency`, say).
+ */
+export class PollarApiError extends Error {
+  readonly code: string;
+  readonly details?: string;
+  readonly body: Record<string, unknown>;
+  constructor(code: string, body: Record<string, unknown> = {}) {
+    // The message stays the code: existing callers that render `err.message`
+    // keep showing exactly what they showed before this class existed.
+    super(code);
+    this.name = 'PollarApiError';
+    this.code = code;
+    this.body = body;
+    if (typeof body.details === 'string') this.details = body.details;
+  }
+}
+
+/** Type guard for {@link PollarApiError} (instanceof is unreliable across
+ *  bundle/dual-package boundaries, so match the shape too). */
+export function isPollarApiError(err: unknown): err is PollarApiError {
+  return (
+    err instanceof PollarApiError ||
+    (typeof err === 'object' && err !== null && (err as { name?: unknown }).name === 'PollarApiError')
+  );
+}
+
 /** Type guard for {@link PollarNetworkError} (instanceof is unreliable across
  *  bundle/dual-package boundaries, so match the stable `code` too). */
 export function isPollarNetworkError(err: unknown): err is PollarNetworkError {
