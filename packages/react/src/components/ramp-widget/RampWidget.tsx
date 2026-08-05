@@ -355,7 +355,9 @@ export function RampWidget({ onClose }: RampWidgetProps) {
       return;
     }
     const fields = requiredFieldsOf(quote);
-    const missing = fields.some((f) => !(fieldValues[f.key] ?? '').trim());
+    // An `optional` field left blank is not missing (Abroad's tax id) — it must
+    // not drag the user into the details step on its own.
+    const missing = fields.some((f) => !f.optional && !(fieldValues[f.key] ?? '').trim());
     if (fields.length > 0 && missing) {
       setStep('contact');
       return;

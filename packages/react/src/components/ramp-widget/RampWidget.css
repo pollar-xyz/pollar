@@ -97,6 +97,21 @@
   color: var(--pollar-error-text, #dc2626);
 }
 
+.pollar-ramp-field-hint {
+  display: block;
+  margin-top: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--pollar-muted);
+}
+
+/* Rides inside the label, so it reads as part of the field name rather than as
+   another line competing with the hint below. */
+.pollar-ramp-field-optional {
+  font-weight: 400;
+  text-transform: none;
+  color: var(--pollar-muted);
+}
+
 .pollar-ramp-input-row {
   display: flex;
   gap: 0.625rem;

@@ -11,10 +11,14 @@ export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 
 // provider (which rejects it with a generic VALIDATION_ERROR).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** A collected field is complete when it's non-empty and (for email) well-formed. */
+/**
+ * A collected field is complete when it's non-empty and (for email) well-formed.
+ * An `optional` field is complete while blank, but still has to be well-formed
+ * once something is typed into it.
+ */
 function isFieldValid(spec: RampFieldSpec, raw: string | undefined): boolean {
   const value = (raw ?? '').trim();
-  if (!value) return false;
+  if (!value) return spec.optional === true;
   if (spec.type === 'email') return EMAIL_RE.test(value);
   return true;
 }
@@ -26,7 +30,37 @@ export interface RampFieldSpec {
   type: 'text' | 'email' | 'tel' | 'select';
   bankType?: 'CLABE' | 'PIX' | 'PSE' | 'ACH' | 'BREB';
   /** For `type: 'select'` — dropdown choices (e.g. Stereum's Bolivian banks). */
-  options?: { value: string; label: string }[];
+  options?: { value: string; label: string; placeholder?: string }[];
+  /** Declared but not mandatory (Abroad's tax id). Blank must not block Continue. */
+  optional?: boolean;
+  /** Example of the expected shape, for formats a user cannot guess. */
+  placeholder?: string;
+  /**
+   * Key of a sibling `select` whose chosen option supplies the placeholder. One
+   * Pix field can then show a CPF mask, an email or a +55 number as the user
+   * switches kind, without this component knowing what a Pix key is.
+   */
+  placeholderFrom?: string;
+  /** Secondary line under the field, for a rule the label has no room for. */
+  hint?: string;
+}
+
+/** "a", "a and b", "a, b and c" — for naming what a step is asking for. */
+function listOf(items: string[]): string {
+  const last = items[items.length - 1];
+  if (last === undefined) return 'a few details';
+  if (items.length === 1) return last;
+  return `${items.slice(0, -1).join(', ')} and ${last}`;
+}
+
+/** The placeholder to show: the one a sibling select dictates, else the static one. */
+function placeholderFor(field: RampFieldSpec, fields: RampFieldSpec[], values: Record<string, string>): string | undefined {
+  if (field.placeholderFrom) {
+    const source = fields.find((f) => f.key === field.placeholderFrom);
+    const chosen = source?.options?.find((o) => o.value === values[field.placeholderFrom as string]);
+    if (chosen?.placeholder) return chosen.placeholder;
+  }
+  return field.placeholder;
 }
 
 interface RampWidgetTemplateProps {
@@ -218,7 +252,11 @@ export function RampWidgetTemplate({
     input: direction === 'onramp' ? 'Enter the amount you want to deposit' : 'Enter the amount you want to withdraw',
     loading_quote: 'Comparing providers in real time…',
     select_route: 'All prices include fees',
-    contact: `${provider || 'This provider'} needs your name and email to verify you`,
+    // What this step actually asks for is whatever the route declared, and that
+    // is rarely a name and an email: an Abroad off-ramp asks where to send the
+    // money, not who you are. Say which, rather than asserting the Bridge case
+    // over every provider.
+    contact: `${provider || 'This provider'} needs ${listOf(requiredFields.filter((f) => !f.optional).map((f) => f.label.toLowerCase()))} to continue`,
     status: `Finish the flow at ${provider || 'the provider'} to continue`,
     error: 'Please try again',
   };
@@ -399,7 +437,10 @@ export function RampWidgetTemplate({
         <>
           {requiredFields.map((f) => (
             <div key={f.key} className="pollar-ramp-field">
-              <label className="pollar-ramp-label">{f.label}</label>
+              <label className="pollar-ramp-label">
+                {f.label}
+                {f.optional && <span className="pollar-ramp-field-optional"> (optional)</span>}
+              </label>
               {f.type === 'select' ? (
                 <select
                   className="pollar-ramp-input"
@@ -420,10 +461,12 @@ export function RampWidgetTemplate({
                   type={f.type}
                   className="pollar-ramp-input"
                   value={fieldValues[f.key] ?? ''}
+                  placeholder={placeholderFor(f, requiredFields, fieldValues)}
                   autoComplete={f.type === 'email' ? 'email' : 'off'}
                   onChange={(e) => onFieldChange(f.key, e.target.value)}
                 />
               )}
+              {f.hint && <span className="pollar-ramp-field-hint">{f.hint}</span>}
               {f.type === 'email' && (fieldValues[f.key] ?? '').trim() !== '' && !isFieldValid(f, fieldValues[f.key]) && (
                 <span className="pollar-ramp-field-error">Enter a valid email address.</span>
               )}
