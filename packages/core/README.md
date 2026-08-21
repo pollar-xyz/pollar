@@ -2,14 +2,20 @@
 
 Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction utilities for Stellar and Solana applications.
 
-> **0.11.1** reworks the multichain wallet responses. **Breaking:** `WalletBalanceRecord.balance`
-> and `.available` are now `string | null` - `null` means the chain could not be read, and must
-> render as unavailable rather than as `0`. Every chain now reports its native coin plus each
-> token the app enabled (0.11.0 reported only the native token off Stellar), and balances gained
-> `decimals`, `limit` and `sponsored`. `signTx` accepts `skipSponsorship`. New exported types:
-> `WalletAssetsContent`, `EnabledAssetRecord`, `PollarPersistedWallet`.
+> **0.11.2** adds `client.stellar` — **SEP-53 message** and **SEP-10 challenge** ownership
+> proofs. External wallets sign client-side through their adapter (new optional
+> `signStellarMessage` on `WalletAdapter`; Freighter implements it, Albedo has no SEP-53
+> support), custodial wallets sign server-side, and both return the same `sep53` scheme so a
+> verifier treats them alike. Also: `@stellar/freighter-api` bumped to 6.0.0. Non-breaking.
+> New exported types: `StellarSepApi`, `StellarMessageProof`, `Sep10SignParams`, `Sep10Proof`,
+> `SignMessageOptions`, `SignMessageResponse`.
 >
-> Earlier: **0.11.0** went multichain (Solana joins Stellar) and moved every request to the
+> Earlier: **0.11.1** reworked the multichain wallet responses. **Breaking:**
+> `WalletBalanceRecord.balance` and `.available` are `string | null` - `null` means the chain
+> could not be read, and must render as unavailable rather than as `0`. Every chain reports its
+> native coin plus each token the app enabled (0.11.0 reported only the native token off
+> Stellar), and balances gained `decimals`, `limit` and `sponsored`. `signTx` accepts
+> `skipSponsorship`. **0.11.0** went multichain (Solana joins Stellar) and moved every request to the
 > **`/v2`** API. **0.10.0** unified external wallets into `walletAdapters: WalletAdapter[]` and
 > removed the singular `walletAdapter` resolver and `client.loginWallet()`.
 >
@@ -514,10 +520,12 @@ submitting → success` transitions (each composed call emits its own); custodia
 
 #### `client.sendPayment(params): Promise<SubmitOutcome>`
 
-One entry point for a payment on any chain the user holds a wallet on. A Stellar payment routes through
-`buildAndSignAndSubmitTx` (so external adapters and passkey wallets keep the split flow); a Solana payment is a single
-server-side call and is **custodial-only** for now. `SendPaymentParams` is a per-chain union - a Stellar member with a
-decimal `amount` and an `asset`, a Solana member with an integer base-unit `amount` and an optional `mint`.
+One entry point for a payment on Stellar or Solana. A Stellar payment routes through `buildAndSignAndSubmitTx` (so
+external adapters and passkey wallets keep the split flow); a Solana payment is a single server-side call and is
+**custodial-only** for now. `SendPaymentParams` is a per-chain union - a Stellar member with a decimal `amount` and an
+`asset`, a Solana member with an integer base-unit `amount` and an optional `mint`. The union also carries a `POLYGON`
+member for the shape, but there is no transfer path for it yet: the call returns
+`{ status: 'error', details: 'Sending on POLYGON is not supported yet.' }`.
 
 ```ts
 // Stellar
@@ -703,6 +711,37 @@ Log into (or create) a Soroban smart-account C-address backed by a device passke
 client.loginSmartWallet(): void; // returning user (WebAuthn get)
 client.createSmartWallet(): void; // new user (WebAuthn create + sponsored deploy)
 ```
+
+---
+
+### Stellar ownership proofs (SEP-53 / SEP-10)
+
+`client.stellar` namespaces the Stellar-specific proof standards so the multichain client stays clean. Each method
+dispatches by wallet type: external wallets sign client-side through their adapter, custodial wallets sign server-side
+through the API, and smart (passkey) wallets yield an error outcome — a C-address has no classic ed25519 key to prove.
+
+```ts
+// SEP-53: prove ownership by signing an arbitrary message
+const proof = await client.stellar.sep53.signMessage('verify me');
+// { status: 'signed', signature, signerAddress, scheme: 'sep53' } | { status: 'error', details?, code? }
+
+// SEP-10: sign a verifier-issued web-auth challenge transaction
+const auth = await client.stellar.sep10.sign({
+  challengeXdr,
+  homeDomains: 'verifier.example.com', // optional; enables full SEP-10 validation on the custodial path
+  webAuthDomain: 'auth.verifier.example.com', // optional
+});
+// { status: 'signed', signedXdr, signerAddress } | { status: 'error', details?, code? }
+```
+
+`signature` is base64 ed25519 over the SEP-53 digest (`SHA-256("Stellar Signed Message:\n" + message)`), produced
+identically by external wallets and the custodial signer — `scheme` is always `sep53`, so the two proof paths are
+interchangeable for a verifier.
+
+For external wallets, SEP-53 needs an adapter that implements the optional `signStellarMessage` method: the built-in
+`FreighterAdapter` does (native v6 `signMessage`), and `@pollar/stellar-wallets-kit-adapter` does via
+`kit.signMessage`. Albedo does not support SEP-53 message signing and yields an error outcome — use a SEP-10 challenge
+instead. SEP-10 reuses the adapter's existing `signTransaction`, so every Stellar adapter supports it.
 
 ---
 
@@ -913,6 +952,7 @@ import type {
   WalletAssetsContent,
   EnabledAssetRecord,
   EnabledAssetsState,
+  SendPaymentParams,
 
   // Solana wallet adapters (SIWS)
   SolanaSignInInput,

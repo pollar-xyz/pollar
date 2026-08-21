@@ -3,6 +3,8 @@ import type {
   ConnectWalletResponse,
   SignAuthEntryOptions,
   SignAuthEntryResponse,
+  SignMessageOptions,
+  SignMessageResponse,
   SignTransactionOptions,
   SignTransactionResponse,
   WalletAdapter,
@@ -99,5 +101,24 @@ export class StellarWalletsKitAdapter implements WalletAdapter {
       ...(options?.accountToSign !== undefined && { address: options.accountToSign }),
     });
     return { signedAuthEntry: result.signedAuthEntry };
+  }
+
+  async signStellarMessage(message: string, options?: SignMessageOptions): Promise<SignMessageResponse> {
+    // Same singleton network guard as the other signing paths.
+    if (options?.networkPassphrase !== undefined && options.networkPassphrase !== getInitNetwork()) {
+      throw new Error(
+        `[StellarWalletsKit] networkPassphrase override "${options.networkPassphrase}" does not match the network configured at init ("${getInitNetwork()}"). The kit is a global singleton — configure one network at \`stellarWalletsKitAdapters({ network })\` and use that for every call.`,
+      );
+    }
+    StellarWalletsKit.setWallet(String(this.type));
+    // The kit produces the SEP-53 signature natively and returns it as a base64
+    // `signedMessage` plus the signer address.
+    const result = await StellarWalletsKit.signMessage(message, {
+      ...(options?.accountToSign !== undefined && { address: options.accountToSign }),
+    });
+    return {
+      signature: result.signedMessage,
+      ...(result.signerAddress !== undefined && { signerAddress: result.signerAddress }),
+    };
   }
 }

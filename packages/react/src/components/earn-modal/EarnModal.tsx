@@ -162,9 +162,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
     if (!selectedOpportunity) return null;
     const balances = walletBalance.step === 'loaded' ? walletBalance.data.balances : [];
     const issuer = selectedOpportunity.asset.issuer;
-    const rec = balances.find((b) =>
-      issuer === null ? b.type === 'native' : b.code === assetCode && b.issuer === issuer,
-    );
+    const rec = balances.find((b) => (issuer === null ? b.type === 'native' : b.code === assetCode && b.issuer === issuer));
     return rec ? rec.available : null;
   })();
 
@@ -184,10 +182,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
     );
   })();
   const depositNeedsTrustline =
-    tab === 'deposit' &&
-    !smartUnsupported &&
-    !!selectedOpportunity?.asset.issuer &&
-    !depositAssetRecord?.trustlineEstablished;
+    tab === 'deposit' && !smartUnsupported && !!selectedOpportunity?.asset.issuer && !depositAssetRecord?.trustlineEstablished;
 
   const hash = transaction.step === 'success' ? transaction.hash : null;
   const buildData = 'buildData' in transaction ? transaction.buildData : null;
@@ -539,8 +534,8 @@ export function EarnModal({ onClose }: EarnModalProps) {
 
             {depositNeedsTrustline && selectedOpportunity && (
               <div className="pollar-swap-trustline-notice">
-                To deposit {assetCode} your wallet needs a trustline. This will create it first (~0.5 XLM reserve,
-                refundable if you later remove it), then deposit — two signatures.
+                To deposit {assetCode} your wallet needs a trustline. This will create it first (~0.5 XLM reserve, refundable if
+                you later remove it), then deposit — two signatures.
               </div>
             )}
 

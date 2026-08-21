@@ -5,6 +5,8 @@ import { WalletType } from './types';
 import type {
   WalletAdapter,
   ConnectWalletResponse,
+  SignMessageOptions,
+  SignMessageResponse,
   SignTransactionOptions,
   SignTransactionResponse,
   SignAuthEntryOptions,
@@ -152,5 +154,12 @@ export class AlbedoAdapter implements WalletAdapter {
 
     if (!result.signed_xdr) throw new Error('Albedo auth entry signing rejected');
     return { signedAuthEntry: result.signed_xdr };
+  }
+
+  async signStellarMessage(_message: string, _options?: SignMessageOptions): Promise<SignMessageResponse> {
+    // Albedo's `sign_message` intent does not produce a SEP-53 signature, so it
+    // cannot back a SEP-53 ownership proof. Fail loudly rather than return a
+    // signature a verifier cannot check under the sep53 scheme.
+    throw new Error('Albedo does not support SEP-53 message signing; use a SEP-10 challenge instead');
   }
 }

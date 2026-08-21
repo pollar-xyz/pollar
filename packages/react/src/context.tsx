@@ -363,6 +363,17 @@ export function PollarProvider({
   const [configRetry, setConfigRetry] = useState(0);
   const retryConfig = useCallback(() => setConfigRetry((n) => n + 1), []);
 
+  // A locally-passed `appConfig` is tracked by CONTENT, not by identity. A
+  // consumer writing `appConfig={{ ... }}` inline hands us a new object on every
+  // render, so keying the config effect on the object itself would re-run it,
+  // set state with a fresh reference, re-render, and never settle. The
+  // serialized form only changes when the config really changes, and
+  // `PollarConfig` is a plain JSON response shape, so it serializes losslessly.
+  const appConfigKey = appConfigProp === undefined ? '' : JSON.stringify(appConfigProp);
+  // The effect reads the prop through this ref so it does not have to key on it.
+  const appConfigPropRef = useRef(appConfigProp);
+  appConfigPropRef.current = appConfigProp;
+
   useEffect(() => {
     return pollarClient.onTransactionStateChange(setTransaction);
   }, [pollarClient]);
@@ -451,12 +462,18 @@ export function PollarProvider({
     // PRESENCE of `appConfig` is the opt-out, not its contents: any value at all
     // means the consumer owns the config, so the remote fetch never runs and
     // what they passed is used as-is. It is 'ready' immediately because there is
-    // nothing to wait for.
+    // nothing to wait for. It is also re-applied here, not only seeded in the
+    // initial state, so a consumer that swaps the config after mount is not left
+    // with the value from the first render.
     //
     // Otherwise this runs on every mount, which is what keeps branding, login
     // methods and chains current: a change in the dashboard lands on the next
     // page load with no re-login.
-    if (appConfigProp !== undefined) {
+    const localConfig = appConfigPropRef.current;
+    if (localConfig !== undefined) {
+      // Same fallback as the initial state above, so a JS consumer passing an
+      // explicit null still lands on the default config instead of a null one.
+      setResolvedConfig(localConfig ?? DEFAULT_APP_CONFIG);
       setConfigStatus('ready');
       return;
     }
@@ -481,7 +498,7 @@ export function PollarProvider({
     return () => {
       cancelled = true;
     };
-  }, [pollarClient, appConfigProp, configRetry]);
+  }, [pollarClient, appConfigKey, configRetry]);
 
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [transactionModalOpen, setTransactionModalOpen] = useState(false);

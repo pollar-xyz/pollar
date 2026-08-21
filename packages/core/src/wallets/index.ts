@@ -10,6 +10,8 @@ export type {
   SignTransactionResponse,
   SignAuthEntryOptions,
   SignAuthEntryResponse,
+  SignMessageOptions,
+  SignMessageResponse,
   SolanaSignInInput,
   SolanaSignInOutput,
   SolanaSignMessageResponse,

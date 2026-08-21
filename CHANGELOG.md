@@ -1,5 +1,98 @@
 # Changelog
 
+## 0.11.2
+
+> Stable release. Published under the default `latest` dist-tag
+> (`npm i @pollar/core`). Headline: **Stellar ownership proofs** — the new
+> `client.stellar` namespace signs SEP-53 messages and SEP-10 challenges across
+> custodial and external wallets — and the **Transaction History modal goes
+> multichain**. Additive, non-breaking on top of 0.11.1.
+
+### Highlights (since 0.11.1)
+
+- **`client.stellar` — SEP ownership proofs.** `sep53.signMessage(message)` and
+  `sep10.sign({ challengeXdr, ... })` prove wallet ownership to a verifier. Each
+  dispatches by wallet type: external wallets sign client-side via their
+  adapter, custodial wallets sign server-side through sdk-api, and smart
+  (passkey) wallets are rejected with a clear error (no classic ed25519 key).
+  Both paths return the same `sep53` scheme (base64 signature + signer address),
+  so external and custodial proofs are interchangeable for a verifier.
+- **Multichain Transaction History modal.** The History modal gains the network
+  picker and address chip the Balance / Send modals already have, per-chain
+  explorer links, and the unified `{ amount, unit }` fee.
+- **`@stellar/freighter-api` 6.0.0.** The Freighter adapter migrated to the v6
+  API, which unblocks native SEP-53 message signing.
+
+### `@pollar/core`
+
+- New `client.stellar` namespace (`StellarSepApi`), Stellar-specific standards
+  namespaced so the multichain client stays clean:
+  - `sep53.signMessage(message)` — SEP-53 message ownership proof. External
+    wallets sign through the new **optional `signStellarMessage`** on the
+    `WalletAdapter` interface (Freighter implements it via the v6 native
+    `signMessage`; Albedo throws — its `sign_message` intent cannot produce a
+    SEP-53 signature). Custodial wallets post to `/v2/stellar/sep53/sign`. The
+    signature is base64 ed25519 over the SEP-53 digest
+    (`SHA-256("Stellar Signed Message:\n" + message)`) on every path.
+  - `sep10.sign({ challengeXdr, homeDomains?, webAuthDomain? })` — SEP-10
+    challenge ownership proof. External wallets reuse the adapter's existing
+    `signTransaction`; custodial wallets post to `/v2/stellar/sep10/sign`,
+    which reuses the audited sign-sep10-challenge path (validates the challenge
+    is un-submittable). Passing the verifier domains enables full SEP-10
+    validation on the custodial path.
+- New exported types: `StellarSepApi`, `StellarMessageProof`, `Sep10SignParams`,
+  `Sep10Proof`, `SignMessageOptions`, `SignMessageResponse`.
+- `@stellar/freighter-api` bumped `2.0.0` → `6.0.0` and `FreighterAdapter`
+  migrated (v6 returns `{ ...data, error? }` instead of throwing, and
+  `getUserInfo` is replaced by `getAddress` / `requestAccess`). No change to the
+  adapter's own throw-on-failure contract, and it dedupes the second
+  freighter-api copy that `@pollar/stellar-wallets-kit-adapter` already pinned.
+- `schema.d.ts` regenerated from sdk-api: the two `/v2/stellar/sep*/sign` paths,
+  and the v2 history record now carries `chain` and `fee` (query accepts
+  `chain`).
+
+### `@pollar/react`
+
+- The Transaction History modal gains the network picker and address chip the
+  Balance / Send modals already have. Selecting a network refetches history
+  filtered to that chain (the filter is a server query param, since pagination
+  is server-side) and resets the pager to page 1 — page 3 of Stellar is not
+  page 3 of Solana. Each row links to its own chain's explorer
+  (explorer.solana.com for Solana, stellar.expert for Stellar) and shows the
+  unified `{ amount, unit }` fee, so a Solana row reads "5000 lamports" rather
+  than being mislabelled XLM. The picker hides itself on a single-chain app,
+  like the other modals.
+- **The swap sell list is Stellar-only again.** The filter now tests `chain`
+  (the same guard the buy list already used) instead of `type`: a SOL row
+  passed the `type === 'native'` arm and became a Stellar native sell asset,
+  and an SPL/ERC-20 row passed the trustline arm (`trustlineRemoved` is
+  Stellar-only, so it is `undefined` off Stellar) and was narrowed to a
+  credit_alphanum.
+- **A locally-passed `appConfig` is re-applied after mount.** A consumer that
+  added or swapped `<PollarProvider appConfig>` after the first render got
+  `configStatus: 'ready'` while the context kept serving the value from the
+  initial state (stale login settings and chain order). The effect keys on the
+  serialized config, so an inline `appConfig={{ ... }}` object literal does not
+  re-trigger it on every render.
+- **A Solana token send requires the row's mint and `decimals`.** Both are
+  optional on `WalletBalanceRecord` and both silent defaults were wrong for a
+  token: `mint: null` is dropped from the payload, turning a USDC transfer
+  into a native SOL one, and `decimals ?? 9` is SOL's precision, so a
+  6-decimal token would be multiplied by 1000. A non-native asset missing
+  either now fails the send; the `9` fallback remains only for native SOL.
+  sdk-api always populates both fields today, so this is a guard against
+  malformed data rather than a live path.
+
+### `@pollar/stellar-wallets-kit-adapter`
+
+- Implements `signStellarMessage` via `kit.signMessage`, so every kit wallet
+  that supports message signing can back a `client.stellar.sep53` proof.
+
+### Docs
+
+- The `@pollar/core` README's API reference now covers the full `PollarClient`
+  surface.
+
 ## 0.11.1
 
 > Stable release. Published under the default `latest` dist-tag
@@ -20,9 +113,11 @@
   stays `null` instead of being coerced to `'0'`, so the UI can tell
   "unavailable" from "zero". `WalletBalanceRecord.balance` is therefore
   `string | null`.
-- **Send on any chain the user holds.** `sendPayment()` is one entry point across
+- **Send on Stellar and Solana.** `sendPayment()` is one entry point across
   chains; Solana custodial sends land through the multichain atomic endpoint, and
-  the Send / Receive modals carry the network picker.
+  the Send / Receive modals carry the network picker. Polygon is browse-only: it
+  has no transfer path yet, so the Send modal blocks it and `sendPayment()`
+  returns an error for it.
 - **Network picker across every wallet modal.** New `ChainSelect` component and
   `useChains()` hook in `@pollar/react`; the balance, assets, send and receive
   modals filter to the selected chain, and the chain order plus primary address
@@ -62,13 +157,15 @@
 - `WalletBalanceRecord.balance` and `.available` are now `string | null`
   (`null` = the chain could not be read). Callers that parse the balance need a
   null check.
-- New `sendPayment(params)` — one entry point for sending on any chain the user
-  holds a wallet on. Stellar routes through `buildAndSignAndSubmitTx`, so
-  external adapters and passkey wallets keep the split build → sign → submit
-  flow; chains whose signature expires (a Solana blockhash lapses in ~60s) do
-  the whole thing in one server-side call and are **custodial-only** for now.
-  An `idempotencyKey` is minted per call, because a Solana submit is a single
-  non-idempotent shot and a transport retry would otherwise transfer twice.
+- New `sendPayment(params)` — one entry point for sending, on Stellar and on
+  Solana. Stellar routes through `buildAndSignAndSubmitTx`, so external adapters
+  and passkey wallets keep the split build → sign → submit flow; chains whose
+  signature expires (a Solana blockhash lapses in ~60s) do the whole thing in
+  one server-side call and are **custodial-only** for now. An `idempotencyKey`
+  is minted per call, because a Solana submit is a single non-idempotent shot
+  and a transport retry would otherwise transfer twice. `SendPaymentParams`
+  carries a `POLYGON` member for the shape, but there is no transfer path for it
+  yet and the call returns an error.
 - New `toBaseUnits(amount, decimals)` / `fromBaseUnits(base, decimals)`.
   Balances are reported formatted (`"1.5"`) while base-unit chains take integer
   amounts (`1500000000` lamports), so anything sending to those chains must

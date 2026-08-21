@@ -1,8 +1,9 @@
 'use client';
 
-import { TxHistoryRecord, TxHistoryState } from '@pollar/core';
+import { StellarNetwork, TxHistoryRecord, TxHistoryState, WalletChain } from '@pollar/core';
 import { type CSSProperties, type ReactNode } from 'react';
-import { CopyButton, PollarModalFooter } from '../commons';
+import { ChainSelect } from '../ChainSelect';
+import { CopyButton, cropAddress, PollarModalFooter } from '../commons';
 
 const PAGE_SIZE = 10;
 
@@ -11,10 +12,24 @@ interface TxHistoryModalTemplateProps {
   accentColor: string;
   txHistory: TxHistoryState;
   offset: number;
+  /** Networks the user holds a wallet on; the first one is the default. */
+  chains: WalletChain[];
+  selectedChain: WalletChain | null;
+  /** Address of the wallet on {@link selectedChain}. */
+  walletAddress: string;
+  onSelectChain: (chain: WalletChain) => void;
   onRefresh: () => void;
   onPrev: () => void;
   onNext: () => void;
   onClose: () => void;
+}
+
+/** The explorer transaction URL for a row, by its chain. */
+function explorerUrlFor(chain: WalletChain, hash: string, network: StellarNetwork): string {
+  if (chain === 'SOLANA') {
+    return `https://explorer.solana.com/tx/${hash}${network === 'testnet' ? '?cluster=devnet' : ''}`;
+  }
+  return `https://stellar.expert/explorer/${network === 'testnet' ? 'testnet' : 'public'}/tx/${hash}`;
 }
 
 function StatusBadge({ status }: { status: TxHistoryRecord['status'] }) {
@@ -74,6 +89,10 @@ export function TxHistoryModalTemplate({
   accentColor,
   txHistory,
   offset,
+  chains,
+  selectedChain,
+  walletAddress,
+  onSelectChain,
   onRefresh,
   onPrev,
   onNext,
@@ -149,6 +168,15 @@ export function TxHistoryModalTemplate({
         </div>
       </div>
 
+      <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoading} />
+
+      {walletAddress && (
+        <div className="pollar-address-row">
+          <span className="pollar-address">{cropAddress(walletAddress)}</span>
+          <CopyButton value={walletAddress} label="Copy wallet address" />
+        </div>
+      )}
+
       <div className="pollar-hist-list">
         {txHistory.step === 'idle' && <div className="pollar-modal-empty">Click Refresh to load transactions.</div>}
         {isLoading && (
@@ -161,9 +189,9 @@ export function TxHistoryModalTemplate({
         {txHistory.step === 'loaded' && records.length === 0 && <div className="pollar-modal-empty">No transactions yet.</div>}
         {records.map((record) => {
           const hash = typeof record.hash === 'string' && record.hash.length > 0 ? record.hash : undefined;
-          const explorerUrl = hash
-            ? `https://stellar.expert/explorer/${record.network === 'testnet' ? 'testnet' : 'public'}/tx/${hash}`
-            : undefined;
+          // Each row carries its own chain (a filtered view is still per-chain),
+          // so the explorer link follows the row, not the picker.
+          const explorerUrl = hash ? explorerUrlFor(record.chain, hash, record.network) : undefined;
           const asset = typeof record.details?.asset === 'string' ? record.details.asset : undefined;
           // `change_trust` summaries embed the asset as `CODE:ISSUER` — split so
           // the issuer can be truncated and copied on its own.
@@ -212,7 +240,11 @@ export function TxHistoryModalTemplate({
                 {typeof record.details?.sponsored === 'boolean' && (
                   <span>· {record.details.sponsored ? 'Sponsored' : 'Self-paid'}</span>
                 )}
-                {record.feeXlm && <span>· {record.feeXlm} XLM</span>}
+                {record.fee && (
+                  <span>
+                    · {record.fee.amount} {record.fee.unit}
+                  </span>
+                )}
               </span>
 
               <div className="pollar-hist-item-footer">
@@ -227,7 +259,7 @@ export function TxHistoryModalTemplate({
                       href={explorerUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      aria-label="View on Stellar Explorer"
+                      aria-label="View on block explorer"
                     >
                       <svg width="12" height="12" viewBox="0 0 13 13" fill="none" aria-hidden>
                         <path

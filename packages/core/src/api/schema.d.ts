@@ -156,7 +156,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get transaction history */
+        /**
+         * Get transaction history (multichain)
+         * @description Every chain by default; pass `?chain=` to narrow. Each row is tagged with its `chain` and a `{ amount, unit }` fee.
+         */
         get: operations["getTxHistory"];
         put?: never;
         post?: never;
@@ -238,7 +241,7 @@ export interface paths {
         put?: never;
         /**
          * Enable or remove a trustline for an enabled asset
-         * @description Establishes (no limit) or removes (limit '0') a trustline on the authenticated user's custodial wallet for an asset configured in the application, sponsored by the app (the reserve and fee are paid by the app wallets). Returns the refreshed enabled-asset list. Only valid for the sponsored custodial path — custom assets, adapter-managed wallets, and apps with trustline sponsoring disabled must sign a change_trust transaction client-side instead and will get a 400 here. The wallet and network are derived from the session.
+         * @description Establishes (no limit) or removes (limit '0') a trustline on the authenticated user's custodial wallet. When the asset is app-configured and sponsoring is on, the app wallets pay the reserve + fee; otherwise the server self-pays with the user's own wallet. Either way it submits server-side and returns the refreshed enabled-asset list. The wallet and network are derived from the session.
          */
         post: operations["postWalletAssetsTrustline"];
         delete?: never;
@@ -258,7 +261,7 @@ export interface paths {
         put?: never;
         /**
          * Build a sponsored trustline for an external wallet to co-sign
-         * @description Builds a sponsored changeTrust for an app-configured asset and signs ONLY the app's sponsor wallet (which covers the 0.5 XLM reserve and the fee), returning the partially-signed XDR. Use this for EXTERNAL / adapter-managed wallets whose key the platform does not hold: the caller adds the trustor signature with its own wallet and broadcasts via POST /tx/submit. Custodial wallets should use POST /wallet/assets/trustline instead. Only valid for the sponsored path — custom assets and apps with trustline sponsoring disabled get a 400 and must sign a plain change_trust client-side. The wallet and network are derived from the session.
+         * @description Builds a changeTrust for an EXTERNAL / adapter-managed wallet whose key the platform does not hold, and returns it for the caller to co-sign with its own wallet and broadcast via POST /tx/submit. When the app covers it, the response is `sponsorSignedXdr` (sponsor already signed, app pays the 0.5 XLM reserve + fee); otherwise it's `unsignedXdr`, a plain self-pay change_trust the trustor signs and pays for. The `sponsored` flag says which. Custodial wallets should use POST /wallet/assets/trustline instead. The wallet and network are derived from the session.
          */
         post: operations["postWalletAssetsTrustlineBuild"];
         delete?: never;
@@ -753,6 +756,46 @@ export interface paths {
         post?: never;
         /** Revoke a specific session (refresh-token family) */
         delete: operations["deleteAuthSessionsByFamilyId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stellar/sep53/sign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign a message (SEP-53 ownership proof, custodial)
+         * @description Signs a plaintext message with the user's custodial wallet using the SEP-53 "Stellar Signed Message" framing. Returns the base64 signature and signer address. External wallets sign client-side in the SDK.
+         */
+        post: operations["postStellarSep53Sign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stellar/sep10/sign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign a SEP-10 web-auth challenge (ownership proof, custodial)
+         * @description Signs a verifier-issued SEP-10 challenge transaction with the user's custodial wallet. wallet-service validates the challenge is a harmless, un-submittable SEP-10 tx before signing. External wallets sign client-side in the SDK.
+         */
+        post: operations["postStellarSep10Sign"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2338,6 +2381,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                chain?: "STELLAR" | "POLYGON" | "SOLANA";
             };
             header?: never;
             path?: never;
@@ -2359,13 +2403,18 @@ export interface operations {
                         content: {
                             records: {
                                 id: string;
+                                /** @enum {string} */
+                                chain: "STELLAR" | "POLYGON" | "SOLANA";
                                 hash: string;
                                 /** @enum {string} */
                                 network: "testnet" | "mainnet";
                                 /** @enum {string} */
                                 status: "PENDING" | "SUCCESS" | "FAILED";
                                 operation: string;
-                                feeXlm?: string;
+                                fee?: {
+                                    amount: string;
+                                    unit: string;
+                                };
                                 resultCode?: string;
                                 details: {
                                     [key: string]: unknown;
@@ -5064,6 +5113,202 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postStellarSep53Sign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    address: string;
+                    message: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Signed message */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_STELLAR_MESSAGE_SIGNED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            signature: string;
+                            signerAddress: string;
+                            /** @constant */
+                            scheme: "sep53";
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Signing error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postStellarSep10Sign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    address: string;
+                    challengeXdr: string;
+                    homeDomains?: string | string[];
+                    webAuthDomain?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Signed challenge */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_STELLAR_SEP10_SIGNED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            signedXdr: string;
+                            signerAddress: string;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Signing error */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

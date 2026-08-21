@@ -74,8 +74,12 @@ import {
   RampTxStatus,
   SessionInfo,
   SessionsState,
+  Sep10Proof,
+  Sep10SignParams,
   SignAuthEntryOutcome,
   SignOutcome,
+  StellarMessageProof,
+  StellarSepApi,
   SendPaymentParams,
   SubmitOutcome,
   TransactionState,
@@ -265,6 +269,11 @@ export class PollarClient {
   private readonly _walletAdapters = new Map<WalletId, WalletAdapter>();
   private readonly _passkey: PasskeyCeremony | null;
   private readonly _passkeySign: PasskeySigner | null;
+  /**
+   * Stellar SEP ownership-proof surface (`client.stellar.sep53`, `.sep10`). Set
+   * in the constructor so it exists on both client and server runtimes.
+   */
+  readonly stellar: StellarSepApi;
   private _loginController: AbortController | null = null;
   /** Aborts an in-flight `/auth/session/resume` on destroy() or re-trigger. */
   private _resumeController: AbortController | null = null;
@@ -363,6 +372,13 @@ export class PollarClient {
       resignRetry: (request) => this._resignForRetry(request),
     });
     this._wireMiddlewares();
+
+    // Stellar SEP ownership-proof namespace. Thin object over the private
+    // dispatchers so the public surface reads `client.stellar.sep53.signMessage(...)`.
+    this.stellar = {
+      sep53: { signMessage: (message: string) => this._sep53SignMessage(message) },
+      sep10: { sign: (params: Sep10SignParams) => this._sep10Sign(params) },
+    };
 
     this._networkState = { step: 'connected', network: config.stellarNetwork ?? 'testnet' };
 
@@ -1808,8 +1824,7 @@ export class PollarClient {
           return { status: 'success' };
         }
         const details =
-          (error as { details?: string; code?: string } | undefined)?.details ??
-          (error as { code?: string } | undefined)?.code;
+          (error as { details?: string; code?: string } | undefined)?.details ?? (error as { code?: string } | undefined)?.code;
         return { status: 'error', ...(details && { details }) };
       } catch (err) {
         const details = err instanceof Error ? err.message : undefined;
@@ -1829,8 +1844,7 @@ export class PollarClient {
       const xdr = data?.content?.sponsorSignedXdr ?? data?.content?.unsignedXdr;
       if (error || !data?.success || !xdr) {
         const details =
-          (error as { details?: string; code?: string } | undefined)?.details ??
-          (error as { code?: string } | undefined)?.code;
+          (error as { details?: string; code?: string } | undefined)?.details ?? (error as { code?: string } | undefined)?.code;
         return { status: 'error', ...(details && { details }) };
       }
       const signed = await this.signTx(xdr);
@@ -2216,6 +2230,120 @@ export class PollarClient {
       });
       if (!error && data?.success && data.content?.signedAuthEntry) {
         return { status: 'signed', signedAuthEntry: data.content.signedAuthEntry };
+      }
+      const details = (error as { details?: string } | undefined)?.details;
+      return { status: 'error', ...(details && { details }) };
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      return { status: 'error', ...(details && { details }) };
+    }
+  }
+
+  // ─── Stellar SEP ownership proofs (client.stellar.*) ──────────────────────────
+
+  /**
+   * SEP-53 message signing (`client.stellar.sep53.signMessage`). Returns a base64
+   * signature + signer address a verifier checks under the `sep53` scheme.
+   *
+   * - External wallets sign client-side via the adapter's `signStellarMessage`
+   *   (Freighter/SWK produce the SEP-53 framing natively; Albedo has none).
+   * - Custodial wallets sign server-side via `/stellar/sep53/sign`, where the
+   *   backend applies the mandatory SEP-53 prefix.
+   * - Smart (passkey) wallets cannot: a C-address has no classic ed25519 key.
+   */
+  private async _sep53SignMessage(message: string): Promise<StellarMessageProof> {
+    const noSigner = this._externalSignerMissing();
+    if (noSigner) return noSigner;
+    if (this._session?.wallet?.type === 'smart') {
+      return { status: 'error', details: 'SEP-53 message signing is not supported for smart (passkey) wallets.' };
+    }
+    const address = this._session?.wallet?.address ?? '';
+
+    // External adapter signs directly (smart already returned above).
+    if (this._walletAdapter) {
+      if (!this._walletAdapter.signStellarMessage) {
+        return { status: 'error', details: `Wallet "${this._walletAdapter.type}" does not support message signing (SEP-53).` };
+      }
+      try {
+        const { signature, signerAddress } = await this._walletAdapter.signStellarMessage(message, {
+          networkPassphrase: this._networkPassphrase(),
+          ...(address ? { accountToSign: address } : {}),
+        });
+        return { status: 'signed', signature, signerAddress: signerAddress ?? address, scheme: 'sep53' };
+      } catch (err) {
+        const details = err instanceof Error ? err.message : undefined;
+        return { status: 'error', ...(details && { details }) };
+      }
+    }
+
+    // Custodial: backend signs with the user's key (SEP-53 prefix enforced there).
+    try {
+      const { data, error } = await this._api.POST('/stellar/sep53/sign', { body: { address, message } });
+      if (!error && data?.success && data.content?.signature) {
+        return {
+          status: 'signed',
+          signature: data.content.signature,
+          signerAddress: data.content.signerAddress,
+          scheme: 'sep53',
+        };
+      }
+      const details = (error as { details?: string } | undefined)?.details;
+      return { status: 'error', ...(details && { details }) };
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      return { status: 'error', ...(details && { details }) };
+    }
+  }
+
+  /**
+   * SEP-10 challenge signing (`client.stellar.sep10.sign`). The verifier builds
+   * the challenge; this signs it and returns the signed XDR for the verifier to
+   * check with `WebAuth.readChallengeTx`.
+   *
+   * - External wallets sign the challenge transaction via the adapter.
+   * - Custodial wallets sign via `/stellar/sep10/sign`, which reuses the audited
+   *   sign-sep10-challenge endpoint (validates the challenge is un-submittable).
+   * - Smart (passkey) wallets cannot: SEP-10 is for classic accounts.
+   */
+  private async _sep10Sign(params: Sep10SignParams): Promise<Sep10Proof> {
+    const noSigner = this._externalSignerMissing();
+    if (noSigner) return noSigner;
+    if (this._session?.wallet?.type === 'smart') {
+      return {
+        status: 'error',
+        details: 'SEP-10 is for classic accounts; smart (passkey) wallets cannot sign a SEP-10 challenge.',
+      };
+    }
+    const address = this._session?.wallet?.address ?? '';
+
+    if (this._walletAdapter) {
+      if (!this._walletAdapter.signTransaction) {
+        return { status: 'error', details: `Wallet "${this._walletAdapter.type}" cannot sign a SEP-10 challenge.` };
+      }
+      try {
+        const { signedTxXdr } = await this._walletAdapter.signTransaction(params.challengeXdr, {
+          networkPassphrase: this._networkPassphrase(),
+          ...(address ? { accountToSign: address } : {}),
+        });
+        return { status: 'signed', signedXdr: signedTxXdr, signerAddress: address };
+      } catch (err) {
+        const details = err instanceof Error ? err.message : undefined;
+        return { status: 'error', ...(details && { details }) };
+      }
+    }
+
+    // Custodial path.
+    try {
+      const { data, error } = await this._api.POST('/stellar/sep10/sign', {
+        body: {
+          address,
+          challengeXdr: params.challengeXdr,
+          ...(params.homeDomains !== undefined ? { homeDomains: params.homeDomains } : {}),
+          ...(params.webAuthDomain !== undefined ? { webAuthDomain: params.webAuthDomain } : {}),
+        },
+      });
+      if (!error && data?.success && data.content?.signedXdr) {
+        return { status: 'signed', signedXdr: data.content.signedXdr, signerAddress: data.content.signerAddress };
       }
       const details = (error as { details?: string } | undefined)?.details;
       return { status: 'error', ...(details && { details }) };
