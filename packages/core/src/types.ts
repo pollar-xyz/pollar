@@ -61,6 +61,17 @@ export interface PollarPersistedSession {
   token: { accessToken: string; refreshToken: string; expiresAt: number };
   user: { id?: string; ready: boolean };
   /**
+   * RFC 7638 thumbprint of the DPoP keypair this session's tokens are bound
+   * to (`cnf.jkt`), stamped at store time. On restore the client compares it
+   * against the currently loaded keypair: a mismatch means the private key
+   * was lost (IndexedDB evicted/unavailable, key reset elsewhere) and every
+   * proof-bound call — resume and refresh included — is guaranteed to fail,
+   * so the session is cleared locally with a precise diagnostic instead of a
+   * burst of opaque 401s. Optional: absent on sessions persisted by older
+   * SDKs and on Bearer-fallback sessions, which skip the check.
+   */
+  dpopJkt?: string;
+  /**
    * BACK-COMPAT — the user's STELLAR wallet (or their smart account). Always
    * present, always Stellar. Mirrors the entry in `wallets` with
    * `chain: 'STELLAR'` when there is one.

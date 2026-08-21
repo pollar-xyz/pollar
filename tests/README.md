@@ -84,6 +84,27 @@ Session-lifecycle race safety (each block exercises one concurrency fix):
   `verified` without re-resuming; a legacy 8-hex session is not restored;
   cross-tab logout propagates even when this tab's storage is degraded
 
+### `smoke-resume.cjs`
+
+Session resume across "page loads" — DPoP key binding (regression guards for the
+0.11.2 reload-logout bug, `thumbprint-mismatch`). Runs against a mock server that
+actually verifies the binding (nonce challenge + proof-JWK thumbprint vs the
+`cnf.jkt` computed from the login's `dpopJwk`) and an in-memory IndexedDB shim
+that survives across client instances:
+
+- A fresh `PollarClient` over the same Storage + IndexedDB resumes: the resume
+  proof's thumbprint equals the token's `cnf.jkt`, and concurrent resume
+  triggers (visibility flaps) coalesce into a single request
+- A genuinely revoked session (403 on resume) still clears to `idle`
+- With IndexedDB unavailable, login warns that the keypair can't persist, and
+  the next load clears the doomed session locally via the persisted `dpopJkt`
+  check — no resume round trip, no phantom `authenticated` emission
+- A 5xx resume keeps the optimistic session and backs off instead of bursting
+- `logout()` rotates the DPoP keypair; a failure-path clear does not
+- Cross-tab logout → fresh login: the sibling tab resyncs its stale in-memory
+  key cache to the rotated shared key and resumes the new session instead of
+  clearing it
+
 ## What's not covered
 
 - Real network requests (`fetch` is mocked).

@@ -122,6 +122,36 @@ export class NobleKeyManager implements KeyManager {
     this._initPromise = null;
   }
 
+  /**
+   * Re-persist the private scalar and verify it actually landed in storage.
+   * Mirrors `WebCryptoKeyManager.ensurePersisted` — see there for rationale.
+   * Returns `false` when the adapter can't durably hold the key, so the login
+   * flow can warn that the session will not survive a relaunch.
+   */
+  async ensurePersisted(): Promise<boolean> {
+    if (!this.privateKey) await this.init();
+    if (!this.privateKey) return false;
+    try {
+      const encoded = base64urlEncode(this.privateKey);
+      await this.storage.set(this.storageKey, encoded);
+      return (await this.storage.get(this.storageKey)) === encoded;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Drop the in-memory cache; the next operation re-runs `init()` and adopts
+   * whatever the storage adapter holds. Never touches persistent storage —
+   * that's `reset()`. Mirrors `WebCryptoKeyManager.resync`.
+   */
+  resync(): void {
+    this.privateKey = null;
+    this.publicJwk = null;
+    this.thumbprint = null;
+    this._initPromise = null;
+  }
+
   async getPublicJwk(): Promise<PublicEcJwk> {
     if (!this.publicJwk) await this.init();
     if (!this.publicJwk) {

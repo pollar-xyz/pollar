@@ -35,6 +35,8 @@ const MAX_CLIENT_SESSION_ID = 64;
 const MAX_STATUS = 64;
 const MAX_WALLET_PUBLIC_KEY = 128;
 const MAX_WALLET_TYPE = 32;
+// base64url(SHA-256) is exactly 43 chars; bound with headroom.
+const MAX_DPOP_JKT = 64;
 // One wallet per supported chain, with headroom. Bounds the persisted blob so a
 // hostile or buggy `wallets[]` can't blow up storage or the validation loop.
 const MAX_WALLETS = 16;
@@ -81,6 +83,13 @@ export function isValidSession(value: unknown, logger: PollarLogger = console): 
   }
   if (typeof t['expiresAt'] !== 'number' || !Number.isFinite(t['expiresAt'])) {
     logger.debug('[PollarClient:session] Invalid session — token.expiresAt must be a finite number');
+    return false;
+  }
+
+  // Optional DPoP key binding (see PollarPersistedSession.dpopJkt). Absent on
+  // sessions persisted by older SDKs — never required.
+  if (s['dpopJkt'] !== undefined && !isBoundedString(s['dpopJkt'], MAX_DPOP_JKT)) {
+    logger.debug('[PollarClient:session] Invalid session — dpopJkt must be a non-empty string if present');
     return false;
   }
 

@@ -2,13 +2,68 @@
 
 ## 0.11.3 (unreleased)
 
-> Patch release. Headline: the **Smart Wallet passkey ceremony is now installed
-> however the client reaches `PollarProvider`**, so a consumer-built
-> `PollarClient` no longer silently loses passkey login. Additive, non-breaking
-> on top of 0.11.2.
+> Patch release. Headlines: **sessions no longer die on reload when the DPoP
+> keypair fails to persist** (thumbprint-mismatch logout loop), and the **Smart
+> Wallet passkey ceremony is now installed however the client reaches
+> `PollarProvider`**, so a consumer-built `PollarClient` no longer silently
+> loses passkey login. Additive, non-breaking on top of 0.11.2.
 
 ### `@pollar/core`
 
+- **Fix: a session no longer dies on the first reload when the DPoP keypair
+  fails to persist (`SDK_AUTH_DPOP_INVALID` / `thumbprint-mismatch`).** When
+  IndexedDB couldn't durably store the keypair (blocked, evicted, private
+  mode), the failure was swallowed: login worked against the in-memory key, but
+  the next page load generated a fresh keypair, every `/auth/session/resume`
+  401'd with `thumbprint-mismatch`, and `_clearSession()` then also destroyed
+  the (new, valid) keypair — logging the user out with no diagnostic. Four
+  changes, none touching the public API:
+  - The persisted session now records `dpopJkt` — the thumbprint of the key
+    its tokens are bound to (`cnf.jkt`). On restore, a mismatch against the
+    currently loaded keypair means every proof-bound call (resume, refresh,
+    signing) is guaranteed to fail, so the session is cleared **locally** with
+    an error log naming the real cause — no doomed resume round trip, no 401
+    burst, no phantom `authenticated` emission. Sessions persisted by older
+    SDKs have no `dpopJkt` and behave as before (the resume decides).
+  - `_clearSession()` no longer resets the DPoP keypair. The key is
+    device-scoped, not session-scoped, and the clear also runs on failure
+    paths (rejected resume, failed refresh, cross-tab clear, superseded login
+    race) where destroying it made every other session bound to the key —
+    persisted, or a token the consumer held elsewhere — permanently
+    unverifiable. The keypair is rotated only on explicit `logout()`. The
+    in-memory `DPoP-Nonce` also survives the clear (it is origin-scoped server
+    state); it is intentionally **not** persisted across page loads — server
+    nonces are short-lived, so the one cold-start `use_dpop_nonce` round trip
+    stays. To keep multiple tabs coherent now that the clear keeps the key,
+    the new optional `KeyManager.resync()` (drop the in-memory cache, keep
+    persistent storage) runs on every clear, and the `dpopJkt` check resyncs
+    and re-compares before concluding a mismatch — so after a cross-tab
+    logout → fresh login, a sibling tab adopts the rotated shared key instead
+    of signing with its stale cached copy (or clearing the session the other
+    tab just created).
+  - `_resume()` coalesces concurrent triggers (startup restore + visibility
+    flaps used to abort/restart each other into a burst of identical 401s)
+    and backs off exponentially (1s → 30s cap) after non-terminal failures
+    (network, 429, 5xx). Terminal 401/403/410 still clears the session
+    immediately, exactly as before.
+  - Key managers persist durably and loudly: IndexedDB writes now await the
+    transaction's `complete` event (a put request's `onsuccess` fires before
+    the commit, so commit-time failures were silent), and the new optional
+    `KeyManager.ensurePersisted()` (implemented by both `WebCryptoKeyManager`
+    and `NobleKeyManager`) is called at login just before the key is bound:
+    it re-writes and read-back-verifies the key, and the client warns
+    `"the session will NOT survive a reload"` when persistence is
+    unavailable — at login time, not as a mystery logout later. The re-write
+    also heals a key deleted by another tab's `reset()`.
+  - New smoke suite `tests/smoke-resume.cjs` covers all of it against a mock
+    server that actually verifies the DPoP binding (nonce challenge + proof
+    thumbprint vs `cnf.jkt`) and an IndexedDB shim that survives across
+    client instances.
+  - Recovery note: sessions persisted by ≤0.11.2 whose keypair DID persist
+    resume normally after upgrading. Sessions whose keypair was already lost
+    or reset cannot be recovered (the private key is gone — that is DPoP's
+    security property); those users must log in once more, now with a clean
+    single log line instead of a 401 loop.
 - New `client.setPasskeyDefaults({ passkey?, passkeySign? })`. Fills in the
   passkey ceremony and signer when they were not supplied at construction, and
   never replaces ones that were, so React Native keeps injecting its native

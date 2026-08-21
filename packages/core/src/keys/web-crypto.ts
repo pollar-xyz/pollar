@@ -48,6 +48,23 @@ function awaitTx<T>(req: IDBRequest<T>): Promise<T> {
   });
 }
 
+/**
+ * Await a WRITE durably: a put/delete request's `onsuccess` fires before the
+ * transaction actually commits, and a commit-time failure (quota, private-mode
+ * eviction, serialization) aborts the transaction silently after that. Waiting
+ * for the transaction's own `complete` event turns those silent losses into
+ * caught errors — critical here, because a DPoP keypair that only *appeared*
+ * to persist guarantees a thumbprint-mismatch logout on the next page load.
+ */
+function awaitWriteTx(tx: IDBTransaction, req: IDBRequest): Promise<void> {
+  return new Promise((resolve, reject) => {
+    req.onerror = (): void => reject(req.error ?? new Error('[PollarClient:keys] IDB write request failed'));
+    tx.oncomplete = (): void => resolve();
+    tx.onerror = (): void => reject(tx.error ?? new Error('[PollarClient:keys] IDB write transaction failed'));
+    tx.onabort = (): void => reject(tx.error ?? new Error('[PollarClient:keys] IDB write transaction aborted'));
+  });
+}
+
 async function dbGet<T>(key: string): Promise<T | undefined> {
   const db = await openDb();
   try {
@@ -63,7 +80,7 @@ async function dbPut(key: string, value: unknown): Promise<void> {
   const db = await openDb();
   try {
     const tx = db.transaction(STORE_NAME, 'readwrite');
-    await awaitTx(tx.objectStore(STORE_NAME).put(value, key));
+    await awaitWriteTx(tx, tx.objectStore(STORE_NAME).put(value, key));
   } finally {
     db.close();
   }
@@ -73,7 +90,7 @@ async function dbDelete(key: string): Promise<void> {
   const db = await openDb();
   try {
     const tx = db.transaction(STORE_NAME, 'readwrite');
-    await awaitTx(tx.objectStore(STORE_NAME).delete(key));
+    await awaitWriteTx(tx, tx.objectStore(STORE_NAME).delete(key));
   } finally {
     db.close();
   }
@@ -202,6 +219,40 @@ export class WebCryptoKeyManager implements KeyManager {
     } catch {
       // Best-effort cleanup; if IDB is unavailable there's nothing persisted to clear.
     }
+    this.keyPair = null;
+    this.publicJwk = null;
+    this.thumbprint = null;
+    this._initPromise = null;
+  }
+
+  /**
+   * Re-persist the in-memory pair and verify it actually landed in IndexedDB.
+   * Idempotent and cheap (one put + one get). Returns `false` when persistence
+   * is unavailable — the caller (the login flow) warns that the session will
+   * not survive a reload, instead of the previous behavior where a silent
+   * `dbPut` failure surfaced only as an unexplained thumbprint-mismatch logout
+   * on the next page load. Re-putting (rather than only probing) also heals
+   * the case where another tab's `reset()` deleted the row this instance still
+   * signs with — the key a new login binds is guaranteed to be the stored one.
+   */
+  async ensurePersisted(): Promise<boolean> {
+    if (!this.keyPair) await this.init();
+    if (!this.keyPair || !this.apiKeyHash) return false;
+    try {
+      await dbPut(this.apiKeyHash, this.keyPair);
+      const readBack = await dbGet<CryptoKeyPair>(this.apiKeyHash);
+      return isCryptoKeyPair(readBack);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Drop the in-memory cache; the next operation re-runs `init()` and adopts
+   * whatever IndexedDB holds (another tab may have rotated the shared key).
+   * Never touches persistent storage — that's `reset()`.
+   */
+  resync(): void {
     this.keyPair = null;
     this.publicJwk = null;
     this.thumbprint = null;

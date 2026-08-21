@@ -285,8 +285,20 @@ export class PollarClient {
    */
   readonly stellar: StellarSepApi;
   private _loginController: AbortController | null = null;
-  /** Aborts an in-flight `/auth/session/resume` on destroy() or re-trigger. */
+  /** Aborts an in-flight `/auth/session/resume` on destroy() or session clear. */
   private _resumeController: AbortController | null = null;
+  /**
+   * Coalesces concurrent `_resume()` calls into one in-flight validation.
+   * The startup restore and the visibility handler can both fire within the
+   * same tick (and visibility can flap repeatedly at page load); without this,
+   * each trigger aborted the previous request and started another, turning one
+   * failing resume into a burst of identical 401s.
+   */
+  private _resumePromise: Promise<void> | null = null;
+  /** Consecutive non-terminal resume failures; drives the retry backoff below. */
+  private _resumeFailStreak = 0;
+  /** Epoch ms before which `_resume()` refuses to fire again (failure backoff). */
+  private _resumeBackoffUntil = 0;
   /** Platform strategy for opening the hosted-OAuth URL (popup on web; injected on RN). */
   private readonly _openAuthUrl: AuthUrlOpener;
   /** `redirect_uri` sent to the backend for hosted OAuth. */
@@ -1409,6 +1421,17 @@ export class PollarClient {
       await this._clearSession();
     } catch (err) {
       this._log.warn('[PollarClient] Local logout cleanup failed', err);
+    }
+
+    // Rotate the DPoP keypair ONLY here, on the user-initiated logout — not in
+    // `_clearSession()`, which also runs on transient failure paths where
+    // destroying the key would make every other session bound to it (persisted
+    // or held by the consumer) permanently unverifiable. On explicit logout the
+    // user is done with this identity, so fresh key hygiene wins.
+    try {
+      await this._keyManager.reset();
+    } catch (err) {
+      this._log.warn('[PollarClient] KeyManager reset failed during logout', err);
     }
   }
 
@@ -3402,8 +3425,8 @@ export class PollarClient {
       signal,
       // Suppress terminal writes from a flow that was CANCELLED or SUPERSEDED
       // (its `signal` is aborted) so a late-resolving loser can't clobber the
-      // active flow's state or, via clearSession, tear down a newer session /
-      // reset the DPoP key. The active flow's signal is never aborted, so the
+      // active flow's state or, via clearSession, tear down a newer session.
+      // The active flow's signal is never aborted, so the
       // happy path is unchanged. (Completes the C1 guard — covers error/clear
       // writes, not just storeSession.)
       setAuthState: (state: AuthState) => {
@@ -3412,7 +3435,30 @@ export class PollarClient {
       storeSession: (session: PollarApplicationConfigContent) =>
         signal.aborted ? Promise.resolve() : this._storeSession(session),
       clearSession: () => (signal.aborted ? Promise.resolve() : this._clearSession()),
-      getPublicJwk: () => this._keyManager.getPublicJwk(),
+      getPublicJwk: async () => {
+        const jwk = await this._keyManager.getPublicJwk();
+        // The login is about to bind its tokens to this key (`cnf.jkt`). Verify
+        // the key is durably persisted (re-writing it if needed) and warn loudly
+        // when it isn't: a non-persisted key means the session cannot survive a
+        // reload — every resume/refresh will 401 with `thumbprint-mismatch`.
+        // Previously this failure was swallowed inside the key manager and only
+        // surfaced as an unexplained logout on the next page load. Best-effort
+        // and optional: custom KeyManager implementations without
+        // `ensurePersisted` behave as before.
+        try {
+          // `undefined` (method not implemented) intentionally does not warn.
+          if ((await this._keyManager.ensurePersisted?.()) === false) {
+            this._log.warn(
+              '[PollarClient] The DPoP keypair could not be persisted (IndexedDB/secure storage ' +
+                'unavailable?). Login will work, but the session will NOT survive a reload — the ' +
+                'user will be logged out on the next page load.',
+            );
+          }
+        } catch (err) {
+          this._log.warn('[PollarClient] DPoP keypair persistence check failed', err);
+        }
+        return jwk;
+      },
       storeWalletAdapter: async (adapter: WalletAdapter, id: WalletId) => {
         // A cancelled/superseded flow must not leave a dangling adapter +
         // persisted walletType row with no session (the same reason the other
@@ -3479,6 +3525,46 @@ export class PollarClient {
       // so it doesn't disturb an in-flight refresh of the very same session.)
       if (prevSession && prevSession.clientSessionId !== this._session.clientSessionId) {
         this._sessionGeneration++;
+      }
+
+      // DPoP key binding precheck: the persisted session records the thumbprint
+      // of the keypair its tokens are bound to (`dpopJkt`, = the token's
+      // `cnf.jkt`). If the keypair we just loaded is a DIFFERENT one — the
+      // stored key was lost (IndexedDB evicted, unavailable, or reset by
+      // another tab) and a fresh key was generated — then EVERY proof-bound
+      // call is guaranteed to 401 (`thumbprint-mismatch`): resume, refresh,
+      // signing, all of them. Converge to logged-out locally, with a diagnostic
+      // that names the real cause, instead of burning a doomed resume round
+      // trip whose opaque 401 used to also nuke the (new, perfectly good)
+      // keypair. Sessions persisted by older SDKs have no `dpopJkt` and skip
+      // this — their resume decides, as before. If the thumbprint can't be
+      // computed (key manager init failed), skip too: the Bearer fallback may
+      // still be able to use the session.
+      if (this._session.dpopJkt) {
+        // A thumbprint that can't be computed (key manager unavailable) reads
+        // as null and skips the check — the resume path decides, as before.
+        const readJkt = (): Promise<string | null> => this._keyManager.getThumbprint().catch(() => null);
+        let currentJkt = await readJkt();
+        if (currentJkt !== null && currentJkt !== this._session.dpopJkt && this._keyManager.resync) {
+          // The cached key may simply be stale: another tab can rotate the
+          // shared persisted key (logout → fresh login) and then write the
+          // session this restore is picking up. Re-read persistent storage
+          // and re-compare before concluding the key is really lost —
+          // without this, a stale cache would clear the session the other
+          // tab just created.
+          this._keyManager.resync();
+          currentJkt = await readJkt();
+        }
+        if (currentJkt !== null && currentJkt !== this._session.dpopJkt) {
+          this._log.error(
+            '[PollarClient] Stored session is bound to a DPoP key that no longer exists locally ' +
+              '(key persistence failed or the key was reset). The session cannot be resumed or ' +
+              'refreshed — clearing it. The user must log in again.',
+            { expectedJkt: this._session.dpopJkt, currentJkt },
+          );
+          await this._clearSession();
+          return;
+        }
       }
       // Only restore an adapter for an EXTERNAL session — those are the only ones
       // signed via an adapter. `internal` is custodial (server-signed) and `smart`
@@ -3561,7 +3647,8 @@ export class PollarClient {
       this._log.info('[PollarClient] No session in storage');
       // Another tab (or this one) wiped the session key. If we were
       // authenticated, propagate the logout: tear down in-memory state, the
-      // refresh timer and DPoP keys, and emit `idle`. Guarded so the cold-start
+      // refresh timer, and emit `idle` (the DPoP keypair survives — see
+      // `_clearSession`). Guarded so the cold-start
       // call (step already `idle`) is a no-op and we never recurse — the
       // `removeStorage` inside `_clearSession` targets an already-removed key.
       if (this._authState.step !== 'idle') {
@@ -3588,10 +3675,37 @@ export class PollarClient {
    *                    out; keep the optimistic session for a later retry.
    * - network error  → stay optimistic; revalidated on `visibilitychange`/use.
    */
-  private async _resume(): Promise<void> {
+  private _resume(): Promise<void> {
+    // Coalesce: a resume already in flight IS the validation every caller
+    // wants — join it instead of aborting and restarting (which multiplied one
+    // failure into a burst when the startup restore and visibility handler
+    // fired together).
+    if (this._resumePromise) return this._resumePromise;
+    // Backoff after non-terminal failures (network, 5xx, 429): a visibility
+    // flap must not hammer the endpoint. Terminal outcomes (verified, or the
+    // session cleared) reset this.
+    if (Date.now() < this._resumeBackoffUntil) return Promise.resolve();
+    this._resumePromise = this._doResume().finally(() => {
+      this._resumePromise = null;
+    });
+    return this._resumePromise;
+  }
+
+  /** Record a retryable resume failure: exponential backoff, 1s → 30s cap. */
+  private _noteResumeFailure(): void {
+    this._resumeFailStreak++;
+    const delayMs = Math.min(1_000 * 2 ** (this._resumeFailStreak - 1), 30_000);
+    this._resumeBackoffUntil = Date.now() + delayMs;
+  }
+
+  private _resetResumeBackoff(): void {
+    this._resumeFailStreak = 0;
+    this._resumeBackoffUntil = 0;
+  }
+
+  private async _doResume(): Promise<void> {
     if (!this._session) return;
     const gen = this._sessionGeneration;
-    this._resumeController?.abort();
     const controller = new AbortController();
     this._resumeController = controller;
     try {
@@ -3608,6 +3722,8 @@ export class PollarClient {
         const status = response?.status ?? 0;
         if (status === 401 || status === 403 || status === 410) {
           await this._clearSession();
+        } else {
+          this._noteResumeFailure();
         }
         return;
       }
@@ -3615,11 +3731,14 @@ export class PollarClient {
       const content = (data as { content?: PollarUserProfile }).content;
       if (!content) return;
       this._profile = { ...content };
+      this._resetResumeBackoff();
       this._setAuthState({ step: 'authenticated', session: this._session, verified: true });
     } catch (err) {
       if ((err as { name?: string })?.name === 'AbortError') return;
       // Network failure (no response) — keep the optimistic (unverified) session
-      // and retry when the app next becomes visible or on the next authed request.
+      // and retry (with backoff) when the app next becomes visible or on the
+      // next authed request.
+      this._noteResumeFailure();
       this._log.warn('[PollarClient] resume failed (network); will retry', err);
     } finally {
       if (this._resumeController === controller) this._resumeController = null;
@@ -3652,12 +3771,20 @@ export class PollarClient {
       ...(w.deployTxHash !== undefined ? { deployTxHash: w.deployTxHash } : {}),
     });
 
+    // Record which DPoP key this session's tokens are bound to (= the token's
+    // `cnf.jkt`) so a later restore can detect key loss up front instead of
+    // discovering it through a burst of thumbprint-mismatch 401s. Best-effort:
+    // if the key manager is unavailable (Bearer fallback), omit the field and
+    // the restore-time check is skipped.
+    const dpopJkt = await this._keyManager.getThumbprint().catch(() => null);
+
     const persisted: PollarPersistedSession = {
       clientSessionId: session.clientSessionId,
       userId: session.userId ?? null,
       status: session.status,
       token: session.token,
       user: session.user,
+      ...(dpopJkt ? { dpopJkt } : {}),
       wallet: toPersistedWallet(session.wallet),
       // Absent on logins against an sdk-api that predates `wallets[]` — persist
       // nothing rather than an empty array, so consumers can tell "not reported"
@@ -3665,8 +3792,10 @@ export class PollarClient {
       ...(session.wallets ? { wallets: session.wallets.map(toPersistedWallet) } : {}),
     };
     // A fresh login replaces the session: invalidate any refresh/resume still
-    // in flight against the previous one.
+    // in flight against the previous one, and drop any resume backoff the old
+    // session accumulated.
     this._sessionGeneration++;
+    this._resetResumeBackoff();
     const gen = this._sessionGeneration;
     this._session = persisted;
 
@@ -3716,16 +3845,31 @@ export class PollarClient {
     this._sessionGeneration++;
     this._resumeController?.abort();
     this._resumeController = null;
+    this._resetResumeBackoff();
     this._clearRefreshTimer();
     this._session = null;
     this._profile = null;
     this._walletAdapter = null;
-    this._dpopNonce = null;
-    try {
-      await this._keyManager.reset();
-    } catch (err) {
-      this._log.warn('[PollarClient] KeyManager reset failed during clearSession', err);
-    }
+    // The DPoP keypair deliberately SURVIVES this teardown. It is device-scoped,
+    // not session-scoped: nothing about a dropped session invalidates the key,
+    // and `_clearSession` also runs on failure paths (a rejected resume, a
+    // failed refresh, a cross-tab clear, a login attempt superseding another).
+    // Resetting it here made every such failure destructive — any session still
+    // bound to the key (persisted, or a token a consumer held elsewhere) became
+    // permanently unverifiable, and a stale clear racing a fresh login could
+    // discard the very key the login had just bound (persisting a session that
+    // could never resume). The keypair is rotated ONLY on explicit `logout()`.
+    // The in-memory CACHE is dropped, though: the persisted key is shared per
+    // origin across tabs, and a cross-tab logout (one of the paths that land
+    // here) deletes/rotates it — the next use must re-read storage instead of
+    // signing with a stale cached copy. Persistent storage is untouched, so
+    // after a same-tab failure clear the next init re-loads the very same key.
+    this._keyManager.resync?.();
+    // `_dpopNonce` likewise survives: it is origin-scoped server state, not
+    // session state — keeping it saves the guaranteed `use_dpop_nonce` 401 on
+    // the next login's first proof. (It is intentionally NOT persisted across
+    // page loads: server nonces are short-lived HMACs, so a stored one is
+    // usually stale and the cold-start challenge round trip is unavoidable.)
     await removeStorage(this._storage, this.apiKeyHash);
     this._resetReactiveStores();
     this._setAuthState({ step: 'idle' });
