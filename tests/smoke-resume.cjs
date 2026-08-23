@@ -706,7 +706,11 @@ function makeVisibility() {
     await waitFor(() => c.getAuthState().step === 'authenticated' && c.getAuthState().verified === true);
     disconnects = 0;
     await c.logout();
-    check('  (baseline) an owned external logout disconnects the adapter once', disconnects === 1, `disconnects=${disconnects}`);
+    check(
+      '  (baseline) an owned external logout disconnects the adapter once',
+      disconnects === 1,
+      `disconnects=${disconnects}`,
+    );
     c.destroy();
   }
 

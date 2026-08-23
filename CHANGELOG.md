@@ -219,9 +219,10 @@
 
 ### Packaging
 
-- `@pollar/react` now requires `@pollar/core@^0.11.3` (`setPasskeyDefaults()`
-  is new in core; an older core throws `client.setPasskeyDefaults is not a
-  function` when the provider mounts). Consumers that pin both packages to an
+- `@pollar/react` now requires `@pollar/core@^0.11.3` (`setPasskeyDefaults()` is
+  new in core; an older one throws
+  `client.setPasskeyDefaults is not a function` when the provider mounts).
+  Consumers that pin both packages to an
   exact version must bump them together: mixing versions installs a second
   copy of core, and `client instanceof PollarClient` then compares against a
   different class object, so the provider takes the config branch and spreads
