@@ -10,6 +10,26 @@
 
 ### `@pollar/core`
 
+- **Fix: a superseded `logout()` no longer disconnects the wallet adapter.**
+  The adapter disconnect ran before the logout's generation guard, and
+  registered adapters are per-type singletons — so when a new external-wallet
+  login landed while the logout awaited the server, the "old" adapter
+  reference could be the very instance the new session was now using, and
+  disconnecting it cut that session's provider connection (external signing
+  broken until reconnect). The disconnect now sits behind the guard, with a
+  second generation re-check after its own await. Accepted residual: a
+  disconnect already in flight cannot be cancelled; if a login completes
+  during that exact await the provider connection can still be cut, though
+  the session and its keypair survive.
+- The same-document sibling registry now registers only on client runtimes
+  (browser / RN), matching the deregistration in `destroy()`. The old
+  unconditional registration leaked one entry (plus its notify closure) per
+  server-side client — those never deregister — and fired the "multiple live
+  clients" warning on servers, where one client per request is the normal
+  pattern and nothing is actually shared.
+- `tests/smoke-resume.cjs` grows to 44 checks (block 14): a superseded logout
+  leaves the adapter connected (0 disconnect calls) while an owned external
+  logout disconnects exactly once.
 - **Fix: `logout()` no longer destroys a session created while it runs.**
   `logout()` awaits a network call and an adapter disconnect, and consumers
   routinely do not await it (`@pollar/react` fires it from the login modal and
@@ -166,6 +186,16 @@
   instead of failing the whole session (a newer server adding a chain no longer
   logs older tabs out), and the access/refresh token bounds went from 4096 to
   8192 chars so a larger JWT cannot silently invalidate a valid session.
+- **Fix: a logout racing a login-over-login no longer leaves the previous
+  session's row behind.** Ownership for removing the shared session row is now
+  membership in the instance's own session history (`_ownedSessionIds`, stored
+  or restored, capped), not equality with the session being cleared. Without
+  this, a logout whose replacement write was still queued could find the row
+  holding this client's PREVIOUS session, refuse to remove it as "not ours",
+  and skip the key rotation gated on that removal — so the old, never-revoked
+  session restored fully functional on the next reload. Rows from sessions the
+  instance never held (another document's or instance's newer login) are still
+  protected: they are never in the history.
 
 ### `@pollar/react`
 

@@ -147,6 +147,15 @@ async function waitFor(cond, timeoutMs = 4000) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const b64uJson = (part) => JSON.parse(Buffer.from(part, 'base64url').toString('utf8'));
 
+// Storage namespace for an API key: SHA-256, first 16 bytes, hex — mirrors
+// lib/api-key-hash.ts, for pre-seeding rows BEFORE a client exists.
+async function hashKey(apiKey) {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(apiKey));
+  return Array.from(new Uint8Array(digest).slice(0, 16))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 // ─── Mock server ─────────────────────────────────────────────────────────────
 // `resumeMode` selects the behavior of GET /auth/session/resume per test case.
 let serverBoundJkt = null; // cnf.jkt bound at the last /auth/login
@@ -606,6 +615,98 @@ function makeVisibility() {
     await c.ready();
     await waitFor(() => c.getAuthState().verified === true);
     check('  the NEXT reload resumes in ONE hit (challenge skipped)', resumeHits === 1, `hits=${resumeHits}`);
+    c.destroy();
+  }
+
+  console.log('\n── 14. superseded logout leaves the wallet adapter connected ──');
+  {
+    // Same race as block 10, from an EXTERNAL-wallet session: the logout's
+    // adapter disconnect must sit BEHIND the generation guard. Registered
+    // adapters are per-type singletons, so the "old" adapter reference can be
+    // the very instance a login that lands mid-logout is now using —
+    // disconnecting it would cut the new session's provider connection.
+    const apiKey = 'pk_smoke_resume_adapter_race';
+    const storage = sdk.createMemoryAdapter();
+    let disconnects = 0;
+    const adapter = {
+      type: 'mockwallet',
+      meta: { label: 'Mock' },
+      chain: 'STELLAR',
+      isAvailable: async () => true,
+      connect: async () => ({ address: 'GMOCK' }),
+      disconnect: async () => {
+        disconnects++;
+      },
+      getPublicKey: async () => 'GMOCK',
+      signTransaction: async () => ({ signedTxXdr: 'X' }),
+    };
+
+    // Seed an EXTERNAL session bound to the current persisted keypair, plus the
+    // walletType row, so the client restores with the adapter attached — the
+    // exact state a returning external-wallet user is in when they hit logout.
+    const kmJkt = await new sdk.WebCryptoKeyManager(apiKey).getThumbprint();
+    serverBoundJkt = kmJkt;
+    await storage.set(
+      `pollar:${await hashKey(apiKey)}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs_ext',
+        userId: 'u1',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT_EXT', refreshToken: 'RT_EXT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        dpopJkt: kmJkt,
+        wallet: { type: 'external', address: 'GMOCK' },
+      }),
+    );
+    await storage.set(`pollar:${await hashKey(apiKey)}:walletType`, 'mockwallet');
+
+    const a = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', walletAdapters: [adapter] });
+    await a.ready();
+    await waitFor(() => a.getAuthState().step === 'authenticated' && a.getAuthState().verified === true);
+    check('external session restored with the adapter attached', a.getWalletType() === 'mockwallet', a.getWalletType());
+
+    logoutDelayMs = 150;
+    const pending = a.logout(); // NOT awaited — the UI pattern
+    await sleep(10);
+    await login(a); // a new login completes while the logout awaits the server
+    await pending;
+    await sleep(20);
+    logoutDelayMs = 0;
+
+    check('the mid-logout login survives (generation guard)', a.getAuthState().step === 'authenticated');
+    check('  the adapter was NOT disconnected by the superseded logout', disconnects === 0, `disconnects=${disconnects}`);
+
+    // Baseline: an owned, un-raced logout of an external session DOES disconnect.
+    // Re-seed the external state (the login above switched to an internal session).
+    await a.logout();
+    await waitFor(() => a.getAuthState().step === 'idle');
+    check('  (baseline) the un-raced logout ran to completion', a.getAuthState().step === 'idle');
+    a.destroy();
+
+    const b = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', walletAdapters: [adapter] });
+    await b.ready();
+    const kmJkt2 = await new sdk.WebCryptoKeyManager(apiKey).getThumbprint();
+    serverBoundJkt = kmJkt2;
+    await storage.set(
+      `pollar:${b.apiKeyHash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs_ext2',
+        userId: 'u1',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT_EXT2', refreshToken: 'RT_EXT2', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        dpopJkt: kmJkt2,
+        wallet: { type: 'external', address: 'GMOCK' },
+      }),
+    );
+    await storage.set(`pollar:${b.apiKeyHash}:walletType`, 'mockwallet');
+    b.destroy();
+    const c = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', walletAdapters: [adapter] });
+    await c.ready();
+    await waitFor(() => c.getAuthState().step === 'authenticated' && c.getAuthState().verified === true);
+    disconnects = 0;
+    await c.logout();
+    check('  (baseline) an owned external logout disconnects the adapter once', disconnects === 1, `disconnects=${disconnects}`);
     c.destroy();
   }
 

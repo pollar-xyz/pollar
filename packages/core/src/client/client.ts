@@ -241,6 +241,18 @@ export class PollarClient {
    * writes cannot land out of order. See `_persistSession`.
    */
   private _persistQueue: Promise<void> = Promise.resolve();
+  /**
+   * Every `clientSessionId` this instance has held (stored OR restored),
+   * newest last, capped. Ownership for removing the shared session row is
+   * membership here, not equality with the CURRENT session: a logout that
+   * races a login-over-login can find the row still holding this client's
+   * PREVIOUS session (its replacement write was superseded in the persist
+   * queue), and that row is this client's to remove — leaving it behind would
+   * restore the old, never-revoked session on the next reload. Rows from
+   * sessions this instance never held (another document's or instance's newer
+   * login) are still protected: they are never in this set.
+   */
+  private readonly _ownedSessionIds = new Set<string>();
   /** Set by `destroy()`; short-circuits timer re-arming and any post-teardown work. */
   private _destroyed = false;
   private _storageEventHandler: ((e: StorageEvent) => void) | null = null;
@@ -448,21 +460,30 @@ export class PollarClient {
 
     // N4: warn (don't throw — that would break StrictMode double-mounts / HMR)
     // when a second live client exists for this API key.
-    let liveSet = liveClientsByApiKey.get(this.apiKey);
-    if (!liveSet) {
-      liveSet = new Map<PollarClient, () => void>();
-      liveClientsByApiKey.set(this.apiKey, liveSet);
-    }
-    // Register a closure rather than the instance method so the handler stays
-    // private to the class.
-    liveSet.set(this, () => this._onSiblingSessionCleared());
-    if (liveSet.size > 1) {
-      this._log.warn(
-        '[PollarClient] Another PollarClient is already active for this API key. Multiple ' +
-          'instances share one persisted session + DPoP key and run independent refresh loops; ' +
-          'the single-use refresh-token rotation will trip server-side reuse-detection and log ' +
-          'all of them out. Create one client per API key and reuse it (e.g. a module singleton).',
-      );
+    //
+    // Client runtimes only, matching the deregistration in `destroy()` — the
+    // old unconditional registration leaked an entry (and its notify closure)
+    // per server-side client, since those never deregistered. Server-rendered
+    // code also legitimately builds one client per request, so the "multiple
+    // live clients" warning is only meaningful where instances actually share
+    // persisted state and refresh loops: the browser / RN.
+    if (isClientRuntime) {
+      let liveSet = liveClientsByApiKey.get(this.apiKey);
+      if (!liveSet) {
+        liveSet = new Map<PollarClient, () => void>();
+        liveClientsByApiKey.set(this.apiKey, liveSet);
+      }
+      // Register a closure rather than the instance method so the handler stays
+      // private to the class.
+      liveSet.set(this, () => this._onSiblingSessionCleared());
+      if (liveSet.size > 1) {
+        this._log.warn(
+          '[PollarClient] Another PollarClient is already active for this API key. Multiple ' +
+            'instances share one persisted session + DPoP key and run independent refresh loops; ' +
+            'the single-use refresh-token rotation will trip server-side reuse-detection and log ' +
+            'all of them out. Create one client per API key and reuse it (e.g. a module singleton).',
+        );
+      }
     }
 
     // N5: on a non-browser client runtime (React Native) the default visibility
@@ -1517,6 +1538,22 @@ export class PollarClient {
       }
     }
 
+    // A newer session landed while we were awaiting the server revocation (a
+    // login started after this logout, or a cross-tab login this client
+    // adopted). It is not ours to tear down, and the user asked for it more
+    // recently than they asked for this logout - the server-side revocation of
+    // the OLD session already happened, so stop here rather than destroying
+    // state we no longer own. This guard sits BEFORE the adapter disconnect on
+    // purpose: registered adapters are per-type singletons, so the "old"
+    // adapter reference can be the very instance the new login is now using —
+    // disconnecting it would cut the new session's provider connection and
+    // break external signing. When superseded, the old provider session is
+    // left alone: it is either in use by the new login or benign to keep.
+    if (this._destroyed || this._sessionGeneration !== gen) {
+      this._log.info('[PollarClient] Logout superseded by a newer session; leaving it in place');
+      return;
+    }
+
     // Tear down the active wallet adapter's own provider session (e.g. Privy)
     // on an explicit logout. `_clearSession()` only drops the in-memory adapter
     // reference; without this, the provider session persists across a reload and
@@ -1532,16 +1569,13 @@ export class PollarClient {
       } catch (err) {
         this._log.warn('[PollarClient] Wallet adapter disconnect during logout failed', err);
       }
-    }
-
-    // A newer session landed while we were awaiting above (a login started
-    // after this logout, or a cross-tab login this client adopted). It is not
-    // ours to tear down, and the user asked for it more recently than they
-    // asked for this logout - the server-side revocation already happened, so
-    // stop here rather than destroying state we no longer own.
-    if (this._destroyed || this._sessionGeneration !== gen) {
-      this._log.info('[PollarClient] Logout superseded by a newer session; leaving it in place');
-      return;
+      // Re-check after the disconnect await too: a login that completed during
+      // it owns the state from here on (its own storeSession already replaced
+      // the row), so the clear + key rotation below are no longer ours to run.
+      if (this._destroyed || this._sessionGeneration !== gen) {
+        this._log.info('[PollarClient] Logout superseded during adapter disconnect; leaving the new session in place');
+        return;
+      }
     }
 
     let droppedOwnRow = false;
@@ -3657,6 +3691,7 @@ export class PollarClient {
     const prevSession = this._session;
     this._session = await readStorage(this._storage, this.apiKeyHash, this._log);
     if (this._session) {
+      this._recordOwnedSession(this._session.clientSessionId);
       // A DIFFERENT session was restored (e.g. a cross-tab login as another user
       // overwrote storage): invalidate any refresh/resume still in flight against
       // the OLD session, so its rotated token can't be written over the
@@ -3946,6 +3981,7 @@ export class PollarClient {
     this._resetResumeBackoff();
     const gen = this._sessionGeneration;
     this._session = persisted;
+    this._recordOwnedSession(persisted.clientSessionId);
 
     if (session.data) {
       this._profile = {
@@ -4088,6 +4124,16 @@ export class PollarClient {
    *
    * Returns whether the mutation was applied.
    */
+  /** Record a session this instance held; bounded so a long-lived SPA cannot grow it unboundedly. */
+  private _recordOwnedSession(id: string): void {
+    if (this._ownedSessionIds.has(id)) return;
+    this._ownedSessionIds.add(id);
+    if (this._ownedSessionIds.size > 10) {
+      const oldest = this._ownedSessionIds.values().next().value;
+      if (oldest !== undefined) this._ownedSessionIds.delete(oldest);
+    }
+  }
+
   private async _persistSession(
     gen: number,
     session: PollarPersistedSession | null,
@@ -4116,7 +4162,10 @@ export class PollarClient {
       if (current === null) return false;
       let owns: boolean;
       try {
-        owns = (JSON.parse(current) as { clientSessionId?: unknown }).clientSessionId === ownedId;
+        const rowId = (JSON.parse(current) as { clientSessionId?: unknown }).clientSessionId;
+        // Membership in the instance's session history, not equality with the
+        // one being cleared — see `_ownedSessionIds` for the race this covers.
+        owns = typeof rowId === 'string' && (rowId === ownedId || this._ownedSessionIds.has(rowId));
       } catch {
         // Unparseable row inside our own namespace: nobody can use it, so it is
         // ours to clean up.

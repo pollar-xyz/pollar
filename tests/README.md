@@ -123,6 +123,10 @@ Cross-document and logout-race guards (added after a cross-review):
   StrictMode leaves one behind) is notified in-process instead.
 - The `DPoP-Nonce` is persisted, so only the first reload pays the
   `use_dpop_nonce` challenge.
+- A superseded logout leaves the wallet adapter connected (registered adapters
+  are per-type singletons, so disconnecting could cut the connection the
+  mid-logout login is now using); an owned external logout still disconnects
+  exactly once.
 
 ## What's not covered
 
