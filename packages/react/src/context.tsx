@@ -310,6 +310,36 @@ interface PollarProviderProps {
   children: ReactNode;
 }
 
+/**
+ * Clients built from a `PollarClientConfig`, keyed by that exact config object.
+ *
+ * React StrictMode double-invokes the `useState` initializer below on mount and
+ * discards the FIRST pass's hook state entirely - the value the component keeps
+ * comes from the second pass, and `useRef` carries nothing between the two. So
+ * a ref guard cannot see the first construction, and without this map the
+ * provider built TWO clients and only ever tore down the one React kept. The
+ * orphan outlived the provider, holding a cross-tab `storage` listener, a
+ * refresh loop and a live-client registry entry for the life of the page - and
+ * two live clients on one API key share a session row and a DPoP keypair, which
+ * is exactly the configuration `@pollar/core`'s session teardown has to defend
+ * against. (See `tests/smoke-react.cjs`, which renders through jsdom because
+ * `react-test-renderer` does not reproduce the double render at all.)
+ *
+ * Both passes receive the same props object - React re-invokes a component's
+ * render function in place and reconciles children from the last pass - so
+ * keying on the config makes the second pass reuse the first pass's client
+ * instead of building another. Weak, so an abandoned config never keeps a
+ * client alive; and the entry is dropped as soon as the mount effect claims the
+ * client, so a later provider rendered with the same (retained) config object
+ * builds its own rather than receiving one this provider is about to destroy.
+ *
+ * Two providers sharing one config OBJECT still share the client. That is the
+ * better outcome of the two - one client per config identity, rather than two
+ * fighting over the same session row - and it matches what the SDK already
+ * warns about for multiple clients on one API key.
+ */
+const clientByConfig = new WeakMap<PollarClientConfig, PollarClient>();
+
 export function PollarProvider({
   client,
   appConfig: appConfigProp,
@@ -328,23 +358,39 @@ export function PollarProvider({
       client.setPasskeyDefaults({ passkey: browserPasskeyCeremony, passkeySign: browserPasskeySigner });
       return client;
     }
-    return new PollarClient({
+    // Reuse the instance a discarded render pass already built (see
+    // `clientByConfig`) instead of constructing a second one that nothing
+    // would ever tear down.
+    const alreadyBuilt = clientByConfig.get(client);
+    if (alreadyBuilt) return alreadyBuilt;
+    const built = new PollarClient({
       ...client,
       passkey: client.passkey ?? browserPasskeyCeremony,
       passkeySign: client.passkeySign ?? browserPasskeySigner,
     });
+    clientByConfig.set(client, built);
+    return built;
   });
   // Only a client WE constructed is ours to tear down on unmount; a client the
   // consumer passed in is theirs to manage. Captured once (the useState
   // initializer above made the same decision).
   const ownsClientRef = useRef(!(client instanceof PollarClient));
   const destroyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The config this provider built from, until the mount effect claims it. */
+  const builtFromConfigRef = useRef<PollarClientConfig | null>(client instanceof PollarClient ? null : client);
 
   // Tear down the client on a real unmount so its cross-tab storage listener,
   // refresh timer, and live-client registry entry don't leak — matters when the
   // provider is keyed (e.g. `key={apiKey}`) and remounts on network change.
   useEffect(() => {
     if (!ownsClientRef.current) return;
+    // Claim the client. Effects run after the double render, so the shared
+    // entry has done its job; dropping it keeps a future provider from being
+    // handed a client this one will destroy on unmount.
+    if (builtFromConfigRef.current) {
+      clientByConfig.delete(builtFromConfigRef.current);
+      builtFromConfigRef.current = null;
+    }
     // This mount is live again — cancel any teardown scheduled by a prior
     // (StrictMode dev) unmount before it can destroy the client we still use.
     if (destroyTimerRef.current) {

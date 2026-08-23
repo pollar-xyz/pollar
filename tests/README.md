@@ -128,6 +128,65 @@ Cross-document and logout-race guards (added after a cross-review):
   mid-logout login is now using); an owned external logout still disconnects
   exactly once.
 
+### `smoke-lifecycle.cjs`
+
+Teardown leaves nothing behind. `PollarClient` registers itself in a MODULE-level
+registry so an in-document logout can reach sibling instances, and a module-level
+map holding client references leaks unless registration and deregistration agree
+exactly. Observed through behavior, never private state:
+
+- the "another client is already active" warning fires for two live clients
+  (positive control - the assertions below are worthless without it)
+- 25 construct/destroy cycles leave no entry behind, and `destroy()` is idempotent
+- `destroy()` detaches the cross-tab `storage` listener, and a destroyed client
+  is not reached by a sibling's teardown
+- a destroyed client is garbage-collectable (needs `--expose-gc`, which the npm
+  script passes; skipped, not failed, without it), and a server-side client is
+  never retained
+
+### `smoke-invariants.cjs`
+
+Randomized operation order against fixed properties. Every session bug found in
+this area had the same shape: an `await` window let two pieces of state disagree.
+Scenario tests pin the cases we know; this one goes after the ones we do not. It
+drives seeded random sequences of login / logout / un-awaited logout racing a
+login / refresh / revalidate / reload / second instance / cross-tab clear /
+revocation, and after every step asserts:
+
+- I1 a persisted session's `dpopJkt` is the `cnf.jkt` the server really bound
+- I2 the keypair a persisted session names still exists locally
+- I3/I4 `authenticated` always carries a session, and that session has a token
+- I5 a client never returns to a session it logged out of
+
+Deterministic: a seeded PRNG picks the operations and every mock delay is fixed,
+so a failing seed replays with `node tests/smoke-invariants.cjs <seed>`. It
+independently rediscovers the ownership bug fixed in this release when run
+against the build that predates it.
+
+### `smoke-react.cjs`
+
+`PollarProvider` client lifecycle, rendered through jsdom + `react-dom/client`.
+Deliberately NOT `react-test-renderer`: that renderer does not enable
+StrictMode's double-render, so the central assertion would pass without the
+scenario ever running. Block 0 is a positive control that proves the
+double-invocation happens here.
+
+- StrictMode leaves exactly ONE live client, and nothing from that mount
+  outlives it. The config is written as an INLINE literal inside a component
+  StrictMode also double-renders, because that is what consumers write; hoisting
+  it would hand both passes the same object for a reason the SDK does not
+  control and the assertion would stop meaning anything.
+- unmount destroys a provider-built client, and leaves a consumer-passed one alive
+- five mount/unmount cycles leak no `storage` listeners
+
+The StrictMode block is what caught the orphan `PollarClient` this release fixes:
+the provider built the client in a `useState` initializer, StrictMode
+double-invoked it, React kept one and the other was never destroyed - it outlived
+the provider's unmount holding a `storage` listener, a refresh loop and a
+registry entry. Two live clients on one API key share a session row and a DPoP
+keypair, which is the precondition every session-teardown bug in `@pollar/core`
+needed. Both assertions fail against the provider that predates the fix.
+
 ## What's not covered
 
 - Real network requests (`fetch` is mocked).

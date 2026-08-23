@@ -2,9 +2,12 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    # Release branches (0.11.3, 0.12.0, ...) get the same gate as main: work
+    # lands there first and only reaches main once it is already merged, so
+    # gating main alone means the checks run after the review, not before it.
+    branches: [main, '0.*']
   push:
-    branches: [main]
+    branches: [main, '0.*']
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
