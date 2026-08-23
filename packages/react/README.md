@@ -3,7 +3,15 @@
 React bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI, transaction modals, and hooks for
 Stellar and Solana applications.
 
-> **0.11.2** requires `@pollar/core@^0.11.2`. The **Transaction History modal
+> **0.11.3** requires `@pollar/core@^0.11.3`. Non-breaking. A **pre-built `PollarClient`
+> passed to `PollarProvider` no longer loses passkey support**: the provider installs the
+> browser passkey ceremony on every path (via core's new `setPasskeyDefaults()`), and an
+> explicit `passkey: undefined` no longer wipes the default. `browserPasskeyCeremony` and
+> `browserPasskeySigner` are now exported for consumers who build their own client or want
+> to wrap the ceremony. If you pin exact versions, bump `@pollar/react` and `@pollar/core`
+> together.
+>
+> Earlier: **0.11.2** required `@pollar/core@^0.11.2`. The **Transaction History modal
 > goes multichain**: the same network picker and address chip as the Balance /
 > Send modals, a server-side chain filter (pagination is server-side, so
 > switching networks refetches and resets to page 1), per-chain explorer links

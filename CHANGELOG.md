@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.11.3 (unreleased)
+## 0.11.3
 
 > Patch release. Headlines: **sessions no longer die on reload when the DPoP
 > keypair fails to persist** (thumbprint-mismatch logout loop), and the **Smart
@@ -217,17 +217,15 @@
   consumers who build their own `PollarClient` and want the ceremony wired at
   construction, or who want to wrap it (logging, a custom `rpId`).
 
-### Before publishing this version
+### Packaging
 
-- Bump `@pollar/react`'s `@pollar/core` dependency to `^0.11.3`.
-  `setPasskeyDefaults()` is new in core, and the current `^0.11.2` range lets a
-  resolver pair new react with old core, which throws
-  `client.setPasskeyDefaults is not a function` when the provider mounts.
-- Consumers that pin both packages to an exact version must bump them together.
-  Mixing versions installs a second copy of core, and `client instanceof
-PollarClient` then compares against a different class object, so the provider
-  takes the config branch and spreads an instance into the constructor instead
-  of failing outright.
+- `@pollar/react` now requires `@pollar/core@^0.11.3` (`setPasskeyDefaults()`
+  is new in core; an older core throws `client.setPasskeyDefaults is not a
+  function` when the provider mounts). Consumers that pin both packages to an
+  exact version must bump them together: mixing versions installs a second
+  copy of core, and `client instanceof PollarClient` then compares against a
+  different class object, so the provider takes the config branch and spreads
+  an instance into the constructor instead of failing outright.
 
 ## 0.11.2
 
