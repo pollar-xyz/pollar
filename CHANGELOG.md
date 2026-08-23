@@ -3,8 +3,10 @@
 ## 0.11.3
 
 > Patch release. Headlines: **sessions no longer die on reload when the DPoP
-> keypair fails to persist** (thumbprint-mismatch logout loop), and the **Smart
-> Wallet passkey ceremony is now installed however the client reaches
+> keypair fails to persist** (thumbprint-mismatch logout loop), **`PollarProvider`
+> no longer leaves a second `PollarClient` running under React StrictMode** (the
+> trigger behind "session cleared ~700ms after login" in development), and the
+> **Smart Wallet passkey ceremony is now installed however the client reaches
 > `PollarProvider`**, so a consumer-built `PollarClient` no longer silently
 > loses passkey login. Additive, non-breaking on top of 0.11.2.
 
@@ -199,6 +201,35 @@
 
 ### `@pollar/react`
 
+- **Fix: StrictMode no longer leaves an orphaned `PollarClient` running.**
+  The provider builds the client in a `useState` initializer, and React
+  StrictMode double-invokes that initializer in development while discarding the
+  first pass's hook state entirely - the instance the component keeps comes from
+  the second pass, and `useRef` carries nothing between the two, so nothing in
+  the component could see the first construction. That first client was never
+  torn down: it outlived the provider's own unmount, holding a cross-tab
+  `storage` listener, a proactive-refresh loop and a live-client registry entry
+  for the life of the page.
+
+  This is a real behavior change, not just tidier teardown. Two live clients on
+  one API key share the persisted session row and the DPoP keypair while running
+  independent refresh loops, so the orphan would restore the previous session,
+  revalidate it, and on the 401/403 clear the row the fresh login had just
+  written - surfacing as a session dropped about one round trip (~700ms) after a
+  successful login, with no `logout()` call, no visible 401 and no `storage`
+  event, because both clients live in the same document. Every cross-document
+  hardening elsewhere in this release exists to survive that configuration;
+  this stops it from happening in the first place. Development only (StrictMode
+  is a dev behavior), but that is where it was being hit.
+
+  Both render passes receive the same props object, so the provider now keys
+  clients it builds on that config object and the second pass reuses the first
+  pass's instance instead of constructing another. The entry is dropped as soon
+  as the mount effect claims the client, so a later provider rendered with the
+  same retained config object still builds its own. Consumers who pass a
+  ready-made `PollarClient` are unaffected - that path never constructed
+  anything. No API change.
+
 - **Fix: a pre-built `PollarClient` no longer loses passkey support.**
   `PollarProvider` injected `browserPasskeyCeremony` only on the branch that
   builds the client from a config object. A consumer passing a ready instance
@@ -216,6 +247,23 @@
 - `browserPasskeyCeremony` and `browserPasskeySigner` are now exported, for
   consumers who build their own `PollarClient` and want the ceremony wired at
   construction, or who want to wrap it (logging, a custom `rpId`).
+
+### Tests and CI
+
+- Three new smoke suites, wired into `npm run test:smoke` (which CI already
+  runs). `smoke-lifecycle.cjs` asserts that a destroyed client leaves nothing
+  behind - no registry entry, no `storage` listener, no reachability - since the
+  live-client registry holds instances. `smoke-invariants.cjs` drives seeded
+  random sequences of login / logout / un-awaited logout racing a login /
+  refresh / revalidate / reload / second instance / cross-tab clear / revocation
+  and checks fixed properties after every step, so it looks for the next
+  state-disagreement race rather than the last one; a failing seed replays with
+  `node tests/smoke-invariants.cjs <seed>`. `smoke-react.cjs` covers
+  `PollarProvider`'s client lifecycle and is what caught the StrictMode orphan
+  above. Each suite ships a positive control, and each was verified to fail
+  against the code that predates its fix.
+- CI runs on release branches (`main` and `0.*`), not `main` alone, so a release
+  branch is no longer unverified until its pull request opens.
 
 ### Packaging
 
