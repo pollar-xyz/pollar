@@ -72,6 +72,40 @@
   `@pollar/react`. `_passkey` / `_passkeySign` stop being `readonly` to allow
   this. Both are read per login and per signature, never latched at
   construction, so filling them in later takes effect immediately.
+- **Fix: a logout sticks, and a login can no longer be undone by a write
+  already in flight.** Every mutation of the shared
+  `pollar:<apiKeyHash>:session` row now goes through one serialized writer that
+  re-checks the session generation immediately before it writes, instead of
+  after. Previously a persist that started before a logout landed after it and
+  re-created the row: the client went `idle` but the session came back on the
+  next reload, and in a browser that write's own `storage` event could log
+  other documents back in. Overlapping writes also landed in adapter-resolution
+  order, so an older session could win over a newer one.
+- **Fix: a client only removes the shared session row it owns.** The row is
+  shared by every document — and every client instance — on the origin, so a
+  teardown now removes it only when it still holds the session being cleared. A
+  second instance sitting on a stale session (e.g. React StrictMode
+  double-invoking the `useState` initializer that builds the client) used to
+  delete the row a fresh login had just written, about one round trip after
+  "Session stored", with no `logout()` and no 401 in the affected document.
+  `refresh()` called with no session no longer touches storage at all.
+- **Fix: the cross-tab `storage` handler no longer acts on events that are not
+  about this session.** It ignores `key === null` (a `clear()` of a whole
+  area, which any code on the origin can fire — an unrelated app on
+  `localhost`, a demo, an injected script), ignores events whose `storageArea`
+  is not `localStorage` (a same-origin iframe's `sessionStorage.clear()` used
+  to log the user out), and guards on holding a session rather than on the auth
+  step, so a cross-tab logout can no longer flap a login in progress. A client
+  destroyed before `_initialize()` finished no longer leaves a live listener
+  behind.
+- **Fix: a session row this build cannot read is no longer deleted.**
+  `readStorage()` used to remove the row on any validation or parse failure; in
+  a browser that removal emits a `storage` event, so one document hitting the
+  failure logged every other one out. It is now left alone and simply ignored.
+  `wallets[]` entries whose `type`/`chain` this build does not know are pruned
+  instead of failing the whole session (a newer server adding a chain no longer
+  logs older tabs out), and the access/refresh token bounds went from 4096 to
+  8192 chars so a larger JWT cannot silently invalidate a valid session.
 
 ### `@pollar/react`
 

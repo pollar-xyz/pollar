@@ -28,8 +28,11 @@ export function walletTypeStorageKey(apiKeyHash: string): string {
   return `pollar:${apiKeyHash}${WALLET_TYPE_SUFFIX}`;
 }
 
-const MAX_ACCESS_TOKEN = 4096;
-const MAX_REFRESH_TOKEN = 4096;
+// Bounds are defense-in-depth against a hostile/buggy blob, not a spec limit:
+// exceeding one makes the whole session unreadable, so leave real headroom over
+// the ~1-2 KB a DPoP-bound JWT actually costs.
+const MAX_ACCESS_TOKEN = 8192;
+const MAX_REFRESH_TOKEN = 8192;
 const MAX_USER_ID = 64;
 const MAX_CLIENT_SESSION_ID = 64;
 const MAX_STATUS = 64;
@@ -40,6 +43,23 @@ const MAX_DPOP_JKT = 64;
 // One wallet per supported chain, with headroom. Bounds the persisted blob so a
 // hostile or buggy `wallets[]` can't blow up storage or the validation loop.
 const MAX_WALLETS = 16;
+
+const KNOWN_WALLET_TYPES = new Set(['internal', 'smart', 'external']);
+const KNOWN_CHAINS = new Set(['STELLAR', 'POLYGON', 'SOLANA']);
+
+/**
+ * "Does this build understand the entry at all?" Deliberately NOT the full
+ * shape guard — it looks only at the two closed vocabularies a newer server can
+ * extend (`type`, `chain`), so `readStorage` can prune entries from the future
+ * instead of failing validation on the whole session.
+ */
+function isKnownWalletShape(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const w = value as Record<string, unknown>;
+  if (typeof w['type'] === 'string' && !KNOWN_WALLET_TYPES.has(w['type'])) return false;
+  if (typeof w['chain'] === 'string' && !KNOWN_CHAINS.has(w['chain'])) return false;
+  return true;
+}
 
 function isBoundedString(v: unknown, max: number, allowEmpty = false): v is string {
   if (typeof v !== 'string') return false;
@@ -207,10 +227,29 @@ export async function readStorage(
       if (w && w['type'] === 'custodial') {
         w['type'] = 'internal';
       }
+      // Forward compatibility: a row written by a NEWER SDK — or by a login
+      // against a newer sdk-api — can carry `wallets[]` entries for a chain or
+      // wallet type this build does not model. Pruning the unknown entries keeps
+      // the session usable; rejecting the whole row would strand the user
+      // logged-out on nothing worse than a vocabulary it has never seen.
+      const list = (session as { wallets?: unknown }).wallets;
+      if (Array.isArray(list)) {
+        const known = list.filter((entry) => isKnownWalletShape(entry));
+        if (known.length !== list.length) {
+          logger.warn('[PollarClient:session] Pruned wallets[] entries this SDK does not recognize', {
+            dropped: list.length - known.length,
+          });
+          (session as { wallets?: unknown }).wallets = known;
+        }
+      }
     }
     if (!isValidSession(session, logger)) {
-      await storage.remove(sessionStorageKey(apiKeyHash));
-      logger.warn('[PollarClient:session] Stored session is invalid — clearing storage');
+      // Deliberately NOT removed. The row is shared by every document on the
+      // origin, and in a browser the removal emits a `storage` event that tears
+      // the session down in all of them — so one document running an older
+      // build, or hitting a bound, would log everybody out. A row this build
+      // cannot read is simply ignored; the next login overwrites it.
+      logger.warn('[PollarClient:session] Stored session is invalid — ignoring it (left in storage)');
       return null;
     }
     if (session.token.expiresAt * 1000 < Date.now()) {
@@ -220,8 +259,9 @@ export async function readStorage(
     }
     return session;
   } catch (error) {
+    // Same reasoning as the invalid-session branch: never delete a shared row we
+    // merely failed to read.
     logger.error('[PollarClient:session] Failed to parse session from storage', error);
-    await storage.remove(sessionStorageKey(apiKeyHash));
     return null;
   }
 }

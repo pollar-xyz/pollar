@@ -209,6 +209,11 @@ export class PollarClient {
    * re-arms the refresh timer.
    */
   private _sessionGeneration = 0;
+  /**
+   * Serializes every mutation of the shared session row so two overlapping
+   * writes cannot land out of order. See `_persistSession`.
+   */
+  private _persistQueue: Promise<void> = Promise.resolve();
   /** Set by `destroy()`; short-circuits timer re-arming and any post-teardown work. */
   private _destroyed = false;
   private _storageEventHandler: ((e: StorageEvent) => void) | null = null;
@@ -452,6 +457,11 @@ export class PollarClient {
     // Compute the storage namespace first — every subsequent storage op
     // (including the cross-tab listener below and `_restoreSession`) reads it.
     this._apiKeyHash = await hashApiKey(this.apiKey);
+    // `destroy()` can only unhook a listener that is already attached, so a
+    // client destroyed during the await above would otherwise leave the handler
+    // below wired to `window` for the document's lifetime — a dead client that
+    // still reacts to cross-tab events and mutates shared storage.
+    if (this._destroyed) return;
 
     // Cross-tab session sync. Browser-only — the `storage` event is a DOM
     // feature with no React Native equivalent (each RN process owns its
@@ -459,18 +469,38 @@ export class PollarClient {
     if (isBrowser) {
       const sessionKey = sessionStorageKey(this._apiKeyHash);
       const handler = (e: StorageEvent): void => {
-        // `localStorage.clear()` fires with key === null; a targeted set/remove
-        // fires with key === sessionKey. Ignore unrelated keys.
-        if (e.key !== null && e.key !== sessionKey) return;
+        if (this._destroyed) return;
 
-        // Cross-tab LOGOUT: the session key was removed (newValue === null) or
-        // all storage was cleared (key === null). Propagate the logout straight
-        // from the event WITHOUT re-reading storage — a tab whose adapter
-        // degraded to memory (Safari private mode, quota) still holds its own
-        // copy of the session, so a re-read would miss the logout and keep using
-        // the now-revoked token.
-        if (e.key === null || e.newValue === null) {
-          if (this._authState.step !== 'idle') {
+        // Only `localStorage` concerns us. `sessionStorage` fires the very same
+        // event type at other same-origin documents that share its area (an
+        // iframe in this tab), and its contents have nothing to do with the
+        // session. `storageArea` is absent on synthetic events — treat those as
+        // ours rather than dropping them.
+        if (e.storageArea != null && typeof localStorage !== 'undefined' && e.storageArea !== localStorage) return;
+
+        // `key === null` is what the browser sends for `clear()` of a whole
+        // area, fired by ANY code on the origin: an unrelated app sharing
+        // `localhost`, a demo page, an injected script. It carries no
+        // information about our row, and the session it would tear down is
+        // still valid server-side, so it is not a logout signal. A logout that
+        // must propagate removes the session key itself (see below) or calls
+        // `logout()`.
+        if (e.key === null) {
+          this._log.debug('[PollarClient] Ignoring a foreign storage clear()');
+          return;
+        }
+        if (e.key !== sessionKey) return;
+
+        // Cross-tab LOGOUT: the session key was removed (newValue === null).
+        // Propagate the logout straight from the event WITHOUT re-reading
+        // storage — a tab whose adapter degraded to memory (Safari private
+        // mode, quota) still holds its own copy of the session, so a re-read
+        // would miss the logout and keep using the now-revoked token.
+        if (e.newValue === null) {
+          // Guard on the SESSION, not on the auth step: a login in flight
+          // (`authenticating`) holds no session to tear down, and clearing
+          // under it would flap the state of a login this event predates.
+          if (this._session) {
             void this._clearSession().catch((err) => this._log.error('[PollarClient] Cross-tab logout failed', err));
           }
           return;
@@ -937,7 +967,11 @@ export class PollarClient {
     const refreshToken = this._session?.token?.refreshToken;
     if (!refreshToken) {
       this._log.warn('[PollarClient] Refresh skipped: no refresh token in session');
-      await this._clearSession();
+      // Only tear down if we actually hold a session. `refresh()` is public and
+      // reachable with no session at all (a consumer calling it on a cold
+      // client); tearing down then would remove the shared row of a session
+      // this client never owned and log every other document out.
+      if (this._session) await this._clearSession();
       throw new Error('No refresh token available');
     }
 
@@ -1020,7 +1054,7 @@ export class PollarClient {
 
     this._session = { ...this._session, token: newToken };
     try {
-      await writeStorage(this._storage, this.apiKeyHash, this._session);
+      await this._persistSession(gen, this._session);
       this._log.info('[PollarClient] Tokens refreshed');
     } catch (err) {
       this._log.error('[PollarClient] Failed to persist refreshed session', err);
@@ -3510,6 +3544,7 @@ export class PollarClient {
   }
 
   private async _restoreSession(): Promise<void> {
+    if (this._destroyed) return;
     // Capture the pre-restore state so we can tell a genuine restore (cold
     // start, or another user's session) apart from a cross-tab token ROTATION
     // of the session we already have verified.
@@ -3809,7 +3844,7 @@ export class PollarClient {
       };
     }
 
-    await writeStorage(this._storage, this.apiKeyHash, persisted);
+    await this._persistSession(gen, persisted);
     // A logout / destroy / newer login landed DURING the persist await — bail so
     // we don't emit `authenticated` (resurrecting a session that was just
     // cleared) or re-arm the refresh timer for a session this call no longer
@@ -3838,11 +3873,17 @@ export class PollarClient {
 
   private async _clearSession(): Promise<void> {
     this._log.info('[PollarClient] Session cleared');
+    // Identify the session being torn down BEFORE dropping it: the persisted
+    // row is shared by every document (and every client instance) on this
+    // origin using this API key, so it may only be removed by the client that
+    // actually owns it. See `_persistSession`.
+    const owned = this._session?.clientSessionId ?? null;
     // Invalidate any in-flight refresh/resume so a result that lands after this
     // clear (e.g. a refresh racing a logout) is discarded instead of
     // resurrecting the session, and abort the resume so it can't re-emit
     // `authenticated` after we go `idle`.
     this._sessionGeneration++;
+    const gen = this._sessionGeneration;
     this._resumeController?.abort();
     this._resumeController = null;
     this._resetResumeBackoff();
@@ -3870,9 +3911,88 @@ export class PollarClient {
     // the next login's first proof. (It is intentionally NOT persisted across
     // page loads: server nonces are short-lived HMACs, so a stored one is
     // usually stale and the cold-start challenge round trip is unavoidable.)
-    await removeStorage(this._storage, this.apiKeyHash);
+    await this._persistSession(gen, null, owned);
     this._resetReactiveStores();
     this._setAuthState({ step: 'idle' });
+  }
+
+  /**
+   * Single writer for the shared `pollar:<apiKeyHash>:session` row.
+   *
+   * Every document on the origin — and every client instance inside one
+   * document — writes that same row, and each mutation is preceded by an await
+   * (the network round-trip, the storage adapter itself). Without this queue two
+   * hazards are reachable:
+   *
+   *   - ORDERING: two overlapping writes land in the order their adapter
+   *     resolves, so an older session can win over a newer one.
+   *   - RESURRECTION: a write that started before a logout lands after it and
+   *     re-creates a row the user just cleared. Re-checking the generation
+   *     *after* the write (as the callers used to) skips the state emission but
+   *     leaves the row behind, so the session comes back on the next reload and
+   *     the write's own `storage` event can log other documents back in.
+   *
+   * So the generation is re-checked HERE, immediately before the mutation, with
+   * writes serialized against each other. `gen` is the caller's snapshot of
+   * `_sessionGeneration`; a mismatch means a logout or a newer login superseded
+   * this write while it was queued and the mutation is dropped.
+   *
+   * `session === null` removes the row, but only when it still holds the
+   * session named by `ownedId` — a client must never delete a row that now
+   * belongs to a newer login in another document or another instance (a second
+   * client sitting on a stale session used to delete the row a fresh login had
+   * just written, about one round trip after "Session stored").
+   *
+   * Returns whether the mutation was applied.
+   */
+  private async _persistSession(
+    gen: number,
+    session: PollarPersistedSession | null,
+    ownedId: string | null = null,
+  ): Promise<boolean> {
+    const run = this._persistQueue.then(async (): Promise<boolean> => {
+      // `destroy()` does not bump the generation, so check it explicitly: a
+      // write still queued when the client is torn down must not land.
+      if (this._destroyed || this._sessionGeneration !== gen) {
+        this._log.debug('[PollarClient] Session write dropped: superseded before it reached storage');
+        return false;
+      }
+      if (session) {
+        await writeStorage(this._storage, this.apiKeyHash, session);
+        return true;
+      }
+      if (!ownedId) return false;
+      let current: string | null;
+      try {
+        current = await this._storage.get(sessionStorageKey(this.apiKeyHash));
+      } catch {
+        current = null;
+      }
+      // Already gone (another document removed it, or a foreign clear wiped
+      // the area): there is nothing of ours left to drop.
+      if (current === null) return false;
+      let owns: boolean;
+      try {
+        owns = (JSON.parse(current) as { clientSessionId?: unknown }).clientSessionId === ownedId;
+      } catch {
+        // Unparseable row inside our own namespace: nobody can use it, so it is
+        // ours to clean up.
+        owns = true;
+      }
+      if (!owns) {
+        this._log.debug('[PollarClient] Session row now belongs to a newer session; leaving shared storage untouched');
+        return false;
+      }
+      await removeStorage(this._storage, this.apiKeyHash);
+      return true;
+    });
+    // Keep the chain resolved: a rejected mutation must not poison every write
+    // queued behind it. The rejection still reaches this call's caller.
+    this._persistQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   private _networkPassphrase(): string {
