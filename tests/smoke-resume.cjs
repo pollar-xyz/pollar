@@ -152,6 +152,7 @@ const b64uJson = (part) => JSON.parse(Buffer.from(part, 'base64url').toString('u
 let serverBoundJkt = null; // cnf.jkt bound at the last /auth/login
 let resumeMode = 'verify'; // 'verify' | 'revoked-403' | 'error-500'
 let resumeDelayMs = 0;
+let loginDelayMs = 0; // holds the /auth/login response so a logout can race it
 let resumeHits = 0; // every fetch hit on the resume path (nonce retries included)
 const resumeProofJkts = []; // jkt of each nonce-carrying resume proof
 
@@ -174,6 +175,7 @@ globalThis.fetch = async (req) => {
   if (p.endsWith('/auth/login')) {
     const body = await req.clone().json();
     serverBoundJkt = await calculateJwkThumbprint(body.dpopJwk, 'sha256');
+    if (loginDelayMs) await sleep(loginDelayMs);
     return json({
       code: 'SDK_LOGIN_SUCCESS',
       success: true,
@@ -394,6 +396,82 @@ function makeVisibility() {
     check('  the new session was not cleared from storage', (await storage.get(sessionKey)) != null);
     a.destroy();
     b.destroy();
+  }
+
+  console.log('\n── 7. logout() cancels an in-flight login (no resurrection) ───');
+  {
+    const apiKey = 'pk_smoke_resume_logoutrace';
+    const storage = sdk.createMemoryAdapter();
+    const a = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test' });
+    await a.ready();
+    serverBoundJkt = null;
+    loginDelayMs = 300; // hold the /auth/login response so logout lands mid-flight
+    a.beginEmailLogin();
+    await waitFor(() => a.getAuthState().step === 'entering_email');
+    a.sendEmailCode('a@b.c');
+    await waitFor(() => a.getAuthState().step === 'entering_code');
+    a.verifyEmailCode('123456');
+    await waitFor(() => serverBoundJkt !== null); // the login POST reached the server
+    await a.logout(); // user logs out while the login response is still pending
+    await sleep(500); // let the held login response land
+    loginDelayMs = 0;
+    const sessionKey = `pollar:${a.apiKeyHash}:session`;
+    check('state stays idle after the login response lands', a.getAuthState().step === 'idle', a.getAuthState().step);
+    check('  no session row was resurrected in storage', (await storage.get(sessionKey)) == null);
+    a.destroy();
+  }
+
+  console.log('\n── 8. dpopJkt records the BOUND key, not the store-time key ───');
+  {
+    // A key manager whose getThumbprint LIES at store time models a rotation
+    // between the login's bind and its store. The persisted dpopJkt must come
+    // from the JWK actually sent to /auth/login (= cnf.jkt), not from this.
+    const apiKey = 'pk_smoke_resume_boundjkt';
+    const storage = sdk.createMemoryAdapter();
+    const real = new sdk.WebCryptoKeyManager(apiKey);
+    const lying = {
+      init: () => real.init(),
+      reset: () => real.reset(),
+      getPublicJwk: () => real.getPublicJwk(),
+      getThumbprint: async () => 'STORE-TIME-KEY-NOT-THE-BOUND-ONE',
+      sign: (payload) => real.sign(payload),
+    };
+    const a = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', keyManager: lying });
+    await a.ready();
+    await login(a);
+    const stored = JSON.parse(await storage.get(`pollar:${a.apiKeyHash}:session`));
+    check('persisted dpopJkt === server cnf.jkt (bound key wins)', stored.dpopJkt === serverBoundJkt, stored.dpopJkt);
+    a.destroy();
+  }
+
+  console.log('\n── 9. init() joins a half-built in-flight init ────────────────');
+  {
+    // _doInit assigns keyPair, THEN awaits the JWK export. Hold the export open
+    // and call getThumbprint() inside that window: it must join the in-flight
+    // init instead of early-returning into a half-built manager and throwing.
+    const realExport = crypto.subtle.exportKey.bind(crypto.subtle);
+    crypto.subtle.exportKey = async (...args) => {
+      await sleep(50);
+      return realExport(...args);
+    };
+    try {
+      const km = new sdk.WebCryptoKeyManager('pk_smoke_resume_halfinit');
+      const p1 = km.init();
+      const start = Date.now();
+      while (!km.keyPair && Date.now() - start < 2000) await sleep(1);
+      check('window is open (keyPair set, publicJwk pending)', !!km.keyPair && !km.publicJwk);
+      let thumb = null;
+      let threw = null;
+      try {
+        thumb = await km.getThumbprint();
+      } catch (e) {
+        threw = e.message;
+      }
+      check('getThumbprint during the window resolves (no half-built throw)', threw === null && !!thumb, threw);
+      await p1;
+    } finally {
+      crypto.subtle.exportKey = realExport;
+    }
   }
 
   console.log(`\n${pass} pass, ${fail} fail`);

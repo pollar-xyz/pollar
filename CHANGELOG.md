@@ -10,6 +10,38 @@
 
 ### `@pollar/core`
 
+- **Fix: `logout()` cancels a login still in flight.** It never aborted
+  `_loginController` (only `cancelLogin()` and `destroy()` did), so a
+  `/auth/login` response landing after the logout re-ran the session store and
+  resurrected the session — the user pressed logout and ended up logged in,
+  and (because logout rotates the keypair) that resurrected session was bound
+  to a destroyed key, guaranteed to 401 on first use. The flow deps already
+  no-op on an aborted signal, so aborting at the top of `logout()` closes it.
+- **Fix: the persisted `dpopJkt` records the key the server actually bound.**
+  It was computed with `getThumbprint()` at store time; if the key rotated
+  between the login's bind and its store (e.g. the logout race above, or a
+  cross-tab rotation mid-login), the field vouched for a key the server never
+  saw and the restore-time binding check waved through a session guaranteed to
+  401. `authenticate()` now computes the thumbprint of the exact `dpopJwk` it
+  sent to `/auth/login` and threads it into `storeSession` (internal
+  `FlowDeps` signature only); the store-time read remains as fallback for the
+  refresh path.
+- **Fix: `init()` no longer early-returns into a half-built key manager.**
+  `_doInit` assigns the keypair and only then awaits the JWK export +
+  thumbprint; a caller landing in that window returned immediately and
+  `getThumbprint()` threw "initialization failed" while init was mid-flight —
+  silently omitting `dpopJkt` and disabling the binding check. Both managers
+  now require all three fields (`keyPair`/`privateKey`, `publicJwk`,
+  `thumbprint`) before the fast path, so such callers join the in-flight init.
+- Corrected the `_clearSession` nonce comment: sdk-api DPoP nonces verify for
+  days (24h active + 3-day rotation overlap), not "short-lived" — not
+  persisting the nonce across page loads is a simplicity trade-off, and
+  persisting it is a possible future latency win (would skip the cold-start
+  `use_dpop_nonce` challenge).
+- `tests/smoke-resume.cjs` grew to 27 checks: logout-cancels-login (no
+  resurrection), `dpopJkt === cnf.jkt` even when the store-time key lies
+  (simulated mid-login rotation), and `getThumbprint()` during the init
+  window resolving instead of throwing.
 - **Fix: a session no longer dies on the first reload when the DPoP keypair
   fails to persist (`SDK_AUTH_DPOP_INVALID` / `thumbprint-mismatch`).** When
   IndexedDB couldn't durably store the keypair (blocked, evicted, private

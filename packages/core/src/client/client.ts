@@ -1424,6 +1424,16 @@ export class PollarClient {
     }
     this._log.info('[PollarClient] Logout requested', { everywhere: !!options.everywhere });
 
+    // Abort any login still in flight FIRST. Without this, a /auth/login
+    // response landing after the logout re-ran `_storeSession` and resurrected
+    // the session — the user pressed logout and ended up logged in. Worse, the
+    // keypair reset below rotated the key between that login's bind and its
+    // store, so the resurrected session was bound to a destroyed key. The
+    // flow's other deps (storeSession/clearSession/setAuthState) already no-op
+    // on an aborted signal, so aborting here is all it takes.
+    this._loginController?.abort();
+    this._loginController = null;
+
     if (this._session?.token?.accessToken) {
       try {
         await this._api.POST('/auth/logout', {
@@ -3466,8 +3476,8 @@ export class PollarClient {
       setAuthState: (state: AuthState) => {
         if (!signal.aborted) this._setAuthState(state);
       },
-      storeSession: (session: PollarApplicationConfigContent) =>
-        signal.aborted ? Promise.resolve() : this._storeSession(session),
+      storeSession: (session: PollarApplicationConfigContent, boundDpopJkt?: string) =>
+        signal.aborted ? Promise.resolve() : this._storeSession(session, boundDpopJkt),
       clearSession: () => (signal.aborted ? Promise.resolve() : this._clearSession()),
       getPublicJwk: async () => {
         const jwk = await this._keyManager.getPublicJwk();
@@ -3780,7 +3790,7 @@ export class PollarClient {
     }
   }
 
-  private async _storeSession(session: PollarApplicationConfigContent): Promise<void> {
+  private async _storeSession(session: PollarApplicationConfigContent, boundDpopJkt?: string): Promise<void> {
     this._log.info('[PollarClient] Session stored');
 
     // The wire response still carries the legacy `publicKey` alias (kept for
@@ -3808,10 +3818,18 @@ export class PollarClient {
 
     // Record which DPoP key this session's tokens are bound to (= the token's
     // `cnf.jkt`) so a later restore can detect key loss up front instead of
-    // discovering it through a burst of thumbprint-mismatch 401s. Best-effort:
-    // if the key manager is unavailable (Bearer fallback), omit the field and
-    // the restore-time check is skipped.
-    const dpopJkt = await this._keyManager.getThumbprint().catch(() => null);
+    // discovering it through a burst of thumbprint-mismatch 401s.
+    //
+    // Prefer `boundDpopJkt` — the thumbprint of the JWK the login flow ACTUALLY
+    // sent to /auth/login. Re-reading `getThumbprint()` here records whatever
+    // key is loaded NOW, which is the wrong key if it rotated between the bind
+    // and this store (a reset racing the login, a cross-tab rotation): the
+    // field would then vouch for a key the server never bound, and the restore
+    // precheck would wave through a session guaranteed to 401. The fallback
+    // read covers the refresh path and custom flows that don't thread the
+    // bound value; best-effort — if the key manager is unavailable (Bearer
+    // fallback), omit the field and the restore-time check is skipped.
+    const dpopJkt = boundDpopJkt ?? (await this._keyManager.getThumbprint().catch(() => null));
 
     const persisted: PollarPersistedSession = {
       clientSessionId: session.clientSessionId,
@@ -3908,9 +3926,13 @@ export class PollarClient {
     this._keyManager.resync?.();
     // `_dpopNonce` likewise survives: it is origin-scoped server state, not
     // session state — keeping it saves the guaranteed `use_dpop_nonce` 401 on
-    // the next login's first proof. (It is intentionally NOT persisted across
-    // page loads: server nonces are short-lived HMACs, so a stored one is
-    // usually stale and the cold-start challenge round trip is unavoidable.)
+    // the next login's first proof. It is NOT persisted across page loads —
+    // a deliberate simplicity trade-off, not a freshness constraint: sdk-api
+    // nonces actually verify for days (24h active + 3-day rotation overlap,
+    // see sdk-api lib/dpop-nonce.ts), so persisting one would eliminate the
+    // cold-start challenge round trip on nearly every reload. If that ever
+    // matters for latency, persist it best-effort under the apiKeyHash
+    // namespace; the challenge-retry path already handles a stale value.
     await this._persistSession(gen, null, owned);
     this._resetReactiveStores();
     this._setAuthState({ step: 'idle' });

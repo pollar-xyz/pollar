@@ -55,7 +55,11 @@ export class NobleKeyManager implements KeyManager {
    * the manager is self-healing if `init()` was never explicitly invoked.
    */
   async init(): Promise<void> {
-    if (this.privateKey) return;
+    // All three fields, not just the scalar — see `WebCryptoKeyManager.init`:
+    // `_doInit` assigns `privateKey`/`publicJwk` and only then awaits the
+    // thumbprint, so a caller in that window must join the in-flight init
+    // instead of early-returning into a half-built manager.
+    if (this.privateKey && this.publicJwk && this.thumbprint) return;
     if (!this._initPromise) {
       this._initPromise = this._doInit().catch((err) => {
         // Clear the promise so the next call retries. The error propagates to

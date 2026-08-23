@@ -27,7 +27,14 @@ export type FlowDeps = {
   useStreaming: boolean;
   signal: AbortSignal;
   setAuthState: (state: AuthState) => void;
-  storeSession: (session: PollarApplicationConfigContent) => void | Promise<void>;
+  /**
+   * Persist the authenticated session. `boundDpopJkt` is the RFC 7638
+   * thumbprint of the JWK the flow actually sent as `dpopJwk` to /auth/login —
+   * i.e. the key the server bound the tokens to (`cnf.jkt`). Pass it so the
+   * persisted `dpopJkt` records the BOUND key, not whatever key happens to be
+   * loaded at store time (they differ if the key rotated mid-login).
+   */
+  storeSession: (session: PollarApplicationConfigContent, boundDpopJkt?: string) => void | Promise<void>;
   clearSession: () => void | Promise<void>;
   /** Persists the connected adapter (in memory + the stored wallet id) so a
    *  returning session restores it. Keyed by `adapter.type`. */

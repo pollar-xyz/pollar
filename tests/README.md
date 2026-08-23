@@ -104,6 +104,12 @@ that survives across client instances:
 - Cross-tab logout → fresh login: the sibling tab resyncs its stale in-memory
   key cache to the rotated shared key and resumes the new session instead of
   clearing it
+- `logout()` aborts an in-flight login — the held `/auth/login` response can no
+  longer resurrect the session after the user logged out
+- The persisted `dpopJkt` equals the server's `cnf.jkt` even when the key
+  manager reports a different key at store time (simulated mid-login rotation)
+- `getThumbprint()` called while `init()` is mid-flight (keypair assigned, JWK
+  export pending) joins the in-flight init instead of throwing
 
 ## What's not covered
 

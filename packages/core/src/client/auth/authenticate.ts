@@ -1,3 +1,4 @@
+import { computeJwkThumbprint } from '../../keys/thumbprint';
 import { AUTH_ERROR_CODES } from '../../types';
 import { isValidSession } from '../session';
 import { SessionStatusError, waitForSessionReady } from '../stream';
@@ -47,6 +48,11 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
 
   // Pass `dpopJwk` so the server mints DPoP-bound tokens (`cnf.jkt`).
   const dpopJwk = await deps.getPublicJwk();
+  // Thumbprint of the JWK we are about to bind — threaded into storeSession so
+  // the persisted `dpopJkt` records the key the server actually bound, even if
+  // the local key rotates between this bind and the store (see FlowDeps).
+  // Best-effort: a thumbprint failure must not fail the login.
+  const boundDpopJkt = await computeJwkThumbprint(dpopJwk).catch(() => undefined);
   // HTTP-level `error` is not handled here; the `else` branch below catches
   // both "request failed" (data === undefined) and "request OK but body
   // wasn't a valid session" via the same generic path.
@@ -78,7 +84,7 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
     // aborted. Don't resurrect `authenticated` over the idle/new state. (The
     // intervening error/clearSession writes above are intentionally NOT guarded.)
     if (signal.aborted) return;
-    await storeSession(data.content);
+    await storeSession(data.content, boundDpopJkt);
   } else {
     if (!error) logApiError(logger, 'POST /auth/login', { body, data });
     // Clear first, then emit error (see the LOGIN_TIMEOUT branch above).

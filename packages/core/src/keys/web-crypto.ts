@@ -129,7 +129,13 @@ export class WebCryptoKeyManager implements KeyManager {
    * the manager is self-healing if `init()` was never explicitly invoked.
    */
   async init(): Promise<void> {
-    if (this.keyPair) return;
+    // All three fields, not just the pair: `_doInit` assigns `keyPair` and only
+    // THEN awaits the JWK export + thumbprint. A caller landing in that window
+    // would early-return on `keyPair` alone and find `publicJwk`/`thumbprint`
+    // still null — `getThumbprint()` then threw "initialization failed" while
+    // init was, in fact, mid-flight. Requiring all three makes such a caller
+    // fall through and join the in-flight `_initPromise` instead.
+    if (this.keyPair && this.publicJwk && this.thumbprint) return;
     if (!this._initPromise) {
       this._initPromise = this._doInit().catch((err) => {
         // Clear the promise so the next call retries instead of permanently
