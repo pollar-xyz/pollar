@@ -10,6 +10,35 @@
 
 ### `@pollar/core`
 
+- **Fix: `logout()` no longer destroys a session created while it runs.**
+  `logout()` awaits a network call and an adapter disconnect, and consumers
+  routinely do not await it (`@pollar/react` fires it from the login modal and
+  the wallet button, then offers the login UI). A complete new login could land
+  inside that window - the abort below only cancels a login already running -
+  and the teardown then ran against whatever state existed when the awaits
+  resolved: it wiped the new session and rotated away the key that session had
+  just been bound to. The whole teardown is now guarded on the session
+  generation snapshotted at the top of `logout()`.
+- **Fix: `logout()` rotates the DPoP keypair only when it still owns the
+  session row.** The keypair record (`pollar-keys/<apiKeyHash>`) is shared by
+  every document on the origin and is MORE shared than the session row, which
+  was already ownership-gated. A client whose session had been superseded still
+  destroyed the key the current row's session was bound to, leaving that session
+  in storage pointing at a `cnf.jkt` that no longer existed locally - cleared on
+  its next restore with its refresh token still valid.
+- **Fix: a logout propagates to sibling clients in the SAME document.** Browsers
+  deliver `storage` events only to OTHER documents, so two instances side by
+  side were the blind spot: after one logged out, the other kept its session and
+  re-persisted the row on its next write. The live-client registry now carries
+  the instances (not just a count) and the clear is announced in-process,
+  mirroring what the cross-document handler does.
+- **Change: the last server-issued `DPoP-Nonce` is persisted**
+  (`pollar:<apiKeyHash>:dpopNonce`) and restored at startup. The server requires
+  a nonce on every proof, so without it the first authenticated request of every
+  page load was a guaranteed 401 `use_dpop_nonce` challenge plus a retry. sdk-api
+  nonces verify for days (24h active + a 3-day rotation overlap), carry no user
+  identity and grant nothing on their own, so the value survives page loads and
+  session teardowns; a stale one costs exactly what having none costs.
 - **Fix: `logout()` cancels a login still in flight.** It never aborted
   `_loginController` (only `cancelLogin()` and `destroy()` did), so a
   `/auth/login` response landing after the logout re-ran the session store and
@@ -21,8 +50,7 @@
   It was computed with `getThumbprint()` at store time; if the key rotated
   between the login's bind and its store (e.g. the logout race above, or a
   cross-tab rotation mid-login), the field vouched for a key the server never
-  saw and the restore-time binding check waved through a session guaranteed to
-  401. `authenticate()` now computes the thumbprint of the exact `dpopJwk` it
+  saw and the restore-time binding check waved through a session guaranteed to 401. `authenticate()` now computes the thumbprint of the exact `dpopJwk` it
   sent to `/auth/login` and threads it into `storeSession` (internal
   `FlowDeps` signature only); the store-time read remains as fallback for the
   refresh path.
@@ -167,7 +195,7 @@
   `client.setPasskeyDefaults is not a function` when the provider mounts.
 - Consumers that pin both packages to an exact version must bump them together.
   Mixing versions installs a second copy of core, and `client instanceof
-  PollarClient` then compares against a different class object, so the provider
+PollarClient` then compares against a different class object, so the provider
   takes the config branch and spreads an instance into the constructor instead
   of failing outright.
 

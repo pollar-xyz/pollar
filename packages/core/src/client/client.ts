@@ -116,7 +116,16 @@ import { smartWalletFlow } from './auth/passkeyFlow';
 import { emailProvider, oauthProvider } from './auth/providers';
 import { loginWithSolanaAdapter } from './auth/solanaWalletFlow';
 import { loginWithAdapter, requestWalletChallenge } from './auth/walletFlow';
-import { readStorage, readWalletType, removeStorage, sessionStorageKey, writeStorage, writeWalletType } from './session';
+import {
+  dpopNonceStorageKey,
+  MAX_DPOP_NONCE,
+  readStorage,
+  readWalletType,
+  removeStorage,
+  sessionStorageKey,
+  writeStorage,
+  writeWalletType,
+} from './session';
 
 const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
 /** React Native runtime: `navigator.product === 'ReactNative'` (set by the RN runtime). */
@@ -135,7 +144,25 @@ const isClientRuntime = isBrowser || isReactNative;
  * DPoP key and run independent refresh loops; the single-use refresh-token
  * rotation then trips server-side reuse-detection and logs all of them out.
  */
-const liveClientsByApiKey = new Map<string, number>();
+const liveClientsByApiKey = new Map<string, Map<PollarClient, () => void>>();
+
+/**
+ * Tell every OTHER live client in this document that `origin` dropped the
+ * shared session row.
+ *
+ * The cross-document path is the `storage` event, which browsers deliberately
+ * do not deliver to the document that wrote the change - so instances sitting
+ * next to each other were the one blind spot. Notification is synchronous and
+ * one-hop: the recipients' own clears find the row already gone, so
+ * `_persistSession` reports no removal and they do not notify back.
+ */
+function notifySiblingClients(origin: PollarClient, apiKey: string): void {
+  const siblings = liveClientsByApiKey.get(apiKey);
+  if (!siblings) return;
+  for (const [client, notify] of siblings) {
+    if (client !== origin) notify();
+  }
+}
 
 /** Renew the access token this many seconds before its `exp` to absorb clock skew + signing latency. */
 const REFRESH_SKEW_SECONDS = 60;
@@ -421,9 +448,15 @@ export class PollarClient {
 
     // N4: warn (don't throw — that would break StrictMode double-mounts / HMR)
     // when a second live client exists for this API key.
-    const liveForKey = (liveClientsByApiKey.get(this.apiKey) ?? 0) + 1;
-    liveClientsByApiKey.set(this.apiKey, liveForKey);
-    if (liveForKey > 1) {
+    let liveSet = liveClientsByApiKey.get(this.apiKey);
+    if (!liveSet) {
+      liveSet = new Map<PollarClient, () => void>();
+      liveClientsByApiKey.set(this.apiKey, liveSet);
+    }
+    // Register a closure rather than the instance method so the handler stays
+    // private to the class.
+    liveSet.set(this, () => this._onSiblingSessionCleared());
+    if (liveSet.size > 1) {
       this._log.warn(
         '[PollarClient] Another PollarClient is already active for this API key. Multiple ' +
           'instances share one persisted session + DPoP key and run independent refresh loops; ' +
@@ -515,6 +548,17 @@ export class PollarClient {
       this._storageEventHandler = handler;
     }
 
+    // Reload the last server-issued DPoP nonce before anything is signed. The
+    // server requires a nonce on every proof, so without this the first
+    // authenticated request of every page load is a guaranteed 401
+    // `use_dpop_nonce` challenge plus a retry.
+    try {
+      const storedNonce = await this._storage.get(dpopNonceStorageKey(this._apiKeyHash));
+      if (storedNonce && storedNonce.length <= MAX_DPOP_NONCE) this._dpopNonce = storedNonce;
+    } catch (err) {
+      this._log.debug('[PollarClient] Could not read the stored DPoP nonce', err);
+    }
+
     try {
       await this._keyManager.init();
     } catch (err) {
@@ -544,9 +588,11 @@ export class PollarClient {
     if (this._destroyed) return; // idempotent — don't double-decrement the registry
     this._destroyed = true;
     if (isClientRuntime) {
-      const remaining = (liveClientsByApiKey.get(this.apiKey) ?? 1) - 1;
-      if (remaining <= 0) liveClientsByApiKey.delete(this.apiKey);
-      else liveClientsByApiKey.set(this.apiKey, remaining);
+      const siblings = liveClientsByApiKey.get(this.apiKey);
+      if (siblings) {
+        siblings.delete(this);
+        if (siblings.size === 0) liveClientsByApiKey.delete(this.apiKey);
+      }
     }
     if (this._storageEventHandler && isBrowser) {
       window.removeEventListener('storage', this._storageEventHandler);
@@ -655,7 +701,10 @@ export class PollarClient {
       },
       onResponse: async ({ request, response }: { request: Request; response: Response }) => {
         const newNonce = response.headers.get('DPoP-Nonce');
-        if (newNonce) self._dpopNonce = newNonce;
+        if (newNonce && newNonce !== self._dpopNonce) {
+          self._dpopNonce = newNonce;
+          void self._persistDpopNonce(newNonce);
+        }
 
         // Learn the clock skew from the server's `Date` header BEFORE any retry
         // or refresh below, so a proof rejected for a bad `iat` is rebuilt with
@@ -785,6 +834,20 @@ export class PollarClient {
       return /^\/v\d+\//.test(pathname) ? pathname.slice(pathname.indexOf('/', 1)) : pathname;
     } catch {
       return url;
+    }
+  }
+
+  /**
+   * Persist the newest `DPoP-Nonce` so the next page load can sign its first
+   * proof with it. Fire-and-forget and failure-tolerant: the nonce is a latency
+   * optimization, and a client that loses it just pays one challenge + retry.
+   */
+  private async _persistDpopNonce(nonce: string): Promise<void> {
+    if (this._apiKeyHash === null || nonce.length > MAX_DPOP_NONCE) return;
+    try {
+      await this._storage.set(dpopNonceStorageKey(this._apiKeyHash), nonce);
+    } catch (err) {
+      this._log.debug('[PollarClient] Could not persist the DPoP nonce', err);
     }
   }
 
@@ -1433,6 +1496,16 @@ export class PollarClient {
     // on an aborted signal, so aborting here is all it takes.
     this._loginController?.abort();
     this._loginController = null;
+    // Snapshot the session identity AFTER that abort: from here on the whole
+    // teardown is guarded on it. `logout()` awaits a network call and an adapter
+    // disconnect, and consumers routinely do NOT await it (`@pollar/react` fires
+    // it from the login modal and the wallet button and immediately offers the
+    // login UI), so a complete new login can land inside that window - the abort
+    // above only cancels a login that was already running. Without the guard the
+    // teardown below ran against whatever state existed when the awaits
+    // resolved: it wiped the new session and rotated away the very key that
+    // session had just been bound to.
+    const gen = this._sessionGeneration;
 
     if (this._session?.token?.accessToken) {
       try {
@@ -1461,17 +1534,37 @@ export class PollarClient {
       }
     }
 
+    // A newer session landed while we were awaiting above (a login started
+    // after this logout, or a cross-tab login this client adopted). It is not
+    // ours to tear down, and the user asked for it more recently than they
+    // asked for this logout - the server-side revocation already happened, so
+    // stop here rather than destroying state we no longer own.
+    if (this._destroyed || this._sessionGeneration !== gen) {
+      this._log.info('[PollarClient] Logout superseded by a newer session; leaving it in place');
+      return;
+    }
+
+    let droppedOwnRow = false;
     try {
-      await this._clearSession();
+      droppedOwnRow = await this._clearSession();
     } catch (err) {
       this._log.warn('[PollarClient] Local logout cleanup failed', err);
     }
 
-    // Rotate the DPoP keypair ONLY here, on the user-initiated logout — not in
+    // Rotate the DPoP keypair ONLY here, on the user-initiated logout - not in
     // `_clearSession()`, which also runs on transient failure paths where
     // destroying the key would make every other session bound to it (persisted
     // or held by the consumer) permanently unverifiable. On explicit logout the
     // user is done with this identity, so fresh key hygiene wins.
+    //
+    // Gated on actually having dropped our own row, for the same reason that
+    // removal is: the keypair record (`pollar-keys/<apiKeyHash>`) is shared by
+    // every document on the origin, and it is MORE shared than the session row,
+    // not less. A client whose session was already superseded must not destroy
+    // the key the current session is bound to - that session would survive in
+    // storage pointing at a `cnf.jkt` that no longer exists locally, and get
+    // cleared on its next restore with its refresh token still valid.
+    if (!droppedOwnRow) return;
     try {
       await this._keyManager.reset();
     } catch (err) {
@@ -3478,7 +3571,9 @@ export class PollarClient {
       },
       storeSession: (session: PollarApplicationConfigContent, boundDpopJkt?: string) =>
         signal.aborted ? Promise.resolve() : this._storeSession(session, boundDpopJkt),
-      clearSession: () => (signal.aborted ? Promise.resolve() : this._clearSession()),
+      clearSession: async () => {
+        if (!signal.aborted) await this._clearSession();
+      },
       getPublicJwk: async () => {
         const jwk = await this._keyManager.getPublicJwk();
         // The login is about to bind its tokens to this key (`cnf.jkt`). Verify
@@ -3889,7 +3984,16 @@ export class PollarClient {
     this._scheduleNextRefresh();
   }
 
-  private async _clearSession(): Promise<void> {
+  /**
+   * Tear down the local session and converge to `idle`.
+   *
+   * Returns whether this client actually removed the shared persisted row -
+   * i.e. whether it still owned the session it was clearing. `logout()` gates
+   * the DPoP keypair rotation on that answer: the keypair is the most shared
+   * piece of state on the origin, so a client that was not entitled to drop the
+   * row is not entitled to destroy the key either.
+   */
+  private async _clearSession(): Promise<boolean> {
     this._log.info('[PollarClient] Session cleared');
     // Identify the session being torn down BEFORE dropping it: the persisted
     // row is shared by every document (and every client instance) on this
@@ -3924,18 +4028,35 @@ export class PollarClient {
     // signing with a stale cached copy. Persistent storage is untouched, so
     // after a same-tab failure clear the next init re-loads the very same key.
     this._keyManager.resync?.();
-    // `_dpopNonce` likewise survives: it is origin-scoped server state, not
-    // session state — keeping it saves the guaranteed `use_dpop_nonce` 401 on
-    // the next login's first proof. It is NOT persisted across page loads —
-    // a deliberate simplicity trade-off, not a freshness constraint: sdk-api
-    // nonces actually verify for days (24h active + 3-day rotation overlap,
-    // see sdk-api lib/dpop-nonce.ts), so persisting one would eliminate the
-    // cold-start challenge round trip on nearly every reload. If that ever
-    // matters for latency, persist it best-effort under the apiKeyHash
-    // namespace; the challenge-retry path already handles a stale value.
-    await this._persistSession(gen, null, owned);
+    // `_dpopNonce` likewise survives, in memory AND in storage: it is
+    // origin-scoped server state, not session state. sdk-api nonces verify for
+    // days (24h active + a 3-day rotation overlap, see its lib/dpop-nonce.ts),
+    // so the stored one stays usable across page loads and saves the guaranteed
+    // `use_dpop_nonce` 401 on the next first proof. See `dpopNonceStorageKey`.
+    const droppedOwnRow = await this._persistSession(gen, null, owned);
+    // Same-document siblings never see the `storage` event this removal emits -
+    // browsers fire it only at OTHER documents. Tell them directly, so a second
+    // instance in this document (a React StrictMode double-invoked `useState`
+    // initializer leaves one behind, and it is never destroyed) converges to
+    // logged-out instead of re-persisting its own copy of the session a moment
+    // later. Mirrors exactly what the cross-document handler does.
+    if (droppedOwnRow) notifySiblingClients(this, this.apiKey);
     this._resetReactiveStores();
     this._setAuthState({ step: 'idle' });
+    return droppedOwnRow;
+  }
+
+  /**
+   * A sibling client in THIS document dropped the shared session row. Same
+   * reasoning as the cross-document `storage` handler: propagate the logout
+   * from the notification without re-reading storage, and guard on holding a
+   * session rather than on the auth step, so a login in flight (which owns no
+   * session yet) is left alone.
+   */
+  private _onSiblingSessionCleared(): void {
+    if (this._destroyed || !this._session) return;
+    this._log.info('[PollarClient] Session cleared by another client in this document');
+    void this._clearSession().catch((err) => this._log.error('[PollarClient] Same-document logout failed', err));
   }
 
   /**

@@ -19,9 +19,26 @@ import type { PollarPersistedSession } from '../types';
 
 const SESSION_SUFFIX = ':session';
 const WALLET_TYPE_SUFFIX = ':walletType';
+const DPOP_NONCE_SUFFIX = ':dpopNonce';
 
 export function sessionStorageKey(apiKeyHash: string): string {
   return `pollar:${apiKeyHash}${SESSION_SUFFIX}`;
+}
+
+/**
+ * Key for the last server-issued `DPoP-Nonce`.
+ *
+ * Deliberately NOT removed by `removeStorage`: the nonce is origin-scoped
+ * server state, not session state. It is a stateless HMAC that sdk-api accepts
+ * for days (24h active + a 3-day rotation overlap, see its lib/dpop-nonce.ts),
+ * carries no user identity and grants nothing on its own, so keeping it across
+ * page loads and logouts is safe - and it spares every cold start the
+ * guaranteed 401 `use_dpop_nonce` challenge it otherwise pays before its first
+ * authenticated request. A stale one costs exactly what having none costs: the
+ * server answers with a fresh nonce and the middleware retries once.
+ */
+export function dpopNonceStorageKey(apiKeyHash: string): string {
+  return `pollar:${apiKeyHash}${DPOP_NONCE_SUFFIX}`;
 }
 
 export function walletTypeStorageKey(apiKeyHash: string): string {
@@ -40,6 +57,8 @@ const MAX_WALLET_PUBLIC_KEY = 128;
 const MAX_WALLET_TYPE = 32;
 // base64url(SHA-256) is exactly 43 chars; bound with headroom.
 const MAX_DPOP_JKT = 64;
+/** Bounds what we accept back from storage as a nonce (sdk-api mints ~70 chars). */
+export const MAX_DPOP_NONCE = 512;
 // One wallet per supported chain, with headroom. Bounds the persisted blob so a
 // hostile or buggy `wallets[]` can't blow up storage or the validation loop.
 const MAX_WALLETS = 16;

@@ -153,6 +153,7 @@ let serverBoundJkt = null; // cnf.jkt bound at the last /auth/login
 let resumeMode = 'verify'; // 'verify' | 'revoked-403' | 'error-500'
 let resumeDelayMs = 0;
 let loginDelayMs = 0; // holds the /auth/login response so a logout can race it
+let logoutDelayMs = 0; // holds the /auth/logout response so a login can race the logout
 let resumeHits = 0; // every fetch hit on the resume path (nonce retries included)
 const resumeProofJkts = []; // jkt of each nonce-carrying resume proof
 
@@ -190,7 +191,10 @@ globalThis.fetch = async (req) => {
       },
     });
   }
-  if (p.endsWith('/auth/logout')) return json({ success: true });
+  if (p.endsWith('/auth/logout')) {
+    if (logoutDelayMs) await sleep(logoutDelayMs);
+    return json({ success: true });
+  }
   if (p.endsWith('/auth/session/resume')) {
     resumeHits++;
     if (resumeDelayMs) await sleep(resumeDelayMs);
@@ -264,8 +268,15 @@ function makeVisibility() {
     check('fresh client resumes to authenticated + verified', true);
     check('  resume proof thumbprint === token cnf.jkt', resumeProofJkts.at(-1) === serverBoundJkt);
     // One logical resume = nonce challenge + retried proof = exactly 2 hits.
-    check('  concurrent triggers coalesced into ONE resume (2 hits: challenge + retry)', resumeHits === 2, `hits=${resumeHits}`);
-    check('  keypair unchanged across the reload', (await new sdk.WebCryptoKeyManager(apiKey).getThumbprint()) === persistedJkt);
+    check(
+      '  concurrent triggers coalesced into ONE resume (2 hits: challenge + retry)',
+      resumeHits === 2,
+      `hits=${resumeHits}`,
+    );
+    check(
+      '  keypair unchanged across the reload',
+      (await new sdk.WebCryptoKeyManager(apiKey).getThumbprint()) === persistedJkt,
+    );
     resumeDelayMs = 0;
 
     console.log('\n── 2. A genuinely revoked session still clears ───────────────');
@@ -277,7 +288,10 @@ function makeVisibility() {
     check('revoked session converges to idle', c.getAuthState().step === 'idle');
     check('  session removed from storage', (await storage.get(`pollar:${c.apiKeyHash}:session`)) == null);
     console.log('\n── 5a. Failure-path clear does NOT rotate the keypair ────────');
-    check('keypair survives the revoked-session clear', (await new sdk.WebCryptoKeyManager(apiKey).getThumbprint()) === persistedJkt);
+    check(
+      'keypair survives the revoked-session clear',
+      (await new sdk.WebCryptoKeyManager(apiKey).getThumbprint()) === persistedJkt,
+    );
 
     console.log('\n── 5b. logout() DOES rotate the keypair ──────────────────────');
     resumeMode = 'verify';
@@ -322,11 +336,7 @@ function makeVisibility() {
       await waitFor(() => b.getAuthState().step === 'idle');
       check('doomed session is cleared locally (idle)', b.getAuthState().step === 'idle');
       check('  no resume round trip was attempted (dpopJkt precheck)', resumeHits === 0, `hits=${resumeHits}`);
-      check(
-        '  no phantom authenticated state was emitted',
-        !states.includes('authenticated'),
-        `states=${states.join(',')}`,
-      );
+      check('  no phantom authenticated state was emitted', !states.includes('authenticated'), `states=${states.join(',')}`);
       check('  session removed from storage', (await storage.get(`pollar:${b.apiKeyHash}:session`)) == null);
       b.destroy();
     } finally {
@@ -472,6 +482,131 @@ function makeVisibility() {
     } finally {
       crypto.subtle.exportKey = realExport;
     }
+  }
+
+  console.log('\n── 10. logout() does not destroy a session created during it ──');
+  {
+    // `logout()` awaits the server call, and consumers routinely do not await it
+    // (@pollar/react fires it from the login modal and the wallet button, then
+    // opens the login UI). A whole new login can land inside that window: the
+    // teardown must recognize it and leave it alone, or the user "logs in" and
+    // is thrown straight back out with the key that session was bound to gone.
+    const apiKey = 'pk_smoke_resume_logout_race';
+    const storage = sdk.createMemoryAdapter();
+    const a = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test' });
+    await a.ready();
+    await login(a);
+
+    logoutDelayMs = 150;
+    const pending = a.logout(); // deliberately NOT awaited
+    await sleep(10);
+    await login(a); // the user signs in again while the logout is still running
+    const jktAfterLogin = serverBoundJkt;
+    await pending;
+    await sleep(20);
+    logoutDelayMs = 0;
+
+    check('the session created during the logout survives', a.getAuthState().step === 'authenticated', a.getAuthState().step);
+    const row = await storage.get(`pollar:${a.apiKeyHash}:session`);
+    check('  its row is still in storage', row != null);
+    check(
+      '  the keypair it is bound to was not rotated away',
+      (await new sdk.WebCryptoKeyManager(apiKey).getThumbprint()) === jktAfterLogin,
+    );
+    check('  persisted dpopJkt still matches cnf.jkt', row != null && JSON.parse(row).dpopJkt === jktAfterLogin);
+    a.destroy();
+  }
+
+  console.log('\n── 11. logout() only rotates the key it still owns ────────────');
+  {
+    // The keypair record is shared per origin + API key, MORE shared than the
+    // session row. A client whose session was superseded must not destroy the
+    // key the current row's session is bound to.
+    const apiKey = 'pk_smoke_resume_logout_owner';
+    const storage = sdk.createMemoryAdapter();
+    const a = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test' });
+    await a.ready();
+    await login(a);
+    const sharedJkt = await new sdk.WebCryptoKeyManager(apiKey).getThumbprint();
+
+    // Another document logs in later and becomes the owner of the shared row.
+    const sessionKey = `pollar:${a.apiKeyHash}:session`;
+    const owned = JSON.parse(await storage.get(sessionKey));
+    owned.clientSessionId = 'cs_other_document';
+    await storage.set(sessionKey, JSON.stringify(owned));
+
+    await a.logout();
+    const after = await storage.get(sessionKey);
+    check(
+      'the row it no longer owns is left alone',
+      after != null && JSON.parse(after).clientSessionId === 'cs_other_document',
+    );
+    check(
+      '  and so is the keypair that row is bound to',
+      (await new sdk.WebCryptoKeyManager(apiKey).getThumbprint()) === sharedJkt,
+    );
+    a.destroy();
+  }
+
+  console.log('\n── 12. a logout propagates to siblings in the SAME document ───');
+  {
+    // Browsers never deliver `storage` events to the document that wrote the
+    // change, so a second instance in this one (React StrictMode double-invokes
+    // the useState initializer and leaves one behind, never destroyed) used to
+    // keep its session and re-persist the row after the other logged out.
+    const apiKey = 'pk_smoke_resume_siblings';
+    const storage = sdk.createMemoryAdapter();
+    const a = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test' });
+    await a.ready();
+    await login(a);
+    const b = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test' });
+    await b.ready();
+    await waitFor(() => b.getAuthState().step === 'authenticated');
+    check(
+      'both instances hold the session',
+      a.getAuthState().step === 'authenticated' && b.getAuthState().step === 'authenticated',
+    );
+
+    await a.logout();
+    await sleep(30);
+    check('  the sibling converges to idle', b.getAuthState().step === 'idle', b.getAuthState().step);
+    await b.refresh().catch(() => {});
+    await sleep(30);
+    check('  and does not re-persist the row', (await storage.get(`pollar:${b.apiKeyHash}:session`)) == null);
+    a.destroy();
+    b.destroy();
+  }
+
+  console.log('\n── 13. the DPoP nonce survives a page load ────────────────────');
+  {
+    // Every proof needs a server nonce, so without persistence the first
+    // authenticated request of EVERY page load is a guaranteed 401 challenge.
+    const apiKey = 'pk_smoke_resume_nonce';
+    const storage = sdk.createMemoryAdapter();
+    const a = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test' });
+    await a.ready();
+    await login(a);
+    a.destroy();
+    // A login alone never signs a proof (its calls are pre-auth), so the first
+    // nonce arrives on the first RELOAD's resume: challenge + retry = 2 hits.
+    resumeHits = 0;
+    const b = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test' });
+    await b.ready();
+    await waitFor(() => b.getAuthState().verified === true);
+    check('first reload pays the challenge and learns a nonce', resumeHits === 2, `hits=${resumeHits}`);
+    check(
+      '  the nonce is persisted under the apiKeyHash namespace',
+      (await storage.get(`pollar:${b.apiKeyHash}:dpopNonce`)) === 'N1',
+    );
+    b.destroy();
+
+    // Every reload after that signs its first proof with the stored nonce.
+    resumeHits = 0;
+    const c = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test' });
+    await c.ready();
+    await waitFor(() => c.getAuthState().verified === true);
+    check('  the NEXT reload resumes in ONE hit (challenge skipped)', resumeHits === 1, `hits=${resumeHits}`);
+    c.destroy();
   }
 
   console.log(`\n${pass} pass, ${fail} fail`);

@@ -111,6 +111,19 @@ that survives across client instances:
 - `getThumbprint()` called while `init()` is mid-flight (keypair assigned, JWK
   export pending) joins the in-flight init instead of throwing
 
+Cross-document and logout-race guards (added after a cross-review):
+
+- `logout()` is async and consumers do not await it (`@pollar/react` fires it
+  from the login modal and the wallet button). A login that completes inside that
+  window must survive: the teardown is guarded on the session generation.
+- The DPoP keypair is shared per origin + API key, so `logout()` rotates it only
+  when it actually dropped its own session row.
+- A logout propagates to sibling clients in the SAME document; browsers deliver
+  `storage` events only to other documents, so a second instance (React
+  StrictMode leaves one behind) is notified in-process instead.
+- The `DPoP-Nonce` is persisted, so only the first reload pays the
+  `use_dpop_nonce` challenge.
+
 ## What's not covered
 
 - Real network requests (`fetch` is mocked).
