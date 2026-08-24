@@ -8,7 +8,13 @@
 > trigger behind "session cleared ~700ms after login" in development), and the
 > **Smart Wallet passkey ceremony is now installed however the client reaches
 > `PollarProvider`**, so a consumer-built `PollarClient` no longer silently
-> loses passkey login. Additive, non-breaking on top of 0.11.2.
+> loses passkey login. The release also carries the **ramp-widget work** that
+> landed before the cut: server-normalized deposit instructions, a KYC gate,
+> pre-submit amount limits, navigable flow steps, per-field placeholders and
+> hints, and Branding-configurable modal chrome. Additive on top of 0.11.2 for
+> typical integrations; the exceptions are two type-level changes for custom
+> templates, called out inline below (the normalized deposit-instructions
+> shape, and a dead wallet-button template prop).
 
 ### `@pollar/core`
 
@@ -198,6 +204,21 @@
   session restored fully functional on the next reload. Rows from sessions the
   instance never held (another document's or instance's newer login) are still
   protected: they are never in the history.
+- **New ramp client methods:** `getRampLiquidity(rail)`, `getRampKycStatus()`
+  and `decodePixQr(qrCode)`, plus an optional `kycRequired` on the ramp
+  response. Surfaced on the generic ramp API rather than as provider-specific
+  methods, so all five providers ride one flow and the widget does not fork
+  per provider. `schema.d.ts` regenerated from `openapi.v2.json`; v2 mounts
+  v1's ramp routes unchanged, so the new paths appear in both documents.
+- **New: `PollarApiError`.** The ten ramp endpoint helpers collapsed every
+  failure into `new Error(code)`, discarding the body the server answered
+  with. They now share one wrapper carrying the code, the server's `details`
+  and the whole body, so a ramp failure reaches the caller with its cause
+  intact. `message` is still the code, so anything rendering `err.message` is
+  unchanged.
+- **New exported types:** `RampDepositInstructions`, `RampScannable` and
+  `RampInstructionField`, so a payment screen can be rendered without
+  `@pollar/react` and without reaching into the generated schema.
 
 ### `@pollar/react`
 
@@ -274,6 +295,45 @@
   behavior in this package. A custom template that read `props.walletType` can
   reconstruct it from `usePollar()`:
   `const walletType = wallet?.custody === 'external' ? wallet.provider : null;`
+- **The ramp widget consumes the server's normalized deposit instructions.**
+  sdk-api now answers with one shape for every provider, so the widget stopped
+  translating: the internal `flattenInstructions` / `INSTRUCTION_LABELS` /
+  `InstructionKind` machinery is gone, and three blocks remain - the code to
+  scan, the payload as text when the server marks it worth pasting, and a map
+  over `fields` - none of which knows which provider served the route. Pollar's
+  own QR arrives as inline markup so `currentColor` keeps it legible in both
+  themes; a provider's bitmap (`inlineSafe: false`) renders through an `<img>`
+  instead. A custom ramp template must adopt the normalized shape - this is
+  the type-level change flagged in the headline.
+- **Ramp KYC gate.** When an off-ramp answers `kycRequired: true` and the
+  provider publishes no hosted KYC URL, the withdraw button is withheld with
+  the reason stated (nothing was sent, nothing was signed) and
+  `getRampKycStatus()` is polled until the provider clears the user.
+- **Amount limits are enforced and explained before submitting.** The widget
+  checks the amount against the chosen route's `minAmount` / `maxAmount` (the
+  limits already travelled on the quote and nothing read them) and renders the
+  warning in the route list, where another route can be picked without leaving
+  the flow; ramp API failures now surface the server's exact bound through
+  `PollarApiError` instead of a bare error code.
+- **The widget's flow is navigable and legible.** `select_route` gains Back
+  (returning to the amount step and carrying the reason with it, shown under
+  the field and cleared on typing), and picking a route shows a spinner and
+  "Starting..." on that row while the other rows dim and stop responding, so a
+  second click cannot race a competing request.
+- **`RampFieldSpec` grew `optional`, `placeholder` / `placeholderFrom` and
+  `hint`** - all optional, all driven by what the quote declares. A blank
+  optional field no longer blocks Continue; `placeholderFrom` names a sibling
+  select whose chosen option supplies the example, so one Pix field shows a
+  CPF mask, an email or a +55 number as the kind changes without the component
+  knowing what a Pix key is.
+- **The modal chrome is configurable from Branding.** New
+  `components/modal-theme.ts` (`buildModalCssVars()` + `modalChrome()`)
+  replaces an identical block copy-pasted into 14 templates: background, text,
+  secondary-button fill, both radii and the overlay z-index resolve from the
+  per-app Branding config, so a variable added there reaches every modal at
+  once. The primary button takes its label color from the accent's luminance
+  instead of a hardcoded white, so the Amber preset stops rendering white on
+  yellow.
 
 ### Tests and CI
 
