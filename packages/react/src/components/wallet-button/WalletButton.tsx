@@ -29,9 +29,6 @@ export function WalletButton() {
   // enumerates no wallets.
   const { primaryAddress } = useChains();
   const walletAddress = primaryAddress || (wallet?.address ?? '');
-  // External-wallet signing-adapter id (freighter/albedo) drives the wallet logo;
-  // null for custodial/smart, which fall back to the Pollar logo.
-  const walletType = wallet?.custody === 'external' ? wallet.provider : null;
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -154,7 +151,6 @@ export function WalletButton() {
       itemColor={itemColor}
       wrapperRef={wrapperRef}
       isInProgress={isInProgress}
-      walletType={walletType}
       showCreateAccount={canCreateAccount}
       creatingAccount={creating}
       onToggleOpen={() => setOpen((v) => !v)}

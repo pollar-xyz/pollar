@@ -746,9 +746,8 @@ export class PollarNetworkError extends Error {
 }
 
 /**
- * Thrown when the API answers with an error body. Endpoint helpers used to
- * collapse that body into `new Error(code)`, which threw away everything the
- * server said about WHY — so a caller could only ever show the bare code.
+ * Thrown when the API answers with an error body, keeping everything the
+ * server said about WHY instead of collapsing it to a bare code string.
  *
  * `code` is the stable machine-readable one (e.g. `SDK_RAMPS_AMOUNT_OUT_OF_RANGE`);
  * `details` is the server's human reason when it sends one; `body` is the whole
@@ -760,8 +759,8 @@ export class PollarApiError extends Error {
   readonly details?: string;
   readonly body: Record<string, unknown>;
   constructor(code: string, body: Record<string, unknown> = {}) {
-    // The message stays the code: existing callers that render `err.message`
-    // keep showing exactly what they showed before this class existed.
+    // The message stays the code, so anything that renders `err.message` shows
+    // the stable machine-readable code.
     super(code);
     this.name = 'PollarApiError';
     this.code = code;

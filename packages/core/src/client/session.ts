@@ -57,7 +57,7 @@ const MAX_WALLET_PUBLIC_KEY = 128;
 const MAX_WALLET_TYPE = 32;
 // base64url(SHA-256) is exactly 43 chars; bound with headroom.
 const MAX_DPOP_JKT = 64;
-/** Bounds what we accept back from storage as a nonce (sdk-api mints ~70 chars). */
+/** Bounds what we accept back from storage as a nonce (sdk-api mints ~60 chars). */
 export const MAX_DPOP_NONCE = 512;
 // One wallet per supported chain, with headroom. Bounds the persisted blob so a
 // hostile or buggy `wallets[]` can't blow up storage or the validation loop.

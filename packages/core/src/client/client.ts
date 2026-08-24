@@ -133,8 +133,8 @@ const isReactNative = typeof navigator !== 'undefined' && (navigator as { produc
 /**
  * True wherever the SDK can persist state and do crypto — browser OR React
  * Native. False only in true server-side renders (Node/SSR) where there is no
- * client runtime. Gates everything that previously keyed off `isBrowser`; that
- * check alone wrongly treated RN (no `localStorage`) as server-side.
+ * client runtime. Gate runtime checks on this, not on `isBrowser` alone, which
+ * treats RN (no `localStorage`) as server-side.
  */
 const isClientRuntime = isBrowser || isReactNative;
 
@@ -422,7 +422,7 @@ export class PollarClient {
       defaultStorage({
         logger: this._log,
         onDegrade: (reason, error) => {
-          // N6: on React Native the default storage falls back to memory because
+          // On React Native the default storage falls back to memory because
           // there is no localStorage — make that misconfiguration obvious rather
           // than letting sessions silently vanish on every cold start.
           if (isReactNative && reason === 'unavailable') {
@@ -510,7 +510,7 @@ export class PollarClient {
       `[PollarClient] Initialized v${POLLAR_CORE_VERSION} — endpoint: ${this.basePath}, network: ${this._networkState.network}`,
     );
 
-    // N4: warn (don't throw — that would break StrictMode double-mounts / HMR)
+    // Warn (don't throw - that would break StrictMode double-mounts / HMR)
     // when a second live client exists for this API key.
     //
     // Client runtimes only, mirroring the deregistration in `destroy()`. The
@@ -540,7 +540,7 @@ export class PollarClient {
       }
     }
 
-    // N5: on a non-browser client runtime (React Native) the default visibility
+    // On a non-browser client runtime (React Native) the default visibility
     // provider is a no-op, so proactive refresh can't resume when the app
     // returns to the foreground (the OS suspended the timer in the background).
     if (!isBrowser && !config.visibilityProvider) {
@@ -647,7 +647,7 @@ export class PollarClient {
     this._visibilityUnsubscribe = this._visibilityProvider.onChange((visible) => {
       if (!visible) return;
       void this._maybeProactiveRefresh();
-      // B5: if the session is still optimistic (e.g. the startup resume failed
+      // If the session is still optimistic (e.g. the startup resume failed
       // offline), retry validation now that the app is foreground again.
       if (this._authState.step === 'authenticated' && !this._authState.verified) {
         void this._resume();
@@ -709,7 +709,7 @@ export class PollarClient {
         request.headers.set('x-pollar-api-key', self.apiKey);
         self._lastRequestAt = Date.now();
         // Every request waits until the client is initialized — EXCEPT a
-        // /auth/refresh: the expired-AT restore (F5) issues one from WITHIN
+        // /auth/refresh: the expired-AT restore issues one from WITHIN
         // _restoreSession (before `_initialized` resolves), so awaiting here would
         // deadlock. Post-init this is a no-op (already resolved), and the refresh
         // has everything it needs by then (keyManager init'd, `_session` set).
@@ -718,9 +718,9 @@ export class PollarClient {
         // call request.clone() once the body is consumed. Gate only on the
         // method: GET/HEAD carry no body. Do NOT gate on `request.body` — in
         // RN's fetch polyfill that getter is `undefined` even for a POST with a
-        // JSON body, so the old `request.body != null` check silently skipped
-        // the snapshot and a /auth/refresh retry (after a DPoP nonce challenge)
-        // was replayed with an empty body → server 400 "Malformed JSON". We
+        // JSON body, so a `request.body != null` gate would silently skip the
+        // snapshot and a /auth/refresh retry (after a DPoP nonce challenge)
+        // would replay with an empty body -> server 400 "Malformed JSON". We
         // snapshot via clone().arrayBuffer() (works in RN by reading the
         // polyfill's internal body) and only store non-empty buffers so a
         // genuinely body-less POST never gets a phantom body on retry.
@@ -2320,19 +2320,6 @@ export class PollarClient {
   }
 
   /**
-   * Signs the given unsigned XDR and returns the signed XDR.
-   *
-   * - External wallets: signs locally via the wallet adapter.
-   * - Custodial wallets: posts to `/tx/sign`. The backend signs (through
-   *   wallet-service or the app's customer-managed adapter) and returns the
-   *   signed XDR plus an `idempotencyKey` the caller should echo back to
-   *   `submitTx`.
-   *
-   * Drives `_setTransactionState`: emits `signing` while in flight and
-   * `signed` on success (or `error[phase: 'signing']` on failure). `buildData`
-   * is threaded through if the consumer previously called `buildTx`.
-   */
-  /**
    * For an EXTERNAL-wallet session whose signing adapter isn't attached (the host
    * didn't re-register the same `walletAdapters` this run, or the persisted
    * walletType row was lost), the custodial signer can't help: the platform holds
@@ -2348,6 +2335,19 @@ export class PollarClient {
     return null;
   }
 
+  /**
+   * Signs the given unsigned XDR and returns the signed XDR.
+   *
+   * - External wallets: signs locally via the wallet adapter.
+   * - Custodial wallets: posts to `/tx/sign`. The backend signs (through
+   *   wallet-service or the app's customer-managed adapter) and returns the
+   *   signed XDR plus an `idempotencyKey` the caller should echo back to
+   *   `submitTx`.
+   *
+   * Drives `_setTransactionState`: emits `signing` while in flight and
+   * `signed` on success (or `error[phase: 'signing']` on failure). `buildData`
+   * is threaded through if the consumer previously called `buildTx`.
+   */
   async signTx(unsignedXdr: string, options?: { skipSponsorship?: boolean }): Promise<SignOutcome> {
     this._txStartGen = this._sessionGeneration;
     const noSigner = this._externalSignerMissing();
@@ -2628,24 +2628,6 @@ export class PollarClient {
   }
 
   /**
-   * Submits a signed XDR via `/tx/submit` regardless of wallet type
-   * (custodial or external). Routing through sdk-api gives us:
-   *   - End-to-end tx_records persistence with full phase lifecycle so the
-   *     developer dashboard can show every tx (both custodial and external
-   *     wallet flows) at `/apps/:id/monitor/transactions`.
-   *   - Idempotency tracking via `submissionToken` (returned by `signTx`).
-   *   - A single response shape (SUCCESS / PENDING / FAILED) shared by both
-   *     flows — previously external wallets could only return SUCCESS or
-   *     error since the direct-to-Horizon path was synchronous.
-   *
-   * The extra hop adds ~50–150 ms vs. the legacy direct-Horizon path; the
-   * persistence + observability win is worth it.
-   *
-   * Drives `_setTransactionState`: emits `submitting` while in flight,
-   * `submitted` on Horizon ack (pending), `success` on ledger confirmation,
-   * or `error[phase: 'submitting']` on failure.
-   */
-  /**
    * Normalize a backend API error into { details, code, message }. `code` is the
    * precise backend ErrorCode (e.g. `TX_FEE_LIMIT_EXCEEDED`) for programmatic
    * handling; `message` is a friendly string from the error catalog; `details`
@@ -2747,6 +2729,24 @@ export class PollarClient {
     return { status: 'pending', hash, ...outcomeExtra };
   }
 
+  /**
+   * Submits a signed XDR via `/tx/submit` regardless of wallet type
+   * (custodial or external). Routing through sdk-api gives us:
+   *   - End-to-end tx_records persistence with full phase lifecycle so the
+   *     developer dashboard can show every tx (both custodial and external
+   *     wallet flows) at `/apps/:id/monitor/transactions`.
+   *   - Idempotency tracking via `submissionToken` (returned by `signTx`).
+   *   - A single response shape (SUCCESS / PENDING / FAILED) shared by both
+   *     flows (a direct-to-Horizon submit is synchronous, so on its own it can
+   *     only report SUCCESS or error).
+   *
+   * The extra hop adds ~50-150 ms vs. submitting straight to Horizon; the
+   * persistence + observability win is worth it.
+   *
+   * Drives `_setTransactionState`: emits `submitting` while in flight,
+   * `submitted` on Horizon ack (pending), `success` on ledger confirmation,
+   * or `error[phase: 'submitting']` on failure.
+   */
   async submitTx(signedXdr: string, opts?: { submissionToken?: string }): Promise<SubmitOutcome> {
     this._txStartGen = this._sessionGeneration;
     const buildData = this._currentBuildData();
@@ -3383,14 +3383,6 @@ export class PollarClient {
   // ─── Swap (DEX/AMM) ───────────────────────────────────────────────────────
 
   /**
-   * Quote an asset-to-asset swap across the requested venue(s). Read-only: no
-   * funds move. Returns quotes ranked by output (best first) — pick `[0]` for the
-   * best price, or let the user choose a route. An empty array means no route
-   * exists for the pair on this network. `provider` defaults to `'auto'` (the best
-   * of every available venue); `slippageBps` defaults to 50 (0.5%) and sets the
-   * on-chain minimum each quote's `build` will accept.
-   */
-  /**
    * The swap venues this app exposes to end-users (operator's dashboard
    * selection, intersected with server capability). An empty array means swap is
    * disabled for this app — hide any swap UI. `'auto'` is not returned here; add
@@ -3411,6 +3403,14 @@ export class PollarClient {
     return content.tokens;
   }
 
+  /**
+   * Quote an asset-to-asset swap across the requested venue(s). Read-only: no
+   * funds move. Returns quotes ranked by output (best first) - pick `[0]` for the
+   * best price, or let the user choose a route. An empty array means no route
+   * exists for the pair on this network. `provider` defaults to `'auto'` (the best
+   * of every available venue); `slippageBps` defaults to 50 (0.5%) and sets the
+   * on-chain minimum each quote's `build` will accept.
+   */
   async getSwapQuote(params: SwapQuoteParams): Promise<SwapQuote[]> {
     const wallet = this.getWallet();
     if (!wallet) throw new Error('No wallet connected');
@@ -3652,7 +3652,7 @@ export class PollarClient {
       // (its `signal` is aborted) so a late-resolving loser can't clobber the
       // active flow's state or, via clearSession, tear down a newer session.
       // The active flow's signal is never aborted, so the
-      // happy path is unchanged. (Completes the C1 guard — covers error/clear
+      // happy path is unchanged. (Completes the cancelled-flow guard - covers error/clear
       // writes, not just storeSession.)
       setAuthState: (state: AuthState) => {
         if (!signal.aborted) this._setAuthState(state);
@@ -3764,8 +3764,8 @@ export class PollarClient {
       // call is guaranteed to 401 (`thumbprint-mismatch`): resume, refresh,
       // signing, all of them. Converge to logged-out locally, with a diagnostic
       // that names the real cause, instead of burning a doomed resume round
-      // trip whose opaque 401 used to also nuke the (new, perfectly good)
-      // keypair. Sessions persisted by older SDKs have no `dpopJkt` and skip
+      // trip that can only fail with an opaque 401. Sessions persisted by older
+      // SDKs have no `dpopJkt` and skip
       // this — their resume decides, as before. If the thumbprint can't be
       // computed (key manager init failed), skip too: the Bearer fallback may
       // still be able to use the session.
@@ -3838,7 +3838,7 @@ export class PollarClient {
         return;
       }
 
-      // F5: if the stored access token is ALREADY expired, refresh inline BEFORE
+      // If the stored access token is ALREADY expired, refresh inline BEFORE
       // surfacing the session — otherwise a consumer reading `session.token` in
       // the optimistic `verified:false` window forwards a token we already know is
       // dead. A successful refresh both rotates the token AND proves the session
@@ -4130,8 +4130,8 @@ export class PollarClient {
     // the shared row. They never see the `storage` event that removal emits -
     // browsers fire it at OTHER documents only - so a second instance in this
     // document would otherwise keep its session and re-persist the row a moment
-    // later. (`PollarProvider` no longer leaves one behind under StrictMode, but
-    // a consumer can still hold two clients, and non-React callers always
+    // later. (`PollarProvider` reuses one client per config under StrictMode,
+    // but a consumer can still hold two clients, and non-React callers always
     // could.) This mirrors the cross-document handler.
     //
     // It runs AFTER the teardown above on purpose: announcing first put the
@@ -4154,6 +4154,16 @@ export class PollarClient {
     void this._clearSession().catch((err) => this._log.error('[PollarClient] Same-document logout failed', err));
   }
 
+  /** Record a session this instance held; bounded so a long-lived SPA cannot grow it unboundedly. */
+  private _recordOwnedSession(id: string): void {
+    if (this._ownedSessionIds.has(id)) return;
+    this._ownedSessionIds.add(id);
+    if (this._ownedSessionIds.size > 10) {
+      const oldest = this._ownedSessionIds.values().next().value;
+      if (oldest !== undefined) this._ownedSessionIds.delete(oldest);
+    }
+  }
+
   /**
    * Single writer for the shared `pollar:<apiKeyHash>:session` row.
    *
@@ -4165,10 +4175,10 @@ export class PollarClient {
    *   - ORDERING: two overlapping writes land in the order their adapter
    *     resolves, so an older session can win over a newer one.
    *   - RESURRECTION: a write that started before a logout lands after it and
-   *     re-creates a row the user just cleared. Re-checking the generation
-   *     *after* the write (as the callers used to) skips the state emission but
-   *     leaves the row behind, so the session comes back on the next reload and
-   *     the write's own `storage` event can log other documents back in.
+   *     re-creates a row the user just cleared. Re-checking the generation only
+   *     *after* the write would skip the state emission but leave the row
+   *     behind, so the session would come back on the next reload and the
+   *     write's own `storage` event could log other documents back in.
    *
    * So the generation is re-checked HERE, immediately before the mutation, with
    * writes serialized against each other. `gen` is the caller's snapshot of
@@ -4176,23 +4186,14 @@ export class PollarClient {
    * this write while it was queued and the mutation is dropped.
    *
    * `session === null` removes the row, but only when it still holds the
-   * session named by `ownedId` — a client must never delete a row that now
-   * belongs to a newer login in another document or another instance (a second
-   * client sitting on a stale session used to delete the row a fresh login had
-   * just written, about one round trip after "Session stored").
+   * session named by `ownedId` - a client must never delete a row that now
+   * belongs to a newer login in another document or another instance. Without
+   * the ownership check, a second client sitting on a stale session would
+   * delete the row a fresh login had just written, about one round trip after
+   * "Session stored".
    *
    * Returns whether the mutation was applied.
    */
-  /** Record a session this instance held; bounded so a long-lived SPA cannot grow it unboundedly. */
-  private _recordOwnedSession(id: string): void {
-    if (this._ownedSessionIds.has(id)) return;
-    this._ownedSessionIds.add(id);
-    if (this._ownedSessionIds.size > 10) {
-      const oldest = this._ownedSessionIds.values().next().value;
-      if (oldest !== undefined) this._ownedSessionIds.delete(oldest);
-    }
-  }
-
   private async _persistSession(
     gen: number,
     session: PollarPersistedSession | null,
@@ -4289,7 +4290,7 @@ export class PollarClient {
    * in-flight fetch that resolves into the new session's store.
    *
    * The tx store is dispatched DIRECTLY (not via `_setTransactionState`) on
-   * purpose: re-arming `_txStartGen` to satisfy that method's F2 generation guard
+   * purpose: re-arming `_txStartGen` to satisfy that method's session-generation guard
    * would also let an in-flight tx's late write through. Leaving `_txStartGen`
    * untouched keeps a late tx write dropped by the guard. Callers must bump
    * `_sessionGeneration` BEFORE calling this (both already do).
@@ -4316,10 +4317,11 @@ export class PollarClient {
   private _currentBuildData(): TxBuildContent | undefined {
     const s = this._transactionState;
     if (!s) return undefined;
-    // A terminal step belongs to a FINISHED tx. `_transactionState` is only
-    // reset on `_clearSession`, so without this a standalone signTx/submitTx
+    // A terminal step belongs to a FINISHED tx. Between txs the state machine is
+    // only reset by `resetTransactionState()` (modal open) or a session change
+    // (`_resetReactiveStores`), so without this a standalone signTx/submitTx
     // (no preceding buildTx) would thread the previous tx's buildData into the
-    // new one — mislabeling its UI summary. Only carry buildData forward from
+    // new one - mislabeling its UI summary. Only carry buildData forward from
     // live, in-progress steps; the composed paths (buildTx→signTx→submitTx) read
     // it while non-terminal (`built`/`signed`), so they're unaffected.
     if (s.step === 'success' || s.step === 'submitted' || s.step === 'error') return undefined;

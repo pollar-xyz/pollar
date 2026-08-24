@@ -36,8 +36,8 @@ function faucetFor(record: WalletBalanceRecord): FaucetHint | null {
   return null;
 }
 
-// The chain is no longer tagged per row: the list is filtered to the network
-// picked in the header, so every row would carry the same tag.
+// No per-row chain tag: the list is filtered to the network picked in the
+// header, so every row would carry the same tag.
 function BalanceItem({ record, faucet }: { record: WalletBalanceRecord; faucet: FaucetHint | null }) {
   const balanceDiffers = record.balance !== record.available;
   return (

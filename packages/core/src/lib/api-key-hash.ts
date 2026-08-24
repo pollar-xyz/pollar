@@ -2,17 +2,14 @@ import { sha256 } from './sha256';
 
 /**
  * Stable per-API-key namespace tag used to scope persisted storage keys and
- * keypairs. First 32 hex chars (16 bytes / 128 bits) of SHA-256(apiKey) — two
- * distinct keys collide with probability ≈ 1/2^64 (negligible). The pre-0.10
- * width was 8 hex (≈1/2^32), where colliding keys would have shared a session
- * AND a DPoP keypair.
+ * keypairs. First 32 hex chars (16 bytes / 128 bits) of SHA-256(apiKey) - two
+ * distinct keys collide with probability ~1/2^64 (negligible).
  *
- * NOTE: widening this from the old 8-hex value intentionally changes every
- * storage key, so an existing session written by an older SDK is NOT found and
- * the user is asked to re-authenticate ONCE on upgrade. That is by design here —
- * it flushes any stale session state left by earlier buggy versions onto a clean
- * session. There is deliberately NO migration. Do not re-widen without weighing
- * that one-time logout.
+ * NOTE: the tag width is baked into every storage key, so changing it orphans
+ * every persisted session (the row is simply never found) and logs every user
+ * out once on upgrade. There is deliberately NO migration between widths - do
+ * not change it without weighing that one-time logout. (Sessions written by
+ * SDKs older than 0.10 use an 8-hex tag and are intentionally left orphaned.)
  *
  * Async only to match the `sha256` wrapper's signature — the underlying
  * `@noble/hashes` digest is synchronous. Compute once during client

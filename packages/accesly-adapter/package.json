@@ -7,7 +7,7 @@
     "url": "git+https://github.com/pollar-xyz/pollar.git",
     "directory": "packages/accesly-adapter"
   },
-  "description": "Accesly Smart Account wallet adapter for @pollar/core — sign Stellar transactions with a user's Accesly C-address (passkey + MPC) smart wallet, client-side.",
+  "description": "Accesly Smart Account wallet adapter for @pollar/core - sign Stellar transactions with a user's Accesly C-address (passkey + MPC) smart wallet, client-side.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

@@ -94,7 +94,7 @@ function utf8ByteLength(value: string): number {
 /**
  * Create a `Storage` adapter backed by Expo SecureStore.
  *
- * Throws synchronously (via the returned Promise) at construction time if
+ * Throws (via the returned Promise) at construction time if
  * `expo-secure-store` cannot be loaded.
  */
 export async function createSecureStoreAdapter(options: SecureStoreAdapterOptions = {}): Promise<Storage> {

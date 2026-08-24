@@ -226,3 +226,12 @@ needed. Both assertions fail against the provider that predates the fix.
 - Node ≥ 20 (the SDK runtime floor)
 - Built `dist/` (run `npm run build` first)
 - No external services — tests are fully self-contained
+
+### `check-comment-ascii.cjs`
+
+Style guard, not a smoke test: asserts that code comments (`.ts`/`.tsx`/`.css`
+under `packages/*/src`, minus the generated `schema.d.ts`) and every
+`package.json` description use only keyboard-typeable ASCII characters - no em
+dashes, box-drawing header lines, arrows or section signs. String literals are
+exempt on purpose: UI copy is a product decision. Runs at the end of
+`npm run test:smoke` and lists every violation on failure.

@@ -151,9 +151,9 @@ const STATUS_LABEL: Record<RampTxStatus, string> = {
 };
 
 /**
- * A timestamp field arrives as ISO-8601 (the server no longer guesses at epoch
- * milliseconds); render it in the viewer's locale. Anything unparseable falls
- * back to the raw string rather than showing "Invalid Date".
+ * A timestamp field arrives as ISO-8601; render it in the viewer's locale.
+ * Anything unparseable falls back to the raw string rather than showing
+ * "Invalid Date".
  */
 function displayValue(field: RampInstructionField): string {
   if (field.type !== 'datetime') return field.value;

@@ -234,10 +234,10 @@ export class WebCryptoKeyManager implements KeyManager {
   /**
    * Re-persist the in-memory pair and verify it actually landed in IndexedDB.
    * Idempotent and cheap (one put + one get). Returns `false` when persistence
-   * is unavailable — the caller (the login flow) warns that the session will
-   * not survive a reload, instead of the previous behavior where a silent
-   * `dbPut` failure surfaced only as an unexplained thumbprint-mismatch logout
-   * on the next page load. Re-putting (rather than only probing) also heals
+   * is unavailable, so the caller (the login flow) can warn that the session
+   * will not survive a reload rather than letting a silent `dbPut` failure
+   * surface later as an unexplained thumbprint-mismatch logout on the next
+   * page load. Re-putting (rather than only probing) also heals
    * the case where another tab's `reset()` deleted the row this instance still
    * signs with — the key a new login binds is guaranteed to be the stored one.
    */

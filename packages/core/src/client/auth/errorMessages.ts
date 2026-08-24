@@ -93,7 +93,7 @@ const CATALOG: Record<string, ResolvedAuthError> = {
 export function resolveAuthError(code: string | undefined, fallbackMessage: string): ResolvedAuthError {
   if (code && CATALOG[code]) return CATALOG[code];
   // Bucket an UNKNOWN code by its domain prefix so a transaction code isn't
-  // mislabeled as a passkey failure (the historical default).
+  // mislabeled as a passkey failure.
   const errorCode =
     code && (code.startsWith('TX_') || code.startsWith('SDK_TX_'))
       ? AUTH_ERROR_CODES.TX_FAILED

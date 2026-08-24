@@ -25,7 +25,8 @@ import type { KeyManager, PublicEcJwk } from './types';
  * the key inside Secure Enclave / StrongBox (planned for a future minor).
  */
 
-/** Base64url-encoded private scalar (32 bytes → ~43 chars). */
+// Prefix of the storage key; the value stored under it is the base64url-encoded
+// private scalar (32 bytes -> ~43 chars).
 const STORAGE_KEY_PREFIX = 'pollar:dpop-key:';
 
 export class NobleKeyManager implements KeyManager {
