@@ -266,6 +266,14 @@
   instances. The guard tries `instanceof` first, so it also accepts instances
   from builds that predate the brand. Use it instead of `instanceof` wherever a
   client may have crossed a package boundary.
+- **Removed: the `walletType` prop on `WalletButtonTemplateProps`.**
+  `WalletButton` derived it (`wallet.provider` for an `external`-custody wallet,
+  else `null`) and passed it down, but the default template never rendered it;
+  the wallet-logo mapping lives in the transaction modal's `TxStatusView`,
+  which derives the same value itself. Type-level only - the value carried no
+  behavior in this package. A custom template that read `props.walletType` can
+  reconstruct it from `usePollar()`:
+  `const walletType = wallet?.custody === 'external' ? wallet.provider : null;`
 
 ### Tests and CI
 

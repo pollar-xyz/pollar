@@ -14,8 +14,20 @@ the live-client registry, and let two clients share one persisted session row.
 On npm 7+ there is nothing to do - peer dependencies install automatically. On
 npm 6, Yarn 1, or with `--legacy-peer-deps`, add `@pollar/core` to your own
 dependencies. `@pollar/react@0.11.3` requires `@pollar/core@^0.11.3`; if you
-pin both packages to exact versions, keep them on the same version. See the
-[CHANGELOG](./CHANGELOG.md) for the details.
+pin both packages to exact versions, keep them on the same version.
+
+One type-level removal in `@pollar/react`: `WalletButtonTemplateProps` no
+longer carries `walletType`. The default template never rendered it (the
+wallet-logo mapping lives in the transaction modal, which derives its own
+value). If a custom wallet-button template of yours read `props.walletType`,
+reconstruct it from the wallet exposed by `usePollar()`:
+
+```tsx
+const { wallet } = usePollar();
+const walletType = wallet?.custody === 'external' ? wallet.provider : null;
+```
+
+See the [CHANGELOG](./CHANGELOG.md) for the details.
 
 ## 0.11.1 -> 0.11.2
 
