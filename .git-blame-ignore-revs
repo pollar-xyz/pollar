@@ -16,3 +16,6 @@ c2c2f31c6934cd9b3748786bb9db336c20f3eef1
 
 # ASCII normalization of comments across all packages (no behavior change)
 3c35b3c3a010f1bb0e1a935be738a0ff5001c986
+
+# Prettier pass over the comment-ASCII guard (no behavior change)
+143171400435de199d37627d01420267b9f185f4
