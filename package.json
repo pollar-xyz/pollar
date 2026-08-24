@@ -1,5 +1,6 @@
 {
   "name": "polar-auth-monorepo",
+  "private": true,
   "version": "0.11.2",
   "license": "MIT",
   "scripts": {

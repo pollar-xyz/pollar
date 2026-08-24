@@ -209,6 +209,59 @@ function newClient(apiKey, logger) {
     }
   }
 
+  console.log('\n── 8. A failing sibling cannot abort our own teardown ───────');
+  {
+    // The in-document announcement is a courtesy call made on behalf of OTHER
+    // instances. It used to run before the clearing client emitted `idle`, and
+    // nothing guarded it: a sibling that threw (a logger sink that chokes is
+    // the realistic version) left the clearing client reporting `authenticated`
+    // with its session row already gone - and `logout()` swallows the error, so
+    // nothing pointed at the sibling that caused it.
+    const quiet = { debug() {}, info() {}, warn() {}, error() {} };
+    const hostile = {
+      debug() {},
+      warn() {},
+      error() {},
+      info: (m) => {
+        if (String(m).includes('cleared by another client')) throw new Error('sibling logger blew up');
+      },
+    };
+    const storage = sdk.createMemoryAdapter();
+    const apiKey = 'pk_lifecycle_hostile_sibling';
+
+    const seed = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logger: quiet });
+    await seed.ready();
+    const sessionKey = `pollar:${seed.apiKeyHash}:session`;
+    await storage.set(
+      sessionKey,
+      JSON.stringify({
+        clientSessionId: 'cs1',
+        userId: 'u1',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'internal', address: 'G' },
+      }),
+    );
+    seed.destroy();
+
+    const origin = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logger: quiet });
+    const sibling = new sdk.PollarClient({ apiKey, storage, baseUrl: 'https://x.test', logger: hostile });
+    await Promise.all([origin.ready(), sibling.ready()]);
+    await new Promise((r) => setTimeout(r, 40));
+    check(
+      '(baseline) both instances hold the session',
+      origin.getAuthState().step === 'authenticated' && sibling.getAuthState().step === 'authenticated',
+    );
+
+    await origin.logout();
+    await new Promise((r) => setTimeout(r, 40));
+    check('the clearing client still converges to idle', origin.getAuthState().step === 'idle', origin.getAuthState().step);
+    check('  and its session row is gone', (await storage.get(sessionKey)) == null);
+    origin.destroy();
+    sibling.destroy();
+  }
+
   console.log(`\n${pass} pass, ${fail} fail${skipped ? `, ${skipped} skip` : ''}`);
   process.exit(fail ? 1 : 0);
 })().catch((err) => {

@@ -156,11 +156,22 @@ const liveClientsByApiKey = new Map<string, Map<PollarClient, () => void>>();
  * one-hop: the recipients' own clears find the row already gone, so
  * `_persistSession` reports no removal and they do not notify back.
  */
-function notifySiblingClients(origin: PollarClient, apiKey: string): void {
+function notifySiblingClients(origin: PollarClient, apiKey: string, log: PollarLogger): void {
   const siblings = liveClientsByApiKey.get(apiKey);
   if (!siblings) return;
   for (const [client, notify] of siblings) {
-    if (client !== origin) notify();
+    if (client === origin) continue;
+    // Each sibling is isolated. This is a courtesy call made on behalf of OTHER
+    // instances, so a failure inside one must not stop the rest from being told
+    // and must never surface as a failure of the teardown that triggered it -
+    // an unguarded throw here left the clearing client stuck reporting
+    // `authenticated` with its session row already gone, and `logout()` swallows
+    // the error, so nothing pointed at the sibling that caused it.
+    try {
+      notify();
+    } catch (err) {
+      log.error('[PollarClient] A sibling client failed to handle the session clear', err);
+    }
   }
 }
 
@@ -461,12 +472,14 @@ export class PollarClient {
     // N4: warn (don't throw — that would break StrictMode double-mounts / HMR)
     // when a second live client exists for this API key.
     //
-    // Client runtimes only, matching the deregistration in `destroy()` — the
-    // old unconditional registration leaked an entry (and its notify closure)
-    // per server-side client, since those never deregistered. Server-rendered
-    // code also legitimately builds one client per request, so the "multiple
-    // live clients" warning is only meaningful where instances actually share
-    // persisted state and refresh loops: the browser / RN.
+    // Client runtimes only, mirroring the deregistration in `destroy()`. The
+    // constructor already returns above when there is no client runtime, so
+    // this is belt-and-braces rather than a fix for a reachable leak: it keeps
+    // the two halves of the registry contract stated in the same terms, so a
+    // refactor that moves either one cannot silently retain a client that never
+    // deregisters. Server-rendered code also legitimately builds one client per
+    // request, and the "multiple live clients" warning is only meaningful where
+    // instances actually share persisted state and refresh loops: browser / RN.
     if (isClientRuntime) {
       let liveSet = liveClientsByApiKey.get(this.apiKey);
       if (!liveSet) {
@@ -4076,9 +4089,12 @@ export class PollarClient {
     // initializer leaves one behind, and it is never destroyed) converges to
     // logged-out instead of re-persisting its own copy of the session a moment
     // later. Mirrors exactly what the cross-document handler does.
-    if (droppedOwnRow) notifySiblingClients(this, this.apiKey);
     this._resetReactiveStores();
     this._setAuthState({ step: 'idle' });
+    // Announce only once this client's own teardown is complete. Telling the
+    // siblings first put their handlers between us and our terminal state, so
+    // anything that went wrong in one of them left this client mid-teardown.
+    if (droppedOwnRow) notifySiblingClients(this, this.apiKey, this._log);
     return droppedOwnRow;
   }
 
