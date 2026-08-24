@@ -163,6 +163,32 @@ so a failing seed replays with `node tests/smoke-invariants.cjs <seed>`. It
 independently rediscovers the ownership bug fixed in this release when run
 against the build that predates it.
 
+### `smoke-cross-document.cjs`
+
+Cross-document (cross-tab) session semantics + persist-queue races — the two
+things the other suites' mocks cannot express: real `storage`-event delivery
+(every same-origin document EXCEPT the writer; each client gets its own
+"document" with its own window and listener set) and a storage adapter whose
+session writes can be held, giving the `_persistSession` queue actual depth.
+Ported from the scratchpad harnesses that found the cross-document teardown
+bugs. Negative-controlled: run against the pre-fix bundle, the ownership,
+handler-filter and triple-race blocks fail.
+
+- Positive control: the writing document never hears its own event
+- A login in one document is adopted by idle siblings in the others
+- A STALE document's teardown (logout / failed refresh / 401 resume) cannot
+  remove the row a fresh login now owns, nor destroy that login's keypair
+- A foreign `localStorage.clear()` (`key === null`) and events from a
+  different storage area (`sessionStorage`) are ignored
+- [known limitation, pinned] an external PHYSICAL deletion of the very row a
+  client holds still reads as a logout — the explicit logout-signal design
+  (backlog) is what would distinguish it
+- Triple race: a held login write + a queued login-over-login write + logout —
+  the row is removed via ownership-by-session-history and the key rotates
+- `destroy()` discards a refresh mutation still queued behind a held write
+- `logout()` with the login's persist still queued: no resurrection, no
+  leftover row
+
 ### `smoke-react.cjs`
 
 `PollarProvider` client lifecycle, rendered through jsdom + `react-dom/client`.

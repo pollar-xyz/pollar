@@ -262,6 +262,21 @@
   `PollarProvider`'s client lifecycle and is what caught the StrictMode orphan
   above. Each suite ships a positive control, and each was verified to fail
   against the code that predates its fix.
+- A fourth new suite, `smoke-cross-document.cjs`, ports the scratchpad
+  harnesses that found the cross-document teardown bugs. It adds the two mock
+  capabilities the rest of the suite lacks — real `storage`-event semantics
+  (delivered to every same-origin document EXCEPT the writer, one "document"
+  per client) and a storage adapter whose session writes can be held so the
+  `_persistSession` queue takes real depth. Covers: adoption of a sibling
+  document's login; a stale document's teardown not removing a fresh login's
+  row or keypair; foreign `clear()` / other-storage-area events ignored; the
+  triple race (held write + queued login-over-login + logout) resolved by
+  ownership-by-session-history with the key rotation; `destroy()` discarding a
+  queued refresh mutation; logout with the login's persist still queued; and
+  it pins the documented limitation that an external PHYSICAL deletion of the
+  row a client holds still reads as a logout (what the explicit logout-signal
+  design, in backlog, would fix). Negative-controlled against the pre-fix
+  bundle: the ownership, handler-filter and triple-race blocks fail there.
 - CI runs on release branches (`main` and `0.*`), not `main` alone, so a release
   branch is no longer unverified until its pull request opens.
 
