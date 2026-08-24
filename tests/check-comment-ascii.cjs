@@ -3,7 +3,7 @@
 
 // Guards the repo convention that code comments use only keyboard-typeable
 // (ASCII) characters: no em dashes, box-drawing header lines, arrows, section
-// signs or similar glyphs. Scans .ts/.tsx/.css comments under packages/*/src
+// signs or similar glyphs. Scans every .ts/.tsx/.css comment under packages/
 // (the generated schema.d.ts is exempt) plus every package.json "description".
 // String literals are out of scope on purpose: UI copy is a product decision.
 //

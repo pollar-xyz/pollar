@@ -229,8 +229,8 @@ needed. Both assertions fail against the provider that predates the fix.
 
 ### `check-comment-ascii.cjs`
 
-Style guard, not a smoke test: asserts that code comments (`.ts`/`.tsx`/`.css`
-under `packages/*/src`, minus the generated `schema.d.ts`) and every
+Style guard, not a smoke test: asserts that code comments (every
+`.ts`/`.tsx`/`.css` under `packages/`, minus the generated `schema.d.ts`) and every
 `package.json` description use only keyboard-typeable ASCII characters - no em
 dashes, box-drawing header lines, arrows or section signs. String literals are
 exempt on purpose: UI copy is a product decision. Runs at the end of
