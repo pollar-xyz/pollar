@@ -200,8 +200,15 @@ const POLLAR_CLIENT_BRAND = Symbol.for('@pollar/core.PollarClient');
  * Is this a `PollarClient`, including one built by another copy of the module?
  *
  * Prefer this over `instanceof PollarClient` anywhere the value may have crossed
- * a package boundary. Tries `instanceof` first, so it still recognises an
- * instance from a build that predates the brand.
+ * a package boundary. The brand is what does the work here: inside a single copy
+ * the two checks always agree, because this constructor stamps every instance it
+ * builds; across copies - a duplicated install, an iframe, a module swapped by
+ * HMR - `instanceof` is always false and the brand is the only thing that
+ * identifies the value. (An instance from a build older than the brand is, by
+ * definition, from another copy: it fails both checks, and no ordering here
+ * changes that.) `instanceof` stays first because it is the canonical identity
+ * test and keeps this guard's answer identical to the bare `instanceof` it
+ * replaced at every call site.
  */
 export function isPollarClient(value: unknown): value is PollarClient {
   if (value instanceof PollarClient) return true;
@@ -4117,17 +4124,19 @@ export class PollarClient {
     // so the stored one stays usable across page loads and saves the guaranteed
     // `use_dpop_nonce` 401 on the next first proof. See `dpopNonceStorageKey`.
     const droppedOwnRow = await this._persistSession(gen, null, owned);
-    // Same-document siblings never see the `storage` event this removal emits -
-    // browsers fire it only at OTHER documents. Tell them directly, so a second
-    // instance in this document (a React StrictMode double-invoked `useState`
-    // initializer leaves one behind, and it is never destroyed) converges to
-    // logged-out instead of re-persisting its own copy of the session a moment
-    // later. Mirrors exactly what the cross-document handler does.
     this._resetReactiveStores();
     this._setAuthState({ step: 'idle' });
-    // Announce only once this client's own teardown is complete. Telling the
-    // siblings first put their handlers between us and our terminal state, so
-    // anything that went wrong in one of them left this client mid-teardown.
+    // Only now tell the same-document siblings, and only if we actually dropped
+    // the shared row. They never see the `storage` event that removal emits -
+    // browsers fire it at OTHER documents only - so a second instance in this
+    // document would otherwise keep its session and re-persist the row a moment
+    // later. (`PollarProvider` no longer leaves one behind under StrictMode, but
+    // a consumer can still hold two clients, and non-React callers always
+    // could.) This mirrors the cross-document handler.
+    //
+    // It runs AFTER the teardown above on purpose: announcing first put the
+    // siblings' handlers between this client and its own terminal state, so
+    // anything that went wrong inside one of them left this client mid-teardown.
     if (droppedOwnRow) notifySiblingClients(this, this.apiKey, this._log);
     return droppedOwnRow;
   }
