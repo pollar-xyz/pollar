@@ -52,7 +52,7 @@ function waitForAlbedoPopup(): Promise<Record<string, string>> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(
       () => {
-        // Detach before rejecting — otherwise the listener leaks for the page
+        // Detach before rejecting - otherwise the listener leaks for the page
         // lifetime and a late/duplicate ALBEDO_RESULT could resolve an
         // already-timed-out promise (and accumulate across retries).
         window.removeEventListener('message', handler);
@@ -128,7 +128,7 @@ export class AlbedoAdapter implements WalletAdapter {
 
     // Popup + postMessage (same flow as `connect`). A top-level
     // `window.location.href` redirect would unload this document, destroying
-    // the realm the returned promise lives in — it would never resolve.
+    // the realm the returned promise lives in - it would never resolve.
     openAlbedoPopup(url.toString());
     const result = await waitForAlbedoPopup();
 
@@ -147,7 +147,7 @@ export class AlbedoAdapter implements WalletAdapter {
     url.searchParams.set('callback', `${window.location.origin}/albedo-callback`);
     url.searchParams.set('origin', window.location.origin);
 
-    // Popup + postMessage (see `signTransaction` — a redirect would unload the
+    // Popup + postMessage (see `signTransaction` - a redirect would unload the
     // page before the awaited promise could settle).
     openAlbedoPopup(url.toString());
     const result = await waitForAlbedoPopup();

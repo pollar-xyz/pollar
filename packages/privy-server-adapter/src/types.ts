@@ -45,7 +45,7 @@ export interface PollarPrivyAdapterConfig {
   // rules between the two fields below.
   //
   // `allowedOperations`: explicit list of stellar-sdk operation type names
-  // (e.g. ['changeTrust', 'payment']). `undefined` → no restriction (legacy).
+  // (e.g. ['changeTrust', 'payment']). `undefined` -> no restriction (legacy).
   allowedOperations?: string[];
   // `restrictToTrustlines`: shortcut that allows the trustline preset
   // (changeTrust + the sponsorship sandwich) AND additionally requires at least

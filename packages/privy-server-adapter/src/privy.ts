@@ -13,7 +13,7 @@ export const createPrivyClientFactory = (config: ResolvedAdapterConfig) => {
   // Coalesce concurrent expired-cache calls. Without this, two requests
   // arriving while `entry` is null/expired would each call
   // `config.getCredentials()` and `new PrivyClient(...)`, with the second
-  // overwriting the first — wasted creds fetch + an orphaned client.
+  // overwriting the first - wasted creds fetch + an orphaned client.
   let pending: Promise<PrivyClient> | null = null;
 
   return async (): Promise<PrivyClient> => {
@@ -31,7 +31,7 @@ export const createPrivyClientFactory = (config: ResolvedAdapterConfig) => {
         const fingerprint = createHash('sha256').update(`${appId}:${appSecret}`).digest('hex');
 
         if (entry && entry.fingerprint === fingerprint) {
-          // Credentials unchanged — extend TTL, keep client to avoid reconnect overhead.
+          // Credentials unchanged - extend TTL, keep client to avoid reconnect overhead.
           entry.expiresAt = Date.now() + config.cacheTtlMs;
           return entry.client;
         }

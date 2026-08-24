@@ -165,7 +165,7 @@ export function SendModalTemplate({
       {/* Form step */}
       {step === 'form' && (
         <>
-          {/* Network selector — drives the address and the asset list below */}
+          {/* Network selector - drives the address and the asset list below */}
           <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoadingBalance} />
 
           {walletAddress && (
@@ -186,7 +186,7 @@ export function SendModalTemplate({
             options={assets.map((a) => ({
               key: assetKey(a),
               code: a.code,
-              // Unreadable (null) drops the "— X available" suffix instead of
+              // Unreadable (null) drops the "- X available" suffix instead of
               // claiming a zero balance.
               available: a.available ?? undefined,
               enabledInApp: a.enabledInApp,

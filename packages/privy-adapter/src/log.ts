@@ -9,7 +9,7 @@ export function setPrivyAdapterDebug(on: boolean): void {
   DEBUG = on;
 }
 
-/** Verbose trace log — a no-op unless debug is enabled. */
+/** Verbose trace log - a no-op unless debug is enabled. */
 export function log(message: string, data?: unknown): void {
   if (!DEBUG) return;
   if (data !== undefined) {

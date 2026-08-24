@@ -29,7 +29,7 @@ export type FlowDeps = {
   setAuthState: (state: AuthState) => void;
   /**
    * Persist the authenticated session. `boundDpopJkt` is the RFC 7638
-   * thumbprint of the JWK the flow actually sent as `dpopJwk` to /auth/login —
+   * thumbprint of the JWK the flow actually sent as `dpopJwk` to /auth/login -
    * i.e. the key the server bound the tokens to (`cnf.jkt`). Pass it so the
    * persisted `dpopJkt` records the BOUND key, not whatever key happens to be
    * loaded at store time (they differ if the key rotated mid-login).
@@ -52,7 +52,7 @@ export type FlowDeps = {
   getPublicJwk: () => Promise<PublicEcJwk>;
   /**
    * Optional UI label persisted on the server-side refresh-token row so the
-   * sessions UI can show "iPhone — Safari" instead of a raw user-agent.
+   * sessions UI can show "iPhone - Safari" instead of a raw user-agent.
    */
   deviceLabel?: string;
 };

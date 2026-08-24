@@ -58,7 +58,7 @@ const DEFAULT_APP_CONFIG: PollarConfig = {
 
 /**
  * Compares the fields of a persisted session that actually drive UI re-renders.
- * Replaces a per-listener `JSON.stringify(...) !== JSON.stringify(...)` call —
+ * Replaces a per-listener `JSON.stringify(...) !== JSON.stringify(...)` call -
  * cheaper, allocation-free, and explicit about what counts as "changed".
  *
  * If a field is added to `PollarPersistedSession` that consumers read through
@@ -82,13 +82,13 @@ interface PollarContextValue {
   /**
    * The authenticated user's wallet as a discriminated union over `custody`
    * (`internal` | `smart` | `external`), or `null` when unauthenticated. Every
-   * field is meaningful for any login method — `custody` is always present and
+   * field is meaningful for any login method - `custody` is always present and
    * strictly determines the shape of `provider`. Use `wallet.address` for the
    * on-chain address and `wallet.provider` for the wallet/login provider.
    */
   wallet: WalletInfo | null;
   /**
-   * Every wallet the user holds, one per chain — a superset of {@link wallet},
+   * Every wallet the user holds, one per chain - a superset of {@link wallet},
    * with `chain` populated. `[]` when unauthenticated. Drives the network
    * selector in the Send / Wallet Balance / Assets modals: each entry is a
    * network the user can switch to, and the first one is the default.
@@ -101,7 +101,7 @@ interface PollarContextValue {
   /**
    * `true` once the server has confirmed the session (login / refresh /
    * `/auth/session/resume`). `false` while a cold-start session is still
-   * optimistic — gate sensitive actions (e.g. signing) on this.
+   * optimistic - gate sensitive actions (e.g. signing) on this.
    */
   verified: boolean;
   login: (options: PollarLoginOptions) => void;
@@ -114,7 +114,7 @@ interface PollarContextValue {
   styles: PollarStyles;
   /** Remote app-config load state. 'loading' while the initial fetch is in
    *  flight, 'error' if it failed (styles fall back to empty defaults), 'ready'
-   *  once resolved — or immediately 'ready' when `appConfig` is passed as a prop.
+   *  once resolved - or immediately 'ready' when `appConfig` is passed as a prop.
    *  The login modal shows a spinner/retry instead of an empty shell until this
    *  is 'ready'. */
   configStatus: 'loading' | 'ready' | 'error';
@@ -133,7 +133,7 @@ interface PollarContextValue {
   /** External-wallet only. Custodial flows should use `signAndSubmitTx`. */
   signTx: (unsignedXdr: string) => Promise<SignOutcome>;
   submitTx: (signedXdr: string) => Promise<SubmitOutcome>;
-  /** One-shot: build → sign → submit. Drives the same TransactionState flow as the split calls. */
+  /** One-shot: build -> sign -> submit. Drives the same TransactionState flow as the split calls. */
   buildAndSignAndSubmitTx: (
     operation: TxBuildBody['operation'],
     params: TxBuildBody['params'],
@@ -282,13 +282,13 @@ interface PollarProviderProps {
    * bypass the type anyway (plain JS, or a cast), each missing field lands on a
    * default scattered across the components rather than on anything central:
    *
-   *   chains       absent → the chain order/filter falls back to the order the
+   *   chains       absent -> the chain order/filter falls back to the order the
    *                         session listed the user's wallets in (see useChains)
-   *   name         absent → 'Pollar'
-   *   theme        absent → 'light'
-   *   accentColor  absent → '#005DB4'
+   *   name         absent -> 'Pollar'
+   *   theme        absent -> 'light'
+   *   accentColor  absent -> '#005DB4'
    *   emailEnabled, providers, embeddedWallets, smartWallet
-   *                absent → false. NOTE: that means EVERY login method is off
+   *                absent -> false. NOTE: that means EVERY login method is off
    *                         and the login modal renders with no way in.
    *
    * Leave this `undefined` to have the SDK fetch `/applications/config` on
@@ -381,7 +381,7 @@ export function PollarProvider({
   const builtFromConfigRef = useRef<PollarClientConfig | null>(isPollarClient(client) ? null : client);
 
   // Tear down the client on a real unmount so its cross-tab storage listener,
-  // refresh timer, and live-client registry entry don't leak — matters when the
+  // refresh timer, and live-client registry entry don't leak - matters when the
   // provider is keyed (e.g. `key={apiKey}`) and remounts on network change.
   useEffect(() => {
     if (!ownsClientRef.current) return;
@@ -392,7 +392,7 @@ export function PollarProvider({
       clientByConfig.delete(builtFromConfigRef.current);
       builtFromConfigRef.current = null;
     }
-    // This mount is live again — cancel any teardown scheduled by a prior
+    // This mount is live again - cancel any teardown scheduled by a prior
     // (StrictMode dev) unmount before it can destroy the client we still use.
     if (destroyTimerRef.current) {
       clearTimeout(destroyTimerRef.current);
@@ -470,7 +470,7 @@ export function PollarProvider({
       if (authState.step === 'authenticated') {
         setSessionState((prev) => (sessionsEqual(prev, authState.session) ? prev : authState.session));
         // The session object is identical between the optimistic restore and
-        // the post-resume confirmation, so `verified` is tracked separately —
+        // the post-resume confirmation, so `verified` is tracked separately -
         // otherwise the sessionsEqual short-circuit would swallow the flip.
         setVerified(authState.verified);
       } else if (authState.step === 'idle') {
@@ -481,9 +481,9 @@ export function PollarProvider({
   }, [pollarClient]);
 
   // Auto-login for interactive adapters (e.g. Privy). When the adapter's
-  // provider authenticates *outside* the sub-modal flow — after an OAuth redirect
+  // provider authenticates *outside* the sub-modal flow - after an OAuth redirect
   // (the page reloaded, so the sub-modal promise is gone) or a persisted provider
-  // session on load — and Pollar has no session yet, trigger `login({ provider })`
+  // session on load - and Pollar has no session yet, trigger `login({ provider })`
   // so `connect()` + SEP-10 run. Read the session through a ref so the
   // subscription is set up once and never re-subscribes on session changes.
   const sessionRef = useRef(sessionState);

@@ -27,8 +27,8 @@ function WalletAdapterButtons({
   walletAdapters: WalletAdapterEntry[];
   onConnect: (id: WalletId) => void;
   isLoading: boolean;
-  // 'list'  → borderless rows for inside a group sub-picker (large icon + name).
-  // 'entry' → bordered buttons that match the root-level entries (Google, Wallet,
+  // 'list'  -> borderless rows for inside a group sub-picker (large icon + name).
+  // 'entry' -> bordered buttons that match the root-level entries (Google, Wallet,
   //           Smart Wallet) so a root adapter like Privy doesn't read as bare text.
   variant?: 'list' | 'entry';
 }) {
@@ -127,7 +127,7 @@ interface LoginModalTemplateProps {
     github: boolean;
     apple: boolean;
   };
-  /** Registered wallet adapters to render as buttons (Freighter, Albedo, Privy, …). */
+  /** Registered wallet adapters to render as buttons (Freighter, Albedo, Privy, ...). */
   walletAdapters: WalletAdapterEntry[];
   appName: string;
   email?: string;
@@ -180,7 +180,7 @@ export function LoginModalTemplate({
 
   // Split registered adapters into root-level buttons (no `meta.group`, e.g. Privy)
   // and gateway groups (adapters sharing a `meta.group` collapse behind one button
-  // that opens a sub-picker — e.g. the Stellar Wallets Kit wallets under "Wallet").
+  // that opens a sub-picker - e.g. the Stellar Wallets Kit wallets under "Wallet").
   const rootAdapters = walletAdapters.filter((a) => !a.meta.group);
   const walletGroups = walletAdapters
     .filter((a) => a.meta.group)
@@ -394,7 +394,7 @@ export function LoginModalTemplate({
 }
 
 /** Placeholder shown inside the login modal while the app config is loading, or
- *  when its remote fetch failed — instead of the empty shell that renders when
+ *  when its remote fetch failed - instead of the empty shell that renders when
  *  `styles` is still the default `{}`. Mirrors the template's card chrome (logo,
  *  title, footer) so the swap to the real form isn't jarring. */
 export function LoginModalStatus({

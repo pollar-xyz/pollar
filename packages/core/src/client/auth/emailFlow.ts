@@ -17,7 +17,7 @@ export async function initEmailSession(ctx: AuthProviderContext): Promise<string
 export async function sendEmailCode(email: string, clientSessionId: string, ctx: AuthProviderContext): Promise<void> {
   const { api, logger, signal, setAuthState } = ctx;
 
-  // Validate before hitting the API — an empty email/session (e.g. login()
+  // Validate before hitting the API - an empty email/session (e.g. login()
   // called without an `email`, or an action with a missing payload) would
   // otherwise POST blanks to /auth/email and get an opaque 400.
   if (!email?.trim() || !clientSessionId) {
@@ -57,7 +57,7 @@ export async function verifyAndAuthenticate(
 ): Promise<void> {
   const { api, logger, signal, setAuthState } = ctx;
 
-  // Validate before hitting the API — a blank code/session would otherwise POST
+  // Validate before hitting the API - a blank code/session would otherwise POST
   // blanks to /auth/email/verify-code for an opaque 400.
   if (!code?.trim() || !clientSessionId) {
     setAuthState({
@@ -111,7 +111,7 @@ export async function verifyAndAuthenticate(
 
   if (!error) logApiError(logger, 'POST /auth/email/verify-code', { body, data });
   // Carry `clientSessionId`/`email` so this generic failure (transient 5xx,
-  // contract drift) stays RETRYABLE — the message says "try again" and the
+  // contract drift) stays RETRYABLE - the message says "try again" and the
   // session is usually still alive, so `verifyEmailCode()` must be able to
   // re-submit without restarting the whole flow.
   setAuthState({

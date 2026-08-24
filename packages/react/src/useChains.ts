@@ -1,6 +1,6 @@
 'use client';
 
-// ─── Chain order, one source of truth ─────────────────────────────────────────
+// --- Chain order, one source of truth -----------------------------------------
 // Every component that shows "the user's address" or offers a network picker
 // reads it from here, so the wallet button and the modals can never disagree
 // about which chain is first.
@@ -16,7 +16,7 @@
 //     enum order), identical for every app on the platform. That is fixed
 //     server-side now, but a session persisted before the fix still carries the
 //     old array, and re-deriving here repairs it without forcing a re-login.
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 import type { WalletChain } from '@pollar/core';
 import { useMemo } from 'react';

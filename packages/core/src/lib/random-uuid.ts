@@ -1,9 +1,9 @@
 /**
  * Generate a RFC 4122 v4 UUID. Prefers the secure-context `crypto.randomUUID`
  * when available; falls back to a manual v4 build via `crypto.getRandomValues`
- * for environments where `randomUUID` is missing (older RN/Hermes — where the
+ * for environments where `randomUUID` is missing (older RN/Hermes - where the
  * `react-native-get-random-values` polyfill provides `getRandomValues` but not
- * `randomUUID` — and insecure HTTP origins).
+ * `randomUUID` - and insecure HTTP origins).
  *
  * Throws only when no secure random source exists at all, in which case DPoP
  * (and the SDK) cannot operate anyway.

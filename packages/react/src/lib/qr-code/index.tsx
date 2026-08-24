@@ -1,5 +1,5 @@
 /**
- * QRCode component — vendored from react-qr-code (MIT License)
+ * QRCode component - vendored from react-qr-code (MIT License)
  * Original: https://github.com/rosskhanas/react-qr-code
  * Adapted: removed prop-types dependency, added TypeScript types.
  *
@@ -7,13 +7,13 @@
  * Copyright (c) 2018 Ross Khanas
  */
 
-// @ts-expect-error — qr.js ships CJS without type declarations; bundled via noExternal
+// @ts-expect-error - qr.js ships CJS without type declarations; bundled via noExternal
 import ErrorCorrectLevel from 'qr.js/lib/ErrorCorrectLevel';
-// @ts-expect-error — same as above
+// @ts-expect-error - same as above
 import QRCodeImpl from 'qr.js/lib/QRCode';
 import { forwardRef, type SVGProps } from 'react';
 
-// ─── Internal SVG renderer ────────────────────────────────────────────────────
+// --- Internal SVG renderer ----------------------------------------------------
 
 interface QRCodeSvgProps extends SVGProps<SVGSVGElement> {
   bgColor: string;
@@ -41,7 +41,7 @@ const QRCodeSvg = forwardRef<SVGSVGElement, QRCodeSvgProps>(function QRCodeSvg(
 
 QRCodeSvg.displayName = 'QRCodeSvg';
 
-// ─── Public component ─────────────────────────────────────────────────────────
+// --- Public component ---------------------------------------------------------
 
 export interface QRCodeProps extends SVGProps<SVGSVGElement> {
   value: string;

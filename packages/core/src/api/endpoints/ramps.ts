@@ -21,8 +21,8 @@ import { PollarApiError } from '../../types';
 
 /**
  * Wrap an error body into a {@link PollarApiError}, keeping every field the API
- * sent. Ramp failures are the ones a UI most needs to explain — an amount below
- * the provider's minimum, a stale quote, pending KYC — and collapsing them to
+ * sent. Ramp failures are the ones a UI most needs to explain - an amount below
+ * the provider's minimum, a stale quote, pending KYC - and collapsing them to
  * the bare code left the caller with nothing to say beyond it.
  *
  * `message` stays the code, so anything rendering `err.message` is unaffected.
@@ -121,7 +121,7 @@ export async function getRampTransaction(api: PollarApiClient, txId: string): Pr
 /**
  * GET /ramps/liquidity
  * Live liquidity on a payout rail. `available: false` means the rail cannot be
- * served right now — quoting it succeeds and then fails downstream, so check
+ * served right now - quoting it succeeds and then fails downstream, so check
  * before offering the corridor.
  */
 export async function getRampLiquidity(api: PollarApiClient, rail: RampRail): Promise<RampsLiquidityResponse> {
@@ -147,7 +147,7 @@ export async function getRampKycStatus(api: PollarApiClient): Promise<RampsKycSt
  * Reads a Pix "copia e cola" payload into payee + amount. `decoded: null` means
  * the code no longer resolves: dynamic Pix QRs carry a per-charge id and go
  * stale once used or expired. Decode immediately before quoting, quote the
- * amount it returns, and send the ORIGINAL payload as `qrCode` on the off-ramp —
+ * amount it returns, and send the ORIGINAL payload as `qrCode` on the off-ramp -
  * paying the bare key it decodes to gets rejected by the payee's bank.
  */
 export async function decodePixQr(api: PollarApiClient, qrCode: string): Promise<RampsPixDecodeResponse> {

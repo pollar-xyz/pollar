@@ -17,7 +17,7 @@ export function SessionsModal({ onClose }: SessionsModalProps) {
 
   // Only the per-action button spinners are local UI state. The list itself
   // (idle/loading/loaded/error) lives in the client's observable `sessions`
-  // store, read straight from the provider — so this component is a pure
+  // store, read straight from the provider - so this component is a pure
   // reader and there's no `await`-then-`setState` to guard against unmount.
   const [revokingFamilyId, setRevokingFamilyId] = useState<string | null>(null);
   const [signingOutEverywhere, setSigningOutEverywhere] = useState(false);
@@ -48,7 +48,7 @@ export function SessionsModal({ onClose }: SessionsModalProps) {
       try {
         await getClient().revokeSession(familyId);
       } catch {
-        // Swallow — the refresh below resyncs the list with server truth, so a
+        // Swallow - the refresh below resyncs the list with server truth, so a
         // failed revoke simply leaves the (still-active) row in place.
       } finally {
         setRevokingFamilyId(null);
@@ -63,7 +63,7 @@ export function SessionsModal({ onClose }: SessionsModalProps) {
     setSigningOutEverywhere(true);
     try {
       await getClient().logoutEverywhere();
-      // After logout-everywhere the auth state flips to 'idle' — the
+      // After logout-everywhere the auth state flips to 'idle' - the
       // provider closes the parent overlay automatically. Belt-and-braces:
       // call onClose so the modal also tears down even if the consumer
       // wired it up outside the provider.

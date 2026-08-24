@@ -6,7 +6,7 @@ import { buildPrivyAdapter, type PrivyRuntime } from '../src/runtime.ts';
 import { PrivyAdapterUnsupportedError } from '../src/environment.ts';
 
 // These tests exercise the framework-agnostic core (`buildPrivyAdapter`) with a
-// MOCK PrivyRuntime — no Privy SDK, no app id, no browser. The mock stands in for
+// MOCK PrivyRuntime - no Privy SDK, no app id, no browser. The mock stands in for
 // what the web/RN bridge would attach; a real Stellar keypair plays the role of
 // Privy's `signRawHash`, so we can prove the adapter emits a cryptographically
 // valid Stellar signature without any Privy infrastructure.
@@ -61,7 +61,7 @@ test('signTransaction produces a valid Stellar signature via the runtime', async
   assert.equal(signed.signatures.length, 1);
   const sig = signed.signatures[0]!;
   // The decorated signature must verify against the original tx hash + keypair,
-  // and carry the keypair's hint — i.e. it is exactly what `tx.sign(kp)` yields.
+  // and carry the keypair's hint - i.e. it is exactly what `tx.sign(kp)` yields.
   assert.ok(kp.verify(signed.hash(), sig.signature()), 'signature verifies against the tx hash');
   assert.deepEqual(sig.hint(), kp.signatureHint(), 'decorated signature carries the keypair hint');
 });
@@ -123,7 +123,7 @@ test('getPublicKey is null before a runtime attaches', async () => {
 
 test('throws PrivyAdapterUnsupportedError when no runtime ever attaches', async () => {
   // No bridge mounts (e.g. Angular/Vue). The method waits for the attach timeout
-  // and then fails clearly. ~5s by design — the only slow test here.
+  // and then fails clearly. ~5s by design - the only slow test here.
   const adapter = buildPrivyAdapter({ appId: 'app', loginMethods: ['email'] });
   await assert.rejects(
     () => adapter.signTransaction(buildTxXdr(), { networkPassphrase: PASSPHRASE }),

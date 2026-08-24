@@ -13,7 +13,7 @@ type OAuthDeps = FlowDeps & {
 
 /**
  * Break the popup's `window.opener` back-reference so the OAuth window
- * cannot navigate the parent. Best-effort — older browsers expose the
+ * cannot navigate the parent. Best-effort - older browsers expose the
  * property as read-only.
  */
 function severOpener(popup: Window | null): void {
@@ -27,8 +27,8 @@ function severOpener(popup: Window | null): void {
 
 /**
  * Default web opener: reserve a blank popup synchronously (before any await)
- * so popup blockers — which only honor `window.open` inside the original
- * user-gesture tick — don't swallow it, then navigate it to the OAuth URL.
+ * so popup blockers - which only honor `window.open` inside the original
+ * user-gesture tick - don't swallow it, then navigate it to the OAuth URL.
  *
  * React Native consumers replace this via `PollarClientConfig.openAuthUrl`
  * (typically wrapping `expo-web-browser`'s `openAuthSessionAsync`).
@@ -73,7 +73,7 @@ export async function loginOAuth(provider: 'google' | 'github', deps: OAuthDeps)
 
   await openAuthUrl({ provider, getUrl, redirectUri, signal });
 
-  // Opener never called `getUrl`, or session creation failed — nothing to poll.
+  // Opener never called `getUrl`, or session creation failed - nothing to poll.
   if (!clientSessionId) return;
 
   await authenticate(clientSessionId, deps);

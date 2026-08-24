@@ -5,7 +5,7 @@ import { AUTH_ERROR_CODES, type AuthErrorCode } from '../../types';
  * wallet-service in `{ code, success: false }`) to a user-facing message and
  * the SDK's coarse `AuthErrorCode` bucket.
  *
- * The backend stays code-only by design — this catalog is the single place the
+ * The backend stays code-only by design - this catalog is the single place the
  * SDK turns those codes into human-readable English. Consumers that need i18n
  * can switch on `state.errorCode` (the bucket) or the raw `code` instead of the
  * message string.
@@ -16,7 +16,7 @@ interface ResolvedAuthError {
 }
 
 const CATALOG: Record<string, ResolvedAuthError> = {
-  // ── Smart-account deploy / sponsor wallet ──────────────────────────────────
+  // -- Smart-account deploy / sponsor wallet ----------------------------------
   SPONSOR_NOT_FUNDED: {
     message: "This app can't create your wallet yet — its sponsor account isn't funded. Please contact the app's developer.",
     errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED,
@@ -34,7 +34,7 @@ const CATALOG: Record<string, ResolvedAuthError> = {
     errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED,
   },
 
-  // ── Passkey ceremony ────────────────────────────────────────────────────────
+  // -- Passkey ceremony --------------------------------------------------------
   PASSKEY_ALREADY_REGISTERED: {
     message: 'A passkey is already registered for this account. Try signing in instead.',
     errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED,
@@ -52,8 +52,8 @@ const CATALOG: Record<string, ResolvedAuthError> = {
     errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED,
   },
 
-  // ── On-chain transaction failures (surfaced during deploy/transfer) ─────────
-  // These map to the TX_FAILED bucket (not PASSKEY_FAILED) — the precise reason
+  // -- On-chain transaction failures (surfaced during deploy/transfer) ---------
+  // These map to the TX_FAILED bucket (not PASSKEY_FAILED) - the precise reason
   // is the entry key itself, surfaced as the raw `code` on the tx outcome.
   TX_INSUFFICIENT_BALANCE: {
     message: 'Insufficient balance to complete this transaction.',
@@ -88,7 +88,7 @@ const CATALOG: Record<string, ResolvedAuthError> = {
 /**
  * Resolves a backend error `code` to a friendly message + bucket. Falls back to
  * the supplied default message when the code is unknown or absent, bucketing by
- * the code's domain prefix (`TX_`/`SDK_TX_` → `TX_FAILED`, else `PASSKEY_FAILED`).
+ * the code's domain prefix (`TX_`/`SDK_TX_` -> `TX_FAILED`, else `PASSKEY_FAILED`).
  */
 export function resolveAuthError(code: string | undefined, fallbackMessage: string): ResolvedAuthError {
   if (code && CATALOG[code]) return CATALOG[code];

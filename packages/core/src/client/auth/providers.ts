@@ -4,7 +4,7 @@ import { initEmailSession, sendEmailCode, verifyAndAuthenticate } from './emailF
 /**
  * Built-in hosted-OAuth provider (`google` / `github`). The whole popup +
  * status-poll dance lives in `ctx.startHostedOAuth`, so the provider is a
- * one-liner — and any custom provider can reuse the same helper.
+ * one-liner - and any custom provider can reuse the same helper.
  */
 export function oauthProvider(provider: 'google' | 'github'): PollarAuthProvider {
   return {
@@ -27,7 +27,7 @@ export function emailProvider(): PollarAuthProvider {
       const email = (options as { email?: string }).email ?? '';
       // Reject a blank email BEFORE minting a server session, so an `email`-less
       // login() doesn't create an orphaned session that then errors. sendEmailCode
-      // validates too (the real safety net) — this just fails faster and avoids
+      // validates too (the real safety net) - this just fails faster and avoids
       // the wasted /auth/session round-trip.
       if (!email.trim()) {
         ctx.setAuthState({

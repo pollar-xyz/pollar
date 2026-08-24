@@ -47,7 +47,7 @@
   white-space: nowrap;
 }
 
-/* Truncated identifier chip (trustline issuer, payment counterparty…). */
+/* Truncated identifier chip (trustline issuer, payment counterparty...). */
 .pollar-hist-item-issuer {
   display: inline-flex;
   align-items: center;

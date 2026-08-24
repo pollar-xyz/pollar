@@ -11,7 +11,7 @@ export interface ModalStyleOverrides {
    *  keeps its theme color, so the two stay distinguishable. */
   textColor?: string | null | undefined;
   /** Fill of the SECONDARY buttons (the wallet / social / provider entries, the
-   *  retry button). The primary button is the accent's job. Unset ⇒ the theme's
+   *  retry button). The primary button is the accent's job. Unset => the theme's
    *  own surface color, which is what these buttons always used. */
   buttonColor?: string | null | undefined;
   /** Radius of the modal card itself, in px. */
@@ -28,7 +28,7 @@ const DEFAULT_BUTTON_BORDER_RADIUS = 6;
 const DEFAULT_OVERLAY_Z_INDEX = 50;
 
 /** A configured length, as a CSS px string. Anything that isn't a finite,
- *  non-negative number falls back to `fallback` — a malformed stored value must
+ *  non-negative number falls back to `fallback` - a malformed stored value must
  *  not collapse the card's chrome. */
 function px(value: number | null | undefined, fallback: number): string {
   return `${typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback}px`;
@@ -51,7 +51,7 @@ function parseHex(value: string): [number, number, number] | null {
 
 /** Text color that stays legible on `background`. The primary button's label was
  *  hardcoded white, which a light fill (the Amber accent preset, say) turns
- *  invisible — so it follows the fill's luminance instead. Unparseable colors
+ *  invisible - so it follows the fill's luminance instead. Unparseable colors
  *  keep white, the pre-existing behavior. */
 export function readableTextOn(background: string): string {
   const rgb = parseHex(background);
@@ -65,12 +65,12 @@ export function readableTextOn(background: string): string {
 /** How much room a modal gives its header. 'hero' is the identity-forward set
  *  (login, KYC, ramp, the Privy sub-modal): roomier padding and a larger
  *  centered heading. 'compact' is every utility modal (send, balance, history,
- *  …), which keeps the card's own 1.75rem padding. */
+ *  ...), which keeps the card's own 1.75rem padding. */
 export type ModalVariant = 'hero' | 'compact';
 
 /** Theme-derived CSS custom properties shared by every Pollar modal, plus the
  *  per-app overrides on top. One definition so the whole modal family stays
- *  visually in lockstep — a var added here reaches all of them at once. */
+ *  visually in lockstep - a var added here reaches all of them at once. */
 export function buildModalCssVars(
   theme: string,
   accentColor: string,
@@ -80,8 +80,8 @@ export function buildModalCssVars(
   const isDark = theme === 'dark';
   const textColor = color(overrides.textColor, isDark ? '#ffffff' : '#111827');
   // Only emitted when actually configured. Left out, the secondary buttons fall
-  // back inside the CSS to whatever each already used — the theme surface for
-  // the filled ones, `transparent` for the ghost one — so an unset field can't
+  // back inside the CSS to whatever each already used - the theme surface for
+  // the filled ones, `transparent` for the ghost one - so an unset field can't
   // flatten those two into the same look.
   const secondaryBg = color(overrides.buttonColor, '');
   return {

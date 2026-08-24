@@ -38,7 +38,7 @@ export async function requestWalletChallenge(
     return null;
   }
   const challengeXdr = data.content.challengeXdr;
-  // Defense-in-depth before ANY consumer hands this to a real wallet to sign —
+  // Defense-in-depth before ANY consumer hands this to a real wallet to sign -
   // the built-in flow AND custom providers (via `ctx.requestChallenge`). Refuse
   // anything that isn't a real SEP-10 challenge (e.g. a live, submittable tx with
   // sequence != 0 from a compromised/MITM'd challenge endpoint). The server's
@@ -55,7 +55,7 @@ export async function loginWithAdapter(adapter: WalletAdapter, deps: FlowDeps): 
   const type = adapter.type;
 
   let connectedWallet: string;
-  // Assigned after the wallet is confirmed installed (see below) — declared here
+  // Assigned after the wallet is confirmed installed (see below) - declared here
   // so it's in scope for the `authenticate()` call after the try/catch.
   let clientSessionId: string;
   // Track the phase so the catch reports where the failure ACTUALLY happened
@@ -127,14 +127,14 @@ export async function loginWithAdapter(adapter: WalletAdapter, deps: FlowDeps): 
       return;
     }
 
-    // Key control is proven — NOW persist the adapter (and its walletType).
+    // Key control is proven - NOW persist the adapter (and its walletType).
     // Storing it at connect time left a dangling adapter + walletType row with
     // NO session whenever any step above failed; doing it here means a failure
     // never strands one. If the `authenticate()` call below fails, it runs
     // `clearSession()` which clears the adapter again.
     await deps.storeWalletAdapter(adapter, type);
   } catch (err) {
-    // A cancel (cancelLogin / destroy / new login) aborts the signal → withSignal
+    // A cancel (cancelLogin / destroy / new login) aborts the signal -> withSignal
     // rejects with an AbortError. Rethrow it so the flow's handler maps it to
     // `idle`, instead of mislabeling a user cancel as WALLET_CONNECT_FAILED.
     // (Mirrors how the other flows let AbortError propagate.)

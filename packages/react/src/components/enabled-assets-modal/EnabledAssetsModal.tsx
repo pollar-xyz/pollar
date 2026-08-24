@@ -65,7 +65,7 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
   const handleToggle = useCallback(
     (record: EnabledAssetRecord) => {
       const removing = record.trustlineEstablished;
-      // Sponsorship is derived automatically from the app config now — no flag.
+      // Sponsorship is derived automatically from the app config now - no flag.
       void runAction(
         assetKey(record),
         { code: record.code, issuer: record.issuer ?? '' },
@@ -77,7 +77,7 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
 
   const handleCustomSubmit = useCallback(
     async (input: { code: string; issuer: string; limit?: string }) => {
-      // Custom (non-configured) assets are never app-sponsored — the user pays.
+      // Custom (non-configured) assets are never app-sponsored - the user pays.
       const ok = await runAction(
         'custom',
         { code: input.code, issuer: input.issuer },

@@ -35,12 +35,12 @@ export interface OperationValidation {
  * Enforces the configured operation allowlist on a parsed transaction.
  *
  * Precedence:
- *  - If neither field is set → no restriction (legacy behavior): `{ ok: true }`.
+ *  - If neither field is set -> no restriction (legacy behavior): `{ ok: true }`.
  *  - `allowedOperations` (when set) is the base allowlist of stellar-sdk
  *    operation type names.
  *  - `restrictToTrustlines: true` adds the trustline preset
- *    (`TRUSTLINE_OPERATION_ALLOWLIST`) to the allowlist — so the effective set is
- *    the UNION of `allowedOperations` and the preset — and additionally requires
+ *    (`TRUSTLINE_OPERATION_ALLOWLIST`) to the allowlist - so the effective set is
+ *    the UNION of `allowedOperations` and the preset - and additionally requires
  *    the transaction to contain at least one `changeTrust` operation.
  *
  * Returns `{ ok: false, reason }` on the first violation; `reason` is safe to
@@ -49,7 +49,7 @@ export interface OperationValidation {
 export const validateTxOperations = (tx: Transaction, policy: OperationPolicy): OperationValidation => {
   const restrict = policy.restrictToTrustlines === true;
 
-  // No allowlist configured at all → legacy: sign any (non-fee-bump) tx.
+  // No allowlist configured at all -> legacy: sign any (non-fee-bump) tx.
   if (!restrict && !policy.allowedOperations) {
     return { ok: true };
   }

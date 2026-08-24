@@ -8,12 +8,12 @@ import type { VisibilityProvider } from './types';
  *   - `visibilitychange` is the canonical signal but lags on Safari macOS
  *     when switching between windows of the same app.
  *   - `pageshow` / `pagehide` fire when the page enters/leaves BFCache on
- *     iOS Safari — `visibilitychange` does not.
+ *     iOS Safari - `visibilitychange` does not.
  *   - `focus` / `blur` on window catch the macOS Safari multi-window case
  *     and are also the most-likely-to-fire signal on older browsers.
  *
  * Duplicate notifications are filtered by comparing against the last
- * dispatched state — listeners only see real transitions.
+ * dispatched state - listeners only see real transitions.
  */
 export function createWebVisibilityProvider(): VisibilityProvider {
   const isVisibleNow = (): boolean => typeof document === 'undefined' || document.visibilityState === 'visible';

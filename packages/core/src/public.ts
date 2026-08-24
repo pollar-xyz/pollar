@@ -9,13 +9,13 @@ export { createLogger } from './lib/logger';
 export { toBaseUnits, fromBaseUnits } from './lib/units';
 export type { LogLevel, PollarLogger } from './lib/logger';
 
-// ─── Storage ──────────────────────────────────────────────────────────────────
+// --- Storage ------------------------------------------------------------------
 export type { Storage, OnStorageDegrade, StorageDegradeReason } from './storage/types';
 export { defaultStorage } from './storage/autodetect';
 export { createLocalStorageAdapter, createMemoryAdapter } from './storage/web';
 export type { LocalStorageAdapterOptions } from './storage/web';
 
-// ─── KeyManager + DPoP ────────────────────────────────────────────────────────
+// --- KeyManager + DPoP --------------------------------------------------------
 export type { KeyManager, PublicEcJwk } from './keys/types';
 export { defaultKeyManager } from './keys/factory';
 export { WebCryptoKeyManager } from './keys/web-crypto';
@@ -50,10 +50,10 @@ export { isValidSession } from './client/session';
 export { StellarClient } from './stellar/StellarClient';
 export type { StellarNetwork, StellarClientConfig, StellarBalance } from './stellar/StellarClient';
 
-// ─── KYC endpoints ────────────────────────────────────────────────────────────
+// --- KYC endpoints ------------------------------------------------------------
 export { getKycStatus, getKycProviders, startKyc, resolveKyc, pollKycStatus } from './api/endpoints/kyc';
 
-// ─── Ramps endpoints ──────────────────────────────────────────────────────────
+// --- Ramps endpoints ----------------------------------------------------------
 export {
   getRampsQuote,
   getRampCountries,
@@ -68,11 +68,11 @@ export {
   decodePixQr,
 } from './api/endpoints/ramps';
 
-// ─── Distribution endpoints ───────────────────────────────────────────────────
+// --- Distribution endpoints ---------------------------------------------------
 export { listDistributionRules, claimDistributionRule } from './api/endpoints/distribution';
 
-// ─── Swap endpoints ───────────────────────────────────────────────────────────
+// --- Swap endpoints -----------------------------------------------------------
 export { quoteSwap, getSwapConfig, getSwapTokens } from './api/endpoints/swap';
 
-// ─── Earn endpoints ───────────────────────────────────────────────────────────
+// --- Earn endpoints -----------------------------------------------------------
 export { getEarnProviders, getEarnOpportunities, getEarnPosition, buildEarnTx } from './api/endpoints/earn';

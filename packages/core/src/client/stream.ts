@@ -108,7 +108,7 @@ export async function streamUntilFound(
           try {
             parsed = JSON.parse(dataLine.slice('data:'.length).trim());
           } catch {
-            // partial chunk — keep reading
+            // partial chunk - keep reading
             continue;
           }
           // Terminal `error` event (invalid / expired session): stop and surface.
@@ -134,8 +134,8 @@ export async function streamUntilFound(
 
     // Always wait the computed backoff before reconnecting. A data-bearing
     // close already reset it to the floor (retryDelayMs), so the happy-path
-    // reconnect stays snappy; the failure paths — including a mid-stream read
-    // error caught above — now back off instead of spinning in a tight
+    // reconnect stays snappy; the failure paths - including a mid-stream read
+    // error caught above - now back off instead of spinning in a tight
     // reconnect loop that hammers the server.
     await sleep(backoff);
   }
@@ -192,7 +192,7 @@ export async function pollUntilFound(
     }
 
     // Terminal: the session is gone (404 / INVALID) or expired (410 / EXPIRED).
-    // It can never become ready, so stop and surface — the caller resets the
+    // It can never become ready, so stop and surface - the caller resets the
     // login to an error state. Mirrors the SSE stream's terminal `error` events.
     if (httpStatus === 404 || envelope?.code === 'INVALID_CLIENT_SESSION_ID') {
       throw new SessionStatusError('INVALID_CLIENT_SESSION_ID');

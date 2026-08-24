@@ -6,7 +6,7 @@ import type { PollarPersistedSession } from '../types';
  * Persisted session shape (stored via the injected `Storage` adapter).
  *
  * Compared to the full `/auth/login` response:
- *   - `data.{mail,first_name,last_name,avatar,providers}` is dropped — that
+ *   - `data.{mail,first_name,last_name,avatar,providers}` is dropped - that
  *     PII is held in memory only on `PollarClient`, fetched from
  *     `/applications/config` after auth.
  *   - All string fields are length-bounded as defense-in-depth: even though
@@ -68,7 +68,7 @@ const KNOWN_CHAINS = new Set(['STELLAR', 'POLYGON', 'SOLANA']);
 
 /**
  * "Does this build understand the entry at all?" Deliberately NOT the full
- * shape guard — it looks only at the two closed vocabularies a newer server can
+ * shape guard - it looks only at the two closed vocabularies a newer server can
  * extend (`type`, `chain`), so `readStorage` can prune entries from the future
  * instead of failing validation on the whole session.
  */
@@ -126,7 +126,7 @@ export function isValidSession(value: unknown, logger: PollarLogger = console): 
   }
 
   // Optional DPoP key binding (see PollarPersistedSession.dpopJkt). Absent on
-  // sessions persisted by older SDKs — never required.
+  // sessions persisted by older SDKs - never required.
   if (s['dpopJkt'] !== undefined && !isBoundedString(s['dpopJkt'], MAX_DPOP_JKT)) {
     logger.debug('[PollarClient:session] Invalid session — dpopJkt must be a non-empty string if present');
     return false;
@@ -154,12 +154,12 @@ export function isValidSession(value: unknown, logger: PollarLogger = console): 
   // This guard runs against BOTH the persisted shape and the raw `/auth/login`
   // wire response; both speak the same vocabulary (`internal`), so no alias is
   // accepted here. Sessions persisted by older SDKs carry the legacy
-  // `'custodial'` type and a legacy `publicKey` alias — `readStorage` remaps
+  // `'custodial'` type and a legacy `publicKey` alias - `readStorage` remaps
   // the type and backfills `address` before validation, so those upgrade
   // instead of being rejected.
   if (!isValidWallet(s['wallet'], 'wallet', logger)) return false;
 
-  // `wallets` is optional — sessions persisted before the field existed, and
+  // `wallets` is optional - sessions persisted before the field existed, and
   // logins against an sdk-api that predates it, simply have none. When present
   // it must be a bounded array whose entries satisfy the same shape as
   // `wallet`, so a caller reading either field gets the same guarantees.
@@ -233,7 +233,7 @@ export async function readStorage(
 
   try {
     const session = JSON.parse(raw) as unknown;
-    // Migrate sessions persisted by older SDKs (≤0.8.x): they stored the wallet
+    // Migrate sessions persisted by older SDKs (<=0.8.x): they stored the wallet
     // address under the legacy `publicKey` key, and persisted the old wire type
     // `'custodial'` (the wire now emits `'internal'` directly). Backfill
     // `address` and remap the type so they pass validation and survive the
@@ -246,8 +246,8 @@ export async function readStorage(
       if (w && w['type'] === 'custodial') {
         w['type'] = 'internal';
       }
-      // Forward compatibility: a row written by a NEWER SDK — or by a login
-      // against a newer sdk-api — can carry `wallets[]` entries for a chain or
+      // Forward compatibility: a row written by a NEWER SDK - or by a login
+      // against a newer sdk-api - can carry `wallets[]` entries for a chain or
       // wallet type this build does not model. Pruning the unknown entries keeps
       // the session usable; rejecting the whole row would strand the user
       // logged-out on nothing worse than a vocabulary it has never seen.
@@ -265,14 +265,14 @@ export async function readStorage(
     if (!isValidSession(session, logger)) {
       // Deliberately NOT removed. The row is shared by every document on the
       // origin, and in a browser the removal emits a `storage` event that tears
-      // the session down in all of them — so one document running an older
+      // the session down in all of them - so one document running an older
       // build, or hitting a bound, would log everybody out. A row this build
       // cannot read is simply ignored; the next login overwrites it.
       logger.warn('[PollarClient:session] Stored session is invalid — ignoring it (left in storage)');
       return null;
     }
     if (session.token.expiresAt * 1000 < Date.now()) {
-      // AT expired — keep the session row so we can attempt /refresh; the
+      // AT expired - keep the session row so we can attempt /refresh; the
       // caller's refresh path will clear if refresh itself fails.
       return session;
     }

@@ -47,7 +47,7 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-/** Shorten a long identifier (issuer, hash, address) to `head…tail`. */
+/** Shorten a long identifier (issuer, hash, address) to `head...tail`. */
 function truncateMiddle(value: string, head = 4, tail = 4): string {
   return value.length <= head + tail + 1 ? value : `${value.slice(0, head)}…${value.slice(-tail)}`;
 }
@@ -55,7 +55,7 @@ function truncateMiddle(value: string, head = 4, tail = 4): string {
 // Stellar account (G) and contract (C) strkeys are 56 base32 chars.
 const STELLAR_ADDRESS = /\b[GC][A-Z2-7]{55}\b/g;
 
-/** Truncated address rendered as a copyable tag (issuer, wallet, contract…). */
+/** Truncated address rendered as a copyable tag (issuer, wallet, contract...). */
 function AddressChip({ value, label }: { value: string; label: string }) {
   return (
     <span className="pollar-hist-item-issuer">
@@ -66,8 +66,8 @@ function AddressChip({ value, label }: { value: string; label: string }) {
 }
 
 /**
- * Renders a summary string, swapping every full Stellar address (G… account or
- * C… contract) for an {@link AddressChip}. Plain-text runs are kept as-is.
+ * Renders a summary string, swapping every full Stellar address (G... account or
+ * C... contract) for an {@link AddressChip}. Plain-text runs are kept as-is.
  */
 function renderSummary(summary: string): ReactNode {
   const parts: ReactNode[] = [];
@@ -179,7 +179,7 @@ export function TxHistoryModalTemplate({
           // so the explorer link follows the row, not the picker.
           const explorerUrl = hash ? explorerUrlFor(record.chain, hash, record.network) : undefined;
           const asset = typeof record.details?.asset === 'string' ? record.details.asset : undefined;
-          // `change_trust` summaries embed the asset as `CODE:ISSUER` — split so
+          // `change_trust` summaries embed the asset as `CODE:ISSUER` - split so
           // the issuer can be truncated and copied on its own.
           const colon = asset ? asset.indexOf(':') : -1;
           const trustline =

@@ -44,7 +44,7 @@ function flowStepsOf(quotes: RampQuote[], selected: RampQuote | null): string[] 
 }
 
 /** Which of those steps the current widget step sits on. `error` belongs to no
- *  step — the flow stopped rather than advanced — so the bar hides there. */
+ *  step - the flow stopped rather than advanced - so the bar hides there. */
 const STEP_LABEL: Partial<Record<RampStep, string>> = {
   input: 'Amount',
   loading_quote: 'Amount',
@@ -64,7 +64,7 @@ function brokenLimitOf(amount: number, quote: RampQuote): { limit: 'min' | 'max'
   return null;
 }
 
-/** "The minimum amount is 11 ARS" — one phrasing, used both when we catch the
+/** "The minimum amount is 11 ARS" - one phrasing, used both when we catch the
  *  limit before submitting and when the backend is the one to report it. */
 function limitMessage(limit: 'min' | 'max', value: number, currency: string): string {
   return `The ${limit === 'min' ? 'minimum' : 'maximum'} amount for this route is ${value} ${currency}.`;
@@ -112,7 +112,7 @@ interface RampResult {
   // acceptance. Both must be completed before the customer activates.
   tosUrl?: string;
   // The provider gated the flow on identity verification and offers no hosted
-  // URL (Abroad). Nothing was built or signed — the user clears KYC with the
+  // URL (Abroad). Nothing was built or signed - the user clears KYC with the
   // provider directly, and we poll `getRampKycStatus` until they do.
   kycRequired?: boolean;
   stellarTxHash?: string;
@@ -175,12 +175,12 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         setTxStatus(tx.status);
         if (tx.stellarTxHash) setStellarTxHash(tx.stellarTxHash);
         if (tx.kycUrl) setKycUrl(tx.kycUrl);
-        // depositInstructions is returned by REST providers (Bridge) — e.g. a Pix
+        // depositInstructions is returned by REST providers (Bridge) - e.g. a Pix
         // `br_code` / bank details for on-ramp.
         if (tx.depositInstructions) setDepositInstructions(tx.depositInstructions);
         if (TERMINAL.includes(tx.status)) clearInterval(id);
       } catch {
-        /* transient — keep polling */
+        /* transient - keep polling */
       }
     }, 5000);
     return () => {
@@ -199,7 +199,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         const { hasApproved } = await client.getRampKycStatus();
         if (active && hasApproved) setKycApproved(true);
       } catch {
-        /* transient — keep polling */
+        /* transient - keep polling */
       }
     };
     void check();
@@ -212,7 +212,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
 
   /**
    * Fetch the ramp countries supported on the app's network. When `resetSelection`
-   * is set (initial load) — or the current selection is no longer offered — pick
+   * is set (initial load) - or the current selection is no longer offered - pick
    * the first country and adopt its primary currency.
    */
   async function loadCountries(resetSelection: boolean) {
@@ -263,7 +263,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         if (tx.depositInstructions) setDepositInstructions(tx.depositInstructions);
       }
     } catch {
-      /* transient — leave the current data in place */
+      /* transient - leave the current data in place */
     } finally {
       setRefreshing(false);
     }
@@ -355,7 +355,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setSelectedQuote(quote);
     setErrorMsg(null);
     // The limits are per route, and the amount was typed before the routes were
-    // known — so this is the first moment we can check it. Catching it here
+    // known - so this is the first moment we can check it. Catching it here
     // states the figure without spending a round trip on a certain rejection.
     const broken = brokenLimitOf(Number(amount), quote);
     if (broken) {
@@ -363,7 +363,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
       return;
     }
     const fields = requiredFieldsOf(quote);
-    // An `optional` field left blank is not missing (Abroad's tax id) — it must
+    // An `optional` field left blank is not missing (Abroad's tax id) - it must
     // not drag the user into the details step on its own.
     const missing = fields.some((f) => !f.optional && !(fieldValues[f.key] ?? '').trim());
     if (fields.length > 0 && missing) {
@@ -442,7 +442,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   }
 
   // A pending link-less KYC gate blocks the withdraw: the provider has no payment
-  // context to pay into yet, so completing would either fail or — worse — move
+  // context to pay into yet, so completing would either fail or - worse - move
   // real funds into a deposit it cannot pay out.
   const kycBlocking = kycPending && !kycApproved;
   const canComplete =

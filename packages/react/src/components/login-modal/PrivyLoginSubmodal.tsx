@@ -24,7 +24,7 @@ interface PrivyLoginSubmodalProps {
   onBack: () => void;
   /** Close the whole login modal. */
   onCancel: () => void;
-  /** The provider login finished — hand off to `login({ provider })`. */
+  /** The provider login finished - hand off to `login({ provider })`. */
   onAuthenticated: () => void;
 }
 

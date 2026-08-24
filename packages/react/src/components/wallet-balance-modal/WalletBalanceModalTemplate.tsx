@@ -11,7 +11,7 @@ import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 // blow the column apart. Digits are padded either way so amounts line up.
 //
 // A null balance means the chain could not be read. It renders as a dash, never
-// as 0.0000000 — a wallet that failed to load must not look empty.
+// as 0.0000000 - a wallet that failed to load must not look empty.
 function formatBalance(balance: string | null, decimals = 7): string {
   if (balance === null) return '—';
   const digits = Math.min(decimals, 7);
@@ -59,7 +59,7 @@ function BalanceItem({ record, faucet }: { record: WalletBalanceRecord; faucet: 
               {faucet.label}
             </a>
             {/* Pollar's Solana testnet is the devnet cluster, and both faucets
-                fund devnet — spell it out so nobody requests on the wrong one. */}
+                fund devnet - spell it out so nobody requests on the wrong one. */}
             <span className="pollar-bal-faucet-net"> (devnet)</span>
           </span>
         )}
@@ -85,7 +85,7 @@ export interface WalletBalanceModalTemplateProps {
   /** Networks the user holds a wallet on; the first one is the default. */
   chains: WalletChain[];
   selectedChain: WalletChain | null;
-  /** testnet vs mainnet — gates the Solana devnet faucet hint. */
+  /** testnet vs mainnet - gates the Solana devnet faucet hint. */
   network: StellarNetwork;
   onSelectChain: (chain: WalletChain) => void;
   onRefresh: () => void;
@@ -112,7 +112,7 @@ export function WalletBalanceModalTemplate({
   // blocks interaction so nothing is read against data that is changing.
   const data = useStickyData(walletBalance.step === 'loaded' ? walletBalance.data : null);
   // Only the picked network's balances. The backend returns every chain in one
-  // payload, so this is a local filter — switching networks costs no request.
+  // payload, so this is a local filter - switching networks costs no request.
   const balances = (data?.balances ?? []).filter((b) => resolveChain(b.chain) === selectedChain);
   // These faucets fund devnet/testnet only, so mainnet gets no hint at all.
   const showFaucets = selectedChain === 'SOLANA' && network === 'testnet';
@@ -166,7 +166,7 @@ export function WalletBalanceModalTemplate({
         </div>
       )}
 
-      {/* First load only — a refresh keeps the old list under the overlay. */}
+      {/* First load only - a refresh keeps the old list under the overlay. */}
       {isLoading && !data && (
         <div className="pollar-loading-block">
           <div className="pollar-spinner" />

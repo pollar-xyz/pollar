@@ -7,7 +7,7 @@
  *     throws `ReferenceError` instead of producing an AbortError.
  *   - `AbortSignal.prototype.throwIfAborted` is absent on older RN AbortSignal
  *     polyfills, so calling it (even via optional chaining, which only guards a
- *     null/undefined signal — not a missing method) throws `TypeError`.
+ *     null/undefined signal - not a missing method) throws `TypeError`.
  *
  * These shims keep the abort path working everywhere while preserving the
  * `error.name === 'AbortError'` contract the rest of the SDK checks against.
@@ -15,7 +15,7 @@
 
 /**
  * Build an AbortError. Uses the native `DOMException` when present (browsers,
- * Node ≥17) and falls back to a plain `Error` tagged `name = 'AbortError'`
+ * Node >=17) and falls back to a plain `Error` tagged `name = 'AbortError'`
  * where `DOMException` is undefined (Hermes).
  */
 export function abortError(): Error {
@@ -57,7 +57,7 @@ export function timeoutController(ms: number): { signal: AbortSignal; clear: () 
 /**
  * Combine several `AbortSignal`s into one that aborts as soon as ANY input does.
  * RN-safe replacement for `AbortSignal.any` (absent on Hermes). Returns the
- * combined signal plus a `cleanup()` that detaches the listeners — call it once
+ * combined signal plus a `cleanup()` that detaches the listeners - call it once
  * the awaited work settles so finished requests don't leak listeners on a
  * long-lived caller signal.
  */

@@ -15,7 +15,7 @@ import { logApiError } from './logging';
  * 2. Ask the server for a challenge bound to that session.
  * 3. Run the device ceremony (injected `deps.passkey`) in `mode`.
  * 4. Post the result to the matching endpoint.
- * 5. Hand off to `authenticate()` for the READY → `/auth/login` token exchange.
+ * 5. Hand off to `authenticate()` for the READY -> `/auth/login` token exchange.
  */
 export async function smartWalletFlow(deps: FlowDeps, mode: PasskeyMode): Promise<void> {
   const { api, logger, signal, setAuthState, passkey } = deps;
@@ -49,14 +49,14 @@ export async function smartWalletFlow(deps: FlowDeps, mode: PasskeyMode): Promis
       return failPasskey(setAuthState, extractErrorCode(challengeError, challengeData), 'Failed to start passkey');
     }
 
-    // 2. Device ceremony (Touch ID / biometric) — runtime-injected.
+    // 2. Device ceremony (Touch ID / biometric) - runtime-injected.
     setAuthState({ step: 'creating_passkey' });
     const ceremony = await passkey({ challenge, mode });
     // openapi-fetch types the WebAuthn payload as a loose object; the browser
     // PublicKeyCredential JSON satisfies it.
     const response = ceremony.response as { [key: string]: unknown };
 
-    // 3. New user → register (deploys the C-address); returning → login.
+    // 3. New user -> register (deploys the C-address); returning -> login.
     if (ceremony.kind === 'register') {
       setAuthState({ step: 'deploying_smart_account' });
       const body = { clientSessionId, response };
@@ -76,7 +76,7 @@ export async function smartWalletFlow(deps: FlowDeps, mode: PasskeyMode): Promis
       }
     }
   } catch (err) {
-    // A cancel (cancelLogin / destroy / new login) aborts the signal → the
+    // A cancel (cancelLogin / destroy / new login) aborts the signal -> the
     // WebAuthn/ceremony call rejects with an AbortError. Rethrow it so the flow's
     // handler maps it to `idle`, instead of mislabeling a user cancel as
     // PASSKEY_FAILED. (Mirrors walletFlow.)
@@ -85,7 +85,7 @@ export async function smartWalletFlow(deps: FlowDeps, mode: PasskeyMode): Promis
     return failPasskey(setAuthState, undefined, 'Passkey login failed');
   }
 
-  // 4. Session is READY → exchange for DPoP-bound tokens.
+  // 4. Session is READY -> exchange for DPoP-bound tokens.
   await authenticate(clientSessionId, deps);
 }
 

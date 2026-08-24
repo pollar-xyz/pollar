@@ -35,7 +35,7 @@ const REASON_LABEL: Record<string, string> = {
   DISTRIBUTION_RULE_NOT_STARTED: 'Not started yet',
   DISTRIBUTION_RULE_EXPIRED: 'Expired',
   DISTRIBUTION_RULE_EXHAUSTED: 'Fully claimed',
-  // Per-user, per-window claim limit (resets next period) — not permanent.
+  // Per-user, per-window claim limit (resets next period) - not permanent.
   DISTRIBUTION_RATE_LIMIT_EXCEEDED: 'Claimed for this period',
 };
 

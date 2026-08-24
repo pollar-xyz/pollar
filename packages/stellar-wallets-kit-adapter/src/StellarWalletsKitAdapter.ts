@@ -15,7 +15,7 @@ import { getInitNetwork, getKitLogger } from './factory';
 
 /**
  * Wraps Stellar Wallets Kit so it satisfies the `@pollar/core` `WalletAdapter`
- * contract. The kit is a global singleton — `setWallet` is called before every
+ * contract. The kit is a global singleton - `setWallet` is called before every
  * operation so the correct module handles the request, which lets a single
  * `StellarWalletsKit.init(...)` cover many wallet modules.
  */

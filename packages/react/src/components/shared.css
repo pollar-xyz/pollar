@@ -1,4 +1,4 @@
-/* ─── Animations ──────────────────────────────────────────────────────────────── */
+/* --- Animations ---------------------------------------------------------------- */
 @keyframes pollar-spin {
   to {
     transform: rotate(360deg);
@@ -15,7 +15,7 @@
   }
 }
 
-/* ─── Overlay ─────────────────────────────────────────────────────────────────── */
+/* --- Overlay ------------------------------------------------------------------- */
 .pollar-overlay {
   position: fixed;
   inset: 0;
@@ -31,7 +31,7 @@
   background-color: rgba(0, 0, 0, 0.5);
 }
 
-/* ─── Modal card base (all modals extend this) ────────────────────────────────── */
+/* --- Modal card base (all modals extend this) ---------------------------------- */
 .pollar-modal-card {
   position: relative;
   width: 100%;
@@ -48,7 +48,7 @@
   overflow-y: auto;
 }
 
-/* ─── Common input ────────────────────────────────────────────────────────────── */
+/* --- Common input -------------------------------------------------------------- */
 .pollar-input {
   width: 100%;
   height: var(--pollar-input-height, 44px);
@@ -74,7 +74,7 @@
   cursor: not-allowed;
 }
 
-/* ─── Modal header (title left, actions right) ────────────────────────────────── */
+/* --- Modal header (title left, actions right) ---------------------------------- */
 .pollar-modal-header {
   display: flex;
   align-items: center;
@@ -95,7 +95,7 @@
   gap: 0.5rem;
 }
 
-/* ─── Icon nav buttons (close / back — shared base) ──────────────────────────── */
+/* --- Icon nav buttons (close / back - shared base) ---------------------------- */
 .pollar-close-btn,
 .pollar-back-btn,
 .pollar-modal-close {
@@ -137,12 +137,12 @@
   left: 1rem;
 }
 
-/* ─── Refresh icon (icon-only refresh button reuses .pollar-modal-close base) ──── */
+/* --- Refresh icon (icon-only refresh button reuses .pollar-modal-close base) ---- */
 .pollar-modal-refresh-icon.pollar-spinning {
   animation: pollar-spin 0.8s linear infinite;
 }
 
-/* ─── Action button container ─────────────────────────────────────────────────── */
+/* --- Action button container --------------------------------------------------- */
 .pollar-modal-actions {
   display: flex;
   gap: 0.625rem;
@@ -151,19 +151,19 @@
 
 /* In a button row the primary grows to fill/share the available width. Scoped
  * here (rather than on the base class) so the button keeps its 44px height when
- * used inside a flex-column — a bare `flex: 1` collapses it to text height. */
+ * used inside a flex-column - a bare `flex: 1` collapses it to text height. */
 .pollar-modal-actions .pollar-btn-primary {
   flex: 1;
 }
 
-/* ─── Primary button ──────────────────────────────────────────────────────────── */
+/* --- Primary button ------------------------------------------------------------ */
 .pollar-btn-primary {
   width: 100%;
   height: var(--pollar-buttons-height, 44px);
   border: none;
   border-radius: var(--pollar-buttons-border-radius, 0.5rem);
   background-color: var(--pollar-accent);
-  /* Falls back to white — the hardcoded value this replaced — so a consumer
+  /* Falls back to white - the hardcoded value this replaced - so a consumer
    * mounting a template without the button vars keeps the original look. */
   color: var(--pollar-btn-primary-fg, #fff);
   font-size: 0.9375rem;
@@ -184,7 +184,7 @@
   cursor: not-allowed;
 }
 
-/* ─── Secondary button ────────────────────────────────────────────────────────── */
+/* --- Secondary button ---------------------------------------------------------- */
 .pollar-btn-secondary {
   height: var(--pollar-buttons-height, 44px);
   padding: 0 1rem;
@@ -204,7 +204,7 @@
   border-color: var(--pollar-text);
 }
 
-/* ─── Spinner ─────────────────────────────────────────────────────────────────── */
+/* --- Spinner ------------------------------------------------------------------- */
 .pollar-spinner {
   display: inline-block;
   vertical-align: middle;
@@ -217,7 +217,7 @@
   flex-shrink: 0;
 }
 
-/* Compact spinner for inline use (next to a label, inside a button, …). */
+/* Compact spinner for inline use (next to a label, inside a button, ...). */
 .pollar-spinner-sm {
   width: 1rem;
   height: 1rem;
@@ -225,7 +225,7 @@
 }
 
 /* When a spinner sits on the primary button's accent-filled surface its
- * accent-colored ring is invisible — recolor it to the button's own label color,
+ * accent-colored ring is invisible - recolor it to the button's own label color,
  * which follows the accent's luminance (white on a dark accent, dark on a pale
  * one). */
 .pollar-btn-primary .pollar-spinner {
@@ -233,7 +233,7 @@
   border-top-color: var(--pollar-btn-primary-fg, #fff);
 }
 
-/* Spinner that inherits the current text color — for inline use inside custom /
+/* Spinner that inherits the current text color - for inline use inside custom /
  * danger buttons where the accent ring would clash with the button's own color. */
 .pollar-spinner-current {
   border-color: color-mix(in srgb, currentColor 25%, transparent);
@@ -252,7 +252,7 @@
 }
 
 /* Inline spinner + label row for a compact loading state (next to a field, in a
- * list body, …). Pair with a muted text class for the label color. */
+ * list body, ...). Pair with a muted text class for the label color. */
 .pollar-inline-loading {
   display: flex;
   align-items: center;
@@ -269,7 +269,7 @@
   color: var(--pollar-muted);
 }
 
-/* ─── Segmented-control tabs (shared by Earn / Ramp modals) ───────────────────── */
+/* --- Segmented-control tabs (shared by Earn / Ramp modals) --------------------- */
 .pollar-tabs {
   display: flex;
   gap: 4px;
@@ -301,7 +301,7 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
-/* ─── Empty / error states ────────────────────────────────────────────────────── */
+/* --- Empty / error states ------------------------------------------------------ */
 .pollar-modal-empty {
   text-align: center;
   padding: 2rem 1rem;
@@ -316,7 +316,7 @@
   font-size: 0.875rem;
 }
 
-/* ─── Footer ──────────────────────────────────────────────────────────────────── */
+/* --- Footer -------------------------------------------------------------------- */
 .pollar-footer {
   display: flex;
   align-items: center;
@@ -355,7 +355,7 @@
   opacity: 0.6;
 }
 
-/* ─── Status banner ───────────────────────────────────────────────────────────── */
+/* --- Status banner ------------------------------------------------------------- */
 .pollar-status {
   display: flex;
   align-items: center;
@@ -425,7 +425,7 @@
   border-color: var(--pollar-accent);
 }
 
-/* Compact variant used inline next to an address (issuer, tx counterparty…). */
+/* Compact variant used inline next to an address (issuer, tx counterparty...). */
 .pollar-copy-btn-sm {
   width: 20px;
   height: 20px;
@@ -433,7 +433,7 @@
   border: none;
 }
 
-/* ─── Chain tag + on-chain address, shared by the balance and asset lists ────
+/* --- Chain tag + on-chain address, shared by the balance and asset lists ----
    Both modals list per-chain assets, so the network tag and the cropped
    issuer/contract address live here rather than in either modal's own CSS. The
    tag's accent is passed in per chain via --pollar-chain-color. */
@@ -462,7 +462,7 @@
   color: var(--pollar-muted);
 }
 
-/* ─── Busy overlay ───────────────────────────────────────────────────────────
+/* --- Busy overlay -----------------------------------------------------------
    Covers the card while a refresh is in flight so the stale data underneath
    stays readable but untouchable. The card is the scroll container, so `inset:0`
    spans the whole scrollable height; the inner box is sticky to stay on screen
@@ -489,7 +489,7 @@
   font-size: 0.8125rem;
 }
 
-/* ─── On/off switch ──────────────────────────────────────────────────────────
+/* --- On/off switch ----------------------------------------------------------
    One control for a binary state (currently trustlines), replacing the old
    status-pill-plus-button pair. */
 .pollar-switch {
@@ -542,14 +542,14 @@
   color: var(--pollar-muted);
 }
 
-/* ─── Network picker, shared by the send / balance / assets modals ───────────
+/* --- Network picker, shared by the send / balance / assets modals -----------
    Sits directly above the address chip and drives what the rest of the modal
    shows, so it hugs the chip instead of keeping the full field gap. */
 .pollar-chain-field {
   margin-bottom: 0.75rem;
 }
 
-/* ─── Wallet address chip, shared by every modal that shows the user's address ──
+/* --- Wallet address chip, shared by every modal that shows the user's address --
    The address plus its copy button. One definition so the chip looks identical
    whichever modal it appears in. */
 .pollar-address-row {

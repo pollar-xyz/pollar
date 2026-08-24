@@ -26,7 +26,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
   const [email, setEmail] = useState('');
   const { getClient, styles, appConfig: config, configStatus, retryConfig } = usePollar();
   const [authState, setAuthState] = useState<AuthState>(() => getClient().getAuthState());
-  // Registered wallet adapters (built-ins + config) → one login button each.
+  // Registered wallet adapters (built-ins + config) -> one login button each.
   const walletAdapters = useMemo(() => getClient().listWalletAdapters(), [getClient]);
   const [codeInputKey, setCodeInputKey] = useState(0);
   const pendingEmail = useRef<string | null>(null);
@@ -49,7 +49,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
         setCodeInputKey((k) => k + 1);
       }
       if (next.step === 'authenticated') {
-        // Clear any timer already pending — if `authenticated` fires more than
+        // Clear any timer already pending - if `authenticated` fires more than
         // once, overwriting the handle would orphan the previous timeout
         // (cleanup only tracks the latest).
         if (autoCloseTimer.current !== null) {
@@ -73,7 +73,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
   const { logoUrl, emailEnabled, embeddedWallets, smartWallet, providers } = styles;
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   // Opt-in: the Smart Wallet (passkey) option only shows when the dashboard
-  // explicitly enables it. Absent → hidden.
+  // explicitly enables it. Absent -> hidden.
   const smartWalletEnabled = smartWallet ?? false;
   // The heading is the app's name unless Branding set a custom one. Blank counts
   // as unset, which is what the dashboard sends when the field is cleared.
@@ -103,7 +103,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
       setInteractiveAdapter(adapter);
       return;
     }
-    // Any other registered wallet adapter (freighter/albedo/swk…). The adapter
+    // Any other registered wallet adapter (freighter/albedo/swk...). The adapter
     // opens its own connect/auth UI; the SDK wraps the generic SEP-10 flow.
     getClient().login({ provider: type } as PollarLoginOptions);
   }

@@ -4,7 +4,7 @@ import type { RampQuote } from '@pollar/core';
 
 interface RouteDisplayProps {
   quote: RampQuote;
-  /** This route is the one being started — it owns the in-flight request. */
+  /** This route is the one being started - it owns the in-flight request. */
   busy?: boolean;
   /** Another route is starting, so this one is not selectable meanwhile. */
   disabled?: boolean;

@@ -26,7 +26,7 @@ export interface PollarPrivyAppearance {
  * install `@privy-io/react-auth` just for the types.
  */
 export interface PollarPrivyConfig {
-  /** Your Privy app id (Privy dashboard → app settings). */
+  /** Your Privy app id (Privy dashboard -> app settings). */
   appId: string;
   /** Optional Privy app client id, for apps scoped to a specific client key. */
   clientId?: string;

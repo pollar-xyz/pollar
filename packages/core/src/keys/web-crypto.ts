@@ -5,7 +5,7 @@ import type { KeyManager, PublicEcJwk } from './types';
 
 /**
  * `KeyManager` backed by Web Crypto + IndexedDB. The ECDSA P-256 keypair is
- * generated with `extractable: false` for the private key — its bytes never
+ * generated with `extractable: false` for the private key - its bytes never
  * leave the browser's crypto subsystem. The `CryptoKeyPair` is persisted in
  * IndexedDB via structured clone (browsers serialize non-extractable keys
  * without exposing material).
@@ -53,7 +53,7 @@ function awaitTx<T>(req: IDBRequest<T>): Promise<T> {
  * transaction actually commits, and a commit-time failure (quota, private-mode
  * eviction, serialization) aborts the transaction silently after that. Waiting
  * for the transaction's own `complete` event turns those silent losses into
- * caught errors — critical here, because a DPoP keypair that only *appeared*
+ * caught errors - critical here, because a DPoP keypair that only *appeared*
  * to persist guarantees a thumbprint-mismatch logout on the next page load.
  */
 function awaitWriteTx(tx: IDBTransaction, req: IDBRequest): Promise<void> {
@@ -132,14 +132,14 @@ export class WebCryptoKeyManager implements KeyManager {
     // All three fields, not just the pair: `_doInit` assigns `keyPair` and only
     // THEN awaits the JWK export + thumbprint. A caller landing in that window
     // would early-return on `keyPair` alone and find `publicJwk`/`thumbprint`
-    // still null — `getThumbprint()` then threw "initialization failed" while
+    // still null - `getThumbprint()` then threw "initialization failed" while
     // init was, in fact, mid-flight. Requiring all three makes such a caller
     // fall through and join the in-flight `_initPromise` instead.
     if (this.keyPair && this.publicJwk && this.thumbprint) return;
     if (!this._initPromise) {
       this._initPromise = this._doInit().catch((err) => {
         // Clear the promise so the next call retries instead of permanently
-        // returning a rejected promise. The error propagates to the caller —
+        // returning a rejected promise. The error propagates to the caller -
         // `PollarClient` logs it through its configured logger, so we don't
         // double-log (raw, ungated) here.
         this._initPromise = null;
@@ -160,7 +160,7 @@ export class WebCryptoKeyManager implements KeyManager {
       if (pair && !isCryptoKeyPair(pair)) pair = undefined;
     } catch {
       // IDB unavailable (Safari private mode, sandboxed iframe, partitioned
-      // storage in a 3rd-party iframe). Fall through to fresh keygen — we
+      // storage in a 3rd-party iframe). Fall through to fresh keygen - we
       // lose persistence across reloads but the current session can sign.
       pair = undefined;
     }
@@ -168,7 +168,7 @@ export class WebCryptoKeyManager implements KeyManager {
     if (!pair) {
       pair = (await globalThis.crypto.subtle.generateKey(
         { name: 'ECDSA', namedCurve: 'P-256' },
-        // false → private key non-extractable; per W3C ECDSA spec the public
+        // false -> private key non-extractable; per W3C ECDSA spec the public
         // key is always extractable regardless of this flag.
         false,
         ['sign', 'verify'],
@@ -188,9 +188,9 @@ export class WebCryptoKeyManager implements KeyManager {
   /**
    * Derive the public JWK from a `CryptoKey`. Prefers the `'raw'` export (the
    * 65-byte uncompressed point `0x04 || X(32) || Y(32)`) and base64url-encodes
-   * the coordinates ourselves — that sidesteps polyfills whose `exportKey('jwk')`
-   * emits non-base64url `x`/`y` (standard base64, `=` padding, or — as seen with
-   * `react-native-quick-crypto` — a stray `.`). Real browsers and most polyfills
+   * the coordinates ourselves - that sidesteps polyfills whose `exportKey('jwk')`
+   * emits non-base64url `x`/`y` (standard base64, `=` padding, or - as seen with
+   * `react-native-quick-crypto` - a stray `.`). Real browsers and most polyfills
    * support `'raw'` for public EC keys.
    *
    * Falls back to the `'jwk'` export (normalized via `canonicalEcJwk`) if `'raw'`
@@ -212,7 +212,7 @@ export class WebCryptoKeyManager implements KeyManager {
         y: base64urlEncode(raw.slice(33, 65)),
       };
     } catch {
-      // 'raw' unsupported (or odd) on this runtime — fall back to the JWK export
+      // 'raw' unsupported (or odd) on this runtime - fall back to the JWK export
       // and normalize its coordinates to unpadded base64url.
       const jwk = (await globalThis.crypto.subtle.exportKey('jwk', publicKey)) as JsonWebKey;
       return canonicalEcJwk(jwk);
@@ -239,7 +239,7 @@ export class WebCryptoKeyManager implements KeyManager {
    * surface later as an unexplained thumbprint-mismatch logout on the next
    * page load. Re-putting (rather than only probing) also heals
    * the case where another tab's `reset()` deleted the row this instance still
-   * signs with — the key a new login binds is guaranteed to be the stored one.
+   * signs with - the key a new login binds is guaranteed to be the stored one.
    */
   async ensurePersisted(): Promise<boolean> {
     if (!this.keyPair) await this.init();
@@ -256,7 +256,7 @@ export class WebCryptoKeyManager implements KeyManager {
   /**
    * Drop the in-memory cache; the next operation re-runs `init()` and adopts
    * whatever IndexedDB holds (another tab may have rotated the shared key).
-   * Never touches persistent storage — that's `reset()`.
+   * Never touches persistent storage - that's `reset()`.
    */
   resync(): void {
     this.keyPair = null;

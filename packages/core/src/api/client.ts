@@ -17,7 +17,7 @@ export interface ApiClientOptions {
    * A DPoP proof is single-use: the server remembers each `jti` and answers a
    * replay with `SDK_AUTH_DPOP_INVALID` / `jti-replay` (401). A retry built with
    * `request.clone()` carries the very same `DPoP` header, so without this hook
-   * the retry of a proof-carrying request is guaranteed to fail — and its 401
+   * the retry of a proof-carrying request is guaranteed to fail - and its 401
    * then looks like an expired token, triggering a pointless refresh.
    *
    * Returns a request with a freshly-minted proof, or `null` when it cannot be
@@ -32,7 +32,7 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_ATTEMPTS = 2;
 const DEFAULT_BASE_DELAY_MS = 300;
 
-/** `true` for a transport-level failure (timeout / dropped connection) — the
+/** `true` for a transport-level failure (timeout / dropped connection) - the
  *  only class of error worth retrying. An HTTP response, even a 5xx, is NOT an
  *  error here: openapi-fetch resolves it, so it never reaches this path. */
 function isRetryableTransportError(err: unknown): boolean {
@@ -54,7 +54,7 @@ function backoffDelay(attempt: number, baseDelayMs: number): number {
 /**
  * Run a single fetch bounded by `timeoutMs`, combining the timeout with the
  * request's own abort signal (e.g. a caller's cancellation, or `destroy()`).
- * Rejects with {@link PollarNetworkError} when the timeout — not the caller —
+ * Rejects with {@link PollarNetworkError} when the timeout - not the caller -
  * fired, so the reason is distinguishable downstream.
  *
  * Exported so the DPoP-nonce retry inside the client (which rebuilds the Request
@@ -73,7 +73,7 @@ export async function fetchWithTimeout(request: Request, timeoutMs: number): Pro
   try {
     // Race the fetch against the timeout. The abort above is the clean path, but
     // some runtimes (older React Native / Hermes fetch polyfills) ignore an
-    // `init.signal` override on a Request argument — there the abort never
+    // `init.signal` override on a Request argument - there the abort never
     // reaches the socket and the promise would hang forever. Racing a rejection
     // GUARANTEES the call settles regardless of how the runtime treats the
     // signal, which is the whole point: a stalled refresh must never trap the
@@ -86,7 +86,7 @@ export async function fetchWithTimeout(request: Request, timeoutMs: number): Pro
       else timeout.signal.addEventListener('abort', onTimeout);
     });
   } catch (err) {
-    // The timeout fired (not the caller's own cancellation) — normalize the
+    // The timeout fired (not the caller's own cancellation) - normalize the
     // failure to a typed, catchable error so callers can branch on the code.
     if (timeout.signal.aborted && !request.signal?.aborted) {
       throw err instanceof PollarNetworkError ? err : new PollarNetworkError(`Request timed out after ${timeoutMs}ms`, err);
@@ -96,7 +96,7 @@ export async function fetchWithTimeout(request: Request, timeoutMs: number): Pro
     timeout.clear();
     combined.cleanup();
     // If the race settled via the timeout, the aborted fetch will reject shortly
-    // after — swallow it so it doesn't surface as an unhandled rejection.
+    // after - swallow it so it doesn't surface as an unhandled rejection.
     fetchPromise.catch(() => {});
   }
 }
@@ -109,7 +109,7 @@ export async function fetchWithTimeout(request: Request, timeoutMs: number): Pro
  *
  * Only **idempotent** methods (GET/HEAD) are transparently retried. A
  * transport error (timeout / dropped connection) does not tell us whether the
- * server received and processed the request — only that we did not get the
+ * server received and processed the request - only that we did not get the
  * response. Re-sending a POST/PUT/PATCH/DELETE that already landed can duplicate
  * its effect, and for a DPoP-bound request it also replays a single-use proof
  * (same `jti`), which the server rejects with `SDK_AUTH_DPOP_INVALID` /
@@ -165,7 +165,7 @@ function makeRetryingFetch(
         return await fetchWithTimeout(attemptReq, effectiveTimeoutMs);
       } catch (err) {
         lastErr = err;
-        // The CALLER aborted (cancellation / destroy) — never retry, propagate.
+        // The CALLER aborted (cancellation / destroy) - never retry, propagate.
         if (request.signal?.aborted) throw err;
         // A real HTTP response never lands here; only transport errors do.
         if (!isRetryableTransportError(err) || attempt >= maxAttempts) throw err;

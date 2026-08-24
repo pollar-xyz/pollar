@@ -57,7 +57,7 @@ function AssetItem({
       {isStellar && (
         <div className="pollar-asset-actions">
           <span className="pollar-asset-trustline-label">Trustline</span>
-          {/* Native XLM needs no trustline — it is implicit and can't be removed,
+          {/* Native XLM needs no trustline - it is implicit and can't be removed,
               so the switch shows the state but stays locked on. */}
           <Toggle
             checked={established}
@@ -117,7 +117,7 @@ export function EnabledAssetsModalTemplate({
   const data = useStickyData(enabledAssets.step === 'loaded' ? enabledAssets.data : null);
   const busy = busyKey !== null;
   // Only the picked network's assets. The backend returns every chain in one
-  // payload, so this is a local filter — switching networks costs no request.
+  // payload, so this is a local filter - switching networks costs no request.
   const assets = (data?.assets ?? []).filter((a) => resolveChain(a.chain) === selectedChain);
   // Trustlines are Stellar-only, so the custom-trustline form is offered only
   // while Stellar is the selected network.
@@ -177,7 +177,7 @@ export function EnabledAssetsModalTemplate({
         </div>
       )}
 
-      {/* First load only — a refresh keeps the old list under the overlay. */}
+      {/* First load only - a refresh keeps the old list under the overlay. */}
       {isLoading && !data && (
         <div className="pollar-loading-block">
           <div className="pollar-spinner" />

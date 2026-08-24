@@ -78,7 +78,7 @@ export function SendModal({ onClose }: SendModalProps) {
 
   const balanceData = walletBalance.step === 'loaded' ? walletBalance.data : null;
   // Only the picked network's assets. The backend returns every chain in one
-  // payload, so this is a local filter — switching networks costs no request.
+  // payload, so this is a local filter - switching networks costs no request.
   const allAssets = (balanceData?.balances ?? []).filter((b) => resolveChain(b.chain) === selectedChain);
   // App assets first, then native XLM (always, even at 0, so the user knows to
   // fund) and any other non-app asset the wallet actually holds.
@@ -174,7 +174,7 @@ export function SendModal({ onClose }: SendModalProps) {
     }
 
     // Solana takes integer base units while the form (like the balance above it)
-    // is in decimals, so convert before sending — with the asset's own decimals,
+    // is in decimals, so convert before sending - with the asset's own decimals,
     // and via strings so a 9-decimal amount is not rounded by a float. The
     // fallback is native SOL's 9, reached only on the native row (the guard above
     // rejects any other asset that lacks `decimals`).

@@ -11,7 +11,7 @@ export { browserPasskeyCeremony, browserPasskeySigner } from './lib/passkey-cere
 export { WalletButton } from './components/wallet-button/WalletButton';
 export { WalletButtonTemplate, type WalletButtonTemplateProps } from './components/wallet-button/WalletButtonTemplate';
 
-// ─── Network picker ───────────────────────────────────────────────────────────
+// --- Network picker -----------------------------------------------------------
 // Exported alongside the templates: every template that takes `chains` /
 // `selectedChain` / `onSelectChain` needs these to build those props, so a
 // consumer mounting a template itself would otherwise have to reimplement the
@@ -25,7 +25,7 @@ export type { ChainSelectProps } from './components/ChainSelect';
 export { useChains } from './useChains';
 export type { UseChainsResult } from './useChains';
 
-// ─── Modals ───────────────────────────────────────────────────────────────────
+// --- Modals -------------------------------------------------------------------
 export { KycModal } from './components/kyc-modal/KycModal';
 export { KycStatus } from './components/kyc-modal/KycStatus';
 export { RampWidget } from './components/ramp-widget/RampWidget';
@@ -39,14 +39,14 @@ export { ReceiveModal } from './components/receive-modal/ReceiveModal';
 export { SessionsModal } from './components/sessions-modal/SessionsModal';
 export { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
 
-// ─── Modal theming ────────────────────────────────────────────────────────────
+// --- Modal theming ------------------------------------------------------------
 // Exported alongside the templates: a consumer mounting a template itself needs
 // these to reproduce the exact CSS custom properties the built-in modals set,
 // and to forward the app's Branding overrides into them.
 export { buildModalCssVars, modalChrome, readableTextOn } from './components/modal-theme';
 export type { ModalStyleOverrides, ModalVariant, ModalChrome } from './components/modal-theme';
 
-// ─── Templates ────────────────────────────────────────────────────────────────
+// --- Templates ----------------------------------------------------------------
 export { LoginModalTemplate } from './components/login-modal/LoginModalTemplate';
 export { KycModalTemplate } from './components/kyc-modal/KycModalTemplate';
 export type { KycStep } from './components/kyc-modal/KycModalTemplate';

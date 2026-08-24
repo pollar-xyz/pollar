@@ -24,7 +24,7 @@ export default defineConfig({
   ],
   // The web entry renders React hooks, so it must be a client module under
   // Next.js app-router. tsup/esbuild strip a module-level "use client" (and the
-  // `banner` option too), so prepend it to the built files post-build — same
+  // `banner` option too), so prepend it to the built files post-build - same
   // approach as `@pollar/react`. Web entry only (the directive is meaningless in
   // React Native).
   async onSuccess() {

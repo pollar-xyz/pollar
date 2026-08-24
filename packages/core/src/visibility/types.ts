@@ -2,7 +2,7 @@
  * Pluggable "is the user looking at this app right now?" signal.
  *
  * Used by the silent-refresh scheduler so token renewals are skipped while
- * the tab is hidden / the app is backgrounded — both saves network and
+ * the tab is hidden / the app is backgrounded - both saves network and
  * works around aggressive `setTimeout` throttling that web browsers and RN
  * apply to non-foreground contexts.
  *

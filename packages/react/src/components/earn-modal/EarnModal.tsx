@@ -75,7 +75,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ─── Providers ────────────────────────────────────────────────────────────
+  // --- Providers ------------------------------------------------------------
   const loadProviders = useCallback(() => {
     setProviders(null);
     return getEarnProviders()
@@ -97,7 +97,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
     void refreshAssets();
   }, [refreshWalletBalance, refreshAssets]);
 
-  // ─── Opportunities (per provider) ───────────────────────────────────────────
+  // --- Opportunities (per provider) -------------------------------------------
   useEffect(() => {
     if (!provider) return;
     let cancelled = false;
@@ -121,7 +121,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
 
   const selectedOpportunity = opportunities.find((o) => o.id === opportunityId) ?? null;
 
-  // ─── Position (live, polled) ────────────────────────────────────────────────
+  // --- Position (live, polled) ------------------------------------------------
   const refreshPosition = useCallback(() => {
     if (!provider || !opportunityId || !wallet) return;
     getEarnPosition({ provider, opportunity: opportunityId })
@@ -149,7 +149,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
     [],
   );
 
-  // ─── Derived ────────────────────────────────────────────────────────────────
+  // --- Derived ----------------------------------------------------------------
   const providersLoading = providers === null;
   const earnUnavailable = providers !== null && providers.length === 0;
   const withdrawUnit = position?.withdrawUnit ?? 'asset';
@@ -231,7 +231,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
 
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
-  // ─── Actions ────────────────────────────────────────────────────────────────
+  // --- Actions ----------------------------------------------------------------
   async function handleSubmit() {
     setFormError('');
     if (smartUnsupported) {
@@ -258,9 +258,9 @@ export function EarnModal({ onClose }: EarnModalProps) {
     setStep('tx');
 
     // Deposit of an issued asset needs its trustline first (native never does).
-    // Establish it, then deposit — two signatures, like swap.
+    // Establish it, then deposit - two signatures, like swap.
     if (tab === 'deposit' && depositNeedsTrustline && selectedOpportunity?.asset.issuer) {
-      // Sponsorship is derived automatically from the app config now — no flag.
+      // Sponsorship is derived automatically from the app config now - no flag.
       const tl = await setTrustline({ code: assetCode, issuer: selectedOpportunity.asset.issuer });
       if (tl.status === 'error') {
         setFormError(`Trustline for ${assetCode} failed: ${tl.details ?? 'unknown error'}`);
@@ -318,7 +318,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
       setOpportunityId((cur) => (opps.some((o) => o.id === cur) ? cur : (opps[0]?.id ?? '')));
       refreshPosition();
     } catch {
-      /* transient — keep the current snapshot */
+      /* transient - keep the current snapshot */
     } finally {
       setRefreshing(false);
     }

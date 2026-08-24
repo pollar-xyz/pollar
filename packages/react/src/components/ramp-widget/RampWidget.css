@@ -1,9 +1,9 @@
-/* ─── Widget container ──────────────────────────────────────────────────────── */
+/* --- Widget container -------------------------------------------------------- */
 .pollar-ramp-modal {
   max-width: 480px;
 }
 
-/* ─── Header ────────────────────────────────────────────────────────────────── */
+/* --- Header ------------------------------------------------------------------ */
 .pollar-ramp-header-text {
   display: flex;
   flex-direction: column;
@@ -17,8 +17,8 @@
   color: var(--pollar-muted);
 }
 
-/* ─── Step indicator ────────────────────────────────────────────────────────
-   One segment per step of THIS run — the count varies by route, so the track is
+/* --- Step indicator --------------------------------------------------------
+   One segment per step of THIS run - the count varies by route, so the track is
    a flex row of equal shares rather than a percentage-filled bar. */
 .pollar-ramp-steps {
   display: flex;
@@ -57,7 +57,7 @@
 
 /* Direction tabs use the shared segmented control (.pollar-tabs / .pollar-tab). */
 
-/* ─── Input group ───────────────────────────────────────────────────────────── */
+/* --- Input group ------------------------------------------------------------- */
 .pollar-ramp-field {
   margin-bottom: 1rem;
 }
@@ -121,7 +121,7 @@
   flex: 1;
 }
 
-/* ─── Loading quote ─────────────────────────────────────────────────────────── */
+/* --- Loading quote ----------------------------------------------------------- */
 .pollar-ramp-loading {
   display: flex;
   flex-direction: column;
@@ -170,7 +170,7 @@
   flex-shrink: 0;
 }
 
-/* ─── Route card ────────────────────────────────────────────────────────────── */
+/* --- Route card -------------------------------------------------------------- */
 .pollar-ramp-route-list {
   display: flex;
   flex-direction: column;
@@ -198,7 +198,7 @@
   border-color: var(--pollar-accent);
 }
 
-/* The other routes while one is starting — dimmed and inert, so a second click
+/* The other routes while one is starting - dimmed and inert, so a second click
    can't fire a competing request. */
 .pollar-ramp-route-card[data-disabled] {
   opacity: 0.5;
@@ -252,7 +252,7 @@
   letter-spacing: 0.04em;
 }
 
-/* ─── Payment instructions ──────────────────────────────────────────────────── */
+/* --- Payment instructions ---------------------------------------------------- */
 .pollar-ramp-payment {
   display: flex;
   flex-direction: column;

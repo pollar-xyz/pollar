@@ -1,4 +1,4 @@
-/* ─── KYC Badge ─────────────────────────────────────────────────────────────── */
+/* --- KYC Badge --------------------------------------------------------------- */
 .pollar-kyc-badge {
   display: inline-flex;
   align-items: center;
@@ -20,7 +20,7 @@
   animation: pollar-pulse 1.5s ease-in-out infinite;
 }
 
-/* ─── KYC Modal ─────────────────────────────────────────────────────────────── */
+/* --- KYC Modal --------------------------------------------------------------- */
 .pollar-kyc-modal {
   max-width: 500px;
 }
@@ -40,7 +40,7 @@
   color: var(--pollar-muted);
 }
 
-/* ─── Provider list ─────────────────────────────────────────────────────────── */
+/* --- Provider list ----------------------------------------------------------- */
 .pollar-kyc-providers {
   display: flex;
   flex-direction: column;
@@ -85,7 +85,7 @@
   letter-spacing: 0.04em;
 }
 
-/* ─── KYC iframe ────────────────────────────────────────────────────────────── */
+/* --- KYC iframe -------------------------------------------------------------- */
 .pollar-kyc-iframe-wrap {
   width: 100%;
   height: 400px;
@@ -117,7 +117,7 @@
   box-sizing: border-box;
 }
 
-/* ─── Polling state ─────────────────────────────────────────────────────────── */
+/* --- Polling state ----------------------------------------------------------- */
 .pollar-kyc-polling {
   display: flex;
   flex-direction: column;
@@ -132,7 +132,7 @@
   color: var(--pollar-muted);
 }
 
-/* ─── Result ────────────────────────────────────────────────────────────────── */
+/* --- Result ------------------------------------------------------------------ */
 .pollar-kyc-result {
   display: flex;
   flex-direction: column;

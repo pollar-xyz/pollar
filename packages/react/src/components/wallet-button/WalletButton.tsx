@@ -23,7 +23,7 @@ export function WalletButton() {
     tx: transaction,
   } = usePollar();
   // The address shown (and copied) is the one on the app's FIRST configured
-  // chain, not `wallet.address` — that field is the Stellar wallet by definition
+  // chain, not `wallet.address` - that field is the Stellar wallet by definition
   // in core, so this button used to say "Stellar" to an app whose users live on
   // Polygon. Falls back to it while `/config` loads and for a legacy session that
   // enumerates no wallets.

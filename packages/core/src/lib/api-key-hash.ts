@@ -11,7 +11,7 @@ import { sha256 } from './sha256';
  * not change it without weighing that one-time logout. (Sessions written by
  * SDKs older than 0.10 use an 8-hex tag and are intentionally left orphaned.)
  *
- * Async only to match the `sha256` wrapper's signature — the underlying
+ * Async only to match the `sha256` wrapper's signature - the underlying
  * `@noble/hashes` digest is synchronous. Compute once during client
  * initialization and cache.
  */

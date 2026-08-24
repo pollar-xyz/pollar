@@ -11,7 +11,7 @@ import type { KeyManager, PublicEcJwk } from './types';
  * `Storage` adapter. Used in React Native, where `WebCryptoKeyManager` can't
  * be: its non-extractable keys can't be serialized to the `Storage` adapter
  * (and RN has no IndexedDB), so the keypair would be regenerated every launch
- * — see the rationale in `index.rn.ts`. The 32-byte private scalar is
+ * - see the rationale in `index.rn.ts`. The 32-byte private scalar is
  * base64url-encoded and stored through the `Storage` adapter (Keychain /
  * SecureStore in production).
  *
@@ -36,7 +36,7 @@ export class NobleKeyManager implements KeyManager {
   private privateKey: Uint8Array | null = null;
   private publicJwk: PublicEcJwk | null = null;
   private thumbprint: string | null = null;
-  /** Cached in-flight init — see `WebCryptoKeyManager` for the rationale. */
+  /** Cached in-flight init - see `WebCryptoKeyManager` for the rationale. */
   private _initPromise: Promise<void> | null = null;
 
   constructor(storage: Storage, apiKey: string) {
@@ -56,7 +56,7 @@ export class NobleKeyManager implements KeyManager {
    * the manager is self-healing if `init()` was never explicitly invoked.
    */
   async init(): Promise<void> {
-    // All three fields, not just the scalar — see `WebCryptoKeyManager.init`:
+    // All three fields, not just the scalar - see `WebCryptoKeyManager.init`:
     // `_doInit` assigns `privateKey`/`publicJwk` and only then awaits the
     // thumbprint, so a caller in that window must join the in-flight init
     // instead of early-returning into a half-built manager.
@@ -64,7 +64,7 @@ export class NobleKeyManager implements KeyManager {
     if (!this._initPromise) {
       this._initPromise = this._doInit().catch((err) => {
         // Clear the promise so the next call retries. The error propagates to
-        // the caller — `PollarClient` logs it through its configured logger, so
+        // the caller - `PollarClient` logs it through its configured logger, so
         // we don't double-log (raw, ungated) here.
         this._initPromise = null;
         throw err;
@@ -129,7 +129,7 @@ export class NobleKeyManager implements KeyManager {
 
   /**
    * Re-persist the private scalar and verify it actually landed in storage.
-   * Mirrors `WebCryptoKeyManager.ensurePersisted` — see there for rationale.
+   * Mirrors `WebCryptoKeyManager.ensurePersisted` - see there for rationale.
    * Returns `false` when the adapter can't durably hold the key, so the login
    * flow can warn that the session will not survive a relaunch.
    */
@@ -147,7 +147,7 @@ export class NobleKeyManager implements KeyManager {
 
   /**
    * Drop the in-memory cache; the next operation re-runs `init()` and adopts
-   * whatever the storage adapter holds. Never touches persistent storage —
+   * whatever the storage adapter holds. Never touches persistent storage -
    * that's `reset()`. Mirrors `WebCryptoKeyManager.resync`.
    */
   resync(): void {

@@ -36,7 +36,7 @@ export interface RampFieldSpec {
   label: string;
   type: 'text' | 'email' | 'tel' | 'select';
   bankType?: 'CLABE' | 'PIX' | 'PSE' | 'ACH' | 'BREB';
-  /** For `type: 'select'` — dropdown choices (e.g. Stereum's Bolivian banks). */
+  /** For `type: 'select'` - dropdown choices (e.g. Stereum's Bolivian banks). */
   options?: { value: string; label: string; placeholder?: string }[];
   /** Declared but not mandatory (Abroad's tax id). Blank must not block Continue. */
   optional?: boolean;
@@ -52,7 +52,7 @@ export interface RampFieldSpec {
   hint?: string;
 }
 
-/** "a", "a and b", "a, b and c" — for naming what a step is asking for. */
+/** "a", "a and b", "a, b and c" - for naming what a step is asking for. */
 function listOf(items: string[]): string {
   const last = items[items.length - 1];
   if (last === undefined) return 'a few details';
@@ -102,7 +102,7 @@ interface RampWidgetTemplateProps {
   tosUrl: string | null;
   /** Provider gated the flow on KYC and published no link; nothing was signed. */
   kycBlocking: boolean;
-  /** The gate has since cleared — the user needs a fresh quote to continue. */
+  /** The gate has since cleared - the user needs a fresh quote to continue. */
   kycJustApproved: boolean;
   stellarTxHash: string | null;
   /** Stellar Expert URL for `stellarTxHash` (network-aware); null when unknown. */
@@ -387,7 +387,7 @@ export function RampWidgetTemplate({
             ))}
           </div>
           {/* A route whose limits the amount breaks reports it here, so the user
-              can pick another route or go back and edit — without leaving the
+              can pick another route or go back and edit - without leaving the
               list for the error step. */}
           {errorMsg && (
             <p className="pollar-ramp-payment-note" style={{ color: 'var(--pollar-error-text)' }}>
@@ -395,8 +395,8 @@ export function RampWidgetTemplate({
             </p>
           )}
           {/* Back returns to the amount, which is the only way out of a route
-              whose minimum the amount misses — so it takes the primary weight
-              while that message is up. The header's ✕ still closes the modal. */}
+              whose minimum the amount misses - so it takes the primary weight
+              while that message is up. The header's X still closes the modal. */}
           <button type="button" className={errorMsg ? 'pollar-btn-primary' : 'pollar-btn-secondary'} onClick={onBack}>
             Back
           </button>
@@ -572,7 +572,7 @@ export function RampWidgetTemplate({
             )}
 
           {/* Everything else. Labelled and formatted server-side, so this only
-              iterates — it knows nothing about which provider served the route. */}
+              iterates - it knows nothing about which provider served the route. */}
           {depositInstructions &&
             txStatus !== 'completed' &&
             depositInstructions.fields.map((f) => (
@@ -596,7 +596,7 @@ export function RampWidgetTemplate({
             ))}
 
           {/* KYC / ToS onboarding steps at the provider. Hidden once deposit
-              instructions exist — by then onboarding is done and the only
+              instructions exist - by then onboarding is done and the only
               remaining action is to pay using the instructions above. */}
           {tosUrl && !depositInstructions && txStatus !== 'completed' && (
             <button type="button" className="pollar-btn-primary" onClick={onOpenTos}>

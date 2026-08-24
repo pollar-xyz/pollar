@@ -54,7 +54,7 @@ export interface SwapModalTemplateProps {
   smartUnsupported: boolean;
   /** Swap config is still loading. */
   configLoading: boolean;
-  /** Config loaded and this app exposes no swap venues — swap is disabled. */
+  /** Config loaded and this app exposes no swap venues - swap is disabled. */
   swapUnavailable: boolean;
   /** Buying the selected asset will create a trustline first (~0.5 XLM reserve). */
   buyNeedsTrustline: boolean;
@@ -203,7 +203,7 @@ export function SwapModalTemplate({
         <div className="pollar-modal-error">Swap is not available for this app.</div>
       )}
 
-      {/* Keep the form visible while the config loads — disable the inputs rather
+      {/* Keep the form visible while the config loads - disable the inputs rather
           than unmounting them, so the modal doesn't visibly collapse/jump. */}
       {step === 'form' && !swapUnavailable && (
         <>
