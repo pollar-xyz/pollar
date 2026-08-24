@@ -2,14 +2,19 @@
 
 ## 0.11.2 -> 0.11.3
 
-No breaking changes and no migration steps. 0.11.3 is a patch: sessions survive
-reloads when the DPoP keypair fails to persist, `logout()` no longer races an
-in-flight or newer login, cross-tab session writes are serialized and
-ownership-gated, and a consumer-built `PollarClient` passed to `PollarProvider`
-keeps passkey login. One packaging note: `@pollar/react@0.11.3` requires
-`@pollar/core@^0.11.3`; if you pin both packages to exact versions, bump them
-together (mixing versions installs a second copy of core and the provider's
-`client instanceof PollarClient` check fails). See the
+No breaking changes. 0.11.3 is a patch: sessions survive reloads when the DPoP
+keypair fails to persist, `logout()` no longer races an in-flight or newer
+login, cross-tab session writes are serialized and ownership-gated, and a
+consumer-built `PollarClient` passed to `PollarProvider` keeps passkey login.
+
+One packaging change: `@pollar/core` moved from `dependencies` to
+`peerDependencies` in `@pollar/react`. The old `dependencies` entry could
+install a second, package-local copy of core, which broke `instanceof`, split
+the live-client registry, and let two clients share one persisted session row.
+On npm 7+ there is nothing to do - peer dependencies install automatically. On
+npm 6, Yarn 1, or with `--legacy-peer-deps`, add `@pollar/core` to your own
+dependencies. `@pollar/react@0.11.3` requires `@pollar/core@^0.11.3`; if you
+pin both packages to exact versions, keep them on the same version. See the
 [CHANGELOG](./CHANGELOG.md) for the details.
 
 ## 0.11.1 -> 0.11.2

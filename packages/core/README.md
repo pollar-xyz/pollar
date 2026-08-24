@@ -9,8 +9,9 @@ Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction uti
 > keypair. `logout()` cancels a login still in flight, never destroys a session created while
 > it runs, rotates the keypair only when it still owns the teardown, and propagates to
 > sibling clients in the same document. Shared session-row writes are serialized and
-> ownership-gated, and the last server-issued `DPoP-Nonce` is persisted. New public method:
-> `setPasskeyDefaults()` on `PollarClient`.
+> ownership-gated, and the last server-issued `DPoP-Nonce` is persisted. New public API:
+> `setPasskeyDefaults()` on `PollarClient`, and `isPollarClient(value)`, a type guard that
+> recognizes a client even across duplicate copies of this package (`instanceof` cannot).
 >
 > Earlier: **0.11.2** added `client.stellar` — **SEP-53 message** and **SEP-10 challenge** ownership
 > proofs. External wallets sign client-side through their adapter (new optional

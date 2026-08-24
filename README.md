@@ -14,8 +14,13 @@ This repository is managed with [Turborepo](https://turbo.build/repo) and contai
 > logout loop), `logout()` no longer races an in-flight or newer login (no resurrected or
 > leaked sessions), and cross-tab / multi-client session-row writes are serialized and
 > ownership-gated. In `@pollar/react`, a consumer-built `PollarClient` passed to
-> `PollarProvider` **keeps passkey login**. `@pollar/react@0.11.3` requires
-> `@pollar/core@^0.11.3`; if you pin exact versions, bump both together.
+> `PollarProvider` **keeps passkey login**, and StrictMode no longer leaves an orphaned
+> client running (dev only). Packaging: **`@pollar/core` is now a peer dependency only** of
+> `@pollar/react`, so the application's single copy of core is the one every package uses
+> (npm 7+ installs peers automatically; npm 6, Yarn 1 and `--legacy-peer-deps` users must
+> add core to their own dependencies), and the new `isPollarClient()` guard recognizes a
+> client even across duplicate copies. `@pollar/react@0.11.3` requires
+> `@pollar/core@^0.11.3`; if you pin exact versions, keep both on the same version.
 >
 > Earlier: **0.11.2** (additive) added the `client.stellar` namespace: sign **SEP-53
 > message** and **SEP-10 challenge** ownership proofs across custodial and external wallets,
