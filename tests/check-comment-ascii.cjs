@@ -30,19 +30,34 @@ function commentSpans(line, inBlock, isCss) {
   while (i < n) {
     const ch = line[i];
     if (quote) {
-      if (ch === '\\') { i += 2; continue; }
+      if (ch === '\\') {
+        i += 2;
+        continue;
+      }
       if (ch === quote) quote = null;
-      i += 1; continue;
+      i += 1;
+      continue;
     }
-    if (!isCss && (ch === '"' || ch === "'" || ch === '`')) { quote = ch; i += 1; continue; }
+    if (!isCss && (ch === '"' || ch === "'" || ch === '`')) {
+      quote = ch;
+      i += 1;
+      continue;
+    }
     if (ch === '/' && i + 1 < n) {
       const nxt = line[i + 1];
-      if (nxt === '/' && !isCss) { spans.push([i, n]); return { spans, inBlock: false }; }
+      if (nxt === '/' && !isCss) {
+        spans.push([i, n]);
+        return { spans, inBlock: false };
+      }
       if (nxt === '*') {
         const end = line.indexOf('*/', i + 2);
-        if (end === -1) { spans.push([i, n]); return { spans, inBlock: true }; }
+        if (end === -1) {
+          spans.push([i, n]);
+          return { spans, inBlock: true };
+        }
         spans.push([i, end]);
-        i = end + 2; continue;
+        i = end + 2;
+        continue;
       }
     }
     i += 1;
@@ -70,7 +85,8 @@ for (const file of walk(ROOT)) {
   if (base === 'package.json') {
     const desc = JSON.parse(fs.readFileSync(file, 'utf8')).description ?? '';
     for (const ch of desc) {
-      if (ch.codePointAt(0) > 126) violations.push(`${rel} (description): "${ch}" U+${ch.codePointAt(0).toString(16).toUpperCase()}`);
+      if (ch.codePointAt(0) > 126)
+        violations.push(`${rel} (description): "${ch}" U+${ch.codePointAt(0).toString(16).toUpperCase()}`);
     }
     continue;
   }
