@@ -220,6 +220,69 @@ async function unmount(handle) {
     );
   }
 
+  console.log('\n── 5. A client from a SECOND copy of core is recognised ──────');
+  {
+    // The failure this guards: a package that pulls its own @pollar/core (a
+    // `dependencies` entry instead of a peer, an exact pin that disagrees, a
+    // bundler that does not dedupe) hands the provider an instance built by a
+    // DIFFERENT class object. `instanceof` answers false, the provider decides
+    // it was given a config, and spreads a live client into
+    // `new PollarClient({...})`. Loading the bundle a second time from a copied
+    // path is exactly that situation - Node caches by resolved path, so this is
+    // a genuinely separate module instance, not the same one twice.
+    const fs = require('node:fs');
+    // Copied NEXT TO the original, not into a temp dir: the bundle resolves its
+    // own dependencies relative to its own path, so it has to sit inside the
+    // workspace to find node_modules.
+    const original = path.resolve(__dirname, '../packages/core/dist/index.js');
+    const copied = path.resolve(__dirname, '../packages/core/dist/__second-copy-under-test.cjs');
+    fs.copyFileSync(original, copied);
+    let otherCore;
+    try {
+      otherCore = require(copied);
+    } finally {
+      // The module is loaded and cached; the file on disk is no longer needed.
+      fs.rmSync(copied, { force: true });
+    }
+
+    check('the second copy really is a separate module', otherCore.PollarClient !== sdk.PollarClient);
+
+    const { logger } = makeLogger();
+    const foreign = new otherCore.PollarClient({ apiKey: 'pk_react_foreign', baseUrl: 'https://x.test', logger });
+    await foreign.ready();
+    check('  instanceof across copies is false (the trap)', !(foreign instanceof sdk.PollarClient));
+    check('  isPollarClient sees through it', sdk.isPollarClient(foreign) === true);
+    check('  and a plain config is still not a client', sdk.isPollarClient({ apiKey: 'x' }) === false);
+
+    // The provider must treat it as a ready client: adopt it, and leave it
+    // alive on unmount because it is not the provider's to destroy.
+    // Measure by `storage` listeners, not by liveness or by log lines. When the
+    // provider mistakes a client for a config it spreads it into
+    // `new PollarClient({...})`; the spread carries `apiKey` so the original
+    // stays alive (liveness passes either way), and it does NOT carry `logger`
+    // so the new client logs to the console instead of our spy (a log counter
+    // passes either way too). A new client always attaches its own cross-tab
+    // listener to the one shared jsdom window, whichever copy of core built it.
+    const listenersBefore = storageListeners;
+    const handle = mount(h(PollarProvider, { client: foreign, appConfig: APP_CONFIG }, null));
+    await render(handle);
+    check(
+      '  the provider adopts it, building nothing',
+      storageListeners === listenersBefore,
+      `listeners ${listenersBefore} -> ${storageListeners}`,
+    );
+    await unmount(handle);
+    let alive = false;
+    try {
+      await foreign.ready();
+      alive = foreign.getAuthState().step === 'idle';
+    } catch {
+      alive = false;
+    }
+    check("  and leaves it alive, since it is not the provider's to destroy", alive);
+    foreign.destroy();
+  }
+
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
 })().catch((err) => {

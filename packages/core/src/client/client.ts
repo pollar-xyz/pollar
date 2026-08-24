@@ -178,6 +178,36 @@ function notifySiblingClients(origin: PollarClient, apiKey: string, log: PollarL
 /** Renew the access token this many seconds before its `exp` to absorb clock skew + signing latency. */
 const REFRESH_SKEW_SECONDS = 60;
 
+/**
+ * Cross-copy brand for `PollarClient`, stamped on every instance.
+ *
+ * `instanceof` compares against one specific class object, so it answers `false`
+ * for an instance built by a DIFFERENT copy of this module - and a second copy
+ * is easy to end up with: a package listing `@pollar/core` in `dependencies`
+ * rather than only as a peer, an exact pin that disagrees with another
+ * package's, a bundler that does not dedupe. `PollarProvider` used that check to
+ * decide whether it was handed a ready client or a config, and answering
+ * `false` for a real client made it spread that instance into
+ * `new PollarClient({...})` - a failure that points nowhere near the dependency
+ * tree that caused it.
+ *
+ * `Symbol.for` resolves through the runtime-wide symbol registry, so every copy
+ * of this module gets the SAME symbol and recognises the others' instances.
+ */
+const POLLAR_CLIENT_BRAND = Symbol.for('@pollar/core.PollarClient');
+
+/**
+ * Is this a `PollarClient`, including one built by another copy of the module?
+ *
+ * Prefer this over `instanceof PollarClient` anywhere the value may have crossed
+ * a package boundary. Tries `instanceof` first, so it still recognises an
+ * instance from a build that predates the brand.
+ */
+export function isPollarClient(value: unknown): value is PollarClient {
+  if (value instanceof PollarClient) return true;
+  return typeof value === 'object' && value !== null && (value as Record<symbol, unknown>)[POLLAR_CLIENT_BRAND] === true;
+}
+
 function warnServerSide(method: string): void {
   // Module-level (no client instance / logger yet) — and a misuse warning the
   // developer should always see, so it stays on the raw console.
@@ -367,6 +397,10 @@ export class PollarClient {
   private readonly _providers = new Map<string, PollarAuthProvider>();
 
   constructor(config: PollarClientConfig) {
+    // Stamp the cross-copy brand FIRST, before any early return below, so even a
+    // server-side instance is recognisable. Non-enumerable and symbol-keyed, so
+    // it never appears in `Object.keys` or a spread. See `isPollarClient`.
+    Object.defineProperty(this, POLLAR_CLIENT_BRAND, { value: true, enumerable: false });
     this.apiKey = config.apiKey;
     this.id = randomUUID();
     // v2 is the multichain SDK surface. It is a superset of v1 — every v1 route is

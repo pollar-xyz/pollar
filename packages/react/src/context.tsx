@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  isPollarClient,
   BuildOutcome,
   EnabledAssetsState,
   isInteractiveAuthAdapter,
@@ -354,7 +355,7 @@ export function PollarProvider({
   // React Native native provider) via `client.passkey`; `??` keeps an explicit
   // ceremony winning while an absent/undefined one still gets the default.
   const [pollarClient] = useState<PollarClient>(() => {
-    if (client instanceof PollarClient) {
+    if (isPollarClient(client)) {
       client.setPasskeyDefaults({ passkey: browserPasskeyCeremony, passkeySign: browserPasskeySigner });
       return client;
     }
@@ -374,10 +375,10 @@ export function PollarProvider({
   // Only a client WE constructed is ours to tear down on unmount; a client the
   // consumer passed in is theirs to manage. Captured once (the useState
   // initializer above made the same decision).
-  const ownsClientRef = useRef(!(client instanceof PollarClient));
+  const ownsClientRef = useRef(!isPollarClient(client));
   const destroyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** The config this provider built from, until the mount effect claims it. */
-  const builtFromConfigRef = useRef<PollarClientConfig | null>(client instanceof PollarClient ? null : client);
+  const builtFromConfigRef = useRef<PollarClientConfig | null>(isPollarClient(client) ? null : client);
 
   // Tear down the client on a real unmount so its cross-tab storage listener,
   // refresh timer, and live-client registry entry don't leak — matters when the

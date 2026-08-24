@@ -45,12 +45,12 @@
     "react-dom": ">=18"
   },
   "dependencies": {
-    "@pollar/core": "^0.11.3",
     "@simplewebauthn/browser": "^13.3.0",
     "qr.js": "^0.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@pollar/core": "^0.11.3",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "eslint": "^10.5.0",

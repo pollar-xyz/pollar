@@ -230,6 +230,15 @@
   ready-made `PollarClient` are unaffected - that path never constructed
   anything. No API change.
 
+- **Fix: a client from a second copy of `@pollar/core` is recognised as one.**
+  `PollarProvider` decided between "a ready client" and "a config" with
+  `client instanceof PollarClient`. With two copies of core in the tree that is
+  `false` for a real client, so the provider took the config branch and spread a
+  live instance into `new PollarClient({...})` - the spread carries `apiKey`, so
+  it quietly produced a SECOND client on the same API key rather than failing
+  outright, which is the same shared-session-row configuration everything else
+  in this release had to defend against. It now uses `isPollarClient()`, which
+  sees through the copy boundary.
 - **Fix: a pre-built `PollarClient` no longer loses passkey support.**
   `PollarProvider` injected `browserPasskeyCeremony` only on the branch that
   builds the client from a config object. A consumer passing a ready instance
@@ -247,6 +256,16 @@
 - `browserPasskeyCeremony` and `browserPasskeySigner` are now exported, for
   consumers who build their own `PollarClient` and want the ceremony wired at
   construction, or who want to wrap it (logging, a custom `rpId`).
+
+- **New: `isPollarClient(value)`.** A cross-copy type guard for `PollarClient`,
+  additive to the public surface. `instanceof` compares against one specific
+  class object, so it answers `false` for an instance built by a different copy
+  of `@pollar/core` - and a second copy is easy to end up with. Every instance
+  now carries a `Symbol.for('@pollar/core.PollarClient')` brand, which resolves
+  through the runtime-wide symbol registry, so any copy recognises the others'
+  instances. The guard tries `instanceof` first, so it also accepts instances
+  from builds that predate the brand. Use it instead of `instanceof` wherever a
+  client may have crossed a package boundary.
 
 ### Tests and CI
 
@@ -282,14 +301,22 @@
 
 ### Packaging
 
-- `@pollar/react` now requires `@pollar/core@^0.11.3` (`setPasskeyDefaults()` is
-  new in core; an older one throws
+- **`@pollar/core` is now a peer dependency only.** `@pollar/react` and the
+  wallet adapters listed it in `dependencies` AND `peerDependencies`. The
+  `dependencies` entry is what told npm to install a package-local copy, and a
+  second copy of core is what broke `instanceof`, split the module-level
+  live-client registry in two, and let two clients share one persisted session
+  row. It now appears only as a peer (plus a `devDependency` for building here),
+  so the application's single copy is the one everybody uses. npm 7+ installs
+  peers automatically; on npm 6, Yarn 1, or with `--legacy-peer-deps`, add
+  `@pollar/core` to your own dependencies.
+- Version ranges are unchanged and did not need bumping: `^0.11.2` already means
+  `>=0.11.2 <0.12.0`, so npm resolves the highest matching version and dedupes
+  to one copy. The duplicate only ever came from the `dependencies` entry above,
+  or from exact pins that disagree.
+- `@pollar/react` requires `@pollar/core@^0.11.3` (`setPasskeyDefaults()` is new
+  in core; an older one throws
   `client.setPasskeyDefaults is not a function` when the provider mounts).
-  Consumers that pin both packages to an
-  exact version must bump them together: mixing versions installs a second
-  copy of core, and `client instanceof PollarClient` then compares against a
-  different class object, so the provider takes the config branch and spreads
-  an instance into the constructor instead of failing outright.
 
 ## 0.11.2
 

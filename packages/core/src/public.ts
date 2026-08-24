@@ -3,7 +3,7 @@
 // `KeyManager` factory, exporting `NobleKeyManager`) live in those entry
 // modules so bundlers can tree-shake unused code paths.
 
-export { PollarClient } from './client/client';
+export { PollarClient, isPollarClient } from './client/client';
 export { POLLAR_CORE_VERSION } from './version';
 export { createLogger } from './lib/logger';
 export { toBaseUnits, fromBaseUnits } from './lib/units';
