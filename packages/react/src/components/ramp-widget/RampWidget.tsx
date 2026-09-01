@@ -80,6 +80,11 @@ const RAMP_ERROR_MESSAGES: Record<string, string> = {
   SDK_RAMPS_PROVIDER_NOT_CONFIGURED: 'This ramp provider is not configured for this app yet.',
   SDK_RAMPS_ANCHOR_ERROR: 'The provider rejected the request. Please try again in a moment.',
   SDK_RAMPS_BRIDGE_ERROR: 'The provider rejected the request. Please try again in a moment.',
+  SDK_RAMPS_ETHERFUSE_ERROR: 'The provider rejected the request. Please try again in a moment.',
+  SDK_RAMPS_INSUFFICIENT_BALANCE: 'This wallet does not hold enough to cover that amount. Try a smaller one.',
+  // Nothing moved on-chain, so the balance is untouched. Almost always no XLM
+  // for the network fee on a wallet the app does not sponsor.
+  SDK_RAMPS_ONCHAIN_SUBMIT_FAILED: 'The network rejected the transaction, so nothing was sent. The wallet may need XLM for the fee.',
 };
 
 /**
