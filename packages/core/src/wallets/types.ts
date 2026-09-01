@@ -66,6 +66,17 @@ export interface SignMessageResponse {
   signerAddress?: string;
 }
 
+/** A provider-authenticated proof that does not use the on-chain wallet key. */
+export interface ExternalIdentityAuthProof {
+  sessionToken: string;
+  challengeSignature: string;
+  accountRequest: {
+    body: string;
+    stampHeaderName: 'X-Stamp';
+    stampHeaderValue: string;
+  };
+}
+
 // --- Solana (SIWS) ------------------------------------------------------------
 // Structural mirror of the Wallet Standard's `solana:signIn` IO, kept here so
 // `@pollar/core` types the Solana adapter contract WITHOUT depending on
@@ -123,8 +134,10 @@ export interface WalletAdapterMeta {
 /**
  * A client-side wallet integration: it does its own auth/connect (Freighter
  * approve, Privy modal, SWK picker...) and signs. `@pollar/core` treats it as a
- * black box - it wraps the generic SEP-10 login + tx signing around `connect()`
- * and `signTransaction()`. Register instances via `PollarClientConfig.walletAdapters`.
+ * black box. By default Core wraps Stellar adapters in its SEP-10 login flow;
+ * identity-backed adapters can instead expose `identityProvider` and
+ * `getIdentityAuthProof()` to prove the provider session without signing a
+ * Stellar transaction. Register instances via `PollarClientConfig.walletAdapters`.
  */
 export interface WalletAdapter {
   /** Stable id - matches `login({ provider: id })` and the server-side wallet provider. */
@@ -136,14 +149,23 @@ export interface WalletAdapter {
   /**
    * Which chain this adapter authenticates and signs on. Absent means `'STELLAR'`,
    * so every existing Stellar adapter keeps working unchanged. The login dispatch
-   * branches on this: STELLAR runs the SEP-10 challenge flow, SOLANA runs SIWS.
+   * branches on this: STELLAR normally runs SEP-10 (unless the adapter exposes
+   * identity auth), while SOLANA runs SIWS.
    */
   chain?: WalletChain;
+  /** Provider id used by an optional identity-backed login capability. */
+  readonly identityProvider?: 'turnkey';
   isAvailable(): Promise<boolean>;
   connect(): Promise<ConnectWalletResponse>;
   disconnect(): Promise<void>;
   getPublicKey(): Promise<string | null>;
-  // --- Stellar signing (SEP-10 login + Soroban) ------------------------------
+  /**
+   * Optional identity-backed login. Core uses this instead of SEP-10 when it is
+   * present: Pollar supplies a one-time challenge and the adapter returns a
+   * provider session proof plus a provider-authorized wallet-account query.
+   */
+  getIdentityAuthProof?(challenge: string): Promise<ExternalIdentityAuthProof>;
+  // --- Stellar signing (SEP-10 login when needed + Soroban) ------------------
   // Optional because non-Stellar adapters do not implement them. The Stellar
   // flows assert their presence (a STELLAR adapter that omits them is a bug).
   signTransaction?(xdr: string, options?: SignTransactionOptions): Promise<SignTransactionResponse>;
@@ -164,6 +186,17 @@ export interface WalletAdapter {
   signSolanaTransaction?(transaction: Uint8Array, chain?: string): Promise<Uint8Array>;
 }
 
+export interface ExternalIdentityAuthAdapter extends WalletAdapter {
+  readonly identityProvider: 'turnkey';
+  getIdentityAuthProof(challenge: string): Promise<ExternalIdentityAuthProof>;
+}
+
+export function isExternalIdentityAuthAdapter(
+  adapter: WalletAdapter | null | undefined,
+): adapter is ExternalIdentityAuthAdapter {
+  return !!adapter && adapter.identityProvider === 'turnkey' && typeof adapter.getIdentityAuthProof === 'function';
+}
+
 /** A single login option an {@link InteractiveAuthAdapter} can render. */
 export type AuthOption = 'email' | 'google' | 'github';
 
@@ -173,9 +206,10 @@ export type AuthOption = 'email' | 'google' | 'github';
  * sub-modal, instead of the adapter being an opaque `connect()` black box.
  *
  * The UI calls these methods to run the provider login; once they resolve, it
- * triggers the normal `login({ provider })` so `connect()` runs and core does the
- * SEP-10 flow against the now-authenticated wallet. An adapter that implements
- * this (e.g. `@pollar/privy-adapter`) is detected via {@link isInteractiveAuthAdapter}.
+ * triggers the normal `login({ provider })` so `connect()` runs. Core then uses
+ * the adapter's identity-proof capability when present; otherwise Stellar falls
+ * back to SEP-10. An adapter that implements this UI capability (e.g.
+ * `@pollar/privy-adapter`) is detected via {@link isInteractiveAuthAdapter}.
  */
 export interface InteractiveAuthAdapter extends WalletAdapter {
   /** Login options to render, in order. */
