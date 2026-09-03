@@ -162,6 +162,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
 
   const directionRef = useRef(direction);
   directionRef.current = direction;
+  const applyResultRef = useRef<(result: RampResult) => Promise<void>>(async () => {});
 
   // Poll the anchor transaction status while on the status step until terminal.
   useEffect(() => {
@@ -178,6 +179,11 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         // depositInstructions is returned by REST providers (Bridge) - e.g. a Pix
         // `br_code` / bank details for on-ramp.
         if (tx.depositInstructions) setDepositInstructions(tx.depositInstructions);
+        if (tx.pendingSignature) {
+          clearInterval(id);
+          await applyResultRef.current(tx as RampResult);
+          return;
+        }
         if (TERMINAL.includes(tx.status)) clearInterval(id);
       } catch {
         /* transient - keep polling */
@@ -261,6 +267,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         if (tx.stellarTxHash) setStellarTxHash(tx.stellarTxHash);
         if (tx.kycUrl) setKycUrl(tx.kycUrl);
         if (tx.depositInstructions) setDepositInstructions(tx.depositInstructions);
+        if (tx.pendingSignature) await applyResult(tx as RampResult);
       }
     } catch {
       /* transient - leave the current data in place */
@@ -329,6 +336,13 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setStep('status');
   }
 
+  // Polling is intentionally set up before the flow helpers below. Keep its
+  // callback pointed at the latest helper without rebuilding the interval on
+  // every render.
+  useEffect(() => {
+    applyResultRef.current = applyResult;
+  });
+
   async function handleFindRoute() {
     setStep('loading_quote');
     setIsLoading(true);
@@ -354,6 +368,12 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   // Each quote declares the fields it needs (`requiredFields`). If any are unset,
   // collect them in the 'contact' step first; otherwise start immediately.
   function handleSelectQuote(quote: RampQuote) {
+    if (quote.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now()) {
+      setSelectedQuote(null);
+      setErrorMsg('This quote expired. Find a new route to get the current rate.');
+      setStep('error');
+      return;
+    }
     setSelectedQuote(quote);
     setErrorMsg(null);
     // The limits are per route, and the amount was typed before the routes were
@@ -380,6 +400,11 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   }
 
   async function startRamp(quote: RampQuote) {
+    if (quote.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now()) {
+      setErrorMsg('This quote expired. Find a new route to get the current rate.');
+      setStep('error');
+      return;
+    }
     setIsLoading(true);
     setErrorMsg(null);
     try {

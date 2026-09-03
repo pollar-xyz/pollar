@@ -621,11 +621,12 @@ hold a `PollarApiClient`.
 
 ---
 
-### Ramps (SEP-24)
+### Ramps (SEP-24 and REST providers)
 
-On/off-ramp fiat through SEP-24 anchors (e.g. Anclap). Get a quote, create the on- or off-ramp, then drive the
-transaction to completion. Custodial wallets receive a `kycUrl` to open; external wallets receive a `pendingSignature`
-to sign and resume via `submitRampSignature`.
+On/off-ramp fiat through SEP-24 anchors (e.g. Anclap) and REST providers (e.g. Etherfuse). Get a quote, create the on-
+or off-ramp, then drive the transaction to completion. Custodial wallets receive a `kycUrl` to open; external wallets
+receive a `pendingSignature` to sign and resume via `submitRampSignature`. Etherfuse also uses this callback for a
+first-time Stellar onramp claim after its order completes.
 
 ```ts
 const quote = await client.getRampsQuote({

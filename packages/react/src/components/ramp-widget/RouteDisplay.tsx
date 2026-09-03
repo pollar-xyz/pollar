@@ -42,7 +42,9 @@ export function RouteDisplay({ quote, busy = false, disabled = false, onSelect }
       <div className="pollar-ramp-route-left">
         <span className="pollar-ramp-route-provider">{quote.provider}</span>
         <span className="pollar-ramp-route-meta">
-          {busy ? 'Starting…' : `${RAIL_LABELS[quote.rail] ?? quote.rail} · ${quote.protocol} · ${quote.estimatedTime}`}
+          {busy
+            ? 'Starting…'
+            : `${RAIL_LABELS[quote.rail] ?? quote.rail} · ${quote.protocol} · ${quote.estimatedTime}${quote.expiresAt ? ' · short-lived quote' : ''}`}
         </span>
       </div>
       <div className="pollar-ramp-route-right">
@@ -50,7 +52,9 @@ export function RouteDisplay({ quote, busy = false, disabled = false, onSelect }
           <span className="pollar-spinner pollar-spinner-sm" />
         ) : (
           <>
-            <span className="pollar-ramp-route-fee">{quote.fee}% fee</span>
+            <span className="pollar-ramp-route-fee">
+              {quote.fee} {quote.feeCurrency} fee
+            </span>
             {quote.recommended && <span className="pollar-ramp-route-badge">Best rate</span>}
           </>
         )}
