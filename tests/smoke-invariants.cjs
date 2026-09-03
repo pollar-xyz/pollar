@@ -128,7 +128,6 @@ const boundJktBySession = new Map();
 let sessionSeq = 0;
 let revokeEverything = false;
 let logoutDelayMs = 0;
-let loginDelayMs = 0;
 
 globalThis.fetch = async (req) => {
   const p = new URL(req.url).pathname;
@@ -154,7 +153,6 @@ globalThis.fetch = async (req) => {
     const body = await req.clone().json();
     const id = `cs${++sessionSeq}`;
     boundJktBySession.set(id, await calculateJwkThumbprint(body.dpopJwk, 'sha256'));
-    if (loginDelayMs) await sleep(loginDelayMs);
     return json({
       code: 'SDK_LOGIN_SUCCESS',
       success: true,
@@ -299,7 +297,6 @@ async function runSeed(seed, steps) {
   sessionSeq = 0;
   revokeEverything = false;
   logoutDelayMs = 0;
-  loginDelayMs = 0;
 
   const world = { apiKey, storage, apiKeyHash: null };
   const clients = [];

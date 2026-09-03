@@ -6,6 +6,7 @@ import type {
   RampDirection,
   RampInstructionField,
   RampQuote,
+  RampScannable,
   RampTxStatus,
 } from '@pollar/core';
 import { RouteDisplay } from './RouteDisplay';
@@ -28,6 +29,18 @@ function isFieldValid(spec: RampFieldSpec, raw: string | undefined): boolean {
   if (!value) return spec.optional === true;
   if (spec.type === 'email') return EMAIL_RE.test(value);
   return true;
+}
+
+/**
+ * The `src` for a scannable that is not inline-safe. `encoding` and `inlineSafe`
+ * are independent in the contract: an SVG a provider sent (so not inline-safe)
+ * still arrives as `utf8`, and base64-wrapping that text yields a data URL the
+ * browser cannot decode - a blank QR on the payment screen.
+ */
+function scannableImageSrc(image: RampScannable['image']): string {
+  return image.encoding === 'base64'
+    ? `data:${image.mediaType};base64,${image.data}`
+    : `data:${image.mediaType};charset=utf-8,${encodeURIComponent(image.data)}`;
 }
 
 /** A field a provider declares (via the quote) that the client must collect. */
@@ -542,7 +555,7 @@ export function RampWidgetTemplate({
                   />
                 ) : (
                   <img
-                    src={`data:${depositInstructions.scannable.image.mediaType};base64,${depositInstructions.scannable.image.data}`}
+                    src={scannableImageSrc(depositInstructions.scannable.image)}
                     alt="Payment QR"
                     style={{ width: '100%', maxWidth: 220, height: 'auto', display: 'block', margin: '0 auto' }}
                   />
@@ -620,10 +633,18 @@ export function RampWidgetTemplate({
             </p>
           )}
 
+          {/* Approval unblocks the next quote, not this one: the provider consumed
+              this transaction's quote when it asked for KYC. So the withdraw stays
+              out of reach and the only way forward is a fresh quote. */}
           {kycJustApproved && (
-            <p className="pollar-ramp-payment-note">
-              {provider} approved your verification. Request a new quote to continue — the previous one was consumed.
-            </p>
+            <>
+              <p className="pollar-ramp-payment-note">
+                {provider} approved your verification. Request a new quote to continue — the previous one was consumed.
+              </p>
+              <button type="button" className="pollar-btn-primary" onClick={onRetry}>
+                Request a new quote
+              </button>
+            </>
           )}
 
           {canComplete && (

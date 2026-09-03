@@ -232,9 +232,10 @@ export class WebCryptoKeyManager implements KeyManager {
   }
 
   /**
-   * Re-persist the in-memory pair and verify it actually landed in IndexedDB.
-   * Idempotent and cheap (one put + one get). Returns `false` when persistence
-   * is unavailable, so the caller (the login flow) can warn that the session
+   * Re-persist the in-memory pair and verify that the pair IndexedDB holds is
+   * that same key, by thumbprint. Idempotent and cheap (one put + one get).
+   * Returns `false` when persistence is unavailable - or when the stored key is
+   * someone else's - so the caller (the login flow) can warn that the session
    * will not survive a reload rather than letting a silent `dbPut` failure
    * surface later as an unexplained thumbprint-mismatch logout on the next
    * page load. Re-putting (rather than only probing) also heals
@@ -242,12 +243,20 @@ export class WebCryptoKeyManager implements KeyManager {
    * signs with - the key a new login binds is guaranteed to be the stored one.
    */
   async ensurePersisted(): Promise<boolean> {
-    if (!this.keyPair) await this.init();
-    if (!this.keyPair || !this.apiKeyHash) return false;
+    // The thumbprint too, not just the pair: it is what the read-back is checked
+    // against, and `_doInit` publishes it one await after `keyPair`.
+    if (!this.keyPair || !this.thumbprint) await this.init();
+    if (!this.keyPair || !this.thumbprint || !this.apiKeyHash) return false;
     try {
       await dbPut(this.apiKeyHash, this.keyPair);
       const readBack = await dbGet<CryptoKeyPair>(this.apiKeyHash);
-      return isCryptoKeyPair(readBack);
+      if (!isCryptoKeyPair(readBack)) return false;
+      // Compare thumbprints, not shapes: another tab can write its own pair
+      // between the put and the get, and a shape check would accept it. The
+      // login would then bind a key IndexedDB no longer holds, which is exactly
+      // the thumbprint-mismatch logout this call exists to rule out.
+      const storedThumbprint = await computeJwkThumbprint(await this._exportPublicJwk(readBack.publicKey));
+      return storedThumbprint === this.thumbprint;
     } catch {
       return false;
     }
