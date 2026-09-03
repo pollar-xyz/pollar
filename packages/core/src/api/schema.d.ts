@@ -6896,6 +6896,8 @@ export interface operations {
                                 protocol: "SEP-24" | "REST";
                                 estimatedTime: string;
                                 recommended: boolean;
+                                /** Format: date-time */
+                                expiresAt?: string;
                                 /** @default [] */
                                 requiredFields: {
                                     key: string;
@@ -7732,6 +7734,11 @@ export interface operations {
                             kycUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            pendingSignature?: {
+                                unsignedXdr: string;
+                                /** @enum {string} */
+                                action: "sep10" | "withdraw_payment";
+                            };
                             depositInstructions?: {
                                 scannable?: {
                                     /** @enum {string} */
