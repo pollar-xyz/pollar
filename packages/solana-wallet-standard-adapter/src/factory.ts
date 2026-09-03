@@ -11,7 +11,7 @@ export interface SolanaWalletStandardAdapterOptions {
   labels?: Record<string, string>;
   /**
    * Gateway button label these wallets collapse behind in the login UI (applied
-   * as each adapter's `meta.group`). Default `'Solana Wallet'` — a distinct group
+   * as each adapter's `meta.group`). Default `'Solana Wallet'` - a distinct group
    * from the Stellar `'Wallet'` gateway, so the two chains render as separate
    * login buttons.
    */
@@ -26,7 +26,7 @@ function isSolanaWallet(w: Wallet): boolean {
 /**
  * Build one {@link SolanaWalletStandardAdapter} per installed Solana wallet discovered
  * through the Wallet Standard registry, to pass to
- * `PollarClientConfig.walletAdapters` (once `@pollar/core` is chain-aware — see the
+ * `PollarClientConfig.walletAdapters` (once `@pollar/core` is chain-aware - see the
  * design doc).
  *
  * @example
@@ -34,7 +34,7 @@ function isSolanaWallet(w: Wallet): boolean {
  * import { solanaWalletStandardAdapters } from '@pollar/solana-wallet-standard-adapter';
  *
  * const client = new PollarClient({
- *   apiKey: '…',
+ *   apiKey: '...',
  *   walletAdapters: [...stellarWalletsKitAdapters({ network }), ...solanaWalletStandardAdapters()],
  * });
  * ```

@@ -5,13 +5,13 @@ import type { VisibilityProvider } from '../visibility/types';
  *
  * Wire it into the silent-refresh scheduler so proactive token renewals are
  * skipped while the app is backgrounded and run the moment it returns to the
- * foreground — matching the web `visibilitychange` behavior and sidestepping
+ * foreground - matching the web `visibilitychange` behavior and sidestepping
  * RN's aggressive background timer throttling.
  *
  * `react-native` is the consumer's framework (not a dependency of this SDK),
  * so the module is loaded lazily via dynamic `import('react-native')`. That
  * keeps web/Node bundles from ever resolving it. Because loading is async, the
- * factory is async too — mirror the `createSecureStoreAdapter` usage:
+ * factory is async too - mirror the `createSecureStoreAdapter` usage:
  *
  *   import { createAppStateVisibilityProvider } from '@pollar/core/adapters/react-native-appstate';
  *   const visibilityProvider = await createAppStateVisibilityProvider();
@@ -61,7 +61,7 @@ export async function createAppStateVisibilityProvider(): Promise<VisibilityProv
   return {
     isVisible: () => isActive(AppState.currentState),
     onChange: (cb) => {
-      // Filter duplicate notifications — listeners only see real transitions,
+      // Filter duplicate notifications - listeners only see real transitions,
       // matching the web provider's contract. RN also emits 'inactive'
       // (iOS transition state) which we collapse into "not visible".
       let last = isActive(AppState.currentState);

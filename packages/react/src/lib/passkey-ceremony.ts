@@ -1,7 +1,7 @@
 import type { PasskeyCeremony, PasskeySigner } from '@pollar/core';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 
-// hex → base64url, for passing the raw auth digest as the WebAuthn challenge.
+// hex -> base64url, for passing the raw auth digest as the WebAuthn challenge.
 function hexToBase64url(hex: string): string {
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
@@ -26,16 +26,16 @@ function randomUserId(): string {
  *
  * `mode` is set explicitly by the caller's button, so there's no ambiguous
  * autodetect:
- *   - `'login'`    → `get()` only (returning user — the OS shows the account
+ *   - `'login'`    -> `get()` only (returning user - the OS shows the account
  *                    picker for discoverable credentials on this domain). A
  *                    failure here is surfaced as-is; it never falls through to
  *                    registration, so cancelling the prompt can't accidentally
  *                    create a second wallet.
- *   - `'register'` → `create()` only (new user → the server deploys the
+ *   - `'register'` -> `create()` only (new user -> the server deploys the
  *                    C-address).
  *
  * rpId = the current page's hostname (the customer app's domain), which is what
- * the passkey is bound to — the anti-phishing guarantee.
+ * the passkey is bound to - the anti-phishing guarantee.
  */
 export const browserPasskeyCeremony: PasskeyCeremony = async ({ challenge, mode }) => {
   const rpId = window.location.hostname;
@@ -53,7 +53,7 @@ export const browserPasskeyCeremony: PasskeyCeremony = async ({ challenge, mode 
       challenge,
       rp: { id: rpId, name: rpId },
       user: { id: userId, name: 'Smart Wallet', displayName: 'Smart Wallet' },
-      // ES256 (secp256r1) — the curve the on-chain WebAuthn verifier expects.
+      // ES256 (secp256r1) - the curve the on-chain WebAuthn verifier expects.
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
       authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
       attestation: 'none',

@@ -7,7 +7,7 @@
     "url": "git+https://github.com/pollar-xyz/pollar.git",
     "directory": "packages/solana-wallet-standard-adapter"
   },
-  "description": "Solana Wallet Standard adapter for @pollar/core — connect user-controlled Solana wallets (Phantom, Solflare, Backpack, …) via the Wallet Standard (@wallet-standard/* + @solana/wallet-standard-features), with SIWS login, without bundling any wallet SDK into @pollar/core.",
+  "description": "Solana Wallet Standard adapter for @pollar/core - connect user-controlled Solana wallets (Phantom, Solflare, Backpack, ...) via the Wallet Standard (@wallet-standard/* + @solana/wallet-standard-features), with SIWS login, without bundling any wallet SDK into @pollar/core.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -40,7 +40,6 @@
     "@pollar/core": "^0.11.2"
   },
   "dependencies": {
-    "@pollar/core": "^0.11.2",
     "@solana/wallet-standard-features": "^1.4.0",
     "@wallet-standard/app": "^1.1.1",
     "@wallet-standard/base": "^1.1.1",
@@ -48,6 +47,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@pollar/core": "^0.11.2",
     "eslint": "^10.5.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",

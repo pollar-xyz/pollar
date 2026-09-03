@@ -1,5 +1,5 @@
 /**
- * Base64url encoder/decoder (RFC 4648 §5), pure JS — no `btoa`, no `Buffer`.
+ * Base64url encoder/decoder (RFC 4648 section 5), pure JS - no `btoa`, no `Buffer`.
  * Used everywhere we need to encode/decode JWS segments, JWK fields, hashes,
  * private scalars, etc. Output is unpadded ("=" stripped).
  */

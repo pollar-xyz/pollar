@@ -9,7 +9,7 @@ export type LogLevel = 'silent' | 'error' | 'warn' | 'info' | 'debug';
 /**
  * Sink the SDK writes logs to. The global `console` already satisfies this
  * shape, so it's the default. Inject your own (pino, Sentry breadcrumbs, a test
- * spy…) via `PollarClientConfig.logger` to route SDK logs wherever you want.
+ * spy...) via `PollarClientConfig.logger` to route SDK logs wherever you want.
  */
 export interface PollarLogger {
   error(...args: unknown[]): void;
@@ -24,7 +24,7 @@ const RANK: Record<LogLevel, number> = { silent: 0, error: 1, warn: 2, info: 3, 
  * Build a level-gated logger over a sink. The returned object has the same
  * method surface as {@link PollarLogger}; each call is silently dropped when its
  * level is more verbose than the configured `level`. Messages keep their own
- * `[PollarClient…]` prefixes, so this only adds filtering + sink routing.
+ * `[PollarClient...]` prefixes, so this only adds filtering + sink routing.
  *
  * Defaults: `level = 'info'`, `sink = console`.
  */

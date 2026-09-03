@@ -2,7 +2,18 @@
 
 Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction utilities for Stellar and Solana applications.
 
-> **0.11.2** adds `client.stellar` — **SEP-53 message** and **SEP-10 challenge** ownership
+> **0.11.3** is a patch, non-breaking, focused on session resilience. A session
+> **survives reloads when the DPoP keypair fails to persist**: the persisted session records
+> the thumbprint of the key its tokens are bound to (`dpopJkt`), a mismatch is detected
+> locally instead of looping through 401s, and clearing a session no longer destroys the
+> keypair. `logout()` cancels a login still in flight, never destroys a session created while
+> it runs, rotates the keypair only when it still owns the teardown, and propagates to
+> sibling clients in the same document. Shared session-row writes are serialized and
+> ownership-gated, and the last server-issued `DPoP-Nonce` is persisted. New public API:
+> `setPasskeyDefaults()` on `PollarClient`, and `isPollarClient(value)`, a type guard that
+> recognizes a client even across duplicate copies of this package (`instanceof` cannot).
+>
+> Earlier: **0.11.2** added `client.stellar` — **SEP-53 message** and **SEP-10 challenge** ownership
 > proofs. External wallets sign client-side through their adapter (new optional
 > `signStellarMessage` on `WalletAdapter`; Freighter implements it, Albedo has no SEP-53
 > support), custodial wallets sign server-side, and both return the same `sep53` scheme so a

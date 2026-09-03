@@ -1,5 +1,398 @@
 # Changelog
 
+## 0.11.3
+
+> Patch release. Headlines: **sessions no longer die on reload when the DPoP
+> keypair fails to persist** (thumbprint-mismatch logout loop), **`PollarProvider`
+> no longer leaves a second `PollarClient` running under React StrictMode** (the
+> trigger behind "session cleared ~700ms after login" in development), and the
+> **Smart Wallet passkey ceremony is now installed however the client reaches
+> `PollarProvider`**, so a consumer-built `PollarClient` no longer silently
+> loses passkey login. The release also carries the **ramp-widget work** that
+> landed before the cut: server-normalized deposit instructions, a KYC gate,
+> pre-submit amount limits, navigable flow steps, per-field placeholders and
+> hints, and Branding-configurable modal chrome. Additive on top of 0.11.2 for
+> typical integrations; the exceptions are two type-level changes for custom
+> templates, called out inline below (the normalized deposit-instructions
+> shape, and a dead wallet-button template prop).
+
+### `@pollar/core`
+
+- **Fix: a superseded `logout()` no longer disconnects the wallet adapter.**
+  The adapter disconnect ran before the logout's generation guard, and
+  registered adapters are per-type singletons — so when a new external-wallet
+  login landed while the logout awaited the server, the "old" adapter
+  reference could be the very instance the new session was now using, and
+  disconnecting it cut that session's provider connection (external signing
+  broken until reconnect). The disconnect now sits behind the guard, with a
+  second generation re-check after its own await. Accepted residual: a
+  disconnect already in flight cannot be cancelled; if a login completes
+  during that exact await the provider connection can still be cut, though
+  the session and its keypair survive.
+- The same-document sibling registry now registers only on client runtimes
+  (browser / RN), matching the deregistration in `destroy()`. The old
+  unconditional registration leaked one entry (plus its notify closure) per
+  server-side client — those never deregister — and fired the "multiple live
+  clients" warning on servers, where one client per request is the normal
+  pattern and nothing is actually shared.
+- `tests/smoke-resume.cjs` grows to 44 checks (block 14): a superseded logout
+  leaves the adapter connected (0 disconnect calls) while an owned external
+  logout disconnects exactly once.
+- **Fix: `logout()` no longer destroys a session created while it runs.**
+  `logout()` awaits a network call and an adapter disconnect, and consumers
+  routinely do not await it (`@pollar/react` fires it from the login modal and
+  the wallet button, then offers the login UI). A complete new login could land
+  inside that window - the abort below only cancels a login already running -
+  and the teardown then ran against whatever state existed when the awaits
+  resolved: it wiped the new session and rotated away the key that session had
+  just been bound to. The whole teardown is now guarded on the session
+  generation snapshotted at the top of `logout()`.
+- **Fix: `logout()` rotates the DPoP keypair only when it still owns the
+  session row.** The keypair record (`pollar-keys/<apiKeyHash>`) is shared by
+  every document on the origin and is MORE shared than the session row, which
+  was already ownership-gated. A client whose session had been superseded still
+  destroyed the key the current row's session was bound to, leaving that session
+  in storage pointing at a `cnf.jkt` that no longer existed locally - cleared on
+  its next restore with its refresh token still valid.
+- **Fix: a logout propagates to sibling clients in the SAME document.** Browsers
+  deliver `storage` events only to OTHER documents, so two instances side by
+  side were the blind spot: after one logged out, the other kept its session and
+  re-persisted the row on its next write. The live-client registry now carries
+  the instances (not just a count) and the clear is announced in-process,
+  mirroring what the cross-document handler does.
+- **Change: the last server-issued `DPoP-Nonce` is persisted**
+  (`pollar:<apiKeyHash>:dpopNonce`) and restored at startup. The server requires
+  a nonce on every proof, so without it the first authenticated request of every
+  page load was a guaranteed 401 `use_dpop_nonce` challenge plus a retry. sdk-api
+  nonces verify for days (24h active + a 3-day rotation overlap), carry no user
+  identity and grant nothing on their own, so the value survives page loads and
+  session teardowns; a stale one costs exactly what having none costs.
+- **Fix: `logout()` cancels a login still in flight.** It never aborted
+  `_loginController` (only `cancelLogin()` and `destroy()` did), so a
+  `/auth/login` response landing after the logout re-ran the session store and
+  resurrected the session — the user pressed logout and ended up logged in,
+  and (because logout rotates the keypair) that resurrected session was bound
+  to a destroyed key, guaranteed to 401 on first use. The flow deps already
+  no-op on an aborted signal, so aborting at the top of `logout()` closes it.
+- **Fix: the persisted `dpopJkt` records the key the server actually bound.**
+  It was computed with `getThumbprint()` at store time; if the key rotated
+  between the login's bind and its store (e.g. the logout race above, or a
+  cross-tab rotation mid-login), the field vouched for a key the server never
+  saw and the restore-time binding check waved through a session guaranteed to 401. `authenticate()` now computes the thumbprint of the exact `dpopJwk` it
+  sent to `/auth/login` and threads it into `storeSession` (internal
+  `FlowDeps` signature only); the store-time read remains as fallback for the
+  refresh path.
+- **Fix: `init()` no longer early-returns into a half-built key manager.**
+  `_doInit` assigns the keypair and only then awaits the JWK export +
+  thumbprint; a caller landing in that window returned immediately and
+  `getThumbprint()` threw "initialization failed" while init was mid-flight —
+  silently omitting `dpopJkt` and disabling the binding check. Both managers
+  now require all three fields (`keyPair`/`privateKey`, `publicJwk`,
+  `thumbprint`) before the fast path, so such callers join the in-flight init.
+- Corrected the `_clearSession` nonce comment: sdk-api DPoP nonces verify for
+  days (24h active + 3-day rotation overlap), not "short-lived" — not
+  persisting the nonce across page loads is a simplicity trade-off, and
+  persisting it is a possible future latency win (would skip the cold-start
+  `use_dpop_nonce` challenge).
+- `tests/smoke-resume.cjs` grew to 27 checks: logout-cancels-login (no
+  resurrection), `dpopJkt === cnf.jkt` even when the store-time key lies
+  (simulated mid-login rotation), and `getThumbprint()` during the init
+  window resolving instead of throwing.
+- **Fix: a session no longer dies on the first reload when the DPoP keypair
+  fails to persist (`SDK_AUTH_DPOP_INVALID` / `thumbprint-mismatch`).** When
+  IndexedDB couldn't durably store the keypair (blocked, evicted, private
+  mode), the failure was swallowed: login worked against the in-memory key, but
+  the next page load generated a fresh keypair, every `/auth/session/resume`
+  401'd with `thumbprint-mismatch`, and `_clearSession()` then also destroyed
+  the (new, valid) keypair — logging the user out with no diagnostic. Four
+  changes, none touching the public API:
+  - The persisted session now records `dpopJkt` — the thumbprint of the key
+    its tokens are bound to (`cnf.jkt`). On restore, a mismatch against the
+    currently loaded keypair means every proof-bound call (resume, refresh,
+    signing) is guaranteed to fail, so the session is cleared **locally** with
+    an error log naming the real cause — no doomed resume round trip, no 401
+    burst, no phantom `authenticated` emission. Sessions persisted by older
+    SDKs have no `dpopJkt` and behave as before (the resume decides).
+  - `_clearSession()` no longer resets the DPoP keypair. The key is
+    device-scoped, not session-scoped, and the clear also runs on failure
+    paths (rejected resume, failed refresh, cross-tab clear, superseded login
+    race) where destroying it made every other session bound to the key —
+    persisted, or a token the consumer held elsewhere — permanently
+    unverifiable. The keypair is rotated only on explicit `logout()`. The
+    in-memory `DPoP-Nonce` also survives the clear (it is origin-scoped server
+    state); it is intentionally **not** persisted across page loads — server
+    nonces are short-lived, so the one cold-start `use_dpop_nonce` round trip
+    stays. To keep multiple tabs coherent now that the clear keeps the key,
+    the new optional `KeyManager.resync()` (drop the in-memory cache, keep
+    persistent storage) runs on every clear, and the `dpopJkt` check resyncs
+    and re-compares before concluding a mismatch — so after a cross-tab
+    logout → fresh login, a sibling tab adopts the rotated shared key instead
+    of signing with its stale cached copy (or clearing the session the other
+    tab just created).
+  - `_resume()` coalesces concurrent triggers (startup restore + visibility
+    flaps used to abort/restart each other into a burst of identical 401s)
+    and backs off exponentially (1s → 30s cap) after non-terminal failures
+    (network, 429, 5xx). Terminal 401/403/410 still clears the session
+    immediately, exactly as before.
+  - Key managers persist durably and loudly: IndexedDB writes now await the
+    transaction's `complete` event (a put request's `onsuccess` fires before
+    the commit, so commit-time failures were silent), and the new optional
+    `KeyManager.ensurePersisted()` (implemented by both `WebCryptoKeyManager`
+    and `NobleKeyManager`) is called at login just before the key is bound:
+    it re-writes the key and verifies that what storage hands back is that
+    same key (by thumbprint, so another tab writing its own pair between the
+    two is caught rather than accepted), and the client warns
+    `"the session will NOT survive a reload"` when persistence is
+    unavailable — at login time, not as a mystery logout later. The re-write
+    also heals a key deleted by another tab's `reset()`.
+  - New smoke suite `tests/smoke-resume.cjs` covers all of it against a mock
+    server that actually verifies the DPoP binding (nonce challenge + proof
+    thumbprint vs `cnf.jkt`) and an IndexedDB shim that survives across
+    client instances.
+  - Recovery note: sessions persisted by ≤0.11.2 whose keypair DID persist
+    resume normally after upgrading. Sessions whose keypair was already lost
+    or reset cannot be recovered (the private key is gone — that is DPoP's
+    security property); those users must log in once more, now with a clean
+    single log line instead of a 401 loop.
+- New `client.setPasskeyDefaults({ passkey?, passkeySign? })`. Fills in the
+  passkey ceremony and signer when they were not supplied at construction, and
+  never replaces ones that were, so React Native keeps injecting its native
+  provider through the constructor. Core still ships no WebAuthn implementation
+  of its own and stays platform-agnostic; the web implementation lives in
+  `@pollar/react`. `_passkey` / `_passkeySign` stop being `readonly` to allow
+  this. Both are read per login and per signature, never latched at
+  construction, so filling them in later takes effect immediately.
+- **Fix: a logout sticks, and a login can no longer be undone by a write
+  already in flight.** Every mutation of the shared
+  `pollar:<apiKeyHash>:session` row now goes through one serialized writer that
+  re-checks the session generation immediately before it writes, instead of
+  after. Previously a persist that started before a logout landed after it and
+  re-created the row: the client went `idle` but the session came back on the
+  next reload, and in a browser that write's own `storage` event could log
+  other documents back in. Overlapping writes also landed in adapter-resolution
+  order, so an older session could win over a newer one.
+- **Fix: a client only removes the shared session row it owns.** The row is
+  shared by every document — and every client instance — on the origin, so a
+  teardown now removes it only when it still holds the session being cleared. A
+  second instance sitting on a stale session (e.g. React StrictMode
+  double-invoking the `useState` initializer that builds the client) used to
+  delete the row a fresh login had just written, about one round trip after
+  "Session stored", with no `logout()` and no 401 in the affected document.
+  `refresh()` called with no session no longer touches storage at all.
+- **Fix: the cross-tab `storage` handler no longer acts on events that are not
+  about this session.** It ignores `key === null` (a `clear()` of a whole
+  area, which any code on the origin can fire — an unrelated app on
+  `localhost`, a demo, an injected script), ignores events whose `storageArea`
+  is not `localStorage` (a same-origin iframe's `sessionStorage.clear()` used
+  to log the user out), and guards on holding a session rather than on the auth
+  step, so a cross-tab logout can no longer flap a login in progress. A client
+  destroyed before `_initialize()` finished no longer leaves a live listener
+  behind.
+- **Fix: a session row this build cannot read is no longer deleted.**
+  `readStorage()` used to remove the row on any validation or parse failure; in
+  a browser that removal emits a `storage` event, so one document hitting the
+  failure logged every other one out. It is now left alone and simply ignored.
+  `wallets[]` entries whose `type`/`chain` this build does not know are pruned
+  instead of failing the whole session (a newer server adding a chain no longer
+  logs older tabs out), and the access/refresh token bounds went from 4096 to
+  8192 chars so a larger JWT cannot silently invalidate a valid session.
+- **Fix: a logout racing a login-over-login no longer leaves the previous
+  session's row behind.** Ownership for removing the shared session row is now
+  membership in the instance's own session history (`_ownedSessionIds`, stored
+  or restored, capped), not equality with the session being cleared. Without
+  this, a logout whose replacement write was still queued could find the row
+  holding this client's PREVIOUS session, refuse to remove it as "not ours",
+  and skip the key rotation gated on that removal — so the old, never-revoked
+  session restored fully functional on the next reload. Rows from sessions the
+  instance never held (another document's or instance's newer login) are still
+  protected: they are never in the history.
+- **New ramp client methods:** `getRampLiquidity(rail)`, `getRampKycStatus()`
+  and `decodePixQr(qrCode)`, plus an optional `kycRequired` on the ramp
+  response. Surfaced on the generic ramp API rather than as provider-specific
+  methods, so all five providers ride one flow and the widget does not fork
+  per provider. `schema.d.ts` regenerated from `openapi.v2.json`; v2 mounts
+  v1's ramp routes unchanged, so the new paths appear in both documents.
+- **New: `PollarApiError`.** The ten ramp endpoint helpers collapsed every
+  failure into `new Error(code)`, discarding the body the server answered
+  with. They now share one wrapper carrying the code, the server's `details`
+  and the whole body, so a ramp failure reaches the caller with its cause
+  intact. `message` is still the code, so anything rendering `err.message` is
+  unchanged.
+- **New exported types:** `RampDepositInstructions`, `RampScannable` and
+  `RampInstructionField`, so a payment screen can be rendered without
+  `@pollar/react` and without reaching into the generated schema.
+
+### `@pollar/react`
+
+- **Fix: StrictMode no longer leaves an orphaned `PollarClient` running.**
+  The provider builds the client in a `useState` initializer, and React
+  StrictMode double-invokes that initializer in development while discarding the
+  first pass's hook state entirely - the instance the component keeps comes from
+  the second pass, and `useRef` carries nothing between the two, so nothing in
+  the component could see the first construction. That first client was never
+  torn down: it outlived the provider's own unmount, holding a cross-tab
+  `storage` listener, a proactive-refresh loop and a live-client registry entry
+  for the life of the page.
+
+  This is a real behavior change, not just tidier teardown. Two live clients on
+  one API key share the persisted session row and the DPoP keypair while running
+  independent refresh loops, so the orphan would restore the previous session,
+  revalidate it, and on the 401/403 clear the row the fresh login had just
+  written - surfacing as a session dropped about one round trip (~700ms) after a
+  successful login, with no `logout()` call, no visible 401 and no `storage`
+  event, because both clients live in the same document. Every cross-document
+  hardening elsewhere in this release exists to survive that configuration;
+  this stops it from happening in the first place. Development only (StrictMode
+  is a dev behavior), but that is where it was being hit.
+
+  Both render passes receive the same props object, so the provider now keys
+  clients it builds on that config object and the second pass reuses the first
+  pass's instance instead of constructing another. The entry is dropped as soon
+  as the mount effect claims the client, so a later provider rendered with the
+  same retained config object still builds its own. Consumers who pass a
+  ready-made `PollarClient` are unaffected - that path never constructed
+  anything. No API change.
+
+- **Fix: a client from a second copy of `@pollar/core` is recognised as one.**
+  `PollarProvider` decided between "a ready client" and "a config" with
+  `client instanceof PollarClient`. With two copies of core in the tree that is
+  `false` for a real client, so the provider took the config branch and spread a
+  live instance into `new PollarClient({...})` - the spread carries `apiKey`, so
+  it quietly produced a SECOND client on the same API key rather than failing
+  outright, which is the same shared-session-row configuration everything else
+  in this release had to defend against. It now uses `isPollarClient()`, which
+  sees through the copy boundary.
+- **Fix: a pre-built `PollarClient` no longer loses passkey support.**
+  `PollarProvider` injected `browserPasskeyCeremony` only on the branch that
+  builds the client from a config object. A consumer passing a ready instance
+  (a module singleton shared with non-React code, say) got a client with no
+  ceremony, so `createSmartWallet()` / `loginSmartWallet()` failed at the first
+  step with `passkey ceremony not configured` and the "Passkey support is not
+  configured" error in the login modal. Smart-wallet `signAndSubmitTx` failed
+  the same way, since `passkeySign` was missing too. The provider now calls
+  `setPasskeyDefaults()` on an instance it receives.
+- **Fix: an explicit `passkey: undefined` no longer wipes the default.** The
+  config branch spread `...client` after the defaults, so a config carrying the
+  key with an undefined value (an optional ceremony that resolved to nothing)
+  overrode `browserPasskeyCeremony`. Defaults now apply with `??`: an
+  explicitly configured ceremony still wins, an absent one still falls back.
+- `browserPasskeyCeremony` and `browserPasskeySigner` are now exported, for
+  consumers who build their own `PollarClient` and want the ceremony wired at
+  construction, or who want to wrap it (logging, a custom `rpId`).
+
+- **New: `isPollarClient(value)`.** A cross-copy type guard for `PollarClient`,
+  additive to the public surface. `instanceof` compares against one specific
+  class object, so it answers `false` for an instance built by a different copy
+  of `@pollar/core` - and a second copy is easy to end up with. Every instance
+  now carries a `Symbol.for('@pollar/core.PollarClient')` brand, which resolves
+  through the runtime-wide symbol registry, so any copy recognises the others'
+  instances. The guard tries `instanceof` first, so it also accepts instances
+  from builds that predate the brand. Use it instead of `instanceof` wherever a
+  client may have crossed a package boundary.
+- **Removed: the `walletType` prop on `WalletButtonTemplateProps`.**
+  `WalletButton` derived it (`wallet.provider` for an `external`-custody wallet,
+  else `null`) and passed it down, but the default template never rendered it;
+  the wallet-logo mapping lives in the transaction modal's `TxStatusView`,
+  which derives the same value itself. Type-level only - the value carried no
+  behavior in this package. A custom template that read `props.walletType` can
+  reconstruct it from `usePollar()`:
+  `const walletType = wallet?.custody === 'external' ? wallet.provider : null;`
+- **The ramp widget consumes the server's normalized deposit instructions.**
+  sdk-api now answers with one shape for every provider, so the widget stopped
+  translating: the internal `flattenInstructions` / `INSTRUCTION_LABELS` /
+  `InstructionKind` machinery is gone, and three blocks remain - the code to
+  scan, the payload as text when the server marks it worth pasting, and a map
+  over `fields` - none of which knows which provider served the route. Pollar's
+  own QR arrives as inline markup so `currentColor` keeps it legible in both
+  themes; anything not inline-safe renders through an `<img>` whose data URL
+  follows the declared `encoding`, so a provider's `utf8` SVG is escaped rather
+  than base64-wrapped into a URL no browser can decode. A custom ramp template
+  must adopt the normalized shape - this is the type-level change flagged in
+  the headline.
+- **Ramp KYC gate.** When an off-ramp answers `kycRequired: true` and the
+  provider publishes no hosted KYC URL, the withdraw button is withheld with
+  the reason stated (nothing was sent, nothing was signed) and
+  `getRampKycStatus()` is polled until the provider clears the user. Approval
+  unblocks the next quote, not that one: the provider consumed its quote when
+  it asked for KYC, so the transaction stays blocked for good and the approved
+  state offers a "Request a new quote" button instead of the withdraw.
+- **Amount limits are enforced and explained before submitting.** The widget
+  checks the amount against the chosen route's `minAmount` / `maxAmount` (the
+  limits already travelled on the quote and nothing read them) and renders the
+  warning in the route list, where another route can be picked without leaving
+  the flow; ramp API failures now surface the server's exact bound through
+  `PollarApiError` instead of a bare error code.
+- **The widget's flow is navigable and legible.** `select_route` gains Back
+  (returning to the amount step and carrying the reason with it, shown under
+  the field and cleared on typing), and picking a route shows a spinner and
+  "Starting..." on that row while the other rows dim and stop responding, so a
+  second click cannot race a competing request.
+- **`RampFieldSpec` grew `optional`, `placeholder` / `placeholderFrom` and
+  `hint`** - all optional, all driven by what the quote declares. A blank
+  optional field no longer blocks Continue; `placeholderFrom` names a sibling
+  select whose chosen option supplies the example, so one Pix field shows a
+  CPF mask, an email or a +55 number as the kind changes without the component
+  knowing what a Pix key is.
+- **The modal chrome is configurable from Branding.** New
+  `components/modal-theme.ts` (`buildModalCssVars()` + `modalChrome()`)
+  replaces an identical block copy-pasted into 14 templates: background, text,
+  secondary-button fill, both radii and the overlay z-index resolve from the
+  per-app Branding config, so a variable added there reaches every modal at
+  once. The primary button takes its label color from the accent's luminance
+  instead of a hardcoded white, so the Amber preset stops rendering white on
+  yellow.
+
+### Tests and CI
+
+- Three new smoke suites, wired into `npm run test:smoke` (which CI already
+  runs). `smoke-lifecycle.cjs` asserts that a destroyed client leaves nothing
+  behind - no registry entry, no `storage` listener, no reachability - since the
+  live-client registry holds instances. `smoke-invariants.cjs` drives seeded
+  random sequences of login / logout / un-awaited logout racing a login /
+  refresh / revalidate / reload / second instance / cross-tab clear / revocation
+  and checks fixed properties after every step, so it looks for the next
+  state-disagreement race rather than the last one; a failing seed replays with
+  `node tests/smoke-invariants.cjs <seed>`. `smoke-react.cjs` covers
+  `PollarProvider`'s client lifecycle and is what caught the StrictMode orphan
+  above. Each suite ships a positive control, and each was verified to fail
+  against the code that predates its fix.
+- A fourth new suite, `smoke-cross-document.cjs`, ports the scratchpad
+  harnesses that found the cross-document teardown bugs. It adds the two mock
+  capabilities the rest of the suite lacks — real `storage`-event semantics
+  (delivered to every same-origin document EXCEPT the writer, one "document"
+  per client) and a storage adapter whose session writes can be held so the
+  `_persistSession` queue takes real depth. Covers: adoption of a sibling
+  document's login; a stale document's teardown not removing a fresh login's
+  row or keypair; foreign `clear()` / other-storage-area events ignored; the
+  triple race (held write + queued login-over-login + logout) resolved by
+  ownership-by-session-history with the key rotation; `destroy()` discarding a
+  queued refresh mutation; logout with the login's persist still queued; and
+  it pins the documented limitation that an external PHYSICAL deletion of the
+  row a client holds still reads as a logout (what the explicit logout-signal
+  design, in backlog, would fix). Negative-controlled against the pre-fix
+  bundle: the ownership, handler-filter and triple-race blocks fail there.
+- CI runs on release branches (`main` and `0.*`), not `main` alone, so a release
+  branch is no longer unverified until its pull request opens.
+
+### Packaging
+
+- **`@pollar/core` is now a peer dependency only.** `@pollar/react` and the
+  wallet adapters listed it in `dependencies` AND `peerDependencies`. The
+  `dependencies` entry is what told npm to install a package-local copy, and a
+  second copy of core is what broke `instanceof`, split the module-level
+  live-client registry in two, and let two clients share one persisted session
+  row. It now appears only as a peer (plus a `devDependency` for building here),
+  so the application's single copy is the one everybody uses. npm 7+ installs
+  peers automatically; on npm 6, Yarn 1, or with `--legacy-peer-deps`, add
+  `@pollar/core` to your own dependencies.
+- Version ranges are unchanged and did not need bumping: `^0.11.2` already means
+  `>=0.11.2 <0.12.0`, so npm resolves the highest matching version and dedupes
+  to one copy. The duplicate only ever came from the `dependencies` entry above,
+  or from exact pins that disagree.
+- `@pollar/react` requires `@pollar/core@^0.11.3` (`setPasskeyDefaults()` is new
+  in core; an older one throws
+  `client.setPasskeyDefaults is not a function` when the provider mounts).
+
 ## 0.11.2
 
 > Stable release. Published under the default `latest` dist-tag

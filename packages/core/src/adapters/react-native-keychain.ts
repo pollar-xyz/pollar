@@ -14,7 +14,7 @@ import type { Storage } from '../storage/types';
  * Storage model: one Keychain `service` per logical key. Each `Storage.set(k, v)`
  * call writes a separate Keychain entry under `service = k`; this keeps the
  * adapter simple but means the number of distinct keys you write should stay
- * bounded (the SDK uses 2–3 keys per `apiKeyHash`).
+ * bounded (the SDK uses 2-3 keys per `apiKeyHash`).
  */
 
 type KeychainOptions = {
@@ -50,7 +50,7 @@ export interface KeychainAdapterOptions {
   /**
    * Override the iOS Keychain accessibility class. Defaults to
    * `ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY` when available on the loaded
-   * module — that prevents iCloud Keychain backup from carrying the SDK's
+   * module - that prevents iCloud Keychain backup from carrying the SDK's
    * private key material to another device.
    */
   accessible?: string;

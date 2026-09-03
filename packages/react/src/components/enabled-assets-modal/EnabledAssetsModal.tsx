@@ -8,6 +8,7 @@ import { addressForChain } from '../ChainSelect';
 import '../shared.css';
 import './EnabledAssetsModal.css';
 import { CustomTrustlineModalTemplate, EnabledAssetsModalTemplate } from './EnabledAssetsModalTemplate';
+import { modalChrome } from '../modal-theme';
 
 interface EnabledAssetsModalProps {
   onClose: () => void;
@@ -19,7 +20,7 @@ function assetKey(record: { code: string; issuer?: string }): string {
 
 export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
   const { enabledAssets, refreshAssets, setTrustline, wallets, styles } = usePollar();
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const { chains } = useChains();
   const [selectedChain, setSelectedChain] = useState<WalletChain | null>(null);
@@ -64,7 +65,7 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
   const handleToggle = useCallback(
     (record: EnabledAssetRecord) => {
       const removing = record.trustlineEstablished;
-      // Sponsorship is derived automatically from the app config now — no flag.
+      // Sponsorship is derived automatically from the app config now - no flag.
       void runAction(
         assetKey(record),
         { code: record.code, issuer: record.issuer ?? '' },
@@ -76,7 +77,7 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
 
   const handleCustomSubmit = useCallback(
     async (input: { code: string; issuer: string; limit?: string }) => {
-      // Custom (non-configured) assets are never app-sponsored — the user pays.
+      // Custom (non-configured) assets are never app-sponsored - the user pays.
       const ok = await runAction(
         'custom',
         { code: input.code, issuer: input.issuer },
@@ -88,11 +89,12 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
   );
 
   return (
-    <div className="pollar-overlay" onClick={onClose}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
       {view === 'list' ? (
         <EnabledAssetsModalTemplate
           theme={theme}
           accentColor={accentColor}
+          styleOverrides={styleOverrides}
           enabledAssets={enabledAssets}
           walletAddress={walletAddress}
           chains={chains}
@@ -112,6 +114,7 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
         <CustomTrustlineModalTemplate
           theme={theme}
           accentColor={accentColor}
+          styleOverrides={styleOverrides}
           busy={busyKey === 'custom'}
           actionError={actionError}
           onBack={() => {

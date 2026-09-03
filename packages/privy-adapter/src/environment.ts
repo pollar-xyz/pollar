@@ -6,12 +6,12 @@
  * There is **no** Privy SDK for Angular, Vue, Svelte or vanilla JS. So this
  * adapter supports exactly two hosts: React (web) and Expo / React Native.
  *
- * We can't reliably fingerprint the host framework at build time — Angular, Vue
+ * We can't reliably fingerprint the host framework at build time - Angular, Vue
  * and React web all resolve the same "web" bundle (only the `react-native`
  * export condition is distinguishable). The support boundary is therefore
  * enforced at runtime: the adapter only works once a platform bridge
  * (`<PrivyAdapterProvider>` on web, the Expo provider on RN) mounts and attaches
- * its runtime. If none ever does — the typical Angular/Vue case — the first use
+ * its runtime. If none ever does - the typical Angular/Vue case - the first use
  * fails with {@link PrivyAdapterUnsupportedError} instead of hanging or throwing
  * a cryptic "react-auth not found".
  */

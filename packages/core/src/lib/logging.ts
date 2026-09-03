@@ -14,7 +14,7 @@ export const SENSITIVE_BODY_KEYS = new Set([
   'accessToken',
   'token',
   // SEP-10 challenge envelopes: a counter-signed challenge is a live, replayable
-  // auth credential — never log it in the clear.
+  // auth credential - never log it in the clear.
   'signedChallengeXdr',
   'challengeXdr',
   'signedTxXdr',
@@ -46,15 +46,15 @@ export function redactBody(body: unknown): unknown {
 
 /**
  * Sensitive keys for a RESPONSE / error-cause envelope. Same as
- * {@link SENSITIVE_BODY_KEYS} but WITHOUT `code` — in a request body `code` is
+ * {@link SENSITIVE_BODY_KEYS} but WITHOUT `code` - in a request body `code` is
  * the email OTP (a secret), but in a response/cause it's the diagnostic error
- * code (`TX_FEE_LIMIT_EXCEEDED`, `INVALID_EMAIL_CODE`, …) that you need in logs.
+ * code (`TX_FEE_LIMIT_EXCEEDED`, `INVALID_EMAIL_CODE`, ...) that you need in logs.
  * Token/PII/XDR keys stay masked.
  */
 const SENSITIVE_RESPONSE_KEYS = new Set([...SENSITIVE_BODY_KEYS].filter((k) => k !== 'code'));
 
 /**
- * Like {@link redactBody} but RECURSIVE — masks sensitive keys at any depth. Use
+ * Like {@link redactBody} but RECURSIVE - masks sensitive keys at any depth. Use
  * for RESPONSE bodies / error causes, where token material is nested (e.g.
  * `{ content: { token: { accessToken, refreshToken } } }`) and the shallow
  * `redactBody` would leak it. Keeps the diagnostic `code` visible (see

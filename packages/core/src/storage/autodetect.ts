@@ -8,7 +8,7 @@ const PROBE_KEY = '__pollar_storage_probe__';
  * fallback. The probe writes-reads-removes a sentinel; any throw, value
  * mismatch, or missing `localStorage` (SSR / disabled storage) falls back.
  *
- * Run-time degrade still happens inside `createLocalStorageAdapter` — see its
+ * Run-time degrade still happens inside `createLocalStorageAdapter` - see its
  * docstring for the rationale.
  */
 export function defaultStorage(options: LocalStorageAdapterOptions = {}): Storage {

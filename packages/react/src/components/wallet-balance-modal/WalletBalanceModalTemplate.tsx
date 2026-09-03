@@ -1,9 +1,9 @@
 'use client';
 
 import { StellarNetwork, WalletBalanceRecord, WalletBalanceState, WalletChain } from '@pollar/core';
-import { type CSSProperties } from 'react';
 import { ChainSelect, resolveChain } from '../ChainSelect';
 import { BusyOverlay, CopyButton, cropAddress, PollarModalFooter, useStickyData } from '../commons';
+import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 // Stellar amounts are int64 scaled by 10^7, so 7 decimals is the ledger's exact
 // precision and the default. A Polygon/Solana token carries its own `decimals`
@@ -11,7 +11,7 @@ import { BusyOverlay, CopyButton, cropAddress, PollarModalFooter, useStickyData 
 // blow the column apart. Digits are padded either way so amounts line up.
 //
 // A null balance means the chain could not be read. It renders as a dash, never
-// as 0.0000000 — a wallet that failed to load must not look empty.
+// as 0.0000000 - a wallet that failed to load must not look empty.
 function formatBalance(balance: string | null, decimals = 7): string {
   if (balance === null) return '—';
   const digits = Math.min(decimals, 7);
@@ -36,8 +36,8 @@ function faucetFor(record: WalletBalanceRecord): FaucetHint | null {
   return null;
 }
 
-// The chain is no longer tagged per row: the list is filtered to the network
-// picked in the header, so every row would carry the same tag.
+// No per-row chain tag: the list is filtered to the network picked in the
+// header, so every row would carry the same tag.
 function BalanceItem({ record, faucet }: { record: WalletBalanceRecord; faucet: FaucetHint | null }) {
   const balanceDiffers = record.balance !== record.available;
   return (
@@ -59,7 +59,7 @@ function BalanceItem({ record, faucet }: { record: WalletBalanceRecord; faucet: 
               {faucet.label}
             </a>
             {/* Pollar's Solana testnet is the devnet cluster, and both faucets
-                fund devnet — spell it out so nobody requests on the wrong one. */}
+                fund devnet - spell it out so nobody requests on the wrong one. */}
             <span className="pollar-bal-faucet-net"> (devnet)</span>
           </span>
         )}
@@ -77,13 +77,15 @@ function BalanceItem({ record, faucet }: { record: WalletBalanceRecord; faucet: 
 export interface WalletBalanceModalTemplateProps {
   theme: string;
   accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
   walletBalance: WalletBalanceState;
   /** Address of the wallet on {@link selectedChain}. */
   walletAddress: string;
   /** Networks the user holds a wallet on; the first one is the default. */
   chains: WalletChain[];
   selectedChain: WalletChain | null;
-  /** testnet vs mainnet — gates the Solana devnet faucet hint. */
+  /** testnet vs mainnet - gates the Solana devnet faucet hint. */
   network: StellarNetwork;
   onSelectChain: (chain: WalletChain) => void;
   onRefresh: () => void;
@@ -93,6 +95,7 @@ export interface WalletBalanceModalTemplateProps {
 export function WalletBalanceModalTemplate({
   theme,
   accentColor,
+  styleOverrides,
   walletBalance,
   walletAddress,
   chains,
@@ -102,32 +105,14 @@ export function WalletBalanceModalTemplate({
   onRefresh,
   onClose,
 }: WalletBalanceModalTemplateProps) {
-  const isDark = theme === 'dark';
-
-  const cssVars = {
-    '--pollar-accent': accentColor,
-    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': isDark ? '#ffffff' : '#111827',
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
-    '--pollar-input-height': '44px',
-    '--pollar-input-border-radius': '0.5rem',
-    '--pollar-card-border-radius': '10px',
-  } as CSSProperties;
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
   const isLoading = walletBalance.step === 'loading';
   // Keep the previous payload on screen while refreshing; the overlay below
   // blocks interaction so nothing is read against data that is changing.
   const data = useStickyData(walletBalance.step === 'loaded' ? walletBalance.data : null);
   // Only the picked network's balances. The backend returns every chain in one
-  // payload, so this is a local filter — switching networks costs no request.
+  // payload, so this is a local filter - switching networks costs no request.
   const balances = (data?.balances ?? []).filter((b) => resolveChain(b.chain) === selectedChain);
   // These faucets fund devnet/testnet only, so mainnet gets no hint at all.
   const showFaucets = selectedChain === 'SOLANA' && network === 'testnet';
@@ -181,7 +166,7 @@ export function WalletBalanceModalTemplate({
         </div>
       )}
 
-      {/* First load only — a refresh keeps the old list under the overlay. */}
+      {/* First load only - a refresh keeps the old list under the overlay. */}
       {isLoading && !data && (
         <div className="pollar-loading-block">
           <div className="pollar-spinner" />

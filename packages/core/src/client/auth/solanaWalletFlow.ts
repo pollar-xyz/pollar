@@ -20,7 +20,7 @@ function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 }
 
 /**
- * Sign In With Solana (SIWS) login for a `chain: 'SOLANA'` adapter — the Solana
+ * Sign In With Solana (SIWS) login for a `chain: 'SOLANA'` adapter - the Solana
  * counterpart of {@link loginWithAdapter} (which is SEP-10, Stellar). Solana has no
  * challenge TRANSACTION (its signature binds an expiring blockhash), so the server
  * issues a SIWS INPUT, the wallet signs the rendered message (`solana:signIn`), and
@@ -113,7 +113,7 @@ export async function loginWithSolanaAdapter(adapter: WalletAdapter, deps: FlowD
       return;
     }
 
-    // Key control is proven — persist the adapter (and its walletType) now, so a
+    // Key control is proven - persist the adapter (and its walletType) now, so a
     // failure above never strands one (mirrors the Stellar flow).
     await deps.storeWalletAdapter(adapter, type);
   } catch (err) {

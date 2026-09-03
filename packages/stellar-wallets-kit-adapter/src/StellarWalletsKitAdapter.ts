@@ -15,7 +15,7 @@ import { getInitNetwork, getKitLogger } from './factory';
 
 /**
  * Wraps Stellar Wallets Kit so it satisfies the `@pollar/core` `WalletAdapter`
- * contract. The kit is a global singleton — `setWallet` is called before every
+ * contract. The kit is a global singleton - `setWallet` is called before every
  * operation so the correct module handles the request, which lets a single
  * `StellarWalletsKit.init(...)` cover many wallet modules.
  */
@@ -33,9 +33,9 @@ export class StellarWalletsKitAdapter implements WalletAdapter {
   async isAvailable(): Promise<boolean> {
     // `refreshSupportedWallets()` probes every module's own `isAvailable()`
     // hook (modules promise <1000ms per the kit contract) and returns a
-    // static snapshot. This avoids the old false-positive where we always
-    // claimed availability and let `connect()` fail later — the picker / UI
-    // can now short-circuit on `wallet_not_installed` immediately.
+    // static snapshot. Claiming availability blindly would let `connect()`
+    // fail later; probing lets the picker / UI short-circuit on
+    // `wallet_not_installed` immediately.
     try {
       const supported = await StellarWalletsKit.refreshSupportedWallets();
       const wallet = supported.find((w) => w.id === String(this.type));

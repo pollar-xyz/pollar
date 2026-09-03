@@ -169,7 +169,7 @@ export function ModalStatusBanner({ message, status, onCancel, onRetry }: ModalS
  *
  * Shared by the balance and asset lists: both render per-chain rows and must
  * agree on the label and colour, so the palette lives in one place. Callers show
- * it only when the app spans more than one chain — a Stellar-only app would just
+ * it only when the app spans more than one chain - a Stellar-only app would just
  * see the same tag on every row.
  */
 const CHAIN_TAG: Record<string, { label: string; color: string }> = {
@@ -199,7 +199,7 @@ export function cropAddress(address: string): string {
  * The balance/assets state machines drop their payload while a refresh is in
  * flight (`step` leaves `'loaded'`), which would blank the list on every
  * refresh. Holding the previous data lets the modal keep rendering it under a
- * {@link BusyOverlay} instead — the list never collapses and then reflows.
+ * {@link BusyOverlay} instead - the list never collapses and then reflows.
  */
 export function useStickyData<T>(data: T | null): T | null {
   const lastRef = useRef<T | null>(null);

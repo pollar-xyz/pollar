@@ -1,7 +1,7 @@
 // Injected at build time by tsup (`define`) from `package.json#version`.
 // `declare` so TypeScript knows the identifier; at runtime it is either
 // replaced with a string literal (bundled builds) or absent (running the
-// source unbundled — ts-node, vitest), which the `typeof` guard below handles.
+// source unbundled - ts-node, vitest), which the `typeof` guard below handles.
 declare const __POLLAR_SDK_VERSION__: string;
 
 /**

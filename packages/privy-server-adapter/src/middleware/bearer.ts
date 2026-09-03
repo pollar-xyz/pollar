@@ -16,7 +16,7 @@ export const createBearerMiddleware = (pollarApiSecret: string) => {
     }
 
     const provided = Buffer.from(auth.slice(7), 'utf8');
-    // timingSafeEqual throws on length mismatch — guard first.
+    // timingSafeEqual throws on length mismatch - guard first.
     if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
       c.header('WWW-Authenticate', WWW_AUTH_INVALID);
       return c.var.error(ErrorCode.FORBIDDEN, 401);

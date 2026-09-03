@@ -9,7 +9,20 @@ This repository is managed with [Turborepo](https://turbo.build/repo) and contai
 
 ## Packages
 
-> **0.11.2 is additive (no breaking changes).** New `client.stellar` namespace: sign **SEP-53
+> **0.11.3 is a patch (no breaking changes).** Session resilience in `@pollar/core`: a session
+> **survives reloads when the DPoP keypair fails to persist** (no more thumbprint-mismatch
+> logout loop), `logout()` no longer races an in-flight or newer login (no resurrected or
+> leaked sessions), and cross-tab / multi-client session-row writes are serialized and
+> ownership-gated. In `@pollar/react`, a consumer-built `PollarClient` passed to
+> `PollarProvider` **keeps passkey login**, and StrictMode no longer leaves an orphaned
+> client running (dev only). Packaging: **`@pollar/core` is now a peer dependency only** of
+> `@pollar/react`, so the application's single copy of core is the one every package uses
+> (npm 7+ installs peers automatically; npm 6, Yarn 1 and `--legacy-peer-deps` users must
+> add core to their own dependencies), and the new `isPollarClient()` guard recognizes a
+> client even across duplicate copies. `@pollar/react@0.11.3` requires
+> `@pollar/core@^0.11.3`; if you pin exact versions, keep both on the same version.
+>
+> Earlier: **0.11.2** (additive) added the `client.stellar` namespace: sign **SEP-53
 > message** and **SEP-10 challenge** ownership proofs across custodial and external wallets,
 > both returning the same `sep53` scheme so a verifier treats them alike. The Transaction
 > History modal goes **multichain** (network picker, per-chain explorer links, unified
@@ -32,7 +45,7 @@ This repository is managed with [Turborepo](https://turbo.build/repo) and contai
 
 ### [`@pollar/core`](./packages/core)
 
-**Version:** `0.11.2` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/core)
+**Version:** `0.11.3` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/core)
 
 Framework-agnostic TypeScript SDK. Provides the `PollarClient` class and all lower-level utilities needed to integrate
 Pollar authentication and multichain (Stellar + Solana) transactions into any JavaScript environment.
@@ -111,7 +124,7 @@ const client = new PollarClient({ apiKey: 'pk_...', storage });
 
 ### [`@pollar/react`](./packages/react)
 
-**Version:** `0.11.2` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react)
+**Version:** `0.11.3` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react)
 
 React bindings built on top of `@pollar/core`. Provides a context provider, hook, and pre-built UI components for
 drop-in authentication in React applications.

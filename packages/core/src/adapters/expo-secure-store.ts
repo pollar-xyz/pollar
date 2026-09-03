@@ -31,7 +31,7 @@ type SecureStoreApi = {
 
 /**
  * Hard cap per stored value. Generously above what the SDK actually writes
- * (sessions ≈ 600–800 bytes, private scalars ≈ 43 chars), and well within
+ * (sessions ~ 600-800 bytes, private scalars ~ 43 chars), and well within
  * iOS Keychain's practical limit. Refuses oversized writes loudly rather
  * than letting the platform truncate or silently fail.
  */
@@ -40,10 +40,10 @@ export const SECURE_STORE_MAX_VALUE_BYTES = 4096;
 /**
  * Map a logical storage key onto one Expo SecureStore accepts. SecureStore keys
  * must match `[A-Za-z0-9._-]`, but the SDK namespaces its keys with `:`
- * (`pollar:<apiKeyHash>:session`, `pollar:dpop-key:<apiKeyHash>`, …), which
+ * (`pollar:<apiKeyHash>:session`, `pollar:dpop-key:<apiKeyHash>`, ...), which
  * SecureStore rejects with an `Invalid key` error. Replace every disallowed
  * character with `_`. The transform is deterministic and collision-free for the
- * SDK's fixed key templates — their only variable segment is a hex hash — so a
+ * SDK's fixed key templates - their only variable segment is a hex hash - so a
  * given logical key always resolves to the same SecureStore key.
  */
 export function sanitizeKey(key: string): string {
@@ -83,7 +83,7 @@ function utf8ByteLength(value: string): number {
     if (code < 0x80) bytes += 1;
     else if (code < 0x800) bytes += 2;
     else if (code >= 0xd800 && code <= 0xdbff) {
-      // Surrogate pair → 4 bytes; advance the index.
+      // Surrogate pair -> 4 bytes; advance the index.
       bytes += 4;
       i++;
     } else bytes += 3;
@@ -94,7 +94,7 @@ function utf8ByteLength(value: string): number {
 /**
  * Create a `Storage` adapter backed by Expo SecureStore.
  *
- * Throws synchronously (via the returned Promise) at construction time if
+ * Throws (via the returned Promise) at construction time if
  * `expo-secure-store` cannot be loaded.
  */
 export async function createSecureStoreAdapter(options: SecureStoreAdapterOptions = {}): Promise<Storage> {

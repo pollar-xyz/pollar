@@ -66,7 +66,7 @@ export interface SignMessageResponse {
   signerAddress?: string;
 }
 
-// ─── Solana (SIWS) ────────────────────────────────────────────────────────────
+// --- Solana (SIWS) ------------------------------------------------------------
 // Structural mirror of the Wallet Standard's `solana:signIn` IO, kept here so
 // `@pollar/core` types the Solana adapter contract WITHOUT depending on
 // `@solana/wallet-standard-features`. `@pollar/solana-wallet-standard-adapter`
@@ -111,8 +111,8 @@ export interface WalletAdapterMeta {
   /**
    * Optional gateway grouping for the login UI. Adapters that share the same
    * `group` string collapse behind a single gateway button (labeled with the
-   * `group` value) that opens a sub-picker listing them — this is how the
-   * Stellar Wallets Kit wallets (Freighter, Albedo, xBull, …) stay behind one
+   * `group` value) that opens a sub-picker listing them - this is how the
+   * Stellar Wallets Kit wallets (Freighter, Albedo, xBull, ...) stay behind one
    * "Wallet" button. Adapters with no `group` render as their own button in the
    * root login view (e.g. Privy). Distinct group strings produce distinct
    * gateway buttons.
@@ -122,12 +122,12 @@ export interface WalletAdapterMeta {
 
 /**
  * A client-side wallet integration: it does its own auth/connect (Freighter
- * approve, Privy modal, SWK picker…) and signs. `@pollar/core` treats it as a
- * black box — it wraps the generic SEP-10 login + tx signing around `connect()`
+ * approve, Privy modal, SWK picker...) and signs. `@pollar/core` treats it as a
+ * black box - it wraps the generic SEP-10 login + tx signing around `connect()`
  * and `signTransaction()`. Register instances via `PollarClientConfig.walletAdapters`.
  */
 export interface WalletAdapter {
-  /** Stable id — matches `login({ provider: id })` and the server-side wallet provider. */
+  /** Stable id - matches `login({ provider: id })` and the server-side wallet provider. */
   type: WalletId;
   /** UI metadata for the auto-rendered login button. */
   meta: WalletAdapterMeta;
@@ -143,22 +143,22 @@ export interface WalletAdapter {
   connect(): Promise<ConnectWalletResponse>;
   disconnect(): Promise<void>;
   getPublicKey(): Promise<string | null>;
-  // ─── Stellar signing (SEP-10 login + Soroban) ──────────────────────────────
+  // --- Stellar signing (SEP-10 login + Soroban) ------------------------------
   // Optional because non-Stellar adapters do not implement them. The Stellar
   // flows assert their presence (a STELLAR adapter that omits them is a bug).
   signTransaction?(xdr: string, options?: SignTransactionOptions): Promise<SignTransactionResponse>;
   signAuthEntry?(entryXdr: string, options?: SignAuthEntryOptions): Promise<SignAuthEntryResponse>;
   /**
    * SEP-53: sign an arbitrary message and return the base64 signature + signer
-   * address. Stellar adapters only, and optional even among them — not every
+   * address. Stellar adapters only, and optional even among them - not every
    * wallet exposes message signing (e.g. Albedo does not). Used by the
    * `client.stellar.sep53` ownership-proof flow for external wallets.
    */
   signStellarMessage?(message: string, options?: SignMessageOptions): Promise<SignMessageResponse>;
-  // ─── Solana signing (SIWS login + phase-2 transfers) ───────────────────────
+  // --- Solana signing (SIWS login + phase-2 transfers) -----------------------
   /** SIWS: sign the server-issued Sign In With Solana input. Solana adapters only. */
   signIn?(input: SolanaSignInInput): Promise<SolanaSignInOutput>;
-  /** Raw message signature — the SIWS fallback for wallets without `solana:signIn`. */
+  /** Raw message signature - the SIWS fallback for wallets without `solana:signIn`. */
   signMessage?(message: Uint8Array): Promise<SolanaSignMessageResponse>;
   /** Sign a serialized Solana transaction (phase 2: sponsored external transfers). */
   signSolanaTransaction?(transaction: Uint8Array, chain?: string): Promise<Uint8Array>;
@@ -189,7 +189,7 @@ export interface InteractiveAuthAdapter extends WalletAdapter {
   /**
    * Optional: subscribe to the underlying provider's auth state. The host uses
    * this to auto-trigger `login({ provider })` when the provider authenticates
-   * outside the sub-modal flow — e.g. after an OAuth redirect (the page reloaded,
+   * outside the sub-modal flow - e.g. after an OAuth redirect (the page reloaded,
    * so the sub-modal promise is gone) or a persisted provider session on load.
    * Fires on subscribe with the current state, then on changes. Returns an
    * unsubscribe function.

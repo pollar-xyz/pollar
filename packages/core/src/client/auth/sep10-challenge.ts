@@ -1,31 +1,31 @@
 /**
- * SEP-10 challenge sanity-check — pure JS, ZERO external dependencies.
+ * SEP-10 challenge sanity-check - pure JS, ZERO external dependencies.
  *
  * Hardening for the wallet-login flow: before asking the user's wallet to sign
  * the server's "challenge transaction", we cheaply verify it actually looks like
  * a SEP-10 challenge and not a real, submittable transaction smuggled in by a
  * compromised or MITM'd challenge endpoint.
  *
- * The single most important invariant — and the one this checks — is
+ * The single most important invariant - and the one this checks - is
  * `sequenceNumber === 0`. A genuine SEP-10 challenge ALWAYS has sequence 0, so it
  * can never be applied to the ledger; a non-zero sequence means it's a live
  * transaction that, once signed, could authorize a real operation. Asserting
  * seq == 0 blocks the most dangerous class of "sign this to log in" attacks.
  *
  * This is deliberately NOT a full SEP-10 verification: it does not check the
- * server signature, home domain, or operation source — that would need a full
+ * server signature, home domain, or operation source - that would need a full
  * XDR + crypto library (`@stellar/stellar-base`). The real security boundary
  * remains the server-side `verifyChallengeTxSigners`; this is client-side
  * defense-in-depth, kept dependency-free on purpose.
  *
- * ── Why hand-parsing is safe here ────────────────────────────────────────────
+ * -- Why hand-parsing is safe here --------------------------------------------
  * The field we read (the transaction `seqNum`) sits at a fixed offset because it
  * comes right after the transaction SOURCE account, which in a SEP-10 challenge
  * is always the SERVER's account: a plain ed25519 G-address. It is never muxed
- * (M-address) and never a contract (C-address) — the user's account appears only
+ * (M-address) and never a contract (C-address) - the user's account appears only
  * as the source of the inner `manageData` operation, which we never touch. So
  * the byte layout up to `seqNum` is fixed. Anything that does NOT match the
- * expected shape — a muxed source, a fee-bump envelope, truncated bytes — makes
+ * expected shape - a muxed source, a fee-bump envelope, truncated bytes - makes
  * this return `false`: it FAILS CLOSED and the challenge is rejected before the
  * user can sign it.
  *
@@ -36,12 +36,12 @@
  * over `EnvelopeType`:
  *
  *   v1  (ENVELOPE_TYPE_TX = 2):
- *     [envelopeType u32=2][MuxedAccount source][fee u32][seqNum i64] …
- *     MuxedAccount = [keyType u32][…]; KEY_TYPE_ED25519 (0) → 32-byte key.
+ *     [envelopeType u32=2][MuxedAccount source][fee u32][seqNum i64] ...
+ *     MuxedAccount = [keyType u32][...]; KEY_TYPE_ED25519 (0) -> 32-byte key.
  *     seqNum offset = 4 (env) + 4 (keyType) + 32 (key) + 4 (fee) = 44.
  *
  *   v0  (ENVELOPE_TYPE_TX_V0 = 0):
- *     [envelopeType u32=0][ed25519 32 (raw, no keyType)][fee u32][seqNum i64] …
+ *     [envelopeType u32=0][ed25519 32 (raw, no keyType)][fee u32][seqNum i64] ...
  *     seqNum offset = 4 (env) + 32 (key) + 4 (fee) = 40.
  */
 import { base64urlDecode } from '../../lib/base64url';
@@ -82,7 +82,7 @@ export function isValidSep10Challenge(challengeXdr: string): boolean {
 
     let seqOffset: number;
     if (envelopeType === ENVELOPE_TYPE_TX) {
-      // v1: source is a MuxedAccount — require a plain ed25519 key (reject muxed).
+      // v1: source is a MuxedAccount - require a plain ed25519 key (reject muxed).
       if (view.getUint32(4, false) !== KEY_TYPE_ED25519) return false;
       seqOffset = SEQ_OFFSET_V1;
     } else if (envelopeType === ENVELOPE_TYPE_TX_V0) {

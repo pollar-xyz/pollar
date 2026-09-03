@@ -1,12 +1,12 @@
 'use client';
 
-// ─── Shared asset picker ──────────────────────────────────────────────────────
+// --- Shared asset picker ------------------------------------------------------
 // One asset <select> used by both the Send and Swap modals: groups options into
 // "App assets" (enabled by the app) and "Other assets" (everything else, incl.
-// native XLM), shows a "— X available" suffix, and renders a skeleton shimmer
+// native XLM), shows a "- X available" suffix, and renders a skeleton shimmer
 // while loading. The parent auto-selects the first option, so there is no
 // "Select asset" placeholder in the normal flow.
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 import type { ReactNode } from 'react';
 import './send-modal/SendModal.css';
@@ -17,7 +17,7 @@ export interface AssetSelectOption {
   /** Stable unique key: `code:issuer` or `code:native`. */
   key: string;
   code: string;
-  /** Spendable amount shown as "— X available"; omit to hide the suffix. */
+  /** Spendable amount shown as "- X available"; omit to hide the suffix. */
   available?: string | undefined;
   /** App-enabled asset? Drives the App / Other grouping. */
   enabledInApp?: boolean | undefined;

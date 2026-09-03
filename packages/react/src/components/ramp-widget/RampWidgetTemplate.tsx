@@ -1,9 +1,17 @@
 'use client';
 
-import type { RampCountry, RampDirection, RampQuote, RampTxStatus } from '@pollar/core';
-import type { CSSProperties } from 'react';
+import type {
+  RampCountry,
+  RampDepositInstructions,
+  RampDirection,
+  RampInstructionField,
+  RampQuote,
+  RampScannable,
+  RampTxStatus,
+} from '@pollar/core';
 import { RouteDisplay } from './RouteDisplay';
 import { CopyButton } from '../commons';
+import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 'status' | 'error';
 
@@ -11,12 +19,28 @@ export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 
 // provider (which rejects it with a generic VALIDATION_ERROR).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** A collected field is complete when it's non-empty and (for email) well-formed. */
+/**
+ * A collected field is complete when it's non-empty and (for email) well-formed.
+ * An `optional` field is complete while blank, but still has to be well-formed
+ * once something is typed into it.
+ */
 function isFieldValid(spec: RampFieldSpec, raw: string | undefined): boolean {
   const value = (raw ?? '').trim();
-  if (!value) return false;
+  if (!value) return spec.optional === true;
   if (spec.type === 'email') return EMAIL_RE.test(value);
   return true;
+}
+
+/**
+ * The `src` for a scannable that is not inline-safe. `encoding` and `inlineSafe`
+ * are independent in the contract: an SVG a provider sent (so not inline-safe)
+ * still arrives as `utf8`, and base64-wrapping that text yields a data URL the
+ * browser cannot decode - a blank QR on the payment screen.
+ */
+function scannableImageSrc(image: RampScannable['image']): string {
+  return image.encoding === 'base64'
+    ? `data:${image.mediaType};base64,${image.data}`
+    : `data:${image.mediaType};charset=utf-8,${encodeURIComponent(image.data)}`;
 }
 
 /** A field a provider declares (via the quote) that the client must collect. */
@@ -25,14 +49,54 @@ export interface RampFieldSpec {
   label: string;
   type: 'text' | 'email' | 'tel' | 'select';
   bankType?: 'CLABE' | 'PIX' | 'PSE' | 'ACH' | 'BREB';
-  /** For `type: 'select'` — dropdown choices (e.g. Stereum's Bolivian banks). */
-  options?: { value: string; label: string }[];
+  /** For `type: 'select'` - dropdown choices (e.g. Stereum's Bolivian banks). */
+  options?: { value: string; label: string; placeholder?: string }[];
+  /** Declared but not mandatory (Abroad's tax id). Blank must not block Continue. */
+  optional?: boolean;
+  /** Example of the expected shape, for formats a user cannot guess. */
+  placeholder?: string;
+  /**
+   * Key of a sibling `select` whose chosen option supplies the placeholder. One
+   * Pix field can then show a CPF mask, an email or a +55 number as the user
+   * switches kind, without this component knowing what a Pix key is.
+   */
+  placeholderFrom?: string;
+  /** Secondary line under the field, for a rule the label has no room for. */
+  hint?: string;
+}
+
+/** "a", "a and b", "a, b and c" - for naming what a step is asking for. */
+function listOf(items: string[]): string {
+  const last = items[items.length - 1];
+  if (last === undefined) return 'a few details';
+  if (items.length === 1) return last;
+  return `${items.slice(0, -1).join(', ')} and ${last}`;
+}
+
+/** The placeholder to show: the one a sibling select dictates, else the static one. */
+function placeholderFor(field: RampFieldSpec, fields: RampFieldSpec[], values: Record<string, string>): string | undefined {
+  if (field.placeholderFrom) {
+    const source = fields.find((f) => f.key === field.placeholderFrom);
+    const chosen = source?.options?.find((o) => o.value === values[field.placeholderFrom as string]);
+    if (chosen?.placeholder) return chosen.placeholder;
+  }
+  return field.placeholder;
 }
 
 interface RampWidgetTemplateProps {
   theme: string;
   accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
   step: RampStep;
+  /** Labels of the steps this run goes through. Length varies by route: only
+   *  providers that collect fields add a 'Details' step. */
+  flowSteps: string[];
+  /** Index into `flowSteps`, or -1 when the current step is outside the flow
+   *  (the error step) and the progress bar should be hidden. */
+  flowStepIndex: number;
+  /** Quote whose start request is in flight, so its row can show it. */
+  startingQuoteId: string | null;
   direction: RampDirection;
   amount: string;
   currency: string;
@@ -49,10 +113,14 @@ interface RampWidgetTemplateProps {
   txStatus: RampTxStatus | null;
   kycUrl: string | null;
   tosUrl: string | null;
+  /** Provider gated the flow on KYC and published no link; nothing was signed. */
+  kycBlocking: boolean;
+  /** The gate has since cleared - the user needs a fresh quote to continue. */
+  kycJustApproved: boolean;
   stellarTxHash: string | null;
   /** Stellar Expert URL for `stellarTxHash` (network-aware); null when unknown. */
   explorerUrl: string | null;
-  depositInstructions: Record<string, unknown> | null;
+  depositInstructions: RampDepositInstructions | null;
   canComplete: boolean;
   completing: boolean;
   errorMsg: string | null;
@@ -66,6 +134,9 @@ interface RampWidgetTemplateProps {
   onOpenKyc: () => void;
   onOpenTos: () => void;
   onCompleteWithdraw: () => void;
+  /** Step back to the amount, keeping what was entered. Distinct from `onRetry`
+   *  (which restarts a failed flow) so a "Back" button reads as navigation. */
+  onBack: () => void;
   onRetry: () => void;
   onRefresh: () => void;
   onClose: () => void;
@@ -92,58 +163,25 @@ const STATUS_LABEL: Record<RampTxStatus, string> = {
   failed: 'Failed',
 };
 
-// Human labels for the deposit-instruction fields REST providers (Bridge) return
-// (e.g. a Pix `br_code`, or bank details for ACH/SEPA). Unknown keys fall back to
-// the raw key so nothing is silently dropped.
-const INSTRUCTION_LABELS: Record<string, string> = {
-  br_code: 'Pix code',
-  account_holder_name: 'Account holder',
-  bank_name: 'Bank',
-  bank_address: 'Bank address',
-  bank_account_number: 'Account number',
-  bank_routing_number: 'Routing number',
-  iban: 'IBAN',
-  bic: 'BIC',
-  clabe: 'CLABE',
-  amount: 'Amount',
-  currency: 'Currency',
-  payment_rails: 'Rails',
-};
-
-type InstructionKind = 'text' | 'qr' | 'datetime';
-type InstructionField = { key: string; label: string; value: string; kind: InstructionKind };
-
-function flattenInstructions(instr: Record<string, unknown>): InstructionField[] {
-  const out: InstructionField[] = [];
-  for (const [k, v] of Object.entries(instr)) {
-    // A base64 QR image (e.g. Stereum's Bolivian bank QR) — render as an <img>,
-    // not raw text.
-    if (k === 'qrBase64') {
-      if (typeof v === 'string' && v) out.push({ key: k, label: INSTRUCTION_LABELS[k] ?? 'Payment QR', value: v, kind: 'qr' });
-      continue;
-    }
-    // Expiry timestamps come as epoch milliseconds — render as a local date/time.
-    if ((k === 'expiresAt' || k === 'expires_at') && (typeof v === 'number' || typeof v === 'string')) {
-      const ms = Number(v);
-      if (Number.isFinite(ms) && ms > 0) {
-        out.push({ key: k, label: INSTRUCTION_LABELS[k] ?? 'Expires', value: new Date(ms).toLocaleString(), kind: 'datetime' });
-      }
-      continue;
-    }
-    let value: string;
-    if (typeof v === 'string' || typeof v === 'number') value = String(v);
-    else if (Array.isArray(v)) value = v.filter((x) => typeof x === 'string' || typeof x === 'number').join(', ');
-    else continue;
-    if (!value) continue;
-    out.push({ key: k, label: INSTRUCTION_LABELS[k] ?? k, value, kind: 'text' });
-  }
-  return out;
+/**
+ * A timestamp field arrives as ISO-8601; render it in the viewer's locale.
+ * Anything unparseable falls back to the raw string rather than showing
+ * "Invalid Date".
+ */
+function displayValue(field: RampInstructionField): string {
+  if (field.type !== 'datetime') return field.value;
+  const at = new Date(field.value);
+  return Number.isNaN(at.getTime()) ? field.value : at.toLocaleString();
 }
 
 export function RampWidgetTemplate({
   theme,
   accentColor,
+  styleOverrides,
   step,
+  flowSteps,
+  flowStepIndex,
+  startingQuoteId,
   direction,
   amount,
   currency,
@@ -159,6 +197,8 @@ export function RampWidgetTemplate({
   txStatus,
   kycUrl,
   tosUrl,
+  kycBlocking,
+  kycJustApproved,
   stellarTxHash,
   explorerUrl,
   depositInstructions,
@@ -175,32 +215,12 @@ export function RampWidgetTemplate({
   onOpenKyc,
   onOpenTos,
   onCompleteWithdraw,
+  onBack,
   onRetry,
   onRefresh,
   onClose,
 }: RampWidgetTemplateProps) {
-  const isDark = theme === 'dark';
-
-  const cssVars = {
-    '--pollar-accent': accentColor,
-    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': isDark ? '#ffffff' : '#111827',
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
-    '--pollar-input-height': '44px',
-    '--pollar-input-border-radius': '0.5rem',
-    '--pollar-card-border-radius': '10px',
-    '--pollar-modal-padding': '2rem',
-    '--pollar-modal-heading-size': '1.375rem',
-    '--pollar-modal-subtitle-size': '0.9rem',
-  } as CSSProperties;
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
 
   const stepTitle: Record<RampStep, string> = {
     input: direction === 'onramp' ? 'Buy crypto' : 'Sell crypto',
@@ -215,7 +235,11 @@ export function RampWidgetTemplate({
     input: direction === 'onramp' ? 'Enter the amount you want to deposit' : 'Enter the amount you want to withdraw',
     loading_quote: 'Comparing providers in real time…',
     select_route: 'All prices include fees',
-    contact: `${provider || 'This provider'} needs your name and email to verify you`,
+    // What this step actually asks for is whatever the route declared, and that
+    // is rarely a name and an email: an Abroad off-ramp asks where to send the
+    // money, not who you are. Say which, rather than asserting the Bridge case
+    // over every provider.
+    contact: `${provider || 'This provider'} needs ${listOf(requiredFields.filter((f) => !f.optional).map((f) => f.label.toLowerCase()))} to continue`,
     status: `Finish the flow at ${provider || 'the provider'} to continue`,
     error: 'Please try again',
   };
@@ -253,6 +277,29 @@ export function RampWidgetTemplate({
           </button>
         </div>
       </div>
+
+      {/* How far along the run is. The segment count comes from the route, not
+          from a constant: a provider that collects no fields genuinely has one
+          step fewer. Hidden on the error step, which is not part of the flow. */}
+      {flowStepIndex >= 0 && flowSteps.length > 0 && (
+        <div className="pollar-ramp-steps">
+          <span className="pollar-ramp-steps-label">
+            Step {flowStepIndex + 1} of {flowSteps.length}
+          </span>
+          <div
+            className="pollar-ramp-steps-track"
+            role="progressbar"
+            aria-valuenow={flowStepIndex + 1}
+            aria-valuemin={1}
+            aria-valuemax={flowSteps.length}
+            aria-label={flowSteps[flowStepIndex]}
+          >
+            {flowSteps.map((label, i) => (
+              <span key={label} className="pollar-ramp-steps-segment" data-done={i <= flowStepIndex || undefined} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {step === 'input' && (
         <>
@@ -306,6 +353,9 @@ export function RampWidgetTemplate({
               min="0"
               onChange={(e) => onAmountChange(e.target.value)}
             />
+            {/* Why the user was sent back here (e.g. the route's minimum), kept
+                under the field they came to fix. Clears as soon as they type. */}
+            {errorMsg && <span className="pollar-ramp-field-error">{errorMsg}</span>}
           </div>
 
           <div className="pollar-modal-actions">
@@ -340,11 +390,28 @@ export function RampWidgetTemplate({
         <>
           <div className="pollar-ramp-route-list">
             {quotes.map((q, i) => (
-              <RouteDisplay key={i} quote={q} onSelect={onSelectQuote} />
+              <RouteDisplay
+                key={i}
+                quote={q}
+                busy={startingQuoteId != null && q.quoteId === startingQuoteId}
+                disabled={startingQuoteId != null && q.quoteId !== startingQuoteId}
+                onSelect={onSelectQuote}
+              />
             ))}
           </div>
-          <button type="button" className="pollar-btn-secondary" onClick={onClose}>
-            Cancel
+          {/* A route whose limits the amount breaks reports it here, so the user
+              can pick another route or go back and edit - without leaving the
+              list for the error step. */}
+          {errorMsg && (
+            <p className="pollar-ramp-payment-note" style={{ color: 'var(--pollar-error-text)' }}>
+              {errorMsg}
+            </p>
+          )}
+          {/* Back returns to the amount, which is the only way out of a route
+              whose minimum the amount misses - so it takes the primary weight
+              while that message is up. The header's X still closes the modal. */}
+          <button type="button" className={errorMsg ? 'pollar-btn-primary' : 'pollar-btn-secondary'} onClick={onBack}>
+            Back
           </button>
         </>
       )}
@@ -353,7 +420,10 @@ export function RampWidgetTemplate({
         <>
           {requiredFields.map((f) => (
             <div key={f.key} className="pollar-ramp-field">
-              <label className="pollar-ramp-label">{f.label}</label>
+              <label className="pollar-ramp-label">
+                {f.label}
+                {f.optional && <span className="pollar-ramp-field-optional"> (optional)</span>}
+              </label>
               {f.type === 'select' ? (
                 <select
                   className="pollar-ramp-input"
@@ -374,10 +444,12 @@ export function RampWidgetTemplate({
                   type={f.type}
                   className="pollar-ramp-input"
                   value={fieldValues[f.key] ?? ''}
+                  placeholder={placeholderFor(f, requiredFields, fieldValues)}
                   autoComplete={f.type === 'email' ? 'email' : 'off'}
                   onChange={(e) => onFieldChange(f.key, e.target.value)}
                 />
               )}
+              {f.hint && <span className="pollar-ramp-field-hint">{f.hint}</span>}
               {f.type === 'email' && (fieldValues[f.key] ?? '').trim() !== '' && !isFieldValid(f, fieldValues[f.key]) && (
                 <span className="pollar-ramp-field-error">Enter a valid email address.</span>
               )}
@@ -385,7 +457,7 @@ export function RampWidgetTemplate({
           ))}
 
           <div className="pollar-modal-actions">
-            <button type="button" className="pollar-btn-secondary" onClick={onRetry}>
+            <button type="button" className="pollar-btn-secondary" onClick={onBack}>
               Back
             </button>
             <button
@@ -467,32 +539,77 @@ export function RampWidgetTemplate({
             </div>
           )}
 
+          {/* The code to scan. The server sends it rendered, so there is no QR
+              library here and no per-provider branch: a Pollar-made SVG is
+              inlined (it uses `currentColor`, so it follows the modal's theme),
+              and a provider's own bitmap goes through an <img>. */}
+          {depositInstructions?.scannable && txStatus !== 'completed' && (
+            <div className="pollar-ramp-payment-field">
+              <span className="pollar-ramp-payment-label">Payment QR</span>
+              <div className="pollar-ramp-payment-value">
+                {depositInstructions.scannable.image.inlineSafe ? (
+                  <div
+                    className="pollar-ramp-qr"
+                    aria-label="Payment QR"
+                    dangerouslySetInnerHTML={{ __html: depositInstructions.scannable.image.data }}
+                  />
+                ) : (
+                  <img
+                    src={scannableImageSrc(depositInstructions.scannable.image)}
+                    alt="Payment QR"
+                    style={{ width: '100%', maxWidth: 220, height: 'auto', display: 'block', margin: '0 auto' }}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* The payload as text, when it is worth pasting. On the phone holding
+              the screen there is nothing to scan, and a Pix code is designed to
+              be pasted. The server decides by setting `payloadLabel`. */}
+          {depositInstructions?.scannable?.payload &&
+            depositInstructions.scannable.payloadLabel &&
+            txStatus !== 'completed' && (
+              <div className="pollar-ramp-payment-field">
+                <span className="pollar-ramp-payment-label">{depositInstructions.scannable.payloadLabel}</span>
+                <div className="pollar-ramp-payment-value">
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <code style={{ flex: 1, wordBreak: 'break-all' }}>{depositInstructions.scannable.payload}</code>
+                    <CopyButton
+                      value={depositInstructions.scannable.payload}
+                      label={`Copy ${depositInstructions.scannable.payloadLabel}`}
+                    />
+                  </span>
+                </div>
+              </div>
+            )}
+
+          {/* Everything else. Labelled and formatted server-side, so this only
+              iterates - it knows nothing about which provider served the route. */}
           {depositInstructions &&
             txStatus !== 'completed' &&
-            flattenInstructions(depositInstructions).map(({ key, label, value, kind }) => (
-              <div key={key} className="pollar-ramp-payment-field">
-                <span className="pollar-ramp-payment-label">{label}</span>
+            depositInstructions.fields.map((f) => (
+              <div key={f.key} className="pollar-ramp-payment-field">
+                <span className="pollar-ramp-payment-label">{f.label}</span>
                 <div className="pollar-ramp-payment-value">
-                  {kind === 'qr' ? (
-                    <img
-                      src={value.startsWith('data:') ? value : `data:image/png;base64,${value}`}
-                      alt={label}
-                      style={{ width: '100%', maxWidth: 220, height: 'auto', display: 'block', margin: '0 auto' }}
-                    />
-                  ) : kind === 'datetime' ? (
-                    <span>{value}</span>
-                  ) : (
+                  {f.copyable ? (
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <code style={{ flex: 1, wordBreak: 'break-all' }}>{value}</code>
-                      <CopyButton value={value} label={`Copy ${label}`} />
+                      <code style={{ flex: 1, wordBreak: 'break-all' }}>{f.value}</code>
+                      <CopyButton value={f.value} label={`Copy ${f.label}`} />
                     </span>
+                  ) : f.type === 'url' ? (
+                    <a href={f.value} target="_blank" rel="noopener noreferrer">
+                      {f.value}
+                    </a>
+                  ) : (
+                    <span>{displayValue(f)}</span>
                   )}
                 </div>
               </div>
             ))}
 
           {/* KYC / ToS onboarding steps at the provider. Hidden once deposit
-              instructions exist — by then onboarding is done and the only
+              instructions exist - by then onboarding is done and the only
               remaining action is to pay using the instructions above. */}
           {tosUrl && !depositInstructions && txStatus !== 'completed' && (
             <button type="button" className="pollar-btn-primary" onClick={onOpenTos}>
@@ -504,6 +621,30 @@ export function RampWidgetTemplate({
             <button type="button" className="pollar-btn-primary" onClick={onOpenKyc}>
               Continue at {provider}
             </button>
+          )}
+
+          {/* Link-less KYC gate: there is nowhere to send the user, so say what
+              is blocking and keep the withdraw button out of reach. No funds
+              have moved and nothing was signed. */}
+          {kycBlocking && (
+            <p className="pollar-ramp-payment-note">
+              {provider} needs to verify your identity before this payout. Nothing has been sent yet — complete verification
+              with {provider}, and this will update on its own.
+            </p>
+          )}
+
+          {/* Approval unblocks the next quote, not this one: the provider consumed
+              this transaction's quote when it asked for KYC. So the withdraw stays
+              out of reach and the only way forward is a fresh quote. */}
+          {kycJustApproved && (
+            <>
+              <p className="pollar-ramp-payment-note">
+                {provider} approved your verification. Request a new quote to continue — the previous one was consumed.
+              </p>
+              <button type="button" className="pollar-btn-primary" onClick={onRetry}>
+                Request a new quote
+              </button>
+            </>
           )}
 
           {canComplete && (

@@ -1121,6 +1121,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ramps/liquidity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get payout rail liquidity
+         * @description Live liquidity on a payout rail. `available: false` means the rail cannot be served right now and the corridor should not be offered — quoting it succeeds and then fails downstream. Only providers that publish liquidity answer (Abroad today).
+         */
+        get: operations["getRampsLiquidity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ramps/kyc-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the ramp provider KYC status
+         * @description Where the authenticated user stands with the ramp provider's identity checks. Poll this after an off-ramp answered `kycRequired: true`: that provider exposes no hosted KYC link, so the client waits for `hasApproved` and then requests a fresh quote.
+         */
+        get: operations["getRampsKycStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ramps/pix/decode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Decode a Pix QR payload
+         * @description Reads a Pix "copia e cola" EMV payload into payee, amount and tax id. `decoded: null` means the code no longer resolves — dynamic Pix QRs carry a per-charge id and go stale once used or expired. Decode immediately before quoting, quote the amount returned, and pass the original payload as `qrCode` on POST /ramps/offramp.
+         */
+        get: operations["getRampsPixDecode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ramps/onramp": {
         parameters: {
             query?: never;
@@ -5355,6 +5415,13 @@ export interface operations {
                                 theme?: string;
                                 accentColor?: string;
                                 logoUrl?: string;
+                                modalTitle?: string;
+                                backgroundColor?: string;
+                                textColor?: string;
+                                buttonColor?: string;
+                                modalBorderRadius?: number;
+                                buttonBorderRadius?: number;
+                                modalZIndex?: number;
                                 emailEnabled?: boolean;
                                 embeddedWallets?: boolean;
                                 smartWallet?: boolean;
@@ -6840,7 +6907,12 @@ export interface operations {
                                     options?: {
                                         value: string;
                                         label: string;
+                                        placeholder?: string;
                                     }[];
+                                    placeholderFrom?: string;
+                                    optional?: boolean;
+                                    placeholder?: string;
+                                    hint?: string;
                                 }[];
                                 minAmount?: number;
                                 maxAmount?: number;
@@ -6866,6 +6938,228 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getRampsLiquidity: {
+        parameters: {
+            query: {
+                /** @description Payout rail to check */
+                rail: "PIX" | "BREB";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current liquidity on the rail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_RAMPS_LIQUIDITY";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            /** @enum {string} */
+                            rail: "PIX" | "BREB";
+                            liquidity: number;
+                            available: boolean;
+                            message?: string;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getRampsKycStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description KYC state for the authenticated user. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_RAMPS_KYC_STATUS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            provider: string;
+                            hasApproved: boolean;
+                            status: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getRampsPixDecode: {
+        parameters: {
+            query: {
+                /** @description The raw Pix "copia e cola" payload */
+                qrCode: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Decoded payee details, or null when the code is stale. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_RAMPS_PIX_DECODED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            decoded: {
+                                account: string;
+                                amount: string | null;
+                                currency: string | null;
+                                name: string | null;
+                                taxId: string | null;
+                            } | null;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6920,6 +7214,7 @@ export interface operations {
                             /** @enum {string} */
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
+                            kycRequired?: boolean;
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
@@ -6929,7 +7224,29 @@ export interface operations {
                                 action: "sep10" | "withdraw_payment";
                             };
                             depositInstructions?: {
-                                [key: string]: unknown;
+                                scannable?: {
+                                    /** @enum {string} */
+                                    kind: "pix" | "stellar" | "url" | "opaque";
+                                    payload: string | null;
+                                    payloadLabel: string | null;
+                                    image: {
+                                        /** @enum {string} */
+                                        mediaType: "image/svg+xml" | "image/png";
+                                        /** @enum {string} */
+                                        encoding: "utf8" | "base64";
+                                        data: string;
+                                        inlineSafe: boolean;
+                                    };
+                                };
+                                fields: {
+                                    /** @enum {string} */
+                                    key: "amount" | "currency" | "rail" | "reference" | "expires_at" | "status_page" | "account_holder" | "bank_name" | "bank_address" | "bank_account" | "bank_routing" | "iban" | "bic" | "clabe" | "deposit_address" | "memo";
+                                    label: string;
+                                    value: string;
+                                    /** @enum {string} */
+                                    type: "text" | "code" | "amount" | "datetime" | "url";
+                                    copyable: boolean;
+                                }[];
                             };
                         };
                     };
@@ -7031,6 +7348,7 @@ export interface operations {
                             /** @enum {string} */
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
+                            kycRequired?: boolean;
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
@@ -7040,7 +7358,29 @@ export interface operations {
                                 action: "sep10" | "withdraw_payment";
                             };
                             depositInstructions?: {
-                                [key: string]: unknown;
+                                scannable?: {
+                                    /** @enum {string} */
+                                    kind: "pix" | "stellar" | "url" | "opaque";
+                                    payload: string | null;
+                                    payloadLabel: string | null;
+                                    image: {
+                                        /** @enum {string} */
+                                        mediaType: "image/svg+xml" | "image/png";
+                                        /** @enum {string} */
+                                        encoding: "utf8" | "base64";
+                                        data: string;
+                                        inlineSafe: boolean;
+                                    };
+                                };
+                                fields: {
+                                    /** @enum {string} */
+                                    key: "amount" | "currency" | "rail" | "reference" | "expires_at" | "status_page" | "account_holder" | "bank_name" | "bank_address" | "bank_account" | "bank_routing" | "iban" | "bic" | "clabe" | "deposit_address" | "memo";
+                                    label: string;
+                                    value: string;
+                                    /** @enum {string} */
+                                    type: "text" | "code" | "amount" | "datetime" | "url";
+                                    copyable: boolean;
+                                }[];
                             };
                         };
                     };
@@ -7129,6 +7469,7 @@ export interface operations {
                             /** @enum {string} */
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
+                            kycRequired?: boolean;
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
@@ -7138,7 +7479,29 @@ export interface operations {
                                 action: "sep10" | "withdraw_payment";
                             };
                             depositInstructions?: {
-                                [key: string]: unknown;
+                                scannable?: {
+                                    /** @enum {string} */
+                                    kind: "pix" | "stellar" | "url" | "opaque";
+                                    payload: string | null;
+                                    payloadLabel: string | null;
+                                    image: {
+                                        /** @enum {string} */
+                                        mediaType: "image/svg+xml" | "image/png";
+                                        /** @enum {string} */
+                                        encoding: "utf8" | "base64";
+                                        data: string;
+                                        inlineSafe: boolean;
+                                    };
+                                };
+                                fields: {
+                                    /** @enum {string} */
+                                    key: "amount" | "currency" | "rail" | "reference" | "expires_at" | "status_page" | "account_holder" | "bank_name" | "bank_address" | "bank_account" | "bank_routing" | "iban" | "bic" | "clabe" | "deposit_address" | "memo";
+                                    label: string;
+                                    value: string;
+                                    /** @enum {string} */
+                                    type: "text" | "code" | "amount" | "datetime" | "url";
+                                    copyable: boolean;
+                                }[];
                             };
                         };
                     };
@@ -7234,6 +7597,7 @@ export interface operations {
                             /** @enum {string} */
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
+                            kycRequired?: boolean;
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
@@ -7243,7 +7607,29 @@ export interface operations {
                                 action: "sep10" | "withdraw_payment";
                             };
                             depositInstructions?: {
-                                [key: string]: unknown;
+                                scannable?: {
+                                    /** @enum {string} */
+                                    kind: "pix" | "stellar" | "url" | "opaque";
+                                    payload: string | null;
+                                    payloadLabel: string | null;
+                                    image: {
+                                        /** @enum {string} */
+                                        mediaType: "image/svg+xml" | "image/png";
+                                        /** @enum {string} */
+                                        encoding: "utf8" | "base64";
+                                        data: string;
+                                        inlineSafe: boolean;
+                                    };
+                                };
+                                fields: {
+                                    /** @enum {string} */
+                                    key: "amount" | "currency" | "rail" | "reference" | "expires_at" | "status_page" | "account_holder" | "bank_name" | "bank_address" | "bank_account" | "bank_routing" | "iban" | "bic" | "clabe" | "deposit_address" | "memo";
+                                    label: string;
+                                    value: string;
+                                    /** @enum {string} */
+                                    type: "text" | "code" | "amount" | "datetime" | "url";
+                                    copyable: boolean;
+                                }[];
                             };
                         };
                     };
@@ -7347,7 +7733,29 @@ export interface operations {
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
                             depositInstructions?: {
-                                [key: string]: unknown;
+                                scannable?: {
+                                    /** @enum {string} */
+                                    kind: "pix" | "stellar" | "url" | "opaque";
+                                    payload: string | null;
+                                    payloadLabel: string | null;
+                                    image: {
+                                        /** @enum {string} */
+                                        mediaType: "image/svg+xml" | "image/png";
+                                        /** @enum {string} */
+                                        encoding: "utf8" | "base64";
+                                        data: string;
+                                        inlineSafe: boolean;
+                                    };
+                                };
+                                fields: {
+                                    /** @enum {string} */
+                                    key: "amount" | "currency" | "rail" | "reference" | "expires_at" | "status_page" | "account_holder" | "bank_name" | "bank_address" | "bank_account" | "bank_routing" | "iban" | "bic" | "clabe" | "deposit_address" | "memo";
+                                    label: string;
+                                    value: string;
+                                    /** @enum {string} */
+                                    type: "text" | "code" | "amount" | "datetime" | "url";
+                                    copyable: boolean;
+                                }[];
                             };
                             updatedAt: string;
                         };

@@ -23,15 +23,12 @@ export function WalletButton() {
     tx: transaction,
   } = usePollar();
   // The address shown (and copied) is the one on the app's FIRST configured
-  // chain, not `wallet.address` — that field is the Stellar wallet by definition
+  // chain, not `wallet.address` - that field is the Stellar wallet by definition
   // in core, so this button used to say "Stellar" to an app whose users live on
   // Polygon. Falls back to it while `/config` loads and for a legacy session that
   // enumerates no wallets.
   const { primaryAddress } = useChains();
   const walletAddress = primaryAddress || (wallet?.address ?? '');
-  // External-wallet signing-adapter id (freighter/albedo) drives the wallet logo;
-  // null for custodial/smart, which fall back to the Pollar logo.
-  const walletType = wallet?.custody === 'external' ? wallet.provider : null;
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -154,7 +151,6 @@ export function WalletButton() {
       itemColor={itemColor}
       wrapperRef={wrapperRef}
       isInProgress={isInProgress}
-      walletType={walletType}
       showCreateAccount={canCreateAccount}
       creatingAccount={creating}
       onToggleOpen={() => setOpen((v) => !v)}

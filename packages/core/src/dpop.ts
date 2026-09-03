@@ -12,7 +12,7 @@ import type { KeyManager, PublicEcJwk } from './keys/types';
  * `iat` / `jti` / optional `nonce` / optional `ath` claims, and matches the
  * proof's JWK thumbprint against the access token's `cnf.jkt` claim.
  *
- * Server-issued nonce flow (RFC 9449 §8/§9): the server may respond with
+ * Server-issued nonce flow (RFC 9449 section 8/section 9): the server may respond with
  * `WWW-Authenticate: DPoP ... error="use_dpop_nonce"` plus a `DPoP-Nonce`
  * header. The client should re-build the proof with the new nonce and retry.
  * `buildProof` accepts an optional nonce; the SDK client tracks it across
@@ -20,7 +20,7 @@ import type { KeyManager, PublicEcJwk } from './keys/types';
  *
  * The last seen `DPoP-Nonce` is stored verbatim and embedded in the next
  * proof. The server validates it as an HMAC token, so an attacker who
- * injects an arbitrary nonce cannot escalate — verification fails and the
+ * injects an arbitrary nonce cannot escalate - verification fails and the
  * server replies with a fresh nonce on the next request.
  */
 
@@ -28,7 +28,7 @@ export interface BuildProofArgs {
   /** HTTP method, e.g. `"GET"`. Will be uppercased before signing. */
   htm: string;
   /**
-   * HTTP target URI. Will be normalized per RFC 3986 §6.2 (lowercase scheme
+   * HTTP target URI. Will be normalized per RFC 3986 section 6.2 (lowercase scheme
    * + host, default port elided, query+fragment+userinfo stripped, path
    * dot-segments resolved, trailing slash preserved exactly as provided).
    */
@@ -36,18 +36,18 @@ export interface BuildProofArgs {
   /**
    * Access token to bind the proof to (its base64url(SHA-256) goes in the
    * `ath` claim). Omit for proofs sent to the token endpoint per RFC 9449
-   * §5 / §6.1 (those proofs MUST NOT include `ath`).
+   * section 5 / section 6.1 (those proofs MUST NOT include `ath`).
    */
   accessToken?: string;
   /**
    * Server-issued DPoP nonce, if the server has previously challenged this
    * client with `WWW-Authenticate: DPoP ... error="use_dpop_nonce"`. RFC
-   * 9449 §8.
+   * 9449 section 8.
    */
   nonce?: string;
   /**
    * Seconds to add to the local clock when stamping `iat`, to compensate for a
-   * skewed device clock (`serverTime − localTime`, learned from the `Date`
+   * skewed device clock (`serverTime - localTime`, learned from the `Date`
    * response header). Defaults to 0. Keeps `iat` inside the server's acceptance
    * window even when the device clock is wrong, avoiding proof rejections.
    */
@@ -114,14 +114,14 @@ export async function buildProof(args: BuildProofArgs, keyManager: KeyManager): 
 /**
  * Normalize an HTTP URI for use as the `htu` claim.
  *
- * RFC 9449 §4.3 + RFC 3986 §6.2:
+ * RFC 9449 section 4.3 + RFC 3986 section 6.2:
  *  - lowercase scheme + host
  *  - elide default port (`:443` for https, `:80` for http)
  *  - strip userinfo (never appears in `htu`)
  *  - strip query + fragment
  *  - apply path dot-segment removal (handled by the URL constructor)
- *  - **preserve trailing slash exactly** — `/foo` and `/foo/` are distinct
- *    paths per RFC 3986 §6 and must round-trip identically.
+ *  - **preserve trailing slash exactly** - `/foo` and `/foo/` are distinct
+ *    paths per RFC 3986 section 6 and must round-trip identically.
  *  - preserve IPv6 brackets in host
  *
  * Both client and server must apply the same normalization so the `htu`

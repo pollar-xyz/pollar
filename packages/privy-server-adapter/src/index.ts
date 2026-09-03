@@ -1,10 +1,10 @@
 /**
- * @pollar/privy-server-adapter — SERVER-SIDE ONLY.
+ * @pollar/privy-server-adapter - SERVER-SIDE ONLY.
  *
  * This package binds an HTTP listener via `@hono/node-server` and consumes
  * `PRIVY_APP_SECRET` + `POLLAR_API_SECRET` from the host environment. Do not
  * import it in a browser bundle, a React Native app, or any other client-side
- * runtime — credentials would leak and `node:*` imports would fail to bundle.
+ * runtime - credentials would leak and `node:*` imports would fail to bundle.
  */
 import { serve } from '@hono/node-server';
 import { LRUCache } from 'lru-cache';

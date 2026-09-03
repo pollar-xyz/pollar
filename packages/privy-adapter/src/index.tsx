@@ -50,7 +50,7 @@ function toPrivyClientConfig(config: PollarPrivyConfig): PrivyClientConfig {
       solana: { createOnLogin: 'off' },
     },
   };
-  // Build appearance only from defined fields — `exactOptionalPropertyTypes`
+  // Build appearance only from defined fields - `exactOptionalPropertyTypes`
   // forbids assigning `undefined` to optional props.
   const a = config.appearance;
   if (a) {
@@ -97,7 +97,7 @@ function PrivyRuntimeBridge({ adapter }: BridgeProps) {
   api.current = { privy, sendCode, loginWithCode, initOAuth, createWallet, signRawHash };
 
   // Trace Privy's auth state. If this logs `authenticated: true` but Pollar still
-  // shows logged-out, the handoff (login({ provider:'privy' })) never ran — e.g.
+  // shows logged-out, the handoff (login({ provider:'privy' })) never ran - e.g.
   // an OAuth redirect that lost the in-page promise.
   useEffect(() => {
     const address = findStellarAddress(privy.user);
@@ -113,7 +113,7 @@ function PrivyRuntimeBridge({ adapter }: BridgeProps) {
 
   // Keep the host app's URL clean: once authenticated, strip Privy's OAuth
   // redirect params. react-auth usually does this, but skips it when the user
-  // was already logged in — so we always do it ourselves. `replaceState` does
+  // was already logged in - so we always do it ourselves. `replaceState` does
   // not reload or add a history entry.
   useEffect(() => {
     if (!privy.authenticated || typeof window === 'undefined') return;
@@ -141,7 +141,7 @@ function PrivyRuntimeBridge({ adapter }: BridgeProps) {
         new Promise<void>((resolve, reject) => {
           oauthPending.current = { resolve, reject };
           // On web, `initOAuth` redirects (or opens a popup); completion arrives
-          // via the onComplete callback above — after the redirect round-trip,
+          // via the onComplete callback above - after the redirect round-trip,
           // which the Pollar sub-modal resumes once Privy reports authenticated.
           log('web: initOAuth invoked (web uses a redirect/popup)', { provider });
           api.current.initOAuth({ provider }).catch((error) => {

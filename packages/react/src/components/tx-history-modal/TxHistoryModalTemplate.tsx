@@ -1,15 +1,18 @@
 'use client';
 
 import { StellarNetwork, TxHistoryRecord, TxHistoryState, WalletChain } from '@pollar/core';
-import { type CSSProperties, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { ChainSelect } from '../ChainSelect';
 import { CopyButton, cropAddress, PollarModalFooter } from '../commons';
+import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 const PAGE_SIZE = 10;
 
 interface TxHistoryModalTemplateProps {
   theme: string;
   accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
   txHistory: TxHistoryState;
   offset: number;
   /** Networks the user holds a wallet on; the first one is the default. */
@@ -44,7 +47,7 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-/** Shorten a long identifier (issuer, hash, address) to `head…tail`. */
+/** Shorten a long identifier (issuer, hash, address) to `head...tail`. */
 function truncateMiddle(value: string, head = 4, tail = 4): string {
   return value.length <= head + tail + 1 ? value : `${value.slice(0, head)}…${value.slice(-tail)}`;
 }
@@ -52,7 +55,7 @@ function truncateMiddle(value: string, head = 4, tail = 4): string {
 // Stellar account (G) and contract (C) strkeys are 56 base32 chars.
 const STELLAR_ADDRESS = /\b[GC][A-Z2-7]{55}\b/g;
 
-/** Truncated address rendered as a copyable tag (issuer, wallet, contract…). */
+/** Truncated address rendered as a copyable tag (issuer, wallet, contract...). */
 function AddressChip({ value, label }: { value: string; label: string }) {
   return (
     <span className="pollar-hist-item-issuer">
@@ -63,8 +66,8 @@ function AddressChip({ value, label }: { value: string; label: string }) {
 }
 
 /**
- * Renders a summary string, swapping every full Stellar address (G… account or
- * C… contract) for an {@link AddressChip}. Plain-text runs are kept as-is.
+ * Renders a summary string, swapping every full Stellar address (G... account or
+ * C... contract) for an {@link AddressChip}. Plain-text runs are kept as-is.
  */
 function renderSummary(summary: string): ReactNode {
   const parts: ReactNode[] = [];
@@ -87,6 +90,7 @@ function renderSummary(summary: string): ReactNode {
 export function TxHistoryModalTemplate({
   theme,
   accentColor,
+  styleOverrides,
   txHistory,
   offset,
   chains,
@@ -98,25 +102,7 @@ export function TxHistoryModalTemplate({
   onNext,
   onClose,
 }: TxHistoryModalTemplateProps) {
-  const isDark = theme === 'dark';
-
-  const cssVars = {
-    '--pollar-accent': accentColor,
-    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': isDark ? '#ffffff' : '#111827',
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
-    '--pollar-input-height': '44px',
-    '--pollar-input-border-radius': '0.5rem',
-    '--pollar-card-border-radius': '10px',
-  } as CSSProperties;
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
   const isLoading = txHistory.step === 'loading';
   const records = txHistory.step === 'loaded' ? txHistory.data.records : [];
@@ -193,7 +179,7 @@ export function TxHistoryModalTemplate({
           // so the explorer link follows the row, not the picker.
           const explorerUrl = hash ? explorerUrlFor(record.chain, hash, record.network) : undefined;
           const asset = typeof record.details?.asset === 'string' ? record.details.asset : undefined;
-          // `change_trust` summaries embed the asset as `CODE:ISSUER` — split so
+          // `change_trust` summaries embed the asset as `CODE:ISSUER` - split so
           // the issuer can be truncated and copied on its own.
           const colon = asset ? asset.indexOf(':') : -1;
           const trustline =

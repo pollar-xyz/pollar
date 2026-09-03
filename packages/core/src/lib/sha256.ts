@@ -11,9 +11,9 @@ import { sha256 as nobleSha256 } from '@noble/hashes/sha2';
  * (the `NobleKeyManager`). The inputs hashed here are tiny (API keys, access
  * tokens, JWK thumbprints), so the JS implementation is more than fast enough.
  *
- * Kept `async` (the digest itself is synchronous) so existing `await sha256(…)`
- * call sites — DPoP `ath`, API-key hashing, JWK thumbprints, `NobleKeyManager`
- * — need no change.
+ * Kept `async` (the digest itself is synchronous) so existing `await sha256(...)`
+ * call sites - DPoP `ath`, API-key hashing, JWK thumbprints, `NobleKeyManager`
+ * - need no change.
  */
 export async function sha256(data: Uint8Array): Promise<Uint8Array> {
   return nobleSha256(data);

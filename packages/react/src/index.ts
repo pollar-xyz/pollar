@@ -4,10 +4,14 @@ export type { LoginButtonProps, AuthModalProps, PollarStyles, PollarConfig } fro
 // Re-export the custom-provider contracts so consumers can author providers
 // (e.g. a Privy login provider) without importing from `@pollar/core` directly.
 export type { PollarAuthProvider, AuthProviderContext } from '@pollar/core';
+// The web WebAuthn implementations `PollarProvider` installs by default. Exported
+// for consumers who build their own `PollarClient` and want the ceremony wired at
+// construction, and for anyone wrapping it (logging, custom rpId).
+export { browserPasskeyCeremony, browserPasskeySigner } from './lib/passkey-ceremony';
 export { WalletButton } from './components/wallet-button/WalletButton';
 export { WalletButtonTemplate, type WalletButtonTemplateProps } from './components/wallet-button/WalletButtonTemplate';
 
-// ─── Network picker ───────────────────────────────────────────────────────────
+// --- Network picker -----------------------------------------------------------
 // Exported alongside the templates: every template that takes `chains` /
 // `selectedChain` / `onSelectChain` needs these to build those props, so a
 // consumer mounting a template itself would otherwise have to reimplement the
@@ -21,7 +25,7 @@ export type { ChainSelectProps } from './components/ChainSelect';
 export { useChains } from './useChains';
 export type { UseChainsResult } from './useChains';
 
-// ─── Modals ───────────────────────────────────────────────────────────────────
+// --- Modals -------------------------------------------------------------------
 export { KycModal } from './components/kyc-modal/KycModal';
 export { KycStatus } from './components/kyc-modal/KycStatus';
 export { RampWidget } from './components/ramp-widget/RampWidget';
@@ -35,7 +39,14 @@ export { ReceiveModal } from './components/receive-modal/ReceiveModal';
 export { SessionsModal } from './components/sessions-modal/SessionsModal';
 export { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
 
-// ─── Templates ────────────────────────────────────────────────────────────────
+// --- Modal theming ------------------------------------------------------------
+// Exported alongside the templates: a consumer mounting a template itself needs
+// these to reproduce the exact CSS custom properties the built-in modals set,
+// and to forward the app's Branding overrides into them.
+export { buildModalCssVars, modalChrome, readableTextOn } from './components/modal-theme';
+export type { ModalStyleOverrides, ModalVariant, ModalChrome } from './components/modal-theme';
+
+// --- Templates ----------------------------------------------------------------
 export { LoginModalTemplate } from './components/login-modal/LoginModalTemplate';
 export { KycModalTemplate } from './components/kyc-modal/KycModalTemplate';
 export type { KycStep } from './components/kyc-modal/KycModalTemplate';

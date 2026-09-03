@@ -28,7 +28,7 @@ export function _setDefaultKeyManagerFactory(factory: KeyManagerFactory): void {
 
 /**
  * Construct the default `KeyManager` for the current runtime. Throws if no
- * factory has been registered — that only happens if `@pollar/core` was
+ * factory has been registered - that only happens if `@pollar/core` was
  * imported in a way that bypassed the entry-point module (a bundler or
  * test setup bug).
  */

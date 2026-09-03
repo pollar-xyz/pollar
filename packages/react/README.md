@@ -3,7 +3,24 @@
 React bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI, transaction modals, and hooks for
 Stellar and Solana applications.
 
-> **0.11.2** requires `@pollar/core@^0.11.2`. The **Transaction History modal
+> **0.11.3** requires `@pollar/core@^0.11.3`. Non-breaking. A **pre-built `PollarClient`
+> passed to `PollarProvider` no longer loses passkey support**: the provider installs the
+> browser passkey ceremony on every path (via core's new `setPasskeyDefaults()`), and an
+> explicit `passkey: undefined` no longer wipes the default. `browserPasskeyCeremony` and
+> `browserPasskeySigner` are now exported for consumers who build their own client or want
+> to wrap the ceremony. Also, **StrictMode no longer leaves an orphaned `PollarClient`
+> running**: the provider keys the client it builds on the config object, so StrictMode's
+> second render pass reuses the first pass's instance instead of constructing a second
+> client whose refresh loop could clear the session the real login just wrote (dev only,
+> no API change). Packaging: **`@pollar/core` moved from `dependencies` to
+> `peerDependencies`**, so npm no longer installs a package-local duplicate of core (the
+> configuration that broke `instanceof` and split the live-client registry); the provider
+> now discriminates with core's new `isPollarClient()` guard, which works across copies.
+> npm 7+ installs peers automatically; on npm 6, Yarn 1 or `--legacy-peer-deps`, add
+> `@pollar/core` to your own dependencies. If you pin exact versions, keep both packages
+> on the same version.
+>
+> Earlier: **0.11.2** required `@pollar/core@^0.11.2`. The **Transaction History modal
 > goes multichain**: the same network picker and address chip as the Balance /
 > Send modals, a server-side chain filter (pagination is server-side, so
 > switching networks refetches and resets to page 1), per-chain explorer links

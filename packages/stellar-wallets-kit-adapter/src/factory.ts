@@ -31,20 +31,20 @@ export interface KitPickerOptions {
   /**
    * Label of the gateway button these kit wallets collapse behind in the login
    * UI (the `meta.group` applied to every adapter this factory builds). Default
-   * `'Wallet'` — the same group as the built-in Freighter/Albedo, so they share
+   * `'Wallet'` - the same group as the built-in Freighter/Albedo, so they share
    * one gateway. Set a distinct value (e.g. `'More wallets'`) to render the kit
    * wallets as a *separate* gateway button from the built-in ones.
    */
   groupLabel?: string;
   /** Visual layout. Default `'grid'`. */
   layout?: 'grid' | 'list';
-  /** Theme passthrough — applied as CSS custom properties on the picker root. */
+  /** Theme passthrough - applied as CSS custom properties on the picker root. */
   theme?: { accent?: string; mode?: 'light' | 'dark' };
 }
 
 export interface StellarWalletsKitAdapterOptions {
   /**
-   * Stellar network the kit will use for signing. Required — there is no
+   * Stellar network the kit will use for signing. Required - there is no
    * default. The kit is a global singleton, so picking the network silently
    * for a consumer would risk signing real-looking transactions on the wrong
    * chain (testnet xdr signed on mainnet, etc.). Pass `Networks.TESTNET` or
@@ -55,7 +55,7 @@ export interface StellarWalletsKitAdapterOptions {
    * Wallet modules the kit should drive. Defaults to every module that works
    * out of the box (Albedo, Bitget, CactusLink, Fordefi, Freighter, Hana,
    * HotWallet, Klever, Lobstr, OneKey, Rabet, xBull). Pass an explicit list
-   * to add Ledger / Trezor / WalletConnect — those need extra setup (a
+   * to add Ledger / Trezor / WalletConnect - those need extra setup (a
    * Buffer polyfill for Ledger; constructor params for the other two) so we
    * don't auto-include them.
    *
@@ -90,7 +90,7 @@ export function getKitLogger(): PollarLogger {
   return _log;
 }
 
-/** @internal — used by the `/picker` subpath. */
+/** @internal - used by the `/picker` subpath. */
 export function buildDefaultModules(): ModuleInterface[] {
   return [
     new AlbedoModule(),
@@ -109,7 +109,7 @@ export function buildDefaultModules(): ModuleInterface[] {
 }
 
 /**
- * @internal — used by the `/picker` subpath.
+ * @internal - used by the `/picker` subpath.
  *
  * Accepts `Partial<...>` because the picker may be mounted in a flow where
  * `stellarWalletsKitAdapters({ network })` has already initialised the kit elsewhere;
@@ -121,7 +121,7 @@ export function ensureInit(options: Partial<StellarWalletsKitAdapterOptions>): v
     _log = createLogger(options.logLevel ?? 'info', options.logger);
   }
   if (initialised) {
-    // The kit is a global singleton — a second call with a different network
+    // The kit is a global singleton - a second call with a different network
     // would be silently ignored. Warn so the developer notices the
     // misconfiguration instead of debugging wrong-chain signatures later.
     if (options.network && options.network !== initNetwork) {
@@ -144,7 +144,7 @@ export function ensureInit(options: Partial<StellarWalletsKitAdapterOptions>): v
   initialised = true;
 }
 
-/** @internal — used by `StellarWalletsKitAdapter` to reject per-call network overrides that don't match init. */
+/** @internal - used by `StellarWalletsKitAdapter` to reject per-call network overrides that don't match init. */
 export function getInitNetwork(): Networks {
   if (initNetwork === null) {
     throw new Error('[StellarWalletsKit] not initialised — call `stellarWalletsKitAdapters({ network })` first');
@@ -153,8 +153,8 @@ export function getInitNetwork(): Networks {
 }
 
 /**
- * Build the list of {@link WalletAdapter}s backed by Stellar Wallets Kit — one
- * per kit module — to pass to `PollarClientConfig.walletAdapters`. Each adapter
+ * Build the list of {@link WalletAdapter}s backed by Stellar Wallets Kit - one
+ * per kit module - to pass to `PollarClientConfig.walletAdapters`. Each adapter
  * carries the module's name/icon as its button `meta`. `picker.wallets` (subset)
  * and `picker.labels` (overrides) are honored if provided.
  *
@@ -164,7 +164,7 @@ export function getInitNetwork(): Networks {
  * import { Networks } from '@creit.tech/stellar-wallets-kit';
  *
  * const client = new PollarClient({
- *   apiKey: '…',
+ *   apiKey: '...',
  *   walletAdapters: stellarWalletsKitAdapters({ network: Networks.PUBLIC }),
  * });
  * ```
@@ -172,7 +172,7 @@ export function getInitNetwork(): Networks {
 export function stellarWalletsKitAdapters(options: StellarWalletsKitAdapterOptions): WalletAdapter[] {
   // SSR / non-browser guard. Stellar Wallets Kit talks to browser wallet
   // extensions and touches `window` both at `StellarWalletsKit.init()` and in its
-  // wallet modules' constructors — there are no wallets server-side, so return an
+  // wallet modules' constructors - there are no wallets server-side, so return an
   // empty list instead of crashing during Next.js/Remix SSR. The real adapters
   // are built when this re-runs on the client (so build your PollarClient and
   // render the wallet UI on the client, e.g. behind a mounted flag or

@@ -5,6 +5,7 @@ import { usePollar } from '../../context';
 import '../shared.css';
 import './TransactionModal.css';
 import { TransactionModalTemplate } from './TransactionModalTemplate';
+import { modalChrome } from '../modal-theme';
 
 interface TransactionModalProps {
   onClose: () => void;
@@ -15,7 +16,7 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
   // External-wallet signing-adapter id (freighter/albedo) drives the wallet logo;
   // null for custodial/smart, which fall back to the Pollar logo.
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [showXdr, setShowXdr] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -64,10 +65,11 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
   }
 
   return (
-    <div className="pollar-overlay" onClick={onClose}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
       <TransactionModalTemplate
         theme={theme}
         accentColor={accentColor}
+        styleOverrides={styleOverrides}
         transaction={transaction}
         showXdr={showXdr}
         copied={copied}

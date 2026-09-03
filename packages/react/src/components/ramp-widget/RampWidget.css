@@ -1,9 +1,9 @@
-/* ─── Widget container ──────────────────────────────────────────────────────── */
+/* --- Widget container -------------------------------------------------------- */
 .pollar-ramp-modal {
   max-width: 480px;
 }
 
-/* ─── Header ────────────────────────────────────────────────────────────────── */
+/* --- Header ------------------------------------------------------------------ */
 .pollar-ramp-header-text {
   display: flex;
   flex-direction: column;
@@ -17,12 +17,47 @@
   color: var(--pollar-muted);
 }
 
+/* --- Step indicator --------------------------------------------------------
+   One segment per step of THIS run - the count varies by route, so the track is
+   a flex row of equal shares rather than a percentage-filled bar. */
+.pollar-ramp-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.pollar-ramp-steps-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pollar-muted);
+}
+
+.pollar-ramp-steps-track {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.pollar-ramp-steps-segment {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--pollar-border);
+  transition: background-color 0.2s;
+}
+
+.pollar-ramp-steps-segment[data-done] {
+  background: var(--pollar-accent);
+}
+
 /* The country <select> loading placeholder uses the shared .pollar-select-loading
    (spinner + label inside a select-shaped box), consistent with all the modals. */
 
 /* Direction tabs use the shared segmented control (.pollar-tabs / .pollar-tab). */
 
-/* ─── Input group ───────────────────────────────────────────────────────────── */
+/* --- Input group ------------------------------------------------------------- */
 .pollar-ramp-field {
   margin-bottom: 1rem;
 }
@@ -62,6 +97,21 @@
   color: var(--pollar-error-text, #dc2626);
 }
 
+.pollar-ramp-field-hint {
+  display: block;
+  margin-top: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--pollar-muted);
+}
+
+/* Rides inside the label, so it reads as part of the field name rather than as
+   another line competing with the hint below. */
+.pollar-ramp-field-optional {
+  font-weight: 400;
+  text-transform: none;
+  color: var(--pollar-muted);
+}
+
 .pollar-ramp-input-row {
   display: flex;
   gap: 0.625rem;
@@ -71,7 +121,7 @@
   flex: 1;
 }
 
-/* ─── Loading quote ─────────────────────────────────────────────────────────── */
+/* --- Loading quote ----------------------------------------------------------- */
 .pollar-ramp-loading {
   display: flex;
   flex-direction: column;
@@ -120,7 +170,7 @@
   flex-shrink: 0;
 }
 
-/* ─── Route card ────────────────────────────────────────────────────────────── */
+/* --- Route card -------------------------------------------------------------- */
 .pollar-ramp-route-list {
   display: flex;
   flex-direction: column;
@@ -141,12 +191,26 @@
   box-sizing: border-box;
 }
 
+/* The route being started: keep it prominent (it's the one acting) but make it
+   clear it no longer responds to clicks. */
+.pollar-ramp-route-card[data-busy] {
+  cursor: wait;
+  border-color: var(--pollar-accent);
+}
+
+/* The other routes while one is starting - dimmed and inert, so a second click
+   can't fire a competing request. */
+.pollar-ramp-route-card[data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .pollar-ramp-route-card[data-recommended='true'] {
   border-color: var(--pollar-accent);
   background-color: color-mix(in srgb, var(--pollar-accent) 5%, var(--pollar-input-bg));
 }
 
-.pollar-ramp-route-card:hover {
+.pollar-ramp-route-card:not([data-disabled]):hover {
   border-color: var(--pollar-accent);
 }
 
@@ -188,7 +252,7 @@
   letter-spacing: 0.04em;
 }
 
-/* ─── Payment instructions ──────────────────────────────────────────────────── */
+/* --- Payment instructions ---------------------------------------------------- */
 .pollar-ramp-payment {
   display: flex;
   flex-direction: column;
@@ -231,6 +295,22 @@
   color: var(--pollar-text);
   letter-spacing: 0.03em;
   font-family: monospace;
+}
+
+/* Pollar-rendered QR. The SVG paints with `currentColor`, so setting the text
+   colour here is what makes it legible in both themes without a second asset. */
+.pollar-ramp-qr {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  color: var(--pollar-text);
+}
+
+.pollar-ramp-qr svg {
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+  display: block;
 }
 
 .pollar-ramp-copy-btn {

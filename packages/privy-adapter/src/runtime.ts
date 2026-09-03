@@ -17,7 +17,7 @@ import { log, setPrivyAdapterDebug } from './log.ts';
 export const PRIVY_ID = 'privy';
 
 /**
- * Platform-agnostic contract a Privy "bridge" fulfils — `@privy-io/react-auth`
+ * Platform-agnostic contract a Privy "bridge" fulfils - `@privy-io/react-auth`
  * on web, `@privy-io/expo` on React Native. Both SDKs are hook-based and must
  * run inside a React tree, so the bridge captures those hooks and exposes them
  * imperatively here, letting the {@link WalletAdapter} drive login + signing
@@ -43,7 +43,7 @@ export interface PrivyRuntime {
   ensureStellarWallet(): Promise<string>;
   /**
    * Raw-hash sign (ed25519) over the 32-byte transaction hash. Hex in, hex out
-   * — mirrors Privy's `signRawHash` for `chainType: 'stellar'`.
+   * - mirrors Privy's `signRawHash` for `chainType: 'stellar'`.
    */
   signRawHash(address: string, hashHex: string): Promise<string>;
   /** The authenticated Stellar address, or null if not logged in / no wallet. */
@@ -77,7 +77,7 @@ const LOGIN_METHOD_TO_OPTION: Record<PrivyLoginMethod, AuthOption> = {
  * Build the platform-agnostic Privy {@link WalletAdapter}. The returned handle
  * is inert until a platform bridge calls `_attachRuntime`; any method invoked
  * before that waits briefly and then throws {@link PrivyAdapterUnsupportedError}
- * — the signal that there is no React/Expo host (e.g. Angular/Vue) or the bridge
+ * - the signal that there is no React/Expo host (e.g. Angular/Vue) or the bridge
  * was never mounted.
  */
 export function buildPrivyAdapter(config: PollarPrivyConfig): PrivyAdapterHandle {

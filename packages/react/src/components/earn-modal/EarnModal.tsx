@@ -1,9 +1,10 @@
 'use client';
 
 import { EarnOpportunity, EarnPosition, EarnProviderId } from '@pollar/core';
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { PollarModalFooter } from '../commons';
+import { buildModalCssVars, modalChrome } from '../modal-theme';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
 import '../shared.css';
 import '../transaction-modal/TransactionModal.css';
@@ -57,8 +58,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
 
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;
   const smartUnsupported = wallet?.custody === 'smart';
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
-  const isDark = theme === 'dark';
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<'form' | 'tx'>('form');
   const [tab, setTab] = useState<'deposit' | 'withdraw'>('deposit');
@@ -75,7 +75,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ─── Providers ────────────────────────────────────────────────────────────
+  // --- Providers ------------------------------------------------------------
   const loadProviders = useCallback(() => {
     setProviders(null);
     return getEarnProviders()
@@ -97,7 +97,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
     void refreshAssets();
   }, [refreshWalletBalance, refreshAssets]);
 
-  // ─── Opportunities (per provider) ───────────────────────────────────────────
+  // --- Opportunities (per provider) -------------------------------------------
   useEffect(() => {
     if (!provider) return;
     let cancelled = false;
@@ -121,7 +121,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
 
   const selectedOpportunity = opportunities.find((o) => o.id === opportunityId) ?? null;
 
-  // ─── Position (live, polled) ────────────────────────────────────────────────
+  // --- Position (live, polled) ------------------------------------------------
   const refreshPosition = useCallback(() => {
     if (!provider || !opportunityId || !wallet) return;
     getEarnPosition({ provider, opportunity: opportunityId })
@@ -149,7 +149,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
     [],
   );
 
-  // ─── Derived ────────────────────────────────────────────────────────────────
+  // --- Derived ----------------------------------------------------------------
   const providersLoading = providers === null;
   const earnUnavailable = providers !== null && providers.length === 0;
   const withdrawUnit = position?.withdrawUnit ?? 'asset';
@@ -229,25 +229,9 @@ export function EarnModal({ onClose }: EarnModalProps) {
     !providersLoading &&
     !loadingOpps;
 
-  const cssVars = {
-    '--pollar-accent': accentColor,
-    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': isDark ? '#ffffff' : '#111827',
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
-    '--pollar-input-height': '44px',
-    '--pollar-input-border-radius': '0.5rem',
-    '--pollar-card-border-radius': '10px',
-  } as CSSProperties;
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
-  // ─── Actions ────────────────────────────────────────────────────────────────
+  // --- Actions ----------------------------------------------------------------
   async function handleSubmit() {
     setFormError('');
     if (smartUnsupported) {
@@ -274,9 +258,9 @@ export function EarnModal({ onClose }: EarnModalProps) {
     setStep('tx');
 
     // Deposit of an issued asset needs its trustline first (native never does).
-    // Establish it, then deposit — two signatures, like swap.
+    // Establish it, then deposit - two signatures, like swap.
     if (tab === 'deposit' && depositNeedsTrustline && selectedOpportunity?.asset.issuer) {
-      // Sponsorship is derived automatically from the app config now — no flag.
+      // Sponsorship is derived automatically from the app config now - no flag.
       const tl = await setTrustline({ code: assetCode, issuer: selectedOpportunity.asset.issuer });
       if (tl.status === 'error') {
         setFormError(`Trustline for ${assetCode} failed: ${tl.details ?? 'unknown error'}`);
@@ -334,7 +318,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
       setOpportunityId((cur) => (opps.some((o) => o.id === cur) ? cur : (opps[0]?.id ?? '')));
       refreshPosition();
     } catch {
-      /* transient — keep the current snapshot */
+      /* transient - keep the current snapshot */
     } finally {
       setRefreshing(false);
     }
@@ -343,7 +327,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
   const title = step === 'form' ? 'Earn' : txTitle;
 
   return (
-    <div className="pollar-overlay" onClick={!isInProgress ? onClose : undefined}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
       <div
         className="pollar-modal-card pollar-send-modal"
         data-theme={theme}

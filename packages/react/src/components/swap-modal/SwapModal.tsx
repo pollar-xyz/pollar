@@ -8,6 +8,7 @@ import '../transaction-modal/TransactionModal.css';
 import '../send-modal/SendModal.css';
 import './SwapModal.css';
 import { SwapAssetOption, SwapModalTemplate } from './SwapModalTemplate';
+import { modalChrome } from '../modal-theme';
 
 interface SwapModalProps {
   onClose: () => void;
@@ -47,7 +48,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
 
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;
   const smartUnsupported = wallet?.custody === 'smart';
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<'form' | 'tx'>('form');
   const [selectedSell, setSelectedSell] = useState<SwapAssetOption | null>(null);
@@ -75,7 +76,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
     void refreshAssets();
   }, [refreshWalletBalance, refreshAssets]);
 
-  // Which venues this app exposes (operator config ∩ server capability).
+  // Which venues this app exposes (operator config intersected with server capability).
   const loadConfig = useCallback(() => {
     setVenues(null); // back to loading
     return getSwapConfig()
@@ -120,7 +121,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
   const isLoadingData = walletBalance.step === 'loading' || enabledAssets.step === 'loading';
 
   // Sell: native XLM + every asset the wallet has a trustline for, even at a 0
-  // balance — so the user always sees what they hold and knows when to fund
+  // balance - so the user always sees what they hold and knows when to fund
   // (the amount field guards against overselling). Buy: app-enabled assets.
   // Swap is Stellar-only, so the guard drops every non-Stellar balance and
   // narrows `type` for toRef(). It has to test `chain`, not `type`: SOL/POL
@@ -133,8 +134,8 @@ export function SwapModal({ onClose }: SwapModalProps) {
         (b.chain === undefined || b.chain === 'STELLAR') &&
         (b.type === 'native' || ((b.type === 'credit_alphanum4' || b.type === 'credit_alphanum12') && !b.trustlineRemoved)),
     )
-    // A null `available` (chain unreadable) maps to undefined — "unknown", which
-    // the option already models — rather than to a 0 that would read as "empty".
+    // A null `available` (chain unreadable) maps to undefined - "unknown", which
+    // the option already models - rather than to a 0 that would read as "empty".
     .map((b) => ({
       ref: toRef(b),
       code: b.code,
@@ -177,7 +178,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
   const buyOptions: SwapAssetOption[] = [...enabledBuy, ...catalogBuy, ...customBuy].filter((o) => optKey(o) !== buyKeyOfSell);
 
   // Auto-select the first sell / buy asset once options are available, and keep a
-  // valid selection if the list changes — so the pickers never sit empty.
+  // valid selection if the list changes - so the pickers never sit empty.
   useEffect(() => {
     if (sellOptions.length === 0) return;
     if (!selectedSell || !sellOptions.some((o) => optKey(o) === optKey(selectedSell))) {
@@ -346,10 +347,11 @@ export function SwapModal({ onClose }: SwapModalProps) {
   }
 
   return (
-    <div className="pollar-overlay" onClick={!isInProgress ? onClose : undefined}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
       <SwapModalTemplate
         theme={theme}
         accentColor={accentColor}
+        styleOverrides={styleOverrides}
         step={step}
         txTitle={txTitle}
         sellOptions={sellOptions}

@@ -59,7 +59,7 @@ export class FreighterAdapter implements WalletAdapter {
     }
 
     // `requestAccess` prompts the user (if not already granted) and returns the
-    // active address — it replaces the v2 `isAllowed`/`setAllowed`/`getUserInfo`
+    // active address - it replaces the v2 `isAllowed`/`setAllowed`/`getUserInfo`
     // dance in a single call.
     const { address } = unwrap(await requestAccess(), 'requestAccess');
     if (!address) {
@@ -123,7 +123,7 @@ export class FreighterAdapter implements WalletAdapter {
   }
 }
 
-/** Standard base64 (padded) via the pure-JS base64url encoder — no `Buffer`, no
+/** Standard base64 (padded) via the pure-JS base64url encoder - no `Buffer`, no
  *  `btoa`, so it works in browser and RN alike. Matches the custodial path's
  *  `signature.toString('base64')` so both proof paths return one format. */
 function bytesToBase64(bytes: Uint8Array): string {

@@ -6,6 +6,7 @@ import { usePollar } from '../../context';
 import '../shared.css';
 import './DistributionRulesModal.css';
 import { DistributionRulesModalTemplate } from './DistributionRulesModalTemplate';
+import { modalChrome } from '../modal-theme';
 
 interface DistributionRulesModalProps {
   onClose: () => void;
@@ -13,7 +14,7 @@ interface DistributionRulesModalProps {
 
 export function DistributionRulesModal({ onClose }: DistributionRulesModalProps) {
   const { getClient, styles } = usePollar();
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [state, setState] = useState<DistributionRulesState>({ step: 'idle' });
   const [claimingId, setClaimingId] = useState<string | null>(null);
@@ -62,10 +63,11 @@ export function DistributionRulesModal({ onClose }: DistributionRulesModalProps)
   );
 
   return (
-    <div className="pollar-overlay" onClick={onClose}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
       <DistributionRulesModalTemplate
         theme={theme}
         accentColor={accentColor}
+        styleOverrides={styleOverrides}
         state={state}
         claimingId={claimingId}
         claimErrors={claimErrors}

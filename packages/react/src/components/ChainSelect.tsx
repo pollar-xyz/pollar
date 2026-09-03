@@ -1,12 +1,12 @@
 'use client';
 
-// ─── Shared network picker ────────────────────────────────────────────────────
+// --- Shared network picker ----------------------------------------------------
 // One chain <select> used by the Send, Wallet Balance and Assets modals. The
 // options are the chains the user actually holds a wallet on (`getWallets()`),
 // so every option always resolves to an address; the parent defaults to the
-// first one. Everything else in those modals — address, assets, balances — is
+// first one. Everything else in those modals - address, assets, balances - is
 // filtered by whatever is picked here.
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 import type { WalletChain, WalletInfo } from '@pollar/core';
 import './send-modal/SendModal.css';
@@ -28,7 +28,7 @@ export function resolveChain(chain: WalletChain | undefined): WalletChain {
 }
 
 /**
- * The selectable chains — the first is the default everywhere (network picker,
+ * The selectable chains - the first is the default everywhere (network picker,
  * the address the wallet button shows). De-duplicated because two wallets on one
  * chain (e.g. a custodial and a linked external Stellar wallet) are still one
  * network choice.

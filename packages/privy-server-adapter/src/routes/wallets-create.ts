@@ -17,13 +17,13 @@ export const createWalletsCreateRoute = (deps: AdapterDeps) => {
    * `getOrCreatePrivyUser` already handles the user-creation race (Privy
    * returns `ConflictError` on the second `users.create`, we fall back to
    * fetch). But for an EXISTING user without a stellar wallet, both
-   * requests fall through `findStellarWalletInUser → null` and both call
-   * `wallets().create(...)` — Privy doesn't dedupe by user, so you get two
+   * requests fall through `findStellarWalletInUser -> null` and both call
+   * `wallets().create(...)` - Privy doesn't dedupe by user, so you get two
    * stellar wallets attached to the same Privy user, with the second
    * overwriting the first in `walletCache`.
    *
    * The mutex is per-process: scaling the adapter to N replicas reintroduces
-   * the race across instances. That's an accepted trade-off — the adapter is
+   * the race across instances. That's an accepted trade-off - the adapter is
    * documented as stateless beyond in-memory caches.
    */
   const inflight = new Map<string, Promise<{ address: string; walletCreated: boolean }>>();

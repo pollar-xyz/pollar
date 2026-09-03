@@ -5,7 +5,7 @@ import type { PublicEcJwk } from './types';
 /**
  * Compute the RFC 7638 JWK thumbprint for an EC P-256 public JWK.
  *
- * Algorithm (RFC 7638 §3):
+ * Algorithm (RFC 7638 section 3):
  *  1. Build a JSON object containing ONLY the required members of the JWK,
  *     ordered lexicographically by member name (Unicode code point).
  *     For EC keys, that's exactly {crv, kty, x, y}.
@@ -17,7 +17,7 @@ import type { PublicEcJwk } from './types';
  * - Including extra fields (`alg`, `use`, `kid`, `ext`, `key_ops`).
  * - Wrong member ordering (must be lex by Unicode code point).
  * - Padded base64 instead of base64url unpadded.
- * - Using `JSON.stringify(jwk)` of an arbitrary-key-order object — we build
+ * - Using `JSON.stringify(jwk)` of an arbitrary-key-order object - we build
  *   a fresh literal in canonical order to make the order explicit and not
  *   rely on V8's insertion-order semantics.
  */
@@ -36,8 +36,8 @@ export async function computeJwkThumbprint(jwk: PublicEcJwk): Promise<string> {
  * Normalize a base64 string to unpadded base64url. Web Crypto's
  * `exportKey('jwk')` is spec'd to return base64url, but some React Native
  * `crypto.subtle` polyfills diverge: standard base64 (`+`/`/`), `=` padding,
- * or — in the case of `react-native-quick-crypto` — a stray `.` in the
- * padding position (observed: `"…dy_c."`). Any of those characters is invalid
+ * or - in the case of `react-native-quick-crypto` - a stray `.` in the
+ * padding position (observed: `"...dy_c."`). Any of those characters is invalid
  * in a JWK member: RFC 7638 thumbprinting and servers that validate `x`/`y`
  * as base64url (`^[A-Za-z0-9_-]+$`) reject them, and the `cnf.jkt` thumbprint
  * silently diverges from the server's. Real browsers already return base64url,
@@ -60,7 +60,7 @@ function toBase64url(value: string): string {
  * coordinates to unpadded base64url. Useful when the input came from
  * `crypto.subtle.exportKey('jwk', publicKey)` which adds `ext` / `key_ops`
  * (and, under some RN polyfills, non-base64url coordinates). Returns a fresh
- * object — never mutates input.
+ * object - never mutates input.
  */
 export function canonicalEcJwk(jwk: { kty?: string; crv?: string; x?: string; y?: string }): PublicEcJwk {
   if (jwk.kty !== 'EC' || jwk.crv !== 'P-256' || typeof jwk.x !== 'string' || typeof jwk.y !== 'string') {

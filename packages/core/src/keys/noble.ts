@@ -11,7 +11,7 @@ import type { KeyManager, PublicEcJwk } from './types';
  * `Storage` adapter. Used in React Native, where `WebCryptoKeyManager` can't
  * be: its non-extractable keys can't be serialized to the `Storage` adapter
  * (and RN has no IndexedDB), so the keypair would be regenerated every launch
- * — see the rationale in `index.rn.ts`. The 32-byte private scalar is
+ * - see the rationale in `index.rn.ts`. The 32-byte private scalar is
  * base64url-encoded and stored through the `Storage` adapter (Keychain /
  * SecureStore in production).
  *
@@ -25,7 +25,8 @@ import type { KeyManager, PublicEcJwk } from './types';
  * the key inside Secure Enclave / StrongBox (planned for a future minor).
  */
 
-/** Base64url-encoded private scalar (32 bytes → ~43 chars). */
+// Prefix of the storage key; the value stored under it is the base64url-encoded
+// private scalar (32 bytes -> ~43 chars).
 const STORAGE_KEY_PREFIX = 'pollar:dpop-key:';
 
 export class NobleKeyManager implements KeyManager {
@@ -35,7 +36,7 @@ export class NobleKeyManager implements KeyManager {
   private privateKey: Uint8Array | null = null;
   private publicJwk: PublicEcJwk | null = null;
   private thumbprint: string | null = null;
-  /** Cached in-flight init — see `WebCryptoKeyManager` for the rationale. */
+  /** Cached in-flight init - see `WebCryptoKeyManager` for the rationale. */
   private _initPromise: Promise<void> | null = null;
 
   constructor(storage: Storage, apiKey: string) {
@@ -55,11 +56,15 @@ export class NobleKeyManager implements KeyManager {
    * the manager is self-healing if `init()` was never explicitly invoked.
    */
   async init(): Promise<void> {
-    if (this.privateKey) return;
+    // All three fields, not just the scalar - see `WebCryptoKeyManager.init`:
+    // `_doInit` assigns `privateKey`/`publicJwk` and only then awaits the
+    // thumbprint, so a caller in that window must join the in-flight init
+    // instead of early-returning into a half-built manager.
+    if (this.privateKey && this.publicJwk && this.thumbprint) return;
     if (!this._initPromise) {
       this._initPromise = this._doInit().catch((err) => {
         // Clear the promise so the next call retries. The error propagates to
-        // the caller — `PollarClient` logs it through its configured logger, so
+        // the caller - `PollarClient` logs it through its configured logger, so
         // we don't double-log (raw, ungated) here.
         this._initPromise = null;
         throw err;
@@ -116,6 +121,36 @@ export class NobleKeyManager implements KeyManager {
     } catch {
       // Best-effort.
     }
+    this.privateKey = null;
+    this.publicJwk = null;
+    this.thumbprint = null;
+    this._initPromise = null;
+  }
+
+  /**
+   * Re-persist the private scalar and verify it actually landed in storage.
+   * Mirrors `WebCryptoKeyManager.ensurePersisted` - see there for rationale.
+   * Returns `false` when the adapter can't durably hold the key, so the login
+   * flow can warn that the session will not survive a relaunch.
+   */
+  async ensurePersisted(): Promise<boolean> {
+    if (!this.privateKey) await this.init();
+    if (!this.privateKey) return false;
+    try {
+      const encoded = base64urlEncode(this.privateKey);
+      await this.storage.set(this.storageKey, encoded);
+      return (await this.storage.get(this.storageKey)) === encoded;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Drop the in-memory cache; the next operation re-runs `init()` and adopts
+   * whatever the storage adapter holds. Never touches persistent storage -
+   * that's `reset()`. Mirrors `WebCryptoKeyManager.resync`.
+   */
+  resync(): void {
     this.privateKey = null;
     this.publicJwk = null;
     this.thumbprint = null;

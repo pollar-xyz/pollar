@@ -1,3 +1,4 @@
+import { computeJwkThumbprint } from '../../keys/thumbprint';
 import { AUTH_ERROR_CODES } from '../../types';
 import { isValidSession } from '../session';
 import { SessionStatusError, waitForSessionReady } from '../stream';
@@ -26,7 +27,7 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
     // generic handler unchanged.
     if (err instanceof SessionStatusError) {
       // App-level terminal session status rides on a 2xx stream, so the central
-      // HTTP middleware can't classify it — log it here.
+      // HTTP middleware can't classify it - log it here.
       logApiError(logger, 'session status', { data: err });
       const { message, errorCode } =
         err.code === 'LOGIN_TIMEOUT'
@@ -36,7 +37,7 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
             : { message: 'Login session is no longer valid — please try again', errorCode: AUTH_ERROR_CODES.SESSION_INVALID };
       // Clear the partial session FIRST, then emit the error. clearSession emits
       // `idle`, so emitting the error AFTER makes it the final state a consumer
-      // sees — otherwise the error (LOGIN_TIMEOUT / SESSION_EXPIRED / …) is
+      // sees - otherwise the error (LOGIN_TIMEOUT / SESSION_EXPIRED / ...) is
       // immediately overwritten by idle and lost.
       await clearSession();
       setAuthState({ step: 'error', previousStep: 'authenticating', message, errorCode });
@@ -47,6 +48,11 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
 
   // Pass `dpopJwk` so the server mints DPoP-bound tokens (`cnf.jkt`).
   const dpopJwk = await deps.getPublicJwk();
+  // Thumbprint of the JWK we are about to bind - threaded into storeSession so
+  // the persisted `dpopJkt` records the key the server actually bound, even if
+  // the local key rotates between this bind and the store (see FlowDeps).
+  // Best-effort: a thumbprint failure must not fail the login.
+  const boundDpopJkt = await computeJwkThumbprint(dpopJwk).catch(() => undefined);
   // HTTP-level `error` is not handled here; the `else` branch below catches
   // both "request failed" (data === undefined) and "request OK but body
   // wasn't a valid session" via the same generic path.
@@ -59,7 +65,7 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
 
   if (data?.code === 'SDK_LOGIN_SUCCESS' && isValidSession(data?.content, logger)) {
     // `isValidSession` doesn't validate the `data` (PII) subtree, so reach into
-    // it defensively — a contract-drifted response missing `data`/`providers`
+    // it defensively - a contract-drifted response missing `data`/`providers`
     // should surface as a clean wallet-mismatch error, not a raw TypeError.
     const sessionWallet = data.content.data?.providers?.wallet?.address;
     if (expectedWallet && sessionWallet !== expectedWallet) {
@@ -74,11 +80,11 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
       return;
     }
     // The login was cancelled (cancelLogin) or superseded by a newer attempt
-    // (_newController) while POST /auth/login was in flight — its `signal` is now
+    // (_newController) while POST /auth/login was in flight - its `signal` is now
     // aborted. Don't resurrect `authenticated` over the idle/new state. (The
     // intervening error/clearSession writes above are intentionally NOT guarded.)
     if (signal.aborted) return;
-    await storeSession(data.content);
+    await storeSession(data.content, boundDpopJkt);
   } else {
     if (!error) logApiError(logger, 'POST /auth/login', { body, data });
     // Clear first, then emit error (see the LOGIN_TIMEOUT branch above).

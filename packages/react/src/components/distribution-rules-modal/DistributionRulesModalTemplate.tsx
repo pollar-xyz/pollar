@@ -1,12 +1,14 @@
 'use client';
 
 import { DistributionRule, DistributionRulesState } from '@pollar/core';
-import { type CSSProperties } from 'react';
 import { PollarModalFooter } from '../commons';
+import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 interface DistributionRulesModalTemplateProps {
   theme: string;
   accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
   state: DistributionRulesState;
   claimingId: string | null;
   claimErrors: Record<string, string>;
@@ -33,7 +35,7 @@ const REASON_LABEL: Record<string, string> = {
   DISTRIBUTION_RULE_NOT_STARTED: 'Not started yet',
   DISTRIBUTION_RULE_EXPIRED: 'Expired',
   DISTRIBUTION_RULE_EXHAUSTED: 'Fully claimed',
-  // Per-user, per-window claim limit (resets next period) — not permanent.
+  // Per-user, per-window claim limit (resets next period) - not permanent.
   DISTRIBUTION_RATE_LIMIT_EXCEEDED: 'Claimed for this period',
 };
 
@@ -116,6 +118,7 @@ function RuleCard({
 export function DistributionRulesModalTemplate({
   theme,
   accentColor,
+  styleOverrides,
   state,
   claimingId,
   claimErrors,
@@ -124,25 +127,7 @@ export function DistributionRulesModalTemplate({
   onClaim,
   onClose,
 }: DistributionRulesModalTemplateProps) {
-  const isDark = theme === 'dark';
-
-  const cssVars = {
-    '--pollar-accent': accentColor,
-    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': isDark ? '#ffffff' : '#111827',
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
-    '--pollar-input-height': '44px',
-    '--pollar-input-border-radius': '0.5rem',
-    '--pollar-card-border-radius': '10px',
-  } as CSSProperties;
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
   const isLoading = state.step === 'loading';
   const rules = state.step === 'loaded' ? state.rules : [];

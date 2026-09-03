@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  isPollarClient,
   BuildOutcome,
   EnabledAssetsState,
   isInteractiveAuthAdapter,
@@ -57,7 +58,7 @@ const DEFAULT_APP_CONFIG: PollarConfig = {
 
 /**
  * Compares the fields of a persisted session that actually drive UI re-renders.
- * Replaces a per-listener `JSON.stringify(...) !== JSON.stringify(...)` call —
+ * Replaces a per-listener `JSON.stringify(...) !== JSON.stringify(...)` call -
  * cheaper, allocation-free, and explicit about what counts as "changed".
  *
  * If a field is added to `PollarPersistedSession` that consumers read through
@@ -81,13 +82,13 @@ interface PollarContextValue {
   /**
    * The authenticated user's wallet as a discriminated union over `custody`
    * (`internal` | `smart` | `external`), or `null` when unauthenticated. Every
-   * field is meaningful for any login method — `custody` is always present and
+   * field is meaningful for any login method - `custody` is always present and
    * strictly determines the shape of `provider`. Use `wallet.address` for the
    * on-chain address and `wallet.provider` for the wallet/login provider.
    */
   wallet: WalletInfo | null;
   /**
-   * Every wallet the user holds, one per chain — a superset of {@link wallet},
+   * Every wallet the user holds, one per chain - a superset of {@link wallet},
    * with `chain` populated. `[]` when unauthenticated. Drives the network
    * selector in the Send / Wallet Balance / Assets modals: each entry is a
    * network the user can switch to, and the first one is the default.
@@ -100,7 +101,7 @@ interface PollarContextValue {
   /**
    * `true` once the server has confirmed the session (login / refresh /
    * `/auth/session/resume`). `false` while a cold-start session is still
-   * optimistic — gate sensitive actions (e.g. signing) on this.
+   * optimistic - gate sensitive actions (e.g. signing) on this.
    */
   verified: boolean;
   login: (options: PollarLoginOptions) => void;
@@ -113,7 +114,7 @@ interface PollarContextValue {
   styles: PollarStyles;
   /** Remote app-config load state. 'loading' while the initial fetch is in
    *  flight, 'error' if it failed (styles fall back to empty defaults), 'ready'
-   *  once resolved — or immediately 'ready' when `appConfig` is passed as a prop.
+   *  once resolved - or immediately 'ready' when `appConfig` is passed as a prop.
    *  The login modal shows a spinner/retry instead of an empty shell until this
    *  is 'ready'. */
   configStatus: 'loading' | 'ready' | 'error';
@@ -132,7 +133,7 @@ interface PollarContextValue {
   /** External-wallet only. Custodial flows should use `signAndSubmitTx`. */
   signTx: (unsignedXdr: string) => Promise<SignOutcome>;
   submitTx: (signedXdr: string) => Promise<SubmitOutcome>;
-  /** One-shot: build → sign → submit. Drives the same TransactionState flow as the split calls. */
+  /** One-shot: build -> sign -> submit. Drives the same TransactionState flow as the split calls. */
   buildAndSignAndSubmitTx: (
     operation: TxBuildBody['operation'],
     params: TxBuildBody['params'],
@@ -263,6 +264,11 @@ interface PollarProviderProps {
    *
    * The client is locked at first render: changing this prop afterwards is
    * ignored. To swap clients, unmount and remount the provider.
+   *
+   * Either form gets the web passkey ceremony installed (a pre-built instance
+   * is filled in via `setPasskeyDefaults`), so the "Smart Wallet" login works
+   * without the consumer wiring WebAuthn. A ceremony you configured yourself is
+   * always kept.
    */
   client: PollarClient | PollarClientConfig;
   /**
@@ -276,13 +282,13 @@ interface PollarProviderProps {
    * bypass the type anyway (plain JS, or a cast), each missing field lands on a
    * default scattered across the components rather than on anything central:
    *
-   *   chains       absent → the chain order/filter falls back to the order the
+   *   chains       absent -> the chain order/filter falls back to the order the
    *                         session listed the user's wallets in (see useChains)
-   *   name         absent → 'Pollar'
-   *   theme        absent → 'light'
-   *   accentColor  absent → '#005DB4'
+   *   name         absent -> 'Pollar'
+   *   theme        absent -> 'light'
+   *   accentColor  absent -> '#005DB4'
    *   emailEnabled, providers, embeddedWallets, smartWallet
-   *                absent → false. NOTE: that means EVERY login method is off
+   *                absent -> false. NOTE: that means EVERY login method is off
    *                         and the login modal renders with no way in.
    *
    * Leave this `undefined` to have the SDK fetch `/applications/config` on
@@ -305,6 +311,36 @@ interface PollarProviderProps {
   children: ReactNode;
 }
 
+/**
+ * Clients built from a `PollarClientConfig`, keyed by that exact config object.
+ *
+ * React StrictMode double-invokes the `useState` initializer below on mount and
+ * discards the FIRST pass's hook state entirely - the value the component keeps
+ * comes from the second pass, and `useRef` carries nothing between the two. So
+ * a ref guard cannot see the first construction, and without this map the
+ * provider built TWO clients and only ever tore down the one React kept. The
+ * orphan outlived the provider, holding a cross-tab `storage` listener, a
+ * refresh loop and a live-client registry entry for the life of the page - and
+ * two live clients on one API key share a session row and a DPoP keypair, which
+ * is exactly the configuration `@pollar/core`'s session teardown has to defend
+ * against. (See `tests/smoke-react.cjs`, which renders through jsdom because
+ * `react-test-renderer` does not reproduce the double render at all.)
+ *
+ * Both passes receive the same props object - React re-invokes a component's
+ * render function in place and reconciles children from the last pass - so
+ * keying on the config makes the second pass reuse the first pass's client
+ * instead of building another. Weak, so an abandoned config never keeps a
+ * client alive; and the entry is dropped as soon as the mount effect claims the
+ * client, so a later provider rendered with the same (retained) config object
+ * builds its own rather than receiving one this provider is about to destroy.
+ *
+ * Two providers sharing one config OBJECT still share the client. That is the
+ * better outcome of the two - one client per config identity, rather than two
+ * fighting over the same session row - and it matches what the SDK already
+ * warns about for multiple clients on one API key.
+ */
+const clientByConfig = new WeakMap<PollarClientConfig, PollarClient>();
+
 export function PollarProvider({
   client,
   appConfig: appConfigProp,
@@ -312,27 +348,51 @@ export function PollarProvider({
   onStorageDegrade,
   children,
 }: PollarProviderProps) {
-  // When the consumer passes a config (not a ready client), inject the browser
-  // passkey ceremony so `loginSmartWallet()` works out of the box on web. The
-  // consumer can override it (e.g. a React Native native provider) via
-  // `client.passkey`.
-  const [pollarClient] = useState<PollarClient>(() =>
-    client instanceof PollarClient
-      ? client
-      : new PollarClient({ passkey: browserPasskeyCeremony, passkeySign: browserPasskeySigner, ...client }),
-  );
+  // Inject the browser passkey ceremony so `loginSmartWallet()` /
+  // `createSmartWallet()` work out of the box on web, whichever way the client
+  // arrives: built here from a config, or handed over ready-made (a consumer
+  // singleton shared with non-React code). The consumer can override it (e.g. a
+  // React Native native provider) via `client.passkey`; `??` keeps an explicit
+  // ceremony winning while an absent/undefined one still gets the default.
+  const [pollarClient] = useState<PollarClient>(() => {
+    if (isPollarClient(client)) {
+      client.setPasskeyDefaults({ passkey: browserPasskeyCeremony, passkeySign: browserPasskeySigner });
+      return client;
+    }
+    // Reuse the instance a discarded render pass already built (see
+    // `clientByConfig`) instead of constructing a second one that nothing
+    // would ever tear down.
+    const alreadyBuilt = clientByConfig.get(client);
+    if (alreadyBuilt) return alreadyBuilt;
+    const built = new PollarClient({
+      ...client,
+      passkey: client.passkey ?? browserPasskeyCeremony,
+      passkeySign: client.passkeySign ?? browserPasskeySigner,
+    });
+    clientByConfig.set(client, built);
+    return built;
+  });
   // Only a client WE constructed is ours to tear down on unmount; a client the
   // consumer passed in is theirs to manage. Captured once (the useState
   // initializer above made the same decision).
-  const ownsClientRef = useRef(!(client instanceof PollarClient));
+  const ownsClientRef = useRef(!isPollarClient(client));
   const destroyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The config this provider built from, until the mount effect claims it. */
+  const builtFromConfigRef = useRef<PollarClientConfig | null>(isPollarClient(client) ? null : client);
 
   // Tear down the client on a real unmount so its cross-tab storage listener,
-  // refresh timer, and live-client registry entry don't leak — matters when the
+  // refresh timer, and live-client registry entry don't leak - matters when the
   // provider is keyed (e.g. `key={apiKey}`) and remounts on network change.
   useEffect(() => {
     if (!ownsClientRef.current) return;
-    // This mount is live again — cancel any teardown scheduled by a prior
+    // Claim the client. Effects run after the double render, so the shared
+    // entry has done its job; dropping it keeps a future provider from being
+    // handed a client this one will destroy on unmount.
+    if (builtFromConfigRef.current) {
+      clientByConfig.delete(builtFromConfigRef.current);
+      builtFromConfigRef.current = null;
+    }
+    // This mount is live again - cancel any teardown scheduled by a prior
     // (StrictMode dev) unmount before it can destroy the client we still use.
     if (destroyTimerRef.current) {
       clearTimeout(destroyTimerRef.current);
@@ -410,7 +470,7 @@ export function PollarProvider({
       if (authState.step === 'authenticated') {
         setSessionState((prev) => (sessionsEqual(prev, authState.session) ? prev : authState.session));
         // The session object is identical between the optimistic restore and
-        // the post-resume confirmation, so `verified` is tracked separately —
+        // the post-resume confirmation, so `verified` is tracked separately -
         // otherwise the sessionsEqual short-circuit would swallow the flip.
         setVerified(authState.verified);
       } else if (authState.step === 'idle') {
@@ -421,9 +481,9 @@ export function PollarProvider({
   }, [pollarClient]);
 
   // Auto-login for interactive adapters (e.g. Privy). When the adapter's
-  // provider authenticates *outside* the sub-modal flow — after an OAuth redirect
+  // provider authenticates *outside* the sub-modal flow - after an OAuth redirect
   // (the page reloaded, so the sub-modal promise is gone) or a persisted provider
-  // session on load — and Pollar has no session yet, trigger `login({ provider })`
+  // session on load - and Pollar has no session yet, trigger `login({ provider })`
   // so `connect()` + SEP-10 run. Read the session through a ref so the
   // subscription is set up once and never re-subscribes on session changes.
   const sessionRef = useRef(sessionState);

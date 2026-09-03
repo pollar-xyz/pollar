@@ -32,7 +32,7 @@ function isSolanaChain(chain: string): boolean {
 }
 
 /**
- * Wraps a Wallet Standard Solana wallet (Phantom, Solflare, Backpack, …) so it can
+ * Wraps a Wallet Standard Solana wallet (Phantom, Solflare, Backpack, ...) so it can
  * back a Pollar external-wallet login. The Wallet Standard is the headless
  * substrate `@solana/wallet-adapter` is built on, so this stays framework-agnostic
  * exactly like `@pollar/stellar-wallets-kit-adapter`.
@@ -102,7 +102,7 @@ export class SolanaWalletStandardAdapter implements WalletAdapter {
   /**
    * SIWS: sign the server-issued Sign In With Solana input. This is the Solana
    * analogue of the Stellar SEP-10 challenge, but the wallet signs a structured
-   * MESSAGE (domain, statement, nonce, …) rather than a transaction.
+   * MESSAGE (domain, statement, nonce, ...) rather than a transaction.
    */
   async signIn(input: SolanaSignInInput): Promise<SolanaSignInOutput> {
     const feature = this._wallet.features[SolanaSignIn] as SolanaSignInFeature[typeof SolanaSignIn] | undefined;
@@ -121,7 +121,7 @@ export class SolanaWalletStandardAdapter implements WalletAdapter {
     };
   }
 
-  /** Raw message signing — the SIWS fallback for wallets without `solana:signIn`. */
+  /** Raw message signing - the SIWS fallback for wallets without `solana:signIn`. */
   async signMessage(message: Uint8Array): Promise<SolanaSignMessageResponse> {
     const account = this._requireAccount();
     const feature = this._wallet.features[SolanaSignMessage] as SolanaSignMessageFeature[typeof SolanaSignMessage] | undefined;

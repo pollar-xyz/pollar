@@ -8,7 +8,7 @@ import { WalletAdapter, WalletId } from './wallets';
 
 export type PollarApplicationConfigResponse =
   pollarPaths['/auth/login']['post']['responses'][200]['content']['application/json'];
-/** Full `/auth/login` response shape — used in transit but NOT persisted. */
+/** Full `/auth/login` response shape - used in transit but NOT persisted. */
 export type PollarApplicationConfigContent = PollarApplicationConfigResponse['content'];
 
 /**
@@ -16,23 +16,23 @@ export type PollarApplicationConfigContent = PollarApplicationConfigResponse['co
  * every entry of `wallets`, so the two can never drift apart in shape.
  *
  * `type` discriminates custody:
- *   - 'internal' → platform-managed (custodial) account (G-address, 0x…, …)
- *   - 'smart'    → Soroban smart-account / passkey (C-address)
- *   - 'external' → user-connected wallet (Freighter/Albedo)
+ *   - 'internal' -> platform-managed (custodial) account (G-address, 0x..., ...)
+ *   - 'smart'    -> Soroban smart-account / passkey (C-address)
+ *   - 'external' -> user-connected wallet (Freighter/Albedo)
  * `address` is the on-chain address for every type.
  */
 export interface PollarPersistedWallet {
   type: 'internal' | 'smart' | 'external';
   // The login method, 1:1 with `type` (fixed at account creation server-side):
-  //   internal → 'email' | 'google' | 'github' | 'oidc'
-  //   smart    → 'passkey'
-  //   external → 'wallet'
+  //   internal -> 'email' | 'google' | 'github' | 'oidc'
+  //   smart    -> 'passkey'
+  //   external -> 'wallet'
   // Optional: sessions minted by sdk-api < this change won't carry it. For
   // external wallets the specific on-chain adapter id (freighter/albedo) is
   // exposed separately via `getWallet().provider`, not here.
   provider?: string;
   address: string | null;
-  // The CHAIN this address lives on — NOT testnet-vs-mainnet, which is
+  // The CHAIN this address lives on - NOT testnet-vs-mainnet, which is
   // `network` below. Optional: the back-compat `wallet` field and sessions
   // minted before multi-chain omit it (those are always STELLAR).
   chain?: WalletChain;
@@ -61,7 +61,18 @@ export interface PollarPersistedSession {
   token: { accessToken: string; refreshToken: string; expiresAt: number };
   user: { id?: string; ready: boolean };
   /**
-   * BACK-COMPAT — the user's STELLAR wallet (or their smart account). Always
+   * RFC 7638 thumbprint of the DPoP keypair this session's tokens are bound
+   * to (`cnf.jkt`), stamped at store time. On restore the client compares it
+   * against the currently loaded keypair: a mismatch means the private key
+   * was lost (IndexedDB evicted/unavailable, key reset elsewhere) and every
+   * proof-bound call - resume and refresh included - is guaranteed to fail,
+   * so the session is cleared locally with a precise diagnostic instead of a
+   * burst of opaque 401s. Optional: absent on sessions persisted by older
+   * SDKs and on Bearer-fallback sessions, which skip the check.
+   */
+  dpopJkt?: string;
+  /**
+   * BACK-COMPAT - the user's STELLAR wallet (or their smart account). Always
    * present, always Stellar. Mirrors the entry in `wallets` with
    * `chain: 'STELLAR'` when there is one.
    */
@@ -70,16 +81,16 @@ export interface PollarPersistedSession {
    * Every wallet the user holds, one per chain. Superset of `wallet`.
    *
    * Optional because sessions persisted before this field existed (and logins
-   * against an sdk-api that predates `wallets[]`) have none — treat an absent
+   * against an sdk-api that predates `wallets[]`) have none - treat an absent
    * array as "only `wallet` is known", not as "the user has no wallets".
    */
   wallets?: PollarPersistedWallet[];
 }
 
 /**
- * Custodial login methods — the providers that map to an `internal` wallet.
- * Mirrors the backend `AuthProvider` enum minus passkey (→ smart) and
- * wallet/external (→ external).
+ * Custodial login methods - the providers that map to an `internal` wallet.
+ * Mirrors the backend `AuthProvider` enum minus passkey (-> smart) and
+ * wallet/external (-> external).
  */
 export type PollarAuthMethod = 'email' | 'google' | 'github' | 'oidc';
 
@@ -88,11 +99,11 @@ export type PollarAuthMethod = 'email' | 'google' | 'github' | 'oidc';
  * Every authenticated session has exactly one wallet whose custody is fixed at
  * account creation, so `custody` strictly determines the shape of `provider`:
  *
- *   - `internal` (platform-custodied G-address) → `provider` is the login
+ *   - `internal` (platform-custodied G-address) -> `provider` is the login
  *     method, or `null` if the session predates provider tracking server-side.
- *   - `smart` (passkey Soroban C-address) → `provider` is always `'passkey'`.
- *   - `external` (user-connected wallet) → `provider` is the on-chain adapter
- *     id (`'freighter'`, `'albedo'`, …), or `null` when no adapter is resolved
+ *   - `smart` (passkey Soroban C-address) -> `provider` is always `'passkey'`.
+ *   - `external` (user-connected wallet) -> `provider` is the on-chain adapter
+ *     id (`'freighter'`, `'albedo'`, ...), or `null` when no adapter is resolved
  *     (e.g. a restored session whose adapter could not be re-attached).
  *
  * Obtained via {@link PollarClient.getWallet} (the Stellar wallet) or
@@ -106,9 +117,9 @@ export type WalletInfo =
   // `existsOnStellar` (is the account created on-chain) and `fundingMode` (the
   // app's funding policy) are wallet-status extras carried on every custody so
   // callers can, e.g., offer on-chain account creation for an external wallet
-  // that isn't on Stellar yet. Optional — absent on sessions that predate them.
+  // that isn't on Stellar yet. Optional - absent on sessions that predate them.
   //
-  // `chain` says which chain `address` lives on — NOT testnet-vs-mainnet.
+  // `chain` says which chain `address` lives on - NOT testnet-vs-mainnet.
   // Optional: `getWallet()` omits it (it is always STELLAR by definition), and
   // sessions minted before multi-chain don't carry it either. `getWallets()`
   // sets it whenever the backend reported it.
@@ -167,12 +178,12 @@ export interface PollarClientConfig {
    *
    * `fetch` has no timeout of its own, so without this a transient connection
    * stall (e.g. a dropped TCP SYN on a flaky mobile network at cold start) hangs
-   * the request forever — it neither resolves nor rejects, trapping any caller
+   * the request forever - it neither resolves nor rejects, trapping any caller
    * that `await`s it (a returning user stuck on the splash screen). Bounding it
    * lets the request fail fast so the caller can recover (retry, or fall back to
    * a cached token).
    *
-   * Defaults to `10000` (10s). Set `0` to disable (NOT recommended — restores
+   * Defaults to `10000` (10s). Set `0` to disable (NOT recommended - restores
    * the unbounded-hang behavior).
    */
   requestTimeoutMs?: number;
@@ -209,14 +220,14 @@ export interface PollarClientConfig {
   logLevel?: LogLevel;
   /**
    * Sink the SDK writes logs to. Defaults to the global `console`. Inject your
-   * own (pino, Sentry breadcrumbs, a test spy…) to route SDK logs anywhere.
+   * own (pino, Sentry breadcrumbs, a test spy...) to route SDK logs anywhere.
    * Filtering by `logLevel` still applies on top of whatever you pass.
    */
   logger?: PollarLogger;
   /**
    * Notified when persistent storage silently degrades to in-memory mode
    * (Safari private browsing quota errors, sandboxed iframes, etc.). Useful
-   * for telemetry — the SDK keeps working but sessions won't survive reload.
+   * for telemetry - the SDK keeps working but sessions won't survive reload.
    */
   onStorageDegrade?: OnStorageDegrade;
   /**
@@ -225,13 +236,13 @@ export interface PollarClientConfig {
    * `FreighterAdapter` / `AlbedoAdapter` are auto-registered; entries here are
    * added on top and override a built-in by reusing its `type`. Import extra
    * adapters from their own packages (`@pollar/stellar-wallets-kit-adapter`,
-   * `@pollar/privy-adapter`, …) so their deps stay out of `@pollar/core`'s bundle.
+   * `@pollar/privy-adapter`, ...) so their deps stay out of `@pollar/core`'s bundle.
    */
   walletAdapters?: WalletAdapter[];
   /**
    * Optional human-friendly label sent at /auth/login time and recorded on
    * the server-side refresh-token row so the user can identify it in the
-   * "active sessions" UI (e.g. "iPhone — Safari", "Mac — Chrome 126").
+   * "active sessions" UI (e.g. "iPhone - Safari", "Mac - Chrome 126").
    * If unset, the server-recorded `user_agent` header is the fallback.
    */
   deviceLabel?: string;
@@ -241,7 +252,7 @@ export interface PollarClientConfig {
    * network + sidesteps browser/RN background timer throttling); they run
    * the moment visibility comes back. Defaults to a web provider in the
    * browser (`visibilitychange` + BFCache + focus) and a noop elsewhere.
-   * React Native consumers should inject an `AppState`-backed provider —
+   * React Native consumers should inject an `AppState`-backed provider -
    * use `createAppStateVisibilityProvider` from
    * `@pollar/core/adapters/react-native-appstate`.
    */
@@ -249,8 +260,8 @@ export interface PollarClientConfig {
   /**
    * If set, the silent-refresh scheduler stops issuing proactive refreshes
    * after this many milliseconds of no client-side HTTP activity. The
-   * session is not cleared — the next user action triggers a request that
-   * either reuses a still-valid access token or hits 401 → reactive
+   * session is not cleared - the next user action triggers a request that
+   * either reuses a still-valid access token or hits 401 -> reactive
    * refresh (transparent if the RT is still valid). Defaults to
    * `undefined` = refresh forever as long as the app is visible.
    */
@@ -261,14 +272,14 @@ export interface PollarClientConfig {
    * on web. React Native consumers MUST provide one (typically wrapping
    * `expo-web-browser`'s `openAuthSessionAsync`), since `window.open` does
    * not exist there. The SDK still drives the rest of the flow by polling the
-   * auth-session status, so the opener only needs to surface the URL — it does
+   * auth-session status, so the opener only needs to surface the URL - it does
    * NOT need to capture the redirect payload.
    */
   openAuthUrl?: AuthUrlOpener;
   /**
    * Value sent to the backend as `redirect_uri` for hosted OAuth (where the
    * provider returns the user afterwards). Defaults to `window.location.origin`
-   * on web. On React Native set this to your app's deep link / scheme — the
+   * on web. On React Native set this to your app's deep link / scheme - the
    * same URL you pass to `WebBrowser.openAuthSessionAsync`.
    */
   oauthRedirectUri?: string;
@@ -293,10 +304,10 @@ export interface PollarClientConfig {
  * the result to forward to the backend: a registration response for a new user
  * (`create()`) or an authentication assertion for a returning one (`get()`).
  * `mode` tells the ceremony which to run: `'login'` runs `get()` only (returning
- * user) and `'register'` runs `create()` only (new wallet) — the caller picks via
+ * user) and `'register'` runs `create()` only (new wallet) - the caller picks via
  * the "Log in" / "Create wallet" buttons, so there's no ambiguous autodetect that
  * could create a wallet when the user merely cancelled a login prompt. `response`
- * is the browser's PublicKeyCredential serialized to JSON — forwarded verbatim to
+ * is the browser's PublicKeyCredential serialized to JSON - forwarded verbatim to
  * `/auth/passkey/{register,login}`.
  */
 export type PasskeyMode = 'login' | 'register';
@@ -310,7 +321,7 @@ export type PasskeyCeremony = (ctx: {
  * Signs a smart-account transaction's auth digest with the user's passkey
  * (a WebAuthn `get()` whose challenge is the raw digest). Returns the PUBLIC
  * assertion fields (base64url) for the server to assemble into the Soroban auth
- * entry — no secret leaves the device. Injected by the runtime layer
+ * entry - no secret leaves the device. Injected by the runtime layer
  * (`@pollar/react`); `@pollar/core` never touches `navigator.credentials`.
  */
 export type PasskeySigner = (ctx: {
@@ -324,8 +335,8 @@ export type PasskeySigner = (ctx: {
  * Strategy for opening the hosted OAuth URL. The SDK mints the per-login auth
  * session lazily inside `getUrl()` (call it once; the first call creates the
  * `clientSessionId` and returns the full URL, or `null` if session creation
- * failed). Open the resolved URL however the platform allows — a popup on web,
- * `WebBrowser.openAuthSessionAsync(url, redirectUri)` on React Native — and
+ * failed). Open the resolved URL however the platform allows - a popup on web,
+ * `WebBrowser.openAuthSessionAsync(url, redirectUri)` on React Native - and
  * resolve once the user-facing browser step is done or dismissed. You do NOT
  * need to capture the redirect payload: the SDK polls the auth-session status
  * until the backend marks it READY.
@@ -381,7 +392,7 @@ export type TxSignAndSendBody = NonNullable<
 >['content']['application/json'];
 export type TxSignSendResponse = pollarPaths['/tx/sign-and-send']['post']['responses'][200]['content']['application/json'];
 
-// ─── Split flow (new in v0.7.2) ───────────────────────────────────────────────
+// --- Split flow (new in v0.7.2) -----------------------------------------------
 
 export type TxSignBody = NonNullable<pollarPaths['/tx/sign']['post']['requestBody']>['content']['application/json'];
 export type TxSignResponse = pollarPaths['/tx/sign']['post']['responses'][200]['content']['application/json'];
@@ -408,15 +419,15 @@ export type PollarLoginOptions =
   // Catch-all for any registered wallet adapter (`login({ provider: adapter.type })`,
   // e.g. 'freighter' | 'albedo' | 'privy' | 'xbull'). `string & {}` keeps the
   // built-in literals autocompleting. Trade-off: this also makes a bare
-  // `{ provider: 'email' }` (no `email`) type-check — the email flow still
+  // `{ provider: 'email' }` (no `email`) type-check - the email flow still
   // validates `email` at runtime.
   | ({ provider: string & {} } & Record<string, unknown>);
 
 /**
  * Curated, stable facade handed to every {@link PollarAuthProvider}. It exposes
- * only the primitives a login strategy needs — the shared backbone
- * (`createSession` → drive the session READY → `authenticate`) plus a couple of
- * ready-made legs — and deliberately keeps `PollarClient` internals (storage,
+ * only the primitives a login strategy needs - the shared backbone
+ * (`createSession` -> drive the session READY -> `authenticate`) plus a couple of
+ * ready-made legs - and deliberately keeps `PollarClient` internals (storage,
  * wallet-adapter resolution, DPoP key manager) private. This is the public
  * contract a third-party provider (e.g. Privy) builds against.
  */
@@ -431,12 +442,12 @@ export interface AuthProviderContext {
   readonly logger: PollarLogger;
   /** Drive the SDK's auth state machine (the host's `onAuthStateChange` mirrors it). */
   setAuthState(state: AuthState): void;
-  /** `POST /auth/session` → `clientSessionId` (null on failure; error state already set). */
+  /** `POST /auth/session` -> `clientSessionId` (null on failure; error state already set). */
   createSession(): Promise<string | null>;
   /** Poll the session to READY, then `POST /auth/login` and persist the session. The shared backbone. */
   authenticate(clientSessionId: string): Promise<void>;
   /**
-   * `POST /auth/wallet/challenge` → the server-signed SEP-10 challenge transaction
+   * `POST /auth/wallet/challenge` -> the server-signed SEP-10 challenge transaction
    * (XDR) the wallet must counter-sign to prove key control. Returns `null` on
    * failure. Bind the network you sign on to the app's network.
    */
@@ -468,17 +479,17 @@ export interface PollarAuthProvider {
 export type TxBuildContent = TxBuildResponse['content'];
 
 /**
- * Phases the SDK can be in across the build → sign → submit lifecycle.
+ * Phases the SDK can be in across the build -> sign -> submit lifecycle.
  *
  * **Granular** steps (`building`, `signing`, `submitting`) are emitted when
- * the SDK can directly observe that phase — i.e. when each is a separate
+ * the SDK can directly observe that phase - i.e. when each is a separate
  * client-driven call (`buildTx`, `signTx`, `submitTx`, external-wallet
  * `signAndSubmitTx`).
  *
  * **Compound** steps (`signing-submitting`, `building-signing-submitting`)
  * are emitted when multiple phases collapse into a single opaque backend
- * round-trip (`signAndSubmitTx` custodial → `/tx/sign-and-send`, and `runTx`
- * / `buildAndSignAndSubmitTx` custodial → `/tx/build-sign-submit`). The SDK
+ * round-trip (`signAndSubmitTx` custodial -> `/tx/sign-and-send`, and `runTx`
+ * / `buildAndSignAndSubmitTx` custodial -> `/tx/build-sign-submit`). The SDK
  * can't see when one phase ends and the next begins inside that request, so
  * it honestly reports a single fused state instead of fabricating
  * transitions.
@@ -491,20 +502,20 @@ export type TxBuildContent = TxBuildResponse['content'];
  */
 export type TransactionState =
   | { step: 'idle' }
-  // ─── Granular phases (observable per-call) ────────────────────────────
+  // --- Granular phases (observable per-call) ----------------------------
   | { step: 'building' }
   | { step: 'built'; buildData: TxBuildContent }
   | { step: 'signing'; buildData?: TxBuildContent }
   | { step: 'signed'; buildData?: TxBuildContent; signedXdr: string; submissionToken?: string }
   | { step: 'submitting'; buildData?: TxBuildContent; signedXdr?: string }
-  // ─── Compound phases (custodial-only — backend swallows the boundaries) ──
+  // --- Compound phases (custodial-only - backend swallows the boundaries) --
   | { step: 'signing-submitting'; buildData?: TxBuildContent }
   | { step: 'building-signing-submitting' }
-  // ─── Post-Horizon-ack, pre-ledger-confirm (shared) ────────────────────
+  // --- Post-Horizon-ack, pre-ledger-confirm (shared) --------------------
   | { step: 'submitted'; buildData?: TxBuildContent; hash: string }
-  // ─── Terminal success (shared) ────────────────────────────────────────
+  // --- Terminal success (shared) ----------------------------------------
   | { step: 'success'; buildData?: TxBuildContent; hash: string }
-  // ─── Terminal failure with phase context ──────────────────────────────
+  // --- Terminal failure with phase context ------------------------------
   | {
       step: 'error';
       phase: TxErrorPhase;
@@ -526,7 +537,7 @@ export type TxErrorPhase = 'building' | 'signing' | 'submitting' | 'signing-subm
 /**
  * Per-call outcomes returned by `buildTx`, `signTx`, `submitTx`,
  * `signAndSubmitTx`, and `buildAndSignAndSubmitTx`. These are additive to
- * `TransactionState` — the same operations still drive the state machine for
+ * `TransactionState` - the same operations still drive the state machine for
  * modal-style UIs, but headless callers can `await` the method and inspect
  * the returned outcome directly instead of subscribing to state changes.
  */
@@ -543,10 +554,10 @@ export type SignOutcome =
  */
 export type SignAuthEntryOutcome = { status: 'signed'; signedAuthEntry: string } | { status: 'error'; details?: string };
 
-// ─── Stellar SEP ownership proofs (client.stellar.*) ────────────────────────────
+// --- Stellar SEP ownership proofs (client.stellar.*) ----------------------------
 
 /**
- * Result of {@link StellarSepApi.sep53}.signMessage — a SEP-53 message signature.
+ * Result of {@link StellarSepApi.sep53}.signMessage - a SEP-53 message signature.
  * `signature` is base64 ed25519 over SHA-256("Stellar Signed Message:\n" + message),
  * the same digest external wallets (Freighter/SWK) and the custodial signer both
  * produce, so `scheme` is always `sep53`.
@@ -555,7 +566,7 @@ export type StellarMessageProof =
   | { status: 'signed'; signature: string; signerAddress: string; scheme: 'sep53' }
   | { status: 'error'; details?: string; code?: string };
 
-/** Input to {@link StellarSepApi.sep10}.sign — a verifier-issued SEP-10 challenge. */
+/** Input to {@link StellarSepApi.sep10}.sign - a verifier-issued SEP-10 challenge. */
 export interface Sep10SignParams {
   /** The SEP-10 challenge transaction (unsigned XDR) built by the verifier. */
   challengeXdr: string;
@@ -565,7 +576,7 @@ export interface Sep10SignParams {
   webAuthDomain?: string;
 }
 
-/** Result of {@link StellarSepApi.sep10}.sign — the challenge with the user's signature. */
+/** Result of {@link StellarSepApi.sep10}.sign - the challenge with the user's signature. */
 export type Sep10Proof =
   | { status: 'signed'; signedXdr: string; signerAddress: string }
   | { status: 'error'; details?: string; code?: string };
@@ -587,7 +598,7 @@ export interface StellarSepApi {
  * A payment, addressed per chain.
  *
  * The asset is the one part that cannot be unified: Stellar identifies it by
- * code + issuer, Solana by SPL mint. Amounts differ too — Stellar takes a
+ * code + issuer, Solana by SPL mint. Amounts differ too - Stellar takes a
  * decimal string, Solana integer base units (lamports / mint units), because
  * that is what each chain's signer actually consumes.
  */
@@ -734,6 +745,39 @@ export class PollarNetworkError extends Error {
   }
 }
 
+/**
+ * Thrown when the API answers with an error body, keeping everything the
+ * server said about WHY instead of collapsing it to a bare code string.
+ *
+ * `code` is the stable machine-readable one (e.g. `SDK_RAMPS_AMOUNT_OUT_OF_RANGE`);
+ * `details` is the server's human reason when it sends one; `body` is the whole
+ * payload, for the fields a specific error adds on top (an out-of-range amount
+ * carries `limit` / `limitAmount` / `limitCurrency`, say).
+ */
+export class PollarApiError extends Error {
+  readonly code: string;
+  readonly details?: string;
+  readonly body: Record<string, unknown>;
+  constructor(code: string, body: Record<string, unknown> = {}) {
+    // The message stays the code, so anything that renders `err.message` shows
+    // the stable machine-readable code.
+    super(code);
+    this.name = 'PollarApiError';
+    this.code = code;
+    this.body = body;
+    if (typeof body.details === 'string') this.details = body.details;
+  }
+}
+
+/** Type guard for {@link PollarApiError} (instanceof is unreliable across
+ *  bundle/dual-package boundaries, so match the shape too). */
+export function isPollarApiError(err: unknown): err is PollarApiError {
+  return (
+    err instanceof PollarApiError ||
+    (typeof err === 'object' && err !== null && (err as { name?: unknown }).name === 'PollarApiError')
+  );
+}
+
 /** Type guard for {@link PollarNetworkError} (instanceof is unreliable across
  *  bundle/dual-package boundaries, so match the stable `code` too). */
 export function isPollarNetworkError(err: unknown): err is PollarNetworkError {
@@ -746,7 +790,7 @@ export function isPollarNetworkError(err: unknown): err is PollarNetworkError {
 /**
  * Automatic retry for idempotent, transient-failure SDK HTTP (the token refresh
  * and GETs). Only transport-level failures (timeouts, dropped connections)
- * retry — any HTTP response (including 4xx/5xx) is returned as-is and never
+ * retry - any HTTP response (including 4xx/5xx) is returned as-is and never
  * retried, so a refresh that's genuinely rejected logs out immediately rather
  * than after N pointless attempts.
  */
@@ -764,7 +808,7 @@ export interface PollarRetryConfig {
   baseDelayMs?: number;
 }
 
-// ─── Wallet balance types ─────────────────────────────────────────────────────
+// --- Wallet balance types -----------------------------------------------------
 
 /** A chain a wallet can live on. Mirrors the platform's WalletNetwork enum. */
 export type WalletChain = 'STELLAR' | 'POLYGON' | 'SOLANA';
@@ -781,7 +825,7 @@ export type WalletChain = 'STELLAR' | 'POLYGON' | 'SOLANA';
  * describe trustlines and stay Stellar-only; `decimals` is carried by Polygon and
  * Solana tokens, which need it to format raw amounts.
  *
- * `balance` is null when the chain could not be read — an unreachable RPC, not an
+ * `balance` is null when the chain could not be read - an unreachable RPC, not an
  * empty wallet. Render it as unavailable rather than as zero.
  */
 export interface WalletBalanceRecord {
@@ -821,7 +865,7 @@ export type WalletBalanceState =
   | { step: 'loaded'; data: WalletBalanceContent }
   | { step: 'error'; message: string };
 
-// ─── Enabled-asset types ──────────────────────────────────────────────────────
+// --- Enabled-asset types ------------------------------------------------------
 
 /**
  * One asset the app offers, tagged with the chain it lives on.
@@ -831,12 +875,12 @@ export type WalletBalanceState =
  * chain the app is provisioned on. Mirrors {@link WalletBalanceRecord}, which is
  * hand-written for the same reason.
  *
- * `trustlineEstablished`, `limit` and `sponsored` are Stellar-only — a trustline
+ * `trustlineEstablished`, `limit` and `sponsored` are Stellar-only - a trustline
  * is a Stellar concept, so an ERC-20 or SPL token needs no per-user opt-in to be
  * held and carries none of them. `decimals` is the mirror case: Polygon and
  * Solana tokens carry it, Stellar does not (every Stellar asset is 7-decimal).
  *
- * This is the app's CATALOG, not the user's holdings — amounts come from
+ * This is the app's CATALOG, not the user's holdings - amounts come from
  * {@link WalletBalanceRecord} via `refreshBalance`.
  */
 export interface EnabledAssetRecord {
@@ -857,7 +901,7 @@ export interface EnabledAssetRecord {
 
 /**
  * The app's enabled assets across every chain it is provisioned on, flattened
- * into one list. `multichain` is true when more than one chain answered — the UI
+ * into one list. `multichain` is true when more than one chain answered - the UI
  * uses it to decide whether to show a per-asset network tag.
  */
 export interface WalletAssetsContent {
@@ -874,7 +918,7 @@ export type EnabledAssetsState =
   | { step: 'loaded'; data: WalletAssetsContent }
   | { step: 'error'; message: string };
 
-// ─── Tx history types ─────────────────────────────────────────────────────────
+// --- Tx history types ---------------------------------------------------------
 
 export type TxHistoryRecord =
   pollarPaths['/tx/history']['get']['responses'][200]['content']['application/json']['content']['records'][number];
@@ -889,7 +933,7 @@ export type TxHistoryState =
   | { step: 'loaded'; params: TxHistoryParams; data: TxHistoryContent }
   | { step: 'error'; params: TxHistoryParams; message: string };
 
-// ─── KYC types ────────────────────────────────────────────────────────────────
+// --- KYC types ----------------------------------------------------------------
 
 export type KycLevel = 'basic' | 'intermediate' | 'enhanced';
 export type KycStatus = 'none' | 'pending' | 'approved' | 'rejected';
@@ -900,7 +944,7 @@ export type KycProvider =
 export type KycStartBody = NonNullable<pollarPaths['/kyc/start']['post']['requestBody']>['content']['application/json'];
 export type KycStartResponse = pollarPaths['/kyc/start']['post']['responses'][200]['content']['application/json']['content'];
 
-// ─── Ramps types ──────────────────────────────────────────────────────────────
+// --- Ramps types --------------------------------------------------------------
 
 export type RampsQuoteQuery = NonNullable<pollarPaths['/ramps/quote']['get']['parameters']['query']>;
 export type RampQuote =
@@ -920,6 +964,23 @@ export type RampsTransactionResponse =
 export type RampTxStatus = RampsTransactionResponse['status'];
 export type RampDirection = RampsTransactionResponse['direction'];
 
+/**
+ * How to pay, in one shape for every provider. Named so a consumer that renders
+ * its own payment screen can type it without reaching into the generated schema.
+ *
+ * `fields` arrive labelled and formatted: iterate and display, no per-provider
+ * knowledge needed. `scannable` carries the code the user points a camera at,
+ * with the image already rendered so no QR encoder is required - Pollar-made
+ * SVGs (`image.inlineSafe`) use `currentColor` and can be injected as markup to
+ * follow the host's theme; a provider's own bitmap must go through
+ * `<img src="data:...">`. `scannable.payload` is the raw string behind the code:
+ * show it as text when `payloadLabel` is set, since a user on the phone that
+ * holds the screen has nothing to scan.
+ */
+export type RampDepositInstructions = NonNullable<RampsTransactionResponse['depositInstructions']>;
+export type RampScannable = NonNullable<RampDepositInstructions['scannable']>;
+export type RampInstructionField = RampDepositInstructions['fields'][number];
+
 // SEP-24 anchor flow (e.g. Anclap): custodial wallets get a `kycUrl` to open;
 // EXTERNAL wallets get a `pendingSignature` to sign and resume.
 export type RampsPendingSignature = NonNullable<RampsOnrampResponse['pendingSignature']>;
@@ -934,7 +995,22 @@ export type RampsCountriesResponse =
   pollarPaths['/ramps/countries']['get']['responses'][200]['content']['application/json']['content'];
 export type RampCountry = RampsCountriesResponse['countries'][number];
 
-// ─── Distribution types ───────────────────────────────────────────────────────
+// Provider utilities: reads that inform a ramp before or during a quote.
+export type RampsLiquidityResponse =
+  pollarPaths['/ramps/liquidity']['get']['responses'][200]['content']['application/json']['content'];
+export type RampRail = RampsLiquidityResponse['rail'];
+/**
+ * Where the user stands with the provider's identity checks. Polled after an
+ * off-ramp answered `kycRequired: true` - that provider (Abroad) publishes no
+ * hosted KYC link, so the client waits for `hasApproved` and re-quotes.
+ */
+export type RampsKycStatusResponse =
+  pollarPaths['/ramps/kyc-status']['get']['responses'][200]['content']['application/json']['content'];
+export type RampsPixDecodeResponse =
+  pollarPaths['/ramps/pix/decode']['get']['responses'][200]['content']['application/json']['content'];
+export type RampsPixDecoded = NonNullable<RampsPixDecodeResponse['decoded']>;
+
+// --- Distribution types -------------------------------------------------------
 
 export type DistributionRule =
   pollarPaths['/distribution/rules']['get']['responses'][200]['content']['application/json']['content']['rules'][number];
@@ -954,7 +1030,7 @@ export type DistributionRulesState =
   | { step: 'loaded'; rules: DistributionRule[] }
   | { step: 'error'; message: string };
 
-// ─── Swap types (DEX/AMM) ──────────────────────────────────────────────────────
+// --- Swap types (DEX/AMM) ------------------------------------------------------
 
 export type SwapQuoteBody = NonNullable<pollarPaths['/swap/quote']['post']['requestBody']>['content']['application/json'];
 
@@ -978,7 +1054,7 @@ export type SwapTokensContent = pollarPaths['/swap/tokens']['get']['responses'][
 /** A single curated swap buy token. */
 export type SwapToken = SwapTokensContent['tokens'][number];
 
-/** Input to `client.getSwapQuote` — the request body minus wallet/network, which the client fills. */
+/** Input to `client.getSwapQuote` - the request body minus wallet/network, which the client fills. */
 export type SwapQuoteParams = {
   sellAsset: SwapQuoteBody['sellAsset'];
   buyAsset: SwapQuoteBody['buyAsset'];
@@ -987,7 +1063,7 @@ export type SwapQuoteParams = {
   slippageBps?: number;
 };
 
-// ─── Earn types (yield vaults / lending) ───────────────────────────────────────
+// --- Earn types (yield vaults / lending) ---------------------------------------
 
 /** Providers this app exposes (from GET /earn/providers). Empty = Earn disabled. */
 export type EarnProvidersContent =
@@ -1015,14 +1091,14 @@ export type EarnBuildContent = pollarPaths['/earn/build']['post']['responses'][2
 /** The ready-to-sign payload a build returns. */
 export type EarnBuild = EarnBuildContent['build'];
 
-/** Input to `client.getEarnPosition` — wallet address is filled by the client. */
+/** Input to `client.getEarnPosition` - wallet address is filled by the client. */
 export type EarnPositionParams = {
   provider: EarnProviderId;
   /** Vault/pool id (an opportunity `id`). */
   opportunity: string;
 };
 
-/** Input to `client.earnDeposit` / `client.earnWithdraw` — address filled by the client. */
+/** Input to `client.earnDeposit` / `client.earnWithdraw` - address filled by the client. */
 export type EarnTxParams = {
   provider: EarnProviderId;
   /** Vault/pool id (an opportunity `id`). */
@@ -1031,7 +1107,7 @@ export type EarnTxParams = {
   amount: string;
 };
 
-// ─── Adapter types ────────────────────────────────────────────────────────────
+// --- Adapter types ------------------------------------------------------------
 
 export type AdapterFn<TParams = unknown> = (params: TParams) => Promise<{ unsignedTransaction: string }>;
 

@@ -105,7 +105,7 @@
   gap: 0.75rem;
   border-radius: var(--pollar-buttons-border-radius, 0.5rem);
   border: 1px solid var(--pollar-border);
-  background-color: var(--pollar-input-bg);
+  background-color: var(--pollar-btn-secondary-bg, var(--pollar-input-bg));
   padding: 0 1rem;
   cursor: pointer;
   transition: all 0.15s;
@@ -129,7 +129,7 @@
 .pollar-social-btn-text {
   font-size: 1rem;
   font-weight: 600;
-  color: var(--pollar-text);
+  color: var(--pollar-btn-secondary-fg, var(--pollar-text));
 }
 
 /* ---- Wallets ---- */
@@ -158,8 +158,8 @@
   padding: 0 1rem;
   border-radius: var(--pollar-buttons-border-radius, 0.5rem);
   border: 1px solid var(--pollar-border);
-  background-color: var(--pollar-input-bg);
-  color: var(--pollar-text);
+  background-color: var(--pollar-btn-secondary-bg, var(--pollar-input-bg));
+  color: var(--pollar-btn-secondary-fg, var(--pollar-text));
   font-size: 1rem;
   font-weight: 500;
   cursor: pointer;
@@ -215,8 +215,8 @@
   gap: 0.75rem;
   border-radius: var(--pollar-buttons-border-radius, 0.5rem);
   border: 1px solid var(--pollar-border);
-  background-color: var(--pollar-input-bg);
-  color: var(--pollar-text);
+  background-color: var(--pollar-btn-secondary-bg, var(--pollar-input-bg));
+  color: var(--pollar-btn-secondary-fg, var(--pollar-text));
   padding: 0 1rem;
   font-size: 1rem;
   font-weight: 500;
@@ -248,8 +248,8 @@
   gap: 0.75rem;
   border-radius: var(--pollar-buttons-border-radius, 0.5rem);
   border: 1px solid var(--pollar-border);
-  background-color: var(--pollar-input-bg);
-  color: var(--pollar-text);
+  background-color: var(--pollar-btn-secondary-bg, var(--pollar-input-bg));
+  color: var(--pollar-btn-secondary-fg, var(--pollar-text));
   padding: 0 1rem;
   font-size: 1rem;
   font-weight: 500;

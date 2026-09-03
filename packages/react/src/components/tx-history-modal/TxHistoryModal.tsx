@@ -8,6 +8,7 @@ import { addressForChain } from '../ChainSelect';
 import '../shared.css';
 import './TxHistoryModal.css';
 import { TxHistoryModalTemplate } from './TxHistoryModalTemplate';
+import { modalChrome } from '../modal-theme';
 
 const PAGE_SIZE = 10;
 
@@ -17,7 +18,7 @@ interface TxHistoryModalProps {
 
 export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
   const { getClient, styles, txHistory, wallets } = usePollar();
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   const [offset, setOffset] = useState(0);
 
   const { chains } = useChains();
@@ -30,7 +31,7 @@ export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
   const walletAddress = addressForChain(wallets, selectedChain);
 
   // The chain filter is a server query param (pagination is server-side), so a
-  // fetch always carries the selected chain. Null while chains resolve — the
+  // fetch always carries the selected chain. Null while chains resolve - the
   // effect below waits for it rather than fetching the whole unfiltered set.
   const load = useCallback(
     (nextOffset: number, chain: WalletChain) => {
@@ -41,7 +42,7 @@ export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
   );
 
   // (Re)load from page 1 whenever the selected chain changes. Switching networks
-  // must reset the offset — page 3 of Stellar is not page 3 of Solana.
+  // must reset the offset - page 3 of Stellar is not page 3 of Solana.
   useEffect(() => {
     if (selectedChain) load(0, selectedChain);
   }, [selectedChain, load]);
@@ -52,10 +53,11 @@ export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
   };
 
   return (
-    <div className="pollar-overlay" onClick={onClose}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
       <TxHistoryModalTemplate
         theme={theme}
         accentColor={accentColor}
+        styleOverrides={styleOverrides}
         txHistory={txHistory}
         offset={offset}
         chains={chains}

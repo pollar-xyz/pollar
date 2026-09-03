@@ -9,7 +9,7 @@ import type {
 /**
  * Signs a full Stellar transaction XDR for the user's Accesly Smart Account and
  * returns the signed XDR. The consumer wires this from `@accesly/react`'s
- * `useAccesly().tx` — typically `wallet.unlockForSigning` (passkey → Shamir →
+ * `useAccesly().tx` - typically `wallet.unlockForSigning` (passkey -> Shamir ->
  * ed25519 seed) followed by `tx.signRawXdr({ transactionXdr, ed25519Seed, expectedPublicKey })`.
  */
 export type AcceslySignXdr = (xdr: string) => Promise<string>;
@@ -30,7 +30,7 @@ const ACCESLY_ID = 'accesly';
  *
  * Accesly is a self-custodial **smart wallet** (C-address Soroban contract,
  * passkey + Shamir-MPC ed25519 signer) that Accesly itself deploys and manages.
- * So `custody` is `'smart'`, but — unlike Pollar's own smart wallets — signing
+ * So `custody` is `'smart'`, but - unlike Pollar's own smart wallets - signing
  * happens **client-side** via Accesly's SDK: Pollar never holds the key and does
  * not deploy/sponsor/submit through wallet-service. The signed XDR is broadcast
  * via RPC, the same routing as an external wallet.

@@ -1,11 +1,15 @@
 import type { PollarApiClient } from '../client';
 import type {
+  RampRail,
   RampsCompleteResponse,
   RampsCountriesResponse,
+  RampsKycStatusResponse,
+  RampsLiquidityResponse,
   RampsOfframpBody,
   RampsOfframpResponse,
   RampsOnrampBody,
   RampsOnrampResponse,
+  RampsPixDecodeResponse,
   RampsQuoteQuery,
   RampsQuoteResponse,
   RampsSignatureBody,
@@ -13,6 +17,21 @@ import type {
   RampsTransactionResponse,
   RampTxStatus,
 } from '../../types';
+import { PollarApiError } from '../../types';
+
+/**
+ * Wrap an error body into a {@link PollarApiError}, keeping every field the API
+ * sent. Ramp failures are the ones a UI most needs to explain - an amount below
+ * the provider's minimum, a stale quote, pending KYC - and collapsing them to
+ * the bare code left the caller with nothing to say beyond it.
+ *
+ * `message` stays the code, so anything rendering `err.message` is unaffected.
+ */
+function rampApiError(error: unknown, fallback: string): PollarApiError {
+  const body = (typeof error === 'object' && error !== null ? error : {}) as Record<string, unknown>;
+  const code = typeof body.code === 'string' ? body.code : typeof body.error === 'string' ? body.error : fallback;
+  return new PollarApiError(code, body);
+}
 
 /**
  * GET /ramps/countries
@@ -21,7 +40,7 @@ import type {
  */
 export async function getRampCountries(api: PollarApiClient): Promise<RampsCountriesResponse> {
   const { data, error } = await api.GET('/ramps/countries');
-  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to get ramp countries');
+  if (!data?.content || error) throw rampApiError(error, 'Failed to get ramp countries');
   return data.content;
 }
 
@@ -33,7 +52,7 @@ export async function getRampCountries(api: PollarApiClient): Promise<RampsCount
  */
 export async function getRampsQuote(api: PollarApiClient, query: RampsQuoteQuery): Promise<RampsQuoteResponse> {
   const { data, error } = await api.GET('/ramps/quote', { params: { query } });
-  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to get ramp quotes');
+  if (!data?.content || error) throw rampApiError(error, 'Failed to get ramp quotes');
   return data.content;
 }
 
@@ -45,7 +64,7 @@ export async function getRampsQuote(api: PollarApiClient, query: RampsQuoteQuery
  */
 export async function createOnRamp(api: PollarApiClient, body: RampsOnrampBody): Promise<RampsOnrampResponse> {
   const { data, error } = await api.POST('/ramps/onramp', { body });
-  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to create onramp');
+  if (!data?.content || error) throw rampApiError(error, 'Failed to create onramp');
   return data.content;
 }
 
@@ -56,7 +75,7 @@ export async function createOnRamp(api: PollarApiClient, body: RampsOnrampBody):
  */
 export async function createOffRamp(api: PollarApiClient, body: RampsOfframpBody): Promise<RampsOfframpResponse> {
   const { data, error } = await api.POST('/ramps/offramp', { body });
-  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to create offramp');
+  if (!data?.content || error) throw rampApiError(error, 'Failed to create offramp');
   return data.content;
 }
 
@@ -69,8 +88,7 @@ export async function createOffRamp(api: PollarApiClient, body: RampsOfframpBody
  */
 export async function completeWithdraw(api: PollarApiClient, txId: string): Promise<RampsCompleteResponse> {
   const { data, error } = await api.POST('/ramps/transaction/{txId}/complete', { params: { path: { txId } } });
-  if (!data?.content || error)
-    throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to complete withdrawal');
+  if (!data?.content || error) throw rampApiError(error, 'Failed to complete withdrawal');
   return data.content;
 }
 
@@ -86,7 +104,7 @@ export async function submitRampSignature(
   body: RampsSignatureBody,
 ): Promise<RampsSignatureResponse> {
   const { data, error } = await api.POST('/ramps/transaction/{txId}/signature', { params: { path: { txId } }, body });
-  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to submit signature');
+  if (!data?.content || error) throw rampApiError(error, 'Failed to submit signature');
   return data.content;
 }
 
@@ -96,7 +114,45 @@ export async function submitRampSignature(
  */
 export async function getRampTransaction(api: PollarApiClient, txId: string): Promise<RampsTransactionResponse> {
   const { data, error } = await api.GET('/ramps/transaction/{txId}', { params: { path: { txId } } });
-  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to get transaction');
+  if (!data?.content || error) throw rampApiError(error, 'Failed to get transaction');
+  return data.content;
+}
+
+/**
+ * GET /ramps/liquidity
+ * Live liquidity on a payout rail. `available: false` means the rail cannot be
+ * served right now - quoting it succeeds and then fails downstream, so check
+ * before offering the corridor.
+ */
+export async function getRampLiquidity(api: PollarApiClient, rail: RampRail): Promise<RampsLiquidityResponse> {
+  const { data, error } = await api.GET('/ramps/liquidity', { params: { query: { rail } } });
+  if (!data?.content || error) throw rampApiError(error, 'Failed to get ramp liquidity');
+  return data.content;
+}
+
+/**
+ * GET /ramps/kyc-status
+ * Where the authenticated user stands with the ramp provider's identity checks.
+ * Poll after an off-ramp answered `kycRequired: true`: nothing was signed and no
+ * funds moved, so wait for `hasApproved` and then request a fresh quote.
+ */
+export async function getRampKycStatus(api: PollarApiClient): Promise<RampsKycStatusResponse> {
+  const { data, error } = await api.GET('/ramps/kyc-status');
+  if (!data?.content || error) throw rampApiError(error, 'Failed to get ramp KYC status');
+  return data.content;
+}
+
+/**
+ * GET /ramps/pix/decode
+ * Reads a Pix "copia e cola" payload into payee + amount. `decoded: null` means
+ * the code no longer resolves: dynamic Pix QRs carry a per-charge id and go
+ * stale once used or expired. Decode immediately before quoting, quote the
+ * amount it returns, and send the ORIGINAL payload as `qrCode` on the off-ramp -
+ * paying the bare key it decodes to gets rejected by the payee's bank.
+ */
+export async function decodePixQr(api: PollarApiClient, qrCode: string): Promise<RampsPixDecodeResponse> {
+  const { data, error } = await api.GET('/ramps/pix/decode', { params: { query: { qrCode } } });
+  if (!data?.content || error) throw rampApiError(error, 'Failed to decode Pix QR');
   return data.content;
 }
 

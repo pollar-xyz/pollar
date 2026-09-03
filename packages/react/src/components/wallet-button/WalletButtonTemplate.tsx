@@ -1,6 +1,5 @@
 'use client';
 
-import { WalletId } from '@pollar/core';
 import { LOGO_POLLAR } from '../../constants';
 import './WalletButton.css';
 
@@ -18,7 +17,6 @@ export interface WalletButtonTemplateProps {
   itemColor: string;
   wrapperRef: React.RefObject<HTMLDivElement>;
   isInProgress: boolean;
-  walletType: WalletId | null;
   /** Show the "Create account" action (external wallet not yet on-chain, IMMEDIATE funding). */
   showCreateAccount: boolean;
   creatingAccount: boolean;

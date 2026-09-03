@@ -50,7 +50,7 @@ export const createWalletsSignRoute = (deps: AdapterDeps) => {
       let walletId = deps.walletCache.get(walletAddress);
 
       if (!walletId) {
-        // Cache miss: resolve userId → did:privy: and inspect linked_accounts
+        // Cache miss: resolve userId -> did:privy: and inspect linked_accounts
         // to find the matching wallet. We do NOT auto-create here; sign without
         // a pre-existing wallet must surface as WALLET_NOT_FOUND so the caller
         // can route through the create flow first.
@@ -86,7 +86,7 @@ export const createWalletsSignRoute = (deps: AdapterDeps) => {
       } catch (err) {
         // Cache may have a stale walletId (wallet detached / deleted on
         // Privy side between resolution and now). Evict so the next request
-        // re-resolves from Privy — this request still fails, but we don't
+        // re-resolves from Privy - this request still fails, but we don't
         // keep returning errors for the same stale entry until TTL expires.
         if (err instanceof NotFoundError) {
           deps.walletCache.delete(walletAddress);
@@ -107,7 +107,7 @@ export const createWalletsSignRoute = (deps: AdapterDeps) => {
       const err = error instanceof Error ? error : new Error(String(error));
       // Raw error goes to the host's `onError` callback for server-side logging
       // (Privy SDK errors can include user IDs, rate-limit context, internal
-      // identifiers — none of which the caller should see). The HTTP response
+      // identifiers - none of which the caller should see). The HTTP response
       // is intentionally code-only.
       deps.config.onError?.(err, { endpoint: 'POST /wallets/sign', body: parsed });
       return c.var.error(ErrorCode.TX_SIGN_FAILED, 502);

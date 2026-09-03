@@ -1,5 +1,34 @@
 # Upgrade guide
 
+## 0.11.2 -> 0.11.3
+
+No breaking changes. 0.11.3 is a patch: sessions survive reloads when the DPoP
+keypair fails to persist, `logout()` no longer races an in-flight or newer
+login, cross-tab session writes are serialized and ownership-gated, and a
+consumer-built `PollarClient` passed to `PollarProvider` keeps passkey login.
+
+One packaging change: `@pollar/core` moved from `dependencies` to
+`peerDependencies` in `@pollar/react`. The old `dependencies` entry could
+install a second, package-local copy of core, which broke `instanceof`, split
+the live-client registry, and let two clients share one persisted session row.
+On npm 7+ there is nothing to do - peer dependencies install automatically. On
+npm 6, Yarn 1, or with `--legacy-peer-deps`, add `@pollar/core` to your own
+dependencies. `@pollar/react@0.11.3` requires `@pollar/core@^0.11.3`; if you
+pin both packages to exact versions, keep them on the same version.
+
+One type-level removal in `@pollar/react`: `WalletButtonTemplateProps` no
+longer carries `walletType`. The default template never rendered it (the
+wallet-logo mapping lives in the transaction modal, which derives its own
+value). If a custom wallet-button template of yours read `props.walletType`,
+reconstruct it from the wallet exposed by `usePollar()`:
+
+```tsx
+const { wallet } = usePollar();
+const walletType = wallet?.custody === 'external' ? wallet.provider : null;
+```
+
+See the [CHANGELOG](./CHANGELOG.md) for the details.
+
 ## 0.11.1 -> 0.11.2
 
 No breaking changes and no migration steps. 0.11.2 is additive: the
