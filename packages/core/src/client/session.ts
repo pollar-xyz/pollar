@@ -148,7 +148,7 @@ export function isValidSession(value: unknown, logger: PollarLogger = console): 
   }
 
   // The wallet object is always present; `type` discriminates internal (G,
-  // platform-custodied), smart/passkey (C), and external wallets. `address` is
+  // platform-managed), smart/passkey (C), and external wallets. `address` is
   // the on-chain address for all types.
   //
   // This guard runs against BOTH the persisted shape and the raw `/auth/login`

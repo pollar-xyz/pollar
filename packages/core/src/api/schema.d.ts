@@ -84,7 +84,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Sign a Soroban authorization entry (Stellar, custodial) */
+        /** Sign a Soroban authorization entry (Stellar, embedded) */
         post: operations["postTxSignAuthEntry"];
         delete?: never;
         options?: never;
@@ -120,7 +120,7 @@ export interface paths {
         put?: never;
         /**
          * Atomic build + sign + submit (multichain, one round-trip)
-         * @description Custodial wallets only. `chain` defaults to STELLAR, which behaves exactly as v1. SOLANA takes an SPL/SOL transfer with integer base-unit amounts and a required idempotencyKey.
+         * @description Embedded wallets only. `chain` defaults to STELLAR, which behaves exactly as v1. SOLANA takes an SPL/SOL transfer with integer base-unit amounts and a required idempotencyKey.
          */
         post: operations["postTxBuildSignSubmit"];
         delete?: never;
@@ -241,7 +241,7 @@ export interface paths {
         put?: never;
         /**
          * Enable or remove a trustline for an enabled asset
-         * @description Establishes (no limit) or removes (limit '0') a trustline on the authenticated user's custodial wallet. When the asset is app-configured and sponsoring is on, the app wallets pay the reserve + fee; otherwise the server self-pays with the user's own wallet. Either way it submits server-side and returns the refreshed enabled-asset list. The wallet and network are derived from the session.
+         * @description Establishes (no limit) or removes (limit '0') a trustline on the authenticated user's embedded wallet. When the asset is app-configured and sponsoring is on, the app wallets pay the reserve + fee; otherwise the server self-pays with the user's own wallet. Either way it submits server-side and returns the refreshed enabled-asset list. The wallet and network are derived from the session.
          */
         post: operations["postWalletAssetsTrustline"];
         delete?: never;
@@ -261,7 +261,7 @@ export interface paths {
         put?: never;
         /**
          * Build a sponsored trustline for an external wallet to co-sign
-         * @description Builds a changeTrust for an EXTERNAL / adapter-managed wallet whose key the platform does not hold, and returns it for the caller to co-sign with its own wallet and broadcast via POST /tx/submit. When the app covers it, the response is `sponsorSignedXdr` (sponsor already signed, app pays the 0.5 XLM reserve + fee); otherwise it's `unsignedXdr`, a plain self-pay change_trust the trustor signs and pays for. The `sponsored` flag says which. Custodial wallets should use POST /wallet/assets/trustline instead. The wallet and network are derived from the session.
+         * @description Builds a changeTrust for an EXTERNAL / adapter-managed wallet whose key the platform does not hold, and returns it for the caller to co-sign with its own wallet and broadcast via POST /tx/submit. When the app covers it, the response is `sponsorSignedXdr` (sponsor already signed, app pays the 0.5 XLM reserve + fee); otherwise it's `unsignedXdr`, a plain self-pay change_trust the trustor signs and pays for. The `sponsored` flag says which. Embedded wallets should use POST /wallet/assets/trustline instead. The wallet and network are derived from the session.
          */
         post: operations["postWalletAssetsTrustlineBuild"];
         delete?: never;
@@ -281,7 +281,7 @@ export interface paths {
         put?: never;
         /**
          * Build a sponsored account creation for an external wallet to co-sign
-         * @description Builds a sponsored createAccount (the new account is created with a "0" starting balance; the app sponsor wallet pays the base reserve and the fee) and signs ONLY the sponsor, returning the partially-signed XDR. Use this for EXTERNAL wallets (Freighter / client-side Privy) whose key the platform does not hold: the caller adds the new-account signature client-side and broadcasts via POST /tx/submit. Custodial wallets are created on the server during login. Trustlines are a separate step — request each via POST /wallet/assets/trustline/build. The wallet and network are derived from the session.
+         * @description Builds a sponsored createAccount (the new account is created with a "0" starting balance; the app sponsor wallet pays the base reserve and the fee) and signs ONLY the sponsor, returning the partially-signed XDR. Use this for EXTERNAL wallets (Freighter / client-side Privy) whose key the platform does not hold: the caller adds the new-account signature client-side and broadcasts via POST /tx/submit. Embedded wallets are created on the server during login. Trustlines are a separate step — request each via POST /wallet/assets/trustline/build. The wallet and network are derived from the session.
          */
         post: operations["postWalletAccountCreateBuild"];
         delete?: never;
@@ -771,8 +771,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Sign a message (SEP-53 ownership proof, custodial)
-         * @description Signs a plaintext message with the user's custodial wallet using the SEP-53 "Stellar Signed Message" framing. Returns the base64 signature and signer address. External wallets sign client-side in the SDK.
+         * Sign a message (SEP-53 ownership proof, embedded)
+         * @description Signs a plaintext message with the user's embedded wallet using the SEP-53 "Stellar Signed Message" framing. Returns the base64 signature and signer address. External wallets sign client-side in the SDK.
          */
         post: operations["postStellarSep53Sign"];
         delete?: never;
@@ -791,8 +791,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Sign a SEP-10 web-auth challenge (ownership proof, custodial)
-         * @description Signs a verifier-issued SEP-10 challenge transaction with the user's custodial wallet. wallet-service validates the challenge is a harmless, un-submittable SEP-10 tx before signing. External wallets sign client-side in the SDK.
+         * Sign a SEP-10 web-auth challenge (ownership proof, embedded)
+         * @description Signs a verifier-issued SEP-10 challenge transaction with the user's embedded wallet. wallet-service validates the challenge is a harmless, un-submittable SEP-10 tx before signing. External wallets sign client-side in the SDK.
          */
         post: operations["postStellarSep10Sign"];
         delete?: never;
@@ -1252,7 +1252,7 @@ export interface paths {
         put?: never;
         /**
          * Complete an offramp (on-chain payment)
-         * @description Once anchor KYC is done and the anchor is awaiting the on-chain transfer, build + sign + submit the withdraw payment. Custodial wallets complete server-side; EXTERNAL wallets get a pendingSignature to sign and submit via the signature endpoint.
+         * @description Once anchor KYC is done and the anchor is awaiting the on-chain transfer, build + sign + submit the withdraw payment. Embedded wallets complete server-side; EXTERNAL wallets get a pendingSignature to sign and submit via the signature endpoint.
          */
         post: operations["postRampsTransactionByTxIdComplete"];
         delete?: never;

@@ -162,7 +162,7 @@ const {
   // Transactions
   tx, // TransactionState
   buildTx, // (operation, params, options?) => Promise<BuildOutcome>
-  signAndSubmitTx, // (unsignedXdr?: string) => Promise<SubmitOutcome>  (custodial; XDR optional)
+  signAndSubmitTx, // (unsignedXdr?: string) => Promise<SubmitOutcome>  (embedded; XDR optional)
   signTx, // (unsignedXdr: string) => Promise<SignOutcome>  (external-wallet only)
   sendPayment, // (params: SendPaymentParams) => Promise<SubmitOutcome>
   submitTx, // (signedXdr: string) => Promise<SubmitOutcome>

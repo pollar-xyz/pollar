@@ -398,7 +398,7 @@
 > Stable release. Published under the default `latest` dist-tag
 > (`npm i @pollar/core`). Headline: **Stellar ownership proofs** — the new
 > `client.stellar` namespace signs SEP-53 messages and SEP-10 challenges across
-> custodial and external wallets — and the **Transaction History modal goes
+> embedded and external wallets — and the **Transaction History modal goes
 > multichain**. Additive, non-breaking on top of 0.11.1.
 
 ### Highlights (since 0.11.1)
@@ -406,10 +406,10 @@
 - **`client.stellar` — SEP ownership proofs.** `sep53.signMessage(message)` and
   `sep10.sign({ challengeXdr, ... })` prove wallet ownership to a verifier. Each
   dispatches by wallet type: external wallets sign client-side via their
-  adapter, custodial wallets sign server-side through sdk-api, and smart
+  adapter, embedded wallets sign server-side through sdk-api, and smart
   (passkey) wallets are rejected with a clear error (no classic ed25519 key).
   Both paths return the same `sep53` scheme (base64 signature + signer address),
-  so external and custodial proofs are interchangeable for a verifier.
+  so external and embedded proofs are interchangeable for a verifier.
 - **Multichain Transaction History modal.** The History modal gains the network
   picker and address chip the Balance / Send modals already have, per-chain
   explorer links, and the unified `{ amount, unit }` fee.
@@ -424,15 +424,15 @@
     wallets sign through the new **optional `signStellarMessage`** on the
     `WalletAdapter` interface (Freighter implements it via the v6 native
     `signMessage`; Albedo throws — its `sign_message` intent cannot produce a
-    SEP-53 signature). Custodial wallets post to `/v2/stellar/sep53/sign`. The
+    SEP-53 signature). Embedded wallets post to `/v2/stellar/sep53/sign`. The
     signature is base64 ed25519 over the SEP-53 digest
     (`SHA-256("Stellar Signed Message:\n" + message)`) on every path.
   - `sep10.sign({ challengeXdr, homeDomains?, webAuthDomain? })` — SEP-10
     challenge ownership proof. External wallets reuse the adapter's existing
-    `signTransaction`; custodial wallets post to `/v2/stellar/sep10/sign`,
+    `signTransaction`; embedded wallets post to `/v2/stellar/sep10/sign`,
     which reuses the audited sign-sep10-challenge path (validates the challenge
     is un-submittable). Passing the verifier domains enables full SEP-10
-    validation on the custodial path.
+    validation on the embedded path.
 - New exported types: `StellarSepApi`, `StellarMessageProof`, `Sep10SignParams`,
   `Sep10Proof`, `SignMessageOptions`, `SignMessageResponse`.
 - `@stellar/freighter-api` bumped `2.0.0` → `6.0.0` and `FreighterAdapter`
@@ -490,7 +490,7 @@
 
 > Stable release. Published under the default `latest` dist-tag
 > (`npm i @pollar/core`). Headline: the per-chain wallet rework plus **Solana
-> custodial wallets can send** — the atomic tx endpoint went multichain and the
+> embedded wallets can send** — the atomic tx endpoint went multichain and the
 > Send / Receive modals gained the network picker the balance and asset modals
 > already had.
 
@@ -507,7 +507,7 @@
   "unavailable" from "zero". `WalletBalanceRecord.balance` is therefore
   `string | null`.
 - **Send on Stellar and Solana.** `sendPayment()` is one entry point across
-  chains; Solana custodial sends land through the multichain atomic endpoint, and
+  chains; Solana embedded sends land through the multichain atomic endpoint, and
   the Send / Receive modals carry the network picker. Polygon is browse-only: it
   has no transfer path yet, so the Send modal blocks it and `sendPayment()`
   returns an error for it.
@@ -554,7 +554,7 @@
   Solana. Stellar routes through `buildAndSignAndSubmitTx`, so external adapters
   and passkey wallets keep the split build → sign → submit flow; chains whose
   signature expires (a Solana blockhash lapses in ~60s) do the whole thing in
-  one server-side call and are **custodial-only** for now. An `idempotencyKey`
+  one server-side call and are **embedded-only** for now. An `idempotencyKey`
   is minted per call, because a Solana submit is a single non-idempotent shot
   and a transport retry would otherwise transfer twice. `SendPaymentParams`
   carries a `POLYGON` member for the shape, but there is no transfer path for it
@@ -567,7 +567,7 @@
   cannot represent the value at all. More fractional digits than the asset has
   is an error, not a silent truncation, which would send less than was typed.
 - `setTrustline` no longer takes a `sponsored` opt-in flag. The app config
-  decides who pays server-side: custodial wallets hit `POST /wallet/assets/trustline`
+  decides who pays server-side: embedded wallets hit `POST /wallet/assets/trustline`
   (the server sponsors or self-pays, then submits), external wallets hit
   `/wallet/assets/trustline/build` and co-sign whichever XDR comes back
   (`sponsorSignedXdr` or a plain `unsignedXdr`). Pass `skipSponsorship` to force
@@ -741,7 +741,7 @@
   XDR server-side, then sign + submit through the `runTx` state machine. Smart
   (passkey) wallets fail fast for now.
 - **`createAccount()`** creates an external wallet's classic account on-chain via a
-  sponsored `createAccount`; not applicable to custodial (server-created) or smart
+  sponsored `createAccount`; not applicable to embedded (server-created) or smart
   (C-address) wallets.
 - **`existsOnStellar` + `fundingMode` surfaced on the wallet.**
 - **All swap builds executable.** `swap()` dispatches on the quote build union
@@ -991,7 +991,7 @@
 - **External-wallet signing** — SEP-10 challenges are validated before signing
   (including via custom providers); `signAuthEntry` signs on the currently
   configured network; smart-wallet sessions return an explicit error instead of
-  hitting the custodial endpoint.
+  hitting the embedded endpoint.
 - **Secret redaction** — request/response bodies and error logs no longer print
   access/refresh tokens, the DPoP key, OTPs, or signed XDRs (while keeping
   diagnostic error `code`s).
@@ -1065,9 +1065,9 @@ network?, deployTxHash? }`. `address` is the on-chain address for every type
 
 ### `@pollar/core` — fixes
 
-- **Login no longer clears the session on every custodial (email/OAuth) login.**
+- **Login no longer clears the session on every embedded (email/OAuth) login.**
   `authenticate()` validates the raw `/auth/login` wire response with
-  `isValidSession()` **before** `_storeSession` remaps `custodial → internal`,
+  `isValidSession()` **before** `_storeSession` remaps `embedded → internal`,
   so the transitional wire value `'custodial'` is tolerated at the guard and the
   flow no longer falls through to the error branch → `clearSession()`
   (`[PollarClient] Session cleared`). Callers still remap it before it reaches
@@ -1434,7 +1434,7 @@ const client = new PollarClient({ apiKey, walletAdapter });
 ### `@pollar/core` — BREAKING (behavior)
 
 - **`submitTx` always routes through `/tx/submit`.** External wallets no longer
-  submit directly to the public RPC; both custodial and external paths now go
+  submit directly to the public RPC; both embedded and external paths now go
   through sdk-api. Wins:
   - end-to-end `tx_records` persistence with full phase lifecycle so the
     developer dashboard can show every tx at
@@ -1494,7 +1494,7 @@ const client = new PollarClient({ apiKey, walletAdapter });
 Adds a per-call outcome API so headless callers can `await` a transaction and
 inspect the result instead of subscribing to `onTransactionStateChange`. Adds
 split `signTx` / `submitTx` for both wallet types, a one-shot atomic path
-for custodial flows, and a richer `TransactionState` vocabulary so modal UIs
+for embedded flows, and a richer `TransactionState` vocabulary so modal UIs
 can render every phase honestly (including the previously-elided "submitted
 to network, waiting for ledger" intermediate state). Existing `0.7.x`
 consumers that don't render `TransactionState` themselves keep working
@@ -1512,14 +1512,14 @@ unchanged.
 - **`signTx(unsignedXdr)`** and **`submitTx(signedXdr, { submissionToken? })`** —
   split-flow primitives that return `SignOutcome` / `SubmitOutcome`. External
   wallets sign locally via the adapter and submit directly to Stellar RPC.
-  Custodial wallets go through new sdk-api endpoints (`/tx/sign`,
+  Embedded wallets go through new sdk-api endpoints (`/tx/sign`,
   `/tx/submit`) so the wallet-service tracks the lifecycle and enforces
   idempotency by `submissionToken` (mapped to `idempotencyKey` server-side).
 - **`buildAndSignAndSubmitTx(operation, params, options?)`** and its alias
   **`runTx(...)`** — one method that picks the optimal path per wallet type:
   - External wallets: composes `buildTx + signAndSubmitTx` client-side,
     preserving `building → signing → success` state-machine transitions.
-  - Custodial wallets: single round-trip to `/tx/build-sign-submit`. The
+  - Embedded wallets: single round-trip to `/tx/build-sign-submit`. The
     signed XDR never leaves the backend. Skips intermediate state-machine
     transitions — if you need granular UI feedback, use `buildTx`, `signTx`,
     `submitTx` separately instead.
@@ -1549,8 +1549,8 @@ The `TransactionState` discriminated union grew from 6 step values to 11:
 - `signed` — signed XDR in hand, waiting for `submitTx`
 - `submitting` — pushing signed XDR to the network
 - `submitted` — Horizon ack received, ledger confirmation pending (previously misreported as `success`)
-- `signing-submitting` — compound state for `signAndSubmitTx` custodial (atomic `/tx/sign-and-send` round-trip — the SDK can't observe the sign/submit boundary inside)
-- `building-signing-submitting` — compound state for `runTx` / `buildAndSignAndSubmitTx` custodial (atomic `/tx/build-sign-submit` round-trip)
+- `signing-submitting` — compound state for `signAndSubmitTx` embedded (atomic `/tx/sign-and-send` round-trip — the SDK can't observe the sign/submit boundary inside)
+- `building-signing-submitting` — compound state for `runTx` / `buildAndSignAndSubmitTx` embedded (atomic `/tx/build-sign-submit` round-trip)
 
 **Changed**:
 
@@ -1760,7 +1760,7 @@ fails.
   can be passed via the provider's `config` prop.
 - **`sessionState` type narrowed** — context value's session is now `PollarPersistedSession | null`. Consumers reading
   `sessionState.data.*` need to migrate to `pollarClient.getUserProfile()`.
-- **`walletAddress` simplified** — for both external and custodial wallets, derived from
+- **`walletAddress` simplified** — for both external and embedded wallets, derived from
   `sessionState.wallet.publicKey`.
 - **New: `SessionsModal`** — drop-in active-sessions UI. Lists every refresh-token family for the current user with
   device metadata, marks the local session, and offers per-row revoke + a "Sign out everywhere" button. Available via
@@ -1968,9 +1968,9 @@ The following names exported from `usePollar()` have been renamed for consistenc
 
 - **New:** External wallet support (Freighter, Albedo, etc.) — users can now sign and submit transactions directly from
   their own wallet without Pollar holding the keys
-- **Refactor:** `signAndSubmitTx()` now handles both custodial (social/email login) and external wallet flows —
+- **Refactor:** `signAndSubmitTx()` now handles both embedded (social/email login) and external wallet flows —
   `signAndSubmitExternalTx()` removed
-- **Fix:** Connecting with an external wallet no longer triggers custodial wallet creation on the backend
+- **Fix:** Connecting with an external wallet no longer triggers embedded wallet creation on the backend
 
 ### `@pollar/react`
 

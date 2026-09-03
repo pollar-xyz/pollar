@@ -13,14 +13,14 @@ without ever seeing a secret key. The same client also connects external wallets
 xBull) so both kinds of user go through one code path.
 
 The SDK is `@pollar/core` (framework agnostic) plus `@pollar/react` (provider, hooks, and prebuilt
-modals). Server-side signing, sponsorship, and key custody live behind the Pollar API, configured from
+modals). Server-side signing, sponsorship, and key management live behind the Pollar API, configured from
 [dashboard.pollar.xyz](https://dashboard.pollar.xyz).
 
 ## When to use this skill
 
 - The app wants Stellar accounts for users who do not have a wallet and should not manage keys
 - Onboarding must be gasless: the app pays the base reserve, trustline reserves, and fees
-- One login flow has to cover both embedded (custodial) and external (Freighter / Albedo) wallets
+- One login flow has to cover both embedded and external (Freighter / Albedo) wallets
 - The app needs passkey smart accounts (Soroban C-addresses) instead of classic G-addresses
 - The app needs payments, trustlines, swaps, SEP-24 fiat ramps, or SEP-10 / SEP-53 ownership proofs
   on top of that wallet
@@ -60,11 +60,11 @@ Requires Node 20+ in the toolchain and React 18+ for `@pollar/react`.
 Every authenticated session carries a wallet with one of three custody types. Almost every branch in an
 integration comes down to which one the user has, so read it once and keep it:
 
-| `custody`  | What it is                                                                       | Address | Signing                                   |
-| ---------- | -------------------------------------------------------------------------------- | ------- | ----------------------------------------- |
-| `internal` | Custodial wallet Pollar creates at login. The default for social and email users | `G...`  | Server-side, sponsored per the app config |
-| `smart`    | Soroban smart account deployed for a device passkey                              | `C...`  | WebAuthn ceremony on the device           |
-| `external` | A wallet the user already had, connected through an adapter                      | `G...`  | The user's own extension or signer        |
+| `custody`  | What it is                                                                                                   | Address | Signing                                   |
+| ---------- | ------------------------------------------------------------------------------------------------------------ | ------- | ----------------------------------------- |
+| `internal` | Embedded wallet Pollar provisions at login, keys managed server-side. The default for social and email users | `G...`  | Server-side, sponsored per the app config |
+| `smart`    | Soroban smart account deployed for a device passkey                                                          | `C...`  | WebAuthn ceremony on the device           |
+| `external` | A wallet the user already had, connected through an adapter                                                  | `G...`  | The user's own extension or signer        |
 
 ```ts
 const wallet = client.getWallet(); // WalletInfo | null

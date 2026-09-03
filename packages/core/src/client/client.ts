@@ -2023,7 +2023,7 @@ export class PollarClient {
    * when eligible); pass `skipSponsorship` to force the user's own wallet to pay,
    * mirroring the opt-out on the payment / swap / contract fee-bump surfaces. The
    * route is by wallet type, and each server endpoint sponsors-or-self-pays:
-   *  - **Custodial** (internal wallet, no adapter) -> one call to
+   *  - **Embedded** (internal wallet, no adapter) -> one call to
    *    `/wallet/assets/trustline`: the server holds the trustor key and either
    *    sponsors or self-pays, then submits, returning the refreshed asset list.
    *  - **External/adapter** -> `/wallet/assets/trustline/build` returns a
@@ -2080,7 +2080,7 @@ export class PollarClient {
       return this.runTx('change_trust', changeTrustParams);
     }
 
-    // Custodial: one server call. The server sponsors when the app config allows
+    // Embedded: one server call. The server sponsors when the app config allows
     // and self-pays otherwise, submitting either way and returning the refreshed
     // asset list - the client no longer decides the route.
     if (!this._walletAdapter && walletType === 'internal') {
@@ -2140,7 +2140,7 @@ export class PollarClient {
    * and fee) and signs only the sponsor. This client adds the new-account
    * signature with the user's own wallet and broadcasts it via the submit path.
    *
-   * Not applicable to custodial (internal) wallets - those are created on the
+   * Not applicable to embedded (internal) wallets - those are created on the
    * server at login - nor to smart (C-address) wallets, which don't use classic
    * accounts. Trustlines are a separate step: see {@link setTrustline}.
    */
@@ -2153,7 +2153,7 @@ export class PollarClient {
       return { status: 'error', details: 'Account creation does not apply to smart wallets' };
     }
     if (!this._walletAdapter && walletType === 'internal') {
-      return { status: 'error', details: 'Custodial wallets are created on the server at login' };
+      return { status: 'error', details: 'Embedded wallets are created on the server at login' };
     }
 
     try {
@@ -2322,9 +2322,9 @@ export class PollarClient {
   /**
    * For an EXTERNAL-wallet session whose signing adapter isn't attached (the host
    * didn't re-register the same `walletAdapters` this run, or the persisted
-   * walletType row was lost), the custodial signer can't help: the platform holds
+   * walletType row was lost), the embedded signer can't help: the platform holds
    * no key for a user-owned wallet. Return a clear reconnect error so the host can
-   * prompt the user, instead of POSTing to the custodial endpoint for a confusing
+   * prompt the user, instead of POSTing to the embedded endpoint for a confusing
    * 4xx. The session stays valid (reads/refresh still work); only signing needs the
    * wallet reconnected, so this is an error, NOT a logout.
    */
@@ -2339,7 +2339,7 @@ export class PollarClient {
    * Signs the given unsigned XDR and returns the signed XDR.
    *
    * - External wallets: signs locally via the wallet adapter.
-   * - Custodial wallets: posts to `/tx/sign`. The backend signs (through
+   * - Embedded wallets: posts to `/tx/sign`. The backend signs (through
    *   wallet-service or the app's customer-managed adapter) and returns the
    *   signed XDR plus an `idempotencyKey` the caller should echo back to
    *   `submitTx`.
@@ -2396,7 +2396,7 @@ export class PollarClient {
       }
     }
 
-    // Custodial path: backend signs and returns the XDR + idempotencyKey. By
+    // Embedded path: backend signs and returns the XDR + idempotencyKey. By
     // default the backend also applies sponsorship (per the app's dashboard
     // config), returning a fee-bumped envelope the caller can broadcast directly
     // - the app pays the fee. Pass `skipSponsorship` to force the user to pay.
@@ -2446,7 +2446,7 @@ export class PollarClient {
    * entry is returned as base64 XDR for the caller to compose into its tx.
    *
    * - External wallets (Freighter/Albedo) sign the entry via the provider.
-   * - Custodial wallets are signed by the backend, which FIRST validates the
+   * - Embedded wallets are signed by the backend, which FIRST validates the
    *   entry's invocation tree against the app's contract/function allowlist and
    *   caps the validity window - entries touching a non-allowlisted contract or
    *   function, or expiring too far ahead, are rejected.
@@ -2485,7 +2485,7 @@ export class PollarClient {
     }
 
     // Smart-wallet (C-address/passkey) sessions sign auth entries with their
-    // passkey credential, NOT the custodial endpoint. Standalone signAuthEntry
+    // passkey credential, NOT the embedded endpoint. Standalone signAuthEntry
     // doesn't run that ceremony, so return an explicit, actionable error instead
     // of silently POSTing to /tx/sign-auth-entry (which would sign with the wrong
     // key / 4xx). Mirrors the smart guards on the signing paths.
@@ -2496,7 +2496,7 @@ export class PollarClient {
       };
     }
 
-    // Custodial path: backend enforces the app's auth-entry policy, then signs.
+    // Embedded path: backend enforces the app's auth-entry policy, then signs.
     const address = this._session?.wallet?.address ?? '';
     try {
       const { data, error } = await this._api.POST('/tx/sign-auth-entry', {
@@ -2521,7 +2521,7 @@ export class PollarClient {
    *
    * - External wallets sign client-side via the adapter's `signStellarMessage`
    *   (Freighter/SWK produce the SEP-53 framing natively; Albedo has none).
-   * - Custodial wallets sign server-side via `/stellar/sep53/sign`, where the
+   * - Embedded wallets sign server-side via `/stellar/sep53/sign`, where the
    *   backend applies the mandatory SEP-53 prefix.
    * - Smart (passkey) wallets cannot: a C-address has no classic ed25519 key.
    */
@@ -2550,7 +2550,7 @@ export class PollarClient {
       }
     }
 
-    // Custodial: backend signs with the user's key (SEP-53 prefix enforced there).
+    // Embedded: backend signs with the user's key (SEP-53 prefix enforced there).
     try {
       const { data, error } = await this._api.POST('/stellar/sep53/sign', { body: { address, message } });
       if (!error && data?.success && data.content?.signature) {
@@ -2575,7 +2575,7 @@ export class PollarClient {
    * check with `WebAuth.readChallengeTx`.
    *
    * - External wallets sign the challenge transaction via the adapter.
-   * - Custodial wallets sign via `/stellar/sep10/sign`, which reuses the audited
+   * - Embedded wallets sign via `/stellar/sep10/sign`, which reuses the audited
    *   sign-sep10-challenge endpoint (validates the challenge is un-submittable).
    * - Smart (passkey) wallets cannot: SEP-10 is for classic accounts.
    */
@@ -2606,7 +2606,7 @@ export class PollarClient {
       }
     }
 
-    // Custodial path.
+    // Embedded path.
     try {
       const { data, error } = await this._api.POST('/stellar/sep10/sign', {
         body: {
@@ -2731,9 +2731,9 @@ export class PollarClient {
 
   /**
    * Submits a signed XDR via `/tx/submit` regardless of wallet type
-   * (custodial or external). Routing through sdk-api gives us:
+   * (embedded or external). Routing through sdk-api gives us:
    *   - End-to-end tx_records persistence with full phase lifecycle so the
-   *     developer dashboard can show every tx (both custodial and external
+   *     developer dashboard can show every tx (both embedded and external
    *     wallet flows) at `/apps/:id/monitor/transactions`.
    *   - Idempotency tracking via `submissionToken` (returned by `signTx`).
    *   - A single response shape (SUCCESS / PENDING / FAILED) shared by both
@@ -2765,7 +2765,7 @@ export class PollarClient {
           // well under the timeout, so it can't trip a transport-retry replay.
           waitForConfirmation: false,
         },
-        // Custodial submit does server-side work (wallet-service sign + network
+        // Embedded submit does server-side work (wallet-service sign + network
         // submit) that can exceed the 10s default; give it the longer budget.
         headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
       });
@@ -2826,7 +2826,7 @@ export class PollarClient {
    * - **External wallets**: composes `signTx` + `submitTx` client-side. State
    *   machine sees the full granular sequence `signing -> signed -> submitting
    *   -> success` because the underlying methods each emit.
-   * - **Custodial wallets**: atomic `/tx/sign-and-send` round-trip. State
+   * - **Embedded wallets**: atomic `/tx/sign-and-send` round-trip. State
    *   machine emits the compound `signing-submitting` step (the SDK can't
    *   observe when one phase ends and the next begins inside that single
    *   backend call) and then transitions to `submitted` (Horizon ack only) or
@@ -2868,7 +2868,7 @@ export class PollarClient {
       return this.submitTx(signed.signedXdr);
     }
 
-    // Custodial - atomic single backend call. Compound state.
+    // Embedded - atomic single backend call. Compound state.
     const buildData = this._currentBuildData();
     const outcomeExtra: { buildData?: TxBuildContent } = buildData ? { buildData } : {};
 
@@ -2952,13 +2952,13 @@ export class PollarClient {
    *   State machine sees the full granular sequence (`building -> built ->
    *   signing -> signed -> submitting -> success`) because each composed call
    *   emits its own transitions.
-   * - **Custodial wallets**: single round-trip to `/tx/build-sign-submit`. The
+   * - **Embedded wallets**: single round-trip to `/tx/build-sign-submit`. The
    *   signed XDR never leaves the backend. State machine emits the compound
    *   `building-signing-submitting` step (the SDK can't observe individual
    *   phase boundaries inside one atomic call) and then transitions to
    *   `submitted` / `success` / `error[phase: 'building-signing-submitting']`.
    *
-   * If you need granular UI feedback for custodial flows (separate
+   * If you need granular UI feedback for embedded flows (separate
    * "Building...", "Signing...", "Submitting..." indicators), call `buildTx`,
    * `signTx`, and `submitTx` separately instead.
    */
@@ -2987,7 +2987,7 @@ export class PollarClient {
       return this.signAndSubmitTx(built.buildData.unsignedXdr);
     }
 
-    // Custodial path - single backend call, compound state-machine step.
+    // Embedded path - single backend call, compound state-machine step.
     if (!this._session?.wallet?.address) {
       this._setTransactionState({ step: 'error', phase: 'building-signing-submitting', details: 'No wallet connected' });
       return { status: 'error', details: 'No wallet connected' };
@@ -3056,7 +3056,7 @@ export class PollarClient {
    * external adapters and passkey wallets via the split flow), while a chain
    * whose signature expires does the whole thing in one server-side call.
    *
-   * Custodial-only outside Stellar: a non-Stellar external wallet would have to
+   * Embedded-only outside Stellar: a non-Stellar external wallet would have to
    * sign client-side, and that path is not wired yet.
    */
   async sendPayment(params: SendPaymentParams): Promise<SubmitOutcome> {
@@ -3796,7 +3796,7 @@ export class PollarClient {
         }
       }
       // Only restore an adapter for an EXTERNAL session - those are the only ones
-      // signed via an adapter. `internal` is custodial (server-signed) and `smart`
+      // signed via an adapter. `internal` is embedded (server-signed) and `smart`
       // is passkey-signed; attaching an adapter to either (from a stale walletType
       // row left by a prior external login that was switched away from without a
       // logout) would mis-route their signing to the wrong key. (`_storeSession`
@@ -3807,7 +3807,7 @@ export class PollarClient {
       if (storedType) {
         // Look the adapter up in the registry. If it's no longer registered
         // (e.g. the consumer dropped the kit-adapter package), the session stays
-        // valid; signing falls back to the server-side custodial path until the
+        // valid; signing falls back to the server-side embedded path until the
         // user reconnects a wallet.
         const restored = this._walletAdapters.get(storedType);
         if (restored) this._walletAdapter = restored;

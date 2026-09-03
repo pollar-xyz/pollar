@@ -112,7 +112,7 @@ change needed if you use those.
 ### 5. `setTrustline` drops the `sponsored` opt-in flag
 
 `setTrustline(asset, { sponsored: true })` no longer type-checks. Who pays is now
-decided server-side from the app config, not by a caller flag: custodial wallets
+decided server-side from the app config, not by a caller flag: embedded wallets
 hit `POST /wallet/assets/trustline` (the server sponsors or self-pays, then
 submits) and external wallets co-sign whichever XDR the build endpoint returns.
 The only knob left is the opt-out `skipSponsorship`, which forces a self-pay
