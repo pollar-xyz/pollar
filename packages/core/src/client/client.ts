@@ -102,6 +102,7 @@ import {
   WalletBalanceState,
   WalletChain,
   WalletInfo,
+  WalletProvisioning,
 } from '../types';
 import { POLLAR_CORE_VERSION } from '../version';
 import { defaultVisibilityProvider } from '../visibility/autodetect';
@@ -177,6 +178,21 @@ function notifySiblingClients(origin: PollarClient, apiKey: string, log: PollarL
 
 /** Renew the access token this many seconds before its `exp` to absorb clock skew + signing latency. */
 const REFRESH_SKEW_SECONDS = 60;
+
+/**
+ * Pacing for the wallet-provisioning watch: 1s, 2s, 3s ... to a 10s ceiling, for
+ * at most 12 checks (~75s).
+ *
+ * The ramp is linear rather than exponential because the thing being waited on
+ * lands in seconds: doubling would put the third check at 7s and the fourth at
+ * 15s, so a wallet ready at 6s would look unready for another nine. The cap is
+ * there so a client left open on a wallet the server gave up on stops asking -
+ * nothing is lost by stopping, since the next login or session resume
+ * re-enqueues the creation.
+ */
+const PROVISIONING_BASE_DELAY_MS = 1_000;
+const PROVISIONING_MAX_DELAY_MS = 10_000;
+const PROVISIONING_MAX_ATTEMPTS = 12;
 
 /**
  * Cross-copy brand for `PollarClient`, stamped on every instance.
@@ -316,10 +332,22 @@ export class PollarClient {
    *  PollarClientConfig.submitTimeoutMs). Sent as an `x-pollar-timeout-ms`
    *  header the request middleware reads to bound just those calls. */
   private readonly _submitTimeoutMs: number;
+  /** Per-request budget for `POST /auth/login` (PollarClientConfig.loginTimeoutMs). */
+  private readonly _loginTimeoutMs: number;
   /** Updated by the request middleware. Read by the silent-refresh scheduler
    *  to skip proactive refreshes after `maxIdleMs` of no HTTP activity. */
   private _lastRequestAt: number = Date.now();
   private _refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Poll for the on-chain account a login left in CREATING. Under async
+   * provisioning the wallet address exists before the account does, and nothing
+   * else would ever tell the app the wait is over: `/wallet/state` is a DB read,
+   * so polling it is cheap, and the answer it gives is the same one the server's
+   * operation guard enforces.
+   */
+  private _provisioningTimer: ReturnType<typeof setTimeout> | null = null;
+  private _provisioningAttempt = 0;
+  private _walletStateListeners = new Set<(provisioning: WalletProvisioning) => void>();
   private _visibilityUnsubscribe: (() => void) | null = null;
 
   private _transactionState: TransactionState | null = null;
@@ -447,6 +475,7 @@ export class PollarClient {
     this._maxIdleMs = config.maxIdleMs;
     this._requestTimeoutMs = config.requestTimeoutMs ?? 10_000;
     this._submitTimeoutMs = config.submitTimeoutMs ?? 30_000;
+    this._loginTimeoutMs = config.loginTimeoutMs ?? 45_000;
     this._openAuthUrl = config.openAuthUrl ?? defaultWebOAuthOpener;
     // `window.location` can be absent even when `isBrowser` is true (some
     // webview/SSR shims expose a partial `window`); read it defensively so the
@@ -678,6 +707,7 @@ export class PollarClient {
     this._resumeController?.abort();
     this._resumeController = null;
     this._clearRefreshTimer();
+    this._stopProvisioningWatch();
     if (this._visibilityUnsubscribe) {
       this._visibilityUnsubscribe();
       this._visibilityUnsubscribe = null;
@@ -689,6 +719,7 @@ export class PollarClient {
     this._txHistoryStateListeners.clear();
     this._sessionsStateListeners.clear();
     this._walletBalanceStateListeners.clear();
+    this._walletStateListeners.clear();
     this._enabledAssetsStateListeners.clear();
     this._networkStateListeners.clear();
     this._storageDegradeListeners.clear();
@@ -1286,6 +1317,137 @@ export class PollarClient {
     if (this._refreshTimer !== null) {
       clearTimeout(this._refreshTimer);
       this._refreshTimer = null;
+    }
+  }
+
+  // --- Wallet provisioning watch -----------------------------------------------
+
+  /**
+   * Subscribe to the on-chain readiness of the platform-managed Stellar wallet.
+   *
+   * Under async provisioning login returns before the account is on the ledger,
+   * so this is how a UI knows when to stop showing "preparing your account" and
+   * when a payment will actually be accepted. Replays the current value on
+   * subscribe (same contract as {@link onAuthStateChange}), so a late subscriber
+   * is never left waiting for a transition that already happened.
+   *
+   * Emits only on CHANGE. A wallet that was already READY at login emits READY
+   * once, on subscribe, and never again.
+   */
+  onWalletStateChange(cb: (provisioning: WalletProvisioning) => void): () => void {
+    this._walletStateListeners.add(cb);
+    const current = this._session?.wallet?.provisioning;
+    if (current) cb(current);
+    return () => this._walletStateListeners.delete(cb);
+  }
+
+  /**
+   * Ask the server where the wallet's on-chain account stands, right now, and
+   * store the answer.
+   *
+   * The watch below calls this on a schedule; it is public because a host that
+   * knows better than a timer (a screen the user just opened, a pull to refresh)
+   * should not have to wait for the next tick. Returns null when there is no
+   * session or the server could not answer - never throws, since a readiness
+   * check failing is not a reason to break the caller's flow.
+   */
+  async refreshWalletState(): Promise<WalletProvisioning | null> {
+    if (!this._session) return null;
+    const gen = this._sessionGeneration;
+    try {
+      const { data } = await this._api.GET('/wallet/state');
+      const provisioning = data?.content?.provisioning;
+      if (!provisioning) return null;
+      await this._applyWalletProvisioning(gen, provisioning);
+      return provisioning;
+    } catch (err) {
+      this._log.debug('[PollarClient] wallet state check failed', err);
+      return null;
+    }
+  }
+
+  /**
+   * Write a new provisioning value into the session and tell everyone.
+   *
+   * Both the back-compat `wallet` and the matching `wallets[]` entry are updated
+   * so the two can never disagree - a caller reading `getWallets()` would
+   * otherwise still see CREATING after `getWallet()` went READY.
+   */
+  private async _applyWalletProvisioning(gen: number, provisioning: WalletProvisioning): Promise<void> {
+    if (this._destroyed || this._sessionGeneration !== gen || !this._session) return;
+    if (this._session.wallet.provisioning === provisioning) return;
+
+    const address = this._session.wallet.address;
+    this._session = {
+      ...this._session,
+      wallet: { ...this._session.wallet, provisioning, existsOnStellar: provisioning === 'READY' },
+      ...(this._session.wallets
+        ? {
+            wallets: this._session.wallets.map((w) =>
+              w.address === address ? { ...w, provisioning, existsOnStellar: provisioning === 'READY' } : w,
+            ),
+          }
+        : {}),
+    };
+
+    try {
+      await this._persistSession(gen, this._session);
+    } catch (err) {
+      // In-memory state is still correct for this process; a storage hiccup must
+      // not cost the app the transition it is waiting for.
+      this._log.error('[PollarClient] Failed to persist wallet provisioning', err);
+    }
+    if (this._destroyed || this._sessionGeneration !== gen) return;
+
+    if (this._authState.step === 'authenticated') {
+      this._setAuthState({ ...this._authState, session: this._session });
+    }
+    for (const cb of this._walletStateListeners) cb(provisioning);
+  }
+
+  /**
+   * Start polling while the account is being created, if it is.
+   *
+   * Backs off from 1s to 10s and gives up after {@link PROVISIONING_MAX_ATTEMPTS}
+   * - over a minute, well past the seconds a healthy creation takes and past the
+   * congestion that motivated the async path. Giving up is safe: the next login
+   * or session resume re-enqueues a creation that never landed, so the wallet
+   * heals on the user's next visit even if this client stopped watching.
+   */
+  private _startProvisioningWatch(): void {
+    this._stopProvisioningWatch();
+    if (this._destroyed || this._session?.wallet?.provisioning !== 'CREATING') return;
+    this._provisioningAttempt = 0;
+    this._scheduleProvisioningCheck();
+  }
+
+  private _scheduleProvisioningCheck(): void {
+    const attempt = this._provisioningAttempt;
+    if (attempt >= PROVISIONING_MAX_ATTEMPTS) {
+      this._log.debug('[PollarClient] wallet provisioning watch gave up; the next login or resume retries it');
+      return;
+    }
+    const delay = Math.min(PROVISIONING_BASE_DELAY_MS * (attempt + 1), PROVISIONING_MAX_DELAY_MS);
+    const gen = this._sessionGeneration;
+    this._provisioningTimer = setTimeout(() => {
+      this._provisioningTimer = null;
+      void (async () => {
+        if (this._destroyed || this._sessionGeneration !== gen) return;
+        this._provisioningAttempt += 1;
+        const provisioning = await this.refreshWalletState();
+        // READY is the finish line; FAILED means the server stopped trying too,
+        // and polling a decision that only a new login can change is noise.
+        if (provisioning === 'READY' || provisioning === 'FAILED') return;
+        if (this._destroyed || this._sessionGeneration !== gen) return;
+        this._scheduleProvisioningCheck();
+      })();
+    }, delay);
+  }
+
+  private _stopProvisioningWatch(): void {
+    if (this._provisioningTimer !== null) {
+      clearTimeout(this._provisioningTimer);
+      this._provisioningTimer = null;
     }
   }
 
@@ -2303,6 +2465,7 @@ export class PollarClient {
     const extra = {
       ...(opts.includeChain && w.chain !== undefined ? { chain: w.chain } : {}),
       ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
+      ...(w.provisioning !== undefined ? { provisioning: w.provisioning } : {}),
       ...(w.fundingMode !== undefined ? { fundingMode: w.fundingMode } : {}),
     };
     switch (w.type) {
@@ -3647,6 +3810,7 @@ export class PollarClient {
       // readable `response.body`, so those clients poll the non-streaming
       // status endpoint instead. `isBrowser` is false in RN and SSR alike.
       useStreaming: isBrowser,
+      loginTimeoutMs: this._loginTimeoutMs,
       signal,
       // Suppress terminal writes from a flow that was CANCELLED or SUPERSEDED
       // (its `signal` is aborted) so a late-resolving loser can't clobber the
@@ -3962,6 +4126,10 @@ export class PollarClient {
       this._profile = { ...content };
       this._resetResumeBackoff();
       this._setAuthState({ step: 'authenticated', session: this._session, verified: true });
+      // A wallet restored mid-creation resumes its watch here. The server's own
+      // resume re-enqueues a creation that never landed, so by the time the
+      // first check fires there is something to wait for again.
+      this._startProvisioningWatch();
     } catch (err) {
       if ((err as { name?: string })?.name === 'AbortError') return;
       // Network failure (no response) - keep the optimistic (unverified) session
@@ -3993,6 +4161,11 @@ export class PollarClient {
       address: w.address ?? w.publicKey ?? null,
       ...(w.chain !== undefined ? { chain: w.chain } : {}),
       ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
+      // `provisioning` reached the v2 login payload after the generated OpenAPI
+      // types were last cut, so read it defensively until they're regen'd.
+      ...((w as { provisioning?: WalletProvisioning }).provisioning
+        ? { provisioning: (w as { provisioning?: WalletProvisioning }).provisioning }
+        : {}),
       ...(w.fundingMode !== undefined ? { fundingMode: w.fundingMode } : {}),
       ...(w.createdAt !== undefined ? { createdAt: w.createdAt } : {}),
       ...(w.linkedAt !== undefined ? { linkedAt: w.linkedAt } : {}),
@@ -4072,6 +4245,9 @@ export class PollarClient {
     // session is already server-validated -> `verified: true`.
     this._setAuthState({ step: 'authenticated', session: persisted, verified: true });
     this._scheduleNextRefresh();
+    // A login that returned before the account was on the ledger leaves the
+    // wallet CREATING. Nothing else would tell the app when that ends.
+    this._startProvisioningWatch();
   }
 
   /**
@@ -4085,6 +4261,7 @@ export class PollarClient {
    */
   private async _clearSession(): Promise<boolean> {
     this._log.info('[PollarClient] Session cleared');
+    this._stopProvisioningWatch();
     // Identify the session being torn down BEFORE dropping it: the persisted
     // row is shared by every document (and every client instance) on this
     // origin using this API key, so it may only be removed by the client that

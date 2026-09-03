@@ -21,6 +21,15 @@ export type PollarApplicationConfigContent = PollarApplicationConfigResponse['co
  *   - 'external' -> user-connected wallet (Freighter/Albedo)
  * `address` is the on-chain address for every type.
  */
+/**
+ * How far along a platform-managed Stellar wallet is in its on-chain setup.
+ *
+ * Only the ACCOUNT is described. Trustlines are added incrementally over an
+ * app's life, so a wallet does not leave READY because a token was enabled
+ * yesterday - per-asset state is `getAssets()`.
+ */
+export type WalletProvisioning = 'READY' | 'CREATING' | 'FAILED';
+
 export interface PollarPersistedWallet {
   type: 'internal' | 'smart' | 'external';
   // The login method, 1:1 with `type` (fixed at account creation server-side):
@@ -37,6 +46,12 @@ export interface PollarPersistedWallet {
   // minted before multi-chain omit it (those are always STELLAR).
   chain?: WalletChain;
   existsOnStellar?: boolean;
+  // Where the platform-managed Stellar account stands in its on-chain setup.
+  // Present only on that wallet, and only from sdk-api v2 onward.
+  //   READY    -> on the ledger; operations are accepted
+  //   CREATING -> queued or in flight; operations are refused for now
+  //   FAILED   -> retried to exhaustion; the next login or resume tries again
+  provisioning?: WalletProvisioning;
   // The app's funding policy: IMMEDIATE = Pollar funds/creates the account at
   // onboarding; DEFERRED = left to the app. Lets the UI decide whether to offer
   // on-chain account creation. Optional: older sessions omit it.
@@ -129,6 +144,7 @@ export type WalletInfo =
       provider: PollarAuthMethod | (string & {}) | null;
       chain?: WalletChain;
       existsOnStellar?: boolean;
+      provisioning?: WalletProvisioning;
       fundingMode?: 'IMMEDIATE' | 'DEFERRED';
     }
   | {
@@ -137,6 +153,7 @@ export type WalletInfo =
       provider: 'passkey';
       chain?: WalletChain;
       existsOnStellar?: boolean;
+      provisioning?: WalletProvisioning;
       fundingMode?: 'IMMEDIATE' | 'DEFERRED';
     }
   | {
@@ -145,6 +162,7 @@ export type WalletInfo =
       provider: WalletId | (string & {}) | null;
       chain?: WalletChain;
       existsOnStellar?: boolean;
+      provisioning?: WalletProvisioning;
       fundingMode?: 'IMMEDIATE' | 'DEFERRED';
     };
 
@@ -199,6 +217,21 @@ export interface PollarClientConfig {
    * Defaults to `30000` (30s).
    */
   submitTimeoutMs?: number;
+  /**
+   * Per-request timeout (ms) for the final `POST /auth/login`, instead of
+   * {@link requestTimeoutMs}.
+   *
+   * That call is where a login does its real server-side work - minting tokens,
+   * resolving the wallet, and, for an app whose account creation runs inline,
+   * waiting on the Stellar network. The 10s default that protects every other
+   * request is far too tight for it: a congested network has pushed it past a
+   * minute, and the client aborting mid-flight does not stop the server, so the
+   * work completed with nobody left to receive the tokens.
+   *
+   * Defaults to `45000` (45s). It is a backstop, not a fix - an app whose
+   * account creation is asynchronous returns in a couple of seconds.
+   */
+  loginTimeoutMs?: number;
   /**
    * Automatic retry with backoff for idempotent, transient-failure SDK HTTP
    * (token refresh + GETs), to absorb a single dropped request before surfacing
@@ -776,6 +809,28 @@ export function isPollarApiError(err: unknown): err is PollarApiError {
     err instanceof PollarApiError ||
     (typeof err === 'object' && err !== null && (err as { name?: unknown }).name === 'PollarApiError')
   );
+}
+
+/**
+ * The server's code for "this wallet's Stellar account is not on the ledger yet".
+ *
+ * Under asynchronous provisioning a login returns before the account exists, so
+ * every on-chain operation in that window is refused with this rather than left
+ * to fail as `op_no_source_account` on the network.
+ */
+export const WALLET_NOT_READY_CODE = 'SDK_WALLET_NOT_READY';
+
+/**
+ * True when a failure is "the wallet is still being prepared".
+ *
+ * Accepts either a thrown {@link PollarApiError} or a returned transaction
+ * outcome, since the tx methods report failures as a value rather than throwing.
+ * The right response is to wait - {@link PollarClient.onWalletStateChange} fires
+ * when the account lands - not to retry immediately.
+ */
+export function isWalletNotReady(errorOrOutcome: unknown): boolean {
+  if (typeof errorOrOutcome !== 'object' || errorOrOutcome === null) return false;
+  return (errorOrOutcome as { code?: unknown }).code === WALLET_NOT_READY_CODE;
 }
 
 /** Type guard for {@link PollarNetworkError} (instanceof is unreliable across

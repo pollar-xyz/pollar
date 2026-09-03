@@ -212,6 +212,15 @@ function isValidWallet(value: unknown, label: string, logger: PollarLogger): boo
     logger.debug(`[PollarClient:session] Invalid session — ${label}.existsOnStellar must be boolean if present`);
     return false;
   }
+  if (
+    w['provisioning'] !== undefined &&
+    w['provisioning'] !== 'READY' &&
+    w['provisioning'] !== 'CREATING' &&
+    w['provisioning'] !== 'FAILED'
+  ) {
+    logger.debug(`[PollarClient:session] Invalid session — ${label}.provisioning must be READY|CREATING|FAILED if present`);
+    return false;
+  }
   if (w['createdAt'] !== undefined && (typeof w['createdAt'] !== 'number' || !Number.isFinite(w['createdAt']))) {
     logger.debug(`[PollarClient:session] Invalid session — ${label}.createdAt must be a finite number if present`);
     return false;

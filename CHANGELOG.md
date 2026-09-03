@@ -1,5 +1,54 @@
 # Changelog
 
+## Unreleased
+
+> Additive. The platform now creates an end-user's Stellar account in the
+> background instead of inside `POST /auth/login`, so a login returns as soon as
+> the wallet exists rather than waiting on the network. This release is the SDK
+> half of that: the wallet reports where its on-chain account stands, and the
+> client watches it until the account lands.
+
+### `@pollar/core`
+
+- **New: `onWalletStateChange(cb)`.** Fires when the platform-managed Stellar
+  wallet's on-chain account changes state (`CREATING` → `READY`, or `FAILED`).
+  Replays the current value on subscribe, the same contract as
+  `onAuthStateChange`, so a late subscriber never waits for a transition that
+  already happened. This is what a "preparing your account" state should be
+  driven by.
+- **New: `wallet.provisioning`** on `getWallet()` / `getWallets()` and on the
+  persisted session — `'READY' | 'CREATING' | 'FAILED'`. Only the ACCOUNT is
+  described: trustlines are added incrementally over an app's life, so a wallet
+  does not leave `READY` because a token was enabled yesterday (per-asset state
+  is `getAssets()`). Absent on sessions minted before this release.
+- **New: `refreshWalletState()`** for a host that knows better than a timer (a
+  screen the user just opened, a pull to refresh). Returns the current
+  provisioning value, or `null` when there is no session or the server could not
+  answer. Never throws.
+- **New: `isWalletNotReady(errorOrOutcome)` and `WALLET_NOT_READY_CODE`.** While
+  the account is off the ledger the server refuses on-chain operations with
+  `SDK_WALLET_NOT_READY` (409) instead of letting each one fail as
+  `op_no_source_account`. The helper accepts either a thrown `PollarApiError` or
+  a returned transaction outcome, since the tx methods report failures as a
+  value. The right response is to wait for `onWalletStateChange`, not to retry.
+- **New: `config.loginTimeoutMs` (default 45s).** `POST /auth/login` used the
+  10s `requestTimeoutMs` that protects every other request, and that is the one
+  call where a login does real server-side work. Under network congestion it ran
+  past a minute, so the client aborted while the server kept going and finished
+  the login with nobody left to receive the tokens. It is a backstop, not a fix:
+  an app on the asynchronous path returns in a couple of seconds.
+- The client polls `GET /v2/wallet/state` while a wallet is `CREATING` — 1s, 2s,
+  3s … to a 10s ceiling, at most 12 checks. It stops on `READY` or `FAILED`, on
+  logout and on `destroy()`. Giving up is safe: the next login or session resume
+  re-enqueues a creation that never landed.
+
+**Upgrading:** nothing is required. An app that reads none of the above behaves
+exactly as before — the login response carries the same fields it always did,
+and `existsOnStellar` keeps the value it always had on a first login (`false`,
+since it is read before the account is created). What changes for an
+un-updated client is timing: a payment attempted in the first seconds after
+signup now returns `SDK_WALLET_NOT_READY` instead of succeeding.
+
 ## 0.11.3
 
 > Patch release. Headlines: **sessions no longer die on reload when the DPoP

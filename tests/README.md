@@ -56,6 +56,9 @@ node tests/smoke-session-races.cjs
 - The persisted session does NOT contain `data.*` PII fields
 - Storage keys are namespaced by `apiKeyHash`
 - `client.logout()` clears storage and resets the keypair
+- A wallet restored mid-provisioning is polled until its account lands:
+  `onWalletStateChange` replays `CREATING` on subscribe, reports `READY` when
+  the account reaches the ledger, updates `getWallet()`, and stops polling
 
 ### `smoke-providers.cjs`
 

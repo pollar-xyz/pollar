@@ -207,6 +207,74 @@ async function waitFor(cond, timeoutMs = 1000) {
   check('  apiKeyHash works after ready()', typeof client2.apiKeyHash === 'string' && client2.apiKeyHash.length === 32);
   client2.destroy();
 
+  console.log('\n── 10. A wallet mid-provisioning is watched until it lands ───');
+  // Async provisioning: login returns before the Stellar account exists, so the
+  // client polls /wallet/state and reports the transition. Its own fetch mock,
+  // so the call counting here cannot be disturbed by the blocks above.
+  // The block-1 client still holds this API key; two live clients on one key
+  // share a session and warn about it, which would be noise here.
+  client.destroy();
+  const provStorage = sdk.createMemoryAdapter();
+  await provStorage.set(
+    sessionKey,
+    JSON.stringify({
+      clientSessionId: 'cs-prov',
+      userId: 'u',
+      status: 'CONSUMED',
+      token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+      user: { ready: true },
+      wallet: {
+        type: 'internal',
+        address: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+        provisioning: 'CREATING',
+      },
+    }),
+  );
+
+  const prevFetch = globalThis.fetch;
+  let stateCalls = 0;
+  let reported = 'CREATING';
+  globalThis.fetch = async (req) => {
+    if (req.url.includes('/wallet/state')) {
+      stateCalls++;
+      return new Response(
+        JSON.stringify({
+          success: true,
+          code: 'SDK_WALLET_STATE',
+          content: {
+            address: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+            chain: 'STELLAR',
+            provisioning: reported,
+            existsOnStellar: reported === 'READY',
+          },
+        }),
+        { status: 200 },
+      );
+    }
+    return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
+  };
+
+  const provClient = new sdk.PollarClient({ apiKey, storage: provStorage, baseUrl: 'https://x.test' });
+  await provClient.ready();
+  const seen = [];
+  const unsubscribe = provClient.onWalletStateChange((p) => seen.push(p));
+  check('replays the current value on subscribe', seen[0] === 'CREATING', seen);
+
+  // The account lands between the first check and the second.
+  reported = 'READY';
+  await waitFor(() => seen.includes('READY'), 6000);
+  check('reports READY once the account is on the ledger', seen[seen.length - 1] === 'READY');
+  check('  and the wallet carries it', provClient.getWallet()?.provisioning === 'READY');
+  check('  and existsOnStellar follows', provClient.getWallet()?.existsOnStellar === true);
+
+  const callsAtReady = stateCalls;
+  await new Promise((r) => setTimeout(r, 1500));
+  check('stops polling once READY', stateCalls === callsAtReady, { callsAtReady, stateCalls });
+
+  unsubscribe();
+  provClient.destroy();
+  globalThis.fetch = prevFetch;
+
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
 })().catch((err) => {
