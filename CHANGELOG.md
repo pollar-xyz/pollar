@@ -139,7 +139,9 @@
     the commit, so commit-time failures were silent), and the new optional
     `KeyManager.ensurePersisted()` (implemented by both `WebCryptoKeyManager`
     and `NobleKeyManager`) is called at login just before the key is bound:
-    it re-writes and read-back-verifies the key, and the client warns
+    it re-writes the key and verifies that what storage hands back is that
+    same key (by thumbprint, so another tab writing its own pair between the
+    two is caught rather than accepted), and the client warns
     `"the session will NOT survive a reload"` when persistence is
     unavailable — at login time, not as a mystery logout later. The re-write
     also heals a key deleted by another tab's `reset()`.
@@ -302,13 +304,18 @@
   scan, the payload as text when the server marks it worth pasting, and a map
   over `fields` - none of which knows which provider served the route. Pollar's
   own QR arrives as inline markup so `currentColor` keeps it legible in both
-  themes; a provider's bitmap (`inlineSafe: false`) renders through an `<img>`
-  instead. A custom ramp template must adopt the normalized shape - this is
-  the type-level change flagged in the headline.
+  themes; anything not inline-safe renders through an `<img>` whose data URL
+  follows the declared `encoding`, so a provider's `utf8` SVG is escaped rather
+  than base64-wrapped into a URL no browser can decode. A custom ramp template
+  must adopt the normalized shape - this is the type-level change flagged in
+  the headline.
 - **Ramp KYC gate.** When an off-ramp answers `kycRequired: true` and the
   provider publishes no hosted KYC URL, the withdraw button is withheld with
   the reason stated (nothing was sent, nothing was signed) and
-  `getRampKycStatus()` is polled until the provider clears the user.
+  `getRampKycStatus()` is polled until the provider clears the user. Approval
+  unblocks the next quote, not that one: the provider consumed its quote when
+  it asked for KYC, so the transaction stays blocked for good and the approved
+  state offers a "Request a new quote" button instead of the withdraw.
 - **Amount limits are enforced and explained before submitting.** The widget
   checks the amount against the chosen route's `minAmount` / `maxAmount` (the
   limits already travelled on the quote and nothing read them) and renders the

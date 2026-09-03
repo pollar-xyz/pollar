@@ -288,6 +288,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setTxStatus(null);
     setStellarTxHash(null);
     setDepositInstructions(null);
+    setKycPending(false);
+    setKycApproved(false);
     if (!keepMessage) setErrorMsg(null);
   }
 
@@ -441,12 +443,13 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     }
   }
 
-  // A pending link-less KYC gate blocks the withdraw: the provider has no payment
-  // context to pay into yet, so completing would either fail or - worse - move
-  // real funds into a deposit it cannot pay out.
+  // A link-less KYC gate blocks the withdraw for good: the provider consumed the
+  // quote when it answered `kycRequired`, so completing would either fail or -
+  // worse - move real funds into a deposit it cannot pay out. Approval clears the
+  // gate for the NEXT quote, not for this transaction, so `kycPending` (not
+  // `kycBlocking`) is what keeps the button away.
   const kycBlocking = kycPending && !kycApproved;
-  const canComplete =
-    direction === 'offramp' && step === 'status' && txStatus !== 'completed' && !stellarTxHash && !kycBlocking;
+  const canComplete = direction === 'offramp' && step === 'status' && txStatus !== 'completed' && !stellarTxHash && !kycPending;
 
   const flowSteps = flowStepsOf(quotes, selectedQuote);
   const flowStepIndex = flowSteps.indexOf(STEP_LABEL[step] ?? '');

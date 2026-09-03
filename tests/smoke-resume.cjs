@@ -45,7 +45,10 @@ globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: 
 // Only the surface WebCryptoKeyManager touches: open/upgradeneeded, get/put/
 // delete, transaction `complete`/`abort` events (the durable-write path awaits
 // those), close. Values round-trip through structuredClone like real IDB.
-function makeIndexedDB() {
+// `readAs` makes every get hand back that value instead of what was stored -
+// it stands in for another tab overwriting the row between our write and our
+// read-back, which no single-threaded shim can produce on its own.
+function makeIndexedDB({ readAs } = {}) {
   const dbs = new Map();
   const fire = (t, type) => {
     const h = t['on' + type];
@@ -86,7 +89,11 @@ function makeIndexedDB() {
                 return r;
               };
               return {
-                get: (k) => wrap(() => (store.get(k) === undefined ? undefined : structuredClone(store.get(k)))),
+                get: (k) =>
+                  wrap(() => {
+                    if (readAs !== undefined) return readAs;
+                    return store.get(k) === undefined ? undefined : structuredClone(store.get(k));
+                  }),
                 put: (v, k) => wrap(() => (store.set(k, structuredClone(v)), k)),
                 delete: (k) => wrap(() => (store.delete(k), undefined)),
               };
@@ -348,6 +355,30 @@ function makeVisibility() {
       check('  no phantom authenticated state was emitted', !states.includes('authenticated'), `states=${states.join(',')}`);
       check('  session removed from storage', (await storage.get(`pollar:${b.apiKeyHash}:session`)) == null);
       b.destroy();
+    } finally {
+      globalThis.indexedDB = savedIdb;
+    }
+  }
+
+  console.log('\n── 3b. ensurePersisted() only trusts OUR key ──────────────────');
+  {
+    const apiKey = 'pk_smoke_resume_foreignkey';
+    const savedIdb = globalThis.indexedDB;
+    try {
+      globalThis.indexedDB = makeIndexedDB();
+      const km = new sdk.WebCryptoKeyManager(apiKey);
+      await km.init();
+      check('a freshly persisted keypair reads back as ours', (await km.ensurePersisted()) === true);
+
+      // Another tab rotated the shared row between our put and our get. A shape
+      // check accepts it, login binds the in-memory key, and the next reload
+      // adopts the other one - the thumbprint-mismatch logout, back again.
+      const foreign = await globalThis.crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, [
+        'sign',
+        'verify',
+      ]);
+      globalThis.indexedDB = makeIndexedDB({ readAs: foreign });
+      check("  a stored keypair that isn't ours is reported as not persisted", (await km.ensurePersisted()) === false);
     } finally {
       globalThis.indexedDB = savedIdb;
     }
