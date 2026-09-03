@@ -127,20 +127,17 @@ Units differ per side: the deposit `amount` is the underlying asset amount, whil
 is in the position's `withdrawUnit` (asset amount for Blend, share count for DeFindex). Smart wallets
 are not supported yet.
 
-## Fiat ramps (SEP-24)
+## Fiat ramps
 
-```ts
-const quote = await client.getRampsQuote(query);
-const onramp = await client.createOnRamp(body);
-const status = await client.pollRampTransaction(onramp.txId);
-```
+Moving money between local fiat rails and the wallet has its own file: [ramps.md](ramps.md). It
+covers quotes and the 15-minute `quoteId`, on-ramp deposit instructions, the two-step off-ramp,
+the three KYC shapes a result can carry, Pix QR payment, and the sign-and-resume loop for external
+wallets. The short version: every mutating call returns one `RampResult`, and the integration is a
+single function that branches on its optional fields in a fixed order.
 
-Embedded wallets get a `kycUrl` to open. External wallets get a `pendingSignature` to sign and resume
-through `submitRampSignature(txId, body)`. Off-ramps additionally need `completeWithdraw(txId)`. The
-rest of the surface: `getRampCountries`, `createOffRamp`, `getRampTransaction`.
-
-KYC has its own methods: `getKycProviders(country)`, `startKyc(body)`, `getKycStatus(providerId?)`,
-`pollKycStatus(providerId)`, `resolveKyc(providerId, level?)`.
+Identity verification outside a ramp run has its own methods on the client: `getKycProviders(country)`,
+`startKyc(body)`, `getKycStatus(providerId?)`, `pollKycStatus(providerId)`, `resolveKyc(providerId, level?)`,
+plus `openKycModal()` in `@pollar/react`.
 
 ## Ownership proofs (SEP-53 and SEP-10)
 

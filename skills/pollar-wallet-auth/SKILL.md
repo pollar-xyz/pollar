@@ -1,6 +1,6 @@
 ---
 name: pollar-wallet-auth
-description: Add email, social, or passkey login with an embedded Stellar wallet to a web or React Native app using @pollar/core and @pollar/react. Covers dashboard setup and API keys, sponsored (gasless) account activation and trustlines, payments, multi-venue swaps, SEP-24 ramps, and SEP-53 / SEP-10 ownership proofs. Use when app users need a Stellar wallet without a seed phrase or a browser extension.
+description: Add embedded Stellar wallets and local fiat on/off-ramps to a web or React Native app with @pollar/core and @pollar/react. Users sign in with email, social, or a passkey and get a funded account with no seed phrase; the same client quotes and runs fiat deposits and withdrawals, payments, sponsored (gasless) activation and trustlines, multi-venue swaps, and SEP-53 / SEP-10 ownership proofs. Use when an app needs Stellar wallets for people who do not have one, or needs to move money between fiat and Stellar.
 user-invocable: true
 argument-hint: '[pollar task]'
 ---
@@ -19,11 +19,13 @@ modals). Server-side signing, sponsorship, and key management live behind the Po
 ## When to use this skill
 
 - The app wants Stellar accounts for users who do not have a wallet and should not manage keys
+- Users need to move money between local fiat (SPEI, Pix, PSE, ACH, and so on) and their wallet:
+  on-ramp quotes, deposit instructions, off-ramp payouts, and the identity checks in between
 - Onboarding must be gasless: the app pays the base reserve, trustline reserves, and fees
 - One login flow has to cover both embedded and external (Freighter / Albedo) wallets
 - The app needs passkey smart accounts (Soroban C-addresses) instead of classic G-addresses
-- The app needs payments, trustlines, swaps, SEP-24 fiat ramps, or SEP-10 / SEP-53 ownership proofs
-  on top of that wallet
+- The app needs payments, trustlines, swaps, or SEP-10 / SEP-53 ownership proofs on top of that
+  wallet
 
 ## When NOT to use this skill
 
@@ -41,7 +43,8 @@ modals). Server-side signing, sponsorship, and key management live behind the Po
 | Which wallet a user got, addresses, balances                     | [Wallets and balances](#wallets-and-balances) (below) |
 | React and Next.js wiring, `usePollar`, prebuilt modals, branding | [react.md](react.md)                                  |
 | React Native and Expo, polyfills, secure storage, deep links     | [react-native.md](react-native.md)                    |
-| Payments, sponsorship, trustlines, swaps, ramps, earn, proofs    | [transactions.md](transactions.md)                    |
+| Fiat on/off-ramps: quotes, deposit instructions, KYC, payouts    | [ramps.md](ramps.md)                                  |
+| Payments, sponsorship, trustlines, swaps, earn, proofs           | [transactions.md](transactions.md)                    |
 | Things that silently break an integration                        | [Gotchas](#gotchas) (below)                           |
 
 ## Install
