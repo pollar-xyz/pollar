@@ -24,6 +24,21 @@
   line-height: 1.5;
 }
 
+/* The account behind this address is not on the ledger yet, so a payment to it
+   would be rejected. Reads as a caution, not an error: nothing has gone wrong,
+   the wallet is a few seconds from being usable. */
+.pollar-receive-notice {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  text-align: center;
+  margin: 0 0 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--pollar-card-border-radius, 10px);
+  border: 1px solid var(--pollar-border);
+  color: var(--pollar-text);
+  background: var(--pollar-input-bg);
+}
+
 /* ---- Address row (address + copy button side by side) ---- */
 .pollar-receive-address-row {
   display: flex;

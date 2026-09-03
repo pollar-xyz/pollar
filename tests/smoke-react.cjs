@@ -50,7 +50,7 @@ const React = require('react');
 const { act } = React;
 const { createRoot } = require('react-dom/client');
 const sdk = require(path.resolve(__dirname, '../packages/core/dist/index.js'));
-const { PollarProvider } = require(path.resolve(__dirname, '../packages/react/dist/index.js'));
+const { PollarProvider, usePollar } = require(path.resolve(__dirname, '../packages/react/dist/index.js'));
 
 let pass = 0;
 let fail = 0;
@@ -281,6 +281,83 @@ async function unmount(handle) {
     }
     check("  and leaves it alive, since it is not the provider's to destroy", alive);
     foreign.destroy();
+  }
+
+  console.log('\n── 6. A provisioning wallet reaches the consumer when it lands ─');
+  {
+    // The regression this guards: `sessionsEqual` decides whether an auth-state
+    // emission reaches React, and CREATING -> READY changes no other field on
+    // the session. Leaving `provisioning` out of that comparison swallows the
+    // one emission that says the wait is over, and every UI built on it stays
+    // frozen on "preparing" forever.
+    const apiKey = 'pk_react_provisioning';
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(apiKey));
+    const apiKeyHash = Array.from(new Uint8Array(digest).slice(0, 16))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    const address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
+    localStorage.setItem(
+      `pollar:${apiKeyHash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs-prov',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'internal', address, provisioning: 'CREATING' },
+      }),
+    );
+
+    const prevFetch = globalThis.fetch;
+    let reported = 'CREATING';
+    globalThis.fetch = async (req) => {
+      const url = typeof req === 'string' ? req : req.url;
+      if (url.includes('/wallet/state')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            code: 'SDK_WALLET_STATE',
+            content: { address, chain: 'STELLAR', provisioning: reported, existsOnStellar: reported === 'READY' },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
+    };
+
+    const seen = [];
+    function Consumer() {
+      const { wallet } = usePollar();
+      seen.push(wallet?.provisioning ?? null);
+      return null;
+    }
+    const handle = mount(
+      h(PollarProvider, { client: { apiKey, baseUrl: 'https://x.test' }, appConfig: APP_CONFIG }, h(Consumer)),
+    );
+    // Not the shared `render()`: its trailing settle sits outside act(), and
+    // this is the only block whose provider has a session to restore, so the
+    // restore + resume updates would land there and warn.
+    await act(async () => {
+      handle.root.render(handle.element);
+    });
+    await act(async () => {
+      await sleep(50);
+    });
+    check('the consumer sees the wallet mid-provisioning', seen.includes('CREATING'), seen);
+
+    // The account lands; the client's watch is what notices.
+    reported = 'READY';
+    const deadline = Date.now() + 6000;
+    while (!seen.includes('READY') && Date.now() < deadline) {
+      await act(async () => {
+        await sleep(200);
+      });
+    }
+    check('  and sees READY once it lands', seen.includes('READY'), seen);
+
+    await unmount(handle);
+    globalThis.fetch = prevFetch;
+    localStorage.removeItem(`pollar:${apiKeyHash}:session`);
   }
 
   console.log(`\n${pass} pass, ${fail} fail`);

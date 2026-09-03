@@ -25,6 +25,15 @@ export interface ReceiveModalTemplateProps {
   selectedChain: WalletChain | null;
   onSelectChain: (chain: WalletChain) => void;
   copied: boolean;
+  /**
+   * Why the wallet cannot receive yet (its Stellar account is still being
+   * created, or its creation failed), or null when it can.
+   *
+   * The address itself is valid either way - what is missing is the account
+   * behind it, so a payment sent now is rejected by the network. Optional, so a
+   * custom template written before this existed keeps compiling.
+   */
+  notReadyReason?: string | null;
   onCopy: () => void;
   onClose: () => void;
 }
@@ -38,6 +47,7 @@ export function ReceiveModalTemplate({
   selectedChain,
   onSelectChain,
   copied,
+  notReadyReason,
   onCopy,
   onClose,
 }: ReceiveModalTemplateProps) {
@@ -74,6 +84,8 @@ export function ReceiveModalTemplate({
           <div className="pollar-receive-qr">
             <QRCode value={walletAddress} size={180} fgColor={isDark ? '#ffffff' : '#111827'} bgColor="transparent" />
           </div>
+
+          {notReadyReason && <div className="pollar-receive-notice">{notReadyReason}</div>}
 
           <p className="pollar-receive-instructions">
             Share your {chainName} address to receive any asset. Only send {chainName} assets to this address. Funds sent from

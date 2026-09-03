@@ -207,6 +207,10 @@ double-invocation happens here.
   control and the assertion would stop meaning anything.
 - unmount destroys a provider-built client, and leaves a consumer-passed one alive
 - five mount/unmount cycles leak no `storage` listeners
+- a wallet restored mid-provisioning reaches the consumer when its account
+  lands. The session comparison and the context memo must BOTH carry
+  `provisioning`: either one omitting it swallows the transition, and every
+  screen built on it stays frozen on "preparing" forever
 
 The StrictMode block is what caught the orphan `PollarClient` this release fixes:
 the provider built the client in a `useState` initializer, StrictMode

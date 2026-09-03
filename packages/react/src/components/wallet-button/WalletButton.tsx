@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { walletNotReadyReason } from '../../lib/wallet-provisioning';
 import { useChains } from '../../useChains';
 import { WalletButtonTemplate } from './WalletButtonTemplate';
 import './WalletButton.css';
@@ -43,6 +44,11 @@ export function WalletButton() {
   // only refreshes on the next login/resume).
   const canCreateAccount =
     !created && wallet?.custody === 'external' && wallet.existsOnStellar === false && wallet.fundingMode === 'IMMEDIATE';
+  // A platform-managed wallet whose account is still being created. Surfaced in
+  // the dropdown rather than on the button: the address is real and copyable,
+  // what is missing is the account behind it. `null` for an external wallet,
+  // which the app never provisions (that one gets Create account above).
+  const notReadyReason = walletNotReadyReason(wallet, 'STELLAR');
 
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const isDark = theme === 'dark';
@@ -152,6 +158,7 @@ export function WalletButton() {
       wrapperRef={wrapperRef}
       isInProgress={isInProgress}
       showCreateAccount={canCreateAccount}
+      notReadyReason={notReadyReason}
       creatingAccount={creating}
       onToggleOpen={() => setOpen((v) => !v)}
       onCreateAccount={handleCreateAccount}

@@ -42,6 +42,32 @@
   logout and on `destroy()`. Giving up is safe: the next login or session resume
   re-enqueues a creation that never landed.
 
+### `@pollar/react`
+
+- **Fix: a wallet that finishes provisioning now reaches the UI.** Two guards
+  were swallowing the transition, and either one alone was enough to freeze
+  every screen built on it: `sessionsEqual` compared tokens and the wallet
+  address but not `provisioning`, so the auth-state emission was discarded as a
+  no-op; and the context memo recomputes on a fixed dependency list, which the
+  new field was not in. Both are covered by a regression check now (block 6 of
+  `smoke-react.cjs`).
+- The **Send** modal refuses to build a payment while the account is off the
+  ledger and says why, instead of letting the server's `SDK_WALLET_NOT_READY`
+  surface as a failed transaction. Kept separate from the existing
+  "network has no transfer path" message: collapsing them would tell someone
+  waiting on a brand-new wallet that Stellar does not support sending.
+- The **Receive** modal warns while the account is being created. The address is
+  valid and worth copying either way, but a payment sent to it right now is
+  rejected by the network - this is the one place the window can cost a user a
+  failed transfer from a third party.
+- The **wallet button** shows the same reason as a banner in its dropdown.
+- `walletNotReadyReason(wallet, chain)` is exported so a custom template phrases
+  the wait the same way the built-in ones do. Only STELLAR is gated, and only on
+  the ACCOUNT - a missing trustline never blocks the UI.
+- `SendModalTemplateProps`, `ReceiveModalTemplateProps` and
+  `WalletButtonTemplateProps` each gain an OPTIONAL `notReadyReason`, so a
+  custom template written before this keeps compiling untouched.
+
 **Upgrading:** nothing is required. An app that reads none of the above behaves
 exactly as before — the login response carries the same fields it always did,
 and `existsOnStellar` keeps the value it always had on a first login (`false`,

@@ -35,6 +35,17 @@ export interface SendModalTemplateProps {
   walletAddress: string;
   /** Can a payment be built on {@link selectedChain}? Stellar and Solana only. */
   canSendOnChain: boolean;
+  /**
+   * Why the wallet cannot act on-chain right now (its Stellar account is still
+   * being created, or its creation failed), or null when it can.
+   *
+   * Separate from {@link canSendOnChain}: that one is about the NETWORK not
+   * having a transfer path, this one about the user's own account. Collapsing
+   * them would tell someone waiting on a brand-new wallet that Stellar does not
+   * support sending. Optional, so a custom template written before this existed
+   * keeps compiling.
+   */
+  notReadyReason?: string | null;
   onSelectChain: (chain: WalletChain) => void;
   amount: string;
   destination: string;
@@ -73,6 +84,7 @@ export function SendModalTemplate({
   selectedChain,
   walletAddress,
   canSendOnChain,
+  notReadyReason,
   onSelectChain,
   amount,
   destination,
@@ -101,7 +113,8 @@ export function SendModalTemplate({
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
   const selectedKey = selectedAsset ? assetKey(selectedAsset) : '';
-  const canSubmit = canSendOnChain && !!selectedAsset && !!amount && !!destination.trim() && !isLoadingBalance;
+  const canSubmit =
+    canSendOnChain && !notReadyReason && !!selectedAsset && !!amount && !!destination.trim() && !isLoadingBalance;
 
   const title = step === 'form' ? 'Send' : txTitle;
 
@@ -176,6 +189,7 @@ export function SendModalTemplate({
           )}
 
           {!canSendOnChain && <div className="pollar-modal-empty">Sending is not available on this network yet.</div>}
+          {canSendOnChain && notReadyReason && <div className="pollar-modal-empty">{notReadyReason}</div>}
 
           {/* Asset selector */}
           <AssetSelect
