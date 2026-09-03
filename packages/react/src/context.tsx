@@ -130,7 +130,7 @@ interface PollarContextValue {
     options?: TxBuildBody['options'],
   ) => Promise<BuildOutcome>;
   signAndSubmitTx: (unsignedXdr?: string) => Promise<SubmitOutcome>;
-  /** External-wallet only. Embedded flows should use `signAndSubmitTx`. */
+  /** Sign only. Embedded sessions sign server-side, external sessions through their adapter. Smart wallets use `signAndSubmitTx`. */
   signTx: (unsignedXdr: string) => Promise<SignOutcome>;
   submitTx: (signedXdr: string) => Promise<SubmitOutcome>;
   /** One-shot: build -> sign -> submit. Drives the same TransactionState flow as the split calls. */

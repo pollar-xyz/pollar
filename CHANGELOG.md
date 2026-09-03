@@ -1067,7 +1067,7 @@ network?, deployTxHash? }`. `address` is the on-chain address for every type
 
 - **Login no longer clears the session on every embedded (email/OAuth) login.**
   `authenticate()` validates the raw `/auth/login` wire response with
-  `isValidSession()` **before** `_storeSession` remaps `embedded → internal`,
+  `isValidSession()` **before** `_storeSession` remaps `custodial → internal`,
   so the transitional wire value `'custodial'` is tolerated at the guard and the
   flow no longer falls through to the error branch → `clearSession()`
   (`[PollarClient] Session cleared`). Callers still remap it before it reaches

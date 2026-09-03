@@ -3807,8 +3807,7 @@ export class PollarClient {
       if (storedType) {
         // Look the adapter up in the registry. If it's no longer registered
         // (e.g. the consumer dropped the kit-adapter package), the session stays
-        // valid; signing falls back to the server-side embedded path until the
-        // user reconnects a wallet.
+        // valid; signing stays unavailable until the user reconnects the wallet.
         const restored = this._walletAdapters.get(storedType);
         if (restored) this._walletAdapter = restored;
         else this._log.warn('[PollarClient] No registered wallet adapter for stored id', { id: storedType });
