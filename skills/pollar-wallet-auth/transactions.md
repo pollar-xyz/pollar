@@ -7,7 +7,7 @@ wallet's `custody` (`internal`, `smart`, `external`), and the SDK hides most of 
 
 ```ts
 client.buildTx(operation, params, options?); // unsigned XDR from the Pollar API
-client.signTx(unsignedXdr, options?); // custodial: server signs; external: adapter signs
+client.signTx(unsignedXdr, options?); // embedded: server signs; external: adapter signs
 client.submitTx(signedXdr); // broadcast
 ```
 
@@ -23,14 +23,14 @@ client.sendPayment(params); // one entry point for a payment
 // Stellar payment
 await client.sendPayment({ destination: 'G...', amount: '1.5', asset: { type: 'native' } });
 
-// Solana payment: amount in base units (lamports), custodial only for now
+// Solana payment: amount in base units (lamports), embedded only for now
 await client.sendPayment({ chain: 'SOLANA', destination: '...', amount: '1500000000' });
 ```
 
 Subscribe to `client.onTransactionStateChange` for progress. External and passkey wallets keep the
-granular `building`, `built`, `signing`, `submitting`, `success` transitions. Custodial wallets take a
+granular `building`, `built`, `signing`, `submitting`, `success` transitions. Embedded wallets take a
 single round trip and emit one compound `building-signing-submitting` step, so if the UI needs separate
-"Building" / "Signing" / "Submitting" indicators on a custodial flow, call `buildTx`, `signTx`, and
+"Building" / "Signing" / "Submitting" indicators on an embedded flow, call `buildTx`, `signTx`, and
 `submitTx` yourself.
 
 Poll the result with `client.getTxStatus(hash)`, which returns
@@ -42,7 +42,7 @@ ceremony, and they need `passkeySign` injected in the client config.
 ## Sponsorship (gasless)
 
 Who pays the fee is decided **server-side** from the app's dashboard config, not by the caller. On a
-custodial session the backend signs and returns a fee-bumped envelope with the app paying. The client's
+embedded session the backend signs and returns a fee-bumped envelope with the app paying. The client's
 only lever is opting out:
 
 ```ts
@@ -63,7 +63,7 @@ if (wallet?.custody === 'external' && wallet.existsOnStellar === false) {
 }
 ```
 
-Not applicable to custodial wallets, which are created server-side at login, nor to smart wallets.
+Not applicable to embedded wallets, which are created server-side at login, nor to smart wallets.
 Trustlines remain a separate step.
 
 ## Trustlines
@@ -74,7 +74,7 @@ await client.setTrustline({ code: 'USDC', issuer: 'GA5Z...' }, { limit: '0' }); 
 await client.setTrustline(asset, { skipSponsorship: true }); // force self-pay change_trust
 ```
 
-Routing is by sponsorship flag, not by wallet type: custodial wallets hit the trustline endpoint where
+Routing is by sponsorship flag, not by wallet type: embedded wallets hit the trustline endpoint where
 the server sponsors or self-pays and submits; external wallets co-sign whichever XDR the build endpoint
 returns. Smart wallets do not use classic trustlines at all.
 
@@ -127,25 +127,22 @@ Units differ per side: the deposit `amount` is the underlying asset amount, whil
 is in the position's `withdrawUnit` (asset amount for Blend, share count for DeFindex). Smart wallets
 are not supported yet.
 
-## Fiat ramps (SEP-24)
+## Fiat ramps
 
-```ts
-const quote = await client.getRampsQuote(query);
-const onramp = await client.createOnRamp(body);
-const status = await client.pollRampTransaction(onramp.txId);
-```
+Moving money between local fiat rails and the wallet has its own file: [ramps.md](ramps.md). It
+covers quotes and the 15-minute `quoteId`, on-ramp deposit instructions, the two-step off-ramp,
+the three KYC shapes a result can carry, Pix QR payment, and the sign-and-resume loop for external
+wallets. The short version: every mutating call returns one `RampResult`, and the integration is a
+single function that branches on its optional fields in a fixed order.
 
-Custodial wallets get a `kycUrl` to open. External wallets get a `pendingSignature` to sign and resume
-through `submitRampSignature(txId, body)`. Off-ramps additionally need `completeWithdraw(txId)`. The
-rest of the surface: `getRampCountries`, `createOffRamp`, `getRampTransaction`.
-
-KYC has its own methods: `getKycProviders(country)`, `startKyc(body)`, `getKycStatus(providerId?)`,
-`pollKycStatus(providerId)`, `resolveKyc(providerId, level?)`.
+Identity verification outside a ramp run has its own methods on the client: `getKycProviders(country)`,
+`startKyc(body)`, `getKycStatus(providerId?)`, `pollKycStatus(providerId)`, `resolveKyc(providerId, level?)`,
+plus `openKycModal()` in `@pollar/react`.
 
 ## Ownership proofs (SEP-53 and SEP-10)
 
 `client.stellar` namespaces the Stellar-specific proof standards. Each method dispatches by wallet
-type: external wallets sign client-side through their adapter, custodial wallets sign server-side, and
+type: external wallets sign client-side through their adapter, embedded wallets sign server-side, and
 smart wallets return an error outcome because a C-address has no classic ed25519 key to prove.
 
 ```ts
@@ -156,7 +153,7 @@ const proof = await client.stellar.sep53.signMessage('verify me');
 // SEP-10: sign a verifier-issued web-auth challenge
 const auth = await client.stellar.sep10.sign({
   challengeXdr,
-  homeDomains: 'verifier.example.com', // optional, enables full SEP-10 validation on the custodial path
+  homeDomains: 'verifier.example.com', // optional, enables full SEP-10 validation on the embedded path
   webAuthDomain: 'auth.verifier.example.com',
 });
 // { status: 'signed', signedXdr, signerAddress } | { status: 'error', details?, code? }
@@ -164,7 +161,7 @@ const auth = await client.stellar.sep10.sign({
 
 `signature` is base64 ed25519 over the SEP-53 digest
 (`SHA-256("Stellar Signed Message:\n" + message)`), produced identically on both paths, and `scheme` is
-always `sep53`. A verifier can treat custodial and external proofs interchangeably.
+always `sep53`. A verifier can treat embedded and external proofs interchangeably.
 
 Note that Freighter implements the client-side message signing; Albedo has no SEP-53 support.
 

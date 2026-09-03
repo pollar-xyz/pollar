@@ -162,8 +162,8 @@ const {
   // Transactions
   tx, // TransactionState
   buildTx, // (operation, params, options?) => Promise<BuildOutcome>
-  signAndSubmitTx, // (unsignedXdr?: string) => Promise<SubmitOutcome>  (custodial; XDR optional)
-  signTx, // (unsignedXdr: string) => Promise<SignOutcome>  (external-wallet only)
+  signAndSubmitTx, // (unsignedXdr?: string) => Promise<SubmitOutcome>  (the smart-wallet path; embedded and external can call it too; XDR optional)
+  signTx, // (unsignedXdr: string) => Promise<SignOutcome>  (embedded: server signs; external: adapter signs; not for smart wallets)
   sendPayment, // (params: SendPaymentParams) => Promise<SubmitOutcome>
   submitTx, // (signedXdr: string) => Promise<SubmitOutcome>
   buildAndSignAndSubmitTx, // (operation, params, options?) => Promise<SubmitOutcome>  (one-shot)

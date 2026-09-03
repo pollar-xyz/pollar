@@ -30,7 +30,7 @@ export function resolveChain(chain: WalletChain | undefined): WalletChain {
 /**
  * The selectable chains - the first is the default everywhere (network picker,
  * the address the wallet button shows). De-duplicated because two wallets on one
- * chain (e.g. a custodial and a linked external Stellar wallet) are still one
+ * chain (e.g. an embedded and a linked external Stellar wallet) are still one
  * network choice.
  *
  * `order` is the app's chain list from `/applications/config`, as arranged in the

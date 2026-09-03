@@ -124,7 +124,7 @@ export class FreighterAdapter implements WalletAdapter {
 }
 
 /** Standard base64 (padded) via the pure-JS base64url encoder - no `Buffer`, no
- *  `btoa`, so it works in browser and RN alike. Matches the custodial path's
+ *  `btoa`, so it works in browser and RN alike. Matches the embedded path's
  *  `signature.toString('base64')` so both proof paths return one format. */
 function bytesToBase64(bytes: Uint8Array): string {
   const b64 = base64urlEncode(bytes).replace(/-/g, '+').replace(/_/g, '/');

@@ -59,8 +59,8 @@ export async function getRampsQuote(api: PollarApiClient, query: RampsQuoteQuery
 /**
  * POST /ramps/onramp
  * Creates an onramp transaction.
- * For custodial users: backend orchestrates the full SEP-24 flow and returns payment instructions.
- * For non-custodial: backend may return an unsigned XDR that the client must sign via a wallet adapter.
+ * For embedded users: backend orchestrates the full SEP-24 flow and returns payment instructions.
+ * For external wallets: backend may return an unsigned XDR that the client must sign via a wallet adapter.
  */
 export async function createOnRamp(api: PollarApiClient, body: RampsOnrampBody): Promise<RampsOnrampResponse> {
   const { data, error } = await api.POST('/ramps/onramp', { body });
@@ -82,7 +82,7 @@ export async function createOffRamp(api: PollarApiClient, body: RampsOfframpBody
 /**
  * POST /ramps/transaction/{txId}/complete
  * Completes an offramp once anchor KYC is done: builds + signs + submits the
- * on-chain withdraw payment. Custodial wallets complete server-side and return
+ * on-chain withdraw payment. Embedded wallets complete server-side and return
  * `stellarTxHash`; EXTERNAL wallets get a `pendingSignature` to sign and then
  * resume via {@link submitRampSignature}.
  */
