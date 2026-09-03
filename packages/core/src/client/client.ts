@@ -4161,11 +4161,7 @@ export class PollarClient {
       address: w.address ?? w.publicKey ?? null,
       ...(w.chain !== undefined ? { chain: w.chain } : {}),
       ...(w.existsOnStellar !== undefined ? { existsOnStellar: w.existsOnStellar } : {}),
-      // `provisioning` reached the v2 login payload after the generated OpenAPI
-      // types were last cut, so read it defensively until they're regen'd.
-      ...((w as { provisioning?: WalletProvisioning }).provisioning
-        ? { provisioning: (w as { provisioning?: WalletProvisioning }).provisioning }
-        : {}),
+      ...(w.provisioning !== undefined ? { provisioning: w.provisioning } : {}),
       ...(w.fundingMode !== undefined ? { fundingMode: w.fundingMode } : {}),
       ...(w.createdAt !== undefined ? { createdAt: w.createdAt } : {}),
       ...(w.linkedAt !== undefined ? { linkedAt: w.linkedAt } : {}),

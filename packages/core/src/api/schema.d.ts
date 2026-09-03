@@ -169,26 +169,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/wallet/balance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get my wallet balances
-         * @description Returns XLM and the application's enabled-asset balances for the authenticated user's wallet using Soroban RPC (no Horizon). The wallet and network are derived from the session — no parameters required. "available" reflects the spendable amount after minimum reserve (XLM) and selling liabilities.
-         */
-        get: operations["getWalletBalance"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/wallet/state": {
         parameters: {
             query?: never;
@@ -201,6 +181,26 @@ export interface paths {
          * @description READY: the account exists on the ledger and operations are accepted. CREATING: its creation is queued or in flight. FAILED: creation was retried to exhaustion and is re-attempted on the next sign-in or session resume.
          */
         get: operations["getWalletState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/wallet/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get my wallet balances
+         * @description Returns XLM and the application's enabled-asset balances for the authenticated user's wallet using Soroban RPC (no Horizon). The wallet and network are derived from the session — no parameters required. "available" reflects the spendable amount after minimum reserve (XLM) and selling liabilities.
+         */
+        get: operations["getWalletBalance"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3298,6 +3298,8 @@ export interface operations {
                                 linkedAt?: number;
                                 network?: string;
                                 deployTxHash?: string | null;
+                                /** @enum {string} */
+                                provisioning?: "READY" | "CREATING" | "FAILED";
                             };
                             wallets: {
                                 /** @enum {string} */
@@ -3314,6 +3316,8 @@ export interface operations {
                                 linkedAt?: number;
                                 network?: string;
                                 deployTxHash?: string | null;
+                                /** @enum {string} */
+                                provisioning?: "READY" | "CREATING" | "FAILED";
                             }[];
                             data: {
                                 mail: string;
@@ -6999,6 +7003,11 @@ export interface operations {
                                 }[];
                                 minAmount?: number;
                                 maxAmount?: number;
+                                expiresAt: string;
+                                providerExpiresAt: string | null;
+                                fiatAmount: number;
+                                cryptoAmount: number | null;
+                                availableAmount: number | null;
                             }[];
                         };
                     };
@@ -7301,6 +7310,9 @@ export interface operations {
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            txHash?: string;
+                            /** @enum {string} */
+                            chain?: "STELLAR" | "POLYGON" | "SOLANA";
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
@@ -7435,6 +7447,9 @@ export interface operations {
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            txHash?: string;
+                            /** @enum {string} */
+                            chain?: "STELLAR" | "POLYGON" | "SOLANA";
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
@@ -7556,6 +7571,9 @@ export interface operations {
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            txHash?: string;
+                            /** @enum {string} */
+                            chain?: "STELLAR" | "POLYGON" | "SOLANA";
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
@@ -7684,6 +7702,9 @@ export interface operations {
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            txHash?: string;
+                            /** @enum {string} */
+                            chain?: "STELLAR" | "POLYGON" | "SOLANA";
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
@@ -7815,6 +7836,9 @@ export interface operations {
                             kycUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            txHash?: string;
+                            /** @enum {string} */
+                            chain?: "STELLAR" | "POLYGON" | "SOLANA";
                             depositInstructions?: {
                                 scannable?: {
                                     /** @enum {string} */
