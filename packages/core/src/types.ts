@@ -1015,6 +1015,11 @@ export type EarnBuildContent = pollarPaths['/earn/build']['post']['responses'][2
 /** The ready-to-sign payload a build returns. */
 export type EarnBuild = EarnBuildContent['build'];
 
+/** Result of Earn execution; Jupiter is prepared but not submitted by Core. */
+export type EarnOutcome =
+  | SubmitOutcome
+  | { status: 'prepared'; chain: 'SOLANA'; unsignedTransaction: string; encoding: 'base64' };
+
 /** Input to `client.getEarnPosition` — wallet address is filled by the client. */
 export type EarnPositionParams = {
   provider: EarnProviderId;

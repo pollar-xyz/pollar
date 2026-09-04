@@ -21,6 +21,7 @@ import {
   SwapToken,
   SwapVenue,
   EarnProviderId,
+  EarnOutcome,
   EarnOpportunity,
   EarnPosition,
   EarnPositionParams,
@@ -239,12 +240,12 @@ interface PollarContextValue {
    * Deposit into a vault/pool (asset amount). Drives the transaction state
    * machine. Mirrors {@link PollarClient.earnDeposit}.
    */
-  earnDeposit: (params: EarnTxParams) => Promise<SubmitOutcome>;
+  earnDeposit: (params: EarnTxParams) => Promise<EarnOutcome>;
   /**
    * Withdraw from a vault/pool (amount in the position `withdrawUnit`). Mirrors
    * {@link PollarClient.earnWithdraw}.
    */
-  earnWithdraw: (params: EarnTxParams) => Promise<SubmitOutcome>;
+  earnWithdraw: (params: EarnTxParams) => Promise<EarnOutcome>;
   /** Open the Earn modal. */
   openEarnModal: () => void;
   // distribution

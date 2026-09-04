@@ -5874,7 +5874,7 @@ export interface operations {
                         /** @constant */
                         success: true;
                         content: {
-                            providers: ("blend" | "defindex")[];
+                            providers: ("blend" | "defindex" | "jupiter")[];
                         };
                     };
                 };
@@ -5914,7 +5914,7 @@ export interface operations {
     getEarnOpportunities: {
         parameters: {
             query: {
-                provider: "blend" | "defindex";
+                provider: "blend" | "defindex" | "jupiter";
             };
             header?: never;
             path?: never;
@@ -5936,7 +5936,7 @@ export interface operations {
                         content: {
                             opportunities: {
                                 /** @enum {string} */
-                                provider: "blend" | "defindex";
+                                provider: "blend" | "defindex" | "jupiter";
                                 id: string;
                                 name: string;
                                 symbol: string | null;
@@ -5946,6 +5946,9 @@ export interface operations {
                                     code: string;
                                     issuer: string | null;
                                     contractId: string;
+                                    /** @enum {string} */
+                                    chain?: "STELLAR" | "SOLANA";
+                                    decimals?: number;
                                 };
                                 apy: number;
                                 metadata?: {
@@ -6021,7 +6024,7 @@ export interface operations {
     getEarnPosition: {
         parameters: {
             query: {
-                provider: "blend" | "defindex";
+                provider: "blend" | "defindex" | "jupiter";
                 opportunity: string;
                 publicKey?: string;
                 address?: string;
@@ -6045,7 +6048,7 @@ export interface operations {
                         success: true;
                         content: {
                             /** @enum {string} */
-                            provider: "blend" | "defindex";
+                            provider: "blend" | "defindex" | "jupiter";
                             opportunityId: string;
                             address: string;
                             balance: string;
@@ -6150,7 +6153,7 @@ export interface operations {
                     /** @enum {string} */
                     action: "deposit" | "withdraw";
                     /** @enum {string} */
-                    provider: "blend" | "defindex";
+                    provider: "blend" | "defindex" | "jupiter";
                     opportunity: string;
                     amount: string;
                     publicKey?: string;
@@ -6173,6 +6176,12 @@ export interface operations {
                         content: {
                             build: {
                                 unsignedXdr: string;
+                            } | {
+                                /** @constant */
+                                chain: "SOLANA";
+                                unsignedTransaction: string;
+                                /** @constant */
+                                encoding: "base64";
                             } | {
                                 /** @constant */
                                 operation: "invoke_contract";

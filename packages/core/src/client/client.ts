@@ -38,6 +38,7 @@ import {
   SwapToken,
   SwapVenue,
   EarnProviderId,
+  EarnOutcome,
   EarnOpportunity,
   EarnPosition,
   EarnPositionParams,
@@ -3206,7 +3207,7 @@ export class PollarClient {
    * count (DeFindex); `withdrawable` is the max in that unit.
    */
   async getEarnPosition(params: EarnPositionParams): Promise<EarnPosition> {
-    const wallet = this.getWallet();
+    const wallet = params.provider === 'jupiter' ? this.getWallets().find((item) => item.chain === 'SOLANA') ?? null : this.getWallet();
     if (!wallet) throw new Error('No wallet connected');
     return getEarnPosition(this._api, {
       provider: params.provider,
@@ -3216,32 +3217,33 @@ export class PollarClient {
   }
 
   /**
-   * Deposit into a vault/pool. The provider builds the unsigned XDR server-side
-   * (contract-direct for Blend, via the DeFindex API for DeFindex) and this signs
-   * + submits it, driving the same transaction state machine as {@link runTx}.
+   * Deposit into a vault/pool. Stellar builds are signed and submitted through
+   * the existing XDR flow; Jupiter returns an unsigned Solana transaction with
+   * `status: 'prepared'` for the caller to sign and submit.
    *
    * The `amount` is the underlying asset amount. The deposit asset's trustline
    * must already exist on classic (G-address) wallets — auto-trustline is a
    * follow-up (the opportunity does not yet expose the asset's classic issuer).
    */
-  async earnDeposit(params: EarnTxParams): Promise<SubmitOutcome> {
+  async earnDeposit(params: EarnTxParams): Promise<EarnOutcome> {
     return this._earnBuildAndSubmit('deposit', params);
   }
 
   /**
    * Withdraw from a vault/pool. The `amount` is in the position's `withdrawUnit`
    * (asset amount for Blend, share count for DeFindex) — read it from
-   * {@link getEarnPosition}. Signs + submits the provider-built XDR.
+   * {@link getEarnPosition}. Jupiter returns a prepared Solana transaction;
+   * Stellar providers retain their existing sign-and-submit behavior.
    */
-  async earnWithdraw(params: EarnTxParams): Promise<SubmitOutcome> {
+  async earnWithdraw(params: EarnTxParams): Promise<EarnOutcome> {
     return this._earnBuildAndSubmit('withdraw', params);
   }
 
-  private async _earnBuildAndSubmit(action: 'deposit' | 'withdraw', params: EarnTxParams): Promise<SubmitOutcome> {
-    const wallet = this.getWallet();
+  private async _earnBuildAndSubmit(action: 'deposit' | 'withdraw', params: EarnTxParams): Promise<EarnOutcome> {
+    const wallet = params.provider === 'jupiter' ? this.getWallets().find((item) => item.chain === 'SOLANA') ?? null : this.getWallet();
     if (!wallet) return { status: 'error', details: 'No wallet connected' };
 
-    // Both providers return a prebuilt XDR, which smart (passkey C-address)
+    // Stellar providers return a prebuilt XDR, which smart (passkey C-address)
     // wallets can't sign — their build path must run server-side and return a
     // passkey digest. Fail fast until that lands (same limitation as swap).
     if (wallet.custody === 'smart') {
@@ -3255,7 +3257,10 @@ export class PollarClient {
       amount: params.amount,
       address: wallet.address,
     });
-    // Both current providers return a prebuilt XDR (submit as-is); the
+    if ('unsignedTransaction' in build) {
+      return { status: 'prepared', chain: build.chain, unsignedTransaction: build.unsignedTransaction, encoding: build.encoding };
+    }
+    // Current Stellar providers return a prebuilt XDR (submit as-is); the
     // invoke_contract shape is reserved for a future provider and runs through
     // runTx (re-simulated server-side), mirroring swap.
     if ('unsignedXdr' in build) return this.signAndSubmitTx(build.unsignedXdr);

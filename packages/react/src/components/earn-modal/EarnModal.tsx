@@ -21,6 +21,7 @@ const POSITION_POLL_MS = 10000;
 const PROVIDER_LABELS: Record<EarnProviderId, string> = {
   blend: 'Blend',
   defindex: 'DeFindex',
+  jupiter: 'Jupiter Lend',
 };
 
 const IN_FLIGHT_STEPS = [
@@ -73,6 +74,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [showXdr, setShowXdr] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [preparedSolanaTx, setPreparedSolanaTx] = useState<string | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ─── Providers ────────────────────────────────────────────────────────────
@@ -196,9 +198,11 @@ export function EarnModal({ onClose }: EarnModalProps) {
   const explorerUrl = hash ? `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}` : null;
 
   const isInProgress = (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step);
-  const showBack = step === 'tx' && (transaction.step === 'error' || transaction.step === 'success') && !isInProgress;
+  const showBack = step === 'tx' && (!!preparedSolanaTx || transaction.step === 'error' || transaction.step === 'success') && !isInProgress;
 
-  const txTitle = isInProgress
+  const txTitle = preparedSolanaTx
+    ? 'Transaction prepared'
+    : isInProgress
     ? tab === 'deposit'
       ? 'Depositing…'
       : 'Withdrawing…'
@@ -288,7 +292,8 @@ export function EarnModal({ onClose }: EarnModalProps) {
 
     const params = { provider, opportunity: opportunityId, amount };
     const outcome = tab === 'deposit' ? await earnDeposit(params) : await earnWithdraw(params);
-    if (outcome.status === 'success' || outcome.status === 'pending') {
+    if (outcome.status === 'prepared') setPreparedSolanaTx(outcome.unsignedTransaction);
+    if (outcome.status === 'success' || outcome.status === 'pending' || outcome.status === 'prepared') {
       setAmount('');
       refreshPosition();
     }
@@ -317,6 +322,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
     setStep('form');
     setShowXdr(false);
     setCopied(false);
+    setPreparedSolanaTx(null);
     refreshPosition();
   }
 
@@ -433,12 +439,13 @@ export function EarnModal({ onClose }: EarnModalProps) {
             </div>
 
             {/* Provider */}
-            {providers && providers.length > 1 && (
+            {providers && providers.length > 0 && (
               <div className="pollar-send-field">
                 <label className="pollar-send-label">Provider</label>
                 <select
                   className="pollar-input pollar-send-select"
                   value={provider ?? ''}
+                  disabled={providers.length === 1}
                   onChange={(e) => setProvider(e.target.value as EarnProviderId)}
                 >
                   {providers.map((p) => (
@@ -452,7 +459,9 @@ export function EarnModal({ onClose }: EarnModalProps) {
 
             {/* Opportunity */}
             <div className="pollar-send-field">
-              <label className="pollar-send-label">{provider === 'defindex' ? 'Vault' : 'Pool'}</label>
+              <label className="pollar-send-label">
+                {provider === 'defindex' ? 'Vault' : provider === 'jupiter' ? 'Market' : 'Pool'}
+              </label>
               {loadingOpps || providersLoading ? (
                 <div className="pollar-input pollar-select-loading">
                   <span className="pollar-spinner pollar-spinner-sm" />
@@ -547,7 +556,19 @@ export function EarnModal({ onClose }: EarnModalProps) {
           </>
         )}
 
-        {step === 'tx' && (
+        {step === 'tx' && preparedSolanaTx && (
+          <div className="pollar-send-field">
+            <p className="pollar-send-hint">
+              Unsigned Solana transaction (base64). Sign it with the connected Solana wallet and submit it through your Solana RPC.
+            </p>
+            <pre className="pollar-tx-xdr-content">{preparedSolanaTx}</pre>
+            <div className="pollar-modal-actions">
+              <button className="pollar-btn-primary" onClick={() => void navigator.clipboard.writeText(preparedSolanaTx)}>Copy transaction</button>
+            </div>
+          </div>
+        )}
+
+        {step === 'tx' && !preparedSolanaTx && (
           <TxStatusView
             transaction={transaction}
             showXdr={showXdr}

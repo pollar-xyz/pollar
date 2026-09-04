@@ -51,8 +51,8 @@ export async function getEarnPosition(
 
 /**
  * POST /earn/build
- * Builds the unsigned deposit/withdraw XDR server-side. The SDK then signs and
- * submits it with `signAndSubmitTx`.
+ * Builds an unsigned provider transaction server-side. Stellar XDR is signed
+ * and submitted by Core; Solana base64 is returned prepared to the caller.
  */
 export async function buildEarnTx(api: PollarApiClient, body: EarnBuildBody): Promise<EarnBuildContent> {
   const { data, error } = await api.POST('/earn/build', { body });

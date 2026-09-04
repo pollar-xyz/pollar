@@ -59,12 +59,16 @@ export async function loginWithSolanaAdapter(adapter: WalletAdapter, deps: FlowD
       return;
     }
 
+    // Connect while this flow is still directly associated with the user's
+    // click. Creating the server session first introduces a network await that
+    // can consume browser user activation, preventing extension wallets from
+    // opening their approval popup.
+    const { address } = await withSignal(adapter.connect(), signal);
+    connectedWallet = address;
+
     const sid = await createAuthSession(deps);
     if (!sid) return;
     clientSessionId = sid;
-
-    const { address } = await withSignal(adapter.connect(), signal);
-    connectedWallet = address;
 
     currentStep = 'signing_wallet_challenge';
     setAuthState({ step: 'signing_wallet_challenge', walletType: type });
