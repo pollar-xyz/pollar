@@ -16,7 +16,7 @@ export interface SwapAssetOption {
 }
 
 export function assetOptionKey(o: SwapAssetOption): string {
-  return `${o.code}:${o.issuer ?? 'native'}`;
+  return o.ref.type === 'solana' ? `solana:${o.ref.mint}` : `${o.code}:${o.issuer ?? 'native'}`;
 }
 
 const PROVIDER_LABELS: Record<SwapProvider, string> = {
@@ -24,6 +24,7 @@ const PROVIDER_LABELS: Record<SwapProvider, string> = {
   aquarius: 'Aquarius',
   soroswap: 'Soroswap',
   sdex: 'Stellar DEX',
+  jupiter: 'Jupiter',
 };
 
 function formatAmount(value: string): string {
@@ -282,7 +283,7 @@ export function SwapModalTemplate({
               if (found) onSelectBuy(found);
             }}
           >
-            {customOpen ? (
+            {provider !== 'jupiter' && customOpen ? (
               <div className="pollar-swap-custom">
                 <input
                   className="pollar-input"
@@ -315,7 +316,7 @@ export function SwapModalTemplate({
                   </button>
                 </div>
               </div>
-            ) : (
+            ) : provider !== 'jupiter' ? (
               <button
                 type="button"
                 className="pollar-swap-custom-toggle"
@@ -324,7 +325,7 @@ export function SwapModalTemplate({
               >
                 + Add a token by code / issuer
               </button>
-            )}
+            ) : null}
           </AssetSelect>
 
           {/* Route selector */}

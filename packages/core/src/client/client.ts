@@ -1,6 +1,6 @@
 import { createApiClient, fetchWithTimeout, PollarApiClient } from '../api/client';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
-import { getSwapConfig, getSwapTokens, quoteSwap } from '../api/endpoints/swap';
+import { executeJupiterSwap, getSwapConfig, getSwapTokens, quoteSwap } from '../api/endpoints/swap';
 import { buildEarnTx, getEarnOpportunities, getEarnPosition, getEarnProviders } from '../api/endpoints/earn';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
 import {
@@ -176,6 +176,12 @@ export class PollarClient {
   private _profile: PollarUserProfile | null = null;
   /** Last `DPoP-Nonce` we saw from a server response. Carried into the next proof. */
   private _dpopNonce: string | null = null;
+  /** Cold restored sessions do not persist the server nonce. Let one protected
+   * request obtain it while concurrent reads wait, avoiding a burst of 401s. */
+  private _dpopBootstrapPromise: Promise<void> | null = null;
+  private _resolveDpopBootstrap: (() => void) | null = null;
+  private _dpopBootstrapTimer: ReturnType<typeof setTimeout> | null = null;
+  private _dpopBootstrapLeaders = new WeakSet<Request>();
   /**
    * Clock skew compensation, in seconds (`serverTime − localTime`), learned from
    * the `Date` header of every server response and added to the DPoP proof
@@ -591,6 +597,8 @@ export class PollarClient {
         const accessToken = self._session?.token?.accessToken;
         if (!accessToken) return request;
 
+        await self._coordinateDpopBootstrap(request);
+
         const proof = await self._buildProofForRequest(request, accessToken);
         if (proof) {
           request.headers.set('Authorization', `DPoP ${accessToken}`);
@@ -605,6 +613,7 @@ export class PollarClient {
       onResponse: async ({ request, response }: { request: Request; response: Response }) => {
         const newNonce = response.headers.get('DPoP-Nonce');
         if (newNonce) self._dpopNonce = newNonce;
+        self._finishDpopBootstrap(request);
 
         // Learn the clock skew from the server's `Date` header BEFORE any retry
         // or refresh below, so a proof rejected for a bad `iat` is rebuilt with
@@ -754,6 +763,32 @@ export class PollarClient {
       this._log.warn('[PollarClient] DPoP proof build failed', err);
       return null;
     }
+  }
+
+  private async _coordinateDpopBootstrap(request: Request): Promise<void> {
+    if (this._dpopNonce !== null) return;
+    if (this._dpopBootstrapPromise) {
+      await this._dpopBootstrapPromise;
+      return;
+    }
+
+    this._dpopBootstrapPromise = new Promise<void>((resolve) => {
+      this._resolveDpopBootstrap = resolve;
+    });
+    this._dpopBootstrapLeaders.add(request);
+    // A transport error has no onResponse hook. Release waiters after the same
+    // bounded interval as the leader request so the client cannot deadlock.
+    this._dpopBootstrapTimer = setTimeout(() => this._finishDpopBootstrap(request), this._requestTimeoutMs);
+  }
+
+  private _finishDpopBootstrap(request: Request): void {
+    if (!this._dpopBootstrapLeaders.has(request)) return;
+    this._dpopBootstrapLeaders.delete(request);
+    if (this._dpopBootstrapTimer !== null) clearTimeout(this._dpopBootstrapTimer);
+    this._dpopBootstrapTimer = null;
+    this._resolveDpopBootstrap?.();
+    this._resolveDpopBootstrap = null;
+    this._dpopBootstrapPromise = null;
   }
 
   /**
@@ -3112,7 +3147,8 @@ export class PollarClient {
   }
 
   async getSwapQuote(params: SwapQuoteParams): Promise<SwapQuote[]> {
-    const wallet = this.getWallet();
+    const solanaConnection = params.provider === 'jupiter' ? await this._connectedSolanaWallet() : null;
+    const wallet = params.provider === 'jupiter' ? solanaConnection?.wallet ?? null : this.getWallet();
     if (!wallet) throw new Error('No wallet connected');
     const body: SwapQuoteBody = {
       address: wallet.address,
@@ -3136,8 +3172,37 @@ export class PollarClient {
    * machine as {@link runTx} — subscribe via {@link onTransactionStateChange}.
    */
   async swap(quote: SwapQuote, opts?: { autoTrustline?: boolean }): Promise<SubmitOutcome> {
-    const wallet = this.getWallet();
+    const solanaConnection = quote.provider === 'jupiter' ? await this._connectedSolanaWallet() : null;
+    const wallet = quote.provider === 'jupiter' ? solanaConnection?.wallet ?? null : this.getWallet();
     if (!wallet) return { status: 'error', details: 'No wallet connected' };
+
+    if (quote.provider === 'jupiter') {
+      const build = quote.build;
+      if (!('unsignedTransaction' in build)) return { status: 'error', details: 'Jupiter quote has no Solana transaction' };
+      const adapter = solanaConnection?.adapter;
+      if (!adapter?.signSolanaTransaction) return { status: 'error', details: 'Connected Solana wallet cannot sign transactions' };
+      this._setTransactionState({ step: 'signing' });
+      try {
+        const raw = Uint8Array.from(atob(build.unsignedTransaction), (char) => char.charCodeAt(0));
+        const signed = await adapter.signSolanaTransaction(raw, 'solana:mainnet');
+        let binary = '';
+        for (const byte of signed) binary += String.fromCharCode(byte);
+        const signedTransaction = btoa(binary);
+        this._setTransactionState({ step: 'submitting' });
+        const result = await executeJupiterSwap(this._api, { requestId: build.requestId, signedTransaction });
+        if (result.status === 'SUCCESS') {
+          this._setTransactionState({ step: 'success', hash: result.signature });
+          return { status: 'success', hash: result.signature };
+        }
+        const details = result.error ?? `Jupiter execution failed (${result.code})`;
+        this._setTransactionState({ step: 'error', phase: 'submitting', details });
+        return { status: 'error', hash: result.signature, details };
+      } catch (error) {
+        const details = error instanceof Error ? error.message : 'Jupiter swap failed';
+        this._setTransactionState({ step: 'error', phase: 'submitting', details });
+        return { status: 'error', details };
+      }
+    }
 
     // TODO(phase-4 / C-address swaps): smart (passkey C-address) wallets can't
     // swap yet. The backend smart-account build path (buildSmartAccountTransfer →
@@ -3177,7 +3242,30 @@ export class PollarClient {
     // operation + params that runTx re-builds server-side (fresh sequence).
     const build = quote.build;
     if ('unsignedXdr' in build) return this.signAndSubmitTx(build.unsignedXdr);
+    if ('chain' in build) return { status: 'error', details: 'Unexpected Solana build for a Stellar provider' };
     return this.runTx(build.operation, build.params);
+  }
+
+  /** Resolve the live Solana adapter directly when a freshly authenticated or
+   * restored session has not attached its client-only provider id yet. */
+  private async _connectedSolanaWallet(): Promise<{ wallet: WalletInfo; adapter: WalletAdapter } | null> {
+    const sessionWallet = this.getWallets().find((item) => item.chain === 'SOLANA');
+    const candidates = [
+      ...(this._walletAdapter?.chain === 'SOLANA' ? [this._walletAdapter] : []),
+      ...Array.from(this._walletAdapters.values()).filter(
+        (adapter) => adapter.chain === 'SOLANA' && adapter !== this._walletAdapter,
+      ),
+    ];
+
+    for (const adapter of candidates) {
+      const address = await adapter.getPublicKey();
+      if (!address) continue;
+      return {
+        wallet: sessionWallet ?? { custody: 'external', address, provider: adapter.type, chain: 'SOLANA' },
+        adapter,
+      };
+    }
+    return null;
   }
 
   // ─── Earn (yield vaults / lending) ──────────────────────────────────────────

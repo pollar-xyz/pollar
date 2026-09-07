@@ -15,7 +15,7 @@ export async function getSwapConfig(api: PollarApiClient): Promise<SwapConfigCon
         'Failed to load swap config',
     );
   }
-  return data.content;
+  return data.content as SwapConfigContent;
 }
 
 /**
@@ -43,7 +43,7 @@ export async function getSwapTokens(api: PollarApiClient): Promise<SwapTokensCon
  * exists for the pair on this network.
  */
 export async function quoteSwap(api: PollarApiClient, body: SwapQuoteBody): Promise<SwapQuoteContent> {
-  const { data, error } = await api.POST('/swap/quote', { body });
+  const { data, error } = await api.POST('/swap/quote', { body: body as never });
   if (!data?.content || error) {
     throw new Error(
       (error as { code?: string; error?: string } | undefined)?.code ??
@@ -51,5 +51,12 @@ export async function quoteSwap(api: PollarApiClient, body: SwapQuoteBody): Prom
         'Failed to quote swap',
     );
   }
+  return data.content as SwapQuoteContent;
+}
+
+export async function executeJupiterSwap(api: PollarApiClient, body: { requestId: string; signedTransaction: string }) {
+  const client = api as unknown as { POST(path: string, init: { body: typeof body }): Promise<{ data?: { content?: { status: 'SUCCESS' | 'FAILED'; signature: string; code: number; error?: string } }; error?: unknown }> };
+  const { data, error } = await client.POST('/swap/execute', { body });
+  if (!data?.content || error) throw new Error('Failed to execute Jupiter swap');
   return data.content;
 }

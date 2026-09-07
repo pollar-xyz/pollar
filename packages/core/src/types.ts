@@ -956,21 +956,38 @@ export type DistributionRulesState =
 
 // ─── Swap types (DEX/AMM) ──────────────────────────────────────────────────────
 
-export type SwapQuoteBody = NonNullable<pollarPaths['/swap/quote']['post']['requestBody']>['content']['application/json'];
-
-export type SwapQuoteContent = pollarPaths['/swap/quote']['post']['responses'][200]['content']['application/json']['content'];
-
-/** A single priced swap route, including a ready-to-run `build` payload. */
-export type SwapQuote = SwapQuoteContent['quotes'][number];
-
-/** Route the caller requests: `auto` (best of every venue) or a concrete venue. */
-export type SwapProvider = NonNullable<SwapQuoteBody['provider']>;
-
-/** A concrete venue a returned quote came from (never `auto`). */
-export type SwapVenue = SwapQuote['provider'];
+type StellarSwapQuoteBody = NonNullable<pollarPaths['/swap/quote']['post']['requestBody']>['content']['application/json'];
+export type SolanaSwapAsset = { type: 'solana'; mint: string; symbol: string; decimals: number };
+export type SwapAsset = StellarSwapQuoteBody['sellAsset'] | SolanaSwapAsset;
+export type SwapProvider = 'auto' | 'aquarius' | 'soroswap' | 'sdex' | 'jupiter';
+export type SwapVenue = Exclude<SwapProvider, 'auto'>;
+export type SwapBuild =
+  | pollarPaths['/swap/quote']['post']['responses'][200]['content']['application/json']['content']['quotes'][number]['build']
+  | { chain: 'SOLANA'; unsignedTransaction: string; encoding: 'base64'; requestId: string };
+export type SwapQuote = {
+  provider: SwapVenue;
+  sellAsset: SwapAsset;
+  buyAsset: SwapAsset;
+  amountIn: string;
+  amountOut: string;
+  minReceived: string;
+  priceImpactPct: string;
+  route: { poolAddress?: string; hops: string[] };
+  build: SwapBuild;
+};
+export type SwapQuoteBody = {
+  address?: string;
+  publicKey?: string;
+  sellAsset: SwapAsset;
+  buyAsset: SwapAsset;
+  amount: string;
+  provider?: SwapProvider;
+  slippageBps?: number;
+};
+export type SwapQuoteContent = { quotes: SwapQuote[]; best?: SwapVenue };
 
 /** Venues this app exposes to end-users (from GET /swap/config). Empty = disabled. */
-export type SwapConfigContent = pollarPaths['/swap/config']['get']['responses'][200]['content']['application/json']['content'];
+export type SwapConfigContent = { venues: SwapVenue[] };
 
 /** Curated "buy" tokens the app opted into (from GET /swap/tokens). */
 export type SwapTokensContent = pollarPaths['/swap/tokens']['get']['responses'][200]['content']['application/json']['content'];

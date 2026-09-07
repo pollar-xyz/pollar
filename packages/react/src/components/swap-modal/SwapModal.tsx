@@ -7,7 +7,7 @@ import '../shared.css';
 import '../transaction-modal/TransactionModal.css';
 import '../send-modal/SendModal.css';
 import './SwapModal.css';
-import { SwapAssetOption, SwapModalTemplate } from './SwapModalTemplate';
+import { assetOptionKey, SwapAssetOption, SwapModalTemplate } from './SwapModalTemplate';
 
 interface SwapModalProps {
   onClose: () => void;
@@ -15,6 +15,11 @@ interface SwapModalProps {
 
 /** Debounce (ms) before re-quoting as the user edits the amount / assets. */
 const QUOTE_DEBOUNCE_MS = 400;
+const SOLANA_SWAP_ASSETS: SwapAssetOption[] = [
+  { ref: { type: 'solana', mint: 'So11111111111111111111111111111111111111112', symbol: 'SOL', decimals: 9 }, code: 'SOL', enabledInApp: true },
+  { ref: { type: 'solana', mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', symbol: 'USDC', decimals: 6 }, code: 'USDC', enabledInApp: true },
+  { ref: { type: 'solana', mint: 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN', symbol: 'JUP', decimals: 6 }, code: 'JUP', enabledInApp: true },
+];
 
 type AssetLike = { type: 'native' | 'credit_alphanum4' | 'credit_alphanum12'; code: string; issuer?: string | undefined };
 
@@ -41,11 +46,14 @@ export function SwapModal({ onClose }: SwapModalProps) {
     refreshAssets,
     tx: transaction,
     wallet,
+    wallets,
+    verified,
     network,
     styles,
   } = usePollar();
 
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;
+  const solanaWallet = wallets.find((item) => item.chain === 'SOLANA');
   const smartUnsupported = wallet?.custody === 'smart';
   const { theme = 'light', accentColor = '#005DB4' } = styles;
 
@@ -69,19 +77,22 @@ export function SwapModal({ onClose }: SwapModalProps) {
   // Fixed default slippage (0.5%). Exposed as a constant for now; an advanced
   // control can drive this later without touching the quote/execute wiring.
   const slippageBps = 50;
+  const solanaMode = provider === 'jupiter';
 
   useEffect(() => {
+    if (!verified || solanaWallet) return;
     void refreshWalletBalance();
     void refreshAssets();
-  }, [refreshWalletBalance, refreshAssets]);
+  }, [verified, solanaWallet, refreshWalletBalance, refreshAssets]);
 
   // Which venues this app exposes (operator config ∩ server capability).
   const loadConfig = useCallback(() => {
     setVenues(null); // back to loading
+    if (!verified) return Promise.resolve();
     return getSwapConfig()
       .then(setVenues)
       .catch(() => setVenues([])); // treat a failed config as "unavailable"
-  }, [getSwapConfig]);
+  }, [verified, getSwapConfig]);
 
   useEffect(() => {
     void loadConfig();
@@ -89,11 +100,13 @@ export function SwapModal({ onClose }: SwapModalProps) {
 
   // Curated "buy" catalog tokens the app opted into (may lack a trustline).
   const loadCatalog = useCallback(
-    () =>
-      getSwapTokens()
+    () => {
+      if (!verified) return Promise.resolve();
+      return getSwapTokens()
         .then(setCatalogTokens)
-        .catch(() => setCatalogTokens([])),
-    [getSwapTokens],
+        .catch(() => setCatalogTokens([]));
+    },
+    [verified, getSwapTokens],
   );
 
   useEffect(() => {
@@ -102,8 +115,10 @@ export function SwapModal({ onClose }: SwapModalProps) {
 
   // Re-pull everything the modal shows: balances, app assets, config and catalog.
   function handleRefresh() {
-    void refreshWalletBalance();
-    void refreshAssets();
+    if (verified && !solanaWallet) {
+      void refreshWalletBalance();
+      void refreshAssets();
+    }
     void loadConfig();
     void loadCatalog();
   }
@@ -117,7 +132,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
 
   const balances = walletBalance.step === 'loaded' ? walletBalance.data.balances : [];
   const assetRecords = enabledAssets.step === 'loaded' ? enabledAssets.data.assets : [];
-  const isLoadingData = walletBalance.step === 'loading' || enabledAssets.step === 'loading';
+  const isLoadingData = solanaWallet ? false : walletBalance.step === 'loading' || enabledAssets.step === 'loading';
 
   // Sell: native XLM + every asset the wallet has a trustline for, even at a 0
   // balance — so the user always sees what they hold and knows when to fund
@@ -127,7 +142,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
   // report `type: 'native'` exactly like XLM, and a Solana/Polygon token reports
   // `type: 'token'` with no `trustlineRemoved`, so neither can be told apart
   // from a Stellar row by `type` alone.
-  const sellOptions: SwapAssetOption[] = balances
+  const stellarSellOptions: SwapAssetOption[] = balances
     .filter(
       (b): b is typeof b & { type: 'native' | 'credit_alphanum4' | 'credit_alphanum12' } =>
         (b.chain === undefined || b.chain === 'STELLAR') &&
@@ -143,7 +158,8 @@ export function SwapModal({ onClose }: SwapModalProps) {
       enabledInApp: b.enabledInApp,
     }));
 
-  const buyKeyOfSell = selectedSell ? `${selectedSell.code}:${selectedSell.issuer ?? 'native'}` : '';
+  const sellOptions = solanaMode ? SOLANA_SWAP_ASSETS : stellarSellOptions;
+  const buyKeyOfSell = selectedSell ? assetOptionKey(selectedSell) : '';
   const optKey = (o: { code: string; issuer?: string | undefined }) => `${o.code}:${o.issuer ?? 'native'}`;
   // Buy list = the app's enabled assets, plus curated catalog tokens the app
   // opted into (deduped; catalog tokens the wallet may not trust yet). Exclude
@@ -174,20 +190,23 @@ export function SwapModal({ onClose }: SwapModalProps) {
     .filter((o) => !enabledKeys.has(optKey(o)));
   const knownKeys = new Set([...enabledKeys, ...catalogBuy.map(optKey)]);
   const customBuy = customTokens.filter((o) => !knownKeys.has(optKey(o)));
-  const buyOptions: SwapAssetOption[] = [...enabledBuy, ...catalogBuy, ...customBuy].filter((o) => optKey(o) !== buyKeyOfSell);
+  const stellarBuyOptions: SwapAssetOption[] = [...enabledBuy, ...catalogBuy, ...customBuy].filter((o) => optKey(o) !== buyKeyOfSell);
+  const buyOptions = solanaMode
+    ? SOLANA_SWAP_ASSETS.filter((option) => assetOptionKey(option) !== buyKeyOfSell)
+    : stellarBuyOptions;
 
   // Auto-select the first sell / buy asset once options are available, and keep a
   // valid selection if the list changes — so the pickers never sit empty.
   useEffect(() => {
     if (sellOptions.length === 0) return;
-    if (!selectedSell || !sellOptions.some((o) => optKey(o) === optKey(selectedSell))) {
+    if (!selectedSell || !sellOptions.some((o) => assetOptionKey(o) === assetOptionKey(selectedSell))) {
       setSelectedSell(sellOptions[0]!);
     }
   }, [sellOptions, selectedSell]);
 
   useEffect(() => {
     if (buyOptions.length === 0) return;
-    if (!selectedBuy || !buyOptions.some((o) => optKey(o) === optKey(selectedBuy))) {
+    if (!selectedBuy || !buyOptions.some((o) => assetOptionKey(o) === assetOptionKey(selectedBuy))) {
       setSelectedBuy(buyOptions[0]!);
     }
   }, [buyOptions, selectedBuy]);
@@ -210,7 +229,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
   // trustlineEstablished) doesn't; anything else (incl. catalog tokens) does.
   // Smart wallets hold SAC tokens (no classic trustlines) so it never applies.
   const buyNeedsTrustline = (() => {
-    if (!selectedBuy || smartUnsupported) return false;
+    if (!selectedBuy || smartUnsupported || selectedBuy.ref.type === 'solana') return false;
     if (selectedBuy.ref.type === 'native') return false;
     const rec = assetRecords.find((a) => a.code === selectedBuy.code && a.issuer === selectedBuy.issuer);
     return !rec?.trustlineEstablished;
@@ -221,6 +240,10 @@ export function SwapModal({ onClose }: SwapModalProps) {
   // Offer "Auto" (best of the enabled set) plus each configured venue.
   const providers: SwapProvider[] = venues && venues.length > 0 ? (['auto', ...venues] as SwapProvider[]) : [];
   const quote = quotes[0] ?? null;
+
+  useEffect(() => {
+    if (venues?.includes('jupiter') && solanaWallet) setProvider('jupiter');
+  }, [venues, solanaWallet]);
 
   // Re-quote (debounced) whenever the pair / amount / route changes.
   useEffect(() => {
