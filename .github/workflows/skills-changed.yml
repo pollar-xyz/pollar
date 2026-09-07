@@ -1,0 +1,56 @@
+name: Skills changed
+
+# Recordatorio, no automatizacion. pollar-web espeja skills/ hacia
+# pollar.xyz/.well-known/agent-skills/ con un cron diario, asi que un cambio
+# aqui tarda hasta un dia en publicarse. Este job avisa en el momento para
+# poder adelantarlo a mano si el cambio es urgente.
+#
+# Solo main: el trabajo aterriza primero en una rama de release (0.*) y el
+# espejo lee main, asi que avisar antes del merge seria avisar de algo que
+# todavia no se puede publicar.
+#
+# No dispara el sync directamente porque cruzar de repo necesita un PAT con
+# permiso de dispatch, y un token de larga vida no vale la pena para ahorrar
+# unas horas de desfase.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'skills/**'
+
+permissions:
+  contents: read
+
+jobs:
+  remind:
+    name: remind to publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Announce what changed and how to publish it
+        env:
+          RUN_SYNC: https://github.com/pollar-xyz/pollar-web/actions/workflows/sync-llms.yml
+        run: |
+          changed="$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- skills/ || true)"
+          {
+            echo '## Skills changed'
+            echo
+            echo 'These files changed under `skills/`:'
+            echo
+            echo '```'
+            echo "${changed:-(could not diff, see the commit)}"
+            echo '```'
+            echo
+            echo "pollar.xyz mirrors them on a daily cron, so this reaches"
+            echo "<https://pollar.xyz/.well-known/agent-skills/index.json> within 24h."
+            echo
+            echo "To publish now, run **Sync mirrored content** in pollar-web:"
+            echo "$RUN_SYNC"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "::notice title=Skills changed::Mirrored to pollar.xyz within 24h. To publish now, run 'Sync mirrored content' in pollar-web: $RUN_SYNC"

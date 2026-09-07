@@ -16,7 +16,7 @@ export type PollarApplicationConfigContent = PollarApplicationConfigResponse['co
  * every entry of `wallets`, so the two can never drift apart in shape.
  *
  * `type` discriminates custody:
- *   - 'internal' -> platform-managed (custodial) account (G-address, 0x..., ...)
+ *   - 'internal' -> platform-managed (embedded) account (G-address, 0x..., ...)
  *   - 'smart'    -> Soroban smart-account / passkey (C-address)
  *   - 'external' -> user-connected wallet (Freighter/Albedo)
  * `address` is the on-chain address for every type.
@@ -103,7 +103,7 @@ export interface PollarPersistedSession {
 }
 
 /**
- * Custodial login methods - the providers that map to an `internal` wallet.
+ * Embedded-wallet login methods - the providers that map to an `internal` wallet.
  * Mirrors the backend `AuthProvider` enum minus passkey (-> smart) and
  * wallet/external (-> external).
  */
@@ -114,7 +114,7 @@ export type PollarAuthMethod = 'email' | 'google' | 'github' | 'oidc';
  * Every authenticated session has exactly one wallet whose custody is fixed at
  * account creation, so `custody` strictly determines the shape of `provider`:
  *
- *   - `internal` (platform-custodied G-address) -> `provider` is the login
+ *   - `internal` (platform-managed G-address) -> `provider` is the login
  *     method, or `null` if the session predates provider tracking server-side.
  *   - `smart` (passkey Soroban C-address) -> `provider` is always `'passkey'`.
  *   - `external` (user-connected wallet) -> `provider` is the on-chain adapter
@@ -209,7 +209,7 @@ export interface PollarClientConfig {
    * Per-request timeout (ms) applied to the submit-family tx calls
    * (`submitTx`, `signAndSubmitTx`, `buildAndSignAndSubmitTx`) instead of
    * {@link requestTimeoutMs}. These endpoints do real server-side work
-   * (custodial build + sign via wallet-service, then a network submit) that can
+   * (embedded build + sign via wallet-service, then a network submit) that can
    * take several seconds, so the default 10s request timeout is too tight and
    * would cut a submit that is actually succeeding. Everything else still uses
    * `requestTimeoutMs`.
@@ -521,8 +521,8 @@ export type TxBuildContent = TxBuildResponse['content'];
  *
  * **Compound** steps (`signing-submitting`, `building-signing-submitting`)
  * are emitted when multiple phases collapse into a single opaque backend
- * round-trip (`signAndSubmitTx` custodial -> `/tx/sign-and-send`, and `runTx`
- * / `buildAndSignAndSubmitTx` custodial -> `/tx/build-sign-submit`). The SDK
+ * round-trip (`signAndSubmitTx` embedded -> `/tx/sign-and-send`, and `runTx`
+ * / `buildAndSignAndSubmitTx` embedded -> `/tx/build-sign-submit`). The SDK
  * can't see when one phase ends and the next begins inside that request, so
  * it honestly reports a single fused state instead of fabricating
  * transitions.
@@ -541,7 +541,7 @@ export type TransactionState =
   | { step: 'signing'; buildData?: TxBuildContent }
   | { step: 'signed'; buildData?: TxBuildContent; signedXdr: string; submissionToken?: string }
   | { step: 'submitting'; buildData?: TxBuildContent; signedXdr?: string }
-  // --- Compound phases (custodial-only - backend swallows the boundaries) --
+  // --- Compound phases (embedded-only - backend swallows the boundaries) --
   | { step: 'signing-submitting'; buildData?: TxBuildContent }
   | { step: 'building-signing-submitting' }
   // --- Post-Horizon-ack, pre-ledger-confirm (shared) --------------------
@@ -592,7 +592,7 @@ export type SignAuthEntryOutcome = { status: 'signed'; signedAuthEntry: string }
 /**
  * Result of {@link StellarSepApi.sep53}.signMessage - a SEP-53 message signature.
  * `signature` is base64 ed25519 over SHA-256("Stellar Signed Message:\n" + message),
- * the same digest external wallets (Freighter/SWK) and the custodial signer both
+ * the same digest external wallets (Freighter/SWK) and the embedded signer both
  * produce, so `scheme` is always `sep53`.
  */
 export type StellarMessageProof =
@@ -603,9 +603,9 @@ export type StellarMessageProof =
 export interface Sep10SignParams {
   /** The SEP-10 challenge transaction (unsigned XDR) built by the verifier. */
   challengeXdr: string;
-  /** Verifier home domain(s); when present, the custodial signer runs full SEP-10 validation. */
+  /** Verifier home domain(s); when present, the embedded signer runs full SEP-10 validation. */
   homeDomains?: string | string[];
-  /** Verifier web-auth domain; enables full SEP-10 validation on the custodial path. */
+  /** Verifier web-auth domain; enables full SEP-10 validation on the embedded path. */
   webAuthDomain?: string;
 }
 
@@ -618,7 +618,7 @@ export type Sep10Proof =
  * Stellar Ecosystem Proposal ownership-proof surface, exposed as `client.stellar`.
  * These are Stellar-specific standards, namespaced so the multichain client stays
  * clean. Each method dispatches by wallet type: external wallets sign client-side
- * via their adapter, custodial wallets sign server-side through sdk-api.
+ * via their adapter, embedded wallets sign server-side through sdk-api.
  */
 export interface StellarSepApi {
   /** SEP-53: sign an arbitrary message (message ownership proof). */
@@ -1036,7 +1036,7 @@ export type RampDepositInstructions = NonNullable<RampsTransactionResponse['depo
 export type RampScannable = NonNullable<RampDepositInstructions['scannable']>;
 export type RampInstructionField = RampDepositInstructions['fields'][number];
 
-// SEP-24 anchor flow (e.g. Anclap): custodial wallets get a `kycUrl` to open;
+// SEP-24 anchor flow (e.g. Anclap): embedded wallets get a `kycUrl` to open;
 // EXTERNAL wallets get a `pendingSignature` to sign and resume.
 export type RampsPendingSignature = NonNullable<RampsOnrampResponse['pendingSignature']>;
 export type RampsSignatureBody = NonNullable<

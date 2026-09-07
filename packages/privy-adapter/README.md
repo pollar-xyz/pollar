@@ -9,7 +9,7 @@ standard SEP-10 login + transaction flow.
 You configure it once with a slim, `PrivyClientConfig`-shaped object; you do **not**
 wire up Privy's hooks yourself.
 
-> Server-side custody (signing through your Privy app secret on your backend) is a
+> Server-side signing (through your Privy app secret on your backend) is a
 > different package: [`@pollar/privy-server-adapter`](../privy-server-adapter).
 
 ## Supported platforms

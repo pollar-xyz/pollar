@@ -16,7 +16,7 @@ Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction uti
 > Earlier: **0.11.2** added `client.stellar` — **SEP-53 message** and **SEP-10 challenge** ownership
 > proofs. External wallets sign client-side through their adapter (new optional
 > `signStellarMessage` on `WalletAdapter`; Freighter implements it, Albedo has no SEP-53
-> support), custodial wallets sign server-side, and both return the same `sep53` scheme so a
+> support), embedded wallets sign server-side, and both return the same `sep53` scheme so a
 > verifier treats them alike. Also: `@stellar/freighter-api` bumped to 6.0.0. Non-breaking.
 > New exported types: `StellarSepApi`, `StellarMessageProof`, `Sep10SignParams`, `Sep10Proof`,
 > `SignMessageOptions`, `SignMessageResponse`.
@@ -485,7 +485,7 @@ await client.buildTx('payment', {
 
 #### `client.signTx(unsignedXdr, options?): Promise<SignOutcome>`
 
-Signs an unsigned XDR. On a **custodial** session the backend signs and, by default, also applies sponsorship per the
+Signs an unsigned XDR. On an **embedded** session the backend signs and, by default, also applies sponsorship per the
 app's dashboard config - it returns a fee-bumped envelope the caller can broadcast directly, with the app paying the
 fee. Pass `skipSponsorship: true` to force the user to pay their own fee instead.
 
@@ -510,22 +510,22 @@ await client.submitTx(signedXdr);
 Puts an **external** wallet's classic account on the Stellar network when it doesn't exist yet. The server builds a
 sponsored `createAccount` (the new account starts at "0" balance; the app's sponsor wallet pays the base reserve and
 fee) and signs only the sponsor; this client adds the new-account signature with the user's own wallet and broadcasts
-via the submit path. Not applicable to custodial (internal) wallets — created on the server at login — nor to smart
+via the submit path. Not applicable to embedded (internal) wallets — created on the server at login — nor to smart
 (C-address) wallets. Trustlines are a separate step (`setTrustline`). The wallet exposes `existsOnStellar` +
 `fundingMode` so a UI can decide whether to offer this.
 
 #### `client.signAndSubmitTx(unsignedXdr?): Promise<SubmitOutcome>`
 
 Signs and submits in one call. This is the path smart-wallet (passkey) sessions use - it runs the passkey ceremony -
-and the argument is optional (it defaults to the transaction currently in `TransactionState`). Custodial and external
+and the argument is optional (it defaults to the transaction currently in `TransactionState`). Embedded and external
 sessions can call it too.
 
 #### `client.buildAndSignAndSubmitTx(operation, params, options?): Promise<SubmitOutcome>`
 
 Build + sign + submit in one call. External and passkey wallets keep the granular `building → built → signing →
-submitting → success` transitions (each composed call emits its own); custodial wallets take a single round-trip to
+submitting → success` transitions (each composed call emits its own); embedded wallets take a single round-trip to
 `/tx/build-sign-submit` and emit the compound `building-signing-submitting` step. For separate "Building…" / "Signing…"
-/ "Submitting…" indicators on a custodial flow, call `buildTx` / `signTx` / `submitTx` yourself instead.
+/ "Submitting…" indicators on an embedded flow, call `buildTx` / `signTx` / `submitTx` yourself instead.
 
 `client.runTx(...)` is an alias with the same signature - a shorter "just do the thing" name.
 
@@ -533,7 +533,7 @@ submitting → success` transitions (each composed call emits its own); custodia
 
 One entry point for a payment on Stellar or Solana. A Stellar payment routes through `buildAndSignAndSubmitTx` (so
 external adapters and passkey wallets keep the split flow); a Solana payment is a single server-side call and is
-**custodial-only** for now. `SendPaymentParams` is a per-chain union - a Stellar member with a decimal `amount` and an
+**embedded-only** for now. `SendPaymentParams` is a per-chain union - a Stellar member with a decimal `amount` and an
 `asset`, a Solana member with an integer base-unit `amount` and an optional `mint`. The union also carries a `POLYGON`
 member for the shape, but there is no transfer path for it yet: the call returns
 `{ status: 'error', details: 'Sending on POLYGON is not supported yet.' }`.
@@ -541,7 +541,7 @@ member for the shape, but there is no transfer path for it yet: the call returns
 ```ts
 // Stellar
 await client.sendPayment({ destination: 'G...', amount: '1.5', asset: { type: 'native' } });
-// Solana (custodial): amount in lamports; omit `mint` for native SOL
+// Solana (embedded): amount in lamports; omit `mint` for native SOL
 await client.sendPayment({ chain: 'SOLANA', destination: '...', amount: '1500000000' });
 ```
 
@@ -582,7 +582,7 @@ is no session, or when the session predates the backend's multichain `wallets[]`
 #### `client.setTrustline(asset, opts?): Promise<TrustlineOutcome>`
 
 Establishes (omit `limit`) or removes (`limit: '0'`) a trustline for `{ code, issuer }`. Who pays is decided
-**server-side** from the app config: custodial wallets hit `POST /wallet/assets/trustline` (the server sponsors or
+**server-side** from the app config: embedded wallets hit `POST /wallet/assets/trustline` (the server sponsors or
 self-pays, then submits), external wallets co-sign whichever XDR `/wallet/assets/trustline/build` returns. Pass
 `opts.skipSponsorship` to force a self-pay `change_trust`. Smart (passkey) wallets don't use classic trustlines.
 
@@ -624,7 +624,7 @@ hold a `PollarApiClient`.
 ### Ramps (SEP-24)
 
 On/off-ramp fiat through SEP-24 anchors (e.g. Anclap). Get a quote, create the on- or off-ramp, then drive the
-transaction to completion. Custodial wallets receive a `kycUrl` to open; external wallets receive a `pendingSignature`
+transaction to completion. Embedded wallets receive a `kycUrl` to open; external wallets receive a `pendingSignature`
 to sign and resume via `submitRampSignature`.
 
 ```ts
@@ -728,7 +728,7 @@ client.createSmartWallet(): void; // new user (WebAuthn create + sponsored deplo
 ### Stellar ownership proofs (SEP-53 / SEP-10)
 
 `client.stellar` namespaces the Stellar-specific proof standards so the multichain client stays clean. Each method
-dispatches by wallet type: external wallets sign client-side through their adapter, custodial wallets sign server-side
+dispatches by wallet type: external wallets sign client-side through their adapter, embedded wallets sign server-side
 through the API, and smart (passkey) wallets yield an error outcome — a C-address has no classic ed25519 key to prove.
 
 ```ts
@@ -739,14 +739,14 @@ const proof = await client.stellar.sep53.signMessage('verify me');
 // SEP-10: sign a verifier-issued web-auth challenge transaction
 const auth = await client.stellar.sep10.sign({
   challengeXdr,
-  homeDomains: 'verifier.example.com', // optional; enables full SEP-10 validation on the custodial path
+  homeDomains: 'verifier.example.com', // optional; enables full SEP-10 validation on the embedded path
   webAuthDomain: 'auth.verifier.example.com', // optional
 });
 // { status: 'signed', signedXdr, signerAddress } | { status: 'error', details?, code? }
 ```
 
 `signature` is base64 ed25519 over the SEP-53 digest (`SHA-256("Stellar Signed Message:\n" + message)`), produced
-identically by external wallets and the custodial signer — `scheme` is always `sep53`, so the two proof paths are
+identically by external wallets and the embedded signer — `scheme` is always `sep53`, so the two proof paths are
 interchangeable for a verifier.
 
 For external wallets, SEP-53 needs an adapter that implements the optional `signStellarMessage` method: the built-in

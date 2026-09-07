@@ -135,7 +135,7 @@ interface PollarContextValue {
     options?: TxBuildBody['options'],
   ) => Promise<BuildOutcome>;
   signAndSubmitTx: (unsignedXdr?: string) => Promise<SubmitOutcome>;
-  /** External-wallet only. Custodial flows should use `signAndSubmitTx`. */
+  /** Sign only. Embedded sessions sign server-side, external sessions through their adapter. Smart wallets use `signAndSubmitTx`. */
   signTx: (unsignedXdr: string) => Promise<SignOutcome>;
   submitTx: (signedXdr: string) => Promise<SubmitOutcome>;
   /** One-shot: build -> sign -> submit. Drives the same TransactionState flow as the split calls. */
@@ -153,7 +153,7 @@ interface PollarContextValue {
   /**
    * Send a payment on any chain the user holds a wallet on. Stellar keeps the
    * split flow (so external adapters and passkeys still work); a chain whose
-   * signature expires goes through one server-side call and is custodial-only.
+   * signature expires goes through one server-side call and is embedded-only.
    */
   sendPayment: (params: SendPaymentParams) => Promise<SubmitOutcome>;
   // network

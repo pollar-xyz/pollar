@@ -38,7 +38,7 @@ export function SendModal({ onClose }: SendModalProps) {
     styles,
   } = usePollar();
   // External-wallet signing-adapter id (freighter/albedo) drives the wallet logo;
-  // null for custodial/smart, which fall back to the Pollar logo.
+  // null for embedded/smart, which fall back to the Pollar logo.
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
