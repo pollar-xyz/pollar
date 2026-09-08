@@ -1,13 +1,13 @@
 {
   "name": "@pollar/core",
   "version": "0.11.3",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/pollar-xyz/pollar.git",
     "directory": "packages/core"
   },
-  "description": "Core authentication functions for Pollar services",
+  "description": "Core SDK for Pollar: authentication and transaction utilities for Stellar and Solana applications",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -65,7 +65,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "NOTICE"
   ],
   "sideEffects": [
     "./dist/index.mjs",

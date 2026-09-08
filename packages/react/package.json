@@ -1,13 +1,13 @@
 {
   "name": "@pollar/react",
   "version": "0.11.3",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/pollar-xyz/pollar.git",
     "directory": "packages/react"
   },
-  "description": "React components for Pollar authentication",
+  "description": "React bindings for Pollar: authentication UI, transaction modals and hooks for Stellar and Solana applications",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -25,7 +25,8 @@
     "./styles.css": "./dist/index.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "NOTICE"
   ],
   "sideEffects": [
     "**/*.css"
