@@ -59,6 +59,11 @@ node tests/smoke-session-races.cjs
 - A wallet restored mid-provisioning is polled until its account lands:
   `onWalletStateChange` replays `CREATING` on subscribe, reports `READY` when
   the account reaches the ledger, updates `getWallet()`, and stops polling
+- `onWalletStateChange` also hears a value that arrived with the session
+  rather than through the poll: a sibling tab's `READY` adopted via the
+  `storage` event, and the value a cold-start restore finds for a subscriber
+  that came before `ready()` - each exactly once, never repeated by the poll or
+  the resume that follows
 
 ### `smoke-providers.cjs`
 

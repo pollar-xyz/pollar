@@ -6,10 +6,20 @@
 
 const path = require('node:path');
 
+// `storage` handlers are captured so block 11 can deliver an event the way a
+// browser does: to the OTHER tab only, never to the one that wrote.
+const storageHandlers = [];
 globalThis.window = {
   location: { origin: 'https://x.test', href: 'https://x.test/' },
-  addEventListener: () => {},
-  removeEventListener: () => {},
+  addEventListener: (type, fn) => {
+    if (type === 'storage') storageHandlers.push(fn);
+  },
+  removeEventListener: (type, fn) => {
+    if (type === 'storage') {
+      const i = storageHandlers.indexOf(fn);
+      if (i !== -1) storageHandlers.splice(i, 1);
+    }
+  },
 };
 globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 
@@ -274,6 +284,112 @@ async function waitFor(cond, timeoutMs = 1000) {
   unsubscribe();
   provClient.destroy();
   globalThis.fetch = prevFetch;
+
+  console.log('\n── 11. Wallet state reaches a subscriber the watch did not serve ─');
+  // The watch reports only what ITS poll finds. The session also changes hands
+  // without it: a restore from storage on a cold start, and a sibling tab
+  // persisting the value its own poll found. A subscriber must hear those too,
+  // or a "preparing your account" screen built on the callback never clears.
+  const wsPrevFetch = globalThis.fetch;
+  let wsReported = 'CREATING';
+  let wsStateCalls = 0;
+  globalThis.fetch = async (req) => {
+    if (req.url.includes('/wallet/state')) {
+      wsStateCalls++;
+      return new Response(
+        JSON.stringify({
+          success: true,
+          code: 'SDK_WALLET_STATE',
+          content: {
+            address: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+            chain: 'STELLAR',
+            provisioning: wsReported,
+            existsOnStellar: wsReported === 'READY',
+          },
+        }),
+        { status: 200 },
+      );
+    }
+    return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
+  };
+  const wsSession = (provisioning) =>
+    JSON.stringify({
+      clientSessionId: 'cs-shared',
+      userId: 'u',
+      status: 'CONSUMED',
+      token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+      user: { ready: true },
+      wallet: { type: 'internal', address: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF', provisioning },
+    });
+
+  // (a) A sibling tab's poll found READY and persisted it. This tab adopts the
+  //     row through the `storage` event, so its own poll has nothing new to say.
+  {
+    wsReported = 'CREATING';
+    const wsStorage = sdk.createMemoryAdapter();
+    await wsStorage.set(sessionKey, wsSession('CREATING'));
+    const tabA = new sdk.PollarClient({ apiKey, storage: wsStorage, baseUrl: 'https://x.test' });
+    await tabA.ready();
+    await waitFor(() => tabA.getAuthState().verified === true);
+    const seen = [];
+    const off = tabA.onWalletStateChange((p) => seen.push(p));
+    check('cross-tab: replays CREATING on subscribe', seen[0] === 'CREATING', seen);
+
+    const row = wsSession('READY');
+    await wsStorage.set(sessionKey, row);
+    for (const h of storageHandlers)
+      h({ key: sessionKey, newValue: row, oldValue: null, storageArea: globalThis.localStorage });
+    await waitFor(() => tabA.getWallet()?.provisioning === 'READY');
+    check("cross-tab: a sibling tab's READY reaches onWalletStateChange", seen.includes('READY'), seen);
+
+    // The watch's own poll now answers READY as well: adopted already, so no
+    // second emission.
+    wsReported = 'READY';
+    const callsBefore = wsStateCalls;
+    await waitFor(() => wsStateCalls > callsBefore, 6000);
+    await new Promise((r) => setTimeout(r, 50));
+    check('  and the poll that follows does not report it twice', seen.filter((p) => p === 'READY').length === 1, seen);
+    off();
+    tabA.destroy();
+  }
+
+  // (b) Cold start with a READY row, subscribing before `ready()` resolves, as
+  //     a mount-time effect does. Nothing will ever transition, so the restore
+  //     itself has to deliver the value.
+  {
+    wsReported = 'READY';
+    const wsStorage = sdk.createMemoryAdapter();
+    await wsStorage.set(sessionKey, wsSession('READY'));
+    const cold = new sdk.PollarClient({ apiKey, storage: wsStorage, baseUrl: 'https://x.test' });
+    const seen = [];
+    const off = cold.onWalletStateChange((p) => seen.push(p));
+    await cold.ready();
+    check('cold start (READY): the restore delivers the value to an early subscriber', seen[0] === 'READY', seen);
+    await waitFor(() => cold.getAuthState().verified === true);
+    await new Promise((r) => setTimeout(r, 50));
+    check('  and the resume that follows does not repeat it', seen.length === 1, seen);
+    off();
+    cold.destroy();
+  }
+
+  // (c) Cold start with a CREATING row, subscribing before `ready()`: the
+  //     restore delivers CREATING, the watch delivers READY, each exactly once.
+  {
+    wsReported = 'CREATING';
+    const wsStorage = sdk.createMemoryAdapter();
+    await wsStorage.set(sessionKey, wsSession('CREATING'));
+    const cold = new sdk.PollarClient({ apiKey, storage: wsStorage, baseUrl: 'https://x.test' });
+    const seen = [];
+    const off = cold.onWalletStateChange((p) => seen.push(p));
+    await cold.ready();
+    check('cold start (CREATING): the restore delivers CREATING to an early subscriber', seen[0] === 'CREATING', seen);
+    wsReported = 'READY';
+    await waitFor(() => seen.includes('READY'), 6000);
+    check('  and the watch delivers READY, each exactly once', seen.join(',') === 'CREATING,READY', seen);
+    off();
+    cold.destroy();
+  }
+  globalThis.fetch = wsPrevFetch;
 
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);

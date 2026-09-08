@@ -14,8 +14,10 @@
   wallet's on-chain account changes state (`CREATING` → `READY`, or `FAILED`).
   Replays the current value on subscribe, the same contract as
   `onAuthStateChange`, so a late subscriber never waits for a transition that
-  already happened. This is what a "preparing your account" state should be
-  driven by.
+  already happened; an early one (subscribed before the session was restored)
+  hears its first value when the restore lands. A value another tab found and
+  persisted reaches this tab's subscribers too, once. This is what a
+  "preparing your account" state should be driven by.
 - **New: `wallet.provisioning`** on `getWallet()` / `getWallets()` and on the
   persisted session — `'READY' | 'CREATING' | 'FAILED'`. Only the ACCOUNT is
   described: trustlines are added incrementally over an app's life, so a wallet

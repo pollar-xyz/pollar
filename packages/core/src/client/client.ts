@@ -1332,13 +1332,33 @@ export class PollarClient {
    * is never left waiting for a transition that already happened.
    *
    * Emits only on CHANGE. A wallet that was already READY at login emits READY
-   * once, on subscribe, and never again.
+   * once, on subscribe, and never again. A subscriber that comes before the
+   * session exists (a mount-time effect on a cold start) hears its first value
+   * when the restore lands.
    */
   onWalletStateChange(cb: (provisioning: WalletProvisioning) => void): () => void {
     this._walletStateListeners.add(cb);
     const current = this._session?.wallet?.provisioning;
     if (current) cb(current);
     return () => this._walletStateListeners.delete(cb);
+  }
+
+  /**
+   * Report a `provisioning` change that arrived with a whole session rather
+   * than through the watch: a restore from storage (cold start, or a sibling
+   * tab persisting the value ITS poll found), or a fresh login. Without this the
+   * watch is the only emitter, and a value that reached `_session` any other
+   * way never reaches a subscriber - `_applyWalletProvisioning` then sees the
+   * value already in place and rightly stays quiet.
+   *
+   * A different wallet counts as a change even at the same value, so a
+   * login-over-login as another user is reported.
+   */
+  private _emitWalletStateIfChanged(prev: PollarPersistedSession | null, next: PollarPersistedSession | null): void {
+    const value = next?.wallet?.provisioning;
+    if (!value) return;
+    if (value === prev?.wallet?.provisioning && next?.wallet?.address === prev?.wallet?.address) return;
+    for (const cb of this._walletStateListeners) cb(value);
   }
 
   /**
@@ -3997,6 +4017,10 @@ export class PollarClient {
       if (isSameVerifiedSession) {
         this._log.info('[PollarClient] Session token rotated (cross-tab); keeping verified');
         this._setAuthState({ step: 'authenticated', session: this._session, verified: true });
+        // The row may carry more than a token: a sibling tab's watch writes the
+        // provisioning value it found, and this tab's own poll will find nothing
+        // left to report once the row is adopted.
+        this._emitWalletStateIfChanged(prevSession, this._session);
         this._scheduleNextRefresh();
         return;
       }
@@ -4017,6 +4041,7 @@ export class PollarClient {
         }
         if (this._session) {
           this._setAuthState({ step: 'authenticated', session: this._session, verified: true });
+          this._emitWalletStateIfChanged(prevSession, this._session);
         }
         return;
       }
@@ -4030,6 +4055,7 @@ export class PollarClient {
       // server hasn't confirmed the session is still alive (it may have been
       // revoked elsewhere), so `verified: false`.
       this._setAuthState({ step: 'authenticated', session: this._session, verified: false });
+      this._emitWalletStateIfChanged(prevSession, this._session);
       this._scheduleNextRefresh();
       // Fire-and-forget: revalidate + repopulate the profile in the background.
       // Deliberately NOT awaited so `_initialized` resolves immediately and the
@@ -4202,6 +4228,7 @@ export class PollarClient {
     this._sessionGeneration++;
     this._resetResumeBackoff();
     const gen = this._sessionGeneration;
+    const prevSession = this._session;
     this._session = persisted;
     this._recordOwnedSession(persisted.clientSessionId);
 
@@ -4239,6 +4266,7 @@ export class PollarClient {
     // Fresh login/refresh response came straight from the server, so the
     // session is already server-validated -> `verified: true`.
     this._setAuthState({ step: 'authenticated', session: persisted, verified: true });
+    this._emitWalletStateIfChanged(prevSession, persisted);
     this._scheduleNextRefresh();
     // A login that returned before the account was on the ledger leaves the
     // wallet CREATING. Nothing else would tell the app when that ends.
