@@ -2,6 +2,7 @@ import { createApiClient, fetchWithTimeout, PollarApiClient } from '../api/clien
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { executeJupiterSwap, getSwapConfig, getSwapTokens, quoteSwap } from '../api/endpoints/swap';
 import { buildEarnTx, getEarnOpportunities, getEarnPosition, getEarnProviders } from '../api/endpoints/earn';
+import { buildBorrowTx, getBorrowMarkets, getBorrowPositions } from '../api/endpoints/borrow';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
 import {
   completeWithdraw,
@@ -43,6 +44,11 @@ import {
   EarnPosition,
   EarnPositionParams,
   EarnTxParams,
+  BorrowBuildParams,
+  BorrowMarket,
+  BorrowMarketName,
+  BorrowOutcome,
+  BorrowPosition,
   EnabledAssetRecord,
   EnabledAssetsState,
   KycLevel,
@@ -3353,6 +3359,25 @@ export class PollarClient {
     // runTx (re-simulated server-side), mirroring swap.
     if ('unsignedXdr' in build) return this.signAndSubmitTx(build.unsignedXdr);
     return this.runTx(build.operation, build.params);
+  }
+
+  // ─── Borrow (Jupiter collateralised lending) ───────────────────────────────
+  async getBorrowMarkets(market: BorrowMarketName = 'main'): Promise<BorrowMarket[]> {
+    return getBorrowMarkets(this._api, market);
+  }
+
+  async getBorrowPositions(market: BorrowMarketName = 'main'): Promise<BorrowPosition[]> {
+    const connection = await this._connectedSolanaWallet();
+    if (!connection) throw new Error('No Solana wallet connected');
+    return getBorrowPositions(this._api, market, connection.wallet.address);
+  }
+
+  /** Builds only. Signing and Solana RPC submission stay explicit, matching Jupiter Earn. */
+  async borrowBuild(params: BorrowBuildParams): Promise<BorrowOutcome> {
+    const connection = await this._connectedSolanaWallet();
+    if (!connection) throw new Error('No Solana wallet connected');
+    const content = await buildBorrowTx(this._api, { ...params, market: params.market ?? 'main', signer: connection.wallet.address });
+    return { status: 'prepared', nftId: content.nftId, ...content.build };
   }
 
   private _setTxHistoryState(next: TxHistoryState): void {

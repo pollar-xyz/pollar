@@ -1053,6 +1053,15 @@ export type EarnTxParams = {
   amount: string;
 };
 
+// ─── Borrow types (collateralised lending) ───────────────────────────────────
+export type BorrowMarketName = 'main' | 'ethena';
+export type BorrowToken = { mint: string; symbol: string; name: string; decimals: number; priceUsd: string; logoUrl?: string };
+export type BorrowMarket = { provider: 'jupiter'; market: BorrowMarketName; vaultId: number; address: string; collateral: BorrowToken; debt: BorrowToken; collateralFactorPct: number; liquidationThresholdPct: number; liquidationMaxPct: number; liquidationPenaltyPct: number; supplyApy: number; borrowApy: number; borrowable: string; minimumBorrowing: string; totalPositions: number };
+export type BorrowPosition = { provider: 'jupiter'; market: BorrowMarketName; vaultId: number; positionId: number; owner: string; collateralAmount: string; debtAmount: string; dustDebtAmount: string; isLiquidated: boolean };
+export type BorrowBuildParams = { market?: BorrowMarketName; vaultId: number; positionId: number; collateralAmount: string; debtAmount: string; repayAll?: boolean; withdrawAll?: boolean };
+export type BorrowBuildContent = { nftId: number; build: { chain: 'SOLANA'; unsignedTransaction: string; encoding: 'base64' } };
+export type BorrowOutcome = { status: 'prepared'; nftId: number; chain: 'SOLANA'; unsignedTransaction: string; encoding: 'base64' };
+
 // ─── Adapter types ────────────────────────────────────────────────────────────
 
 export type AdapterFn<TParams = unknown> = (params: TParams) => Promise<{ unsignedTransaction: string }>;
