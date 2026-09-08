@@ -1,7 +1,7 @@
 {
   "name": "@pollar/privy-adapter",
   "version": "0.11.2",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/pollar-xyz/pollar.git",
@@ -35,7 +35,8 @@
   },
   "react-native": "./dist/index.native.js",
   "files": [
-    "dist"
+    "dist",
+    "NOTICE"
   ],
   "sideEffects": false,
   "scripts": {
