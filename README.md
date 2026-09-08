@@ -23,7 +23,7 @@ This repository is managed with [Turborepo](https://turbo.build/repo) and contai
 > `@pollar/core@^0.11.3`; if you pin exact versions, keep both on the same version.
 >
 > Earlier: **0.11.2** (additive) added the `client.stellar` namespace: sign **SEP-53
-> message** and **SEP-10 challenge** ownership proofs across custodial and external wallets,
+> message** and **SEP-10 challenge** ownership proofs across embedded and external wallets,
 > both returning the same `sep53` scheme so a verifier treats them alike. The Transaction
 > History modal goes **multichain** (network picker, per-chain explorer links, unified
 > `{ amount, unit }` fees), and the Freighter adapter runs on `@stellar/freighter-api` 6.0.0.
@@ -77,12 +77,12 @@ Pollar authentication and multichain (Stellar + Solana) transactions into any Ja
 - **SEP-24 on/off-ramps** - anchor deposit/withdraw interactive flow via the `ramps` endpoints
 - **Account creation** - `createAccount()` puts an external wallet's classic account on-chain via a sponsored
   `createAccount`; the wallet surfaces `existsOnStellar` + `fundingMode`
-- **Sponsored trustlines** - `setTrustline` lets the app config decide who pays (server-side): custodial wallets hit
+- **Sponsored trustlines** - `setTrustline` lets the app config decide who pays (server-side): embedded wallets hit
   the sponsored/self-pay trustline endpoint, external wallets co-sign whichever XDR the server returns. Pass
   `skipSponsorship` to force the user's own wallet to pay via `change_trust`
 - **Stellar ownership proofs (SEP-53 / SEP-10)** - `client.stellar.sep53.signMessage()` and
   `client.stellar.sep10.sign()` prove wallet ownership to a verifier. External wallets sign client-side via their
-  adapter, custodial wallets sign server-side, and both return the same `sep53` scheme
+  adapter, embedded wallets sign server-side, and both return the same `sep53` scheme
 - **Network resilience** - per-request timeout (default 10s) and idempotent-request retry; typed `PollarNetworkError`
 - KYC verification flow - provider selection, session start, and status polling
 - Transaction history - paginated fetch with status tracking
@@ -187,7 +187,7 @@ you do not wire up Privy's hooks yourself.
   `@privy-io/expo` on RN); a non-React host fails fast with `PrivyAdapterUnsupportedError`
 - Auto-sync host login (`onProviderAuthChange`) that recovers web OAuth redirects and persisted Privy sessions;
   optional `cleanupOAuthRedirect` and `debug` logging
-- For server-side custody instead, use `@pollar/privy-server-adapter` below
+- For server-side signing instead, use `@pollar/privy-server-adapter` below
 
 ```bash
 npm install @pollar/privy-adapter @pollar/core @stellar/stellar-sdk @privy-io/react-auth react react-dom
