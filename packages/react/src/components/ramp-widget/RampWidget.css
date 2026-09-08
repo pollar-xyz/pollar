@@ -1,0 +1,337 @@
+/* --- Widget container -------------------------------------------------------- */
+.pollar-ramp-modal {
+  max-width: 480px;
+}
+
+/* --- Header ------------------------------------------------------------------ */
+.pollar-ramp-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.pollar-ramp-subtitle {
+  margin: 0;
+  font-size: var(--pollar-modal-subtitle-size, 0.9rem);
+  color: var(--pollar-muted);
+}
+
+/* --- Step indicator --------------------------------------------------------
+   One segment per step of THIS run - the count varies by route, so the track is
+   a flex row of equal shares rather than a percentage-filled bar. */
+.pollar-ramp-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.pollar-ramp-steps-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pollar-muted);
+}
+
+.pollar-ramp-steps-track {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.pollar-ramp-steps-segment {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--pollar-border);
+  transition: background-color 0.2s;
+}
+
+.pollar-ramp-steps-segment[data-done] {
+  background: var(--pollar-accent);
+}
+
+/* The country <select> loading placeholder uses the shared .pollar-select-loading
+   (spinner + label inside a select-shaped box), consistent with all the modals. */
+
+/* Direction tabs use the shared segmented control (.pollar-tabs / .pollar-tab). */
+
+/* --- Input group ------------------------------------------------------------- */
+.pollar-ramp-field {
+  margin-bottom: 1rem;
+}
+
+.pollar-ramp-label {
+  display: block;
+  margin-bottom: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--pollar-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pollar-ramp-input {
+  width: 100%;
+  height: var(--pollar-input-height, 44px);
+  padding: 0 1rem;
+  border-radius: var(--pollar-input-border-radius, 0.5rem);
+  border: 1px solid var(--pollar-border);
+  background-color: var(--pollar-input-bg);
+  color: var(--pollar-text);
+  font-size: 1rem;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.pollar-ramp-input:focus {
+  box-shadow: 0 0 0 2px var(--pollar-accent);
+  border-color: transparent;
+}
+
+.pollar-ramp-field-error {
+  display: block;
+  margin-top: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--pollar-error-text, #dc2626);
+}
+
+.pollar-ramp-field-hint {
+  display: block;
+  margin-top: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--pollar-muted);
+}
+
+/* Rides inside the label, so it reads as part of the field name rather than as
+   another line competing with the hint below. */
+.pollar-ramp-field-optional {
+  font-weight: 400;
+  text-transform: none;
+  color: var(--pollar-muted);
+}
+
+.pollar-ramp-input-row {
+  display: flex;
+  gap: 0.625rem;
+}
+
+.pollar-ramp-input-row .pollar-ramp-field {
+  flex: 1;
+}
+
+/* --- Loading quote ----------------------------------------------------------- */
+.pollar-ramp-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 1.5rem 0;
+}
+
+.pollar-ramp-loading-spinner {
+  align-self: center;
+  margin-bottom: 0.5rem;
+}
+
+.pollar-ramp-loading-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.875rem;
+  color: var(--pollar-muted);
+  opacity: 0;
+  transform: translateY(4px);
+  animation: pollar-ramp-appear 0.3s ease forwards;
+}
+
+.pollar-ramp-loading-row:nth-child(1) {
+  animation-delay: 0ms;
+}
+.pollar-ramp-loading-row:nth-child(2) {
+  animation-delay: 400ms;
+}
+.pollar-ramp-loading-row:nth-child(3) {
+  animation-delay: 800ms;
+}
+
+@keyframes pollar-ramp-appear {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pollar-ramp-loading-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--pollar-accent);
+  flex-shrink: 0;
+}
+
+/* --- Route card -------------------------------------------------------------- */
+.pollar-ramp-route-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin-bottom: 1.25rem;
+}
+
+.pollar-ramp-route-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1rem;
+  border-radius: var(--pollar-card-border-radius, 10px);
+  border: 1px solid var(--pollar-border);
+  background-color: var(--pollar-input-bg);
+  cursor: pointer;
+  transition: all 0.15s;
+  box-sizing: border-box;
+}
+
+/* The route being started: keep it prominent (it's the one acting) but make it
+   clear it no longer responds to clicks. */
+.pollar-ramp-route-card[data-busy] {
+  cursor: wait;
+  border-color: var(--pollar-accent);
+}
+
+/* The other routes while one is starting - dimmed and inert, so a second click
+   can't fire a competing request. */
+.pollar-ramp-route-card[data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pollar-ramp-route-card[data-recommended='true'] {
+  border-color: var(--pollar-accent);
+  background-color: color-mix(in srgb, var(--pollar-accent) 5%, var(--pollar-input-bg));
+}
+
+.pollar-ramp-route-card:not([data-disabled]):hover {
+  border-color: var(--pollar-accent);
+}
+
+.pollar-ramp-route-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.pollar-ramp-route-provider {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--pollar-text);
+}
+
+.pollar-ramp-route-meta {
+  font-size: 0.75rem;
+  color: var(--pollar-muted);
+}
+
+.pollar-ramp-route-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.pollar-ramp-route-fee {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--pollar-text);
+}
+
+.pollar-ramp-route-badge {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--pollar-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* --- Payment instructions ---------------------------------------------------- */
+.pollar-ramp-payment {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pollar-ramp-payment-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--pollar-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+
+.pollar-ramp-payment-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.pollar-ramp-payment-label {
+  font-size: 0.75rem;
+  color: var(--pollar-muted);
+}
+
+.pollar-ramp-payment-value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-radius: var(--pollar-card-border-radius, 10px);
+  border: 1px solid var(--pollar-border);
+  background-color: var(--pollar-input-bg);
+}
+
+.pollar-ramp-payment-value code {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--pollar-text);
+  letter-spacing: 0.03em;
+  font-family: monospace;
+}
+
+/* Pollar-rendered QR. The SVG paints with `currentColor`, so setting the text
+   colour here is what makes it legible in both themes without a second asset. */
+.pollar-ramp-qr {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  color: var(--pollar-text);
+}
+
+.pollar-ramp-qr svg {
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+  display: block;
+}
+
+.pollar-ramp-copy-btn {
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--pollar-buttons-border-radius, 6px);
+  border: 1px solid var(--pollar-border);
+  background: transparent;
+  color: var(--pollar-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pollar-ramp-copy-btn:hover {
+  color: var(--pollar-text);
+  border-color: var(--pollar-accent);
+}
+
+.pollar-ramp-payment-note {
+  font-size: 0.8125rem;
+  color: var(--pollar-muted);
+  text-align: center;
+  margin: 0;
+}

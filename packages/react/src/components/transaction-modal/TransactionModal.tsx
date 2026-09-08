@@ -1,69 +1,85 @@
 'use client';
 
-import { StateTransactionCodes, TxBuildResponse, TxSignSendResponse } from '@pollar/core';
+import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import '../shared.css';
 import './TransactionModal.css';
 import { TransactionModalTemplate } from './TransactionModalTemplate';
+import { modalChrome } from '../modal-theme';
 
 interface TransactionModalProps {
   onClose: () => void;
 }
 
-const isTxBuildResponseContent = (data: unknown): data is TxBuildResponse['content'] => {
-  if (!data || typeof data !== 'object') return false;
-  const d = data as Record<string, unknown>;
-  return (
-    typeof d.unsignedXdr === 'string' &&
-    typeof d.networkPassphrase === 'string' &&
-    typeof d.estimatedFee === 'string' &&
-    d.summary !== null &&
-    typeof d.summary === 'object'
-  );
-};
-
-const isTxSignSendResponseContent = (data: unknown): data is TxSignSendResponse['content'] => {
-  if (!data || typeof data !== 'object') return false;
-  const d = data as Record<string, unknown>;
-  return typeof d.hash === 'string' && (d.status === 'PENDING' || d.status === 'SUCCESS' || d.status === 'FAILED');
-};
-
 export function TransactionModal({ onClose }: TransactionModalProps) {
-  const {
-    getClient,
-    styles,
-    state: { transaction },
-  } = usePollar();
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const { getClient, styles, tx: transaction, network, wallet } = usePollar();
+  // External-wallet signing-adapter id (freighter/albedo) drives the wallet logo;
+  // null for embedded/smart, which fall back to the Pollar logo.
+  const walletType = wallet?.custody === 'external' ? wallet.provider : null;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
-  let buildResult: TxBuildResponse['content'] | null = null;
-  const transactionStateCode = transaction.code as StateTransactionCodes;
-  const content = (transaction.data as { content: unknown })?.content;
-  if (isTxBuildResponseContent(content)) {
-    buildResult = content;
-  }
-  let submitResult: TxSignSendResponse['content'] | null = null;
-  if (isTxSignSendResponseContent(content)) {
-    submitResult = content;
+  const [showXdr, setShowXdr] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
+    },
+    [],
+  );
+
+  const hash = transaction.step === 'success' ? transaction.hash : null;
+  const buildData = 'buildData' in transaction ? transaction.buildData : null;
+  const explorerNetwork = buildData?.summary.network?.toLowerCase().includes('testnet')
+    ? 'testnet'
+    : buildData
+      ? 'public'
+      : network === 'testnet'
+        ? 'testnet'
+        : 'public';
+  const explorerUrl = hash ? `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}` : null;
+
+  function handleSignAndSend() {
+    if (transaction.step === 'built') {
+      void getClient().signAndSubmitTx(transaction.buildData.unsignedXdr);
+    }
   }
 
-  async function handleSignAndSend() {
-    if (buildResult) {
-      await getClient().submitTx(buildResult.unsignedXdr);
+  function handleCopyHash() {
+    if (!hash) return;
+    navigator.clipboard.writeText(hash).then(() => {
+      setCopied(true);
+      if (copyTimerRef.current !== null) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => {
+        copyTimerRef.current = null;
+        setCopied(false);
+      }, 2000);
+    });
+  }
+
+  async function handleRetry() {
+    if (transaction.step === 'error' && transaction.buildData) {
+      await getClient().signAndSubmitTx(transaction.buildData.unsignedXdr);
     }
   }
 
   return (
-    <div className="pollar-overlay" onClick={onClose}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
       <TransactionModalTemplate
         theme={theme}
         accentColor={accentColor}
-        transactionStateCode={transactionStateCode}
-        status={transaction.status}
-        buildResult={buildResult}
-        submitResult={submitResult}
+        styleOverrides={styleOverrides}
+        transaction={transaction}
+        showXdr={showXdr}
+        copied={copied}
+        explorerUrl={explorerUrl}
+        walletType={walletType}
         onClose={onClose}
         onSignAndSend={handleSignAndSend}
-        onRetrySignAndSend={handleSignAndSend}
+        onToggleXdr={() => setShowXdr((v) => !v)}
+        onCopyHash={handleCopyHash}
+        onRetry={handleRetry}
       />
     </div>
   );

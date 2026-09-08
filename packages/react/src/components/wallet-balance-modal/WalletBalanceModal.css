@@ -1,0 +1,116 @@
+/* ---- Wallet balance modal ---- */
+.pollar-bal-modal {
+  max-width: 380px;
+}
+
+/* Address chip + copy button styles live in shared.css (shared with the asset modal). */
+
+/* Copy button styles live in shared.css (used by every modal via <CopyButton/>). */
+
+/* ---- Balance list ---- */
+.pollar-bal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.pollar-bal-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--pollar-input-bg);
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius, 10px);
+  padding: 0.75rem 1rem;
+}
+
+.pollar-bal-asset-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+  min-width: 0;
+}
+
+.pollar-bal-asset-code-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+}
+
+.pollar-bal-asset {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--pollar-text);
+}
+
+/* Small print under the native SOL row on testnet: where to top up test funds. */
+.pollar-bal-faucet-hint {
+  font-size: 0.6875rem;
+  color: var(--pollar-muted);
+}
+
+.pollar-bal-faucet-hint a {
+  color: var(--pollar-accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.pollar-bal-faucet-hint a:hover {
+  text-decoration: underline;
+}
+
+/* Even smaller than the hint: which cluster the faucet funds. */
+.pollar-bal-faucet-net {
+  font-size: 0.625rem;
+  opacity: 0.8;
+}
+
+/* Per-asset network tag, shown only when the app spans more than one chain. The
+   accent is passed in per chain via --pollar-chain-color. */
+.pollar-bal-chain-tag {
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.1875rem 0.375rem;
+  border-radius: 4px;
+  color: var(--pollar-chain-color, var(--pollar-muted));
+  background: color-mix(in srgb, var(--pollar-chain-color, #6b7280) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pollar-chain-color, #6b7280) 34%, transparent);
+}
+
+.pollar-bal-issuer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.pollar-bal-issuer-addr {
+  font-size: 0.6875rem;
+  font-family: monospace;
+  color: var(--pollar-muted);
+}
+
+.pollar-bal-amounts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.125rem;
+}
+
+.pollar-bal-amount {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--pollar-text);
+  font-family: monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.pollar-bal-available {
+  font-size: 0.6875rem;
+  color: var(--pollar-muted);
+  font-family: monospace;
+  font-variant-numeric: tabular-nums;
+}

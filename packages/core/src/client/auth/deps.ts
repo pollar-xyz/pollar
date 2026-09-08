@@ -1,0 +1,81 @@
+import { PollarApiClient } from '../../api/client';
+import type { PublicEcJwk } from '../../keys/types';
+import type { PollarLogger } from '../../lib/logger';
+import { AUTH_ERROR_CODES, AuthState, PasskeyCeremony, PollarApplicationConfigContent } from '../../types';
+import { WalletAdapter, WalletId } from '../../wallets';
+import { logApiError } from './logging';
+
+export type FlowDeps = {
+  api: PollarApiClient;
+  /** Level-gated logger from the owning `PollarClient`. */
+  logger: PollarLogger;
+  /** API origin + version prefix (e.g. `https://sdk.api.pollar.xyz/v2`). Used to
+   *  build the non-streaming status-poll URL on runtimes without fetch streaming. */
+  basePath: string;
+  /**
+   * Stellar network passphrase for the app's network. Used to sign the SEP-10
+   * wallet challenge transaction on the correct network (the backend builds the
+   * challenge with the matching passphrase).
+   */
+  networkPassphrase: string;
+  /**
+   * Whether the runtime supports `fetch` response-body streaming (web). When
+   * `true` the SDK consumes the SSE status stream; when `false` (React Native,
+   * whose `fetch` exposes no `response.body.getReader()`) it polls the
+   * non-streaming `/auth/session/status/{id}/poll` endpoint instead.
+   */
+  useStreaming: boolean;
+  signal: AbortSignal;
+  setAuthState: (state: AuthState) => void;
+  /**
+   * Persist the authenticated session. `boundDpopJkt` is the RFC 7638
+   * thumbprint of the JWK the flow actually sent as `dpopJwk` to /auth/login -
+   * i.e. the key the server bound the tokens to (`cnf.jkt`). Pass it so the
+   * persisted `dpopJkt` records the BOUND key, not whatever key happens to be
+   * loaded at store time (they differ if the key rotated mid-login).
+   */
+  storeSession: (session: PollarApplicationConfigContent, boundDpopJkt?: string) => void | Promise<void>;
+  clearSession: () => void | Promise<void>;
+  /** Persists the connected adapter (in memory + the stored wallet id) so a
+   *  returning session restores it. Keyed by `adapter.type`. */
+  storeWalletAdapter: (adapter: WalletAdapter, id: WalletId) => void | Promise<void>;
+  /**
+   * The passkey (WebAuthn) ceremony for `loginSmartWallet()`, injected from the
+   * client config. Undefined when the consumer didn't configure passkey support.
+   */
+  passkey?: PasskeyCeremony;
+  /**
+   * Returns the public JWK of the SDK's per-session DPoP keypair. Auth
+   * completion calls (`/auth/login`) pass it as `dpopJwk` so the server
+   * can mint DPoP-bound tokens (`cnf.jkt`).
+   */
+  getPublicJwk: () => Promise<PublicEcJwk>;
+  /**
+   * Optional UI label persisted on the server-side refresh-token row so the
+   * sessions UI can show "iPhone - Safari" instead of a raw user-agent.
+   */
+  deviceLabel?: string;
+};
+
+export async function createAuthSession(deps: FlowDeps): Promise<string | null> {
+  const { api, logger, signal, setAuthState } = deps;
+
+  setAuthState({ step: 'creating_session' });
+
+  const { data, error } = await api.POST('/auth/session', { signal });
+
+  if (error || !data?.success) {
+    // HTTP-level errors are logged by the central middleware; only log the
+    // 2xx-with-no-success case here.
+    if (!error) logApiError(logger, 'POST /auth/session', { data });
+    setAuthState({
+      step: 'error',
+      previousStep: 'creating_session',
+      message: 'Failed to create session',
+      errorCode: AUTH_ERROR_CODES.SESSION_CREATE_FAILED,
+    });
+    return null;
+  }
+
+  return data.content.clientSessionId;
+}

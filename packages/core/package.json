@@ -1,12 +1,29 @@
 {
   "name": "@pollar/core",
-  "version": "0.4.4",
+  "version": "0.11.3",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pollar-xyz/pollar.git",
+    "directory": "packages/core"
+  },
   "description": "Core authentication functions for Pollar services",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "react-native": "./dist/index.rn.mjs",
   "exports": {
     ".": {
+      "react-native": {
+        "import": {
+          "types": "./dist/index.rn.d.mts",
+          "default": "./dist/index.rn.mjs"
+        },
+        "require": {
+          "types": "./dist/index.rn.d.ts",
+          "default": "./dist/index.rn.js"
+        }
+      },
       "import": {
         "types": "./dist/index.d.mts",
         "default": "./dist/index.mjs"
@@ -15,24 +32,79 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       }
+    },
+    "./adapters/expo": {
+      "import": {
+        "types": "./dist/adapters/expo-secure-store.d.mts",
+        "default": "./dist/adapters/expo-secure-store.mjs"
+      },
+      "require": {
+        "types": "./dist/adapters/expo-secure-store.d.ts",
+        "default": "./dist/adapters/expo-secure-store.js"
+      }
+    },
+    "./adapters/react-native-keychain": {
+      "import": {
+        "types": "./dist/adapters/react-native-keychain.d.mts",
+        "default": "./dist/adapters/react-native-keychain.mjs"
+      },
+      "require": {
+        "types": "./dist/adapters/react-native-keychain.d.ts",
+        "default": "./dist/adapters/react-native-keychain.js"
+      }
+    },
+    "./adapters/react-native-appstate": {
+      "import": {
+        "types": "./dist/adapters/react-native-appstate.d.mts",
+        "default": "./dist/adapters/react-native-appstate.mjs"
+      },
+      "require": {
+        "types": "./dist/adapters/react-native-appstate.d.ts",
+        "default": "./dist/adapters/react-native-appstate.js"
+      }
     }
   },
   "files": [
     "dist"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/index.mjs",
+    "./dist/index.js",
+    "./dist/index.rn.mjs",
+    "./dist/index.rn.js"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && eslint src",
     "clean": "rm -rf dist"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "devDependencies": {
-    "tsup": "^8.3.0",
-    "typescript": "^5.7.0"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.5.0",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.0"
   },
   "dependencies": {
-    "@stellar/freighter-api": "^2.0.0",
+    "@noble/curves": "~1.9.7",
+    "@noble/hashes": "~1.8.0",
+    "@stellar/freighter-api": "6.0.0",
     "openapi-fetch": "^0.17.0"
+  },
+  "peerDependencies": {
+    "expo-secure-store": ">=12",
+    "react-native-keychain": ">=8"
+  },
+  "peerDependenciesMeta": {
+    "expo-secure-store": {
+      "optional": true
+    },
+    "react-native-keychain": {
+      "optional": true
+    }
   }
 }

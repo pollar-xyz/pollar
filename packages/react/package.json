@@ -1,6 +1,12 @@
 {
   "name": "@pollar/react",
-  "version": "0.4.4",
+  "version": "0.11.3",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pollar-xyz/pollar.git",
+    "directory": "packages/react"
+  },
   "description": "React components for Pollar authentication",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -27,23 +33,33 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && eslint src",
     "clean": "rm -rf dist"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "peerDependencies": {
+    "@pollar/core": "^0.11.3",
     "react": ">=18",
-    "react-dom": ">=18",
-    "@pollar/core": "*"
+    "react-dom": ">=18"
   },
   "dependencies": {
-    "@pollar/core": "*"
+    "@simplewebauthn/browser": "^13.3.0",
+    "qr.js": "^0.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@pollar/core": "^0.11.3",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
+    "eslint": "^10.5.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "jsdom": "^29.1.1",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
-    "tsup": "^8.3.0",
-    "typescript": "^5.7.0"
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.0"
   }
 }

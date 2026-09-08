@@ -1,0 +1,575 @@
+/* --- Animations ---------------------------------------------------------------- */
+@keyframes pollar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pollar-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* --- Overlay ------------------------------------------------------------------- */
+.pollar-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--pollar-overlay-z-index, 50);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Scroll the overlay (not just clip) when the card is taller than the
+   * viewport; padding keeps the card off the screen edges while scrolling. */
+  overflow-y: auto;
+  padding: 1rem;
+  box-sizing: border-box;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* --- Modal card base (all modals extend this) ---------------------------------- */
+.pollar-modal-card {
+  position: relative;
+  width: 100%;
+  border-radius: var(--pollar-modal-border-radius, 1rem);
+  border: 1px solid var(--pollar-border);
+  padding: var(--pollar-modal-padding, 1.75rem);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  background-color: var(--pollar-bg);
+  box-sizing: border-box;
+  font-family: inherit;
+  /* Never grow past the viewport; the card scrolls internally instead of being
+   * clipped by the centered overlay when there isn't enough height. */
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+
+/* --- Common input -------------------------------------------------------------- */
+.pollar-input {
+  width: 100%;
+  height: var(--pollar-input-height, 44px);
+  padding: 0 1rem;
+  border-radius: var(--pollar-input-border-radius, 0.5rem);
+  border: 1px solid var(--pollar-border);
+  background-color: var(--pollar-input-bg);
+  color: var(--pollar-text);
+  font-size: 1rem;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.pollar-input::placeholder {
+  color: var(--pollar-muted);
+}
+.pollar-input:focus {
+  box-shadow: 0 0 0 2px var(--pollar-accent);
+  border-color: transparent;
+}
+.pollar-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Modal header (title left, actions right) ---------------------------------- */
+.pollar-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.pollar-modal-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--pollar-text);
+  margin: 0;
+}
+
+.pollar-modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* --- Icon nav buttons (close / back - shared base) ---------------------------- */
+.pollar-close-btn,
+.pollar-back-btn,
+.pollar-modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: var(--pollar-buttons-border-radius, 6px);
+  border: 1px solid var(--pollar-border);
+  background-color: transparent;
+  color: var(--pollar-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.pollar-close-btn:hover,
+.pollar-back-btn:hover,
+.pollar-modal-close:hover {
+  background-color: var(--pollar-input-bg);
+  color: var(--pollar-text);
+  border-color: var(--pollar-text);
+}
+
+/* Absolute positioned variants */
+.pollar-close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+}
+
+.pollar-back-btn {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+}
+
+/* --- Refresh icon (icon-only refresh button reuses .pollar-modal-close base) ---- */
+.pollar-modal-refresh-icon.pollar-spinning {
+  animation: pollar-spin 0.8s linear infinite;
+}
+
+/* --- Action button container --------------------------------------------------- */
+.pollar-modal-actions {
+  display: flex;
+  gap: 0.625rem;
+  margin-top: 1rem;
+}
+
+/* In a button row the primary grows to fill/share the available width. Scoped
+ * here (rather than on the base class) so the button keeps its 44px height when
+ * used inside a flex-column - a bare `flex: 1` collapses it to text height. */
+.pollar-modal-actions .pollar-btn-primary {
+  flex: 1;
+}
+
+/* --- Primary button ------------------------------------------------------------ */
+.pollar-btn-primary {
+  width: 100%;
+  height: var(--pollar-buttons-height, 44px);
+  border: none;
+  border-radius: var(--pollar-buttons-border-radius, 0.5rem);
+  background-color: var(--pollar-accent);
+  /* Falls back to white - the hardcoded value this replaced - so a consumer
+   * mounting a template without the button vars keeps the original look. */
+  color: var(--pollar-btn-primary-fg, #fff);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.pollar-btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+.pollar-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Secondary button ---------------------------------------------------------- */
+.pollar-btn-secondary {
+  height: var(--pollar-buttons-height, 44px);
+  padding: 0 1rem;
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-buttons-border-radius, 0.5rem);
+  /* Stays a ghost button unless a secondary fill was configured. */
+  background-color: var(--pollar-btn-secondary-bg, transparent);
+  color: var(--pollar-btn-secondary-fg, var(--pollar-muted));
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pollar-btn-secondary:hover:not(:disabled) {
+  color: var(--pollar-text);
+  border-color: var(--pollar-text);
+}
+
+/* --- Spinner ------------------------------------------------------------------- */
+.pollar-spinner {
+  display: inline-block;
+  vertical-align: middle;
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid color-mix(in srgb, var(--pollar-accent) 20%, transparent);
+  border-top-color: var(--pollar-accent);
+  border-radius: 50%;
+  animation: pollar-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+/* Compact spinner for inline use (next to a label, inside a button, ...). */
+.pollar-spinner-sm {
+  width: 1rem;
+  height: 1rem;
+  border-width: 2px;
+}
+
+/* When a spinner sits on the primary button's accent-filled surface its
+ * accent-colored ring is invisible - recolor it to the button's own label color,
+ * which follows the accent's luminance (white on a dark accent, dark on a pale
+ * one). */
+.pollar-btn-primary .pollar-spinner {
+  border-color: color-mix(in srgb, var(--pollar-btn-primary-fg, #fff) 35%, transparent);
+  border-top-color: var(--pollar-btn-primary-fg, #fff);
+}
+
+/* Spinner that inherits the current text color - for inline use inside custom /
+ * danger buttons where the accent ring would clash with the button's own color. */
+.pollar-spinner-current {
+  border-color: color-mix(in srgb, currentColor 25%, transparent);
+  border-top-color: currentColor;
+}
+
+/* Centered spinner + label block for a whole-step loading state. */
+.pollar-loading-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem 1rem;
+  color: var(--pollar-muted);
+  font-size: 0.875rem;
+}
+
+/* Inline spinner + label row for a compact loading state (next to a field, in a
+ * list body, ...). Pair with a muted text class for the label color. */
+.pollar-inline-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+/* Loading state shown inside a select-shaped box: left-aligned spinner + label,
+   so a field's loader lives in the field itself (like the ramp country select). */
+.pollar-select-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--pollar-muted);
+}
+
+/* --- Segmented-control tabs (shared by Earn / Ramp modals) --------------------- */
+.pollar-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 1.25rem;
+  padding: 4px;
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius, 10px);
+  background: var(--pollar-input-bg);
+}
+
+.pollar-tab {
+  flex: 1;
+  height: 36px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--pollar-muted);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    background-color 0.15s;
+}
+
+.pollar-tab[data-active='true'] {
+  background: var(--pollar-bg);
+  color: var(--pollar-accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* --- Empty / error states ------------------------------------------------------ */
+.pollar-modal-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--pollar-muted);
+  font-size: 0.875rem;
+}
+
+.pollar-modal-error {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  color: var(--pollar-error-text, #dc2626);
+  font-size: 0.875rem;
+}
+
+/* --- Footer -------------------------------------------------------------------- */
+.pollar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-top: 1px solid var(--pollar-border);
+  padding-top: 1.5rem;
+}
+
+.pollar-footer-protected {
+  font-size: 0.875rem;
+  color: var(--pollar-muted);
+}
+
+.pollar-footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pollar-footer-logo {
+  height: 18px;
+  width: 18px;
+  object-fit: contain;
+}
+
+.pollar-footer-name {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--pollar-text);
+}
+
+.pollar-footer-version {
+  font-size: 0.7rem;
+  color: var(--pollar-muted);
+  opacity: 0.6;
+}
+
+/* --- Status banner ------------------------------------------------------------- */
+.pollar-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  min-height: 40px;
+}
+
+.pollar-status span {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.pollar-status-cancel {
+  margin-left: 4px;
+  padding: 2px 8px;
+  border-radius: var(--pollar-buttons-border-radius, 4px);
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.pollar-status-cancel:hover {
+  opacity: 1;
+}
+
+.pollar-status[data-kind='ERROR'] {
+  color: #ef4444;
+}
+.pollar-status[data-kind='SUCCESS'] {
+  color: #10b981;
+}
+.pollar-status[data-kind='LOADING'] {
+  color: var(--pollar-accent);
+}
+.pollar-status[data-kind='LOADING'] svg {
+  animation: pollar-spin 1s linear infinite;
+}
+
+/* ---- Copy button (shared by every modal that renders <CopyButton/>) ---- */
+.pollar-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--pollar-muted);
+  background: var(--pollar-input-bg);
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-buttons-border-radius, 6px);
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.pollar-copy-btn:hover {
+  color: var(--pollar-accent);
+  border-color: var(--pollar-accent);
+}
+
+/* Compact variant used inline next to an address (issuer, tx counterparty...). */
+.pollar-copy-btn-sm {
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
+}
+
+/* --- Chain tag + on-chain address, shared by the balance and asset lists ----
+   Both modals list per-chain assets, so the network tag and the cropped
+   issuer/contract address live here rather than in either modal's own CSS. The
+   tag's accent is passed in per chain via --pollar-chain-color. */
+.pollar-chain-tag {
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.1875rem 0.375rem;
+  border-radius: 4px;
+  color: var(--pollar-chain-color, var(--pollar-muted));
+  background: color-mix(in srgb, var(--pollar-chain-color, #6b7280) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pollar-chain-color, #6b7280) 34%, transparent);
+}
+
+.pollar-issuer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.pollar-issuer-addr {
+  font-size: 0.6875rem;
+  font-family: monospace;
+  color: var(--pollar-muted);
+}
+
+/* --- Busy overlay -----------------------------------------------------------
+   Covers the card while a refresh is in flight so the stale data underneath
+   stays readable but untouchable. The card is the scroll container, so `inset:0`
+   spans the whole scrollable height; the inner box is sticky to stay on screen
+   however far the list is scrolled. */
+.pollar-busy-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  cursor: wait;
+  background: color-mix(in srgb, var(--pollar-bg) 62%, transparent);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+}
+
+.pollar-busy-overlay-inner {
+  position: sticky;
+  top: 45%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.625rem;
+  color: var(--pollar-muted);
+  font-size: 0.8125rem;
+}
+
+/* --- On/off switch ----------------------------------------------------------
+   One control for a binary state (currently trustlines), replacing the old
+   status-pill-plus-button pair. */
+.pollar-switch {
+  flex: none;
+  width: 38px;
+  height: 22px;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--pollar-border);
+  background: var(--pollar-input-bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.pollar-switch-on {
+  justify-content: flex-end;
+  background: var(--pollar-accent);
+  border-color: var(--pollar-accent);
+}
+
+.pollar-switch-knob {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--pollar-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s;
+}
+
+.pollar-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pollar-switch-busy {
+  cursor: wait;
+}
+
+/* The spinner sits inside the knob, so the switch keeps its footprint and the
+   row never reflows mid-request. */
+.pollar-switch-busy .pollar-switch-knob {
+  color: var(--pollar-muted);
+}
+
+/* --- Network picker, shared by the send / balance / assets modals -----------
+   Sits directly above the address chip and drives what the rest of the modal
+   shows, so it hugs the chip instead of keeping the full field gap. */
+.pollar-chain-field {
+  margin-bottom: 0.75rem;
+}
+
+/* --- Wallet address chip, shared by every modal that shows the user's address --
+   The address plus its copy button. One definition so the chip looks identical
+   whichever modal it appears in. */
+.pollar-address-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.pollar-address {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.75rem;
+  font-family: monospace;
+  color: var(--pollar-muted);
+  background: var(--pollar-input-bg);
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius, 10px);
+  padding: 0.375rem 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

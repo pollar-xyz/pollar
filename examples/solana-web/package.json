@@ -1,0 +1,25 @@
+{
+  "name": "@pollar-examples/solana-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Minimal Vite + React app to manually e2e-test @pollar/solana-wallet-standard-adapter (SIWS login) against a real Solana wallet (Phantom, Solflare, Backpack).",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pollar/core": "*",
+    "@pollar/react": "*",
+    "@pollar/solana-wallet-standard-adapter": "*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3",
+    "@types/react-dom": "^18.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.0"
+  }
+}

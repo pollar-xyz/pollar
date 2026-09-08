@@ -1,0 +1,102 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit config for the @pollar monorepo (publishable libraries: @pollar/*).
+# Docs: https://docs.coderabbit.ai/guides/configure-coderabbit
+
+language: 'en-US'
+
+# Default tone. These libraries are consumed by external developers, so the
+# review is biased toward API stability, semver and breaking changes.
+tone_instructions: >-
+  You are reviewing a published TypeScript SDK (@pollar/*) consumed by external
+  developers. Prioritize public API stability, backward compatibility and semver
+  correctness. Flag any change to an exported symbol's signature, removed exports
+  or changed runtime behavior as a potential breaking change. Be concise and
+  actionable; skip nitpicks already enforced by ESLint or Prettier.
+
+reviews:
+  # "chill" keeps comments focused and low-noise. Switch to "assertive" if you
+  # want CodeRabbit to surface more (at the cost of more comments).
+  profile: 'chill'
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  poem: false
+  collapse_walkthrough: false
+  changed_files_summary: true
+  sequence_diagrams: true
+
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: true
+    # Review PRs targeting main plus the semver release branches (e.g. 0.10.0).
+    base_branches:
+      - 'main'
+      - 'master'
+      - "^\\d+\\.\\d+\\.\\d+$"
+      - '^release/.*$'
+
+  # Files CodeRabbit should NOT review (build output, generated code, lockfiles).
+  path_filters:
+    - '!**/dist/**'
+    - '!**/.turbo/**'
+    - '!**/*.tsbuildinfo'
+    - '!**/node_modules/**'
+    - '!package-lock.json'
+    - '!**/*.tgz'
+    - '!libs/**'
+    - '!tmp/**'
+    - '!.yalc/**'
+    # Generated from the OpenAPI schema — not hand-written.
+    - '!packages/core/src/api/schema.d.ts'
+
+  # Context-aware instructions per area of the repo.
+  path_instructions:
+    - path: 'packages/*/src/**/*.{ts,tsx}'
+      instructions: >-
+        This is shipped library source. Treat any change to an exported
+        type, function signature or default behavior as a potential breaking
+        change and call it out explicitly. Verify exported APIs have JSDoc and
+        that errors are handled rather than swallowed. Watch for accidental
+        leakage of internal/private symbols into the public surface.
+    - path: 'packages/core/**'
+      instructions: >-
+        Core auth/crypto/session package. Be extra strict about token handling,
+        key management, refresh flows and anything touching credentials. Never
+        suggest logging secrets, tokens or private keys. Flag race conditions in
+        session/refresh logic.
+    - path: 'packages/react/**'
+      instructions: >-
+        React bindings. Check hook rules, dependency arrays, stable references
+        and that providers don't trigger unnecessary re-renders. Confirm SSR/RN
+        safety where relevant.
+    - path: '**/*.test.{ts,tsx}'
+      instructions: >-
+        Test code. Focus on coverage of edge cases and that assertions are
+        meaningful; do not flag minor style issues.
+    - path: 'tests/**'
+      instructions: >-
+        Smoke / integration tests. Ensure they fail loudly and don't depend on
+        live external services in CI.
+    - path: '{CHANGELOG.md,UPGRADE.md,README.md}'
+      instructions: >-
+        Public-facing docs. Verify that breaking changes in the PR are reflected
+        here and that version numbers and migration notes stay consistent.
+
+  tools:
+    # Surface lint findings inline alongside the AI review.
+    eslint:
+      enabled: true
+    # Secret scanning is on by default; keep it on for a published package.
+    gitleaks:
+      enabled: true
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  learnings:
+    scope: 'auto'
+  pull_requests:
+    scope: 'auto'

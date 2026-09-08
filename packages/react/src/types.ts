@@ -1,22 +1,9 @@
-import { PollarApplicationConfigContent, PollarClientConfig, PollarLoginOptions, pollarPaths } from '@pollar/core';
+import { pollarPaths } from '@pollar/core';
 
 type ConfigResponse = pollarPaths['/applications/config']['get']['responses'][200]['content']['application/json'];
 export type PollarConfig = ConfigResponse['content'];
 
 export type PollarStyles = PollarConfig['styles'];
-
-export interface AuthProviderProps {
-  config: PollarClientConfig;
-  children: React.ReactNode;
-}
-
-export interface AuthContextValue {
-  session: PollarApplicationConfigContent | null;
-  isLoading: boolean;
-  isAuthenticated: boolean;
-  login: (options: PollarLoginOptions) => void;
-  logout: () => Promise<void>;
-}
 
 export interface LoginButtonProps {
   onSuccess?: () => void;

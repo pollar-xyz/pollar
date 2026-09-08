@@ -1,121 +1,205 @@
 'use client';
 
-import { PollarStateVar, STATE_VAR_CODES, StateAuthenticationCodes, StateStatus, WalletType } from '@pollar/core';
-import { useEffect, useRef, useState } from 'react';
+import {
+  AUTH_ERROR_CODES,
+  AuthState,
+  InteractiveAuthAdapter,
+  isInteractiveAuthAdapter,
+  PollarLoginOptions,
+  WalletId,
+} from '@pollar/core';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
-import { LoginModalTemplate } from './LoginModalTemplate';
+import { modalChrome } from '../modal-theme';
+import { LoginModalStatus, LoginModalTemplate } from './LoginModalTemplate';
+import { PrivyLoginSubmodal } from './PrivyLoginSubmodal';
+import '../shared.css';
 import './LoginModal.css';
+
+type TimeoutHandle = ReturnType<typeof setTimeout>;
 
 interface LoginModalProps {
   onClose: () => void;
 }
 
-function isLoginCode(code: string): code is StateAuthenticationCodes {
-  return (Object.values(STATE_VAR_CODES[PollarStateVar.AUTHENTICATION]) as string[]).some((c) => code.startsWith(c));
-}
-
 export function LoginModal({ onClose }: LoginModalProps) {
   const [email, setEmail] = useState('');
-  const { getClient, styles, config } = usePollar();
-  const [status, setStatus] = useState<StateStatus>(StateStatus.NONE);
-  const [error, setError] = useState<string | null>(null);
-  const [loginStateCode, setLoginStateCode] = useState<StateAuthenticationCodes | null>(null);
-  const [awaitingEmailCode, setAwaitingEmailCode] = useState(false);
-  const [clientSessionId, setClientSessionId] = useState<string | null>(null);
+  const { getClient, styles, appConfig: config, configStatus, retryConfig } = usePollar();
+  const [authState, setAuthState] = useState<AuthState>(() => getClient().getAuthState());
+  // Registered wallet adapters (built-ins + config) -> one login button each.
+  const walletAdapters = useMemo(() => getClient().listWalletAdapters(), [getClient]);
+  const [codeInputKey, setCodeInputKey] = useState(0);
+  const pendingEmail = useRef<string | null>(null);
+  // When set, an interactive adapter (e.g. Privy) takes over the modal with its
+  // own login sub-view instead of going straight to login({ provider }).
+  const [interactiveAdapter, setInteractiveAdapter] = useState<InteractiveAuthAdapter | null>(null);
+
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const autoCloseTimer = useRef<TimeoutHandle | null>(null);
 
   useEffect(() => {
-    return getClient().onStateChange((stateEntry) => {
-      if (stateEntry.var === PollarStateVar.AUTHENTICATION && isLoginCode(stateEntry.code)) {
-        setLoginStateCode(stateEntry.code);
-        setStatus(stateEntry.status);
-        if (stateEntry.code === STATE_VAR_CODES[PollarStateVar.AUTHENTICATION].STREAM_POLL_START) {
-          const data = stateEntry.data as { clientSessionId: string };
-          setClientSessionId(data.clientSessionId);
+    const unsubscribe = getClient().onAuthStateChange((next) => {
+      setAuthState(next);
+      if (next.step === 'entering_email' && pendingEmail.current) {
+        getClient().sendEmailCode(pendingEmail.current);
+        pendingEmail.current = null;
+      }
+      if (next.step === 'error' && next.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_INVALID) {
+        setCodeInputKey((k) => k + 1);
+      }
+      if (next.step === 'authenticated') {
+        // Clear any timer already pending - if `authenticated` fires more than
+        // once, overwriting the handle would orphan the previous timeout
+        // (cleanup only tracks the latest).
+        if (autoCloseTimer.current !== null) {
+          clearTimeout(autoCloseTimer.current);
         }
-        if (stateEntry.code === STATE_VAR_CODES[PollarStateVar.AUTHENTICATION].EMAIL_AUTH_START_SUCCESS) {
-          const data = stateEntry.data as { code?: string; content: { clientSessionId: string } };
-          if (data?.code === 'SDK_EMAIL_CODE_SENT') {
-            setAwaitingEmailCode(true);
-            setClientSessionId(data?.content?.clientSessionId);
-          }
-        }
-        if (stateEntry.code === STATE_VAR_CODES[PollarStateVar.AUTHENTICATION].FETCH_SESSION_SUCCESS) {
-          setAwaitingEmailCode(false);
-          setTimeout(onClose, 1000);
-        }
+        autoCloseTimer.current = setTimeout(() => {
+          autoCloseTimer.current = null;
+          onCloseRef.current();
+        }, 1000);
       }
     });
-  }, []);
+    return () => {
+      unsubscribe();
+      if (autoCloseTimer.current !== null) {
+        clearTimeout(autoCloseTimer.current);
+        autoCloseTimer.current = null;
+      }
+    };
+  }, [getClient]);
 
-  const { theme = 'light', accentColor = '#005DB4', logoUrl, emailEnabled, embeddedWallets, providers } = styles;
+  const { logoUrl, emailEnabled, embeddedWallets, smartWallet, providers } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
+  // Opt-in: the Smart Wallet (passkey) option only shows when the dashboard
+  // explicitly enables it. Absent -> hidden.
+  const smartWalletEnabled = smartWallet ?? false;
+  // The heading is the app's name unless Branding set a custom one. Blank counts
+  // as unset, which is what the dashboard sends when the field is cleared.
+  const modalTitle = styles.modalTitle?.trim() || config.application?.name || 'Pollar';
 
   function handleClose() {
     setEmail('');
-    setError(null);
-    setAwaitingEmailCode(false);
-    setClientSessionId(null);
+    getClient().cancelLogin();
     onClose();
   }
 
-  const cancelLoginRef = useRef<(() => void) | null>(null);
-
-  function handleEmail() {
-    if (!email) {
-      return;
-    }
-    const { cancelLogin } = getClient().login({ provider: 'email', email });
-    cancelLoginRef.current = cancelLogin;
+  function handleEmailSubmit() {
+    if (!email) return;
+    pendingEmail.current = email;
+    getClient().beginEmailLogin();
   }
 
   function handleSocialLogin(provider: 'google' | 'github') {
-    const { cancelLogin } = getClient().login({ provider });
-    cancelLoginRef.current = cancelLogin;
+    getClient().login({ provider });
   }
 
-  function handleWalletConnect(type: WalletType) {
-    const { cancelLogin } = getClient().login({ provider: 'wallet', type });
-    cancelLoginRef.current = cancelLogin;
+  function handleWalletConnect(type: WalletId) {
+    // Interactive adapters (e.g. Privy) drive their own multi-step login that we
+    // render as a sub-modal; open it instead of going straight to login().
+    const adapter = getClient().getWalletAdapter(type);
+    if (isInteractiveAuthAdapter(adapter)) {
+      setInteractiveAdapter(adapter);
+      return;
+    }
+    // Any other registered wallet adapter (freighter/albedo/swk...). The adapter
+    // opens its own connect/auth UI; the SDK wraps the generic SEP-10 flow.
+    getClient().login({ provider: type } as PollarLoginOptions);
   }
 
-  async function handleVerifyCode(code: string) {
-    if (!clientSessionId) return;
-    void getClient().verifyEmailCode(clientSessionId, code);
+  function handleLoginSmartWallet() {
+    getClient().loginSmartWallet();
+  }
+
+  function handleCreateSmartWallet() {
+    getClient().createSmartWallet();
+  }
+
+  function handleVerifyCode(code: string) {
+    getClient().verifyEmailCode(code);
+  }
+
+  function handleBack() {
+    setEmail('');
+    getClient().cancelLogin();
   }
 
   function handleRetry() {
     getClient().logout();
+    if (styles.emailEnabled) {
+      getClient().beginEmailLogin();
+    }
+  }
+
+  function handleInteractiveAuthenticated() {
+    const provider = interactiveAdapter?.type;
+    setInteractiveAdapter(null);
+    if (provider) {
+      // Provider login (Privy) is done; run the normal flow so connect() + SEP-10
+      // execute against the now-authenticated wallet.
+      getClient().login({ provider } as PollarLoginOptions);
+    }
   }
 
   return (
-    <div className="pollar-overlay" onClick={handleClose}>
-      <LoginModalTemplate
-        theme={theme}
-        accentColor={accentColor}
-        logoUrl={logoUrl ?? null}
-        emailEnabled={!!emailEnabled}
-        embeddedWallets={!!embeddedWallets}
-        providers={{
-          google: !!providers?.google,
-          discord: !!providers?.discord,
-          x: !!providers?.x,
-          github: !!providers?.github,
-          apple: !!providers?.apple,
-        }}
-        appName={config.application?.name ?? 'Pollar'}
-        email={email}
-        status={status}
-        error={error}
-        onEmailChange={setEmail}
-        onEmailSubmit={handleEmail}
-        onSocialLogin={handleSocialLogin}
-        onFreighterConnect={() => handleWalletConnect(WalletType.FREIGHTER)}
-        onAlbedoConnect={() => handleWalletConnect(WalletType.ALBEDO)}
-        loginStateCode={loginStateCode}
-        awaitingEmailCode={awaitingEmailCode}
-        onCodeSubmit={handleVerifyCode}
-        cancelLoginRef={cancelLoginRef}
-        onRetry={handleRetry}
-      />
+    <div className="pollar-overlay" style={overlayStyle} onClick={handleClose}>
+      {configStatus !== 'ready' ? (
+        <LoginModalStatus
+          status={configStatus === 'error' ? 'error' : 'loading'}
+          theme={theme}
+          accentColor={accentColor}
+          styleOverrides={styleOverrides}
+          logoUrl={logoUrl ?? null}
+          appName={modalTitle}
+          onRetry={retryConfig}
+          onCancel={handleClose}
+        />
+      ) : interactiveAdapter ? (
+        <PrivyLoginSubmodal
+          adapter={interactiveAdapter}
+          theme={theme}
+          accentColor={accentColor}
+          styleOverrides={styleOverrides}
+          logoUrl={logoUrl ?? null}
+          appName={modalTitle}
+          onBack={() => setInteractiveAdapter(null)}
+          onCancel={handleClose}
+          onAuthenticated={handleInteractiveAuthenticated}
+        />
+      ) : (
+        <LoginModalTemplate
+          theme={theme}
+          accentColor={accentColor}
+          styleOverrides={styleOverrides}
+          logoUrl={logoUrl ?? null}
+          emailEnabled={!!emailEnabled}
+          embeddedWallets={!!embeddedWallets}
+          smartWallet={smartWalletEnabled}
+          providers={{
+            google: !!providers?.google,
+            discord: !!providers?.discord,
+            x: !!providers?.x,
+            github: !!providers?.github,
+            apple: !!providers?.apple,
+          }}
+          walletAdapters={walletAdapters}
+          appName={modalTitle}
+          email={email}
+          onEmailChange={setEmail}
+          onEmailSubmit={handleEmailSubmit}
+          onSocialLogin={handleSocialLogin}
+          onWalletConnect={handleWalletConnect}
+          onLoginSmartWallet={handleLoginSmartWallet}
+          onCreateSmartWallet={handleCreateSmartWallet}
+          authState={authState}
+          codeInputKey={codeInputKey}
+          onCodeSubmit={handleVerifyCode}
+          onBack={handleBack}
+          onCancel={handleClose}
+          onRetry={handleRetry}
+        />
+      )}
     </div>
   );
 }

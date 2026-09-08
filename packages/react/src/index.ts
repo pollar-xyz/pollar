@@ -1,10 +1,75 @@
 export { PollarProvider, usePollar } from './context';
+export { createPollarAdapterHook } from './usePollarAdapter';
+export type { LoginButtonProps, AuthModalProps, PollarStyles, PollarConfig } from './types';
+// Re-export the custom-provider contracts so consumers can author providers
+// (e.g. a Privy login provider) without importing from `@pollar/core` directly.
+export type { PollarAuthProvider, AuthProviderContext } from '@pollar/core';
+// The web WebAuthn implementations `PollarProvider` installs by default. Exported
+// for consumers who build their own `PollarClient` and want the ceremony wired at
+// construction, and for anyone wrapping it (logging, custom rpId).
+export { browserPasskeyCeremony, browserPasskeySigner } from './lib/passkey-ceremony';
+export { WalletButton } from './components/wallet-button/WalletButton';
+export { WalletButtonTemplate, type WalletButtonTemplateProps } from './components/wallet-button/WalletButtonTemplate';
+
+// --- Network picker -----------------------------------------------------------
+// Exported alongside the templates: every template that takes `chains` /
+// `selectedChain` / `onSelectChain` needs these to build those props, so a
+// consumer mounting a template itself would otherwise have to reimplement the
+// `chain ?? 'STELLAR'` legacy fold by hand.
+export { ChainSelect, resolveChain, chainsOf, addressForChain } from './components/ChainSelect';
+export type { ChainSelectProps } from './components/ChainSelect';
+// The chain order every built-in component reads, straight from the app's
+// `/applications/config`. A consumer building its own wallet button or picker
+// should use this rather than `chainsOf(wallets)` on its own, which cannot know
+// the configured order.
+export { useChains } from './useChains';
+export type { UseChainsResult } from './useChains';
+
+// --- Modals -------------------------------------------------------------------
+export { KycModal } from './components/kyc-modal/KycModal';
+export { KycStatus } from './components/kyc-modal/KycStatus';
+export { RampWidget } from './components/ramp-widget/RampWidget';
+export { RouteDisplay } from './components/ramp-widget/RouteDisplay';
+export { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
+export { EnabledAssetsModal } from './components/enabled-assets-modal/EnabledAssetsModal';
+export { SendModal } from './components/send-modal/SendModal';
+export { SwapModal } from './components/swap-modal/SwapModal';
+export { EarnModal } from './components/earn-modal/EarnModal';
+export { ReceiveModal } from './components/receive-modal/ReceiveModal';
+export { SessionsModal } from './components/sessions-modal/SessionsModal';
+export { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
+
+// --- Modal theming ------------------------------------------------------------
+// Exported alongside the templates: a consumer mounting a template itself needs
+// these to reproduce the exact CSS custom properties the built-in modals set,
+// and to forward the app's Branding overrides into them.
+export { buildModalCssVars, modalChrome, readableTextOn } from './components/modal-theme';
+export type { ModalStyleOverrides, ModalVariant, ModalChrome } from './components/modal-theme';
+
+// --- Templates ----------------------------------------------------------------
+export { LoginModalTemplate } from './components/login-modal/LoginModalTemplate';
+export { KycModalTemplate } from './components/kyc-modal/KycModalTemplate';
+export type { KycStep } from './components/kyc-modal/KycModalTemplate';
+export { RampWidgetTemplate } from './components/ramp-widget/RampWidgetTemplate';
+export type { RampStep } from './components/ramp-widget/RampWidgetTemplate';
+export { TransactionModalTemplate } from './components/transaction-modal/TransactionModalTemplate';
+export type { TransactionModalTemplateProps } from './components/transaction-modal/TransactionModalTemplate';
+export { TxStatusView } from './components/transaction-modal/TxStatusView';
+export type { TxStatusViewProps } from './components/transaction-modal/TxStatusView';
+export { TxHistoryModalTemplate } from './components/tx-history-modal/TxHistoryModalTemplate';
+export { WalletBalanceModalTemplate } from './components/wallet-balance-modal/WalletBalanceModalTemplate';
+export type { WalletBalanceModalTemplateProps } from './components/wallet-balance-modal/WalletBalanceModalTemplate';
+export { EnabledAssetsModalTemplate } from './components/enabled-assets-modal/EnabledAssetsModalTemplate';
 export type {
-  AuthProviderProps,
-  AuthContextValue,
-  LoginButtonProps,
-  AuthModalProps,
-  PollarStyles,
-  PollarConfig,
-} from './types';
-export { WalletButton } from './WalletButton';
+  EnabledAssetsModalTemplateProps,
+  CustomTrustlineModalTemplateProps,
+} from './components/enabled-assets-modal/EnabledAssetsModalTemplate';
+export { SendModalTemplate } from './components/send-modal/SendModalTemplate';
+export type { SendModalTemplateProps } from './components/send-modal/SendModalTemplate';
+export { SwapModalTemplate } from './components/swap-modal/SwapModalTemplate';
+export type { SwapModalTemplateProps, SwapAssetOption } from './components/swap-modal/SwapModalTemplate';
+export { ReceiveModalTemplate } from './components/receive-modal/ReceiveModalTemplate';
+export type { ReceiveModalTemplateProps } from './components/receive-modal/ReceiveModalTemplate';
+export { SessionsModalTemplate } from './components/sessions-modal/SessionsModalTemplate';
+export type { SessionsModalTemplateProps, SessionsState } from './components/sessions-modal/SessionsModalTemplate';
+export { DistributionRulesModalTemplate } from './components/distribution-rules-modal/DistributionRulesModalTemplate';

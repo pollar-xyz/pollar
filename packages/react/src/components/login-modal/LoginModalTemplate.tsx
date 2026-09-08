@@ -1,19 +1,125 @@
 'use client';
 
-import { StateAuthenticationCodes, StateStatus } from '@pollar/core';
-import { type CSSProperties, type RefObject } from 'react';
-import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
+import { AUTH_ERROR_CODES, AuthState, WalletId } from '@pollar/core';
+
+type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
+import { useState } from 'react';
+import { LOGO_POLLAR } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter } from '../commons';
+import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
 
+// Re-exported from its old home so consumers that imported it from this module
+// (the dashboard's branding preview, among others) keep working.
+export { buildModalCssVars } from '../modal-theme';
+export type { ModalStyleOverrides } from '../modal-theme';
+
+type WalletAdapterEntry = { id: WalletId; meta: { label: string; iconUrl?: string; group?: string } };
+
+function WalletAdapterButtons({
+  walletAdapters,
+  onConnect,
+  isLoading,
+  variant = 'list',
+}: {
+  walletAdapters: WalletAdapterEntry[];
+  onConnect: (id: WalletId) => void;
+  isLoading: boolean;
+  // 'list'  -> borderless rows for inside a group sub-picker (large icon + name).
+  // 'entry' -> bordered buttons that match the root-level entries (Google, Wallet,
+  //           Smart Wallet) so a root adapter like Privy doesn't read as bare text.
+  variant?: 'list' | 'entry';
+}) {
+  if (variant === 'entry') {
+    return (
+      <>
+        {walletAdapters.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            disabled={isLoading}
+            className="pollar-wallet-entry-btn"
+            onClick={() => onConnect(a.id)}
+          >
+            {a.meta.iconUrl && <img src={a.meta.iconUrl} alt={a.meta.label} className="pollar-wallet-icon" />}
+            {a.meta.label}
+          </button>
+        ))}
+      </>
+    );
+  }
+  return (
+    <div className="pollar-wallet-list">
+      {walletAdapters.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          disabled={isLoading}
+          className="pollar-wallet-list-btn"
+          onClick={() => onConnect(a.id)}
+        >
+          {a.meta.iconUrl && <img src={a.meta.iconUrl} alt={a.meta.label} className="pollar-wallet-list-icon" />}
+          <span className="pollar-wallet-list-name">{a.meta.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const AUTH_STATE_MESSAGES: Record<AuthState['step'], string> = {
+  idle: '',
+  creating_session: 'Initializing…',
+  entering_email: '',
+  sending_email: 'Sending…',
+  entering_code: 'Code sent — check your inbox',
+  verifying_email_code: 'Verifying…',
+  opening_oauth: 'Redirecting…',
+  connecting_wallet: 'Connecting wallet…',
+  signing_wallet_challenge: 'Confirm in your wallet…',
+  wallet_not_installed: 'Wallet not installed',
+  authenticating_wallet: 'Signing in with wallet…',
+  creating_passkey: 'Waiting for passkey…',
+  deploying_smart_account: 'Creating your wallet…',
+  authenticating: 'Authenticating…',
+  authenticated: 'Welcome!',
+  error: '',
+};
+
+function authStateToStatus(step: AuthState['step']): StateStatus {
+  const loading: AuthState['step'][] = [
+    'creating_session',
+    'sending_email',
+    'verifying_email_code',
+    'opening_oauth',
+    'connecting_wallet',
+    'signing_wallet_challenge',
+    'authenticating_wallet',
+    'creating_passkey',
+    'deploying_smart_account',
+    'authenticating',
+  ];
+  const success: AuthState['step'][] = ['authenticated', 'entering_code'];
+  const error: AuthState['step'][] = ['error', 'wallet_not_installed'];
+
+  if (loading.includes(step)) return 'LOADING';
+  if (success.includes(step)) return 'SUCCESS';
+  if (error.includes(step)) return 'ERROR';
+  return 'NONE';
+}
+
 interface LoginModalTemplateProps {
   theme: string;
   accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
   logoUrl: string | null;
   emailEnabled: boolean;
   embeddedWallets: boolean;
+  /** Show the "Smart Wallet" (passkey) option. Optional & defaults to off so
+   *  adding it isn't a breaking change for existing template consumers. */
+  smartWallet?: boolean;
   providers: {
     google: boolean;
     discord: boolean;
@@ -21,65 +127,116 @@ interface LoginModalTemplateProps {
     github: boolean;
     apple: boolean;
   };
+  /** Registered wallet adapters to render as buttons (Freighter, Albedo, Privy, ...). */
+  walletAdapters: WalletAdapterEntry[];
   appName: string;
   email?: string;
-  status: StateStatus;
-  error?: string | null;
   onEmailChange?: (email: string) => void;
   onEmailSubmit?: () => void;
   onSocialLogin?: (provider: 'google' | 'github') => void;
-  onFreighterConnect?: () => void;
-  onAlbedoConnect?: () => void;
-  loginStateCode: StateAuthenticationCodes | null;
-  awaitingEmailCode?: boolean;
+  onWalletConnect?: (id: WalletId) => void;
+  /** Log in with an existing passkey (returning user). */
+  onLoginSmartWallet?: () => void;
+  /** Create a new passkey + smart wallet (new user). */
+  onCreateSmartWallet?: () => void;
+  authState: AuthState;
+  codeInputKey?: number;
   onCodeSubmit?: (code: string) => void;
-  cancelLoginRef: RefObject<(() => void) | null>;
+  onBack: () => void;
+  onCancel: () => void;
   onRetry: () => void;
 }
 
 export function LoginModalTemplate({
   theme,
   accentColor,
+  styleOverrides,
   logoUrl,
   emailEnabled,
   embeddedWallets,
+  smartWallet = false,
   providers,
+  walletAdapters,
   appName,
   email = '',
-  status,
-  error,
   onEmailChange,
   onEmailSubmit,
   onSocialLogin,
-  onFreighterConnect,
-  onAlbedoConnect,
-  loginStateCode,
-  awaitingEmailCode = false,
+  onWalletConnect,
+  onLoginSmartWallet,
+  onCreateSmartWallet,
+  authState,
+  codeInputKey,
   onCodeSubmit,
-  cancelLoginRef,
+  onBack,
+  onCancel,
   onRetry,
 }: LoginModalTemplateProps) {
-  const isDark = theme === 'dark';
+  const [showPasskeyChooser, setShowPasskeyChooser] = useState(false);
+  // Which wallet group's sub-picker is open (gateway label), or null for the root view.
+  const [activeGroup, setActiveGroup] = useState<string | null>(null);
+
   const enabledSocial = Object.entries(providers).filter(([, enabled]) => enabled);
 
-  const cssVars = {
-    '--pollar-accent': accentColor,
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
-    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': isDark ? '#ffffff' : '#111827',
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#ffffff',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-  } as CSSProperties;
+  // Split registered adapters into root-level buttons (no `meta.group`, e.g. Privy)
+  // and gateway groups (adapters sharing a `meta.group` collapse behind one button
+  // that opens a sub-picker - e.g. the Stellar Wallets Kit wallets under "Wallet").
+  const rootAdapters = walletAdapters.filter((a) => !a.meta.group);
+  const walletGroups = walletAdapters
+    .filter((a) => a.meta.group)
+    .reduce<{ label: string; adapters: WalletAdapterEntry[] }[]>((acc, a) => {
+      const label = a.meta.group as string;
+      const existing = acc.find((g) => g.label === label);
+      if (existing) existing.adapters.push(a);
+      else acc.push({ label, adapters: [a] });
+      return acc;
+    }, []);
+  const activeGroupAdapters = walletGroups.find((g) => g.label === activeGroup)?.adapters ?? [];
 
-  const isLoading = status === StateStatus.LOADING;
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
+
+  const status = authStateToStatus(authState.step);
+  const isLoading = status === 'LOADING';
+  const isEmailCodeError =
+    authState.step === 'error' &&
+    (authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_EXPIRED ||
+      authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_INVALID);
+  const awaitingEmailCode = authState.step === 'entering_code' || authState.step === 'verifying_email_code' || isEmailCodeError;
+  const statusMessage = authState.step === 'error' ? authState.message : AUTH_STATE_MESSAGES[authState.step];
+
+  const BackButton = ({ onClick }: { onClick: () => void }) => (
+    <button type="button" className="pollar-back-btn" onClick={onClick} aria-label="Back">
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M15 19l-7-7 7-7" />
+      </svg>
+    </button>
+  );
 
   return (
-    <div className="pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
+    <div className="pollar-modal-card pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
+      <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label="Close">
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M18 6L6 18M6 6l12 12" />
+        </svg>
+      </button>
       <div className="pollar-header">
         <div className="pollar-logo-wrap">
           <img src={logoUrl ?? LOGO_POLLAR} alt="Logo" className="pollar-logo" />
@@ -89,11 +246,33 @@ export function LoginModalTemplate({
       </div>
 
       {awaitingEmailCode ? (
-        <EmailCodeInput email={email} onSubmit={onCodeSubmit ?? (() => {})} />
+        <>
+          <BackButton onClick={onBack} />
+          <EmailCodeInput key={codeInputKey} email={email} onSubmit={onCodeSubmit ?? (() => {})} />
+        </>
+      ) : activeGroup ? (
+        <>
+          <BackButton onClick={() => setActiveGroup(null)} />
+          <WalletAdapterButtons
+            walletAdapters={activeGroupAdapters}
+            onConnect={onWalletConnect ?? (() => {})}
+            isLoading={isLoading}
+          />
+        </>
+      ) : showPasskeyChooser ? (
+        <>
+          <BackButton onClick={() => setShowPasskeyChooser(false)} />
+          <div className="pollar-wallet-section">
+            <button type="button" disabled={isLoading} className="pollar-btn-primary" onClick={onCreateSmartWallet}>
+              Create a new wallet
+            </button>
+            <button type="button" disabled={isLoading} className="pollar-wallet-entry-btn" onClick={onLoginSmartWallet}>
+              Log in with an existing wallet
+            </button>
+          </div>
+        </>
       ) : (
         <>
-          {error && <div className="pollar-error">{error}</div>}
-
           {emailEnabled && (
             <div className="pollar-email-section">
               <input
@@ -101,11 +280,17 @@ export function LoginModalTemplate({
                 placeholder="you@email.com"
                 value={email}
                 disabled={isLoading}
-                className="pollar-email-input"
+                className="pollar-input"
                 onChange={(e) => onEmailChange?.(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && onEmailSubmit?.()}
               />
-              <button type="button" disabled={isLoading || !email} className="pollar-submit-btn" onClick={onEmailSubmit}>
+              <button
+                type="button"
+                disabled={isLoading || !email}
+                className="pollar-btn-primary"
+                style={{ marginTop: '0.75rem' }}
+                onClick={onEmailSubmit}
+              >
                 Submit
               </button>
             </div>
@@ -131,23 +316,144 @@ export function LoginModalTemplate({
             </div>
           )}
 
-          {embeddedWallets && (
+          {(embeddedWallets || smartWallet) && (
             <div className="pollar-wallet-section">
-              <p className="pollar-wallet-label">Continue with a wallet</p>
-              <button type="button" disabled={isLoading} className="pollar-wallet-btn" onClick={onFreighterConnect}>
-                <img src={LOGO_FREIGHTER} alt="Freighter" className="pollar-wallet-icon" />
-                Freighter
-              </button>
-              <button type="button" disabled={isLoading} className="pollar-wallet-btn" onClick={onAlbedoConnect}>
-                <img src={LOGO_ALBEDO} alt="Albedo" className="pollar-wallet-icon" />
-                Albedo
-              </button>
+              {embeddedWallets && (
+                <>
+                  {walletGroups.map((g) => (
+                    <button
+                      key={g.label}
+                      type="button"
+                      disabled={isLoading}
+                      className="pollar-wallet-entry-btn"
+                      onClick={() => setActiveGroup(g.label)}
+                    >
+                      <svg
+                        width="18"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                      {g.label}
+                    </button>
+                  ))}
+                  {rootAdapters.length > 0 && (
+                    <WalletAdapterButtons
+                      walletAdapters={rootAdapters}
+                      onConnect={onWalletConnect ?? (() => {})}
+                      isLoading={isLoading}
+                      variant="entry"
+                    />
+                  )}
+                </>
+              )}
+
+              {smartWallet && (
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  className="pollar-wallet-entry-btn"
+                  onClick={() => setShowPasskeyChooser(true)}
+                >
+                  <svg
+                    width="18"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M16 8V6a4 4 0 00-8 0v2M5 8h14a1 1 0 011 1v10a1 1 0 01-1 1H5a1 1 0 01-1-1V9a1 1 0 011-1zm7 5v2" />
+                  </svg>
+                  Smart Wallet
+                </button>
+              )}
             </div>
           )}
         </>
       )}
 
-      <ModalStatusBanner code={loginStateCode} status={status} onCancel={() => cancelLoginRef.current?.()} onRetry={onRetry} />
+      <ModalStatusBanner
+        message={statusMessage}
+        status={status}
+        onCancel={onCancel}
+        onRetry={isEmailCodeError ? undefined : onRetry}
+      />
+
+      <PollarModalFooter />
+    </div>
+  );
+}
+
+/** Placeholder shown inside the login modal while the app config is loading, or
+ *  when its remote fetch failed - instead of the empty shell that renders when
+ *  `styles` is still the default `{}`. Mirrors the template's card chrome (logo,
+ *  title, footer) so the swap to the real form isn't jarring. */
+export function LoginModalStatus({
+  status,
+  theme,
+  accentColor,
+  styleOverrides,
+  logoUrl,
+  appName,
+  onRetry,
+  onCancel,
+}: {
+  status: 'loading' | 'error';
+  theme: string;
+  accentColor: string;
+  styleOverrides?: ModalStyleOverrides;
+  logoUrl: string | null;
+  appName: string;
+  onRetry: () => void;
+  onCancel: () => void;
+}) {
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
+  return (
+    <div className="pollar-modal-card pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
+      <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label="Close">
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M18 6L6 18M6 6l12 12" />
+        </svg>
+      </button>
+      <div className="pollar-header">
+        <div className="pollar-logo-wrap">
+          <img src={logoUrl ?? LOGO_POLLAR} alt="Logo" className="pollar-logo" />
+        </div>
+        <h2 className="pollar-title">{appName}</h2>
+        <p className="pollar-subtitle">Log in or sign up</p>
+      </div>
+
+      {status === 'loading' ? (
+        <div className="pollar-loading-block">
+          <div className="pollar-spinner" />
+          <span>Loading...</span>
+        </div>
+      ) : (
+        <div className="pollar-wallet-section">
+          <p className="pollar-modal-error">Could not load sign-in options. Check your connection and try again.</p>
+          <button type="button" className="pollar-btn-primary" onClick={onRetry}>
+            Try again
+          </button>
+        </div>
+      )}
 
       <PollarModalFooter />
     </div>

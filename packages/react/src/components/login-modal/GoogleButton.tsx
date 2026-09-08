@@ -3,17 +3,11 @@ import './GoogleButton.css';
 
 export const GoogleButton = ({ disabled, onClick }: { disabled: boolean; onClick: () => void }) => {
   return (
-    <button className="gsi-material-button" disabled={disabled} onClick={onClick}>
-      <div className="gsi-material-button-state"></div>
-      <div className="gsi-material-button-content-wrapper">
-        <div className="gsi-material-button-icon">
-          <svg
-            version="1.1"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 48 48"
-            // xmlns:xlink="http://www.w3.org/1999/xlink"
-            style={{ display: 'block' }}
-          >
+    <button className="pollar-gsi-material-button" disabled={disabled} onClick={onClick}>
+      <div className="pollar-gsi-material-button-state"></div>
+      <div className="pollar-gsi-material-button-content-wrapper">
+        <div className="pollar-gsi-material-button-icon">
+          <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" style={{ display: 'block' }}>
             <path
               fill="#EA4335"
               d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
@@ -33,8 +27,8 @@ export const GoogleButton = ({ disabled, onClick }: { disabled: boolean; onClick
             <path fill="none" d="M0 0h48v48H0z"></path>
           </svg>
         </div>
-        <span className="gsi-material-button-contents">Continue with Google</span>
-        <span style={{ display: 'none' }}>Continue with Google</span>
+        <span className="pollar-gsi-material-button-contents">Google</span>
+        <span style={{ display: 'none' }}>Google</span>
       </div>
     </button>
   );

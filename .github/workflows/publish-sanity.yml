@@ -1,0 +1,48 @@
+name: Publish sanity
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/**'
+      - '.github/workflows/publish-sanity.yml'
+
+concurrency:
+  group: publish-sanity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: publint (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - packages/core
+          - packages/react
+          - packages/privy-adapter
+          - packages/stellar-wallets-kit-adapter
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: publint
+        run: npx -y publint ${{ matrix.package }}
+
+      # @arethetypeswrong/cli was previously run here but is currently broken
+      # across all tested versions (0.12 → 0.18) due to an upstream tarball
+      # extraction bug in createPackage.js — `data[0].filename` throws because
+      # fflate's streaming gunzip callback overwrites instead of concatenating.
+      # Re-enable when upstream ships a fix.

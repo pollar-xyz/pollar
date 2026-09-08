@@ -1,0 +1,26 @@
+/* Segmented tabs live in shared.css (.pollar-tabs / .pollar-tab). */
+
+.pollar-earn-amount {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pollar-earn-amount .pollar-input {
+  width: 100%;
+  padding-right: 64px;
+}
+
+.pollar-earn-amount-unit {
+  position: absolute;
+  right: 12px;
+  color: var(--pollar-muted);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.pollar-earn-live {
+  color: var(--pollar-accent);
+  font-weight: 600;
+}
