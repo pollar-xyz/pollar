@@ -7,7 +7,7 @@
     "url": "git+https://github.com/pollar-xyz/pollar.git",
     "directory": "packages/react"
   },
-  "description": "React components for Pollar authentication",
+  "description": "React bindings for Pollar: authentication UI, transaction modals and hooks for Stellar and Solana applications",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

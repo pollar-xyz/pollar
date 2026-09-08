@@ -18,7 +18,7 @@ This project is governed by our [Code of Conduct](CODE_OF_CONDUCT.md). By partic
 
 ## What is Pollar?
 
-Pollar is wallet-as-a-service for Stellar: embedded wallets, login, payments and fiat ramps behind one SDK. This monorepo holds the published packages:
+Pollar is authentication and transaction infrastructure for Stellar and Solana applications. This monorepo holds the published packages:
 
 - **@pollar/core**: the framework-agnostic client (auth, wallets, transactions, ramps).
 - **@pollar/react**: provider, hooks and prebuilt modals on top of `@pollar/core`.

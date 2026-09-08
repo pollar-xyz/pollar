@@ -7,7 +7,7 @@ argument-hint: '[pollar task]'
 
 # Pollar: embedded Stellar wallets and login
 
-Pollar is wallet-as-a-service for Stellar. A user signs in with Google, GitHub, email OTP, or a device
+Pollar is wallet-as-a-service for Stellar and Solana. A user signs in with Google, GitHub, email OTP, or a device
 passkey and comes out the other side holding a Stellar account, funded and with trustlines already set,
 without ever seeing a secret key. The same client also connects external wallets (Freighter, Albedo,
 xBull) so both kinds of user go through one code path.

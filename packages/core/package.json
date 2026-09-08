@@ -7,7 +7,7 @@
     "url": "git+https://github.com/pollar-xyz/pollar.git",
     "directory": "packages/core"
   },
-  "description": "Core authentication functions for Pollar services",
+  "description": "Core SDK for Pollar: authentication and transaction utilities for Stellar and Solana applications",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

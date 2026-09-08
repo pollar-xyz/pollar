@@ -12,7 +12,7 @@ the Solana analogue of Stellar's SEP-10 challenge.
 > **0.11.2** requires `@pollar/core@^0.11.2` (peer range bump only; no adapter
 > changes).
 >
-> **0.11.1** was the first published release. The adapter declares
+> **0.11.1** introduced the adapter. It declares
 > `chain: 'SOLANA'`, which is what routes `login({ provider })` through the SIWS
 > flow instead of Stellar's SEP-10 challenge - end to end, discovery through
 > login.
