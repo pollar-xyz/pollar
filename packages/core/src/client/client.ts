@@ -142,6 +142,16 @@ const isReactNative = typeof navigator !== 'undefined' && (navigator as { produc
 const isClientRuntime = isBrowser || isReactNative;
 
 /**
+ * `x-pollar-sdk` - identifies this build to sdk-api, which records it per
+ * application so a stale SDK is visible without asking its developer.
+ *
+ * Computed once: the runtime cannot change mid-process. `POLLAR_CORE_VERSION` is
+ * `'dev'` on unbundled builds, which sdk-api's strict parser drops rather than
+ * writing a junk row.
+ */
+const SDK_CLIENT_HEADER = `core/${POLLAR_CORE_VERSION} ${isReactNative ? 'rn' : isBrowser ? 'web' : 'node'}`;
+
+/**
  * Live client count per API key, so we can warn on the duplicate-instance
  * footgun: two `PollarClient`s for the same key share one persisted session +
  * DPoP key and run independent refresh loops; the single-use refresh-token
@@ -755,6 +765,7 @@ export class PollarClient {
     this._api.use({
       onRequest: async ({ request }: { request: Request }) => {
         request.headers.set('x-pollar-api-key', self.apiKey);
+        request.headers.set('x-pollar-sdk', SDK_CLIENT_HEADER);
         self._lastRequestAt = Date.now();
         // Every request waits until the client is initialized - EXCEPT a
         // /auth/refresh: the expired-AT restore issues one from WITHIN
