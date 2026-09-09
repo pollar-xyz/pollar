@@ -118,7 +118,9 @@ import { emailProvider, oauthProvider } from './auth/providers';
 import { loginWithSolanaAdapter } from './auth/solanaWalletFlow';
 import { loginWithAdapter, requestWalletChallenge } from './auth/walletFlow';
 import {
+  dpopClockOffsetStorageKey,
   dpopNonceStorageKey,
+  MAX_DPOP_CLOCK_OFFSET_SEC,
   MAX_DPOP_NONCE,
   readStorage,
   readWalletType,
@@ -663,6 +665,21 @@ export class PollarClient {
       this._log.debug('[PollarClient] Could not read the stored DPoP nonce', err);
     }
 
+    // Same reasoning for the clock offset: without it every page load signs its
+    // first proof against the raw local clock, so a skewed server costs one
+    // rejected request per load before `onResponse` re-learns the offset.
+    try {
+      const storedOffset = await this._storage.get(dpopClockOffsetStorageKey(this._apiKeyHash));
+      if (storedOffset !== null) {
+        const parsed = Number(storedOffset);
+        if (Number.isFinite(parsed) && Math.abs(parsed) <= MAX_DPOP_CLOCK_OFFSET_SEC) {
+          this._clockOffsetSec = Math.trunc(parsed);
+        }
+      }
+    } catch (err) {
+      this._log.debug('[PollarClient] Could not read the stored DPoP clock offset', err);
+    }
+
     try {
       await this._keyManager.init();
     } catch (err) {
@@ -814,9 +831,13 @@ export class PollarClient {
 
         // Learn the clock skew from the server's `Date` header BEFORE any retry
         // or refresh below, so a proof rejected for a bad `iat` is rebuilt with
-        // the corrected offset on the very next attempt (no logout loop). Every
-        // HTTP response carries `Date`; we recompute each time so a clock that
-        // changes mid-session self-heals.
+        // the corrected offset on the very next attempt (no logout loop). We
+        // recompute each time so a clock that changes mid-session self-heals.
+        //
+        // `Date` is NOT CORS-safelisted: in a browser this reads `null` unless
+        // sdk-api lists it in `exposeHeaders`. Dropping it there silently
+        // disables every line below and hands a drifting server clock a mass
+        // logout - which is exactly what it did until 2026-09-02.
         const serverDate = response.headers.get('Date');
         if (serverDate) {
           const serverSec = Math.floor(Date.parse(serverDate) / 1000);
@@ -826,7 +847,11 @@ export class PollarClient {
           // `Date` (epoch, year 2099, a CDN error page's wrong clock) that would
           // otherwise poison every proof's `iat` and wedge auth. Window: 2020-2100.
           if (Number.isFinite(serverSec) && serverSec > 1_577_836_800 && serverSec < 4_102_444_800) {
-            self._clockOffsetSec = serverSec - Math.floor(Date.now() / 1000);
+            const offset = serverSec - Math.floor(Date.now() / 1000);
+            if (offset !== self._clockOffsetSec) {
+              self._clockOffsetSec = offset;
+              void self._persistDpopClockOffset(offset);
+            }
           }
         }
 
@@ -841,25 +866,30 @@ export class PollarClient {
         const wwwAuth = response.headers.get('WWW-Authenticate') ?? '';
         const isNonceChallenge = wwwAuth.toLowerCase().includes('use_dpop_nonce');
 
-        // A replayed proof is not an expired token, and refreshing cannot fix
-        // it: the server rejected the `jti`, having never processed the request.
-        // Treating it as an expiry (the default 401 path) burns a refresh per
-        // occurrence, which on a polling loop is enough to hit the /auth/refresh
-        // rate limit and take the session down with it. Retrying is all it
-        // needs - `_retryRequest` mints a brand-new proof.
-        const isProofReplay = !isNonceChallenge && (await self._isDpopReplay(response));
+        // A rejected proof is not an expired token, and refreshing cannot fix
+        // it: the server refused the proof itself, having never processed the
+        // request. Treating it as an expiry (the default 401 path) burns a
+        // refresh per occurrence, which on a polling loop is enough to hit the
+        // /auth/refresh rate limit and take the session down with it. Retrying is
+        // all it needs - `_retryRequest` mints a brand-new proof, and for
+        // `iat-skew` that proof carries the offset just learned above.
+        const dpopReason = isNonceChallenge ? null : await self._dpopRejectionReason(response);
+        const isProofRejected = dpopReason === 'jti-replay' || dpopReason === 'iat-skew';
 
         // The refresh endpoint has special handling: don't recursively trigger
-        // refresh from inside itself. But DO honor a nonce challenge - the
-        // fresh `DPoP-Nonce` was already captured above, so a single retry
-        // with the new nonce succeeds. Any other 401 (RT expired, reused,
-        // invalid) propagates to `_doRefresh` which clears the session.
+        // refresh from inside itself. But DO honor a nonce challenge or a
+        // rejected proof - the fresh `DPoP-Nonce` and the corrected clock offset
+        // were both captured above, so a single retry succeeds. Any other 401 (RT
+        // expired, reused, invalid) propagates to `_doRefresh` which clears the
+        // session. Letting a rejected proof reach that path is a logout for a
+        // condition the client can fix by itself, and when the cause is the
+        // server's clock it is a logout for every user at once.
         if (request.url.includes('/auth/refresh')) {
-          if (isNonceChallenge || isProofReplay) return self._logHttp(request, await self._retryRequest(request));
+          if (isNonceChallenge || isProofRejected) return self._logHttp(request, await self._retryRequest(request));
           return self._logHttp(request, response);
         }
 
-        if (!isNonceChallenge && !isProofReplay) {
+        if (!isNonceChallenge && !isProofRejected) {
           try {
             await self.refresh();
           } catch {
@@ -871,7 +901,7 @@ export class PollarClient {
           // effects (double-create a transaction, etc.). The original 401
           // bubbles up so the caller decides; the access token is now fresh,
           // so a manual retry by the caller will succeed. Nonce-challenge and
-          // replayed-proof 401s don't go through this branch (the server
+          // rejected-proof 401s don't go through this branch (the server
           // rejected the proof before the handler ran, so it processed
           // nothing), which is why any method retries safely above.
           const method = request.method.toUpperCase();
@@ -957,6 +987,20 @@ export class PollarClient {
     }
   }
 
+  /**
+   * Persist the learned clock offset so the next page load signs its first proof
+   * already corrected. Same fire-and-forget contract as the nonce: losing it
+   * costs one rejected request, which `onResponse` then heals.
+   */
+  private async _persistDpopClockOffset(offsetSec: number): Promise<void> {
+    if (this._apiKeyHash === null || Math.abs(offsetSec) > MAX_DPOP_CLOCK_OFFSET_SEC) return;
+    try {
+      await this._storage.set(dpopClockOffsetStorageKey(this._apiKeyHash), String(offsetSec));
+    } catch (err) {
+      this._log.debug('[PollarClient] Could not persist the DPoP clock offset', err);
+    }
+  }
+
   private async _buildProofForRequest(request: Request, accessToken: string | undefined): Promise<string | null> {
     try {
       const htu = request.url.split('?')[0]!.split('#')[0]!;
@@ -977,25 +1021,31 @@ export class PollarClient {
   }
 
   /**
-   * Is this 401 a rejected DPoP proof REPLAY (`jti` already seen)?
+   * Why sdk-api rejected the DPoP proof on this 401, or `null` if it did not.
    *
    * The distinction matters because the default 401 path assumes an expired
-   * access token and spends a `/auth/refresh` on it. A replay is neither: the
-   * server refused the proof and never ran the handler, so the token is fine and
-   * a refresh only burns rate-limit budget. Narrowed to the replay `reason`
-   * specifically - every other DPoP failure (thumbprint mismatch, `ath`
-   * mismatch) genuinely can be fixed by re-issuing a token bound to the current
-   * key, so those keep the refresh.
+   * access token and spends a `/auth/refresh` on it. Two reasons are neither -
+   * the server refused the proof and never ran the handler, so the token is fine
+   * and a refresh only burns rate-limit budget:
+   *   - `jti-replay`: the proof was already spent. A fresh one is all it needs.
+   *   - `iat-skew`: the proof's `iat` fell outside the server's window. By the
+   *     time the caller reads this, `onResponse` has already re-learned the
+   *     offset from the same response's `Date`, so the retry signs a proof the
+   *     server accepts.
+   * Every other DPoP failure (thumbprint mismatch, `ath` mismatch) genuinely can
+   * be fixed by re-issuing a token bound to the current key, so those keep the
+   * refresh.
    *
    * Reads a `clone()`, so the caller's body stays untouched. Any parse failure
-   * answers `false` and leaves the existing behaviour in place.
+   * answers `null` and leaves the existing behaviour in place.
    */
-  private async _isDpopReplay(response: Response): Promise<boolean> {
+  private async _dpopRejectionReason(response: Response): Promise<string | null> {
     try {
       const body = (await response.clone().json()) as { code?: unknown; reason?: unknown };
-      return body?.code === 'SDK_AUTH_DPOP_INVALID' && body?.reason === 'jti-replay';
+      if (body?.code !== 'SDK_AUTH_DPOP_INVALID' || typeof body?.reason !== 'string') return null;
+      return body.reason;
     } catch {
-      return false;
+      return null;
     }
   }
 
