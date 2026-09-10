@@ -80,6 +80,12 @@ const RAMP_ERROR_MESSAGES: Record<string, string> = {
   SDK_RAMPS_PROVIDER_NOT_CONFIGURED: 'This ramp provider is not configured for this app yet.',
   SDK_RAMPS_ANCHOR_ERROR: 'The provider rejected the request. Please try again in a moment.',
   SDK_RAMPS_BRIDGE_ERROR: 'The provider rejected the request. Please try again in a moment.',
+  SDK_RAMPS_ETHERFUSE_ERROR: 'The provider rejected the request. Please try again in a moment.',
+  SDK_RAMPS_INSUFFICIENT_BALANCE: 'This wallet does not hold enough to cover that amount. Try a smaller one.',
+  // Nothing moved on-chain, so the balance is untouched. Almost always no XLM
+  // for the network fee on a wallet the app does not sponsor.
+  SDK_RAMPS_ONCHAIN_SUBMIT_FAILED:
+    'The network rejected the transaction, so nothing was sent. The wallet may need XLM for the fee.',
 };
 
 /**
@@ -112,9 +118,12 @@ interface RampResult {
   // acceptance. Both must be completed before the customer activates.
   tosUrl?: string;
   // The provider gated the flow on identity verification and offers no hosted
-  // URL (Abroad). Nothing was built or signed - the user clears KYC with the
-  // provider directly, and we poll `getRampKycStatus` until they do.
+  // URL (Abroad, and Bridge while it provisions). Nothing was built or signed.
   kycRequired?: boolean;
+  // Which part of onboarding is outstanding. `awaiting_provider` means the user
+  // has nothing left to do and the provider is working through its own steps -
+  // there is no page to open and no status of theirs to poll.
+  onboardingStatus?: 'kyc' | 'endorsement' | 'awaiting_provider';
   stellarTxHash?: string;
   pendingSignature?: { unsignedXdr: string; action: 'sep10' | 'withdraw_payment' };
   // REST providers (Bridge) return deposit instructions as data (e.g. a Pix
@@ -154,6 +163,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   // start; `kycApproved` is what polling has since learned.
   const [kycPending, setKycPending] = useState(false);
   const [kycApproved, setKycApproved] = useState(false);
+  const [onboardingStatus, setOnboardingStatus] = useState<RampResult['onboardingStatus']>(undefined);
   const [txStatus, setTxStatus] = useState<RampTxStatus | null>(null);
   const [stellarTxHash, setStellarTxHash] = useState<string | null>(null);
   const [depositInstructions, setDepositInstructions] = useState<RampDepositInstructions | null>(null);
@@ -191,8 +201,14 @@ export function RampWidget({ onClose }: RampWidgetProps) {
 
   // A link-less KYC gate has nothing to open, so poll the provider until the user
   // clears it elsewhere. Stops as soon as it's approved.
+  //
+  // Not for `awaiting_provider`: that gate is not the user's verification and
+  // `getRampKycStatus` answers for a different provider entirely, so polling it
+  // would ask the wrong question every ten seconds and never get an answer. The
+  // transaction poll above is what surfaces movement there.
   useEffect(() => {
     if (step !== 'status' || !kycPending || kycApproved) return;
+    if (onboardingStatus === 'awaiting_provider') return;
     let active = true;
     const check = async () => {
       try {
@@ -208,7 +224,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
       active = false;
       clearInterval(id);
     };
-  }, [step, kycPending, kycApproved, client]);
+  }, [step, kycPending, kycApproved, onboardingStatus, client]);
 
   /**
    * Fetch the ramp countries supported on the app's network. When `resetSelection`
@@ -321,6 +337,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     }
     setKycUrl(result.kycUrl ?? null);
     setTosUrl(result.tosUrl ?? null);
+    setOnboardingStatus(result.onboardingStatus);
     setKycPending(result.kycRequired === true);
     if (result.kycRequired) setKycApproved(false);
     setTxStatus(result.status);
@@ -480,6 +497,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         kycUrl={kycUrl}
         tosUrl={tosUrl}
         kycBlocking={kycBlocking}
+        onboardingStatus={onboardingStatus ?? null}
         kycJustApproved={kycPending && kycApproved}
         stellarTxHash={stellarTxHash}
         explorerUrl={

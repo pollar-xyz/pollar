@@ -3,6 +3,7 @@
 import { toBaseUnits, WalletBalanceRecord, WalletChain } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { walletNotReadyReason } from '../../lib/wallet-provisioning';
 import { useChains } from '../../useChains';
 import { addressForChain, resolveChain } from '../ChainSelect';
 import '../shared.css';
@@ -62,6 +63,11 @@ export function SendModal({ onClose }: SendModalProps) {
   // Solana joined Stellar via the atomic endpoint; Polygon has no transfer path
   // in the backend yet, so it can be browsed but not sent from.
   const canSendOnChain = selectedChain === 'STELLAR' || selectedChain === 'SOLANA';
+  // A Stellar account still being created cannot source a payment: every
+  // operation would come back `op_no_source_account`. The server refuses these
+  // with SDK_WALLET_NOT_READY anyway - saying so here turns that into something
+  // the user can act on (wait) instead of a failed transaction.
+  const notReadyReason = walletNotReadyReason(wallet, selectedChain);
   // Solana amounts are integer base units (lamports / mint units), not decimals.
   const isBaseUnitChain = selectedChain === 'SOLANA';
 
@@ -139,6 +145,10 @@ export function SendModal({ onClose }: SendModalProps) {
     setFormError('');
     if (!canSendOnChain) {
       setFormError('Sending is not available on this network yet.');
+      return;
+    }
+    if (notReadyReason) {
+      setFormError(notReadyReason);
       return;
     }
     if (!selectedAsset) {
@@ -249,6 +259,7 @@ export function SendModal({ onClose }: SendModalProps) {
         selectedChain={selectedChain}
         walletAddress={walletAddress}
         canSendOnChain={canSendOnChain}
+        notReadyReason={notReadyReason}
         onSelectChain={setSelectedChain}
         amount={amount}
         destination={destination}

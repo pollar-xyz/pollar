@@ -56,6 +56,14 @@ node tests/smoke-session-races.cjs
 - The persisted session does NOT contain `data.*` PII fields
 - Storage keys are namespaced by `apiKeyHash`
 - `client.logout()` clears storage and resets the keypair
+- A wallet restored mid-provisioning is polled until its account lands:
+  `onWalletStateChange` replays `CREATING` on subscribe, reports `READY` when
+  the account reaches the ledger, updates `getWallet()`, and stops polling
+- `onWalletStateChange` also hears a value that arrived with the session
+  rather than through the poll: a sibling tab's `READY` adopted via the
+  `storage` event, and the value a cold-start restore finds for a subscriber
+  that came before `ready()` - each exactly once, never repeated by the poll or
+  the resume that follows
 
 ### `smoke-providers.cjs`
 
@@ -204,6 +212,10 @@ double-invocation happens here.
   control and the assertion would stop meaning anything.
 - unmount destroys a provider-built client, and leaves a consumer-passed one alive
 - five mount/unmount cycles leak no `storage` listeners
+- a wallet restored mid-provisioning reaches the consumer when its account
+  lands. The session comparison and the context memo must BOTH carry
+  `provisioning`: either one omitting it swallows the transition, and every
+  screen built on it stays frozen on "preparing" forever
 
 The StrictMode block is what caught the orphan `PollarClient` this release fixes:
 the provider built the client in a `useState` initializer, StrictMode

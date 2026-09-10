@@ -169,6 +169,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/wallet/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * On-chain readiness of my Stellar wallet
+         * @description READY: the account exists on the ledger and operations are accepted. CREATING: its creation is queued or in flight. FAILED: creation was retried to exhaustion and is re-attempted on the next sign-in or session resume.
+         */
+        get: operations["getWalletState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/wallet/balance": {
         parameters: {
             query?: never;
@@ -2521,6 +2541,69 @@ export interface operations {
             };
         };
     };
+    getWalletState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Wallet state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_WALLET_STATE";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            address: string;
+                            /** @enum {string} */
+                            chain: "STELLAR" | "POLYGON" | "SOLANA";
+                            /** @enum {string} */
+                            provisioning: "READY" | "CREATING" | "FAILED";
+                            existsOnStellar: boolean;
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
     getWalletBalance: {
         parameters: {
             query?: {
@@ -3215,6 +3298,8 @@ export interface operations {
                                 linkedAt?: number;
                                 network?: string;
                                 deployTxHash?: string | null;
+                                /** @enum {string} */
+                                provisioning?: "READY" | "CREATING" | "FAILED";
                             };
                             wallets: {
                                 /** @enum {string} */
@@ -3231,6 +3316,8 @@ export interface operations {
                                 linkedAt?: number;
                                 network?: string;
                                 deployTxHash?: string | null;
+                                /** @enum {string} */
+                                provisioning?: "READY" | "CREATING" | "FAILED";
                             }[];
                             data: {
                                 mail: string;
@@ -6916,6 +7003,11 @@ export interface operations {
                                 }[];
                                 minAmount?: number;
                                 maxAmount?: number;
+                                expiresAt: string;
+                                providerExpiresAt: string | null;
+                                fiatAmount: number;
+                                cryptoAmount: number | null;
+                                availableAmount: number | null;
                             }[];
                         };
                     };
@@ -7215,9 +7307,14 @@ export interface operations {
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
                             kycRequired?: boolean;
+                            /** @enum {string} */
+                            onboardingStatus?: "kyc" | "endorsement" | "awaiting_provider";
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            txHash?: string;
+                            /** @enum {string} */
+                            chain?: "STELLAR" | "POLYGON" | "SOLANA";
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
@@ -7349,9 +7446,14 @@ export interface operations {
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
                             kycRequired?: boolean;
+                            /** @enum {string} */
+                            onboardingStatus?: "kyc" | "endorsement" | "awaiting_provider";
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            txHash?: string;
+                            /** @enum {string} */
+                            chain?: "STELLAR" | "POLYGON" | "SOLANA";
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
@@ -7470,9 +7572,14 @@ export interface operations {
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
                             kycRequired?: boolean;
+                            /** @enum {string} */
+                            onboardingStatus?: "kyc" | "endorsement" | "awaiting_provider";
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            txHash?: string;
+                            /** @enum {string} */
+                            chain?: "STELLAR" | "POLYGON" | "SOLANA";
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
@@ -7598,9 +7705,14 @@ export interface operations {
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
                             kycRequired?: boolean;
+                            /** @enum {string} */
+                            onboardingStatus?: "kyc" | "endorsement" | "awaiting_provider";
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            txHash?: string;
+                            /** @enum {string} */
+                            chain?: "STELLAR" | "POLYGON" | "SOLANA";
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
@@ -7732,6 +7844,9 @@ export interface operations {
                             kycUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            txHash?: string;
+                            /** @enum {string} */
+                            chain?: "STELLAR" | "POLYGON" | "SOLANA";
                             depositInstructions?: {
                                 scannable?: {
                                     /** @enum {string} */

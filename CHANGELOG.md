@@ -1,5 +1,95 @@
 # Changelog
 
+## Unreleased
+
+> Additive. The platform now creates an end-user's Stellar account in the
+> background instead of inside `POST /auth/login`, so a login returns as soon as
+> the wallet exists rather than waiting on the network. This release is the SDK
+> half of that: the wallet reports where its on-chain account stands, and the
+> client watches it until the account lands.
+
+### `@pollar/core`
+
+- **New: `onWalletStateChange(cb)`.** Fires when the platform-managed Stellar
+  wallet's on-chain account changes state (`CREATING` → `READY`, or `FAILED`).
+  Replays the current value on subscribe, the same contract as
+  `onAuthStateChange`, so a late subscriber never waits for a transition that
+  already happened; an early one (subscribed before the session was restored)
+  hears its first value when the restore lands. A value another tab found and
+  persisted reaches this tab's subscribers too, once. This is what a
+  "preparing your account" state should be driven by.
+- **New: `wallet.provisioning`** on `getWallet()` / `getWallets()` and on the
+  persisted session — `'READY' | 'CREATING' | 'FAILED'`. Only the ACCOUNT is
+  described: trustlines are added incrementally over an app's life, so a wallet
+  does not leave `READY` because a token was enabled yesterday (per-asset state
+  is `getAssets()`). Absent on sessions minted before this release.
+- **New: `refreshWalletState()`** for a host that knows better than a timer (a
+  screen the user just opened, a pull to refresh). Returns the current
+  provisioning value, or `null` when there is no session or the server could not
+  answer. Never throws.
+- **New: `isWalletNotReady(errorOrOutcome)` and `WALLET_NOT_READY_CODE`.** While
+  the account is off the ledger the server refuses on-chain operations with
+  `SDK_WALLET_NOT_READY` (409) instead of letting each one fail as
+  `op_no_source_account`. The helper accepts either a thrown `PollarApiError` or
+  a returned transaction outcome, since the tx methods report failures as a
+  value. The right response is to wait for `onWalletStateChange`, not to retry.
+- **New: `config.loginTimeoutMs` (default 45s).** `POST /auth/login` used the
+  10s `requestTimeoutMs` that protects every other request, and that is the one
+  call where a login does real server-side work. Under network congestion it ran
+  past a minute, so the client aborted while the server kept going and finished
+  the login with nobody left to receive the tokens. It is a backstop, not a fix:
+  an app on the asynchronous path returns in a couple of seconds.
+- The client polls `GET /v2/wallet/state` while a wallet is `CREATING` — 1s, 2s,
+  3s … to a 10s ceiling, at most 12 checks. It stops on `READY` or `FAILED`, on
+  logout and on `destroy()`. Giving up is safe: the next login or session resume
+  re-enqueues a creation that never landed.
+
+### `@pollar/react`
+
+- **Fix: a wallet that finishes provisioning now reaches the UI.** Two guards
+  were swallowing the transition, and either one alone was enough to freeze
+  every screen built on it: `sessionsEqual` compared tokens and the wallet
+  address but not `provisioning`, so the auth-state emission was discarded as a
+  no-op; and the context memo recomputes on a fixed dependency list, which the
+  new field was not in. Both are covered by a regression check now (block 6 of
+  `smoke-react.cjs`).
+- The **Send** modal refuses to build a payment while the account is off the
+  ledger and says why, instead of letting the server's `SDK_WALLET_NOT_READY`
+  surface as a failed transaction. Kept separate from the existing
+  "network has no transfer path" message: collapsing them would tell someone
+  waiting on a brand-new wallet that Stellar does not support sending.
+- The **Receive** modal warns while the account is being created. The address is
+  valid and worth copying either way, but a payment sent to it right now is
+  rejected by the network - this is the one place the window can cost a user a
+  failed transfer from a third party.
+- The **wallet button** shows the same reason as a banner in its dropdown.
+- `walletNotReadyReason(wallet, chain)` is exported so a custom template phrases
+  the wait the same way the built-in ones do. Only STELLAR is gated, and only on
+  the ACCOUNT - a missing trustline never blocks the UI.
+- `SendModalTemplateProps`, `ReceiveModalTemplateProps` and
+  `WalletButtonTemplateProps` each gain an OPTIONAL `notReadyReason`, so a
+  custom template written before this keeps compiling untouched.
+- **The ramp widget no longer tells a user to verify an identity they already
+  verified.** Some providers gate a payment method on their own setup, finished
+  after — and separately from — the user's verification. The widget had one
+  link-less state and one sentence for it ("complete verification with the
+  provider"), which in that situation asks for something that cannot help: the
+  documents are all in, and reopening the flow changes nothing. The ramp
+  responses now carry `onboardingStatus` (`'kyc' | 'endorsement' |
+'awaiting_provider'`), and on `awaiting_provider` the widget says the account
+  is still being set up and that there is nothing left to do. It also stops
+  polling the KYC-status endpoint in that state, which describes a different
+  provider's checks and could never answer for this one.
+- `RampWidgetTemplateProps` gains an OPTIONAL `onboardingStatus`. A custom
+  template written before this keeps compiling and keeps the old wording.
+
+**Upgrading:** nothing is required. An app that reads none of the above behaves
+exactly as before — the login response carries the same fields it always did,
+and `existsOnStellar` keeps the value it always had on a first login (`false`,
+since it is read before the account is created). What changes for an
+un-updated client is timing: a payment attempted in the first seconds after
+signup now returns `SDK_WALLET_NOT_READY` instead of succeeding.
+
 ## 0.11.3
 
 > Patch release. Headlines: **sessions no longer die on reload when the DPoP

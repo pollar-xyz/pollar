@@ -74,7 +74,12 @@ function sessionsEqual(a: PollarPersistedSession | null, b: PollarPersistedSessi
     a.token?.accessToken === b.token?.accessToken &&
     a.token?.refreshToken === b.token?.refreshToken &&
     a.token?.expiresAt === b.token?.expiresAt &&
-    a.wallet?.address === b.wallet?.address
+    a.wallet?.address === b.wallet?.address &&
+    // The wallet's on-chain account can move from CREATING to READY without any
+    // other field changing. Leaving it out of the comparison is what would make
+    // the whole provisioning UI dead: the short-circuit below would swallow the
+    // one emission that says the wait is over.
+    a.wallet?.provisioning === b.wallet?.provisioning
   );
 }
 
@@ -589,6 +594,12 @@ export function PollarProvider({
   // persisted session. For every wallet type, `wallet.address` holds the on-chain
   // address we care about.
   const walletAddress = sessionState?.wallet?.address || '';
+  // A scalar dependency for the context memo below, for the same reason
+  // `walletAddress` is one: the memo reads the wallet through
+  // `pollarClient.getWallet()`, so it only recomputes when something in its
+  // dependency list moves. Without this, a wallet going from CREATING to READY
+  // updates the session and re-renders nothing.
+  const walletProvisioning = sessionState?.wallet?.provisioning;
   const getClient = useCallback(() => pollarClient, [pollarClient]);
   // refreshBalance resolves the own wallet server-side from the session;
   // walletAddress stays in deps so the callback re-binds when the wallet changes.
@@ -685,8 +696,10 @@ export function PollarProvider({
       retryConfig,
       adapters,
     } as PollarContextValue;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- walletProvisioning is an intentional recompute trigger, not read in the body
   }, [
     walletAddress,
+    walletProvisioning,
     verified,
     pollarClient,
     getClient,
