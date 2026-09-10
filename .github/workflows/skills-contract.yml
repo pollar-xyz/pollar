@@ -6,12 +6,16 @@ name: Skill path contract
 # ECOSYSTEM_CARDS), so a rename here breaks an install link on someone else's
 # site, silently.
 #
-# Two checks, because the path breaks in two different ways:
-#   - Renamed or deleted in this repo. Seen offline, on the pull request, which
-#     is the only moment it can still be stopped.
-#   - Broken from outside it: the repo renamed, turned private, or its default
-#     branch moved. The tree still looks right, so only a real request sees it.
-#     That one runs weekly, and GitHub emails on a failed scheduled run.
+# This job owns one half of the problem: a rename or a deletion inside this
+# repo. It reads the tree offline on the pull request, which is the only moment
+# the break can still be stopped.
+#
+# The other half — the repo renamed, turned private, or its default branch moved
+# — leaves the tree looking correct, so only a real request over the network
+# sees it. Uptime Kuma watches the published URL for that, hourly, through the
+# notification channel the platform monitors already use. It is not on a cron
+# here: a failed scheduled run only emails whoever last touched the cron, and
+# two owners for one fact means an alert nobody is sure is theirs.
 
 on:
   pull_request:
@@ -21,9 +25,6 @@ on:
     branches: [main]
     paths:
       - 'skills/**'
-  schedule:
-    # Mondays 07:00 UTC, after the 06:00 mirror in pollar-web has run.
-    - cron: '0 7 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -65,11 +66,13 @@ jobs:
           fi
           echo "$skill: SKILL.md and every page it links to are present."
 
-      # Only worth asking on a schedule. On a pull request this would test main,
-      # not the branch, and right after a push raw.githubusercontent can still be
+      # On demand only. Uptime Kuma is what watches this continuously; this step
+      # is here to answer "is it broken right now?" without opening Kuma. It is
+      # skipped on a pull request because there it would test main rather than
+      # the branch, and right after a push raw.githubusercontent can still be
       # serving the previous copy from its cache.
       - name: The URL stellar/stellar-dev-skill publishes answers 200
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch'
         env:
           URL: https://raw.githubusercontent.com/pollar-xyz/pollar/main/skills/pollar-wallet-auth/SKILL.md
         run: |
