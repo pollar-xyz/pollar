@@ -115,6 +115,13 @@ interface RampWidgetTemplateProps {
   tosUrl: string | null;
   /** Provider gated the flow on KYC and published no link; nothing was signed. */
   kycBlocking: boolean;
+  /**
+   * Which part of provider onboarding is outstanding, when any is. Optional
+   * because this template is exported for integrators who render their own
+   * chrome: a required prop would break every one of them on upgrade. Omitted,
+   * the gate falls back to the identity-verification wording.
+   */
+  onboardingStatus?: 'kyc' | 'endorsement' | 'awaiting_provider' | null;
   /** The gate has since cleared - the user needs a fresh quote to continue. */
   kycJustApproved: boolean;
   stellarTxHash: string | null;
@@ -198,6 +205,7 @@ export function RampWidgetTemplate({
   kycUrl,
   tosUrl,
   kycBlocking,
+  onboardingStatus,
   kycJustApproved,
   stellarTxHash,
   explorerUrl,
@@ -623,10 +631,23 @@ export function RampWidgetTemplate({
             </button>
           )}
 
-          {/* Link-less KYC gate: there is nowhere to send the user, so say what
-              is blocking and keep the withdraw button out of reach. No funds
-              have moved and nothing was signed. */}
-          {kycBlocking && (
+          {/* Link-less gate: there is nowhere to send the user, so say what is
+              blocking and keep the withdraw button out of reach. No funds have
+              moved and nothing was signed.
+
+              Two different situations reach this, and telling the user the wrong
+              one is worse than saying nothing: `awaiting_provider` means their
+              verification is already done and the provider is finishing its own
+              setup, so asking them to "complete verification" sends them back
+              through a flow that cannot change anything. */}
+          {kycBlocking && onboardingStatus === 'awaiting_provider' && (
+            <p className="pollar-ramp-payment-note">
+              {provider} is still setting up your account for this payment method. Your verification is complete and there is
+              nothing left for you to do — nothing has been sent, and this will update on its own once {provider} is ready.
+            </p>
+          )}
+
+          {kycBlocking && onboardingStatus !== 'awaiting_provider' && (
             <p className="pollar-ramp-payment-note">
               {provider} needs to verify your identity before this payout. Nothing has been sent yet — complete verification
               with {provider}, and this will update on its own.

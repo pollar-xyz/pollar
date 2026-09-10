@@ -69,6 +69,19 @@
 - `SendModalTemplateProps`, `ReceiveModalTemplateProps` and
   `WalletButtonTemplateProps` each gain an OPTIONAL `notReadyReason`, so a
   custom template written before this keeps compiling untouched.
+- **The ramp widget no longer tells a user to verify an identity they already
+  verified.** Some providers gate a payment method on their own setup, finished
+  after — and separately from — the user's verification. The widget had one
+  link-less state and one sentence for it ("complete verification with the
+  provider"), which in that situation asks for something that cannot help: the
+  documents are all in, and reopening the flow changes nothing. The ramp
+  responses now carry `onboardingStatus` (`'kyc' | 'endorsement' |
+'awaiting_provider'`), and on `awaiting_provider` the widget says the account
+  is still being set up and that there is nothing left to do. It also stops
+  polling the KYC-status endpoint in that state, which describes a different
+  provider's checks and could never answer for this one.
+- `RampWidgetTemplateProps` gains an OPTIONAL `onboardingStatus`. A custom
+  template written before this keeps compiling and keeps the old wording.
 
 **Upgrading:** nothing is required. An app that reads none of the above behaves
 exactly as before — the login response carries the same fields it always did,
