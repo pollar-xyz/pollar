@@ -7307,6 +7307,8 @@ export interface operations {
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
                             kycRequired?: boolean;
+                            /** @enum {string} */
+                            onboardingStatus?: "kyc" | "endorsement" | "awaiting_provider";
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
@@ -7444,6 +7446,8 @@ export interface operations {
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
                             kycRequired?: boolean;
+                            /** @enum {string} */
+                            onboardingStatus?: "kyc" | "endorsement" | "awaiting_provider";
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
@@ -7568,6 +7572,8 @@ export interface operations {
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
                             kycRequired?: boolean;
+                            /** @enum {string} */
+                            onboardingStatus?: "kyc" | "endorsement" | "awaiting_provider";
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
@@ -7699,6 +7705,8 @@ export interface operations {
                             status: "pending" | "processing" | "completed" | "failed";
                             kycUrl?: string;
                             kycRequired?: boolean;
+                            /** @enum {string} */
+                            onboardingStatus?: "kyc" | "endorsement" | "awaiting_provider";
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
