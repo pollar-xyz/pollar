@@ -79,6 +79,7 @@ import {
   RampsSignatureResponse,
   RampsTransactionResponse,
   RampTxStatus,
+  RampOperatorOptions,
   SessionInfo,
   SessionsState,
   Sep10Proof,
@@ -253,6 +254,7 @@ export class PollarClient {
     return this._apiKeyHash;
   }
 
+  private _operatorKey: string | null = null;
   private _session: PollarPersistedSession | null = null;
   private _profile: PollarUserProfile | null = null;
   /** Last `DPoP-Nonce` we saw from a server response. Carried into the next proof. */
@@ -481,6 +483,8 @@ export class PollarClient {
       this._walletAdapters.set(adapter.type, adapter);
     }
 
+    this._operatorKey = config.operatorKey ?? config.serverSecretKey ?? null;
+
     this._api = createApiClient(this.basePath, {
       timeoutMs: this._requestTimeoutMs,
       retry: config.retry,
@@ -501,7 +505,9 @@ export class PollarClient {
     this._networkState = { step: 'connected', network: config.stellarNetwork ?? 'testnet' };
 
     if (!isClientRuntime) {
-      warnServerSide('constructor');
+      if (!this._operatorKey) {
+        warnServerSide('constructor');
+      }
       this._initialized = Promise.resolve();
       return;
     }
@@ -557,6 +563,17 @@ export class PollarClient {
   /** Awaitable handle for the initial keypair + session restore. */
   ready(): Promise<void> {
     return this._initialized;
+  }
+
+  /**
+   * Optional server operator or backend secret key configured for server-side operator mode.
+   */
+  get operatorKey(): string | null {
+    return this._operatorKey;
+  }
+
+  setOperatorKey(key: string | null | undefined): void {
+    this._operatorKey = key ?? null;
   }
 
   // --- Lifecycle ------------------------------------------------------------
@@ -761,7 +778,13 @@ export class PollarClient {
         }
 
         const accessToken = self._session?.token?.accessToken;
-        if (!accessToken) return request;
+        if (!accessToken) {
+          if (self._operatorKey && !request.headers.has('Authorization')) {
+            request.headers.set('Authorization', `Bearer ${self._operatorKey}`);
+            request.headers.set('X-Operator-Key', self._operatorKey);
+          }
+          return request;
+        }
 
         const proof = await self._buildProofForRequest(request, accessToken);
         if (proof) {
@@ -990,7 +1013,10 @@ export class PollarClient {
     if (!request.headers.has('DPoP')) return request;
 
     const accessToken = this._session?.token?.accessToken;
-    if (!accessToken) return null;
+    if (!accessToken) {
+      if (this._operatorKey) return request;
+      return null;
+    }
 
     const proof = await this._buildProofForRequest(request, accessToken);
     if (!proof) return null;
@@ -1036,6 +1062,9 @@ export class PollarClient {
         } else {
           headers.set('Authorization', `Bearer ${accessToken}`);
         }
+      } else if (this._operatorKey) {
+        headers.set('Authorization', `Bearer ${this._operatorKey}`);
+        headers.set('X-Operator-Key', this._operatorKey);
       }
     }
 
@@ -3317,12 +3346,14 @@ export class PollarClient {
     return getRampCountries(this._api);
   }
 
-  createOnRamp(body: RampsOnrampBody): Promise<RampsOnrampResponse> {
-    return createOnRamp(this._api, body);
+  createOnRamp(body: RampsOnrampBody, options?: RampOperatorOptions): Promise<RampsOnrampResponse> {
+    const opts = options?.operatorKey ? options : this._operatorKey ? { operatorKey: this._operatorKey } : options;
+    return createOnRamp(this._api, body, opts);
   }
 
-  createOffRamp(body: RampsOfframpBody): Promise<RampsOfframpResponse> {
-    return createOffRamp(this._api, body);
+  createOffRamp(body: RampsOfframpBody, options?: RampOperatorOptions): Promise<RampsOfframpResponse> {
+    const opts = options?.operatorKey ? options : this._operatorKey ? { operatorKey: this._operatorKey } : options;
+    return createOffRamp(this._api, body, opts);
   }
 
   /** Complete an offramp once anchor KYC is done (build + sign + submit the withdraw payment). */
@@ -3335,12 +3366,17 @@ export class PollarClient {
     return submitRampSignature(this._api, txId, body);
   }
 
-  getRampTransaction(txId: string): Promise<RampsTransactionResponse> {
-    return getRampTransaction(this._api, txId);
+  getRampTransaction(txId: string, options?: RampOperatorOptions): Promise<RampsTransactionResponse> {
+    const opts = options?.operatorKey ? options : this._operatorKey ? { operatorKey: this._operatorKey } : options;
+    return getRampTransaction(this._api, txId, opts);
   }
 
-  pollRampTransaction(txId: string, opts?: { intervalMs?: number; timeoutMs?: number }): Promise<RampTxStatus> {
-    return pollRampTransaction(this._api, txId, opts);
+  pollRampTransaction(
+    txId: string,
+    opts?: { intervalMs?: number; timeoutMs?: number; operatorKey?: string },
+  ): Promise<RampTxStatus> {
+    const mergedOpts = opts?.operatorKey ? opts : this._operatorKey ? { ...opts, operatorKey: this._operatorKey } : opts;
+    return pollRampTransaction(this._api, txId, mergedOpts);
   }
 
   /**
