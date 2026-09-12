@@ -1,12 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.11.4
 
-> Additive. The platform now creates an end-user's Stellar account in the
-> background instead of inside `POST /auth/login`, so a login returns as soon as
-> the wallet exists rather than waiting on the network. This release is the SDK
-> half of that: the wallet reports where its on-chain account stands, and the
-> client watches it until the account lands.
+> Patch release, additive. The platform now creates an end-user's Stellar
+> account in the background instead of inside `POST /auth/login`, so a login
+> returns as soon as the wallet exists rather than waiting on the network. This
+> release is the SDK half of that: the wallet reports where its on-chain account
+> stands, the client watches it until the account lands, and the React modals
+> say so rather than letting the first payment fail as an opaque network error.
+> Alongside it, two things that were logging people out: a DPoP proof the server
+> rejected over clock skew is now re-signed instead of tearing the session down,
+> and every request carries `x-pollar-sdk` so a stale SDK is visible from the
+> dashboard. Nothing to migrate - see [UPGRADE.md](./UPGRADE.md).
 
 ### `@pollar/core`
 
@@ -43,6 +48,64 @@
   3s … to a 10s ceiling, at most 12 checks. It stops on `READY` or `FAILED`, on
   logout and on `destroy()`. Giving up is safe: the next login or session resume
   re-enqueues a creation that never landed.
+- **Fix: a DPoP proof the server rejects over clock skew no longer logs the user
+  out.** A 401 carrying `iat-skew` on `/auth/refresh` fell through to the
+  "refresh token is dead" branch and cleared the session - even though
+  `onResponse` had just learned the correct offset from that same response's
+  `Date` header. Both the refresh and the resource branch now route it through
+  the retry the nonce challenge already used: the server rejects these proofs
+  before the handler runs, so nothing was processed and any method retries
+  safely. On a resource request it also stops spending a pointless
+  `/auth/refresh` on a proof the client can simply re-sign.
+- The learned clock offset is persisted next to the DPoP nonce
+  (`pollar:<hash>:dpopClockOffset`), so only a genuine cold start pays one
+  rejected proof before the offset is known. Like the nonce, it survives
+  `logout()` - it describes the server's clock, not the session, and grants
+  nothing on its own. A value further out than a day is treated as corrupt and
+  ignored.
+- **New request header: `x-pollar-sdk`,** sent on every call as
+  `core/<version> <web|rn|node>`. sdk-api records it per application so a stale
+  SDK shows up in the dashboard without anyone having to ask its developer. It
+  is derived from `POLLAR_CORE_VERSION`, which is `'dev'` on an unbundled build
+  and dropped server-side rather than written as a junk row. **This needs an
+  sdk-api that lists `x-pollar-sdk` in its CORS `allowHeaders`** - an unlisted
+  request header fails the preflight, which would take down every browser app
+  at once. The deployed sdk-api allows it as of this release.
+- **Fix: the provisioning watch is armed on every path that restores a session.**
+  Only the `/auth/session/resume` path started it, and two restore branches never
+  reach that call: a cross-tab token rotation of an already-verified session, and
+  a restored session whose access token is already expired (which refreshes
+  inline and returns). A wallet restored mid-creation on either one stayed
+  `CREATING` for the life of the client, with nothing left to unblock the UI. The
+  optimistic branch arms it too, so a `_resume` that fails on a flaky network and
+  backs off for 30s no longer takes the watch down with it. Starting the watch is
+  idempotent per session, so the restore and the resume behind it cost one
+  schedule between them rather than resetting the 1s backoff twice.
+- **Fix: a `/wallet/state` answer that lost a race no longer regresses the
+  wallet.** The watch polls on its own schedule while `refreshWalletState()` is
+  public, so two checks can be in flight and resolve out of order; the older one
+  walked `READY` (and `existsOnStellar`) back to `CREATING`, telling the app to
+  keep waiting for an account that had already landed. Checks now carry a
+  monotonic id and only the newest one applies. The session generation cannot
+  stand in for this: a resume-driven `FAILED -> CREATING -> READY` recovery is
+  legitimate within one generation. `refreshWalletState()` answers with what the
+  wallet reports now rather than with the response it just discarded.
+- **Fix: a provisioning value outside `READY | CREATING | FAILED` is ignored
+  instead of persisted.** `isValidSession` rejects an unknown value on restore,
+  so persisting one cost the user their whole session on the next reload over a
+  field they never asked about. The check the restore already ran is now the
+  single validator both paths share.
+- **Fix: one `onWalletStateChange` subscriber that throws no longer silences the
+  others.** The dispatch loop stopped at the first throw, and the replay inside
+  `onWalletStateChange` was outside any guard - a throwing callback took the
+  unsubscribe handle down with it and stayed registered. Each callback is
+  isolated and its failure logged, the same as `onStorageDegrade`.
+- **`BuildOutcome` carries `code` and `message`,** matching `SignOutcome`.
+  `isWalletNotReady()` is documented to accept a returned outcome, but `buildTx()`
+  reduced a failure to `{ status: 'error', details }`, so a `/tx/build` 409 with
+  `SDK_WALLET_NOT_READY` answered `false` for the one failure the helper exists to
+  name. The external-wallet branch of `buildAndSignAndSubmitTx()` propagates it
+  across the boundary too. Additive: the fields are optional.
 
 ### `@pollar/react`
 
@@ -82,6 +145,54 @@
   provider's checks and could never answer for this one.
 - `RampWidgetTemplateProps` gains an OPTIONAL `onboardingStatus`. A custom
   template written before this keeps compiling and keeps the old wording.
+- **Three ramp failures get a sentence instead of a raw code.** The widget falls
+  back to printing the error code when it has no phrase for one, so a user whose
+  wallet was a cent short read
+  `SDK_RAMPS_INSUFFICIENT_BALANCE:stereum:insufficient_usdc (needs 1.88 USDC,
+wallet holds 1.8773182)`. Now worded like the anchor and Bridge failures beside
+  them: `SDK_RAMPS_INSUFFICIENT_BALANCE` (the wallet cannot cover the amount,
+  caught before anything is submitted), `SDK_RAMPS_ONCHAIN_SUBMIT_FAILED` (the
+  network rejected the transaction and nothing was sent, so the balance is
+  untouched - almost always no XLM for the fee on a wallet the app does not
+  sponsor) and `SDK_RAMPS_ETHERFUSE_ERROR` (an upstream provider failure).
+- **Fix: the not-ready banner follows the chain the wallet button shows.** The
+  button renders the address of the app's first configured chain, but the notice
+  beside it was pinned to Stellar - so a Solana-first app captioned a working
+  Solana address with the wait on its user's separate Stellar wallet. It reads
+  `primaryChain` from `useChains()` now. `walletNotReadyReason(wallet, chain)`
+  treats an unknown chain (`null`, which is what `/config` leaves on every cold
+  start) as no reason to block, for the same reason: guessing Stellar there is
+  the same wrong answer, just earlier.
+
+### Tests and CI
+
+- `smoke-client.cjs` gains two provisioning blocks: a wallet restored mid-
+  creation is polled until its account lands (replay on subscribe, `READY`
+  reaching `getWallet()` and `existsOnStellar`, polling stopping there), and a
+  value that arrived with the SESSION rather than through the poll - a sibling
+  tab's `READY` adopted via the `storage` event, and what a cold-start restore
+  finds for a subscriber that came before `ready()` - reaches a subscriber
+  exactly once, never repeated by the poll or the resume behind it.
+  `smoke-react.cjs` block 6 is the regression check for the two guards that were
+  swallowing the transition before it reached the UI; it is what caught the
+  second one.
+- Block 12 of `smoke-client.cjs` and block 7 of `smoke-react.cjs` are the
+  regression net for the fixes above, one sub-block per failure: the expired-token
+  restore, the out-of-order check, the unknown provisioning value (whose last
+  assertion is that the row still restores - what persisting it would have cost),
+  the throwing subscriber, the build outcome that lost its code, and the banner
+  captioning the wrong chain. Each was confirmed to fail with its fix reverted,
+  so none of them is a test that passes either way.
+- **New workflow `skills-contract.yml`.** `skills/pollar-wallet-auth/` is a
+  contract with a third-party repo: `stellar/stellar-dev-skill` publishes this
+  repo's raw `main` URL as the value a developer copies to install the skill, so
+  moving or renaming the directory serves them a 404 with nobody here being told.
+  The workflow fails a PR that moves it, and fails one that moves the `SKILL.md`
+  siblings, whose relative links resolve against that same URL.
+- `skills-changed.yml` diffs the whole push (`github.event.before` ->
+  `github.sha`) rather than `HEAD^..HEAD`, which reported nothing when a
+  multi-commit push touched `skills/` in any commit but the last. The liveness of
+  the published mirror is Uptime Kuma's job now, not a cron in this repo.
 
 **Upgrading:** nothing is required. An app that reads none of the above behaves
 exactly as before — the login response carries the same fields it always did,

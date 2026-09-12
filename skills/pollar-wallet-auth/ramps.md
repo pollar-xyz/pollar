@@ -32,6 +32,7 @@ type RampResult = {
   kycUrl?: string; // hosted identity check to open
   tosUrl?: string; // hosted terms acceptance, when the provider splits it out
   kycRequired?: boolean; // link-less gate: nothing was signed, nothing moved
+  onboardingStatus?: 'kyc' | 'endorsement' | 'awaiting_provider'; // which part is outstanding
   depositInstructions?: RampDepositInstructions; // on-ramp payment details as data
   stellarTxHash?: string; // set once the on-chain leg has landed
 };
@@ -46,8 +47,18 @@ decides what happens next:
 2. **`kycUrl`** (and `tosUrl`) is set: open it in a new tab. The provider hosts the identity check and
    the transaction advances on its own once the user clears it. Keep polling.
 3. **`kycRequired: true`** is set: the provider gated the flow on identity and offers no hosted URL.
-   Nothing was built or signed and no funds moved. Poll `getRampKycStatus()` until `hasApproved`,
-   then **request a fresh quote**; the provider consumed this one when it answered.
+   Nothing was built or signed and no funds moved. Read `onboardingStatus` before saying anything to
+   the user, because two different situations share this flag:
+
+- `'kyc'` or `'endorsement'`: something is still outstanding on the user's side. Poll
+  `getRampKycStatus()` until `hasApproved`, then **request a fresh quote**; the provider consumed
+  this one when it answered.
+- `'awaiting_provider'`: the user has nothing left to do. The documents are in and the provider is
+  working through its own setup, which finishes separately from the user's verification. Say the
+  account is still being prepared, and **stop polling `getRampKycStatus()`** - it describes a
+  different provider's checks and can never answer for this one. Asking the user to "complete
+  verification" here asks for something that cannot help.
+
 4. **`depositInstructions`** is set (on-ramp): render them. This is where the user is told how to pay.
 5. Otherwise poll `status`.
 

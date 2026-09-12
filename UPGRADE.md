@@ -1,5 +1,65 @@
 # Upgrade guide
 
+## 0.11.3 -> 0.11.4
+
+No breaking changes and no migration steps. 0.11.4 is additive: the wallet
+reports where its on-chain Stellar account stands, the client watches it until
+the account lands, a DPoP proof rejected over clock skew is re-signed instead of
+clearing the session, and every request carries an `x-pollar-sdk` build header.
+`@pollar/react@0.11.4` requires `@pollar/core@^0.11.4`; if you pin both packages
+to exact versions, keep them on the same version. The four adapters stay at
+0.11.2 - their `@pollar/core@^0.11.2` range already resolves 0.11.4.
+
+**One behaviour change to be aware of even if you change no code.** The platform
+now creates the end-user's Stellar account in the background instead of inside
+`POST /auth/login`, so a login returns before the account is on the ledger. An
+on-chain operation attempted in that window comes back as `SDK_WALLET_NOT_READY`
+(409) rather than succeeding. It is a few seconds on a healthy path, and it is
+the same window whether or not you upgrade - the SDK is what makes it visible.
+
+If you built your own send/receive UI, gate it:
+
+```ts
+import { isWalletNotReady } from '@pollar/core';
+
+// Ask before offering the operation...
+const wallet = client.getWallet();
+if (wallet?.provisioning === 'CREATING') {
+  // show "preparing your account", and wait for the transition below
+}
+
+// ...and recognize the server's refusal if one slips through. Wait for
+// onWalletStateChange - do NOT retry in a loop.
+const outcome = await client.signAndSubmitTx(xdr);
+if (isWalletNotReady(outcome)) {
+  /* ... */
+}
+
+const off = client.onWalletStateChange((provisioning) => {
+  if (provisioning === 'READY') enableSending();
+  if (provisioning === 'FAILED') showSupportPath();
+});
+```
+
+`@pollar/react`'s built-in Send, Receive and wallet-button templates already do
+this. A CUSTOM template of yours keeps compiling untouched: `notReadyReason` on
+`SendModalTemplateProps` / `ReceiveModalTemplateProps` /
+`WalletButtonTemplateProps`, and `onboardingStatus` on
+`RampWidgetTemplateProps`, are all optional. Render `notReadyReason` when it is
+present to phrase the wait the way the built-ins do, or call the exported
+`walletNotReadyReason(wallet, chain)` yourself.
+
+`wallet.provisioning` is absent on a session minted before this release, so read
+it as "not reported" rather than as a problem - `undefined` is not `CREATING`.
+
+**Server requirement.** `x-pollar-sdk` is a non-safelisted request header, so an
+sdk-api that does not list it in its CORS `allowHeaders` fails the preflight and
+takes down every browser app on that origin. Pollar's hosted sdk-api allows it.
+If you run sdk-api yourself, deploy the allowlist change **before** upgrading
+the SDK.
+
+See the [CHANGELOG](./CHANGELOG.md) for the details.
+
 ## 0.11.2 -> 0.11.3
 
 No breaking changes. 0.11.3 is a patch: sessions survive reloads when the DPoP

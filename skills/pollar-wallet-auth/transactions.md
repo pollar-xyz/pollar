@@ -50,6 +50,29 @@ await client.signTx(unsignedXdr); // sponsored per app config
 await client.signTx(unsignedXdr, { skipSponsorship: true }); // force the user to pay their own fee
 ```
 
+## A brand-new embedded account
+
+Under `IMMEDIATE` funding the platform creates the Stellar account in the background, so a login can
+return before it is on the ledger. Every on-chain operation in that window comes back as
+`SDK_WALLET_NOT_READY` (409), not as a network failure:
+
+```ts
+import { isWalletNotReady } from '@pollar/core';
+
+const outcome = await client.signAndSubmitTx(unsignedXdr);
+if (isWalletNotReady(outcome)) {
+  // Wait for the transition. Do NOT retry in a loop - the client already polls.
+  const off = client.onWalletStateChange((p) => {
+    if (p === 'READY') retryOnce();
+  });
+}
+```
+
+`client.getWallet()?.provisioning` is the same value as a snapshot, and `refreshWalletState()` forces a
+check when the app knows better than the timer (a screen the user just opened, a pull to refresh).
+`isWalletNotReady()` accepts a thrown `PollarApiError` or any returned outcome - `BuildOutcome`,
+`SignOutcome` and `SubmitOutcome` all carry the server's `code`.
+
 ## Activating an external account
 
 An external wallet that has never been used on Stellar has no on-chain account. `createAccount()`

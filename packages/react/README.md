@@ -3,7 +3,26 @@
 React bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI, transaction modals, and hooks for
 Stellar and Solana applications.
 
-> **0.11.3** requires `@pollar/core@^0.11.3`. Non-breaking. A **pre-built `PollarClient`
+> **0.11.4** requires `@pollar/core@^0.11.4`. Non-breaking. The platform now creates an
+> end-user's Stellar account **in the background**, so a login returns before the account is on
+> the ledger and the first payment in that window is refused by the server. Two things changed
+> here. **A wallet that finishes provisioning now reaches the UI**: `sessionsEqual` did not
+> compare `provisioning` and the context memo's dependency list did not include it, and either
+> one alone froze every screen built on the transition. And the modals say what is happening -
+> **Send** refuses to build a payment while the account is off the ledger and gives the reason
+> (kept apart from the "no transfer path on this network" message, which would otherwise tell
+> someone waiting on a brand-new wallet that Stellar cannot send), **Receive** warns while the
+> address is still unbacked, and the **wallet button** carries the same reason as a banner in its
+> dropdown. `walletNotReadyReason(wallet, chain)` is exported so a custom template phrases the
+> wait the way the built-ins do; `SendModalTemplateProps`, `ReceiveModalTemplateProps` and
+> `WalletButtonTemplateProps` each gain an **optional** `notReadyReason`, so a custom template
+> written before this keeps compiling untouched. In the **ramp widget**: a user whose provider
+> setup is still pending is no longer asked to verify an identity they already verified
+> (`onboardingStatus: 'awaiting_provider'` says the account is being set up and stops the
+> pointless KYC poll), and three failures that printed as raw error codes get sentences.
+> `RampWidgetTemplateProps` gains an optional `onboardingStatus`.
+>
+> Earlier: **0.11.3** required `@pollar/core@^0.11.3`. A **pre-built `PollarClient`
 > passed to `PollarProvider` no longer loses passkey support**: the provider installs the
 > browser passkey ceremony on every path (via core's new `setPasskeyDefaults()`), and an
 > explicit `passkey: undefined` no longer wipes the default. `browserPasskeyCeremony` and
@@ -369,6 +388,16 @@ template yet.)
 `SendModal`; it's exported on its own for consumers that want to embed the lifecycle elsewhere.
 
 > `onWalletConnect` is **optional** on `<LoginModalTemplate>` (defaults to a no-op).
+
+> `notReadyReason` is **optional** on `<SendModalTemplate>`, `<ReceiveModalTemplate>` and
+> `<WalletButtonTemplate>`, and `onboardingStatus` is optional on `<RampWidgetTemplate>` - a custom
+> template written before 0.11.4 keeps compiling and keeps its old wording. Render `notReadyReason`
+> when it is present: it is the sentence for a Stellar account the platform is still creating, and
+> without it a custom Send lets the user build a payment the server will refuse
+> (`SDK_WALLET_NOT_READY`). To phrase it yourself, call the exported
+> `walletNotReadyReason(wallet, chain)`. It gates on `STELLAR` and on the ACCOUNT only, so a
+> Solana wallet, an external wallet (which never carries `provisioning`) and a missing trustline
+> all read as `null` - no reason to block.
 
 ---
 

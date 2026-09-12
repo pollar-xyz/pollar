@@ -2,7 +2,25 @@
 
 Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction utilities for Stellar and Solana applications.
 
-> **0.11.3** is a patch, non-breaking, focused on session resilience. A session
+> **0.11.4** is a patch, non-breaking. The platform now creates an end-user's Stellar account
+> **in the background** instead of inside `POST /auth/login`, so a login returns before the
+> account is on the ledger. New API for that window: `wallet.provisioning`
+> (`'READY' | 'CREATING' | 'FAILED'`) on `getWallet()` / `getWallets()` and the persisted session
+>
+> - the ACCOUNT only, never trustlines; `onWalletStateChange(cb)`, which fires on the transition
+>   and replays the current value on subscribe, the same contract as `onAuthStateChange`;
+>   `refreshWalletState()` for a host that knows better than a timer; and `isWalletNotReady()` +
+>   `WALLET_NOT_READY_CODE`, which name the `SDK_WALLET_NOT_READY` (409) the server returns for an
+>   on-chain operation attempted before the account lands. The client polls `GET /v2/wallet/state`
+>   while a wallet is `CREATING` and stops on `READY`/`FAILED`, on logout and on `destroy()`.
+>   Also: **a DPoP proof the server rejects over clock skew is re-signed instead of clearing the
+>   session** - an `iat-skew` 401 on `/auth/refresh` was logging the user out even though the same
+>   response had just taught the client the right offset; the learned offset is now persisted next
+>   to the nonce. Every request carries **`x-pollar-sdk`** (`core/<version> <web|rn|node>`), which
+>   needs an sdk-api that lists it in CORS `allowHeaders`. New config: `loginTimeoutMs` (45s),
+>   replacing the 10s `requestTimeoutMs` on login alone.
+>
+> Earlier: **0.11.3** was a patch focused on session resilience. A session
 > **survives reloads when the DPoP keypair fails to persist**: the persisted session records
 > the thumbprint of the key its tokens are bound to (`dpopJkt`), a mismatch is detected
 > locally instead of looping through 401s, and clearing a session no longer destroys the
@@ -280,7 +298,7 @@ wallets? PollarPersistedWallet[]        // every wallet the user holds, one per 
 where `PollarPersistedWallet` is:
 
 ```
-{ type, provider?, address, chain?, existsOnStellar?, fundingMode?,
+{ type, provider?, address, chain?, existsOnStellar?, provisioning?, fundingMode?,
   createdAt?, linkedAt?, network?, deployTxHash? }
 ```
 
@@ -303,6 +321,12 @@ const profile = client.getUserProfile();
 
 Storage keys are namespaced by `apiKeyHash` (first 8 hex chars of SHA-256 of your API key) so multiple SDK instances on
 the same origin don't cross-contaminate.
+
+Two keys sit beside the session and deliberately survive `logout()`, because they describe the
+SERVER rather than the user and grant nothing on their own: `pollar:<hash>:dpopNonce` (the last
+nonce the server issued) and `pollar:<hash>:dpopClockOffset` (the learned `serverTime - localTime`,
+in seconds, so only a genuine cold start pays one proof rejected for clock skew before the offset
+is known).
 
 ## End-to-end example
 
@@ -343,6 +367,7 @@ const sessions = await client.listSessions();
 | `keyManager`         | `KeyManager`             | No       | Pluggable DPoP key manager. Web picks `WebCryptoKeyManager`; otherwise `NobleKeyManager`                                                       |
 | `walletAdapters`     | `WalletAdapter[]`        | No       | Extra wallet adapter instances. Built-in `FreighterAdapter`/`AlbedoAdapter` auto-register; an entry overrides a built-in by reusing its `type` |
 | `requestTimeoutMs`   | `number`                 | No       | Max ms a single SDK HTTP attempt waits before aborting with `PollarNetworkError`. Default `10000`; `0` disables                                |
+| `loginTimeoutMs`     | `number`                 | No       | Same, for `POST /auth/login` alone - the one call that does real server-side work. Default `45000`; `0` disables                               |
 | `retry`              | `PollarRetryConfig`      | No       | Retry-with-backoff for idempotent transport failures (refresh + GETs). Default `{ attempts: 2, baseDelayMs: 300 }`                             |
 | `deviceLabel`        | `string`                 | No       | UI-friendly device label sent at `/auth/login` time and shown in `listSessions()` rows                                                         |
 | `onStorageDegrade`   | `OnStorageDegrade`       | No       | Notified the first time `localStorage` falls back to in-memory mode (SSR, private browsing, quota, …)                                          |
@@ -416,7 +441,9 @@ Shorthand for `logout({ everywhere: true })`.
 
 Returns the authenticated user's wallet as a discriminated union over `custody` (`'internal' | 'smart' | 'external'`),
 each carrying `address` and a `provider`, or `null` when there is no wallet. To check whether a session exists, read
-`getAuthState()` (`step === 'authenticated'`) or `getWallet()` - there is no `isAuthenticated()` helper.
+`getAuthState()` (`step === 'authenticated'`) or `getWallet()` - there is no `isAuthenticated()` helper. A
+platform-managed Stellar wallet also carries `provisioning` - see
+[Wallet provisioning](#wallet-provisioning) before offering any on-chain operation on a fresh session.
 
 #### `client.getUserProfile(): PollarUserProfile | null`
 
@@ -466,6 +493,64 @@ interface SessionInfo {
 Revokes a specific refresh-token family. Revoking the **current** family does not immediately clear local state — the
 next 401 triggers an auto-refresh, which fails (family revoked) and clears the session. Call `logout()` for an
 immediate teardown.
+
+---
+
+### Wallet provisioning
+
+The platform creates an end-user's Stellar account in the background, so a login can return
+before the account is on the ledger. These four describe that window. Only the ACCOUNT is
+described - trustlines are added incrementally over an app's life, so a wallet does not leave
+`READY` because a token was enabled yesterday (per-asset state is `getEnabledAssetsState()`).
+
+#### `wallet.provisioning: 'READY' | 'CREATING' | 'FAILED'`
+
+On `getWallet()`, `getWallets()` and the persisted session. **Absent** on a session minted
+before 0.11.4 - read `undefined` as "not reported", not as a problem.
+
+#### `client.onWalletStateChange(cb): () => void`
+
+Fires when the platform-managed Stellar wallet's account changes state. Replays the current
+value on subscribe, the same contract as `onAuthStateChange`, so a late subscriber never waits
+for a transition that already happened, and a subscriber that came before the session was
+restored hears its first value when the restore lands. A value another tab found and persisted
+reaches this tab's subscribers too, once. Emits only on CHANGE: a wallet already `READY` at
+login emits `READY` once, on subscribe, and never again.
+
+```ts
+const off = client.onWalletStateChange((provisioning) => {
+  if (provisioning === 'CREATING') showPreparing();
+  if (provisioning === 'READY') enableSending();
+  if (provisioning === 'FAILED') showSupportPath();
+});
+```
+
+While a wallet is `CREATING` the client polls `GET /v2/wallet/state` - 1s, 2s, 3s ... to a 10s
+ceiling, at most 12 checks - and stops on `READY` or `FAILED`, on `logout()` and on `destroy()`.
+Giving up is safe: the next login or session resume re-enqueues a creation that never landed.
+
+#### `client.refreshWalletState(): Promise<WalletProvisioning | null>`
+
+For a host that knows better than a timer - a screen the user just opened, a pull to refresh.
+Returns the current value, or `null` when there is no session or the server could not answer.
+Never throws.
+
+#### `isWalletNotReady(errorOrOutcome)` / `WALLET_NOT_READY_CODE`
+
+While the account is off the ledger the server refuses on-chain operations with
+`SDK_WALLET_NOT_READY` (409) rather than letting each one fail as `op_no_source_account`. The
+helper accepts either a thrown `PollarApiError` or a returned transaction outcome, since the tx
+methods report failures as a value. The right response is to wait for `onWalletStateChange` -
+not to retry.
+
+```ts
+import { isWalletNotReady } from '@pollar/core';
+
+const outcome = await client.signAndSubmitTx(unsignedXdr);
+if (isWalletNotReady(outcome)) {
+  // the account is not on the ledger yet; wait for the transition
+}
+```
 
 ---
 

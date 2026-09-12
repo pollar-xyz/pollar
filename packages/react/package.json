@@ -1,6 +1,6 @@
 {
   "name": "@pollar/react",
-  "version": "0.11.3",
+  "version": "0.11.4",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -40,7 +40,7 @@
     "node": ">=20"
   },
   "peerDependencies": {
-    "@pollar/core": "^0.11.3",
+    "@pollar/core": "^0.11.4",
     "react": ">=18",
     "react-dom": ">=18"
   },
@@ -50,7 +50,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@pollar/core": "^0.11.3",
+    "@pollar/core": "^0.11.4",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "eslint": "^10.5.0",

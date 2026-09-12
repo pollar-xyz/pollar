@@ -9,7 +9,21 @@ This repository is managed with [Turborepo](https://turbo.build/repo) and contai
 
 ## Packages
 
-> **0.11.3 is a patch (no breaking changes).** Session resilience in `@pollar/core`: a session
+> **0.11.4 is a patch (no breaking changes).** The platform now creates an end-user's Stellar
+> account **in the background** instead of inside `POST /auth/login`, so a login returns before
+> the account is on the ledger. `@pollar/core` is the SDK half of that: `wallet.provisioning`
+> (`READY | CREATING | FAILED`) says where the account stands, `onWalletStateChange()` fires when
+> it lands, the client polls until it does, and `isWalletNotReady()` names the `SDK_WALLET_NOT_READY`
+> (409) the server returns for an on-chain operation attempted in that window. `@pollar/react`'s
+> **Send, Receive and wallet-button** templates say so instead of letting the first payment fail as
+> an opaque network error. Also in core: a DPoP proof the server rejects over **clock skew** is
+> re-signed rather than clearing the session (it was logging people out), and every request carries
+> **`x-pollar-sdk`** so a stale SDK is visible from the dashboard - this one needs an sdk-api that
+> allows the header in CORS, which the hosted one does. `@pollar/react@0.11.4` requires
+> `@pollar/core@^0.11.4`; if you pin exact versions, keep both on the same version. The four
+> adapters stay at `0.11.2` - their `^0.11.2` range already resolves 0.11.4.
+>
+> Earlier: **0.11.3** was session resilience in `@pollar/core`: a session
 > **survives reloads when the DPoP keypair fails to persist** (no more thumbprint-mismatch
 > logout loop), `logout()` no longer races an in-flight or newer login (no resurrected or
 > leaked sessions), and cross-tab / multi-client session-row writes are serialized and
@@ -19,8 +33,7 @@ This repository is managed with [Turborepo](https://turbo.build/repo) and contai
 > `@pollar/react`, so the application's single copy of core is the one every package uses
 > (npm 7+ installs peers automatically; npm 6, Yarn 1 and `--legacy-peer-deps` users must
 > add core to their own dependencies), and the new `isPollarClient()` guard recognizes a
-> client even across duplicate copies. `@pollar/react@0.11.3` requires
-> `@pollar/core@^0.11.3`; if you pin exact versions, keep both on the same version.
+> client even across duplicate copies.
 >
 > Earlier: **0.11.2** (additive) added the `client.stellar` namespace: sign **SEP-53
 > message** and **SEP-10 challenge** ownership proofs across embedded and external wallets,
@@ -45,7 +58,7 @@ This repository is managed with [Turborepo](https://turbo.build/repo) and contai
 
 ### [`@pollar/core`](./packages/core)
 
-**Version:** `0.11.3` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/core)
+**Version:** `0.11.4` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/core)
 
 Framework-agnostic TypeScript SDK. Provides the `PollarClient` class and all lower-level utilities needed to integrate
 Pollar authentication and multichain (Stellar + Solana) transactions into any JavaScript environment.
@@ -124,7 +137,7 @@ const client = new PollarClient({ apiKey: 'pk_...', storage });
 
 ### [`@pollar/react`](./packages/react)
 
-**Version:** `0.11.3` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react)
+**Version:** `0.11.4` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react)
 
 React bindings built on top of `@pollar/core`. Provides a context provider, hook, and pre-built UI components for
 drop-in authentication in React applications.

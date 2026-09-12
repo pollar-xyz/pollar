@@ -147,6 +147,28 @@ in the app's funding wallet while it sponsors the user account. In `DEFERRED` mo
 a `G...` address with no on-chain account until funded, so read `wallet.existsOnStellar` before offering
 any operation that needs a live account.
 
+In `IMMEDIATE` mode the account is created **in the background**, after `login()` returns. The wallet is
+real and its address is worth showing, but for the first few seconds nothing on-chain works. Read
+`wallet.provisioning` and subscribe once:
+
+```ts
+// 'READY' | 'CREATING' | 'FAILED'. Absent on a session minted before 0.11.4 -
+// undefined means "not reported", not "not ready".
+if (client.getWallet()?.provisioning === 'CREATING') showPreparing();
+
+const off = client.onWalletStateChange((provisioning) => {
+  if (provisioning === 'READY') enableSending();
+  if (provisioning === 'FAILED') showSupportPath(); // a new login re-enqueues it
+});
+```
+
+The server refuses on-chain operations in that window with `SDK_WALLET_NOT_READY` (409) rather than
+letting each one fail as `op_no_source_account`. Recognize it with `isWalletNotReady(errorOrOutcome)`,
+which takes a thrown `PollarApiError` or a returned tx outcome, and **wait for the transition rather
+than retrying in a loop**. `@pollar/react`'s Send, Receive and wallet-button templates already do this;
+a custom template gets the sentence from the optional `notReadyReason` prop or from the exported
+`walletNotReadyReason(wallet, chain)`.
+
 ---
 
 ## Authentication
@@ -252,8 +274,12 @@ These are the failures that look like SDK bugs and are not:
    them means no authenticated request works at all. See [react-native.md](react-native.md).
 5. **Treating a `null` balance as zero.** See above.
 6. **Reading PII off the persisted session.** It is not there. Call `getUserProfile()`.
-7. **Assuming the account exists on-chain.** In `DEFERRED` funding mode, and for freshly connected
-   external wallets, check `wallet.existsOnStellar` first and call `createAccount()` for external ones.
+7. **Assuming the account exists on-chain.** Three different reasons it may not. In `DEFERRED` funding
+   mode it is unfunded until the backend funds it; a freshly connected external wallet needs
+   `createAccount()`; and in `IMMEDIATE` mode a brand-new embedded wallet is still being created for
+   the first seconds after login. Check `wallet.existsOnStellar`, and `wallet.provisioning` for the
+   third - retrying a `SDK_WALLET_NOT_READY` in a loop instead of waiting for `onWalletStateChange` is
+   the usual mistake.
 8. **Deciding sponsorship client-side.** Who pays is server-side app config. The client can only opt
    out with `skipSponsorship: true`.
 9. **Expecting smart wallets to do everything.** Passkey C-address sessions have no classic trustlines,
@@ -264,9 +290,11 @@ These are the failures that look like SDK bugs and are not:
 ## Version note
 
 This skill tracks `@pollar/core` and `@pollar/react` `0.11.x`, which moved every request to the `/v2`
-API and added Solana alongside Stellar. Two earlier breaks matter if an existing integration is being
-upgraded: `0.11.1` made balances nullable, and `0.10.0` replaced the singular `walletAdapter` resolver
-and `loginWallet(id)` with a `walletAdapters: WalletAdapter[]` array. Check
+API and added Solana alongside Stellar. `0.11.4` is the current release and is where
+`wallet.provisioning`, `onWalletStateChange()` and `isWalletNotReady()` come from; on an older SDK the
+background-creation window exists but nothing in the client describes it. Two earlier breaks matter if
+an existing integration is being upgraded: `0.11.1` made balances nullable, and `0.10.0` replaced the
+singular `walletAdapter` resolver and `loginWallet(id)` with a `walletAdapters: WalletAdapter[]` array. Check
 [UPGRADE.md](https://github.com/pollar-xyz/pollar/blob/main/UPGRADE.md) before bumping versions.
 
 ## Sources
