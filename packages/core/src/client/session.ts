@@ -1,6 +1,6 @@
 import type { PollarLogger } from '../lib/logger';
 import type { Storage } from '../storage/types';
-import type { PollarPersistedSession } from '../types';
+import type { PollarPersistedSession, WalletProvisioning } from '../types';
 
 /**
  * Persisted session shape (stored via the injected `Storage` adapter).
@@ -21,6 +21,17 @@ const SESSION_SUFFIX = ':session';
 const WALLET_TYPE_SUFFIX = ':walletType';
 const DPOP_NONCE_SUFFIX = ':dpopNonce';
 const DPOP_CLOCK_OFFSET_SUFFIX = ':dpopClockOffset';
+
+/**
+ * The only values `wallet.provisioning` may hold.
+ *
+ * `isValidSession` rejects a session carrying anything else, so a value that
+ * reaches storage unchecked costs the user their session on the next reload -
+ * every writer runs it through here first.
+ */
+export function isWalletProvisioning(value: unknown): value is WalletProvisioning {
+  return value === 'READY' || value === 'CREATING' || value === 'FAILED';
+}
 
 export function sessionStorageKey(apiKeyHash: string): string {
   return `pollar:${apiKeyHash}${SESSION_SUFFIX}`;
@@ -233,12 +244,7 @@ function isValidWallet(value: unknown, label: string, logger: PollarLogger): boo
     logger.debug(`[PollarClient:session] Invalid session — ${label}.existsOnStellar must be boolean if present`);
     return false;
   }
-  if (
-    w['provisioning'] !== undefined &&
-    w['provisioning'] !== 'READY' &&
-    w['provisioning'] !== 'CREATING' &&
-    w['provisioning'] !== 'FAILED'
-  ) {
+  if (w['provisioning'] !== undefined && !isWalletProvisioning(w['provisioning'])) {
     logger.debug(`[PollarClient:session] Invalid session — ${label}.provisioning must be READY|CREATING|FAILED if present`);
     return false;
   }

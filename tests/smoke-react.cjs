@@ -360,6 +360,105 @@ async function unmount(handle) {
     localStorage.removeItem(`pollar:${apiKeyHash}:session`);
   }
 
+  console.log('\n── 7. The not-ready banner follows the chain the button shows ─');
+  {
+    // The regression this guards: the wallet button renders the address of the
+    // app's FIRST configured chain, but the readiness notice beside it is about
+    // the STELLAR account. Pinning the notice to Stellar tells a Solana-first
+    // app's user that "your wallet is still being prepared" next to a Solana
+    // address that sends and receives perfectly well.
+    const { walletNotReadyReason, WalletButton } = require(path.resolve(__dirname, '../packages/react/dist/index.js'));
+    const creating = { custody: 'internal', address: 'G...', provisioning: 'CREATING' };
+    check('unit: STELLAR + CREATING has a reason', typeof walletNotReadyReason(creating, 'STELLAR') === 'string');
+    check('unit: SOLANA has none', walletNotReadyReason(creating, 'SOLANA') === null);
+    // `/config` decides the chain order and is still in flight on a cold start.
+    // Guessing STELLAR there is the same wrong answer, just earlier.
+    check('unit: an unknown chain has none', walletNotReadyReason(creating, null) === null);
+    check('unit: a READY wallet has none', walletNotReadyReason({ ...creating, provisioning: 'READY' }, 'STELLAR') === null);
+
+    const STELLAR_ADDR = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
+    const SOLANA_ADDR = '11111111111111111111111111111111';
+    const NOTICE = '.pollar-wallet-dropdown-notice';
+
+    // One mount per chain order, same session both times: only the app's
+    // configured order differs, so the banner is the only thing that can move.
+    async function bannerFor(chains, apiKey) {
+      const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(apiKey));
+      const apiKeyHash = Array.from(new Uint8Array(digest).slice(0, 16))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      const wallets = [
+        { type: 'internal', address: STELLAR_ADDR, chain: 'STELLAR', provisioning: 'CREATING' },
+        { type: 'internal', address: SOLANA_ADDR, chain: 'SOLANA' },
+      ];
+      localStorage.setItem(
+        `pollar:${apiKeyHash}:session`,
+        JSON.stringify({
+          clientSessionId: `cs-${chains[0]}`,
+          userId: 'u',
+          status: 'CONSUMED',
+          token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+          user: { ready: true },
+          wallet: wallets[0],
+          wallets,
+        }),
+      );
+      const handle = mount(
+        h(
+          PollarProvider,
+          {
+            client: { apiKey, baseUrl: 'https://x.test' },
+            // Passing appConfig makes configStatus 'ready' synchronously, so
+            // useChains has the order on the first paint.
+            appConfig: { branding: {}, features: {}, application: { chains } },
+          },
+          h(WalletButton),
+        ),
+      );
+      await act(async () => {
+        handle.root.render(handle.element);
+      });
+      await act(async () => {
+        await sleep(50);
+      });
+      const btn = handle.container.querySelector('.pollar-wallet-btn');
+      if (btn) {
+        await act(async () => {
+          btn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+        });
+      }
+      const notice = handle.container.querySelector(NOTICE);
+      const text = notice ? notice.textContent : null;
+      await unmount(handle);
+      localStorage.removeItem(`pollar:${apiKeyHash}:session`);
+      return { text, hadButton: !!btn };
+    }
+
+    const prevFetch = globalThis.fetch;
+    globalThis.fetch = async (req) => {
+      const url = typeof req === 'string' ? req : req.url;
+      if (url.includes('/wallet/state')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            content: { address: STELLAR_ADDR, chain: 'STELLAR', provisioning: 'CREATING', existsOnStellar: false },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
+    };
+
+    const stellarFirst = await bannerFor(['STELLAR', 'SOLANA'], 'pk_react_chain_stellar');
+    check('the dropdown really rendered (positive control)', stellarFirst.hadButton);
+    check('Stellar-first: the dropdown warns about the account being created', !!stellarFirst.text, stellarFirst);
+
+    const solanaFirst = await bannerFor(['SOLANA', 'STELLAR'], 'pk_react_chain_solana');
+    check('Solana-first: the same session shows NO Stellar warning', solanaFirst.text === null, solanaFirst);
+
+    globalThis.fetch = prevFetch;
+  }
+
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
 })().catch((err) => {

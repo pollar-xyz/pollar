@@ -391,6 +391,228 @@ async function waitFor(cond, timeoutMs = 1000) {
   }
   globalThis.fetch = wsPrevFetch;
 
+  console.log('\n── 12. The provisioning watch under adversarial conditions ────');
+  // One block per way the watch could strand a UI on "preparing your account".
+  // Each sub-block owns its fetch mock and client so the timing in one cannot
+  // disturb the counting in another.
+  const advSession = (provisioning, expiresInSec = 600) =>
+    JSON.stringify({
+      clientSessionId: 'cs-adv',
+      userId: 'u',
+      status: 'CONSUMED',
+      token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + expiresInSec },
+      user: { ready: true },
+      wallet: { type: 'internal', address: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF', provisioning },
+    });
+  const walletState = (provisioning) =>
+    new Response(
+      JSON.stringify({
+        success: true,
+        code: 'SDK_WALLET_STATE',
+        content: {
+          address: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+          chain: 'STELLAR',
+          provisioning,
+          existsOnStellar: provisioning === 'READY',
+        },
+      }),
+      { status: 200 },
+    );
+  const advPrevFetch = globalThis.fetch;
+
+  // (a) A restored session whose access token is ALREADY expired refreshes
+  //     inline and never reaches `_resume`, so that branch has to arm the watch
+  //     itself. Without it the wallet stays CREATING for the life of the client
+  //     and the UI never unblocks.
+  {
+    let advReported = 'CREATING';
+    globalThis.fetch = async (req) => {
+      if (req.url.includes('/wallet/state')) return walletState(advReported);
+      if (req.url.includes('/auth/refresh')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            content: {
+              token: { accessToken: 'AT2', refreshToken: 'RT2', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
+    };
+    const st = sdk.createMemoryAdapter();
+    await st.set(sessionKey, advSession('CREATING', -60)); // expired an hour ago in token terms
+    const c = new sdk.PollarClient({ apiKey, storage: st, baseUrl: 'https://x.test' });
+    const seen = [];
+    const off = c.onWalletStateChange((p) => seen.push(p));
+    await c.ready();
+    check('expired token: the inline refresh still surfaces CREATING', seen[0] === 'CREATING', seen);
+    advReported = 'READY';
+    let landed = true;
+    try {
+      await waitFor(() => seen.includes('READY'), 6000);
+    } catch {
+      landed = false;
+    }
+    check('expired token: the watch still runs, so READY arrives', landed, seen);
+    check('  and the wallet carries it', c.getWallet()?.provisioning === 'READY');
+    off();
+    c.destroy();
+  }
+
+  // (b) Two /wallet/state checks in flight at once (the watch runs its own
+  //     schedule while `refreshWalletState()` is public) can resolve out of
+  //     order. The older answer must not walk READY back to CREATING.
+  {
+    let nth = 0;
+    let releaseSlow;
+    const slowGate = new Promise((r) => (releaseSlow = r));
+    globalThis.fetch = async (req) => {
+      if (req.url.includes('/wallet/state')) {
+        // The FIRST check issued is the slow one, and it answers with the stale
+        // value. Everything after it answers READY.
+        if (++nth === 1) {
+          await slowGate;
+          return walletState('CREATING');
+        }
+        return walletState('READY');
+      }
+      return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
+    };
+    const st = sdk.createMemoryAdapter();
+    await st.set(sessionKey, advSession('CREATING'));
+    const c = new sdk.PollarClient({ apiKey, storage: st, baseUrl: 'https://x.test' });
+    await c.ready();
+    const seen = [];
+    const off = c.onWalletStateChange((p) => seen.push(p));
+
+    const slow = c.refreshWalletState(); // issued first, resolves last
+    const fast = await c.refreshWalletState(); // issued second, resolves first
+    check('out-of-order: the newer check applies READY', fast === 'READY' && c.getWallet()?.provisioning === 'READY', {
+      fast,
+    });
+
+    releaseSlow();
+    const slowAnswer = await slow;
+    check('out-of-order: the older answer does NOT regress the wallet', c.getWallet()?.provisioning === 'READY', {
+      provisioning: c.getWallet()?.provisioning,
+    });
+    check('  and existsOnStellar stays true', c.getWallet()?.existsOnStellar === true);
+    check('  and no CREATING is re-emitted after READY', seen.lastIndexOf('READY') === seen.length - 1, seen);
+    // The loser reports what the wallet says NOW, so the watch reading it does
+    // not keep polling an account that already landed.
+    check('  and the losing call answers with the value that won', slowAnswer === 'READY', { slowAnswer });
+    off();
+    c.destroy();
+  }
+
+  // (c) A provisioning value outside the union must not be applied OR persisted:
+  //     `isValidSession` rejects it on the next restore, so writing it would
+  //     cost the user their session over a field they never asked about.
+  {
+    globalThis.fetch = async (req) => {
+      if (req.url.includes('/wallet/state')) return walletState('PENDING');
+      return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
+    };
+    const st = sdk.createMemoryAdapter();
+    await st.set(sessionKey, advSession('CREATING'));
+    const c = new sdk.PollarClient({ apiKey, storage: st, baseUrl: 'https://x.test' });
+    await c.ready();
+    const answer = await c.refreshWalletState();
+    check('unknown value: refreshWalletState reports nothing', answer === null, { answer });
+    check('  and the wallet keeps the value it had', c.getWallet()?.provisioning === 'CREATING');
+    const row = JSON.parse(await st.get(sessionKey));
+    check('  and the persisted row was not poisoned', row.wallet.provisioning === 'CREATING', row.wallet);
+    c.destroy();
+
+    // The real cost of persisting it: prove the row still restores.
+    const c2 = new sdk.PollarClient({ apiKey, storage: st, baseUrl: 'https://x.test' });
+    await c2.ready();
+    check('  and the session still restores on the next load', c2.getAuthState().step === 'authenticated');
+    c2.destroy();
+  }
+
+  // (d) One subscriber that throws must not cost the others the transition -
+  //     this is the signal a "preparing" screen waits on, and a listener skipped
+  //     here has nothing else to wake it.
+  {
+    let advReported = 'CREATING';
+    globalThis.fetch = async (req) => {
+      if (req.url.includes('/wallet/state')) return walletState(advReported);
+      return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
+    };
+    const st = sdk.createMemoryAdapter();
+    await st.set(sessionKey, advSession('CREATING'));
+    const c = new sdk.PollarClient({ apiKey, storage: st, baseUrl: 'https://x.test' });
+    await c.ready();
+
+    let offBad;
+    let threwOnSubscribe = false;
+    try {
+      offBad = c.onWalletStateChange(() => {
+        throw new Error('listener boom');
+      });
+    } catch {
+      threwOnSubscribe = true;
+    }
+    check('a throwing listener does not break subscribe()', !threwOnSubscribe && typeof offBad === 'function');
+
+    const seen = [];
+    const off = c.onWalletStateChange((p) => seen.push(p));
+    check('  the listener after it still gets the replay', seen[0] === 'CREATING', seen);
+
+    advReported = 'READY';
+    let landed = true;
+    try {
+      await waitFor(() => seen.includes('READY'), 6000);
+    } catch {
+      landed = false;
+    }
+    check('  and still gets the transition', landed, seen);
+    check('  and the wallet applied it', c.getWallet()?.provisioning === 'READY');
+    off();
+    offBad?.();
+    c.destroy();
+  }
+
+  // (e) `isWalletNotReady` is documented to accept a RETURNED outcome, so the
+  //     build path has to carry the server's code across the boundary. Reducing
+  //     a 409 to `{ status: 'error' }` makes the helper answer false for the one
+  //     failure it exists to name.
+  {
+    globalThis.fetch = async (req) => {
+      if (req.url.includes('/tx/build')) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: 'SDK_WALLET_NOT_READY',
+            details: 'wallet account is not on the ledger yet',
+          }),
+          { status: 409 },
+        );
+      }
+      return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
+    };
+    const st = sdk.createMemoryAdapter();
+    await st.set(sessionKey, advSession('CREATING'));
+    const c = new sdk.PollarClient({ apiKey, storage: st, baseUrl: 'https://x.test' });
+    await c.ready();
+    const built = await c.buildTx('payment', {
+      destination: 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+      amount: '1',
+      asset: 'native',
+    });
+    check('buildTx surfaces the failure', built.status === 'error', built);
+    check('  and keeps the backend code', built.code === sdk.WALLET_NOT_READY_CODE, built);
+    check('  so isWalletNotReady() recognizes the returned outcome', sdk.isWalletNotReady(built) === true);
+    check('  and the transaction state carries the code too', c.getTransactionState().code === sdk.WALLET_NOT_READY_CODE, {
+      state: c.getTransactionState(),
+    });
+    c.destroy();
+  }
+  globalThis.fetch = advPrevFetch;
+
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
 })().catch((err) => {

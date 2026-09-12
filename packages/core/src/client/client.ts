@@ -119,6 +119,7 @@ import { loginWithSolanaAdapter } from './auth/solanaWalletFlow';
 import { loginWithAdapter, requestWalletChallenge } from './auth/walletFlow';
 import {
   dpopClockOffsetStorageKey,
+  isWalletProvisioning,
   dpopNonceStorageKey,
   MAX_DPOP_CLOCK_OFFSET_SEC,
   MAX_DPOP_NONCE,
@@ -359,6 +360,17 @@ export class PollarClient {
    */
   private _provisioningTimer: ReturnType<typeof setTimeout> | null = null;
   private _provisioningAttempt = 0;
+  /**
+   * Session generation the watch is currently following, or null when it is not
+   * watching. Keyed on the generation rather than on `_provisioningTimer`, which
+   * is null while a check is in flight and would let a second caller start a
+   * parallel schedule against the same session.
+   */
+  private _provisioningWatchGen: number | null = null;
+  /** Monotonic id of the most recently ISSUED `/wallet/state` check. */
+  private _provisioningSeq = 0;
+  /** Id of the most recently APPLIED check, so a slower older one is discarded. */
+  private _provisioningAppliedSeq = 0;
   private _walletStateListeners = new Set<(provisioning: WalletProvisioning) => void>();
   private _visibilityUnsubscribe: (() => void) | null = null;
 
@@ -1400,7 +1412,15 @@ export class PollarClient {
   onWalletStateChange(cb: (provisioning: WalletProvisioning) => void): () => void {
     this._walletStateListeners.add(cb);
     const current = this._session?.wallet?.provisioning;
-    if (current) cb(current);
+    // The replay runs inside subscribe, so a throwing callback would take the
+    // unsubscribe handle down with it and leave itself registered.
+    if (current) {
+      try {
+        cb(current);
+      } catch (err) {
+        this._log.error('[PollarClient] onWalletStateChange listener threw on replay', err);
+      }
+    }
     return () => this._walletStateListeners.delete(cb);
   }
 
@@ -1419,7 +1439,24 @@ export class PollarClient {
     const value = next?.wallet?.provisioning;
     if (!value) return;
     if (value === prev?.wallet?.provisioning && next?.wallet?.address === prev?.wallet?.address) return;
-    for (const cb of this._walletStateListeners) cb(value);
+    this._dispatchWalletState(value);
+  }
+
+  /**
+   * Hand a provisioning value to every subscriber, each isolated from the rest.
+   *
+   * One listener that throws must not cost the others the transition: this is
+   * the signal a "preparing your account" screen waits on, and a subscriber
+   * skipped here has nothing else to wake it.
+   */
+  private _dispatchWalletState(value: WalletProvisioning): void {
+    for (const cb of this._walletStateListeners) {
+      try {
+        cb(value);
+      } catch (err) {
+        this._log.error('[PollarClient] onWalletStateChange listener threw', err);
+      }
+    }
   }
 
   /**
@@ -1435,12 +1472,27 @@ export class PollarClient {
   async refreshWalletState(): Promise<WalletProvisioning | null> {
     if (!this._session) return null;
     const gen = this._sessionGeneration;
+    const seq = ++this._provisioningSeq;
     try {
       const { data } = await this._api.GET('/wallet/state');
       const provisioning = data?.content?.provisioning;
-      if (!provisioning) return null;
-      await this._applyWalletProvisioning(gen, provisioning);
-      return provisioning;
+      // A value outside the union would be persisted and then rejected by
+      // `isValidSession` on the next reload, costing the user the session over a
+      // field they never asked about. Keep what we have instead.
+      if (!isWalletProvisioning(provisioning)) {
+        if (provisioning !== undefined) {
+          this._log.warn('[PollarClient] /wallet/state returned an unknown provisioning value; ignoring', {
+            provisioning,
+          });
+        }
+        return null;
+      }
+      await this._applyWalletProvisioning(gen, seq, provisioning);
+      if (this._destroyed || this._sessionGeneration !== gen) return null;
+      // Answer with what the wallet reports NOW, not with a response that lost
+      // the race: the watch stops on READY/FAILED, and telling it CREATING after
+      // a newer check already landed READY would keep it polling a finished job.
+      return this._session?.wallet?.provisioning ?? provisioning;
     } catch (err) {
       this._log.debug('[PollarClient] wallet state check failed', err);
       return null;
@@ -1454,8 +1506,16 @@ export class PollarClient {
    * so the two can never disagree - a caller reading `getWallets()` would
    * otherwise still see CREATING after `getWallet()` went READY.
    */
-  private async _applyWalletProvisioning(gen: number, provisioning: WalletProvisioning): Promise<void> {
+  private async _applyWalletProvisioning(gen: number, seq: number, provisioning: WalletProvisioning): Promise<void> {
     if (this._destroyed || this._sessionGeneration !== gen || !this._session) return;
+    // Two checks can be in flight at once - the watch runs on its own schedule
+    // while `refreshWalletState()` is public - and they can resolve out of
+    // order. Applying the older one would walk READY back to CREATING, telling
+    // the app to keep waiting for an account that already landed.
+    // `_sessionGeneration` cannot catch this: a resume-driven FAILED -> CREATING
+    // -> READY recovery is legitimate within one generation.
+    if (seq < this._provisioningAppliedSeq) return;
+    this._provisioningAppliedSeq = seq;
     if (this._session.wallet.provisioning === provisioning) return;
 
     const address = this._session.wallet.address;
@@ -1483,7 +1543,7 @@ export class PollarClient {
     if (this._authState.step === 'authenticated') {
       this._setAuthState({ ...this._authState, session: this._session });
     }
-    for (const cb of this._walletStateListeners) cb(provisioning);
+    this._dispatchWalletState(provisioning);
   }
 
   /**
@@ -1496,8 +1556,14 @@ export class PollarClient {
    * heals on the user's next visit even if this client stopped watching.
    */
   private _startProvisioningWatch(): void {
+    // Idempotent per session: a restore, the resume behind it and a login can
+    // all reach here for the same wallet. Restarting would reset the backoff to
+    // 1s every time, and - since the timer handle is null while a check is in
+    // flight - could leave two schedules polling one account.
+    if (!this._destroyed && this._provisioningWatchGen === this._sessionGeneration) return;
     this._stopProvisioningWatch();
     if (this._destroyed || this._session?.wallet?.provisioning !== 'CREATING') return;
+    this._provisioningWatchGen = this._sessionGeneration;
     this._provisioningAttempt = 0;
     this._scheduleProvisioningCheck();
   }
@@ -1506,6 +1572,7 @@ export class PollarClient {
     const attempt = this._provisioningAttempt;
     if (attempt >= PROVISIONING_MAX_ATTEMPTS) {
       this._log.debug('[PollarClient] wallet provisioning watch gave up; the next login or resume retries it');
+      this._provisioningWatchGen = null;
       return;
     }
     const delay = Math.min(PROVISIONING_BASE_DELAY_MS * (attempt + 1), PROVISIONING_MAX_DELAY_MS);
@@ -1518,7 +1585,12 @@ export class PollarClient {
         const provisioning = await this.refreshWalletState();
         // READY is the finish line; FAILED means the server stopped trying too,
         // and polling a decision that only a new login can change is noise.
-        if (provisioning === 'READY' || provisioning === 'FAILED') return;
+        // Release the watch either way, so a resume that puts a FAILED wallet
+        // back into CREATING can start a new one on the same session.
+        if (provisioning === 'READY' || provisioning === 'FAILED') {
+          if (this._provisioningWatchGen === gen) this._provisioningWatchGen = null;
+          return;
+        }
         if (this._destroyed || this._sessionGeneration !== gen) return;
         this._scheduleProvisioningCheck();
       })();
@@ -1526,6 +1598,7 @@ export class PollarClient {
   }
 
   private _stopProvisioningWatch(): void {
+    this._provisioningWatchGen = null;
     if (this._provisioningTimer !== null) {
       clearTimeout(this._provisioningTimer);
       this._provisioningTimer = null;
@@ -2450,9 +2523,15 @@ export class PollarClient {
         this._setTransactionState({ step: 'built', buildData: data.content });
         return { status: 'built', buildData: data.content };
       }
-      const details = (error as { details?: string } | undefined)?.details;
-      this._setTransactionState({ step: 'error', phase: 'building', ...(details && { details }) });
-      return { status: 'error', ...(details && { details }) };
+      const { details, code, message } = this._resolveTxApiError(error, data);
+      this._setTransactionState({
+        step: 'error',
+        phase: 'building',
+        ...(details && { details }),
+        ...(code && { code }),
+        ...(message && { message }),
+      });
+      return { status: 'error', ...(details && { details }), ...(code && { code }), ...(message && { message }) };
     } catch (err) {
       this._log.error('[PollarClient] buildTx failed', err);
       this._setTransactionState({ step: 'error', phase: 'building' });
@@ -3223,7 +3302,12 @@ export class PollarClient {
     if (this._walletAdapter) {
       const built = await this.buildTx(operation, params, options);
       if (built.status === 'error') {
-        return { status: 'error', ...(built.details && { details: built.details }) };
+        return {
+          status: 'error',
+          ...(built.details && { details: built.details }),
+          ...(built.code && { code: built.code }),
+          ...(built.message && { message: built.message }),
+        };
       }
       if (!built.buildData.unsignedXdr) {
         return { status: 'error', details: 'build returned no unsigned transaction' };
@@ -3981,6 +4065,16 @@ export class PollarClient {
     });
   }
 
+  /**
+   * Every branch below that surfaces a session arms the provisioning watch.
+   *
+   * The watch is what ends a "preparing your account" screen, and each branch
+   * can restore a wallet mid-creation: a cross-tab rotation, an expired token
+   * refreshed inline (which never reaches `_resume`), and the optimistic path
+   * (whose `_resume` can fail on a flaky network and back off for 30s).
+   * `_startProvisioningWatch` is idempotent per session, so arming it here and
+   * again from `_doResume` costs nothing.
+   */
   private async _restoreSession(): Promise<void> {
     if (this._destroyed) return;
     // Capture the pre-restore state so we can tell a genuine restore (cold
@@ -4083,6 +4177,7 @@ export class PollarClient {
         // left to report once the row is adopted.
         this._emitWalletStateIfChanged(prevSession, this._session);
         this._scheduleNextRefresh();
+        this._startProvisioningWatch();
         return;
       }
 
@@ -4103,6 +4198,7 @@ export class PollarClient {
         if (this._session) {
           this._setAuthState({ step: 'authenticated', session: this._session, verified: true });
           this._emitWalletStateIfChanged(prevSession, this._session);
+          this._startProvisioningWatch();
         }
         return;
       }
@@ -4118,6 +4214,7 @@ export class PollarClient {
       this._setAuthState({ step: 'authenticated', session: this._session, verified: false });
       this._emitWalletStateIfChanged(prevSession, this._session);
       this._scheduleNextRefresh();
+      this._startProvisioningWatch();
       // Fire-and-forget: revalidate + repopulate the profile in the background.
       // Deliberately NOT awaited so `_initialized` resolves immediately and the
       // UI never blocks on a network round-trip at startup.

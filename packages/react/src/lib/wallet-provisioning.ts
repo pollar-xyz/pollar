@@ -1,4 +1,4 @@
-import type { WalletInfo } from '@pollar/core';
+import type { WalletChain, WalletInfo } from '@pollar/core';
 
 /**
  * The one place the widget decides whether a wallet can act on-chain, and what
@@ -9,11 +9,19 @@ import type { WalletInfo } from '@pollar/core';
  * trustlines - an asset the app enabled yesterday is not a reason to stop a
  * user from sending the one they already hold.
  *
+ * A `null` chain is "not known yet" (the app's chain order comes from
+ * `/config`, which is still in flight on a cold start) and reads as no reason
+ * to block. Guessing STELLAR there would tell a Solana-first user their wallet
+ * is being prepared, next to a Solana address that sends and receives fine.
+ *
  * Returns null when the wallet is usable, so a caller reads it as "no reason to
  * block".
  */
-export function walletNotReadyReason(wallet: WalletInfo | null | undefined, chain: string | null | undefined): string | null {
-  if (chain !== null && chain !== undefined && chain !== 'STELLAR') return null;
+export function walletNotReadyReason(
+  wallet: WalletInfo | null | undefined,
+  chain: WalletChain | null | undefined,
+): string | null {
+  if (chain !== 'STELLAR') return null;
   if (wallet?.provisioning === 'CREATING') {
     return 'Your wallet is still being prepared on the network. This usually takes a few seconds.';
   }

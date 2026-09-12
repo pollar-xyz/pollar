@@ -574,7 +574,12 @@ export type TxErrorPhase = 'building' | 'signing' | 'submitting' | 'signing-subm
  * modal-style UIs, but headless callers can `await` the method and inspect
  * the returned outcome directly instead of subscribing to state changes.
  */
-export type BuildOutcome = { status: 'built'; buildData: TxBuildContent } | { status: 'error'; details?: string };
+export type BuildOutcome =
+  | { status: 'built'; buildData: TxBuildContent }
+  // `code` carries the backend's error code through, the same as SignOutcome:
+  // without it `isWalletNotReady(await client.buildTx(...))` cannot see the 409
+  // it is documented to recognize on a returned outcome.
+  | { status: 'error'; details?: string; code?: string; message?: string };
 
 export type SignOutcome =
   | { status: 'signed'; signedXdr: string; submissionToken?: string; expiresAt?: number; sponsored?: boolean }

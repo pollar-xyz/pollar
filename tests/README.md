@@ -64,6 +64,20 @@ node tests/smoke-session-races.cjs
   `storage` event, and the value a cold-start restore finds for a subscriber
   that came before `ready()` - each exactly once, never repeated by the poll or
   the resume that follows
+- the watch under adversarial conditions, one sub-block per way it could strand
+  a UI on "preparing your account":
+  - a restored session whose access token is ALREADY expired refreshes inline
+    and never reaches `_resume`, so that branch arms the watch itself
+  - two `/wallet/state` checks in flight resolve out of order: the older answer
+    does not walk `READY` back to `CREATING`, and the losing call reports the
+    value that won, so the watch does not keep polling a finished job
+  - a provisioning value outside the union is neither applied nor persisted.
+    The last assertion is the point: the row still restores on the next load,
+    which is what writing it would have cost
+  - a subscriber that throws (on the replay inside `subscribe()` AND on a later
+    transition) costs the others nothing
+  - a `/tx/build` 409 keeps its `code`, so `isWalletNotReady(buildOutcome)`
+    recognizes the one failure it exists to name
 
 ### `smoke-providers.cjs`
 
@@ -216,6 +230,11 @@ double-invocation happens here.
   lands. The session comparison and the context memo must BOTH carry
   `provisioning`: either one omitting it swallows the transition, and every
   screen built on it stays frozen on "preparing" forever
+- the not-ready banner follows the chain the wallet button SHOWS, not Stellar by
+  assumption. The same session is mounted twice, changing only the app's
+  configured chain order: Stellar-first warns, Solana-first does not. A unit
+  pass over `walletNotReadyReason` covers the chain-still-unknown case, which
+  `/config` leaves open on every cold start
 
 The StrictMode block is what caught the orphan `PollarClient` this release fixes:
 the provider built the client in a `useState` initializer, StrictMode
