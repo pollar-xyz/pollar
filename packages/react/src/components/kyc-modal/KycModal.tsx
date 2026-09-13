@@ -1,12 +1,13 @@
 'use client';
 
 import { type KycProvider, type KycStartResponse, type KycStatus as KycStatusValue } from '@pollar/core';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { usePollar } from '../../context';
 import type { KycStep } from './KycModalTemplate';
 import { KycModalTemplate } from './KycModalTemplate';
 import '../shared.css';
 import './KycModal.css';
+import { modalChrome } from '../modal-theme';
 
 interface KycModalProps {
   onClose: () => void;
@@ -29,15 +30,20 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved 
   const [isLoading, setIsLoading] = useState(false);
 
   const client = getClient();
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
-  useEffect(() => {
+  const loadProviders = useCallback(() => {
     setIsLoading(true);
-    client.getKycProviders(country)
+    return getClient()
+      .getKycProviders(country)
       .then((result) => setProviders(result.providers))
       .catch(() => setProviders([]))
       .finally(() => setIsLoading(false));
-  }, [country]);
+  }, [getClient, country]);
+
+  useEffect(() => {
+    void loadProviders();
+  }, [loadProviders]);
 
   async function handleSelectProvider(provider: KycProvider) {
     setSelectedProvider(provider);
@@ -74,10 +80,11 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved 
   }
 
   return (
-    <div className="pollar-overlay" onClick={onClose}>
+    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
       <KycModalTemplate
         theme={theme}
         accentColor={accentColor}
+        styleOverrides={styleOverrides}
         step={step}
         providers={providers}
         selectedProvider={selectedProvider}
@@ -86,6 +93,7 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved 
         isLoading={isLoading}
         onSelectProvider={handleSelectProvider}
         onDoneVerifying={handleDoneVerifying}
+        onRefresh={() => void loadProviders()}
         onClose={onClose}
       />
     </div>

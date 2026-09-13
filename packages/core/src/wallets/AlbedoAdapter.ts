@@ -5,11 +5,40 @@ import { WalletType } from './types';
 import type {
   WalletAdapter,
   ConnectWalletResponse,
+  SignMessageOptions,
+  SignMessageResponse,
   SignTransactionOptions,
   SignTransactionResponse,
   SignAuthEntryOptions,
   SignAuthEntryResponse,
 } from './types';
+
+/** Albedo's own network vocabulary (it only understands these two values). */
+type AlbedoNetwork = 'public' | 'testnet';
+
+const PUBLIC_PASSPHRASE = 'Public Global Stellar Network ; September 2015';
+const TESTNET_PASSPHRASE = 'Test SDF Network ; September 2015';
+
+/**
+ * Resolve the Albedo network for a signing call. Prefers the per-call options
+ * the SDK passes (`networkPassphrase`, then `network`) so the signature is
+ * produced on the network configured on `PollarClient`; falls back to the
+ * network the adapter was constructed with when options carry nothing.
+ */
+function albedoNetwork(
+  options: { network?: string; networkPassphrase?: string } | undefined,
+  fallback: AlbedoNetwork,
+): AlbedoNetwork {
+  switch (options?.networkPassphrase) {
+    case PUBLIC_PASSPHRASE:
+      return 'public';
+    case TESTNET_PASSPHRASE:
+      return 'testnet';
+  }
+  if (options?.network === 'public' || options?.network === 'mainnet') return 'public';
+  if (options?.network === 'testnet') return 'testnet';
+  return fallback;
+}
 
 function openAlbedoPopup(url: string): Window {
   const popup = window.open(url, 'albedo', 'width=420,height=720,resizable=yes,scrollbars=yes');
@@ -21,7 +50,16 @@ function openAlbedoPopup(url: string): Window {
 
 function waitForAlbedoPopup(): Promise<Record<string, string>> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Albedo response timeout')), 2 * 60 * 1000);
+    const timeout = setTimeout(
+      () => {
+        // Detach before rejecting - otherwise the listener leaks for the page
+        // lifetime and a late/duplicate ALBEDO_RESULT could resolve an
+        // already-timed-out promise (and accumulate across retries).
+        window.removeEventListener('message', handler);
+        reject(new Error('Albedo response timeout'));
+      },
+      2 * 60 * 1000,
+    );
 
     function handler(event: MessageEvent) {
       if (event.origin !== window.location.origin || event.data?.type !== 'ALBEDO_RESULT') return;
@@ -34,28 +72,18 @@ function waitForAlbedoPopup(): Promise<Record<string, string>> {
   });
 }
 
-function waitForAlbedoResult(): Promise<Record<string, string>> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Albedo response timeout')), 2 * 60 * 1000);
-
-    const parseResult = () => {
-      const params = new URLSearchParams(window.location.search);
-      if (!params.has('pubkey') && !params.has('signed_envelope_xdr') && !params.has('signed_xdr')) return;
-
-      clearTimeout(timeout);
-      const result: Record<string, string> = {};
-      params.forEach((value, key) => { result[key] = value; });
-      window.history.replaceState({}, document.title, window.location.pathname);
-      resolve(result);
-    };
-
-    parseResult();
-    window.addEventListener('popstate', parseResult);
-  });
-}
-
 export class AlbedoAdapter implements WalletAdapter {
   readonly type = WalletType.ALBEDO;
+  readonly meta = { label: 'Albedo', group: 'Wallet' };
+  readonly custody = 'external' as const;
+
+  /**
+   * Network used for `connect` (which carries no per-call network) and as the
+   * fallback for `signTransaction` / `signAuthEntry` when their per-call options
+   * carry none. Defaults to `'testnet'` to preserve the previous behavior when
+   * constructed with no argument.
+   */
+  constructor(private readonly network: AlbedoNetwork = 'testnet') {}
 
   async isAvailable(): Promise<boolean> {
     return typeof window !== 'undefined';
@@ -65,7 +93,7 @@ export class AlbedoAdapter implements WalletAdapter {
     const url = new URL('https://albedo.link');
     url.searchParams.set('intent', 'public-key');
     url.searchParams.set('app_name', 'Pollar');
-    url.searchParams.set('network', 'testnet');
+    url.searchParams.set('network', this.network);
     url.searchParams.set('callback', `${window.location.origin}/albedo-callback`);
     url.searchParams.set('origin', window.location.origin);
 
@@ -76,7 +104,7 @@ export class AlbedoAdapter implements WalletAdapter {
       throw new Error('Albedo connection rejected');
     }
 
-    return { address: result.pubkey, publicKey: result.pubkey };
+    return { address: result.pubkey };
   }
 
   async disconnect(): Promise<void> {}
@@ -89,35 +117,49 @@ export class AlbedoAdapter implements WalletAdapter {
     throw new Error('Albedo does not expose network');
   }
 
-  async signTransaction(xdr: string, _options?: SignTransactionOptions): Promise<SignTransactionResponse> {
+  async signTransaction(xdr: string, options?: SignTransactionOptions): Promise<SignTransactionResponse> {
     const url = new URL('https://albedo.link');
     url.searchParams.set('intent', 'tx');
     url.searchParams.set('xdr', xdr);
     url.searchParams.set('app_name', 'Pollar');
-    url.searchParams.set('network', 'testnet');
-    url.searchParams.set('callback', window.location.href);
+    url.searchParams.set('network', albedoNetwork(options, this.network));
+    url.searchParams.set('callback', `${window.location.origin}/albedo-callback`);
     url.searchParams.set('origin', window.location.origin);
 
-    window.location.href = url.toString();
-    const result = await waitForAlbedoResult();
+    // Popup + postMessage (same flow as `connect`). A top-level
+    // `window.location.href` redirect would unload this document, destroying
+    // the realm the returned promise lives in - it would never resolve.
+    openAlbedoPopup(url.toString());
+    const result = await waitForAlbedoPopup();
 
     if (!result.signed_envelope_xdr) throw new Error('Albedo signing rejected');
     return { signedTxXdr: result.signed_envelope_xdr };
   }
 
-  async signAuthEntry(entryXdr: string, _options?: SignAuthEntryOptions): Promise<SignAuthEntryResponse> {
+  async signAuthEntry(entryXdr: string, options?: SignAuthEntryOptions): Promise<SignAuthEntryResponse> {
     const url = new URL('https://albedo.link');
     url.searchParams.set('intent', 'sign-auth-entry');
     url.searchParams.set('xdr', entryXdr);
     url.searchParams.set('app_name', 'Pollar');
-    url.searchParams.set('network', 'testnet');
-    url.searchParams.set('callback', window.location.href);
+    // Honor the per-call network (the SDK now passes it) so a `setNetwork()`
+    // after login isn't ignored; fall back to the construction-time network.
+    url.searchParams.set('network', albedoNetwork(options, this.network));
+    url.searchParams.set('callback', `${window.location.origin}/albedo-callback`);
     url.searchParams.set('origin', window.location.origin);
 
-    window.location.href = url.toString();
-    const result = await waitForAlbedoResult();
+    // Popup + postMessage (see `signTransaction` - a redirect would unload the
+    // page before the awaited promise could settle).
+    openAlbedoPopup(url.toString());
+    const result = await waitForAlbedoPopup();
 
     if (!result.signed_xdr) throw new Error('Albedo auth entry signing rejected');
     return { signedAuthEntry: result.signed_xdr };
+  }
+
+  async signStellarMessage(_message: string, _options?: SignMessageOptions): Promise<SignMessageResponse> {
+    // Albedo's `sign_message` intent does not produce a SEP-53 signature, so it
+    // cannot back a SEP-53 ownership proof. Fail loudly rather than return a
+    // signature a verifier cannot check under the sep53 scheme.
+    throw new Error('Albedo does not support SEP-53 message signing; use a SEP-10 challenge instead');
   }
 }

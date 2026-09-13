@@ -1,13 +1,13 @@
 'use client';
 
-import type { EscrowAdapter } from '@pollar/core';
+import type { PollarAdapter, SubmitOutcome } from '@pollar/core';
 import { usePollar } from './context';
 
-type WrappedAdapter<T extends EscrowAdapter> = {
-  [K in keyof T]: (params: Parameters<T[K]>[0]) => Promise<void>;
+type WrappedAdapter<T extends PollarAdapter> = {
+  [K in keyof T]: (params: Parameters<T[K]>[0]) => Promise<SubmitOutcome>;
 };
 
-export function createPollarAdapterHook<T extends EscrowAdapter>(key: string) {
+export function createPollarAdapterHook<T extends PollarAdapter>(key: string) {
   return function usePollarAdapter(): WrappedAdapter<T> {
     const { adapters, signAndSubmitTx } = usePollar();
     const adapter = adapters?.[key] as T | undefined;
@@ -21,7 +21,7 @@ export function createPollarAdapterHook<T extends EscrowAdapter>(key: string) {
         name,
         async (params: Parameters<typeof fn>[0]) => {
           const { unsignedTransaction } = await fn(params);
-          await signAndSubmitTx(unsignedTransaction);
+          return signAndSubmitTx(unsignedTransaction);
         },
       ]),
     ) as WrappedAdapter<T>;

@@ -1,0 +1,261 @@
+'use client';
+
+import { TransactionState, WalletBalanceRecord, WalletChain, WalletId } from '@pollar/core';
+import { AssetSelect } from '../AssetSelect';
+import { ChainSelect } from '../ChainSelect';
+import { CopyButton, cropAddress, PollarModalFooter } from '../commons';
+import { TxStatusView } from '../transaction-modal/TxStatusView';
+import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
+
+// A null balance means the chain could not be read; it shows as a dash rather
+// than as 0, so an unreadable wallet never looks empty.
+function formatBalance(balance: string | null): string {
+  if (balance === null) return '—';
+  const n = parseFloat(balance);
+  return isNaN(n) ? balance : n.toLocaleString(undefined, { maximumFractionDigits: 7 });
+}
+
+function assetKey(record: WalletBalanceRecord): string {
+  return `${record.code}:${record.issuer ?? 'native'}`;
+}
+
+export interface SendModalTemplateProps {
+  theme: string;
+  accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
+  step: 'form' | 'tx';
+  txTitle: string;
+  assets: WalletBalanceRecord[];
+  selectedAsset: WalletBalanceRecord | null;
+  /** Networks the user holds a wallet on; the first one is the default. */
+  chains: WalletChain[];
+  selectedChain: WalletChain | null;
+  /** Address of the wallet on {@link selectedChain}, shown under the picker. */
+  walletAddress: string;
+  /** Can a payment be built on {@link selectedChain}? Stellar and Solana only. */
+  canSendOnChain: boolean;
+  onSelectChain: (chain: WalletChain) => void;
+  amount: string;
+  destination: string;
+  formError: string;
+  isLoadingBalance: boolean;
+  transaction: TransactionState;
+  showXdr: boolean;
+  copied: boolean;
+  explorerUrl: string | null;
+  walletType?: WalletId | null | undefined;
+  showBack: boolean;
+  isInProgress: boolean;
+  onClose: () => void;
+  onBack: () => void;
+  onRefresh: () => void;
+  onSelectAsset: (asset: WalletBalanceRecord) => void;
+  onAmountChange: (value: string) => void;
+  onDestinationChange: (value: string) => void;
+  onSubmit: () => void;
+  onSignAndSend: () => void;
+  onToggleXdr: () => void;
+  onCopyHash: () => void;
+  onRetry: () => void;
+  onDone: () => void;
+}
+
+export function SendModalTemplate({
+  theme,
+  accentColor,
+  styleOverrides,
+  step,
+  txTitle,
+  assets,
+  selectedAsset,
+  chains,
+  selectedChain,
+  walletAddress,
+  canSendOnChain,
+  onSelectChain,
+  amount,
+  destination,
+  formError,
+  isLoadingBalance,
+  transaction,
+  showXdr,
+  copied,
+  explorerUrl,
+  walletType,
+  showBack,
+  isInProgress,
+  onClose,
+  onBack,
+  onRefresh,
+  onSelectAsset,
+  onAmountChange,
+  onDestinationChange,
+  onSubmit,
+  onSignAndSend,
+  onToggleXdr,
+  onCopyHash,
+  onRetry,
+  onDone,
+}: SendModalTemplateProps) {
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
+
+  const selectedKey = selectedAsset ? assetKey(selectedAsset) : '';
+  const canSubmit = canSendOnChain && !!selectedAsset && !!amount && !!destination.trim() && !isLoadingBalance;
+
+  const title = step === 'form' ? 'Send' : txTitle;
+
+  return (
+    <div
+      className="pollar-modal-card pollar-send-modal"
+      data-theme={theme}
+      style={cssVars}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Header */}
+      <div className="pollar-modal-header">
+        <div className="pollar-send-header-left">
+          {showBack && (
+            <button type="button" className="pollar-modal-close" onClick={onBack} aria-label="Back">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+          <h2 className="pollar-modal-title">{title}</h2>
+        </div>
+        {!isInProgress && (
+          <div className="pollar-modal-header-actions">
+            {step === 'form' && (
+              <button
+                type="button"
+                className="pollar-modal-close"
+                onClick={onRefresh}
+                disabled={isLoadingBalance}
+                aria-label="Refresh"
+                title="Refresh balances"
+              >
+                <svg
+                  className={isLoadingBalance ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden
+                >
+                  <path
+                    d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            )}
+            <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Form step */}
+      {step === 'form' && (
+        <>
+          {/* Network selector - drives the address and the asset list below */}
+          <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoadingBalance} />
+
+          {walletAddress && (
+            <div className="pollar-address-row">
+              <span className="pollar-address">{cropAddress(walletAddress)}</span>
+              <CopyButton value={walletAddress} label="Copy wallet address" />
+            </div>
+          )}
+
+          {!canSendOnChain && <div className="pollar-modal-empty">Sending is not available on this network yet.</div>}
+
+          {/* Asset selector */}
+          <AssetSelect
+            label="Asset"
+            value={selectedKey}
+            loading={isLoadingBalance}
+            loadingLabel="Loading assets…"
+            options={assets.map((a) => ({
+              key: assetKey(a),
+              code: a.code,
+              // Unreadable (null) drops the "- X available" suffix instead of
+              // claiming a zero balance.
+              available: a.available ?? undefined,
+              enabledInApp: a.enabledInApp,
+            }))}
+            onChange={(key) => {
+              const found = assets.find((a) => assetKey(a) === key);
+              if (found) onSelectAsset(found);
+            }}
+          />
+
+          {/* Amount */}
+          <div className="pollar-send-field">
+            <div className="pollar-send-label-row">
+              <label className="pollar-send-label">Amount</label>
+              {selectedAsset && (
+                <span className="pollar-send-hint">
+                  Available: {formatBalance(selectedAsset.available)} {selectedAsset.code}
+                </span>
+              )}
+            </div>
+            <input
+              className="pollar-input"
+              type="text"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={amount}
+              onChange={(e) => onAmountChange(e.target.value)}
+            />
+          </div>
+
+          {/* Destination */}
+          <div className="pollar-send-field">
+            <label className="pollar-send-label">Destination wallet</label>
+            <input
+              className="pollar-input"
+              type="text"
+              placeholder="G…"
+              value={destination}
+              onChange={(e) => onDestinationChange(e.target.value)}
+            />
+          </div>
+
+          {formError && <div className="pollar-modal-error">{formError}</div>}
+
+          <div className="pollar-modal-actions">
+            <button className="pollar-btn-primary" onClick={onSubmit} disabled={!canSubmit}>
+              Continue
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Transaction step */}
+      {step === 'tx' && (
+        <TxStatusView
+          transaction={transaction}
+          showXdr={showXdr}
+          copied={copied}
+          explorerUrl={explorerUrl}
+          walletType={walletType}
+          onSignAndSend={onSignAndSend}
+          onToggleXdr={onToggleXdr}
+          onCopyHash={onCopyHash}
+          onRetry={onRetry}
+          onDone={onDone}
+        />
+      )}
+
+      <PollarModalFooter />
+    </div>
+  );
+}

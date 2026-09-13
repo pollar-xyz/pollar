@@ -1,0 +1,61 @@
+.pollar-swap-quote {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius);
+  background: var(--pollar-input-bg);
+  color: var(--pollar-text);
+  font-size: 14px;
+}
+
+.pollar-swap-quote-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pollar-swap-custom-toggle {
+  margin-top: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--pollar-accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pollar-swap-custom {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pollar-swap-custom-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pollar-swap-custom-cancel {
+  background: none;
+  border: none;
+  color: var(--pollar-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pollar-swap-trustline-notice {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius);
+  background: var(--pollar-input-bg);
+  color: var(--pollar-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}

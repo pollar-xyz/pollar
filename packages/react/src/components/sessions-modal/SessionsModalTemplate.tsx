@@ -1,0 +1,213 @@
+'use client';
+
+import type { SessionInfo, SessionsState } from '@pollar/core';
+import { PollarModalFooter } from '../commons';
+import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
+
+export type { SessionsState };
+
+export interface SessionsModalTemplateProps {
+  theme: string;
+  accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
+  state: SessionsState;
+  revokingFamilyId: string | null;
+  signingOutEverywhere: boolean;
+  onRefresh: () => void;
+  onRevoke: (familyId: string) => void;
+  onLogoutEverywhere: () => void;
+  onClose: () => void;
+}
+
+/**
+ * Heuristic device label. Prefers the explicit `deviceLabel` set via
+ * `PollarClientConfig`; falls back to a stripped User-Agent.
+ */
+function describeDevice(s: SessionInfo): string {
+  if (s.deviceLabel) return s.deviceLabel;
+  if (!s.userAgent) return 'Unknown device';
+  return parseUserAgent(s.userAgent);
+}
+
+function detectBrowser(ua: string): string | null {
+  // Order matters: Edge / Opera contain "Chrome" in their UA, so check them first.
+  if (/Edg\//.test(ua)) return 'Edge';
+  if (/OPR\//.test(ua)) return 'Opera';
+  if (/(Chrome|CriOS)\//.test(ua)) return 'Chrome';
+  if (/(Firefox|FxiOS)\//.test(ua)) return 'Firefox';
+  if (/Safari\//.test(ua)) return 'Safari';
+  return null;
+}
+
+function detectOS(ua: string): string | null {
+  if (/iPhone|iPad|iPod/.test(ua)) return 'iOS';
+  if (/Android/.test(ua)) return 'Android';
+  if (/Mac OS X/.test(ua)) return 'macOS';
+  if (/Windows NT/.test(ua)) return 'Windows';
+  if (/Linux/.test(ua)) return 'Linux';
+  return null;
+}
+
+function parseUserAgent(ua: string): string {
+  const browser = detectBrowser(ua);
+  const os = detectOS(ua);
+  if (browser && os) return `${os} — ${browser}`;
+  if (os) return os;
+  if (browser) return browser;
+  return ua.slice(0, 48);
+}
+
+function formatRelative(iso: string | null): string {
+  if (!iso) return '—';
+  const ts = new Date(iso).getTime();
+  if (!Number.isFinite(ts)) return '—';
+  const diffSec = Math.round((Date.now() - ts) / 1000);
+  if (diffSec < 0) return 'just now';
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.round(diffHr / 24);
+  if (diffDay < 30) return `${diffDay}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function shortIp(hash: string | null): string {
+  if (!hash) return '';
+  return hash.slice(0, 8);
+}
+
+export function SessionsModalTemplate({
+  theme,
+  accentColor,
+  styleOverrides,
+  state,
+  revokingFamilyId,
+  signingOutEverywhere,
+  onRefresh,
+  onRevoke,
+  onLogoutEverywhere,
+  onClose,
+}: SessionsModalTemplateProps) {
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
+
+  const isLoading = state.step === 'loading';
+  const sessions = state.step === 'loaded' ? state.sessions : [];
+  const otherCount = sessions.filter((s) => !s.current).length;
+
+  return (
+    <div
+      className="pollar-modal-card pollar-sessions-modal"
+      data-theme={theme}
+      style={cssVars}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="pollar-modal-header">
+        <h2 className="pollar-modal-title">Active sessions</h2>
+        <div className="pollar-modal-header-actions">
+          <button
+            type="button"
+            className="pollar-modal-close"
+            onClick={onRefresh}
+            disabled={isLoading}
+            aria-label="Refresh"
+            title="Refresh"
+          >
+            <svg
+              className={isLoading ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden
+            >
+              <path
+                d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+          <button className="pollar-modal-close" onClick={onClose} aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+              <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div className="pollar-sessions-list">
+        {(state.step === 'idle' || isLoading) && (
+          <div className="pollar-loading-block">
+            <div className="pollar-spinner" />
+            <span>Loading…</span>
+          </div>
+        )}
+        {state.step === 'error' && <div className="pollar-modal-empty">{state.message}</div>}
+        {state.step === 'loaded' && sessions.length === 0 && <div className="pollar-modal-empty">No active sessions.</div>}
+        {sessions.map((s) => {
+          const isRevoking = revokingFamilyId === s.familyId;
+          return (
+            <div key={s.familyId} className="pollar-sessions-item" data-current={s.current || undefined}>
+              <div className="pollar-sessions-item-main">
+                <span className="pollar-sessions-item-device">{describeDevice(s)}</span>
+                {s.current && <span className="pollar-sessions-item-badge">This device</span>}
+              </div>
+              <div className="pollar-sessions-item-meta">
+                <span>Last used {formatRelative(s.lastUsedAt ?? s.createdAt)}</span>
+                {s.ipHash && (
+                  <>
+                    <span>·</span>
+                    <span title={`ip-hash ${s.ipHash}`}>ip {shortIp(s.ipHash)}</span>
+                  </>
+                )}
+              </div>
+              {!s.current && (
+                <button
+                  className="pollar-sessions-item-revoke"
+                  onClick={() => onRevoke(s.familyId)}
+                  disabled={isRevoking || signingOutEverywhere}
+                >
+                  {isRevoking ? (
+                    <>
+                      <span className="pollar-spinner pollar-spinner-sm pollar-spinner-current" />
+                      Revoking…
+                    </>
+                  ) : (
+                    'Revoke'
+                  )}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {state.step === 'loaded' && sessions.length > 0 && (
+        <div className="pollar-sessions-actions">
+          <button
+            className="pollar-sessions-logout-all"
+            onClick={onLogoutEverywhere}
+            disabled={signingOutEverywhere || otherCount === 0}
+            title={otherCount === 0 ? 'No other devices to sign out' : undefined}
+          >
+            {signingOutEverywhere ? (
+              <>
+                <span className="pollar-spinner pollar-spinner-sm pollar-spinner-current" />
+                Signing out…
+              </>
+            ) : (
+              'Sign out everywhere'
+            )}
+          </button>
+        </div>
+      )}
+
+      <PollarModalFooter />
+    </div>
+  );
+}

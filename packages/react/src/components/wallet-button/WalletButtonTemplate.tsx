@@ -1,9 +1,10 @@
 'use client';
 
 import { LOGO_POLLAR } from '../../constants';
+import './WalletButton.css';
 
 function ButtonLogo() {
-  return <img src={LOGO_POLLAR} alt="Pollar" width={22} height={22} className="wallet-btn-logo" />;
+  return <img src={LOGO_POLLAR} alt="Pollar" width={22} height={22} className="pollar-wallet-btn-logo" />;
 }
 
 export interface WalletButtonTemplateProps {
@@ -15,10 +16,21 @@ export interface WalletButtonTemplateProps {
   dropdownBorder: string;
   itemColor: string;
   wrapperRef: React.RefObject<HTMLDivElement>;
+  isInProgress: boolean;
+  /** Show the "Create account" action (external wallet not yet on-chain, IMMEDIATE funding). */
+  showCreateAccount: boolean;
+  creatingAccount: boolean;
   onToggleOpen: () => void;
+  onCreateAccount: () => void;
   onCopy: () => void;
   onWalletBalance: () => void;
   onTxHistory: () => void;
+  onSend: () => void;
+  onReceive: () => void;
+  onSessions: () => void;
+  onKyc: () => void;
+  onRamp: () => void;
+  onDistributionRules: () => void;
   onLogout: () => void;
   onLogin: () => void;
 }
@@ -37,16 +49,26 @@ export function WalletButtonTemplate({
   dropdownBorder,
   itemColor,
   wrapperRef,
+  isInProgress,
+  showCreateAccount,
+  creatingAccount,
   onToggleOpen,
+  onCreateAccount,
   onCopy,
   onWalletBalance,
   onTxHistory,
+  onSend,
+  onReceive,
+  onSessions,
+  onKyc,
+  onRamp,
+  onDistributionRules,
   onLogout,
   onLogin,
 }: WalletButtonTemplateProps) {
   if (!walletAddress) {
     return (
-      <button type="button" className="wallet-login-btn" style={{ backgroundColor: accentColor }} onClick={onLogin}>
+      <button type="button" className="pollar-wallet-login-btn" style={{ backgroundColor: accentColor }} onClick={onLogin}>
         <ButtonLogo />
         Login with Pollar
       </button>
@@ -54,25 +76,109 @@ export function WalletButtonTemplate({
   }
 
   return (
-    <div className="wallet-wrapper" ref={wrapperRef}>
-      <button className="wallet-btn" style={{ backgroundColor: accentColor }} onClick={onToggleOpen}>
-        {cropWallet(walletAddress)}
-        <svg
-          className={`wallet-chevron${open ? ' open' : ''}`}
-          viewBox="0 0 12 12"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <polyline points="2,4 6,8 10,4" />
-        </svg>
+    <div className="pollar-wallet-wrapper" ref={wrapperRef}>
+      <button
+        className="pollar-wallet-btn"
+        style={{ backgroundColor: accentColor }}
+        onClick={isInProgress ? undefined : onToggleOpen}
+        disabled={isInProgress}
+        aria-busy={isInProgress}
+      >
+        <span className="pollar-wallet-btn-label">{cropWallet(walletAddress)}</span>
+        {isInProgress ? (
+          <svg className="pollar-wallet-btn-spinner" viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden>
+            <circle cx="6" cy="6" r="4.5" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" />
+            <circle
+              cx="6"
+              cy="6"
+              r="4.5"
+              stroke="white"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeDasharray="14 9"
+              transform="rotate(-90 6 6)"
+            />
+          </svg>
+        ) : (
+          <svg
+            className={`pollar-wallet-chevron${open ? ' pollar-open' : ''}`}
+            viewBox="0 0 12 12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="2,4 6,8 10,4" />
+          </svg>
+        )}
       </button>
 
       {open && (
-        <div className="wallet-dropdown" style={{ backgroundColor: dropdownBg, borderColor: dropdownBorder }}>
-          <button className="wallet-dropdown-item" style={{ color: itemColor }} onClick={onCopy}>
+        <div className="pollar-wallet-dropdown" style={{ backgroundColor: dropdownBg, borderColor: dropdownBorder }}>
+          {showCreateAccount && (
+            <>
+              <button
+                className="pollar-wallet-dropdown-item"
+                style={{ color: itemColor }}
+                onClick={onCreateAccount}
+                disabled={creatingAccount}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <line x1="19" y1="8" x2="19" y2="14" />
+                  <line x1="22" y1="11" x2="16" y2="11" />
+                </svg>
+                {creatingAccount ? 'Creating account…' : 'Create account'}
+              </button>
+              <div className="pollar-wallet-dropdown-divider" />
+            </>
+          )}
+          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onSend}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+            Send
+          </button>
+          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onReceive}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="8 17 12 21 16 17" />
+              <line x1="12" y1="12" x2="12" y2="21" />
+              <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29" />
+            </svg>
+            Receive
+          </button>
+          <div className="pollar-wallet-dropdown-divider" />
+          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onCopy}>
             <svg
               width="14"
               height="14"
@@ -88,11 +194,7 @@ export function WalletButtonTemplate({
             </svg>
             {copied ? 'Copied!' : 'Copy address'}
           </button>
-          <button
-            className="wallet-dropdown-item"
-            style={{ color: itemColor }}
-            onClick={onWalletBalance}
-          >
+          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onWalletBalance}>
             <svg
               width="14"
               height="14"
@@ -109,11 +211,7 @@ export function WalletButtonTemplate({
             </svg>
             Wallet balance
           </button>
-          <button
-            className="wallet-dropdown-item"
-            style={{ color: itemColor }}
-            onClick={onTxHistory}
-          >
+          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onTxHistory}>
             <svg
               width="14"
               height="14"
@@ -132,7 +230,82 @@ export function WalletButtonTemplate({
             </svg>
             Transaction history
           </button>
-          <button className="wallet-dropdown-item danger" onClick={onLogout}>
+          <div className="pollar-wallet-dropdown-divider" />
+          {/* Buy / Sell (ramp) */}
+          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onRamp}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="17 1 21 5 17 9" />
+              <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+              <polyline points="7 23 3 19 7 15" />
+              <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+            </svg>
+            Buy / Sell
+          </button>
+          {/* Identity verification */}
+          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onKyc}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+              <path d="M2 21v-1a6 6 0 0 1 6-6h2" />
+              <polyline points="16 11 18 13 22 9" />
+            </svg>
+            Identity verification
+          </button>
+          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onDistributionRules}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="18" cy="5" r="3" />
+              <circle cx="6" cy="12" r="3" />
+              <circle cx="18" cy="19" r="3" />
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+            </svg>
+            Distribution rules
+          </button>
+          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onSessions}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+            Active sessions
+          </button>
+          <div className="pollar-wallet-dropdown-divider" />
+          <button className="pollar-wallet-dropdown-item pollar-danger" onClick={onLogout}>
             <svg
               width="14"
               height="14"

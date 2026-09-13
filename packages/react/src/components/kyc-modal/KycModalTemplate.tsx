@@ -1,7 +1,7 @@
 'use client';
 
 import type { KycProvider, KycStartResponse, KycStatus as KycStatusValue } from '@pollar/core';
-import type { CSSProperties } from 'react';
+import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { KycStatus as KycStatusBadge } from './KycStatus';
 
 export type KycStep = 'select_provider' | 'verifying' | 'polling' | 'done';
@@ -9,6 +9,8 @@ export type KycStep = 'select_provider' | 'verifying' | 'polling' | 'done';
 interface KycModalTemplateProps {
   theme: string;
   accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
   step: KycStep;
   providers: KycProvider[];
   selectedProvider: KycProvider | null;
@@ -17,12 +19,14 @@ interface KycModalTemplateProps {
   isLoading: boolean;
   onSelectProvider: (provider: KycProvider) => void;
   onDoneVerifying: () => void;
+  onRefresh: () => void;
   onClose: () => void;
 }
 
 export function KycModalTemplate({
   theme,
   accentColor,
+  styleOverrides,
   step,
   providers,
   selectedProvider,
@@ -31,54 +35,84 @@ export function KycModalTemplate({
   isLoading,
   onSelectProvider,
   onDoneVerifying,
+  onRefresh,
   onClose,
 }: KycModalTemplateProps) {
-  const isDark = theme === 'dark';
-
-  const cssVars = {
-    '--pollar-accent': accentColor,
-    '--pollar-bg': isDark ? '#1a1a1a' : '#ffffff',
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': isDark ? '#ffffff' : '#111827',
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
-    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
-    '--pollar-buttons-border-radius': '6px',
-    '--pollar-buttons-height': '44px',
-    '--pollar-input-height': '44px',
-    '--pollar-input-border-radius': '0.5rem',
-    '--pollar-card-border-radius': '10px',
-    '--pollar-modal-padding': '2rem',
-    '--pollar-modal-heading-size': '1.375rem',
-    '--pollar-modal-subtitle-size': '0.9rem',
-  } as CSSProperties;
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
 
   return (
     <div className="pollar-modal-card pollar-kyc-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
-      <div className="pollar-kyc-header">
-        <h2 className="pollar-kyc-title">Identity verification</h2>
-        <p className="pollar-kyc-subtitle">
-          {step === 'select_provider' && 'Choose your verification provider'}
-          {step === 'verifying' && `Verifying with ${selectedProvider?.name}`}
-          {step === 'polling' && 'Waiting for verification result'}
-          {step === 'done' && 'Verification complete'}
-        </p>
+      <div className="pollar-modal-header">
+        <div className="pollar-kyc-header-text">
+          <h2 className="pollar-modal-title">Identity verification</h2>
+          <p className="pollar-kyc-subtitle">
+            {step === 'select_provider' && 'Choose your verification provider'}
+            {step === 'verifying' && `Verifying with ${selectedProvider?.name}`}
+            {step === 'polling' && 'Waiting for verification result'}
+            {step === 'done' && 'Verification complete'}
+          </p>
+        </div>
+        <div className="pollar-modal-header-actions">
+          {step === 'select_provider' && (
+            <button
+              type="button"
+              className="pollar-modal-close"
+              onClick={onRefresh}
+              disabled={isLoading}
+              aria-label="Refresh"
+              title="Refresh providers"
+            >
+              <svg
+                className={isLoading ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden
+              >
+                <path
+                  d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          )}
+          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+              <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
 
-      {step === 'select_provider' && (
-        <div className="pollar-kyc-providers">
-          {providers.length === 0 && <p style={{ color: 'var(--pollar-muted)', textAlign: 'center' }}>No providers available for your country.</p>}
-          {providers.map((p) => (
-            <button key={p.id} type="button" className="pollar-kyc-provider-btn" disabled={isLoading} onClick={() => onSelectProvider(p)}>
-              <span className="pollar-kyc-provider-name">{p.name}</span>
-              <span className="pollar-kyc-provider-flow">{p.flow}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {step === 'select_provider' &&
+        (isLoading && providers.length === 0 ? (
+          <div className="pollar-loading-block">
+            <div className="pollar-spinner" />
+            <span>Loading providers…</span>
+          </div>
+        ) : (
+          <div className="pollar-kyc-providers">
+            {providers.length === 0 && (
+              <p style={{ color: 'var(--pollar-muted)', textAlign: 'center' }}>No providers available for your country.</p>
+            )}
+            {providers.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="pollar-kyc-provider-btn"
+                disabled={isLoading}
+                onClick={() => onSelectProvider(p)}
+              >
+                <span className="pollar-kyc-provider-name">{p.name}</span>
+                <span className="pollar-kyc-provider-flow">{p.flow}</span>
+              </button>
+            ))}
+          </div>
+        ))}
 
       {step === 'verifying' && selectedProvider && (
         <>
@@ -90,10 +124,9 @@ export function KycModalTemplate({
                 <span>🔒</span>
                 <span>
                   {selectedProvider.flow === 'form'
-                    ? 'Form-based KYC — fields will render here once backend is connected'
-                    : 'KYC iframe will load here once backend is connected'}
+                    ? 'The identity verification form will appear here.'
+                    : 'Identity verification will open here.'}
                 </span>
-                <code style={{ fontSize: '0.7rem', opacity: 0.6 }}>provider: {selectedProvider.id}</code>
               </div>
             )}
           </div>
@@ -120,7 +153,9 @@ export function KycModalTemplate({
           <span className="pollar-kyc-result-icon">{kycStatus === 'approved' ? '✅' : '❌'}</span>
           <KycStatusBadge status={kycStatus} />
           <p className="pollar-kyc-result-text">
-            {kycStatus === 'approved' ? 'Your identity has been verified successfully.' : 'Verification was not approved. Please try again.'}
+            {kycStatus === 'approved'
+              ? 'Your identity has been verified successfully.'
+              : 'Verification was not approved. Please try again.'}
           </p>
           <div className="pollar-modal-actions">
             <button type="button" className="pollar-btn-primary" onClick={onClose}>

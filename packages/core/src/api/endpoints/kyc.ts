@@ -14,7 +14,7 @@ export async function getKycStatus(
     params: { query: providerId ? { providerId } : {} },
   });
   if (!data?.content || error) {
-    throw new Error((error as any)?.error ?? 'Failed to get KYC status');
+    throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to get KYC status');
   }
   return data.content;
 }
@@ -25,7 +25,7 @@ export async function getKycStatus(
  */
 export async function getKycProviders(api: PollarApiClient, country: string): Promise<{ providers: KycProvider[] }> {
   const { data, error } = await api.GET('/kyc/providers', { params: { query: { country } } });
-  if (!data?.content || error) throw new Error((error as any)?.error ?? 'Failed to get KYC providers');
+  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to get KYC providers');
   return data.content;
 }
 
@@ -37,7 +37,7 @@ export async function getKycProviders(api: PollarApiClient, country: string): Pr
  */
 export async function startKyc(api: PollarApiClient, body: KycStartBody): Promise<KycStartResponse> {
   const { data, error } = await api.POST('/kyc/start', { body });
-  if (!data?.content || error) throw new Error((error as any)?.error ?? 'Failed to start KYC');
+  if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to start KYC');
   return data.content;
 }
 

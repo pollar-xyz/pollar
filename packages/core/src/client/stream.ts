@@ -1,4 +1,35 @@
 import { PollarApiClient } from '../api/client';
+import { abortError, throwIfAborted } from '../lib/abort';
+import type { PollarLogger } from '../lib/logger';
+
+/** Terminal session-status conditions, surfaced identically by the SSE stream
+ *  (as `error` events) and the poll endpoint (as 404 / 410). When either occurs
+ *  the session can never become ready, so the wait stops and the auth flow
+ *  resets to an error state instead of retrying forever. */
+export type SessionStatusErrorCode = 'INVALID_CLIENT_SESSION_ID' | 'EXPIRED_CLIENT_ID' | 'LOGIN_TIMEOUT';
+
+/**
+ * Overall deadline for an interactive login to reach a ready session. Bounds an
+ * abandoned flow (OAuth popup closed, user walked away, backend stuck in a
+ * non-terminal status) so the poll/stream can't run forever. 5 minutes is
+ * generous for a hosted login with 2FA while still failing a dead flow.
+ */
+export const LOGIN_FLOW_TIMEOUT_MS = 5 * 60 * 1000;
+
+export class SessionStatusError extends Error {
+  constructor(readonly code: SessionStatusErrorCode) {
+    super(`[PollarClient] Session status terminal: ${code}`);
+    this.name = 'SessionStatusError';
+  }
+}
+
+/** Returns the terminal code if `parsed` is an SSE `error` event payload
+ *  (`{ error: '...' }`), otherwise null. */
+function terminalStatusCode(parsed: unknown): SessionStatusErrorCode | null {
+  const err = (parsed as { error?: unknown } | null)?.error;
+  if (err === 'INVALID_CLIENT_SESSION_ID' || err === 'EXPIRED_CLIENT_ID') return err;
+  return null;
+}
 
 function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -7,22 +38,38 @@ function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
       'abort',
       () => {
         clearTimeout(t);
-        reject(new DOMException('Aborted', 'AbortError'));
+        reject(abortError());
       },
       { once: true },
     );
   });
 }
 
+const MAX_BACKOFF_MS = 5_000;
+
+/**
+ * Poll the session-status SSE stream until `check` returns true.
+ *
+ * On consecutive failures the retry delay doubles up to a 5 s cap; any
+ * received chunk resets it to the floor. The happy path is unchanged.
+ */
 export async function streamUntilFound(
   api: PollarApiClient,
   clientSessionId: string,
   check: (data: Record<string, unknown>) => boolean,
   retryDelayMs = 200,
   signal?: AbortSignal,
+  logger: PollarLogger = console,
 ): Promise<Record<string, unknown>> {
+  let backoff = retryDelayMs;
+  const sleep = async (ms: number): Promise<void> => {
+    if (ms <= 0) return;
+    if (signal) await abortableDelay(ms, signal);
+    else await new Promise((r) => setTimeout(r, ms));
+  };
+
   while (true) {
-    signal?.throwIfAborted();
+    throwIfAborted(signal);
 
     let data, error;
     try {
@@ -33,54 +80,190 @@ export async function streamUntilFound(
       }));
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') throw e;
-      console.warn(e);
+      logger.debug('[PollarClient:stream] session-status request failed; will retry', e);
     }
 
     if (error || !data) {
-      if (signal) await abortableDelay(retryDelayMs, signal);
-      else await new Promise((r) => setTimeout(r, retryDelayMs));
+      await sleep(backoff);
+      backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
       continue;
     }
 
     const reader = data.getReader();
     const decoder = new TextDecoder();
-    let streamDone = false;
+    let sawAnyChunk = false;
 
     try {
       while (true) {
-        signal?.throwIfAborted();
+        throwIfAborted(signal);
         const { done, value } = await reader.read();
-        if (done) {
-          streamDone = true;
-          break;
-        }
+        if (done) break;
+        sawAnyChunk = true;
 
         const chunk = decoder.decode(value);
         for (const message of chunk.split('\n\n').filter(Boolean)) {
           const dataLine = message.split('\n').find((l) => l.startsWith('data:'));
           if (!dataLine) continue;
+          let parsed: Record<string, unknown>;
           try {
-            const parsed = JSON.parse(dataLine.slice('data:'.length).trim());
-            if (check(parsed)) {
-              return parsed;
-            }
+            parsed = JSON.parse(dataLine.slice('data:'.length).trim());
           } catch {
-            // chunk parcial, ignorar
+            // partial chunk - keep reading
+            continue;
+          }
+          // Terminal `error` event (invalid / expired session): stop and surface.
+          const terminal = terminalStatusCode(parsed);
+          if (terminal) throw new SessionStatusError(terminal);
+          if (check(parsed)) {
+            return parsed;
           }
         }
       }
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') throw e;
-      console.warn(e);
+      if (e instanceof SessionStatusError) throw e;
+      logger.debug('[PollarClient:stream] session-status stream read failed; will retry', e);
     } finally {
       reader.releaseLock();
     }
 
-    // stream cerrado sin encontrar el valor → reintenta
-    const delay = streamDone ? retryDelayMs : 0;
-    if (delay) {
-      if (signal) await abortableDelay(delay, signal);
-      else await new Promise((r) => setTimeout(r, delay));
-    }
+    // A connection that delivered real data resets the backoff; a stream
+    // that opened and immediately closed counts as failure.
+    if (sawAnyChunk) backoff = retryDelayMs;
+    else backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
+
+    // Always wait the computed backoff before reconnecting. A data-bearing
+    // close already reset it to the floor (retryDelayMs), so the happy-path
+    // reconnect stays snappy; the failure paths - including a mid-stream read
+    // error caught above - now back off instead of spinning in a tight
+    // reconnect loop that hammers the server.
+    await sleep(backoff);
   }
+}
+
+/** Success envelope shape of `GET /auth/session/status/{id}/poll`. */
+interface StatusPollEnvelope {
+  success?: boolean;
+  code?: string;
+  content?: Record<string, unknown>;
+}
+
+/**
+ * Non-streaming counterpart to {@link streamUntilFound}. Repeatedly GETs the
+ * one-shot `/auth/session/status/{clientSessionId}/poll` endpoint until `check`
+ * returns true on the response `content`.
+ *
+ * Used on runtimes where `fetch` does not expose a readable `response.body`
+ * (React Native / Hermes), so the SSE reader in `streamUntilFound` is
+ * unavailable. Uses the global `fetch` directly (not `openapi-fetch`) because
+ * the status endpoint is public/pre-auth and needs no DPoP middleware.
+ *
+ * Backoff matches the SSE path: the delay doubles on transient failures up to a
+ * 5 s cap and resets to the floor after any successful response.
+ */
+export async function pollUntilFound(
+  baseUrl: string,
+  clientSessionId: string,
+  check: (data: Record<string, unknown>) => boolean,
+  intervalMs = 500,
+  signal?: AbortSignal,
+  logger: PollarLogger = console,
+): Promise<Record<string, unknown>> {
+  const url = `${baseUrl}/auth/session/status/${encodeURIComponent(clientSessionId)}/poll`;
+  let backoff = intervalMs;
+  const sleep = async (ms: number): Promise<void> => {
+    if (ms <= 0) return;
+    if (signal) await abortableDelay(ms, signal);
+    else await new Promise((r) => setTimeout(r, ms));
+  };
+
+  while (true) {
+    throwIfAborted(signal);
+
+    let envelope: StatusPollEnvelope | null = null;
+    let httpStatus = 0;
+    try {
+      const response = await fetch(url, { headers: { accept: 'application/json' }, signal: signal ?? null });
+      httpStatus = response.status;
+      envelope = (await response.json().catch(() => null)) as StatusPollEnvelope | null;
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') throw e;
+      logger.debug('[PollarClient:stream] session-status poll failed; will retry', e);
+    }
+
+    // Terminal: the session is gone (404 / INVALID) or expired (410 / EXPIRED).
+    // It can never become ready, so stop and surface - the caller resets the
+    // login to an error state. Mirrors the SSE stream's terminal `error` events.
+    if (httpStatus === 404 || envelope?.code === 'INVALID_CLIENT_SESSION_ID') {
+      throw new SessionStatusError('INVALID_CLIENT_SESSION_ID');
+    }
+    if (httpStatus === 410 || envelope?.code === 'EXPIRED_CLIENT_ID') {
+      throw new SessionStatusError('EXPIRED_CLIENT_ID');
+    }
+
+    if (envelope?.success && envelope.content && check(envelope.content)) {
+      return envelope.content;
+    }
+
+    // A response (even a transient non-terminal error) resets the backoff floor;
+    // a network failure (no response) backs off up to the cap.
+    if (envelope) backoff = intervalMs;
+    else backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
+    await sleep(backoff);
+  }
+}
+
+/**
+ * Wait until the client session reaches a state where `check` passes, using the
+ * transport appropriate to the runtime: the SSE stream on web (`useStreaming`),
+ * or one-shot polling on React Native. Both resolve with the matched status
+ * `content` payload; the calling auth flow does not care which transport ran.
+ */
+export function waitForSessionReady(args: {
+  api: PollarApiClient;
+  baseUrl: string;
+  clientSessionId: string;
+  check: (data: Record<string, unknown>) => boolean;
+  useStreaming: boolean;
+  retryDelayMs?: number;
+  signal?: AbortSignal;
+  logger?: PollarLogger;
+  timeoutMs?: number;
+}): Promise<Record<string, unknown>> {
+  const { api, baseUrl, clientSessionId, check, useStreaming, retryDelayMs, signal, logger = console } = args;
+  const timeoutMs = args.timeoutMs ?? LOGIN_FLOW_TIMEOUT_MS;
+
+  // Combine the caller's signal with an overall deadline: the underlying
+  // poll/stream loops only stop on a terminal status, success, or abort, so
+  // without this an abandoned login would run forever. We abort a derived
+  // controller on timeout (which unblocks the in-flight fetch / SSE read and
+  // the backoff sleep) and re-surface that abort as a `LOGIN_TIMEOUT` terminal,
+  // distinct from a user-initiated cancel (which stays an AbortError).
+  const controller = new AbortController();
+  const onExternalAbort = (): void => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', onExternalAbort, { once: true });
+  }
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  const run = useStreaming
+    ? streamUntilFound(api, clientSessionId, check, retryDelayMs ?? 200, controller.signal, logger)
+    : pollUntilFound(baseUrl, clientSessionId, check, retryDelayMs ?? 500, controller.signal, logger);
+
+  return run
+    .catch((err: unknown) => {
+      if (timedOut && err instanceof Error && err.name === 'AbortError') {
+        throw new SessionStatusError('LOGIN_TIMEOUT');
+      }
+      throw err;
+    })
+    .finally(() => {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', onExternalAbort);
+    });
 }

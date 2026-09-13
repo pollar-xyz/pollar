@@ -1,0 +1,26 @@
+{
+  "name": "@pollar-examples/privy-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Minimal Vite + React app to manually e2e-test @pollar/privy-adapter against a real Privy app.",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pollar/core": "*",
+    "@pollar/privy-adapter": "*",
+    "@pollar/react": "*",
+    "@privy-io/react-auth": "^3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3",
+    "@types/react-dom": "^18.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.0"
+  }
+}
