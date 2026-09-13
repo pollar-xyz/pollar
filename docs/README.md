@@ -4,6 +4,7 @@ The API reference lives with each package, next to the code it documents:
 
 - [`@pollar/core`](../packages/core/README.md) — `PollarClient`, auth flows, transactions, balances, swaps, earn, ramps
 - [`@pollar/react`](../packages/react/README.md) — `PollarProvider`, `usePollar()`, components and templates
+- [`@pollar/react-native`](../packages/react-native/README.md) - `PollarProvider`, `usePollar()` and modals for React Native
 - [`@pollar/privy-adapter`](../packages/privy-adapter/README.md)
 - [`@pollar/privy-server-adapter`](../packages/privy-server-adapter/README.md)
 - [`@pollar/accesly-adapter`](../packages/accesly-adapter/README.md)

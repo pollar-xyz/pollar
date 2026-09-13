@@ -1,168 +1,197 @@
 # @pollar/react-native
 
-React Native bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI and hooks for Stellar-based mobile applications.
+React Native bindings for [Pollar](https://pollar.xyz): a context provider, a hook and pre-built modals for
+authentication and transactions in Stellar mobile applications. Built on top of
+[`@pollar/core`](../core/README.md).
 
 ## Installation
 
 ```bash
 npm install @pollar/react-native @pollar/core
-# or
-pnpm add @pollar/react-native @pollar/core
-# or
-yarn add @pollar/react-native @pollar/core
 ```
 
-**Peer dependencies:** `react >= 18`, `react-native >= 0.72`
+**Peer dependencies:** `@pollar/core ^0.11.3`, `react >= 18`, `react-native >= 0.72`.
 
-## Quick Start
+Add the runtime polyfills and one storage backend:
 
-Wrap your application with `PollarProvider` and use the `usePollar` hook anywhere in the tree.
+```bash
+# Expo (works in Expo Go)
+npx expo install expo-secure-store react-native-get-random-values
+npm i react-native-polyfill-globals
+
+# Bare React Native
+npm i react-native-keychain react-native-get-random-values react-native-polyfill-globals
+```
+
+## Setup
+
+### 1. Polyfills
+
+Every authenticated request carries a DPoP proof, which needs `crypto.getRandomValues`, `TextEncoder` and `URL`.
+Hermes does not ship all of them. Import these at the very top of your entry file, before anything imports
+`@pollar/core`:
+
+```ts
+import 'react-native-get-random-values';
+import 'react-native-polyfill-globals/auto';
+```
+
+If one is missing, no authenticated request works. See the
+[`@pollar/core` README](../core/README.md) for the details.
+
+### 2. Storage
+
+React Native has no `localStorage`. Without a storage adapter the session and the DPoP key live in memory, and the
+user is logged out every time the app restarts (the SDK warns about it in the console). The adapters load their
+native module lazily, so they are async: create the storage before you render the provider.
 
 ```tsx
+import { PollarClientConfig } from '@pollar/core';
+import { createSecureStoreAdapter } from '@pollar/core/adapters/expo';
+// Bare React Native: import { createKeychainAdapter } from '@pollar/core/adapters/react-native-keychain';
 import { PollarProvider } from '@pollar/react-native';
+import { useEffect, useState } from 'react';
 
 export default function App() {
+  const [config, setConfig] = useState<PollarClientConfig | null>(null);
+
+  useEffect(() => {
+    createSecureStoreAdapter().then((storage) => setConfig({ apiKey: 'pub_testnet_xxxxxxxx', storage }));
+  }, []);
+
+  if (!config) return null;
+
   return (
-    <PollarProvider config={{ apiKey: 'your-api-key' }}>
+    <PollarProvider config={config}>
       <MyApp />
     </PollarProvider>
   );
 }
 ```
 
-```tsx
-import { usePollar } from '@pollar/react-native';
+`config` is read once, on mount. To switch API keys, remount the provider (for example with `key={apiKey}`).
 
-export function Profile() {
-  const { isAuthenticated, walletAddress, login, logout } = usePollar();
+### 3. OAuth (Google, GitHub)
 
-  if (!isAuthenticated) {
-    return (
-      <TouchableOpacity onPress={() => login({ provider: 'google' })}>
-        <Text>Sign in with Google</Text>
-      </TouchableOpacity>
-    );
-  }
+`window.open` does not exist on React Native, so pass an opener and your app's deep link. The SDK polls the auth
+session until the backend marks it ready, so the opener only has to show the page:
 
-  return (
-    <View>
-      <Text>Wallet: {walletAddress}</Text>
-      <TouchableOpacity onPress={logout}><Text>Sign out</Text></TouchableOpacity>
-    </View>
-  );
-}
+```ts
+import * as WebBrowser from 'expo-web-browser';
+
+const config: PollarClientConfig = {
+  apiKey: 'pub_testnet_xxxxxxxx',
+  storage,
+  oauthRedirectUri: 'myapp://auth',
+  openAuthUrl: async ({ getUrl, redirectUri }) => {
+    const url = await getUrl();
+    if (url) await WebBrowser.openAuthSessionAsync(url, redirectUri);
+  },
+};
 ```
 
-## API Reference
+Add the same redirect URI to your application in the Pollar dashboard.
 
-### `<PollarProvider>`
+### 4. App state (optional)
 
-Context provider that initialises the Pollar client and makes it available to child components.
+To refresh the session as soon as the app returns to the foreground, pass an `AppState`-backed visibility provider:
 
-```tsx
-<PollarProvider
-  config={{
-    apiKey: 'your-api-key',
-    baseUrl: 'https://sdk.api.pollar.xyz', // optional
-    stellarNetwork: 'testnet',             // optional, default: 'testnet'
-  }}
->
-  {children}
-</PollarProvider>
+```ts
+import { createAppStateVisibilityProvider } from '@pollar/core/adapters/react-native-appstate';
+
+const visibilityProvider = await createAppStateVisibilityProvider();
 ```
 
-| Prop     | Type                | Required | Description                              |
-| -------- | ------------------- | -------- | ---------------------------------------- |
-| `config` | `PollarClientConfig`| Yes      | Configuration passed to `PollarClient`   |
-| `styles` | `PollarStyles`      | No       | Style overrides (theme, accent, providers) |
+## `<PollarProvider>`
 
----
+Creates the `PollarClient`, exposes it through `usePollar()` and mounts the login, transaction, KYC, ramp, transaction
+history and wallet balance modals. You do not render the modals yourself.
 
-### `usePollar()`
+| Prop       | Type                 | Required | Description                                                            |
+| ---------- | -------------------- | -------- | ---------------------------------------------------------------------- |
+| `config`   | `PollarClientConfig` | Yes      | Passed to `new PollarClient(config)`. Read once on mount.              |
+| `styles`   | `PollarStyles`       | No       | Merged over the styles configured in the dashboard.                    |
+| `adapters` | `PollarAdapters`     | No       | Custom transaction builders, used with `createPollarAdapterHook(key)`. |
 
-Returns the authentication and SDK context.
+## `usePollar()`
 
 ```ts
 const {
-  isAuthenticated,  // boolean — true when a valid session exists
-  walletAddress,    // string — public key of the authenticated wallet
-  login,            // (options: PollarLoginOptions) => void
-  logout,           // () => void
-  buildTx,          // (operation, params, options?) => Promise<void>
-  signAndSubmitTx,  // (unsignedXdr: string) => Promise<void>
-  transaction,      // TransactionState — current transaction state
-  txHistory,        // TxHistoryState — transaction history
-  network,          // StellarNetwork — current network
-  setNetwork,       // (network: StellarNetwork) => void
-  getClient,        // () => PollarClient
-  config,           // PollarConfig — remote app configuration
-  styles,           // PollarStyles — resolved styles
+  // session
+  isAuthenticated, // boolean
+  walletAddress, // string, '' when logged out
+  walletType, // WalletId | null, the external wallet id when one is connected
+  login, // (options: PollarLoginOptions) => void
+  logout, // () => void
+  getClient, // () => PollarClient
+
+  // transactions
+  transaction, // TransactionState
+  buildTx, // (operation, params, options?) => Promise<BuildOutcome>
+  signAndSubmitTx, // (unsignedXdr?: string) => Promise<SubmitOutcome>
+
+  // balances and history
+  walletBalance, // WalletBalanceState
+  refreshBalance, // () => Promise<void>
+  txHistory, // TxHistoryState
+
+  // network and configuration
+  network, // StellarNetwork
+  setNetwork, // (network: StellarNetwork) => void
+  config, // PollarConfig, the application config from the dashboard
+  styles, // PollarStyles, the resolved styles
+
+  // modals
   openLoginModal,
   openTransactionModal,
-  openKycModal,
+  openKycModal, // (options?: { country?, level?, onApproved? }) => void
   openRampWidget,
   openTxHistoryModal,
   openWalletBalanceModal,
 } = usePollar();
 ```
 
-#### Login options
+`buildTx` opens the transaction modal automatically, and the user confirms from there.
+
+### Login options
 
 ```ts
-// Social providers (opens browser via Linking)
 login({ provider: 'google' });
 login({ provider: 'github' });
-
-// Email OTP
 login({ provider: 'email', email: 'user@example.com' });
-
-// Stellar wallet
-import { WalletType } from '@pollar/core';
-login({ provider: 'wallet', type: WalletType.FREIGHTER });
-login({ provider: 'wallet', type: WalletType.ALBEDO });
+login({ provider: WalletType.FREIGHTER }); // import { WalletType } from '@pollar/core'
 ```
 
----
+The login modal also offers Freighter and Albedo when the application enables them. `@pollar/core` ships those two
+adapters for the web (browser extension and popup), so on a device they only work if you register adapters with
+the same ids through `walletAdapters` in the client config.
 
-### `<WalletButton>`
+## Components
 
-Pre-built button component that opens the Pollar authentication modal.
+- `<WalletButton>`: opens the login modal when logged out; when logged in, shows the address with a menu for
+  balance, transaction history and logout.
+- `<KycModal>`, `<KycStatus>`, `<RampWidget>`, `<RouteDisplay>`, `<WalletBalanceModal>`: the modals, for when you
+  want to mount one yourself.
+- `LoginModalTemplate`, `TransactionModalTemplate`, `KycModalTemplate`, `RampWidgetTemplate`,
+  `TxHistoryModalTemplate`, `WalletBalanceModalTemplate`, `WalletButtonTemplate`: the presentational layer of each
+  component, to build your own container around it.
+- `createPollarAdapterHook(key)`: builds a typed hook over an adapter passed to `PollarProvider`. Each method builds
+  the transaction and then signs and submits it.
 
-```tsx
-import { WalletButton } from '@pollar/react-native';
+Components are styled with `StyleSheet`; there is no stylesheet to import. Theme, accent color, logo and login
+methods come from the dashboard and can be overridden with the `styles` prop.
 
-export function Header() {
-  return <WalletButton />;
-}
+## Developing in the monorepo
+
+```bash
+npm install
+npx turbo build --filter=@pollar/react-native   # builds @pollar/core first
 ```
 
-The modal handles all login providers, loading states, and error feedback out of the box.
-
----
-
-## Styles
-
-No CSS import is needed. All components use React Native `StyleSheet` and are styled natively. Appearance is controlled via the `styles` prop on `<PollarProvider>`.
-
----
-
-## TypeScript
-
-`@pollar/react-native` ships full type support. Key exported types:
-
-```ts
-import type {
-  AuthProviderProps,
-  AuthContextValue,
-  LoginButtonProps,
-  AuthModalProps,
-  PollarConfig,
-  PollarStyles,
-} from '@pollar/react-native';
-```
-
----
+To try a local build in an app, publish both packages with [yalc](https://github.com/wclr/yalc)
+(`yalc publish` in `packages/core` and `packages/react-native`, then `yalc add @pollar/core @pollar/react-native` in
+the app) and restart Metro with `npm start -- -c`.
 
 ## License
 
-MIT
+Apache-2.0

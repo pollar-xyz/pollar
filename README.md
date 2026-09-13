@@ -170,6 +170,31 @@ npm install @pollar/react @pollar/core
 
 ---
 
+### [`@pollar/react-native`](./packages/react-native)
+
+**Version:** `0.1.1` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react-native)
+
+React Native bindings built on top of `@pollar/core`: the same provider-and-hook model as `@pollar/react`, with
+components styled through `StyleSheet`.
+
+**Key features:**
+
+- `<PollarProvider>` - creates the client and mounts the login, transaction, KYC, ramp, tx history and wallet balance
+  modals; accepts `adapters` for custom signing flows
+- `usePollar()` - session state, `login`, `logout`, `buildTx` / `signAndSubmitTx`, balances, tx history, network and
+  modal entry points
+- `<WalletButton>` - opens the login modal, or shows the address with balance, history and logout
+- Template components for every modal, for fully custom UIs
+- Storage (Keychain / SecureStore), OAuth opener and polyfills are configured through `@pollar/core`; see the package
+  README
+- Peer dependencies on `@pollar/core ^0.11.3`, React >= 18 and React Native >= 0.72
+
+```bash
+npm install @pollar/react-native @pollar/core
+```
+
+---
+
 ### [`@pollar/privy-adapter`](./packages/privy-adapter)
 
 **Version:** `0.11.2` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-adapter)

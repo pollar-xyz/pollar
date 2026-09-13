@@ -1,5 +1,22 @@
 # Changelog
 
+## `@pollar/react-native` 0.1.1
+
+> First release. React Native bindings for Pollar, versioned on their own track. Requires
+> `@pollar/core@^0.11.3`, `react >= 18` and `react-native >= 0.72`.
+
+- `PollarProvider` and `usePollar()`: session state, `login` / `logout`, `buildTx` and
+  `signAndSubmitTx` (returning core's `BuildOutcome` / `SubmitOutcome`), wallet balance,
+  transaction history, network, and entry points for the login, transaction, KYC, ramp, tx
+  history and wallet balance modals, which the provider mounts itself.
+- `<WalletButton>`, `<KycModal>`, `<KycStatus>`, `<RampWidget>`, `<RouteDisplay>`,
+  `<WalletBalanceModal>`, plus a template component for each, styled with `StyleSheet`.
+- `createPollarAdapterHook(key)` over the `PollarAdapter` contract.
+- The provider tears its client down on unmount and builds a single client under StrictMode.
+- Storage, the OAuth opener and the app-state visibility provider come from `@pollar/core`
+  (`storage`, `openAuthUrl` + `oauthRedirectUri`, `visibilityProvider`); the README covers the
+  Expo and bare React Native setup, including the required polyfills.
+
 ## 0.11.3
 
 > Patch release. Headlines: **sessions no longer die on reload when the DPoP
