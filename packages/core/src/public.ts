@@ -67,6 +67,7 @@ export {
   getRampKycStatus,
   decodePixQr,
 } from './api/endpoints/ramps';
+export type { RampOperatorOptions } from './api/endpoints/ramps';
 
 // --- Distribution endpoints ---------------------------------------------------
 export { listDistributionRules, claimDistributionRule } from './api/endpoints/distribution';

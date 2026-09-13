@@ -16,8 +16,11 @@ import type {
   RampsSignatureResponse,
   RampsTransactionResponse,
   RampTxStatus,
+  RampOperatorOptions,
 } from '../../types';
 import { PollarApiError } from '../../types';
+
+export type { RampOperatorOptions };
 
 /**
  * Wrap an error body into a {@link PollarApiError}, keeping every field the API
@@ -56,14 +59,31 @@ export async function getRampsQuote(api: PollarApiClient, query: RampsQuoteQuery
   return data.content;
 }
 
+function operatorHeaders(options?: RampOperatorOptions): Record<string, string> | undefined {
+  if (!options?.operatorKey) return undefined;
+  return {
+    Authorization: `Bearer ${options.operatorKey}`,
+    'X-Operator-Key': options.operatorKey,
+  };
+}
+
 /**
  * POST /ramps/onramp
  * Creates an onramp transaction.
  * For embedded users: backend orchestrates the full SEP-24 flow and returns payment instructions.
  * For external wallets: backend may return an unsigned XDR that the client must sign via a wallet adapter.
+ * For server/operator mode: pass `options.operatorKey` to authorize server-side without user OTP.
  */
-export async function createOnRamp(api: PollarApiClient, body: RampsOnrampBody): Promise<RampsOnrampResponse> {
-  const { data, error } = await api.POST('/ramps/onramp', { body });
+export async function createOnRamp(
+  api: PollarApiClient,
+  body: RampsOnrampBody,
+  options?: RampOperatorOptions,
+): Promise<RampsOnrampResponse> {
+  const headers = operatorHeaders(options);
+  const { data, error } = await api.POST('/ramps/onramp', {
+    body,
+    ...(headers ? { headers } : {}),
+  } as any);
   if (!data?.content || error) throw rampApiError(error, 'Failed to create onramp');
   return data.content;
 }
@@ -72,9 +92,18 @@ export async function createOnRamp(api: PollarApiClient, body: RampsOnrampBody):
  * POST /ramps/offramp
  * Creates an offramp transaction.
  * Backend initiates the bank transfer once the Stellar transaction is confirmed.
+ * For server/operator mode: pass `options.operatorKey` to authorize server-side without user OTP.
  */
-export async function createOffRamp(api: PollarApiClient, body: RampsOfframpBody): Promise<RampsOfframpResponse> {
-  const { data, error } = await api.POST('/ramps/offramp', { body });
+export async function createOffRamp(
+  api: PollarApiClient,
+  body: RampsOfframpBody,
+  options?: RampOperatorOptions,
+): Promise<RampsOfframpResponse> {
+  const headers = operatorHeaders(options);
+  const { data, error } = await api.POST('/ramps/offramp', {
+    body,
+    ...(headers ? { headers } : {}),
+  } as any);
   if (!data?.content || error) throw rampApiError(error, 'Failed to create offramp');
   return data.content;
 }
@@ -111,9 +140,18 @@ export async function submitRampSignature(
 /**
  * GET /ramps/transaction/{txId}
  * Returns the current status of a ramp transaction.
+ * Pass `options.operatorKey` to fetch transaction status with server credentials.
  */
-export async function getRampTransaction(api: PollarApiClient, txId: string): Promise<RampsTransactionResponse> {
-  const { data, error } = await api.GET('/ramps/transaction/{txId}', { params: { path: { txId } } });
+export async function getRampTransaction(
+  api: PollarApiClient,
+  txId: string,
+  options?: RampOperatorOptions,
+): Promise<RampsTransactionResponse> {
+  const headers = operatorHeaders(options);
+  const { data, error } = await api.GET('/ramps/transaction/{txId}', {
+    params: { path: { txId } },
+    ...(headers ? { headers } : {}),
+  } as any);
   if (!data?.content || error) throw rampApiError(error, 'Failed to get transaction');
   return data.content;
 }
@@ -163,11 +201,15 @@ export async function decodePixQr(api: PollarApiClient, qrCode: string): Promise
 export async function pollRampTransaction(
   api: PollarApiClient,
   txId: string,
-  { intervalMs = 5000, timeoutMs = 600_000 }: { intervalMs?: number; timeoutMs?: number } = {},
+  {
+    intervalMs = 5000,
+    timeoutMs = 600_000,
+    operatorKey,
+  }: { intervalMs?: number; timeoutMs?: number; operatorKey?: string } = {},
 ): Promise<RampTxStatus> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const { status } = await getRampTransaction(api, txId);
+    const { status } = await getRampTransaction(api, txId, operatorKey ? { operatorKey } : undefined);
     if (status === 'completed' || status === 'failed') return status;
     await new Promise((r) => setTimeout(r, intervalMs));
   }
