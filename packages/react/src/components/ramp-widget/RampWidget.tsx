@@ -80,6 +80,7 @@ const RAMP_ERROR_MESSAGES: Record<string, string> = {
   SDK_RAMPS_PROVIDER_NOT_CONFIGURED: 'This ramp provider is not configured for this app yet.',
   SDK_RAMPS_ANCHOR_ERROR: 'The provider rejected the request. Please try again in a moment.',
   SDK_RAMPS_BRIDGE_ERROR: 'The provider rejected the request. Please try again in a moment.',
+  SDK_RAMPS_MESADEPAGOS_ERROR: 'Mesa de Pagos could not process this request. Please check the details and try again.',
 };
 
 /**
@@ -116,6 +117,8 @@ interface RampResult {
   // provider directly, and we poll `getRampKycStatus` until they do.
   kycRequired?: boolean;
   stellarTxHash?: string;
+  txHash?: string;
+  chain?: 'STELLAR' | 'POLYGON' | 'SOLANA';
   pendingSignature?: { unsignedXdr: string; action: 'sep10' | 'withdraw_payment' };
   // REST providers (Bridge) return deposit instructions as data (e.g. a Pix
   // `br_code` / bank details for on-ramp) instead of an interactive URL.
@@ -155,7 +158,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   const [kycPending, setKycPending] = useState(false);
   const [kycApproved, setKycApproved] = useState(false);
   const [txStatus, setTxStatus] = useState<RampTxStatus | null>(null);
-  const [stellarTxHash, setStellarTxHash] = useState<string | null>(null);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [txChain, setTxChain] = useState<'STELLAR' | 'POLYGON' | 'SOLANA' | null>(null);
   const [depositInstructions, setDepositInstructions] = useState<RampDepositInstructions | null>(null);
   const [completing, setCompleting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -173,7 +177,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         const tx = await client.getRampTransaction(txId);
         if (!active) return;
         setTxStatus(tx.status);
-        if (tx.stellarTxHash) setStellarTxHash(tx.stellarTxHash);
+        if (tx.txHash ?? tx.stellarTxHash) setTxHash(tx.txHash ?? tx.stellarTxHash ?? null);
+        if (tx.chain) setTxChain(tx.chain);
         if (tx.kycUrl) setKycUrl(tx.kycUrl);
         // depositInstructions is returned by REST providers (Bridge) - e.g. a Pix
         // `br_code` / bank details for on-ramp.
@@ -258,7 +263,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
       } else if (step === 'status' && txId) {
         const tx = await client.getRampTransaction(txId);
         setTxStatus(tx.status);
-        if (tx.stellarTxHash) setStellarTxHash(tx.stellarTxHash);
+        if (tx.txHash ?? tx.stellarTxHash) setTxHash(tx.txHash ?? tx.stellarTxHash ?? null);
+        if (tx.chain) setTxChain(tx.chain);
         if (tx.kycUrl) setKycUrl(tx.kycUrl);
         if (tx.depositInstructions) setDepositInstructions(tx.depositInstructions);
       }
@@ -286,7 +292,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setKycUrl(null);
     setTosUrl(null);
     setTxStatus(null);
-    setStellarTxHash(null);
+    setTxHash(null);
+    setTxChain(null);
     setDepositInstructions(null);
     setKycPending(false);
     setKycApproved(false);
@@ -324,7 +331,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     setKycPending(result.kycRequired === true);
     if (result.kycRequired) setKycApproved(false);
     setTxStatus(result.status);
-    setStellarTxHash(result.stellarTxHash ?? null);
+    setTxHash(result.txHash ?? result.stellarTxHash ?? null);
+    setTxChain(result.chain ?? (result.stellarTxHash ? 'STELLAR' : null));
     setDepositInstructions(result.depositInstructions ?? null);
     setStep('status');
   }
@@ -432,7 +440,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         return;
       }
       setTxStatus(result.status);
-      setStellarTxHash(result.stellarTxHash ?? null);
+      setTxHash(result.txHash ?? result.stellarTxHash ?? null);
+      setTxChain(result.chain ?? (result.stellarTxHash ? 'STELLAR' : null));
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
       setErrorMsg(
@@ -449,7 +458,15 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   // gate for the NEXT quote, not for this transaction, so `kycPending` (not
   // `kycBlocking`) is what keeps the button away.
   const kycBlocking = kycPending && !kycApproved;
-  const canComplete = direction === 'offramp' && step === 'status' && txStatus !== 'completed' && !stellarTxHash && !kycPending;
+  const canComplete = direction === 'offramp' && step === 'status' && txStatus !== 'completed' && !txHash && !kycPending;
+
+  const explorerUrl = txHash
+    ? txChain === 'POLYGON'
+      ? `https://${network === 'mainnet' ? '' : 'amoy.'}polygonscan.com/tx/${txHash}`
+      : txChain === 'SOLANA'
+        ? `https://solscan.io/tx/${txHash}${network === 'mainnet' ? '' : '?cluster=devnet'}`
+        : `https://stellar.expert/explorer/${network === 'mainnet' ? 'public' : 'testnet'}/tx/${txHash}`
+    : null;
 
   const flowSteps = flowStepsOf(quotes, selectedQuote);
   const flowStepIndex = flowSteps.indexOf(STEP_LABEL[step] ?? '');
@@ -481,12 +498,9 @@ export function RampWidget({ onClose }: RampWidgetProps) {
         tosUrl={tosUrl}
         kycBlocking={kycBlocking}
         kycJustApproved={kycPending && kycApproved}
-        stellarTxHash={stellarTxHash}
-        explorerUrl={
-          stellarTxHash
-            ? `https://stellar.expert/explorer/${network === 'mainnet' ? 'public' : 'testnet'}/tx/${stellarTxHash}`
-            : null
-        }
+        txHash={txHash}
+        txChain={txChain}
+        explorerUrl={explorerUrl}
         depositInstructions={depositInstructions}
         canComplete={canComplete}
         completing={completing}

@@ -7218,6 +7218,8 @@ export interface operations {
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            txHash?: string;
+                            chain?: "STELLAR" | "POLYGON" | "SOLANA";
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
@@ -7352,6 +7354,8 @@ export interface operations {
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            txHash?: string;
+                            chain?: "STELLAR" | "POLYGON" | "SOLANA";
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
@@ -7473,6 +7477,8 @@ export interface operations {
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            txHash?: string;
+                            chain?: "STELLAR" | "POLYGON" | "SOLANA";
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
@@ -7601,6 +7607,8 @@ export interface operations {
                             tosUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            txHash?: string;
+                            chain?: "STELLAR" | "POLYGON" | "SOLANA";
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
@@ -7732,6 +7740,8 @@ export interface operations {
                             kycUrl?: string;
                             anchorTransactionId?: string;
                             stellarTxHash?: string;
+                            txHash?: string;
+                            chain?: "STELLAR" | "POLYGON" | "SOLANA";
                             depositInstructions?: {
                                 scannable?: {
                                     /** @enum {string} */

@@ -117,8 +117,9 @@ interface RampWidgetTemplateProps {
   kycBlocking: boolean;
   /** The gate has since cleared - the user needs a fresh quote to continue. */
   kycJustApproved: boolean;
-  stellarTxHash: string | null;
-  /** Stellar Expert URL for `stellarTxHash` (network-aware); null when unknown. */
+  txHash: string | null;
+  txChain: 'STELLAR' | 'POLYGON' | 'SOLANA' | null;
+  /** Chain-aware explorer URL for `txHash`; null when unknown. */
   explorerUrl: string | null;
   depositInstructions: RampDepositInstructions | null;
   canComplete: boolean;
@@ -199,7 +200,8 @@ export function RampWidgetTemplate({
   tosUrl,
   kycBlocking,
   kycJustApproved,
-  stellarTxHash,
+  txHash,
+  txChain,
   explorerUrl,
   depositInstructions,
   canComplete,
@@ -500,22 +502,24 @@ export function RampWidgetTemplate({
             </div>
           </div>
 
-          {stellarTxHash && (
+          {txHash && (
             <div className="pollar-ramp-payment-field">
-              <span className="pollar-ramp-payment-label">Stellar tx</span>
+              <span className="pollar-ramp-payment-label">
+                {txChain ? `${txChain[0]}${txChain.slice(1).toLowerCase()} tx` : 'Transaction'}
+              </span>
               <div className="pollar-ramp-payment-value" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <code style={{ flex: 1, wordBreak: 'break-all' }}>
-                  {stellarTxHash.slice(0, 8)}…{stellarTxHash.slice(-8)}
+                  {txHash.slice(0, 8)}…{txHash.slice(-8)}
                 </code>
-                <CopyButton value={stellarTxHash} label="Copy transaction hash" />
+                <CopyButton value={txHash} label="Copy transaction hash" />
                 {explorerUrl && (
                   <a
                     href={explorerUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="pollar-copy-btn"
-                    aria-label="View on Stellar Expert"
-                    title="View on Stellar Expert"
+                    aria-label="View transaction in explorer"
+                    title="View transaction in explorer"
                   >
                     <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
                       <path

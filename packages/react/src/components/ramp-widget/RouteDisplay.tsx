@@ -15,7 +15,8 @@ const RAIL_LABELS: Record<string, string> = {
   SPEI: 'SPEI (Mexico)',
   PIX: 'PIX (Brazil)',
   PSE: 'PSE (Colombia)',
-  ACH: 'ACH (US)',
+  ACH: 'ACH (bank transfer)',
+  QR: 'Bank QR',
 };
 
 export function RouteDisplay({ quote, busy = false, disabled = false, onSelect }: RouteDisplayProps) {
