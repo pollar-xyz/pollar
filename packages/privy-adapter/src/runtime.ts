@@ -1,4 +1,4 @@
-import { FeeBumpTransaction, Keypair, type Transaction, TransactionBuilder, xdr } from '@stellar/stellar-sdk';
+import { FeeBumpTransaction, Keypair, type Transaction, TransactionBuilder, xdr } from '@stellar/stellar-sdk/minimal';
 import type {
   AuthOption,
   ConnectWalletResponse,
