@@ -84,6 +84,7 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "react-native": "0.86.3",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.5.0",
     "tsup": "^8.5.1",
@@ -97,10 +98,14 @@
     "openapi-fetch": "^0.17.0"
   },
   "peerDependencies": {
+    "react-native": ">=0.72",
     "expo-secure-store": ">=12",
     "react-native-keychain": ">=8"
   },
   "peerDependenciesMeta": {
+    "react-native": {
+      "optional": true
+    },
     "expo-secure-store": {
       "optional": true
     },

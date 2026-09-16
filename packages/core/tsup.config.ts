@@ -21,4 +21,5 @@ export default defineConfig({
   clean: true,
   treeshake: true,
   noExternal: ['@stellar/freighter-api', 'openapi-fetch'],
+  external: ['react-native', 'expo-secure-store', 'react-native-keychain'],
 });
