@@ -1,7 +1,7 @@
 import { createApiClient, fetchWithTimeout, PollarApiClient } from '../api/client';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { executeJupiterSwap, getSwapConfig, getSwapTokens, quoteSwap } from '../api/endpoints/swap';
-import { buildEarnTx, getEarnOpportunities, getEarnPosition, getEarnProviders } from '../api/endpoints/earn';
+import { buildEarnTx, executeEarnTx, getEarnOpportunities, getEarnPosition, getEarnProviders, submitEarnTx } from '../api/endpoints/earn';
 import { buildBorrowTx, getBorrowMarkets, getBorrowPositions } from '../api/endpoints/borrow';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
 import {
@@ -103,6 +103,13 @@ import {
   WalletChain,
   WalletInfo,
 } from '../types';
+
+/** Earn provider routing belongs to capability metadata, not provider branches. */
+const EARN_PROVIDER_CHAIN: Record<EarnProviderId, WalletChain> = {
+  blend: 'STELLAR',
+  defindex: 'STELLAR',
+  jupiter: 'SOLANA',
+};
 import { POLLAR_CORE_VERSION } from '../version';
 import { defaultVisibilityProvider } from '../visibility/autodetect';
 import type { VisibilityProvider } from '../visibility/types';
@@ -3301,7 +3308,7 @@ export class PollarClient {
    * count (DeFindex); `withdrawable` is the max in that unit.
    */
   async getEarnPosition(params: EarnPositionParams): Promise<EarnPosition> {
-    const wallet = params.provider === 'jupiter' ? this.getWallets().find((item) => item.chain === 'SOLANA') ?? null : this.getWallet();
+    const wallet = this._earnWallet(params.provider);
     if (!wallet) throw new Error('No wallet connected');
     return getEarnPosition(this._api, {
       provider: params.provider,
@@ -3334,7 +3341,29 @@ export class PollarClient {
   }
 
   private async _earnBuildAndSubmit(action: 'deposit' | 'withdraw', params: EarnTxParams): Promise<EarnOutcome> {
-    const wallet = params.provider === 'jupiter' ? this.getWallets().find((item) => item.chain === 'SOLANA') ?? null : this.getWallet();
+    this._setTransactionState({ step: 'building' });
+    try {
+      const outcome = await this._performEarnBuildAndSubmit(action, params);
+      // Stellar's transaction pipeline already publishes its detailed state.
+      // Solana returns an outcome directly; publish it to the same subscribers.
+      if (this._earnWallet(params.provider)?.chain === 'SOLANA') {
+        if (outcome.status === 'success') this._setTransactionState({ step: 'success', hash: outcome.hash });
+        if (outcome.status === 'pending') this._setTransactionState({ step: 'submitted', hash: outcome.hash });
+      }
+      if (outcome.status === 'prepared') this._setTransactionState({ step: 'idle' });
+      if (outcome.status === 'error' && this._transactionState?.step !== 'error') {
+        this._setTransactionState({ step: 'error', phase: 'building-signing-submitting', details: outcome.details ?? 'Earn transaction failed' });
+      }
+      return outcome;
+    } catch (error) {
+      const details = error instanceof Error ? error.message : String(error);
+      this._setTransactionState({ step: 'error', phase: 'building-signing-submitting', details });
+      return { status: 'error', details };
+    }
+  }
+
+  private async _performEarnBuildAndSubmit(action: 'deposit' | 'withdraw', params: EarnTxParams): Promise<EarnOutcome> {
+    const wallet = this._earnWallet(params.provider);
     if (!wallet) return { status: 'error', details: 'No wallet connected' };
 
     // Stellar providers return a prebuilt XDR, which smart (passkey C-address)
@@ -3342,6 +3371,29 @@ export class PollarClient {
     // passkey digest. Fail fast until that lands (same limitation as swap).
     if (wallet.custody === 'smart') {
       return { status: 'error', details: 'Earn is not yet supported for smart (passkey) wallets' };
+    }
+
+    // Pollar-owned Solana wallets must never receive an unsigned provider
+    // payload in the app. The backend rebuilds it, signs it in custody and
+    // submits it atomically; the idempotency key makes safe retries possible.
+    if (wallet.custody === 'internal' && wallet.chain === 'SOLANA') {
+      this._setTransactionState({ step: 'building-signing-submitting' });
+      try {
+        const result = await executeEarnTx(this._api, {
+          action,
+          provider: params.provider,
+          opportunity: params.opportunity,
+          amount: params.amount,
+          address: wallet.address,
+          idempotencyKey: randomUUID(),
+          waitForConfirmation: true,
+        });
+        if (result.status === 'SUCCESS') return { status: 'success', hash: result.signature };
+        if (result.status === 'SUBMITTED') return { status: 'pending', hash: result.signature };
+        return { status: 'error', hash: result.signature, details: 'Solana Earn transaction failed' };
+      } catch (error) {
+        return { status: 'error', details: error instanceof Error ? error.message : String(error) };
+      }
     }
 
     const { build } = await buildEarnTx(this._api, {
@@ -3352,6 +3404,30 @@ export class PollarClient {
       address: wallet.address,
     });
     if ('unsignedTransaction' in build) {
+      if (wallet.custody === 'external') {
+        const solanaConnection = await this._connectedSolanaWallet();
+        const adapter = solanaConnection?.adapter;
+        if (!adapter?.signSolanaTransaction) return { status: 'error', details: 'Connected Solana wallet cannot sign transactions' };
+        try {
+          const raw = Uint8Array.from(atob(build.unsignedTransaction), (char) => char.charCodeAt(0));
+          this._setTransactionState({ step: 'signing' });
+          const signed = await adapter.signSolanaTransaction(raw, `solana:${this.getNetwork()}`);
+          let binary = '';
+          for (const byte of signed) binary += String.fromCharCode(byte);
+          this._setTransactionState({ step: 'submitting' });
+          const result = await submitEarnTx(this._api, {
+            address: wallet.address,
+            signedTransaction: btoa(binary),
+            idempotencyKey: randomUUID(),
+            waitForConfirmation: true,
+          });
+          if (result.status === 'SUCCESS') return { status: 'success', hash: result.signature };
+          if (result.status === 'SUBMITTED') return { status: 'pending', hash: result.signature };
+          return { status: 'error', hash: result.signature, details: 'Solana Earn transaction failed' };
+        } catch (error) {
+          return { status: 'error', details: error instanceof Error ? error.message : String(error) };
+        }
+      }
       return { status: 'prepared', chain: build.chain, unsignedTransaction: build.unsignedTransaction, encoding: build.encoding };
     }
     // Current Stellar providers return a prebuilt XDR (submit as-is); the
@@ -3359,6 +3435,12 @@ export class PollarClient {
     // runTx (re-simulated server-side), mirroring swap.
     if ('unsignedXdr' in build) return this.signAndSubmitTx(build.unsignedXdr);
     return this.runTx(build.operation, build.params);
+  }
+
+  /** Selects the wallet from the provider capability registry. */
+  private _earnWallet(provider: EarnProviderId): WalletInfo | null {
+    const chain = EARN_PROVIDER_CHAIN[provider];
+    return this.getWallets().find((item) => item.chain === chain) ?? (chain === 'STELLAR' ? this.getWallet() : null);
   }
 
   // ─── Borrow (Jupiter collateralised lending) ───────────────────────────────

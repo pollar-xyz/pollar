@@ -1,6 +1,7 @@
 import type {
   EarnBuildBody,
   EarnBuildContent,
+  EarnExecuteContent,
   EarnOpportunitiesContent,
   EarnPosition,
   EarnProviderId,
@@ -57,5 +58,21 @@ export async function getEarnPosition(
 export async function buildEarnTx(api: PollarApiClient, body: EarnBuildBody): Promise<EarnBuildContent> {
   const { data, error } = await api.POST('/earn/build', { body });
   if (!data?.content || error) throw new Error(errMessage(error, 'Failed to build earn transaction'));
+  return data.content;
+}
+
+/** Build and execute a custodial Solana Earn transaction server-side. */
+export async function executeEarnTx(api: PollarApiClient, body: EarnBuildBody & { idempotencyKey: string; waitForConfirmation?: boolean }): Promise<EarnExecuteContent> {
+  const client = api as unknown as { POST(path: string, init: { body: typeof body }): Promise<{ data?: { content?: EarnExecuteContent }; error?: unknown }> };
+  const { data, error } = await client.POST('/earn/execute', { body });
+  if (!data?.content || error) throw new Error(errMessage(error, 'Failed to execute earn transaction'));
+  return data.content;
+}
+
+/** Submit an unsigned Jupiter transaction after an external Solana wallet signs it. */
+export async function submitEarnTx(api: PollarApiClient, body: { address: string; signedTransaction: string; idempotencyKey: string; waitForConfirmation?: boolean }): Promise<EarnExecuteContent> {
+  const client = api as unknown as { POST(path: string, init: { body: typeof body }): Promise<{ data?: { content?: EarnExecuteContent }; error?: unknown }> };
+  const { data, error } = await client.POST('/earn/submit', { body });
+  if (!data?.content || error) throw new Error(errMessage(error, 'Failed to submit earn transaction'));
   return data.content;
 }

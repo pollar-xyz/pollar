@@ -1029,10 +1029,18 @@ export type EarnBuildBody = NonNullable<pollarPaths['/earn/build']['post']['requ
 
 export type EarnBuildContent = pollarPaths['/earn/build']['post']['responses'][200]['content']['application/json']['content'];
 
+export type EarnExecuteContent = {
+  requestId: string;
+  address: string;
+  signature: string;
+  status: 'SUBMITTED' | 'SUCCESS' | 'FAILED';
+  feeLamports: string;
+};
+
 /** The ready-to-sign payload a build returns. */
 export type EarnBuild = EarnBuildContent['build'];
 
-/** Result of Earn execution; Jupiter is prepared but not submitted by Core. */
+/** Result of Earn execution. External wallets receive a prepared Solana tx; custodial wallets submit it in Pollar. */
 export type EarnOutcome =
   | SubmitOutcome
   | { status: 'prepared'; chain: 'SOLANA'; unsignedTransaction: string; encoding: 'base64' };

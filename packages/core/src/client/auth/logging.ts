@@ -17,11 +17,15 @@ export function logApiError(
   level: 'warn' | 'error' = 'error',
 ): void {
   const { body, error, data } = detail;
+  const cause = error ?? data;
+  const serializedCause = cause instanceof Error
+    ? { name: cause.name, message: cause.message, ...(cause.stack ? { stack: cause.stack } : {}) }
+    : cause;
   logger[level](`[PollarClient:auth] ${route} failed`, {
     route,
     ...(body !== undefined ? { body: redactBody(body) } : {}),
     // The cause is a server `data`/`error` envelope that can carry nested token
     // material — redact it recursively rather than logging it raw.
-    cause: redactDeep(error ?? data),
+    cause: redactDeep(serializedCause),
   });
 }

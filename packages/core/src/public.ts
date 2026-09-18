@@ -72,5 +72,5 @@ export { listDistributionRules, claimDistributionRule } from './api/endpoints/di
 export { quoteSwap, getSwapConfig, getSwapTokens } from './api/endpoints/swap';
 
 // ─── Earn endpoints ───────────────────────────────────────────────────────────
-export { getEarnProviders, getEarnOpportunities, getEarnPosition, buildEarnTx } from './api/endpoints/earn';
+export { getEarnProviders, getEarnOpportunities, getEarnPosition, buildEarnTx, executeEarnTx, submitEarnTx } from './api/endpoints/earn';
 export { getBorrowMarkets, getBorrowPositions, buildBorrowTx } from './api/endpoints/borrow';

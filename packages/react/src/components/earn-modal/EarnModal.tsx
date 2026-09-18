@@ -195,7 +195,11 @@ export function EarnModal({ onClose }: EarnModalProps) {
       : network === 'testnet'
         ? 'testnet'
         : 'public';
-  const explorerUrl = hash ? `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}` : null;
+  const explorerUrl = hash
+    ? selectedOpportunity?.asset.chain === 'SOLANA'
+      ? `https://solscan.io/tx/${hash}${network === 'testnet' ? '?cluster=devnet' : ''}`
+      : `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}`
+    : null;
 
   const isInProgress = (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step);
   const showBack = step === 'tx' && (!!preparedSolanaTx || transaction.step === 'error' || transaction.step === 'success') && !isInProgress;
@@ -296,14 +300,13 @@ export function EarnModal({ onClose }: EarnModalProps) {
     if (outcome.status === 'success' || outcome.status === 'pending' || outcome.status === 'prepared') {
       setAmount('');
       refreshPosition();
+      void refreshWalletBalance();
     }
   }
 
   async function handleRetry() {
     if (transaction.step !== 'error' || !provider || !opportunityId) return;
-    const params = { provider, opportunity: opportunityId, amount };
-    if (tab === 'deposit') await earnDeposit(params);
-    else await earnWithdraw(params);
+    await handleSubmit();
   }
 
   function handleCopyHash() {
