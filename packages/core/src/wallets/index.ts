@@ -1,6 +1,6 @@
 export { FreighterAdapter } from './FreighterAdapter';
 export { AlbedoAdapter } from './AlbedoAdapter';
-export { WalletType, isInteractiveAuthAdapter } from './types';
+export { WalletType, isExternalIdentityAuthAdapter, isInteractiveAuthAdapter } from './types';
 export type {
   WalletAdapter,
   WalletAdapterMeta,
@@ -18,4 +18,6 @@ export type {
   AuthOption,
   InteractiveAuthAdapter,
   ProviderAuthState,
+  ExternalIdentityAuthAdapter,
+  ExternalIdentityAuthProof,
 } from './types';

@@ -1,6 +1,6 @@
 import { abortError } from '../../lib/abort';
 import { AUTH_ERROR_CODES } from '../../types';
-import { WalletAdapter } from '../../wallets';
+import { isExternalIdentityAuthAdapter, WalletAdapter } from '../../wallets';
 import { authenticate } from './authenticate';
 import { createAuthSession, FlowDeps } from './deps';
 import { logApiError } from './logging';
@@ -81,6 +81,44 @@ export async function loginWithAdapter(adapter: WalletAdapter, deps: FlowDeps): 
 
     const { address } = await withSignal(adapter.connect(), signal);
     connectedWallet = address;
+
+    // Identity-backed adapters (Turnkey today) prove their provider session and
+    // its access to the wallet account. This deliberately bypasses SEP-10 so an
+    // ordinary login never invokes the wallet's on-chain Ed25519 signing key.
+    if (isExternalIdentityAuthAdapter(adapter)) {
+      currentStep = 'authenticating_wallet';
+      setAuthState({ step: 'authenticating_wallet' });
+
+      const challengeBody = { clientSessionId, provider: adapter.identityProvider };
+      const { data: challengeData, error: challengeError } = await api.POST('/auth/external/identity/challenge', {
+        body: challengeBody,
+        signal,
+      });
+      if (challengeError || !challengeData?.success) {
+        if (!challengeError) logApiError(logger, 'POST /auth/external/identity/challenge', { data: challengeData });
+        throw new Error('Failed to obtain an external identity challenge');
+      }
+
+      const proof = await withSignal(adapter.getIdentityAuthProof(challengeData.content.challenge), signal);
+      const identityBody = {
+        clientSessionId,
+        provider: adapter.identityProvider,
+        walletAddress: address,
+        ...proof,
+      };
+      const { data: identityData, error: identityError } = await api.POST('/auth/external/identity', {
+        body: identityBody,
+        signal,
+      });
+      if (identityError || !identityData?.success) {
+        if (!identityError) logApiError(logger, 'POST /auth/external/identity', { data: identityData });
+        throw new Error('External identity authentication failed');
+      }
+
+      await deps.storeWalletAdapter(adapter, type);
+      await authenticate(clientSessionId, deps, connectedWallet);
+      return;
+    }
 
     // SEP-10 challenge-response: prove control of the wallet key. Get a
     // server-signed challenge tx, have the wallet counter-sign it, and send the

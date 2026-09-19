@@ -604,6 +604,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/external/identity/challenge": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never };
+        get?: never;
+        put?: never;
+        post: operations["postAuthExternalIdentityChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/external/identity": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never };
+        get?: never;
+        put?: never;
+        post: operations["postAuthExternalIdentity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/passkey/challenge": {
         parameters: {
             query?: never;
@@ -4399,6 +4421,57 @@ export interface operations {
                         code: string;
                         message?: string;
                         resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postAuthExternalIdentityChallenge: {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never };
+        requestBody: {
+            content: {
+                "application/json": { clientSessionId: string; provider: "turnkey" };
+            };
+        };
+        responses: {
+            200: {
+                headers: { [name: string]: unknown };
+                content: {
+                    "application/json": {
+                        code: "SDK_WALLET_CHALLENGE_CREATED";
+                        success: true;
+                        content: { clientSessionId: string; challenge: string };
+                    };
+                };
+            };
+        };
+    };
+    postAuthExternalIdentity: {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never };
+        requestBody: {
+            content: {
+                "application/json": {
+                    clientSessionId: string;
+                    provider: "turnkey";
+                    walletAddress: string;
+                    sessionToken: string;
+                    challengeSignature: string;
+                    accountRequest: {
+                        body: string;
+                        stampHeaderName: "X-Stamp";
+                        stampHeaderValue: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            200: {
+                headers: { [name: string]: unknown };
+                content: {
+                    "application/json": {
+                        code: "SDK_EXTERNAL_AUTHENTICATED";
+                        success: true;
+                        content: { clientSessionId: string; walletAddress: string; provider: string };
                     };
                 };
             };

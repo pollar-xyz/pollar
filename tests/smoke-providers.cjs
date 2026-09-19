@@ -69,6 +69,12 @@ async function waitFor(cond, timeoutMs = 1000) {
     if (url.includes('/auth/wallet')) {
       return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
     }
+    if (url.includes('/auth/external/identity/challenge')) {
+      return new Response(JSON.stringify({ success: true, content: { challenge: 'nonce_test' } }), { status: 200 });
+    }
+    if (url.includes('/auth/external/identity')) {
+      return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
+    }
     if (url.includes('/auth/email/verify-code') && nextVerifyCode) {
       const code = nextVerifyCode;
       nextVerifyCode = null;
@@ -399,7 +405,55 @@ async function waitFor(cond, timeoutMs = 1000) {
     walletChallengeXdr = null;
   }
 
-  console.log('\n── 14. request-body OTP `code` is masked in logs (redactBody) ──');
+  console.log('\n── 14. identity-backed adapter bypasses SEP-10 ───────────────');
+  {
+    let proofChallenge = null;
+    let signTransactionCalls = 0;
+    const adapter = {
+      type: 'turnkey-test',
+      meta: { label: 'Turnkey Test' },
+      identityProvider: 'turnkey',
+      isAvailable: async () => true,
+      connect: async () => ({ address: 'Gturnkey' }),
+      getPublicKey: async () => 'Gturnkey',
+      getIdentityAuthProof: async (challenge) => {
+        proofChallenge = challenge;
+        return {
+          sessionToken: 'turnkey.jwt',
+          challenge,
+          challengeSignature: 'a'.repeat(128),
+          accountRequest: {
+            body: JSON.stringify({ organizationId: 'org', walletId: 'wallet', address: 'Gturnkey' }),
+            stamp: 'turnkey-stamp',
+          },
+        };
+      },
+      signTransaction: async () => {
+        signTransactionCalls++;
+        return { signedTxXdr: 'SHOULD_NOT_BE_CALLED' };
+      },
+      signAuthEntry: async () => ({ signedAuthEntry: 'x' }),
+    };
+    const c = new sdk.PollarClient({
+      apiKey: 'pk_identity',
+      storage: sdk.createMemoryAdapter(),
+      baseUrl: 'https://x.test',
+      logLevel: 'silent',
+      walletAdapters: [adapter],
+    });
+    await c.ready();
+    calls.length = 0;
+    c.login({ provider: 'turnkey-test' });
+    await waitFor(() => calls.some((x) => x.url.includes('/auth/external/identity') && !x.url.includes('/challenge')));
+    check('Core requested the one-time identity challenge', calls.some((x) => x.url.includes('/auth/external/identity/challenge')));
+    check('  adapter received the server nonce', proofChallenge === 'nonce_test', proofChallenge);
+    check('  Core submitted the identity proof', calls.some((x) => x.url.includes('/auth/external/identity') && !x.url.includes('/challenge')));
+    check('  no SEP-10 challenge was requested', !calls.some((x) => x.url.includes('/auth/wallet/challenge')));
+    check('  no Stellar transaction was signed during login', signTransactionCalls === 0, signTransactionCalls);
+    c.destroy();
+  }
+
+  console.log('\n── 15. request-body OTP `code` is masked in logs (redactBody) ──');
   {
     const logs = [];
     const spyLogger = { error: (...a) => logs.push(a), warn() {}, info() {}, debug() {} };

@@ -23,7 +23,13 @@ export { computeJwkThumbprint, canonicalEcJwk } from './keys/thumbprint';
 export { buildProof, normalizeHtu } from './dpop';
 export type { BuildProofArgs } from './dpop';
 
-export { FreighterAdapter, AlbedoAdapter, WalletType, isInteractiveAuthAdapter } from './wallets';
+export {
+  FreighterAdapter,
+  AlbedoAdapter,
+  WalletType,
+  isExternalIdentityAuthAdapter,
+  isInteractiveAuthAdapter,
+} from './wallets';
 export type {
   WalletAdapter,
   WalletAdapterMeta,
@@ -41,6 +47,8 @@ export type {
   AuthOption,
   InteractiveAuthAdapter,
   ProviderAuthState,
+  ExternalIdentityAuthAdapter,
+  ExternalIdentityAuthProof,
 } from './wallets';
 export type * from './types';
 export { AUTH_ERROR_CODES, PollarNetworkError, isPollarNetworkError, PollarApiError, isPollarApiError } from './types';
