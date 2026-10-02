@@ -119,6 +119,8 @@ export function SwapModal({ onClose }: SwapModalProps) {
   const balances = walletBalance.step === 'loaded' ? walletBalance.data.balances : [];
   const assetRecords = enabledAssets.step === 'loaded' ? enabledAssets.data.assets : [];
   const isLoadingData = walletBalance.step === 'loading' || enabledAssets.step === 'loading';
+  const availableFor = (code: string, issuer?: string): string | undefined =>
+    balances.find((b) => b.code === code && (b.issuer ?? '') === (issuer ?? ''))?.available ?? undefined;
 
   // Sell: native XLM + every asset the wallet has a trustline for, even at a 0
   // balance - so the user always sees what they hold and knows when to fund
@@ -162,6 +164,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
       ref: toRef(a),
       code: a.code,
       issuer: a.issuer,
+      available: availableFor(a.code, a.issuer),
       enabledInApp: a.enabledInApp,
     }));
   const enabledKeys = new Set(enabledBuy.map(optKey));
@@ -170,12 +173,17 @@ export function SwapModal({ onClose }: SwapModalProps) {
       ref: catalogRef(tk.code, tk.issuer),
       code: tk.code,
       issuer: tk.issuer,
+      available: availableFor(tk.code, tk.issuer),
       enabledInApp: false,
     }))
     .filter((o) => !enabledKeys.has(optKey(o)));
   const knownKeys = new Set([...enabledKeys, ...catalogBuy.map(optKey)]);
-  const customBuy = customTokens.filter((o) => !knownKeys.has(optKey(o)));
-  const buyOptions: SwapAssetOption[] = [...enabledBuy, ...catalogBuy, ...customBuy].filter((o) => optKey(o) !== buyKeyOfSell);
+  const customBuy = customTokens
+    .filter((o) => !knownKeys.has(optKey(o)))
+    .map((o) => ({ ...o, available: availableFor(o.code, o.issuer) }));
+  const buyOptions: SwapAssetOption[] = [...enabledBuy, ...catalogBuy, ...customBuy].filter(
+    (o) => optKey(o) !== buyKeyOfSell || optKey(o) === (selectedBuy ? optKey(selectedBuy) : ''),
+  );
 
   // Auto-select the first sell / buy asset once options are available, and keep a
   // valid selection if the list changes - so the pickers never sit empty.
@@ -328,6 +336,17 @@ export function SwapModal({ onClose }: SwapModalProps) {
     if (transaction.step === 'error' && quote) await swap(quote);
   }
 
+  function handleMax() {
+    if (selectedSell?.available !== undefined) setAmount(selectedSell.available);
+  }
+
+  function handleReverse() {
+    if (!selectedSell || !selectedBuy) return;
+    const previousSell = selectedSell;
+    setSelectedSell(selectedBuy);
+    setSelectedBuy(previousSell);
+  }
+
   function handleCopyHash() {
     if (!hash) return;
     navigator.clipboard.writeText(hash).then(() => {
@@ -382,6 +401,8 @@ export function SwapModal({ onClose }: SwapModalProps) {
         onRefresh={handleRefresh}
         onSelectSell={setSelectedSell}
         onSelectBuy={setSelectedBuy}
+        onReverse={handleReverse}
+        onMax={handleMax}
         onAddCustomToken={addCustomToken}
         onAmountChange={setAmount}
         onProviderChange={setProvider}

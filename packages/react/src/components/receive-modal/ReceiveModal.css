@@ -1,49 +1,114 @@
 /* ---- Receive modal ---- */
 .pollar-receive-modal {
-  max-width: 380px;
+  max-width: 400px;
+  padding: 1.5rem;
 }
 
-/* ---- QR wrapper (centered, with padding and subtle border) ---- */
+/* ---- QR section ------------------------------------------------------------- */
 .pollar-receive-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.875rem;
+  margin-bottom: 1rem;
+  padding: 1.25rem 1rem 1.375rem;
+  border: 1px solid color-mix(in srgb, var(--pollar-accent) 12%, var(--pollar-border));
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--pollar-accent) 4%, var(--pollar-input-bg));
+}
+
+.pollar-receive-network-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.375rem 0.7rem;
+  border-radius: 999px;
+  background: var(--pollar-accent);
+  color: var(--pollar-btn-primary-fg, #ffffff);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.pollar-receive-network-dot {
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.9;
+}
+
+.pollar-receive-qr-frame {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.25rem;
-  margin-bottom: 1rem;
-  background: var(--pollar-input-bg);
-  border: 1px solid var(--pollar-border);
-  border-radius: var(--pollar-card-border-radius, 10px);
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--pollar-accent) 28%, transparent);
+  border-radius: 1rem;
+  background: #ffffff;
+  box-shadow: 0 12px 26px color-mix(in srgb, var(--pollar-accent) 16%, transparent);
 }
 
-/* ---- Instructions ---- */
-.pollar-receive-instructions {
-  font-size: 0.8125rem;
-  color: var(--pollar-muted);
-  text-align: center;
-  margin: 0 0 1rem;
-  line-height: 1.5;
+.pollar-receive-qr-frame svg {
+  display: block;
+  max-width: min(58vw, 220px);
+  height: auto;
 }
 
-/* ---- Address row (address + copy button side by side) ---- */
-.pollar-receive-address-row {
+.pollar-receive-qr-mark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  transform: translate(-50%, -50%);
+  border: 3px solid #ffffff;
+  border-radius: 0.75rem;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16);
+  overflow: hidden;
+}
+
+.pollar-receive-qr-mark svg {
+  width: 22px;
+  height: 24px;
+}
+
+/* ---- Address row + copy action ---------------------------------------------- */
+.pollar-receive-address-actions {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  background: var(--pollar-input-bg);
+  margin-bottom: 0;
+}
+
+.pollar-receive-address-row {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
   border: 1px solid var(--pollar-border);
-  border-radius: var(--pollar-card-border-radius, 10px);
-  padding: 0.625rem 0.875rem;
-  margin-bottom: 1rem;
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--pollar-input-bg);
 }
 
 /* ---- Address text ---- */
 .pollar-receive-address {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
   font-size: 0.75rem;
   font-family: monospace;
   color: var(--pollar-text);
-  word-break: break-all;
-  line-height: 1.5;
+  line-height: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---- Copy button ---- */
@@ -52,13 +117,14 @@
   align-items: center;
   gap: 0.375rem;
   flex-shrink: 0;
+  min-height: 2rem;
   padding: 0.375rem 0.75rem;
-  border-radius: var(--pollar-buttons-border-radius, 6px);
-  border: 1px solid var(--pollar-border);
-  background: none;
+  border: 0;
+  border-radius: 999px;
+  background: var(--pollar-accent);
   font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--pollar-muted);
+  font-weight: 700;
+  color: var(--pollar-btn-primary-fg, #ffffff);
   cursor: pointer;
   transition:
     color 150ms,
@@ -66,6 +132,52 @@
 }
 
 .pollar-receive-copy-btn:hover {
-  color: var(--pollar-text);
-  background: var(--pollar-border);
+  filter: brightness(0.94);
+}
+
+.pollar-receive-copy-btn:focus-visible,
+.pollar-receive-modal .pollar-modal-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pollar-accent) 24%, transparent);
+}
+
+.pollar-receive-warning {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin: 0 0 0.625rem;
+  padding-top: 0.375rem;
+  color: var(--pollar-muted);
+  font-size: 0.6875rem;
+  line-height: 1.25rem;
+  text-align: center;
+}
+
+.pollar-receive-warning svg {
+  flex: 0 0 auto;
+}
+
+.pollar-receive-modal .pollar-footer {
+  margin-top: 0;
+  padding-top: 1rem;
+}
+
+@media (max-width: 480px) {
+  .pollar-receive-modal {
+    max-width: calc(100vw - 2rem);
+    padding: 1.25rem;
+  }
+
+  .pollar-receive-qr-frame svg {
+    max-width: min(58vw, 200px);
+  }
+
+  .pollar-receive-address-row {
+    gap: 0.4rem;
+  }
+
+  .pollar-receive-copy-btn {
+    padding-inline: 0.625rem;
+  }
 }

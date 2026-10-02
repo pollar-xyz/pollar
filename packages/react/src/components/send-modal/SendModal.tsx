@@ -4,7 +4,7 @@ import { toBaseUnits, WalletBalanceRecord, WalletChain } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { useChains } from '../../useChains';
-import { addressForChain, resolveChain } from '../ChainSelect';
+import { resolveChain } from '../ChainSelect';
 import '../shared.css';
 import '../transaction-modal/TransactionModal.css';
 import './SendModal.css';
@@ -32,7 +32,6 @@ export function SendModal({ onClose }: SendModalProps) {
     signAndSubmitTx,
     tx: transaction,
     wallet,
-    wallets,
     network,
     styles,
   } = usePollar();
@@ -58,7 +57,6 @@ export function SendModal({ onClose }: SendModalProps) {
     if (selectedChain === null && chains.length > 0) setSelectedChain(chains[0]!);
   }, [chains, selectedChain]);
 
-  const walletAddress = addressForChain(wallets, selectedChain);
   // Solana joined Stellar via the atomic endpoint; Polygon has no transfer path
   // in the backend yet, so it can be browsed but not sent from.
   const canSendOnChain = selectedChain === 'STELLAR' || selectedChain === 'SOLANA';
@@ -211,6 +209,32 @@ export function SendModal({ onClose }: SendModalProps) {
     }
   }
 
+  function handleMax() {
+    if (selectedAsset?.available !== null && selectedAsset?.available !== undefined) {
+      setAmount(selectedAsset.available);
+      setFormError('');
+    }
+  }
+
+  async function handlePaste() {
+    if (!navigator.clipboard?.readText) {
+      setFormError('Clipboard access is not available. Paste the address manually.');
+      return;
+    }
+
+    try {
+      const value = (await navigator.clipboard.readText()).trim();
+      if (!value) {
+        setFormError('The clipboard is empty.');
+        return;
+      }
+      setDestination(value);
+      setFormError('');
+    } catch {
+      setFormError('Could not read the clipboard. Paste the address manually.');
+    }
+  }
+
   function handleCopyHash() {
     if (!hash) return;
     navigator.clipboard.writeText(hash).then(() => {
@@ -245,11 +269,8 @@ export function SendModal({ onClose }: SendModalProps) {
         txTitle={txTitle}
         assets={sortedAssets}
         selectedAsset={selectedAsset}
-        chains={chains}
         selectedChain={selectedChain}
-        walletAddress={walletAddress}
         canSendOnChain={canSendOnChain}
-        onSelectChain={setSelectedChain}
         amount={amount}
         destination={destination}
         formError={formError}
@@ -266,6 +287,8 @@ export function SendModal({ onClose }: SendModalProps) {
         onRefresh={() => void refreshWalletBalance()}
         onSelectAsset={setSelectedAsset}
         onAmountChange={setAmount}
+        onMax={handleMax}
+        onPaste={handlePaste}
         onDestinationChange={setDestination}
         onSubmit={() => void handleSubmit()}
         onSignAndSend={handleSignAndSend}
