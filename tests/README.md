@@ -223,6 +223,14 @@ needed. Both assertions fail against the provider that predates the fix.
 
 ## Requirements
 
+### Ramp KYC UI handoff
+
+Run `node tests/smoke-ramp-kyc.cjs` to test the real RampWidget hooks with mocked
+API/presentation. Both Buy and Sell open scoped KYC on the explicit backend gate.
+Cancellation and late approval preserve the form without continuing; approval
+retries the original quote once, and duplicate approvals, repeated gates and
+expired quotes stop safely. No live vendor requests or transactions are made.
+
 - Node ≥ 20 (the SDK runtime floor)
 - Built `dist/` (run `npm run build` first)
 - No external services — tests are fully self-contained

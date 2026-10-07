@@ -10,16 +10,17 @@ import './KycModal.css';
 import { modalChrome } from '../modal-theme';
 
 interface KycModalProps {
+  corridorId?: string;
   onClose: () => void;
   /** ISO 3166-1 alpha-2 country code to filter providers. Defaults to 'MX'. */
   country?: string;
-  /** KYC level required. Defaults to 'basic'. */
+  /** Legacy fallback for older backends. Named options select their own workflow. */
   level?: 'basic' | 'intermediate' | 'enhanced';
   /** Called when KYC is successfully approved. */
   onApproved?: () => void;
 }
 
-export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved }: KycModalProps) {
+export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved, corridorId }: KycModalProps) {
   const { getClient, styles } = usePollar();
 
   const [step, setStep] = useState<KycStep>('select_provider');
@@ -28,18 +29,23 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved 
   const [session, setSession] = useState<KycStartResponse | null>(null);
   const [kycStatus, setKycStatus] = useState<KycStatusValue>('none');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const client = getClient();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const loadProviders = useCallback(() => {
     setIsLoading(true);
+    setError(null);
     return getClient()
-      .getKycProviders(country)
+      .getKycProviders(country, corridorId)
       .then((result) => setProviders(result.providers))
-      .catch(() => setProviders([]))
+      .catch(() => {
+        setProviders([]);
+        setError('Could not load verification options. Please refresh to try again.');
+      })
       .finally(() => setIsLoading(false));
-  }, [getClient, country]);
+  }, [getClient, country, corridorId]);
 
   useEffect(() => {
     void loadProviders();
@@ -47,9 +53,10 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved 
 
   async function handleSelectProvider(provider: KycProvider) {
     setSelectedProvider(provider);
+    setError(null);
     setIsLoading(true);
     try {
-      const result = await client.resolveKyc(provider.id, level);
+      const result = await client.resolveKyc(provider.id, provider.levels[0] ?? level, country, corridorId);
       if (result.alreadyApproved) {
         setKycStatus('approved');
         setStep('done');
@@ -59,6 +66,7 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved 
       setSession(result as KycStartResponse);
       setStep('verifying');
     } catch {
+      setError('Could not start verification. Please try again.');
       setStep('select_provider');
     } finally {
       setIsLoading(false);
@@ -67,15 +75,20 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved 
 
   async function handleDoneVerifying() {
     if (!selectedProvider) return;
+    setError(null);
     setStep('polling');
     try {
-      const finalStatus = await client.pollKycStatus(selectedProvider.id, { intervalMs: 3000, timeoutMs: 120_000 });
+      const finalStatus = await client.pollKycStatus(selectedProvider.id, {
+        intervalMs: 3000,
+        timeoutMs: 120_000,
+        ...(corridorId ? { corridorId } : {}),
+      });
       setKycStatus(finalStatus);
       setStep('done');
       if (finalStatus === 'approved') onApproved?.();
     } catch {
-      setKycStatus('rejected');
-      setStep('done');
+      setError('We could not confirm your result yet. Check again shortly; this does not mean your verification was rejected.');
+      setStep('verifying');
     }
   }
 
@@ -91,6 +104,7 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved 
         session={session}
         kycStatus={kycStatus}
         isLoading={isLoading}
+        error={error}
         onSelectProvider={handleSelectProvider}
         onDoneVerifying={handleDoneVerifying}
         onRefresh={() => void loadProviders()}

@@ -183,6 +183,7 @@ interface PollarContextValue {
   openEnabledAssetsModal: () => void;
   // kyc
   openKycModal: (options?: {
+    corridorId?: string;
     country?: string;
     level?: 'basic' | 'intermediate' | 'enhanced';
     onApproved?: () => void;
@@ -564,6 +565,7 @@ export function PollarProvider({
   const [transactionModalOpen, setTransactionModalOpen] = useState(false);
   const [kycModalOpen, setKycModalOpen] = useState(false);
   const [kycModalOptions, setKycModalOptions] = useState<{
+    corridorId?: string;
     country?: string;
     level?: 'basic' | 'intermediate' | 'enhanced';
     onApproved?: () => void;
@@ -722,6 +724,7 @@ export function PollarProvider({
           <KycModal
             onClose={() => setKycModalOpen(false)}
             {...(kycModalOptions.country !== undefined && { country: kycModalOptions.country })}
+            {...(kycModalOptions.corridorId !== undefined && { corridorId: kycModalOptions.corridorId })}
             {...(kycModalOptions.level !== undefined && { level: kycModalOptions.level })}
             {...(kycModalOptions.onApproved !== undefined && { onApproved: kycModalOptions.onApproved })}
           />

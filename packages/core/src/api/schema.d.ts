@@ -6582,6 +6582,7 @@ export interface operations {
     getKycStatus: {
         parameters: {
             query?: {
+                corridorId?: string;
                 providerId?: string;
             };
             header?: never;
@@ -6662,6 +6663,7 @@ export interface operations {
     getKycProviders: {
         parameters: {
             query: {
+                corridorId?: string;
                 country: string;
             };
             header?: never;
@@ -6735,9 +6737,12 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    corridorId?: string;
                     providerId: string;
+                    /** ISO 3166-1 alpha-2 country code. */
+                    country?: string;
                     /** @enum {string} */
-                    level: "basic" | "intermediate" | "enhanced";
+                    level?: "basic" | "intermediate" | "enhanced";
                 };
             };
         };
