@@ -3286,26 +3286,23 @@ export class PollarClient {
 
   // --- KYC ------------------------------------------------------------------
 
-  getKycStatus(providerId?: string, corridorId?: string) {
-    return getKycStatus(this._api, providerId, corridorId);
+  getKycStatus(providerId?: string) {
+    return getKycStatus(this._api, providerId);
   }
 
-  getKycProviders(country: string, corridorId?: string) {
-    return getKycProviders(this._api, country, corridorId);
+  getKycProviders(country: string) {
+    return getKycProviders(this._api, country);
   }
 
   startKyc(body: KycStartBody): Promise<KycStartResponse> {
     return startKyc(this._api, body);
   }
 
-  resolveKyc(providerId: string, level?: KycLevel, country?: string, corridorId?: string) {
-    return resolveKyc(this._api, providerId, level, country, corridorId);
+  resolveKyc(providerId: string, level?: KycLevel) {
+    return resolveKyc(this._api, providerId, level);
   }
 
-  pollKycStatus(
-    providerId: string,
-    opts?: { intervalMs?: number; timeoutMs?: number; corridorId?: string },
-  ): Promise<KycStatus> {
+  pollKycStatus(providerId: string, opts?: { intervalMs?: number; timeoutMs?: number }): Promise<KycStatus> {
     return pollKycStatus(this._api, providerId, opts);
   }
 

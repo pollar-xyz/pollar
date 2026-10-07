@@ -9,10 +9,9 @@ import type { PollarApiClient } from '../client';
 export async function getKycStatus(
   api: PollarApiClient,
   providerId?: string,
-  corridorId?: string,
 ): Promise<{ status: KycStatus; level?: KycLevel | undefined; providerId: string; expiresAt?: string }> {
   const { data, error } = await api.GET('/kyc/status', {
-    params: { query: { ...(providerId ? { providerId } : {}), ...(corridorId ? { corridorId } : {}) } },
+    params: { query: providerId ? { providerId } : {} },
   });
   if (!data?.content || error) {
     throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to get KYC status');
@@ -24,14 +23,8 @@ export async function getKycStatus(
  * GET /kyc/providers
  * Returns available KYC providers for a given country.
  */
-export async function getKycProviders(
-  api: PollarApiClient,
-  country: string,
-  corridorId?: string,
-): Promise<{ providers: KycProvider[] }> {
-  const { data, error } = await api.GET('/kyc/providers', {
-    params: { query: { country, ...(corridorId ? { corridorId } : {}) } },
-  });
+export async function getKycProviders(api: PollarApiClient, country: string): Promise<{ providers: KycProvider[] }> {
+  const { data, error } = await api.GET('/kyc/providers', { params: { query: { country } } });
   if (!data?.content || error) throw new Error((error as any)?.code ?? (error as any)?.error ?? 'Failed to get KYC providers');
   return data.content;
 }
@@ -58,17 +51,10 @@ export async function resolveKyc(
   api: PollarApiClient,
   providerId: string,
   level: KycLevel = 'basic',
-  country?: string,
-  corridorId?: string,
 ): Promise<{ alreadyApproved: boolean } & Partial<KycStartResponse>> {
-  const { status } = await getKycStatus(api, providerId, corridorId);
+  const { status } = await getKycStatus(api, providerId);
   if (status === 'approved') return { alreadyApproved: true };
-  const started = await startKyc(api, {
-    providerId,
-    level,
-    ...(corridorId ? { corridorId } : {}),
-    ...(country ? { country: country.trim().toUpperCase() } : {}),
-  });
+  const started = await startKyc(api, { providerId, level });
   return { alreadyApproved: false, ...started };
 }
 
@@ -79,11 +65,11 @@ export async function resolveKyc(
 export async function pollKycStatus(
   api: PollarApiClient,
   providerId: string,
-  { intervalMs = 3000, timeoutMs = 300_000, corridorId }: { intervalMs?: number; timeoutMs?: number; corridorId?: string } = {},
+  { intervalMs = 3000, timeoutMs = 300_000 }: { intervalMs?: number; timeoutMs?: number } = {},
 ): Promise<KycStatus> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const { status } = await getKycStatus(api, providerId, corridorId);
+    const { status } = await getKycStatus(api, providerId);
     if (status === 'approved' || status === 'rejected') return status;
     await new Promise((r) => setTimeout(r, intervalMs));
   }

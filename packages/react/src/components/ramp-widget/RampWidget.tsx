@@ -16,8 +16,6 @@ import { RampWidgetTemplate } from './RampWidgetTemplate';
 import '../shared.css';
 import './RampWidget.css';
 import { modalChrome } from '../modal-theme';
-import { KycModal } from '../kyc-modal/KycModal';
-import { requiredRampKyc } from './ramp-kyc';
 
 interface RampWidgetProps {
   onClose: () => void;
@@ -146,18 +144,6 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   const [quotes, setQuotes] = useState<RampQuote[]>([]);
   const [selectedQuote, setSelectedQuote] = useState<RampQuote | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [pendingKyc, setPendingKyc] = useState<{
-    rampProviderId: string;
-    corridorId: string;
-    quote: RampQuote;
-  } | null>(null);
-  const kycAttempt = useRef<typeof pendingKyc>(null);
-  useEffect(
-    () => () => {
-      kycAttempt.current = null;
-    },
-    [],
-  );
 
   // status step
   const [txId, setTxId] = useState<string | null>(null);
@@ -393,7 +379,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     if (selectedQuote) void startRamp(selectedQuote);
   }
 
-  async function startRamp(quote: RampQuote, allowKycPrompt = true) {
+  async function startRamp(quote: RampQuote) {
     setIsLoading(true);
     setErrorMsg(null);
     try {
@@ -420,15 +406,6 @@ export function RampWidget({ onClose }: RampWidgetProps) {
       ) as RampResult;
       await applyResult(result);
     } catch (e) {
-      const requirement = requiredRampKyc(e);
-      if (requirement && allowKycPrompt) {
-        setStep(requiredFieldsOf(quote).length ? 'contact' : 'select_route');
-        setErrorMsg('Identity verification is required before continuing.');
-        const pending = { rampProviderId: requirement.rampProviderId, corridorId: requirement.corridorId, quote };
-        kycAttempt.current = pending;
-        setPendingKyc(pending);
-        return;
-      }
       setErrorMsg(rampErrorMessage(e, 'Failed to start the ramp.'));
       setStep('error');
     } finally {
@@ -476,29 +453,6 @@ export function RampWidget({ onClose }: RampWidgetProps) {
 
   const flowSteps = flowStepsOf(quotes, selectedQuote);
   const flowStepIndex = flowSteps.indexOf(STEP_LABEL[step] ?? '');
-
-  // Keep this widget mounted so cancelling KYC preserves the user's form.
-  // Approval retries the exact authorized quote once, never a new price/order.
-  if (pendingKyc) {
-    return (
-      <KycModal
-        country={country}
-        corridorId={pendingKyc.corridorId}
-        onClose={() => {
-          kycAttempt.current = null;
-          setPendingKyc(null);
-        }}
-        onApproved={() => {
-          // Ignore duplicate approvals or polling that finishes after cancellation.
-          if (kycAttempt.current !== pendingKyc) return;
-          kycAttempt.current = null;
-          const quote = pendingKyc.quote;
-          setPendingKyc(null);
-          void startRamp(quote, false);
-        }}
-      />
-    );
-  }
 
   return (
     <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
