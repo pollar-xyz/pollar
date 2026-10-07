@@ -2,6 +2,21 @@ import { createApiClient, fetchWithTimeout, PollarApiClient } from '../api/clien
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { getSwapConfig, getSwapTokens, quoteSwap } from '../api/endpoints/swap';
 import { buildEarnTx, getEarnOpportunities, getEarnPosition, getEarnProviders } from '../api/endpoints/earn';
+import {
+  createCardHolder,
+  getCardBalance,
+  getCardDepositAddresses,
+  getCardHolder,
+  getCardOccupations,
+  getCardProviders,
+  getCards,
+  getCardSecrets,
+  getCardSecretsPublicKey,
+  getCardTransactions,
+  issueCard,
+  submitCardKyc,
+} from '../api/endpoints/cards';
+import { createCardSecretsSession, openCardSecrets } from '../lib/card-secrets';
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
 import {
   completeWithdraw,
@@ -45,6 +60,16 @@ import {
   EarnPosition,
   EarnPositionParams,
   EarnTxParams,
+  CardBalance,
+  CardDepositAddress,
+  CardHolder,
+  CardInfo,
+  CardKycInput,
+  CardOccupation,
+  CardProvider,
+  CardProviderParams,
+  CardSecrets,
+  CardTransactionsPage,
   EnabledAssetRecord,
   EnabledAssetsState,
   KycLevel,
@@ -3561,6 +3586,87 @@ export class PollarClient {
     // runTx (re-simulated server-side), mirroring swap.
     if ('unsignedXdr' in build) return this.signAndSubmitTx(build.unsignedXdr);
     return this.runTx(build.operation, build.params);
+  }
+
+  // --- Cards -------------------------------------------------------------------
+
+  /**
+   * The card providers this app enabled on its network. An empty array means
+   * Cards is off for this app - hide any card UI. `cardProviderId` can be left
+   * out of every other cards call while there is exactly one.
+   */
+  async getCardProviders(): Promise<CardProvider[]> {
+    return (await getCardProviders(this._api)).providers;
+  }
+
+  /** The user's registration with the provider, or null before {@link createCardHolder}. */
+  async getCardHolder(params: CardProviderParams = {}): Promise<CardHolder | null> {
+    return (await getCardHolder(this._api, params.cardProviderId)).holder;
+  }
+
+  /**
+   * Register the user with the card provider. Name and email default to the
+   * profile the session carries; pass them when the app collects its own.
+   */
+  async createCardHolder(
+    params: CardProviderParams & { firstName?: string; lastName?: string; email?: string } = {},
+  ): Promise<CardHolder> {
+    return (await createCardHolder(this._api, params)).holder;
+  }
+
+  /**
+   * Send the user's identity data to the provider. `termsAccepted` must be true:
+   * the provider's terms (see `CardProvider.termsUrl`) are shown by the app.
+   * The returned holder carries the `verificationLink` the user opens to finish.
+   */
+  async submitCardKyc(params: CardProviderParams & { termsAccepted: boolean; kyc: CardKycInput }): Promise<CardHolder> {
+    return (await submitCardKyc(this._api, params)).holder;
+  }
+
+  /** Occupation codes the KYC form accepts. */
+  async getCardOccupations(params: CardProviderParams = {}): Promise<CardOccupation[]> {
+    return (await getCardOccupations(this._api, params.cardProviderId)).occupations;
+  }
+
+  /** The user's cards. Never includes card numbers; see {@link revealCardSecrets}. */
+  async getCards(params: CardProviderParams = {}): Promise<CardInfo[]> {
+    return (await getCards(this._api, params.cardProviderId)).cards;
+  }
+
+  /** Issue a virtual card. Needs an approved KYC. */
+  async issueCard(
+    params: CardProviderParams & { nickname?: string; limit?: { amount: number; frequency: string } } = {},
+  ): Promise<CardInfo> {
+    return (await issueCard(this._api, params)).card;
+  }
+
+  /** Credit limit, spending power and balance due, read live from the provider. */
+  async getCardBalance(params: CardProviderParams = {}): Promise<CardBalance | null> {
+    return (await getCardBalance(this._api, params.cardProviderId)).balance;
+  }
+
+  /** Deposits, purchases and fees, newest first. */
+  async getCardTransactions(
+    params: CardProviderParams & { cardId?: string; limit?: number; offset?: number } = {},
+  ): Promise<CardTransactionsPage> {
+    return getCardTransactions(this._api, params);
+  }
+
+  /** Where the card's collateral is deposited, one address per network the provider accepts. */
+  async getCardDepositAddresses(params: CardProviderParams = {}): Promise<CardDepositAddress[]> {
+    return (await getCardDepositAddresses(this._api, params.cardProviderId)).depositAddresses;
+  }
+
+  /**
+   * The full card number and CVC, decrypted on this device with a one-shot key
+   * the server never sees. Show them and drop them: never store or log the
+   * result. Web only (needs WebCrypto).
+   */
+  async revealCardSecrets(cardId: string, params: CardProviderParams = {}): Promise<CardSecrets> {
+    const { publicKeyPem } = await getCardSecretsPublicKey(this._api, params.cardProviderId);
+    const session = await createCardSecretsSession(publicKeyPem);
+    const encrypted = await getCardSecrets(this._api, cardId, { ...params, sessionId: session.sessionId });
+    return openCardSecrets(session, encrypted);
   }
 
   private _setTxHistoryState(next: TxHistoryState): void {

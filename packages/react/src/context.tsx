@@ -44,6 +44,7 @@ import { ReceiveModal } from './components/receive-modal/ReceiveModal';
 import { SendModal } from './components/send-modal/SendModal';
 import { SwapModal } from './components/swap-modal/SwapModal';
 import { EarnModal } from './components/earn-modal/EarnModal';
+import { CardModal } from './components/card-modal/CardModal';
 import { SessionsModal } from './components/sessions-modal/SessionsModal';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
@@ -248,6 +249,13 @@ interface PollarContextValue {
   earnWithdraw: (params: EarnTxParams) => Promise<SubmitOutcome>;
   /** Open the Earn modal. */
   openEarnModal: () => void;
+  // cards
+  /**
+   * Open the Cards modal: sign-up, identity verification, issuing, the card
+   * itself and its activity. The card calls live on {@link PollarClient}
+   * (`getCardProviders`, `issueCard`, `revealCardSecrets`, ...).
+   */
+  openCardModal: () => void;
   // distribution
   openDistributionRulesModal: () => void;
   // adapters
@@ -581,6 +589,8 @@ export function PollarProvider({
   const [sendModalKey, setSendModalKey] = useState(0);
   const [swapModalKey, setSwapModalKey] = useState(0);
   const [earnModalKey, setEarnModalKey] = useState(0);
+  const [cardModalOpen, setCardModalOpen] = useState(false);
+  const [cardModalKey, setCardModalKey] = useState(0);
   const [receiveModalOpen, setReceiveModalOpen] = useState(false);
   const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
   const [distributionRulesModalOpen, setDistributionRulesModalOpen] = useState(false);
@@ -662,6 +672,11 @@ export function PollarProvider({
         pollarClient.resetTransactionState();
         setEarnModalKey((k) => k + 1);
         setEarnModalOpen(true);
+      },
+      // cards
+      openCardModal: () => {
+        setCardModalKey((k) => k + 1);
+        setCardModalOpen(true);
       },
       // sessions
       sessions,
@@ -760,6 +775,11 @@ export function PollarProvider({
       {earnModalOpen && (
         <ModalErrorBoundary key={earnModalKey} onClose={() => setEarnModalOpen(false)}>
           <EarnModal onClose={() => setEarnModalOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {cardModalOpen && (
+        <ModalErrorBoundary key={cardModalKey} onClose={() => setCardModalOpen(false)}>
+          <CardModal onClose={() => setCardModalOpen(false)} />
         </ModalErrorBoundary>
       )}
       {receiveModalOpen && (
