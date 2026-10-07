@@ -3,9 +3,11 @@ import { claimDistributionRule, listDistributionRules } from '../api/endpoints/d
 import { getSwapConfig, getSwapTokens, quoteSwap } from '../api/endpoints/swap';
 import { buildEarnTx, getEarnOpportunities, getEarnPosition, getEarnProviders } from '../api/endpoints/earn';
 import {
+  createCardFunding,
   createCardHolder,
   getCardBalance,
   getCardDepositAddresses,
+  getCardFunding,
   getCardHolder,
   getCardOccupations,
   getCardProviders,
@@ -14,6 +16,8 @@ import {
   getCardSecretsPublicKey,
   getCardTransactions,
   issueCard,
+  listCardFundings,
+  submitCardFundingSignature,
   submitCardKyc,
 } from '../api/endpoints/cards';
 import { createCardSecretsSession, openCardSecrets } from '../lib/card-secrets';
@@ -62,6 +66,8 @@ import {
   EarnTxParams,
   CardBalance,
   CardDepositAddress,
+  CardFunding,
+  CardFundingOutcome,
   CardHolder,
   CardInfo,
   CardKycInput,
@@ -3655,6 +3661,30 @@ export class PollarClient {
   /** Where the card's collateral is deposited, one address per network the provider accepts. */
   async getCardDepositAddresses(params: CardProviderParams = {}): Promise<CardDepositAddress[]> {
     return (await getCardDepositAddresses(this._api, params.cardProviderId)).depositAddresses;
+  }
+
+  /**
+   * Move USDC from the user's Stellar wallet to the card's collateral. A
+   * custodial wallet pays at once; an external wallet is asked to sign the
+   * payment here, and `cancelled` means it declined. The returned funding then
+   * advances on its own; follow it with {@link getCardFunding}.
+   */
+  async fundCard(params: CardProviderParams & { amount: string }): Promise<CardFundingOutcome> {
+    const started = await createCardFunding(this._api, params);
+    if (!started.pendingSignature) return { status: 'ok', funding: started.funding };
+    const signed = await this.signTx(started.pendingSignature.unsignedXdr);
+    if (signed.status !== 'signed') return { status: 'cancelled', funding: started.funding };
+    const { funding } = await submitCardFundingSignature(this._api, started.funding.id, { signedXdr: signed.signedXdr });
+    return { status: 'ok', funding };
+  }
+
+  async getCardFunding(fundingId: string): Promise<CardFunding> {
+    return (await getCardFunding(this._api, fundingId)).funding;
+  }
+
+  /** The user's fundings, newest first. */
+  async listCardFundings(params: CardProviderParams = {}): Promise<CardFunding[]> {
+    return (await listCardFundings(this._api, params.cardProviderId)).fundings;
   }
 
   /**

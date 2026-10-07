@@ -91,6 +91,10 @@ export {
   getCardDepositAddresses,
   getCardSecretsPublicKey,
   getCardSecrets,
+  createCardFunding,
+  submitCardFundingSignature,
+  getCardFunding,
+  listCardFundings,
 } from './api/endpoints/cards';
 export type { EncryptedCardSecrets } from './api/endpoints/cards';
 export { createCardSecretsSession, openCardSecrets } from './lib/card-secrets';

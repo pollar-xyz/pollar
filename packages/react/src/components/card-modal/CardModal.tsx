@@ -12,6 +12,7 @@ import {
   type CardSecrets,
   type CardTransaction,
   type CardDepositAddress,
+  type CardFunding,
 } from '@pollar/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
@@ -30,6 +31,18 @@ const KYC_POLL_MS = 5000;
 /** How long the revealed number stays on screen. */
 const REVEAL_MS = 30_000;
 const TX_LIMIT = 10;
+/** How often fundings in flight are re-read while the funding panel is open. */
+const FUNDING_POLL_MS = 10_000;
+const FUNDING_INFLIGHT = new Set(['CREATED', 'BURNED', 'ATTESTED', 'MINTED']);
+
+const FUNDING_COPY: Record<string, string> = {
+  CREATED: 'Waiting for your payment to confirm',
+  BURNED: 'Leaving Stellar',
+  ATTESTED: 'Crossing to Polygon',
+  MINTED: 'Arrived, waiting for the card to credit it',
+  CREDITED: 'Credited',
+  FAILED: 'Failed',
+};
 
 const INCOME_RANGES: { value: CardIncomeRange; label: string }[] = [
   { value: '0-1000', label: 'Up to 1,000 USD' },
@@ -120,6 +133,9 @@ export function CardModal({ onClose }: CardModalProps) {
   const [balance, setBalance] = useState<CardBalance | null>(null);
   const [transactions, setTransactions] = useState<CardTransaction[] | null>(null);
   const [deposit, setDeposit] = useState<CardDepositAddress[] | null>(null);
+  const [fundings, setFundings] = useState<CardFunding[] | null>(null);
+  const [fundAmount, setFundAmount] = useState('');
+  const [showManual, setShowManual] = useState(false);
   const [occupations, setOccupations] = useState<CardOccupation[]>([]);
   const [kyc, setKyc] = useState<CardKycInput>(emptyKyc);
   const [terms, setTerms] = useState(false);
@@ -282,11 +298,51 @@ export function CardModal({ onClose }: CardModalProps) {
     run(
       'fund',
       async () => {
-        if (!deposit) setDeposit(await getClient().getCardDepositAddresses());
+        setFundings(await getClient().listCardFundings());
         setPanel('fund');
+      },
+      'Could not load your fundings',
+    );
+
+  const fund = () =>
+    run(
+      'fund-send',
+      async () => {
+        const outcome = await getClient().fundCard({ amount: fundAmount.trim() });
+        if (outcome.status === 'cancelled') {
+          setError('The payment was not signed.');
+          return;
+        }
+        setFundings((cur) => [outcome.funding, ...(cur ?? []).filter((f) => f.id !== outcome.funding.id)]);
+        setFundAmount('');
+      },
+      'Could not fund the card',
+    );
+
+  const showManualAddress = () =>
+    run(
+      'fund-manual',
+      async () => {
+        if (!deposit) setDeposit(await getClient().getCardDepositAddresses());
+        setShowManual(true);
       },
       'Could not load the deposit address',
     );
+
+  // Fundings move on their own server-side; keep the panel honest while any is in flight.
+  const fundingsInflight = (fundings ?? []).some((f) => FUNDING_INFLIGHT.has(f.status));
+  useEffect(() => {
+    if (panel !== 'fund' || !fundingsInflight) return;
+    const id = setInterval(() => {
+      getClient()
+        .listCardFundings()
+        .then(setFundings)
+        .catch(() => {
+          /* transient; the next tick retries */
+        });
+    }, FUNDING_POLL_MS);
+    return () => clearInterval(id);
+  }, [panel, fundingsInflight, getClient]);
 
   const field = (
     key: keyof Omit<CardKycInput, 'address' | 'email'>,
@@ -656,22 +712,77 @@ export function CardModal({ onClose }: CardModalProps) {
         {!loading && provider && card && panel === 'fund' && (
           <>
             <p>
-              Your card is backed by the {provider.fundingAssets.join(' or ') || 'stablecoins'} you deposit. Send only the
-              tokens listed, on the network listed; anything else can be lost.
+              Move {provider.fundingAssets.join(' or ') || 'USDC'} from your wallet to your card. It takes a few minutes to
+              cross to the card network.
             </p>
-            {deposit?.map((d) => (
-              <div key={d.network} className="pollar-card-deposit">
-                <strong>{d.network}</strong> (chain {d.chainId})<code>{d.address}</code>
-                <CopyButton value={d.address} label="Copy address" />
-                <p className="pollar-card-note">
-                  Accepts: {d.tokens.map((t) => (t.currency ?? 'token').toUpperCase()).join(', ')}
-                </p>
-              </div>
-            ))}
-            {deposit?.length === 0 && <div className="pollar-modal-error">The provider returned no deposit address.</div>}
-            <p className="pollar-card-note">
-              Funding straight from your Pollar wallet is coming next; for now, transfer to the address above.
-            </p>
+            <label className="pollar-send-field">
+              <span className="pollar-send-label">Amount (USDC)</span>
+              <input
+                className="pollar-input"
+                inputMode="decimal"
+                placeholder="10"
+                value={fundAmount}
+                onChange={(e) => setFundAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+              />
+            </label>
+            <div className="pollar-modal-actions">
+              <button
+                type="button"
+                className="pollar-btn-primary"
+                onClick={() => void fund()}
+                disabled={busy !== null || !(Number(fundAmount) >= 1)}
+              >
+                {busy === 'fund-send' ? 'Sending...' : 'Fund from my wallet'}
+              </button>
+            </div>
+
+            {fundings && fundings.length > 0 && (
+              <>
+                <p className="pollar-card-section-title">Your fundings</p>
+                {fundings.map((f) => (
+                  <div key={f.id} className="pollar-card-tx">
+                    <div>
+                      {FUNDING_COPY[f.status] ?? f.status}
+                      <span className="pollar-card-tx-meta">
+                        {new Date(f.createdAt).toLocaleString()}
+                        {f.status === 'FAILED' && f.error ? ` · ${f.error}` : ''}
+                      </span>
+                    </div>
+                    <div className="pollar-card-tx-amount" data-direction={f.status === 'CREDITED' ? 'credit' : undefined}>
+                      {money(f.amount, 'USD')}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {!showManual && (
+              <p className="pollar-card-note">
+                Prefer to send from another wallet?{' '}
+                <button
+                  type="button"
+                  className="pollar-card-link"
+                  onClick={() => void showManualAddress()}
+                  disabled={busy !== null}
+                >
+                  Show the deposit address
+                </button>
+              </p>
+            )}
+            {showManual &&
+              deposit?.map((d) => (
+                <div key={d.network} className="pollar-card-deposit">
+                  <strong>{d.network}</strong> (chain {d.chainId})<code>{d.address}</code>
+                  <CopyButton value={d.address} label="Copy address" />
+                  <p className="pollar-card-note">
+                    Send only {d.tokens.map((t) => (t.currency ?? 'token').toUpperCase()).join(' or ')} on {d.network}; anything
+                    else can be lost.
+                  </p>
+                </div>
+              ))}
+            {showManual && deposit?.length === 0 && (
+              <div className="pollar-modal-error">The provider returned no deposit address.</div>
+            )}
           </>
         )}
 

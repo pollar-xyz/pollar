@@ -2,6 +2,7 @@ import type { PollarApiClient } from '../client';
 import type {
   CardBalance,
   CardDepositAddress,
+  CardFunding,
   CardHolder,
   CardInfo,
   CardKycInput,
@@ -151,5 +152,38 @@ export async function getCardSecrets(
   return content(
     await loose(api).POST(`/cards/${encodeURIComponent(cardId)}/secrets`, { body }),
     'Failed to load card secrets',
+  );
+}
+
+/** POST /cards/funding */
+export async function createCardFunding(
+  api: PollarApiClient,
+  body: { cardProviderId?: string; amount: string },
+): Promise<{ funding: CardFunding; pendingSignature?: { unsignedXdr: string } }> {
+  return content(await loose(api).POST('/cards/funding', { body }), 'Failed to start card funding');
+}
+
+/** POST /cards/funding/:id/signature */
+export async function submitCardFundingSignature(
+  api: PollarApiClient,
+  fundingId: string,
+  body: { signedXdr: string },
+): Promise<{ funding: CardFunding }> {
+  return content(
+    await loose(api).POST(`/cards/funding/${encodeURIComponent(fundingId)}/signature`, { body }),
+    'Failed to submit the funding payment',
+  );
+}
+
+/** GET /cards/funding/:id */
+export async function getCardFunding(api: PollarApiClient, fundingId: string): Promise<{ funding: CardFunding }> {
+  return content(await loose(api).GET(`/cards/funding/${encodeURIComponent(fundingId)}`), 'Failed to load card funding');
+}
+
+/** GET /cards/funding */
+export async function listCardFundings(api: PollarApiClient, cardProviderId?: string): Promise<{ fundings: CardFunding[] }> {
+  return content(
+    await loose(api).GET('/cards/funding', { params: { query: query({ cardProviderId }) } }),
+    'Failed to load card fundings',
   );
 }
