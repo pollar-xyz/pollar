@@ -1166,6 +1166,163 @@ export type SwapQuoteParams = {
   slippageBps?: number;
 };
 
+// --- Cards types ----------------------------------------------------------------
+// Written by hand: `/cards/*` is a v2-only group and `schema.d.ts` is regenerated
+// from a running sdk-api. Shapes mirror apps/sdk-api `cards.service.ts`.
+
+export type CardKycStatus =
+  | 'NOT_STARTED'
+  | 'PENDING'
+  | 'NEEDS_ACTION'
+  | 'IN_REVIEW'
+  | 'APPROVED'
+  | 'DENIED'
+  | 'LOCKED'
+  | 'CANCELED';
+export type CardStatus = 'PENDING' | 'ACTIVE' | 'FROZEN' | 'TERMINATED';
+export type CardType = 'VIRTUAL' | 'PHYSICAL';
+export type CardIncomeRange = '0-1000' | '1000-5000' | '5000-10000' | '10000+';
+
+/** A card provider the app enabled (from GET /cards/providers). Empty = Cards disabled. */
+export interface CardProvider {
+  id: string;
+  name: string;
+  adapter: string;
+  countries: string[];
+  cardTypes: CardType[];
+  fundingAssets: string[];
+  /** The provider's terms the user accepts before KYC; null while the platform has none loaded. */
+  termsUrl: string | null;
+  supports: { freeze: boolean; terminate: boolean; physical: boolean; revealSecrets: boolean };
+}
+
+/** The user's registration with a card provider. */
+export interface CardHolder {
+  id: string;
+  cardProviderId: string;
+  kycStatus: CardKycStatus;
+  kycReason: string | null;
+  /** Hosted page where the user finishes identity verification; null once KYC is settled. */
+  verificationLink: string | null;
+  termsAcceptedAt: string | null;
+  createdAt: string;
+}
+
+export interface CardKycInput {
+  firstName: string;
+  lastName: string;
+  /** YYYY-MM-DD */
+  birthDate: string;
+  nationalId: string;
+  /** ISO 3166-1 alpha-2 of the document. */
+  countryOfIssue: string;
+  email?: string;
+  phoneCountryCode: string;
+  phoneNumber: string;
+  /** A code from {@link PollarClient.getCardOccupations}. */
+  occupation: string;
+  annualSalary: CardIncomeRange;
+  accountPurpose: string;
+  expectedMonthlyVolume: CardIncomeRange;
+  address: { line1: string; line2?: string; city: string; region: string; postalCode: string; countryCode: string };
+}
+
+export interface CardOccupation {
+  code: string;
+  label: string;
+}
+
+export interface CardInfo {
+  id: string;
+  type: CardType;
+  status: CardStatus;
+  last4: string | null;
+  expMonth: string | null;
+  expYear: string | null;
+  nickname: string | null;
+  currency: string;
+  createdAt: string;
+}
+
+/** Credit line as the provider reports it. Cents of USD; `ledgerBalance` in units. */
+export interface CardBalance {
+  creditLimitCents: number | null;
+  spendingPowerCents: number | null;
+  balanceDueCents: number | null;
+  ledgerBalance: string | null;
+  syncedAt: string;
+}
+
+export interface CardTransaction {
+  id: string;
+  cardId: string | null;
+  type: string;
+  direction: 'debit' | 'credit' | null;
+  status: string;
+  amount: string;
+  fee: string | null;
+  currency: string;
+  network: string | null;
+  txHash: string | null;
+  purchaseId: string | null;
+  /** The provider's purchase detail (merchant, local amount, FX) for card spends. */
+  purchase: Record<string, unknown> | null;
+  merchantName: string | null;
+  occurredAt: string;
+}
+
+export interface CardTransactionsPage {
+  transactions: CardTransaction[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CardDepositAddress {
+  network: string;
+  chainId: number;
+  address: string;
+  tokens: { currency: string | null; tokenAddress: string }[];
+}
+
+/** PAN and CVC decrypted on the device. Never store or log these. */
+export interface CardSecrets {
+  pan: string;
+  cvc: string;
+  last4: string | null;
+  expMonth: string | null;
+  expYear: string | null;
+}
+
+/** Optional on every cards call: which provider, when the app enabled more than one. */
+export type CardProviderParams = { cardProviderId?: string };
+
+export type CardFundingStatus = 'CREATED' | 'BURNED' | 'ATTESTED' | 'MINTED' | 'CREDITED' | 'FAILED';
+
+/**
+ * One transfer from the user's Stellar wallet to the card's collateral. It moves
+ * on its own once paid: CREATED (waiting for the payment) -> BURNED -> ATTESTED
+ * -> MINTED -> CREDITED (the provider booked the deposit). FAILED carries `error`.
+ */
+export interface CardFunding {
+  id: string;
+  status: CardFundingStatus;
+  amount: string;
+  asset: string;
+  depositAddress: string;
+  chainId: number;
+  stellarTxHash: string | null;
+  burnTxHash: string | null;
+  polygonMintTxHash: string | null;
+  providerTxId: string | null;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Outcome of {@link PollarClient.fundCard}: `cancelled` when the external wallet declined to sign. */
+export type CardFundingOutcome = { status: 'ok'; funding: CardFunding } | { status: 'cancelled'; funding: CardFunding };
+
 // --- Earn types (yield vaults / lending) ---------------------------------------
 
 /** Providers this app exposes (from GET /earn/providers). Empty = Earn disabled. */

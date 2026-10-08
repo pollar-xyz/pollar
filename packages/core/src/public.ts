@@ -86,3 +86,26 @@ export { quoteSwap, getSwapConfig, getSwapTokens } from './api/endpoints/swap';
 
 // --- Earn endpoints -----------------------------------------------------------
 export { getEarnProviders, getEarnOpportunities, getEarnPosition, buildEarnTx } from './api/endpoints/earn';
+
+// --- Cards endpoints ----------------------------------------------------------
+export {
+  getCardProviders,
+  getCardHolder,
+  createCardHolder,
+  submitCardKyc,
+  getCardOccupations,
+  getCards,
+  issueCard,
+  getCardBalance,
+  getCardTransactions,
+  getCardDepositAddresses,
+  getCardSecretsPublicKey,
+  getCardSecrets,
+  createCardFunding,
+  submitCardFundingSignature,
+  getCardFunding,
+  listCardFundings,
+} from './api/endpoints/cards';
+export type { EncryptedCardSecrets } from './api/endpoints/cards';
+export { createCardSecretsSession, openCardSecrets } from './lib/card-secrets';
+export type { CardSecretsSession } from './lib/card-secrets';
