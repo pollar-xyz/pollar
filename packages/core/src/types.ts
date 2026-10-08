@@ -297,6 +297,31 @@ export interface PollarClientConfig {
    * browser-only for now.
    */
   passkeySign?: PasskeySigner;
+  /**
+   * Optional server operator or backend credential key.
+   * When specified, enables server-side operator mode (e.g. for backend ramp
+   * creation/polling on `/ramps/onramp` and `/ramps/transaction/{txId}`) without
+   * requiring an interactive end-user OTP login session or browser DPoP proof.
+   *
+   * @see https://github.com/pollar-xyz/pollar/issues/56
+   */
+  operatorKey?: string | undefined;
+  /**
+   * Alias for {@link operatorKey}. Allows supplying a server-side secret key
+   * directly in backend environments.
+   */
+  serverSecretKey?: string | undefined;
+}
+
+/**
+ * Options for server-side operator mode execution on ramp operations.
+ */
+export interface RampOperatorOptions {
+  /**
+   * Optional server operator or backend secret key for authenticating
+   * server-side ramp requests without an interactive end-user OTP session.
+   */
+  operatorKey?: string | undefined;
 }
 
 /**
