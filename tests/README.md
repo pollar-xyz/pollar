@@ -56,6 +56,28 @@ node tests/smoke-session-races.cjs
 - The persisted session does NOT contain `data.*` PII fields
 - Storage keys are namespaced by `apiKeyHash`
 - `client.logout()` clears storage and resets the keypair
+- A wallet restored mid-provisioning is polled until its account lands:
+  `onWalletStateChange` replays `CREATING` on subscribe, reports `READY` when
+  the account reaches the ledger, updates `getWallet()`, and stops polling
+- `onWalletStateChange` also hears a value that arrived with the session
+  rather than through the poll: a sibling tab's `READY` adopted via the
+  `storage` event, and the value a cold-start restore finds for a subscriber
+  that came before `ready()` - each exactly once, never repeated by the poll or
+  the resume that follows
+- the watch under adversarial conditions, one sub-block per way it could strand
+  a UI on "preparing your account":
+  - a restored session whose access token is ALREADY expired refreshes inline
+    and never reaches `_resume`, so that branch arms the watch itself
+  - two `/wallet/state` checks in flight resolve out of order: the older answer
+    does not walk `READY` back to `CREATING`, and the losing call reports the
+    value that won, so the watch does not keep polling a finished job
+  - a provisioning value outside the union is neither applied nor persisted.
+    The last assertion is the point: the row still restores on the next load,
+    which is what writing it would have cost
+  - a subscriber that throws (on the replay inside `subscribe()` AND on a later
+    transition) costs the others nothing
+  - a `/tx/build` 409 keeps its `code`, so `isWalletNotReady(buildOutcome)`
+    recognizes the one failure it exists to name
 
 ### `smoke-providers.cjs`
 
@@ -204,6 +226,15 @@ double-invocation happens here.
   control and the assertion would stop meaning anything.
 - unmount destroys a provider-built client, and leaves a consumer-passed one alive
 - five mount/unmount cycles leak no `storage` listeners
+- a wallet restored mid-provisioning reaches the consumer when its account
+  lands. The session comparison and the context memo must BOTH carry
+  `provisioning`: either one omitting it swallows the transition, and every
+  screen built on it stays frozen on "preparing" forever
+- the not-ready banner follows the chain the wallet button SHOWS, not Stellar by
+  assumption. The same session is mounted twice, changing only the app's
+  configured chain order: Stellar-first warns, Solana-first does not. A unit
+  pass over `walletNotReadyReason` covers the chain-still-unknown case, which
+  `/config` leaves open on every cold start
 
 The StrictMode block is what caught the orphan `PollarClient` this release fixes:
 the provider built the client in a `useState` initializer, StrictMode
@@ -222,6 +253,31 @@ needed. Both assertions fail against the provider that predates the fix.
 - React provider hooks (covered separately when we add `@pollar/react` tests).
 
 ## Requirements
+
+### Ramp KYC UI handoff
+
+Run `node tests/smoke-ramp-kyc.cjs` to test the real RampWidget hooks with mocked
+API/presentation. Both Buy and Sell open the KYC option the backend gate names.
+Cancellation and late approval preserve the form without continuing; approval
+fetches fresh quotes once for the same input and returns to the route list, so
+no order starts on a quote the user did not see. A failed or empty re-quote
+stops on the error step. A route the quote lists in `requirementsRequired`
+shows locked instead of "no providers"; a `FORM`, `REGISTRY_CHECK` or
+`PROVIDER_REGISTRATION` step opens its own modal with the id that step needs
+(form, registry option or corridor) and re-quotes once when done. No live vendor
+requests or transactions are made.
+
+`node tests/smoke-kyc.cjs` covers the core KYC calls (typed errors, idempotency
+key, settled polling: an approval the vendor gave while Pollar still records it
+settles on its own) and `node tests/smoke-kyc-modal.cjs` the web modal (gate
+option opened directly, error codes, manual review, expiry).
+
+All four run as part of `npm run test:smoke`.
+
+`node tests/smoke-rn-kyc.cjs` runs the React Native KycModal and RampWidget with
+`react-native` mocked as plain components: the hosted KYC page goes to the
+system browser and the status is checked on return to the app; the ramp gate
+opens the named option and approval re-quotes without starting an order.
 
 - Node ≥ 20 (the SDK runtime floor)
 - Built `dist/` (run `npm run build` first)

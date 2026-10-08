@@ -74,7 +74,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@pollar/core": "^0.11.2",
+    "@pollar/core": "^0.11.4-rc.1",
     "@privy-io/expo": "^0.69.4",
     "@privy-io/react-auth": "^3.32.2",
     "@stellar/stellar-sdk": "^15.1.0",

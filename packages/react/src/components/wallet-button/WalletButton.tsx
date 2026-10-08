@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { walletNotReadyReason } from '../../lib/wallet-provisioning';
 import { useChains } from '../../useChains';
 import { WalletButtonTemplate } from './WalletButtonTemplate';
 import './WalletButton.css';
@@ -27,7 +28,7 @@ export function WalletButton() {
   // in core, so this button used to say "Stellar" to an app whose users live on
   // Polygon. Falls back to it while `/config` loads and for a legacy session that
   // enumerates no wallets.
-  const { primaryAddress } = useChains();
+  const { primaryChain, primaryAddress } = useChains();
   const walletAddress = primaryAddress || (wallet?.address ?? '');
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -43,6 +44,15 @@ export function WalletButton() {
   // only refreshes on the next login/resume).
   const canCreateAccount =
     !created && wallet?.custody === 'external' && wallet.existsOnStellar === false && wallet.fundingMode === 'IMMEDIATE';
+  // A platform-managed wallet whose account is still being created. Surfaced in
+  // the dropdown rather than on the button: the address is real and copyable,
+  // what is missing is the account behind it. `null` for an external wallet,
+  // which the app never provisions (that one gets Create account above).
+  //
+  // Keyed to `primaryChain` - the chain whose address this button SHOWS - so a
+  // Solana-first app does not caption a working Solana address with the wait on
+  // its user's separate Stellar wallet.
+  const notReadyReason = walletNotReadyReason(wallet, primaryChain);
 
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const isDark = theme === 'dark';
@@ -152,6 +162,7 @@ export function WalletButton() {
       wrapperRef={wrapperRef}
       isInProgress={isInProgress}
       showCreateAccount={canCreateAccount}
+      notReadyReason={notReadyReason}
       creatingAccount={creating}
       onToggleOpen={() => setOpen((v) => !v)}
       onCreateAccount={handleCreateAccount}

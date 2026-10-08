@@ -1,7 +1,7 @@
 'use client';
 
 import type { SessionInfo, SessionsState } from '@pollar/core';
-import { PollarModalFooter } from '../commons';
+import { PollarModalFooter, RefreshIcon } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 export type { SessionsState };
@@ -14,6 +14,7 @@ export interface SessionsModalTemplateProps {
   state: SessionsState;
   revokingFamilyId: string | null;
   signingOutEverywhere: boolean;
+  revokeError: string | null;
   onRefresh: () => void;
   onRevoke: (familyId: string) => void;
   onLogoutEverywhere: () => void;
@@ -25,9 +26,18 @@ export interface SessionsModalTemplateProps {
  * `PollarClientConfig`; falls back to a stripped User-Agent.
  */
 function describeDevice(s: SessionInfo): string {
-  if (s.deviceLabel) return s.deviceLabel;
+  if (s.deviceLabel) return normalizeDeviceLabel(s.deviceLabel);
   if (!s.userAgent) return 'Unknown device';
   return parseUserAgent(s.userAgent);
+}
+
+function normalizeDeviceLabel(label: string): string {
+  // Collapse the whitespace first so the split needs no unbounded `\s+` on both
+  // sides of the separator, which backtracks polynomially on a label with a long
+  // run of spaces (CodeQL js/polynomial-redos); the label comes from the API.
+  const parts = label.replace(/\s+/g, ' ').split(/ (?:[—–-]|·) /);
+  if (parts.length === 2 && parts[1] !== undefined) return `${parts[0]} · ${parts[1].toLowerCase()}`;
+  return label;
 }
 
 function detectBrowser(ua: string): string | null {
@@ -52,7 +62,7 @@ function detectOS(ua: string): string | null {
 function parseUserAgent(ua: string): string {
   const browser = detectBrowser(ua);
   const os = detectOS(ua);
-  if (browser && os) return `${os} — ${browser}`;
+  if (browser && os) return `${os} · ${browser.toLowerCase()}`;
   if (os) return os;
   if (browser) return browser;
   return ua.slice(0, 48);
@@ -79,6 +89,57 @@ function shortIp(hash: string | null): string {
   return hash.slice(0, 8);
 }
 
+type DeviceKind = 'desktop' | 'phone' | 'tablet';
+
+function deviceKind(session: SessionInfo): DeviceKind {
+  const value = `${session.deviceLabel ?? ''} ${session.userAgent ?? ''}`.toLowerCase();
+  if (/ipad|tablet/.test(value)) return 'tablet';
+  if (/android|iphone|ipod|mobile|phone/.test(value)) return 'phone';
+  return 'desktop';
+}
+
+function DeviceIcon({ kind, size = 'small' }: { kind: DeviceKind; size?: 'small' | 'large' }) {
+  const dimensions = size === 'large' ? 30 : 18;
+  if (kind === 'phone') {
+    return (
+      <svg width={dimensions} height={dimensions} viewBox="0 0 24 24" fill="none" aria-hidden>
+        <rect x="7" y="2.5" width="10" height="19" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M10.5 5h3M11 18.5h2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (kind === 'tablet') {
+    return (
+      <svg width={dimensions} height={dimensions} viewBox="0 0 24 24" fill="none" aria-hidden>
+        <rect x="4.5" y="2.5" width="15" height="19" rx="2" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M11 18.5h2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg width={dimensions} height={dimensions} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="3" y="3.5" width="18" height="12" rx="1.8" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8 20.5h8M12 15.5v5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+      <path d="m2.5 6.2 2.1 2.1L9.6 3.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path d="m3 3 8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function SessionsModalTemplate({
   theme,
   accentColor,
@@ -86,6 +147,7 @@ export function SessionsModalTemplate({
   state,
   revokingFamilyId,
   signingOutEverywhere,
+  revokeError,
   onRefresh,
   onRevoke,
   onLogoutEverywhere,
@@ -95,7 +157,9 @@ export function SessionsModalTemplate({
 
   const isLoading = state.step === 'loading';
   const sessions = state.step === 'loaded' ? state.sessions : [];
-  const otherCount = sessions.filter((s) => !s.current).length;
+  const currentSession = sessions.find((s) => s.current);
+  const otherSessions = sessions.filter((s) => !s.current);
+  const otherCount = otherSessions.length;
 
   return (
     <div
@@ -115,27 +179,10 @@ export function SessionsModalTemplate({
             aria-label="Refresh"
             title="Refresh"
           >
-            <svg
-              className={isLoading ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              aria-hidden
-            >
-              <path
-                d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <RefreshIcon spinning={isLoading} />
           </button>
-          <button className="pollar-modal-close" onClick={onClose} aria-label="Close">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-              <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
+          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close" title="Close">
+            <CloseIcon />
           </button>
         </div>
       </div>
@@ -149,42 +196,66 @@ export function SessionsModalTemplate({
         )}
         {state.step === 'error' && <div className="pollar-modal-empty">{state.message}</div>}
         {state.step === 'loaded' && sessions.length === 0 && <div className="pollar-modal-empty">No active sessions.</div>}
-        {sessions.map((s) => {
-          const isRevoking = revokingFamilyId === s.familyId;
-          return (
-            <div key={s.familyId} className="pollar-sessions-item" data-current={s.current || undefined}>
-              <div className="pollar-sessions-item-main">
-                <span className="pollar-sessions-item-device">{describeDevice(s)}</span>
-                {s.current && <span className="pollar-sessions-item-badge">This device</span>}
-              </div>
-              <div className="pollar-sessions-item-meta">
-                <span>Last used {formatRelative(s.lastUsedAt ?? s.createdAt)}</span>
-                {s.ipHash && (
-                  <>
-                    <span>·</span>
-                    <span title={`ip-hash ${s.ipHash}`}>ip {shortIp(s.ipHash)}</span>
-                  </>
-                )}
-              </div>
-              {!s.current && (
-                <button
-                  className="pollar-sessions-item-revoke"
-                  onClick={() => onRevoke(s.familyId)}
-                  disabled={isRevoking || signingOutEverywhere}
-                >
-                  {isRevoking ? (
-                    <>
-                      <span className="pollar-spinner pollar-spinner-sm pollar-spinner-current" />
-                      Revoking…
-                    </>
-                  ) : (
-                    'Revoke'
-                  )}
-                </button>
+        {state.step === 'loaded' && currentSession && (
+          <div className="pollar-sessions-current-card">
+            <div className="pollar-sessions-current-icon-wrap">
+              <DeviceIcon kind={deviceKind(currentSession)} size="large" />
+              <span className="pollar-sessions-current-check">
+                <CheckIcon />
+              </span>
+            </div>
+            <span className="pollar-sessions-current-label">This device</span>
+            <strong className="pollar-sessions-current-device">{describeDevice(currentSession)}</strong>
+            <div className="pollar-sessions-current-status">
+              <span className="pollar-sessions-status-dot" />
+              <span>Active now</span>
+              {currentSession.ipHash && (
+                <>
+                  <span>·</span>
+                  <span title={`ip-hash ${currentSession.ipHash}`}>IP {shortIp(currentSession.ipHash)}</span>
+                </>
               )}
             </div>
-          );
-        })}
+          </div>
+        )}
+        {state.step === 'loaded' && otherSessions.length > 0 && (
+          <section className="pollar-sessions-other-section" aria-labelledby="pollar-other-devices-heading">
+            <h3 id="pollar-other-devices-heading" className="pollar-sessions-section-title">
+              Other devices <span>{otherCount}</span>
+            </h3>
+            <div className="pollar-sessions-grid">
+              {otherSessions.map((s) => {
+                const isRevoking = revokingFamilyId === s.familyId;
+                return (
+                  <div key={s.familyId} className="pollar-sessions-item">
+                    <div className="pollar-sessions-item-top">
+                      <span className="pollar-sessions-item-icon">
+                        <DeviceIcon kind={deviceKind(s)} />
+                      </span>
+                      <button
+                        type="button"
+                        className="pollar-sessions-item-revoke"
+                        onClick={() => onRevoke(s.familyId)}
+                        disabled={isRevoking || signingOutEverywhere}
+                        aria-label={`Sign out ${describeDevice(s)}`}
+                        title={isRevoking ? 'Signing out…' : 'Sign out this device'}
+                      >
+                        {isRevoking ? <span className="pollar-spinner pollar-spinner-sm" /> : <CloseIcon />}
+                      </button>
+                    </div>
+                    <strong className="pollar-sessions-item-device">{describeDevice(s)}</strong>
+                    <span className="pollar-sessions-item-meta">{formatRelative(s.lastUsedAt ?? s.createdAt)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+        {revokeError && (
+          <div className="pollar-sessions-action-error" role="alert">
+            {revokeError}
+          </div>
+        )}
       </div>
 
       {state.step === 'loaded' && sessions.length > 0 && (

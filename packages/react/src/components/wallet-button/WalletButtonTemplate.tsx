@@ -19,6 +19,13 @@ export interface WalletButtonTemplateProps {
   isInProgress: boolean;
   /** Show the "Create account" action (external wallet not yet on-chain, IMMEDIATE funding). */
   showCreateAccount: boolean;
+  /**
+   * Why the wallet cannot act on-chain yet (its account is being created, or
+   * that failed), or null when it can. Shown as a banner in the dropdown, since
+   * the address itself is valid and worth copying either way. Optional, so a
+   * custom template written before this existed keeps compiling.
+   */
+  notReadyReason?: string | null;
   creatingAccount: boolean;
   onToggleOpen: () => void;
   onCreateAccount: () => void;
@@ -51,6 +58,7 @@ export function WalletButtonTemplate({
   wrapperRef,
   isInProgress,
   showCreateAccount,
+  notReadyReason,
   creatingAccount,
   onToggleOpen,
   onCreateAccount,
@@ -116,6 +124,14 @@ export function WalletButtonTemplate({
 
       {open && (
         <div className="pollar-wallet-dropdown" style={{ backgroundColor: dropdownBg, borderColor: dropdownBorder }}>
+          {notReadyReason && (
+            <>
+              <div className="pollar-wallet-dropdown-notice" style={{ color: itemColor }} role="status">
+                {notReadyReason}
+              </div>
+              <div className="pollar-wallet-dropdown-divider" />
+            </>
+          )}
           {showCreateAccount && (
             <>
               <button

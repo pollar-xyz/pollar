@@ -50,7 +50,7 @@ const React = require('react');
 const { act } = React;
 const { createRoot } = require('react-dom/client');
 const sdk = require(path.resolve(__dirname, '../packages/core/dist/index.js'));
-const { PollarProvider } = require(path.resolve(__dirname, '../packages/react/dist/index.js'));
+const { PollarProvider, usePollar } = require(path.resolve(__dirname, '../packages/react/dist/index.js'));
 
 let pass = 0;
 let fail = 0;
@@ -281,6 +281,182 @@ async function unmount(handle) {
     }
     check("  and leaves it alive, since it is not the provider's to destroy", alive);
     foreign.destroy();
+  }
+
+  console.log('\n── 6. A provisioning wallet reaches the consumer when it lands ─');
+  {
+    // The regression this guards: `sessionsEqual` decides whether an auth-state
+    // emission reaches React, and CREATING -> READY changes no other field on
+    // the session. Leaving `provisioning` out of that comparison swallows the
+    // one emission that says the wait is over, and every UI built on it stays
+    // frozen on "preparing" forever.
+    const apiKey = 'pk_react_provisioning';
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(apiKey));
+    const apiKeyHash = Array.from(new Uint8Array(digest).slice(0, 16))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    const address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
+    localStorage.setItem(
+      `pollar:${apiKeyHash}:session`,
+      JSON.stringify({
+        clientSessionId: 'cs-prov',
+        userId: 'u',
+        status: 'CONSUMED',
+        token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+        user: { ready: true },
+        wallet: { type: 'internal', address, provisioning: 'CREATING' },
+      }),
+    );
+
+    const prevFetch = globalThis.fetch;
+    let reported = 'CREATING';
+    globalThis.fetch = async (req) => {
+      const url = typeof req === 'string' ? req : req.url;
+      if (url.includes('/wallet/state')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            code: 'SDK_WALLET_STATE',
+            content: { address, chain: 'STELLAR', provisioning: reported, existsOnStellar: reported === 'READY' },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
+    };
+
+    const seen = [];
+    function Consumer() {
+      const { wallet } = usePollar();
+      seen.push(wallet?.provisioning ?? null);
+      return null;
+    }
+    const handle = mount(
+      h(PollarProvider, { client: { apiKey, baseUrl: 'https://x.test' }, appConfig: APP_CONFIG }, h(Consumer)),
+    );
+    // Not the shared `render()`: its trailing settle sits outside act(), and
+    // this is the only block whose provider has a session to restore, so the
+    // restore + resume updates would land there and warn.
+    await act(async () => {
+      handle.root.render(handle.element);
+    });
+    await act(async () => {
+      await sleep(50);
+    });
+    check('the consumer sees the wallet mid-provisioning', seen.includes('CREATING'), seen);
+
+    // The account lands; the client's watch is what notices.
+    reported = 'READY';
+    const deadline = Date.now() + 6000;
+    while (!seen.includes('READY') && Date.now() < deadline) {
+      await act(async () => {
+        await sleep(200);
+      });
+    }
+    check('  and sees READY once it lands', seen.includes('READY'), seen);
+
+    await unmount(handle);
+    globalThis.fetch = prevFetch;
+    localStorage.removeItem(`pollar:${apiKeyHash}:session`);
+  }
+
+  console.log('\n── 7. The not-ready banner follows the chain the button shows ─');
+  {
+    // The regression this guards: the wallet button renders the address of the
+    // app's FIRST configured chain, but the readiness notice beside it is about
+    // the STELLAR account. Pinning the notice to Stellar tells a Solana-first
+    // app's user that "your wallet is still being prepared" next to a Solana
+    // address that sends and receives perfectly well.
+    const { walletNotReadyReason, WalletButton } = require(path.resolve(__dirname, '../packages/react/dist/index.js'));
+    const creating = { custody: 'internal', address: 'G...', provisioning: 'CREATING' };
+    check('unit: STELLAR + CREATING has a reason', typeof walletNotReadyReason(creating, 'STELLAR') === 'string');
+    check('unit: SOLANA has none', walletNotReadyReason(creating, 'SOLANA') === null);
+    // `/config` decides the chain order and is still in flight on a cold start.
+    // Guessing STELLAR there is the same wrong answer, just earlier.
+    check('unit: an unknown chain has none', walletNotReadyReason(creating, null) === null);
+    check('unit: a READY wallet has none', walletNotReadyReason({ ...creating, provisioning: 'READY' }, 'STELLAR') === null);
+
+    const STELLAR_ADDR = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
+    const SOLANA_ADDR = '11111111111111111111111111111111';
+    const NOTICE = '.pollar-wallet-dropdown-notice';
+
+    // One mount per chain order, same session both times: only the app's
+    // configured order differs, so the banner is the only thing that can move.
+    async function bannerFor(chains, apiKey) {
+      const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(apiKey));
+      const apiKeyHash = Array.from(new Uint8Array(digest).slice(0, 16))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      const wallets = [
+        { type: 'internal', address: STELLAR_ADDR, chain: 'STELLAR', provisioning: 'CREATING' },
+        { type: 'internal', address: SOLANA_ADDR, chain: 'SOLANA' },
+      ];
+      localStorage.setItem(
+        `pollar:${apiKeyHash}:session`,
+        JSON.stringify({
+          clientSessionId: `cs-${chains[0]}`,
+          userId: 'u',
+          status: 'CONSUMED',
+          token: { accessToken: 'AT', refreshToken: 'RT', expiresAt: Math.floor(Date.now() / 1000) + 600 },
+          user: { ready: true },
+          wallet: wallets[0],
+          wallets,
+        }),
+      );
+      const handle = mount(
+        h(
+          PollarProvider,
+          {
+            client: { apiKey, baseUrl: 'https://x.test' },
+            // Passing appConfig makes configStatus 'ready' synchronously, so
+            // useChains has the order on the first paint.
+            appConfig: { branding: {}, features: {}, application: { chains } },
+          },
+          h(WalletButton),
+        ),
+      );
+      await act(async () => {
+        handle.root.render(handle.element);
+      });
+      await act(async () => {
+        await sleep(50);
+      });
+      const btn = handle.container.querySelector('.pollar-wallet-btn');
+      if (btn) {
+        await act(async () => {
+          btn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+        });
+      }
+      const notice = handle.container.querySelector(NOTICE);
+      const text = notice ? notice.textContent : null;
+      await unmount(handle);
+      localStorage.removeItem(`pollar:${apiKeyHash}:session`);
+      return { text, hadButton: !!btn };
+    }
+
+    const prevFetch = globalThis.fetch;
+    globalThis.fetch = async (req) => {
+      const url = typeof req === 'string' ? req : req.url;
+      if (url.includes('/wallet/state')) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            content: { address: STELLAR_ADDR, chain: 'STELLAR', provisioning: 'CREATING', existsOnStellar: false },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
+    };
+
+    const stellarFirst = await bannerFor(['STELLAR', 'SOLANA'], 'pk_react_chain_stellar');
+    check('the dropdown really rendered (positive control)', stellarFirst.hadButton);
+    check('Stellar-first: the dropdown warns about the account being created', !!stellarFirst.text, stellarFirst);
+
+    const solanaFirst = await bannerFor(['SOLANA', 'STELLAR'], 'pk_react_chain_solana');
+    check('Solana-first: the same session shows NO Stellar warning', solanaFirst.text === null, solanaFirst);
+
+    globalThis.fetch = prevFetch;
   }
 
   console.log(`\n${pass} pass, ${fail} fail`);

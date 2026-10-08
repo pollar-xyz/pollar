@@ -44,6 +44,7 @@ export type {
 } from './wallets';
 export type * from './types';
 export { AUTH_ERROR_CODES, PollarNetworkError, isPollarNetworkError, PollarApiError, isPollarApiError } from './types';
+export { WALLET_NOT_READY_CODE, isWalletNotReady } from './types';
 export { PollarApiClient } from './api/client';
 export type { paths as pollarPaths } from './api/schema';
 export { isValidSession } from './client/session';
@@ -51,7 +52,16 @@ export { StellarClient } from './stellar/StellarClient';
 export type { StellarNetwork, StellarClientConfig, StellarBalance } from './stellar/StellarClient';
 
 // --- KYC endpoints ------------------------------------------------------------
-export { getKycStatus, getKycProviders, startKyc, resolveKyc, pollKycStatus } from './api/endpoints/kyc';
+export { getKycStatus, getKycProviders, startKyc, resolveKyc, pollKycStatus, pollKycDecision } from './api/endpoints/kyc';
+export {
+  getAppRequirements,
+  getRequirementForm,
+  submitRequirementForm,
+  getRegistryCheck,
+  submitRegistryCheck,
+  getProviderRegistration,
+  submitProviderRegistration,
+} from './api/endpoints/requirements';
 
 // --- Ramps endpoints ----------------------------------------------------------
 export {

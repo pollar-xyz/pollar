@@ -62,8 +62,16 @@ export async function getRampsQuote(api: PollarApiClient, query: RampsQuoteQuery
  * For embedded users: backend orchestrates the full SEP-24 flow and returns payment instructions.
  * For external wallets: backend may return an unsigned XDR that the client must sign via a wallet adapter.
  */
+/**
+ * Starting a ramp re-quotes and confirms the order at the provider (plus the
+ * requirement gate), which can take well over the 10s default; these two calls get
+ * the longer budget, like startKyc.
+ */
+const RAMP_START_TIMEOUT_MS = 30_000;
+const rampStartHeaders = { 'x-pollar-timeout-ms': String(RAMP_START_TIMEOUT_MS) };
+
 export async function createOnRamp(api: PollarApiClient, body: RampsOnrampBody): Promise<RampsOnrampResponse> {
-  const { data, error } = await api.POST('/ramps/onramp', { body });
+  const { data, error } = await api.POST('/ramps/onramp', { body, headers: rampStartHeaders });
   if (!data?.content || error) throw rampApiError(error, 'Failed to create onramp');
   return data.content;
 }
@@ -74,7 +82,7 @@ export async function createOnRamp(api: PollarApiClient, body: RampsOnrampBody):
  * Backend initiates the bank transfer once the Stellar transaction is confirmed.
  */
 export async function createOffRamp(api: PollarApiClient, body: RampsOfframpBody): Promise<RampsOfframpResponse> {
-  const { data, error } = await api.POST('/ramps/offramp', { body });
+  const { data, error } = await api.POST('/ramps/offramp', { body, headers: rampStartHeaders });
   if (!data?.content || error) throw rampApiError(error, 'Failed to create offramp');
   return data.content;
 }

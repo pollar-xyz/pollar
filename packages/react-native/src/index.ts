@@ -1,23 +1,26 @@
 export { PollarProvider, usePollar } from './context';
 export { createPollarAdapterHook } from './adapterHooks';
 export type {
-    AuthProviderProps,
-    AuthContextValue,
-    LoginButtonProps,
-    AuthModalProps,
-    PollarStyles,
-    PollarConfig,
+  AuthProviderProps,
+  AuthContextValue,
+  LoginButtonProps,
+  AuthModalProps,
+  PollarStyles,
+  PollarConfig,
 } from './types';
 export { WalletButton } from './components/wallet-button/WalletButton';
 
-// ─── Modals ───────────────────────────────────────────────────────────────────
+// --- Modals -------------------------------------------------------------------
 export { KycModal } from './components/kyc-modal/KycModal';
+export { RequirementFormModal } from './components/requirement-form-modal/RequirementFormModal';
+export { RegistryCheckModal } from './components/registry-check-modal/RegistryCheckModal';
+export { ProviderRegistrationModal } from './components/provider-registration-modal/ProviderRegistrationModal';
 export { KycStatus } from './components/kyc-modal/KycStatus';
 export { RampWidget } from './components/ramp-widget/RampWidget';
 export { RouteDisplay } from './components/ramp-widget/RouteDisplay';
 export { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 
-// ─── Templates ────────────────────────────────────────────────────────────────
+// --- Templates ----------------------------------------------------------------
 export { LoginModalTemplate } from './components/login-modal/LoginModalUI';
 export { KycModalTemplate } from './components/kyc-modal/KycModal';
 export type { KycStep } from './components/kyc-modal/KycModal';
@@ -29,4 +32,3 @@ export { TxHistoryModalTemplate } from './components/tx-history-modal/TxHistoryM
 export { WalletBalanceModalTemplate } from './components/wallet-balance-modal/WalletBalanceModalUI';
 export type { WalletBalanceModalTemplateProps } from './components/wallet-balance-modal/WalletBalanceModalUI';
 export { WalletButtonTemplate } from './components/wallet-button/WalletButtonUI';
-

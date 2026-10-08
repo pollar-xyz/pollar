@@ -4,6 +4,7 @@ import { WalletChain } from '@pollar/core';
 import { QRCode } from '../../lib/qr-code';
 import { ChainSelect } from '../ChainSelect';
 import { PollarModalFooter } from '../commons';
+import { PollarLogo } from '../PollarLogo';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 /** Network name as it reads in a sentence ("Share your Stellar address"). */
@@ -20,11 +21,23 @@ export interface ReceiveModalTemplateProps {
   styleOverrides?: ModalStyleOverrides;
   /** Address of the wallet on {@link selectedChain}. */
   walletAddress: string;
-  /** Networks the user holds a wallet on; the first one is the default. */
-  chains: WalletChain[];
+  /**
+   * The networks the user holds an address on, in the app's configured order.
+   * The picker renders only with two or more, so a single-chain app shows none.
+   */
+  chains?: WalletChain[];
   selectedChain: WalletChain | null;
-  onSelectChain: (chain: WalletChain) => void;
+  onSelectChain?: (chain: WalletChain) => void;
   copied: boolean;
+  /**
+   * Why the wallet cannot receive yet (its Stellar account is still being
+   * created, or its creation failed), or null when it can.
+   *
+   * The address itself is valid either way - what is missing is the account
+   * behind it, so a payment sent now is rejected by the network. Optional, so a
+   * custom template written before this existed keeps compiling.
+   */
+  notReadyReason?: string | null;
   onCopy: () => void;
   onClose: () => void;
 }
@@ -38,11 +51,10 @@ export function ReceiveModalTemplate({
   selectedChain,
   onSelectChain,
   copied,
+  notReadyReason,
   onCopy,
   onClose,
 }: ReceiveModalTemplateProps) {
-  const isDark = theme === 'dark';
-
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
   const chainName = selectedChain ? (CHAIN_NAME[selectedChain] ?? selectedChain) : 'wallet';
@@ -66,23 +78,39 @@ export function ReceiveModalTemplate({
         </div>
       </div>
 
-      <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} />
+      {/* Network selector - drives the address and QR below */}
+      {chains && onSelectChain && <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} />}
 
       {/* QR code */}
       {walletAddress ? (
         <>
           <div className="pollar-receive-qr">
-            <QRCode value={walletAddress} size={180} fgColor={isDark ? '#ffffff' : '#111827'} bgColor="transparent" />
+            <div className="pollar-receive-network-badge">
+              <span className="pollar-receive-network-dot" aria-hidden />
+              {chainName} network
+            </div>
+            <div className="pollar-receive-qr-frame">
+              <QRCode
+                value={walletAddress}
+                size={220}
+                level="H"
+                fgColor="#111827"
+                bgColor="#ffffff"
+                title={`${chainName} wallet QR code`}
+              />
+              <span className="pollar-receive-qr-mark" aria-hidden>
+                <PollarLogo width="22" height="24" />
+              </span>
+            </div>
           </div>
 
-          <p className="pollar-receive-instructions">
-            Share your {chainName} address to receive any asset. Only send {chainName} assets to this address. Funds sent from
-            another network are lost.
-          </p>
+          {notReadyReason && <div className="pollar-receive-notice">{notReadyReason}</div>}
 
           {/* Address + copy */}
-          <div className="pollar-receive-address-row">
-            <span className="pollar-receive-address">{walletAddress}</span>
+          <div className="pollar-receive-address-actions">
+            <div className="pollar-receive-address-row">
+              <span className="pollar-receive-address">{walletAddress}</span>
+            </div>
             <button type="button" className="pollar-receive-copy-btn" onClick={onCopy} aria-label="Copy address">
               {copied ? (
                 <>
@@ -96,7 +124,7 @@ export function ReceiveModalTemplate({
                       strokeLinejoin="round"
                     />
                   </svg>
-                  Copied!
+                  Copied
                 </>
               ) : (
                 <>
@@ -109,17 +137,24 @@ export function ReceiveModalTemplate({
                       strokeLinecap="round"
                     />
                   </svg>
-                  Copy address
+                  Copy
                 </>
               )}
             </button>
           </div>
+          <p className="pollar-receive-warning">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+              <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.25" />
+              <path d="M7 6.25V9.25M7 4.5V4.75" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+            </svg>
+            <span>Only send {chainName} assets to this address</span>
+          </p>
         </>
       ) : (
         <div className="pollar-modal-empty">No wallet connected.</div>
       )}
 
-      <PollarModalFooter />
+      <PollarModalFooter shield />
     </div>
   );
 }

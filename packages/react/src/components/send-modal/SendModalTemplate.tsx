@@ -1,9 +1,9 @@
 'use client';
 
 import { TransactionState, WalletBalanceRecord, WalletChain, WalletId } from '@pollar/core';
-import { AssetSelect } from '../AssetSelect';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { ChainSelect } from '../ChainSelect';
-import { CopyButton, cropAddress, PollarModalFooter } from '../commons';
+import { PollarModalFooter, RefreshIcon } from '../commons';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
@@ -19,6 +19,134 @@ function assetKey(record: WalletBalanceRecord): string {
   return `${record.code}:${record.issuer ?? 'native'}`;
 }
 
+function chainLabel(chain: WalletChain | null): string {
+  if (chain === 'STELLAR') return 'Stellar';
+  if (chain === 'SOLANA') return 'Solana';
+  if (chain === 'POLYGON') return 'Polygon';
+  return 'network';
+}
+
+function AssetIcon({ code }: { code: string }) {
+  return (
+    <span className="pollar-send-asset-icon" aria-hidden>
+      {code.slice(0, 2).toUpperCase()}
+    </span>
+  );
+}
+
+interface SendAssetSelectorProps {
+  assets: WalletBalanceRecord[];
+  selectedAsset: WalletBalanceRecord | null;
+  loading: boolean;
+  onSelectAsset: (asset: WalletBalanceRecord) => void;
+}
+
+function SendAssetSelector({ assets, selectedAsset, loading, onSelectAsset }: SendAssetSelectorProps) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!(event.target instanceof Node) || !triggerRef.current?.parentElement?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick);
+  }, [open]);
+
+  function handleTriggerKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      setOpen(true);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="pollar-send-field">
+        <span className="pollar-send-label">Asset</span>
+        <div className="pollar-send-asset-selector pollar-send-asset-selector-loading" aria-label="Loading assets">
+          <span className="pollar-spinner pollar-spinner-sm" />
+          <span>Loading assets…</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pollar-send-field">
+      <label className="pollar-send-label" id="pollar-send-asset-label">
+        Asset
+      </label>
+      <div className="pollar-send-asset-picker">
+        <button
+          ref={triggerRef}
+          type="button"
+          className="pollar-send-asset-selector"
+          aria-labelledby="pollar-send-asset-label"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          disabled={!selectedAsset}
+          onClick={() => setOpen((value) => !value)}
+          onKeyDown={handleTriggerKeyDown}
+        >
+          {selectedAsset ? (
+            <>
+              <AssetIcon code={selectedAsset.code} />
+              <span className="pollar-send-asset-copy">
+                <strong>{selectedAsset.code}</strong>
+                <small>
+                  {selectedAsset.available === null
+                    ? 'Balance unavailable'
+                    : `${formatBalance(selectedAsset.available)} available`}
+                </small>
+              </span>
+            </>
+          ) : (
+            <span className="pollar-send-asset-copy">
+              <strong>No assets available</strong>
+            </span>
+          )}
+          <svg className="pollar-send-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+
+        {open && assets.length > 0 && (
+          <div className="pollar-send-asset-menu" role="listbox" aria-label="Assets">
+            {assets.map((asset) => {
+              const key = assetKey(asset);
+              const selected = selectedAsset ? key === assetKey(selectedAsset) : false;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  className={`pollar-send-asset-option${selected ? ' is-selected' : ''}`}
+                  onClick={() => {
+                    onSelectAsset(asset);
+                    setOpen(false);
+                    triggerRef.current?.focus();
+                  }}
+                >
+                  <AssetIcon code={asset.code} />
+                  <span className="pollar-send-asset-copy">
+                    <strong>{asset.code}</strong>
+                    <small>
+                      {asset.available === null ? 'Balance unavailable' : `${formatBalance(asset.available)} available`}
+                    </small>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export interface SendModalTemplateProps {
   theme: string;
   accentColor: string;
@@ -28,14 +156,28 @@ export interface SendModalTemplateProps {
   txTitle: string;
   assets: WalletBalanceRecord[];
   selectedAsset: WalletBalanceRecord | null;
-  /** Networks the user holds a wallet on; the first one is the default. */
-  chains: WalletChain[];
   selectedChain: WalletChain | null;
-  /** Address of the wallet on {@link selectedChain}, shown under the picker. */
-  walletAddress: string;
+  /**
+   * The networks the user can send from, in the app's configured order. The
+   * picker renders only with two or more, so a single-chain app shows none.
+   */
+  chains?: WalletChain[];
+  /** @deprecated Kept for compatibility; the sender address is no longer shown. */
+  walletAddress?: string;
   /** Can a payment be built on {@link selectedChain}? Stellar and Solana only. */
   canSendOnChain: boolean;
-  onSelectChain: (chain: WalletChain) => void;
+  /**
+   * Why the wallet cannot act on-chain right now (its Stellar account is still
+   * being created, or its creation failed), or null when it can.
+   *
+   * Separate from {@link canSendOnChain}: that one is about the NETWORK not
+   * having a transfer path, this one about the user's own account. Collapsing
+   * them would tell someone waiting on a brand-new wallet that Stellar does not
+   * support sending. Optional, so a custom template written before this existed
+   * keeps compiling.
+   */
+  notReadyReason?: string | null;
+  onSelectChain?: (chain: WalletChain) => void;
   amount: string;
   destination: string;
   formError: string;
@@ -52,6 +194,8 @@ export interface SendModalTemplateProps {
   onRefresh: () => void;
   onSelectAsset: (asset: WalletBalanceRecord) => void;
   onAmountChange: (value: string) => void;
+  onMax: () => void;
+  onPaste: () => void;
   onDestinationChange: (value: string) => void;
   onSubmit: () => void;
   onSignAndSend: () => void;
@@ -69,10 +213,10 @@ export function SendModalTemplate({
   txTitle,
   assets,
   selectedAsset,
-  chains,
   selectedChain,
-  walletAddress,
   canSendOnChain,
+  notReadyReason,
+  chains,
   onSelectChain,
   amount,
   destination,
@@ -90,6 +234,8 @@ export function SendModalTemplate({
   onRefresh,
   onSelectAsset,
   onAmountChange,
+  onMax,
+  onPaste,
   onDestinationChange,
   onSubmit,
   onSignAndSend,
@@ -100,8 +246,18 @@ export function SendModalTemplate({
 }: SendModalTemplateProps) {
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
-  const selectedKey = selectedAsset ? assetKey(selectedAsset) : '';
-  const canSubmit = canSendOnChain && !!selectedAsset && !!amount && !!destination.trim() && !isLoadingBalance;
+  const parsedAmount = amount ? Number(amount) : 0;
+  const availableAmount =
+    selectedAsset?.available === null || selectedAsset?.available === undefined ? 0 : Number(selectedAsset.available);
+  const canSubmit =
+    canSendOnChain &&
+    !notReadyReason &&
+    !!selectedAsset &&
+    Number.isFinite(parsedAmount) &&
+    parsedAmount > 0 &&
+    parsedAmount <= availableAmount &&
+    !!destination.trim() &&
+    !isLoadingBalance;
 
   const title = step === 'form' ? 'Send' : txTitle;
 
@@ -122,7 +278,12 @@ export function SendModalTemplate({
               </svg>
             </button>
           )}
-          <h2 className="pollar-modal-title">{title}</h2>
+          <div className="pollar-send-title-copy">
+            <h2 className="pollar-modal-title">{title}</h2>
+            {step === 'form' && (
+              <p className="pollar-send-subtitle">Transfer assets to another {chainLabel(selectedChain)} wallet</p>
+            )}
+          </div>
         </div>
         {!isInProgress && (
           <div className="pollar-modal-header-actions">
@@ -135,22 +296,7 @@ export function SendModalTemplate({
                 aria-label="Refresh"
                 title="Refresh balances"
               >
-                <svg
-                  className={isLoadingBalance ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
-                  width="16"
-                  height="16"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  aria-hidden
-                >
-                  <path
-                    d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+                <RefreshIcon spinning={isLoadingBalance} />
               </button>
             )}
             <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
@@ -165,36 +311,20 @@ export function SendModalTemplate({
       {/* Form step */}
       {step === 'form' && (
         <>
-          {/* Network selector - drives the address and the asset list below */}
-          <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoadingBalance} />
-
-          {walletAddress && (
-            <div className="pollar-address-row">
-              <span className="pollar-address">{cropAddress(walletAddress)}</span>
-              <CopyButton value={walletAddress} label="Copy wallet address" />
-            </div>
+          {/* Network selector - drives the asset list below */}
+          {chains && onSelectChain && (
+            <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoadingBalance} />
           )}
 
           {!canSendOnChain && <div className="pollar-modal-empty">Sending is not available on this network yet.</div>}
+          {canSendOnChain && notReadyReason && <div className="pollar-modal-empty">{notReadyReason}</div>}
 
           {/* Asset selector */}
-          <AssetSelect
-            label="Asset"
-            value={selectedKey}
+          <SendAssetSelector
+            assets={assets}
+            selectedAsset={selectedAsset}
             loading={isLoadingBalance}
-            loadingLabel="Loading assets…"
-            options={assets.map((a) => ({
-              key: assetKey(a),
-              code: a.code,
-              // Unreadable (null) drops the "- X available" suffix instead of
-              // claiming a zero balance.
-              available: a.available ?? undefined,
-              enabledInApp: a.enabledInApp,
-            }))}
-            onChange={(key) => {
-              const found = assets.find((a) => assetKey(a) === key);
-              if (found) onSelectAsset(found);
-            }}
+            onSelectAsset={onSelectAsset}
           />
 
           {/* Amount */}
@@ -207,26 +337,46 @@ export function SendModalTemplate({
                 </span>
               )}
             </div>
-            <input
-              className="pollar-input"
-              type="text"
-              inputMode="decimal"
-              placeholder="0.00"
-              value={amount}
-              onChange={(e) => onAmountChange(e.target.value)}
-            />
+            <div className="pollar-send-input-shell">
+              <input
+                className="pollar-input pollar-send-amount-input"
+                type="text"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => onAmountChange(e.target.value)}
+                aria-label="Amount"
+              />
+              <div className="pollar-send-input-suffix">
+                <button
+                  type="button"
+                  className="pollar-send-inline-action"
+                  onClick={onMax}
+                  disabled={!selectedAsset?.available}
+                >
+                  Max
+                </button>
+                <span>{selectedAsset?.code ?? ''}</span>
+              </div>
+            </div>
           </div>
 
           {/* Destination */}
           <div className="pollar-send-field">
             <label className="pollar-send-label">Destination wallet</label>
-            <input
-              className="pollar-input"
-              type="text"
-              placeholder="G…"
-              value={destination}
-              onChange={(e) => onDestinationChange(e.target.value)}
-            />
+            <div className="pollar-send-input-shell">
+              <input
+                className="pollar-input pollar-send-destination-input"
+                type="text"
+                placeholder="G…"
+                value={destination}
+                onChange={(e) => onDestinationChange(e.target.value)}
+                aria-label="Destination wallet"
+              />
+              <button type="button" className="pollar-send-inline-action" onClick={onPaste}>
+                Paste
+              </button>
+            </div>
           </div>
 
           {formError && <div className="pollar-modal-error">{formError}</div>}

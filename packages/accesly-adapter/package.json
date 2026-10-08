@@ -42,7 +42,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@pollar/core": "^0.11.2",
+    "@pollar/core": "^0.11.4-rc.1",
     "eslint": "^10.5.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",

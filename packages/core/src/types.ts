@@ -21,6 +21,15 @@ export type PollarApplicationConfigContent = PollarApplicationConfigResponse['co
  *   - 'external' -> user-connected wallet (Freighter/Albedo)
  * `address` is the on-chain address for every type.
  */
+/**
+ * How far along a platform-managed Stellar wallet is in its on-chain setup.
+ *
+ * Only the ACCOUNT is described. Trustlines are added incrementally over an
+ * app's life, so a wallet does not leave READY because a token was enabled
+ * yesterday - per-asset state is `getAssets()`.
+ */
+export type WalletProvisioning = 'READY' | 'CREATING' | 'FAILED';
+
 export interface PollarPersistedWallet {
   type: 'internal' | 'smart' | 'external';
   // The login method, 1:1 with `type` (fixed at account creation server-side):
@@ -37,6 +46,12 @@ export interface PollarPersistedWallet {
   // minted before multi-chain omit it (those are always STELLAR).
   chain?: WalletChain;
   existsOnStellar?: boolean;
+  // Where the platform-managed Stellar account stands in its on-chain setup.
+  // Present only on that wallet, and only from sdk-api v2 onward.
+  //   READY    -> on the ledger; operations are accepted
+  //   CREATING -> queued or in flight; operations are refused for now
+  //   FAILED   -> retried to exhaustion; the next login or resume tries again
+  provisioning?: WalletProvisioning;
   // The app's funding policy: IMMEDIATE = Pollar funds/creates the account at
   // onboarding; DEFERRED = left to the app. Lets the UI decide whether to offer
   // on-chain account creation. Optional: older sessions omit it.
@@ -129,6 +144,7 @@ export type WalletInfo =
       provider: PollarAuthMethod | (string & {}) | null;
       chain?: WalletChain;
       existsOnStellar?: boolean;
+      provisioning?: WalletProvisioning;
       fundingMode?: 'IMMEDIATE' | 'DEFERRED';
     }
   | {
@@ -137,6 +153,7 @@ export type WalletInfo =
       provider: 'passkey';
       chain?: WalletChain;
       existsOnStellar?: boolean;
+      provisioning?: WalletProvisioning;
       fundingMode?: 'IMMEDIATE' | 'DEFERRED';
     }
   | {
@@ -145,6 +162,7 @@ export type WalletInfo =
       provider: WalletId | (string & {}) | null;
       chain?: WalletChain;
       existsOnStellar?: boolean;
+      provisioning?: WalletProvisioning;
       fundingMode?: 'IMMEDIATE' | 'DEFERRED';
     };
 
@@ -199,6 +217,21 @@ export interface PollarClientConfig {
    * Defaults to `30000` (30s).
    */
   submitTimeoutMs?: number;
+  /**
+   * Per-request timeout (ms) for the final `POST /auth/login`, instead of
+   * {@link requestTimeoutMs}.
+   *
+   * That call is where a login does its real server-side work - minting tokens,
+   * resolving the wallet, and, for an app whose account creation runs inline,
+   * waiting on the Stellar network. The 10s default that protects every other
+   * request is far too tight for it: a congested network has pushed it past a
+   * minute, and the client aborting mid-flight does not stop the server, so the
+   * work completed with nobody left to receive the tokens.
+   *
+   * Defaults to `45000` (45s). It is a backstop, not a fix - an app whose
+   * account creation is asynchronous returns in a couple of seconds.
+   */
+  loginTimeoutMs?: number;
   /**
    * Automatic retry with backoff for idempotent, transient-failure SDK HTTP
    * (token refresh + GETs), to absorb a single dropped request before surfacing
@@ -541,7 +574,12 @@ export type TxErrorPhase = 'building' | 'signing' | 'submitting' | 'signing-subm
  * modal-style UIs, but headless callers can `await` the method and inspect
  * the returned outcome directly instead of subscribing to state changes.
  */
-export type BuildOutcome = { status: 'built'; buildData: TxBuildContent } | { status: 'error'; details?: string };
+export type BuildOutcome =
+  | { status: 'built'; buildData: TxBuildContent }
+  // `code` carries the backend's error code through, the same as SignOutcome:
+  // without it `isWalletNotReady(await client.buildTx(...))` cannot see the 409
+  // it is documented to recognize on a returned outcome.
+  | { status: 'error'; details?: string; code?: string; message?: string };
 
 export type SignOutcome =
   | { status: 'signed'; signedXdr: string; submissionToken?: string; expiresAt?: number; sponsored?: boolean }
@@ -778,6 +816,28 @@ export function isPollarApiError(err: unknown): err is PollarApiError {
   );
 }
 
+/**
+ * The server's code for "this wallet's Stellar account is not on the ledger yet".
+ *
+ * Under asynchronous provisioning a login returns before the account exists, so
+ * every on-chain operation in that window is refused with this rather than left
+ * to fail as `op_no_source_account` on the network.
+ */
+export const WALLET_NOT_READY_CODE = 'SDK_WALLET_NOT_READY';
+
+/**
+ * True when a failure is "the wallet is still being prepared".
+ *
+ * Accepts either a thrown {@link PollarApiError} or a returned transaction
+ * outcome, since the tx methods report failures as a value rather than throwing.
+ * The right response is to wait - {@link PollarClient.onWalletStateChange} fires
+ * when the account lands - not to retry immediately.
+ */
+export function isWalletNotReady(errorOrOutcome: unknown): boolean {
+  if (typeof errorOrOutcome !== 'object' || errorOrOutcome === null) return false;
+  return (errorOrOutcome as { code?: unknown }).code === WALLET_NOT_READY_CODE;
+}
+
 /** Type guard for {@link PollarNetworkError} (instanceof is unreliable across
  *  bundle/dual-package boundaries, so match the stable `code` too). */
 export function isPollarNetworkError(err: unknown): err is PollarNetworkError {
@@ -936,8 +996,13 @@ export type TxHistoryState =
 // --- KYC types ----------------------------------------------------------------
 
 export type KycLevel = 'basic' | 'intermediate' | 'enhanced';
-export type KycStatus = 'none' | 'pending' | 'approved' | 'rejected';
+export type KycStatus = 'none' | 'pending' | 'approved' | 'rejected' | 'expired';
+export type KycDecisionStatus = 'pending' | 'manual_review' | 'approved' | 'rejected' | 'expired';
 export type KycFlow = 'iframe' | 'form' | 'redirect';
+
+/** One read of GET /kyc/status. `status` is what gates the user; `decisionStatus`
+ *  and `reviewReason` say why a `pending` is pending (e.g. held for manual review). */
+export type KycStatusContent = pollarPaths['/kyc/status']['get']['responses'][200]['content']['application/json']['content'];
 
 export type KycProvider =
   pollarPaths['/kyc/providers']['get']['responses'][200]['content']['application/json']['content']['providers'][number];
@@ -950,6 +1015,44 @@ export type RampsQuoteQuery = NonNullable<pollarPaths['/ramps/quote']['get']['pa
 export type RampQuote =
   pollarPaths['/ramps/quote']['get']['responses'][200]['content']['application/json']['content']['quotes'][number];
 export type RampsQuoteResponse = pollarPaths['/ramps/quote']['get']['responses'][200]['content']['application/json']['content'];
+/**
+ * A route left out of the quotes because a requirement step of its corridor is
+ * pending. For a `KYC` step, open KYC on `optionId` for `corridorId`; for `FORM`, the
+ * form `optionId`; for `REGISTRY_CHECK`, the registry option `optionId`; for
+ * `PROVIDER_REGISTRATION`, the registration of `corridorId`. Then quote again.
+ */
+export type RampQuoteRequirement = NonNullable<RampsQuoteResponse['requirementsRequired']>[number];
+
+/** A form asked by a FORM requirement step, with the user's previous answers. */
+export type RequirementForm =
+  pollarPaths['/requirements/forms/{formId}']['get']['responses'][200]['content']['application/json']['content'];
+export type RequirementFormField = RequirementForm['fields'][number];
+export type RequirementFormAnswers = RequirementForm['answers'];
+export type RequirementFormSubmitted =
+  pollarPaths['/requirements/forms/{formId}']['post']['responses'][200]['content']['application/json']['content'];
+/** The app's own KYC steps and the user's progress on them (GET /requirements). */
+export type AppRequirements = pollarPaths['/requirements']['get']['responses'][200]['content']['application/json']['content'];
+export type AppRequirementStep = NonNullable<AppRequirements['next']>;
+/**
+ * A REGISTRY_CHECK step (SEGIP): the data that will be checked, read from the user's
+ * verified identity, and the user's status on the option. Only the surname split and
+ * the CI complement can be changed.
+ */
+export type RegistryCheck =
+  pollarPaths['/requirements/registry/{optionId}']['get']['responses'][200]['content']['application/json']['content'];
+export type RegistryCheckPrefill = Extract<RegistryCheck['prefill'], { applies: true }>;
+export type RegistryCheckEdit = NonNullable<
+  pollarPaths['/requirements/registry/{optionId}']['post']['requestBody']
+>['content']['application/json'];
+export type RegistryCheckSubmitted =
+  pollarPaths['/requirements/registry/{optionId}']['post']['responses'][200]['content']['application/json']['content'];
+/** A PROVIDER_REGISTRATION step: whether the user is registered with the ramp, can be now, and what is shared. */
+export type ProviderRegistration =
+  pollarPaths['/requirements/registration/{corridorId}']['get']['responses'][200]['content']['application/json']['content'];
+export type ProviderRegistrationSubmitted =
+  pollarPaths['/requirements/registration/{corridorId}']['post']['responses'][200]['content']['application/json']['content'];
+/** One field the server refused, from a KYC_FORM_INVALID_ANSWERS error's `body.errors`. */
+export type RequirementFormAnswerError = { key: string; code: string };
 
 export type RampsOnrampBody = NonNullable<pollarPaths['/ramps/onramp']['post']['requestBody']>['content']['application/json'];
 export type RampsOnrampResponse =

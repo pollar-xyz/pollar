@@ -6,11 +6,12 @@ import type {
   RampDirection,
   RampInstructionField,
   RampQuote,
+  RampQuoteRequirement,
   RampScannable,
   RampTxStatus,
 } from '@pollar/core';
-import { RouteDisplay } from './RouteDisplay';
-import { CopyButton } from '../commons';
+import { LockedRouteDisplay, RouteDisplay } from './RouteDisplay';
+import { CopyButton, PollarModalFooter } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 'status' | 'error';
@@ -107,6 +108,8 @@ interface RampWidgetTemplateProps {
   countriesLoading: boolean;
   refreshing: boolean;
   quotes: RampQuote[];
+  /** Routes not quoted until the user completes the requirement step their corridor names (KYC, form, registry check or provider registration). */
+  kycRequired: RampQuoteRequirement[];
   isLoading: boolean;
   // status step
   provider: string;
@@ -115,6 +118,13 @@ interface RampWidgetTemplateProps {
   tosUrl: string | null;
   /** Provider gated the flow on KYC and published no link; nothing was signed. */
   kycBlocking: boolean;
+  /**
+   * Which part of provider onboarding is outstanding, when any is. Optional
+   * because this template is exported for integrators who render their own
+   * chrome: a required prop would break every one of them on upgrade. Omitted,
+   * the gate falls back to the identity-verification wording.
+   */
+  onboardingStatus?: 'kyc' | 'endorsement' | 'awaiting_provider' | null;
   /** The gate has since cleared - the user needs a fresh quote to continue. */
   kycJustApproved: boolean;
   stellarTxHash: string | null;
@@ -124,12 +134,15 @@ interface RampWidgetTemplateProps {
   canComplete: boolean;
   completing: boolean;
   errorMsg: string | null;
+  /** Neutral guidance on the route list, e.g. after identity verification sent the user back to it. */
+  noticeMsg?: string | null;
   onDirectionChange: (d: RampDirection) => void;
   onAmountChange: (v: string) => void;
   onFieldChange: (key: string, value: string) => void;
   onCountryChange: (v: string) => void;
   onFindRoute: () => void;
   onSelectQuote: (q: RampQuote) => void;
+  onVerifyRoute: (requirement: RampQuoteRequirement) => void;
   onContactContinue: () => void;
   onOpenKyc: () => void;
   onOpenTos: () => void;
@@ -192,12 +205,14 @@ export function RampWidgetTemplate({
   countriesLoading,
   refreshing,
   quotes,
+  kycRequired,
   isLoading,
   provider,
   txStatus,
   kycUrl,
   tosUrl,
   kycBlocking,
+  onboardingStatus,
   kycJustApproved,
   stellarTxHash,
   explorerUrl,
@@ -205,12 +220,14 @@ export function RampWidgetTemplate({
   canComplete,
   completing,
   errorMsg,
+  noticeMsg,
   onDirectionChange,
   onAmountChange,
   onFieldChange,
   onCountryChange,
   onFindRoute,
   onSelectQuote,
+  onVerifyRoute,
   onContactContinue,
   onOpenKyc,
   onOpenTos,
@@ -388,6 +405,7 @@ export function RampWidgetTemplate({
 
       {step === 'select_route' && (
         <>
+          {noticeMsg && <p className="pollar-ramp-payment-note">{noticeMsg}</p>}
           <div className="pollar-ramp-route-list">
             {quotes.map((q, i) => (
               <RouteDisplay
@@ -396,6 +414,14 @@ export function RampWidgetTemplate({
                 busy={startingQuoteId != null && q.quoteId === startingQuoteId}
                 disabled={startingQuoteId != null && q.quoteId !== startingQuoteId}
                 onSelect={onSelectQuote}
+              />
+            ))}
+            {kycRequired.map((r) => (
+              <LockedRouteDisplay
+                key={`${r.rampProviderId}:${r.corridorId}`}
+                requirement={r}
+                disabled={startingQuoteId != null}
+                onVerify={onVerifyRoute}
               />
             ))}
           </div>
@@ -623,10 +649,23 @@ export function RampWidgetTemplate({
             </button>
           )}
 
-          {/* Link-less KYC gate: there is nowhere to send the user, so say what
-              is blocking and keep the withdraw button out of reach. No funds
-              have moved and nothing was signed. */}
-          {kycBlocking && (
+          {/* Link-less gate: there is nowhere to send the user, so say what is
+              blocking and keep the withdraw button out of reach. No funds have
+              moved and nothing was signed.
+
+              Two different situations reach this, and telling the user the wrong
+              one is worse than saying nothing: `awaiting_provider` means their
+              verification is already done and the provider is finishing its own
+              setup, so asking them to "complete verification" sends them back
+              through a flow that cannot change anything. */}
+          {kycBlocking && onboardingStatus === 'awaiting_provider' && (
+            <p className="pollar-ramp-payment-note">
+              {provider} is still setting up your account for this payment method. Your verification is complete and there is
+              nothing left for you to do — nothing has been sent, and this will update on its own once {provider} is ready.
+            </p>
+          )}
+
+          {kycBlocking && onboardingStatus !== 'awaiting_provider' && (
             <p className="pollar-ramp-payment-note">
               {provider} needs to verify your identity before this payout. Nothing has been sent yet — complete verification
               with {provider}, and this will update on its own.
@@ -687,6 +726,7 @@ export function RampWidgetTemplate({
           </div>
         </div>
       )}
+      <PollarModalFooter />
     </div>
   );
 }

@@ -8,6 +8,9 @@ export type { PollarAuthProvider, AuthProviderContext } from '@pollar/core';
 // for consumers who build their own `PollarClient` and want the ceremony wired at
 // construction, and for anyone wrapping it (logging, custom rpId).
 export { browserPasskeyCeremony, browserPasskeySigner } from './lib/passkey-ceremony';
+// Shared by the modals and exported so a custom template phrases the wait the
+// same way the built-in ones do.
+export { walletNotReadyReason } from './lib/wallet-provisioning';
 export { WalletButton } from './components/wallet-button/WalletButton';
 export { WalletButtonTemplate, type WalletButtonTemplateProps } from './components/wallet-button/WalletButtonTemplate';
 
@@ -27,6 +30,9 @@ export type { UseChainsResult } from './useChains';
 
 // --- Modals -------------------------------------------------------------------
 export { KycModal } from './components/kyc-modal/KycModal';
+export { RequirementFormModal } from './components/requirement-form-modal/RequirementFormModal';
+export { RegistryCheckModal } from './components/registry-check-modal/RegistryCheckModal';
+export { ProviderRegistrationModal } from './components/provider-registration-modal/ProviderRegistrationModal';
 export { KycStatus } from './components/kyc-modal/KycStatus';
 export { RampWidget } from './components/ramp-widget/RampWidget';
 export { RouteDisplay } from './components/ramp-widget/RouteDisplay';

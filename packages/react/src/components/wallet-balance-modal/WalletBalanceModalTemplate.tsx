@@ -1,8 +1,8 @@
 'use client';
 
-import { StellarNetwork, WalletBalanceRecord, WalletBalanceState, WalletChain } from '@pollar/core';
+import { EnabledAssetRecord, StellarNetwork, WalletBalanceRecord, WalletBalanceState, WalletChain } from '@pollar/core';
 import { ChainSelect, resolveChain } from '../ChainSelect';
-import { BusyOverlay, CopyButton, cropAddress, PollarModalFooter, useStickyData } from '../commons';
+import { BusyOverlay, CopyButton, cropAddress, PollarModalFooter, RefreshIcon, useStickyData } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 // Stellar amounts are int64 scaled by 10^7, so 7 decimals is the ledger's exact
@@ -36,22 +36,49 @@ function faucetFor(record: WalletBalanceRecord): FaucetHint | null {
   return null;
 }
 
-// No per-row chain tag: the list is filtered to the network picked in the
-// header, so every row would carry the same tag.
-function BalanceItem({ record, faucet }: { record: WalletBalanceRecord; faucet: FaucetHint | null }) {
+// No per-row chain tag: the list is filtered to the internally selected
+// network, so every row would carry the same tag.
+function assetMetadataFor(record: WalletBalanceRecord, metadata: EnabledAssetRecord[]): EnabledAssetRecord | undefined {
+  return metadata.find(
+    (asset) =>
+      resolveChain(asset.chain) === resolveChain(record.chain) &&
+      asset.code === record.code &&
+      (asset.issuer ?? '') === (record.issuer ?? ''),
+  );
+}
+
+function AssetIcon({ code }: { code: string }) {
+  return (
+    <span className="pollar-bal-asset-icon" aria-hidden>
+      {code.slice(0, 2).toUpperCase()}
+    </span>
+  );
+}
+
+function BalanceItem({
+  record,
+  faucet,
+  metadata,
+}: {
+  record: WalletBalanceRecord;
+  faucet: FaucetHint | null;
+  metadata?: EnabledAssetRecord | undefined;
+}) {
   const balanceDiffers = record.balance !== record.available;
+  const secondary = metadata?.name ?? (record.issuer ? cropAddress(record.issuer) : 'Native asset');
   return (
     <div className="pollar-bal-item">
       <div className="pollar-bal-asset-info">
-        <span className="pollar-bal-asset-code-row">
-          <span className="pollar-bal-asset">{record.code}</span>
-        </span>
-        {record.issuer && (
-          <span className="pollar-issuer">
-            <span className="pollar-issuer-addr">{cropAddress(record.issuer)}</span>
-            <CopyButton value={record.issuer} label="Copy issuer address" className="pollar-copy-btn-sm" />
+        <span className="pollar-bal-asset-leading">
+          <AssetIcon code={record.code} />
+          <span className="pollar-bal-asset-copy">
+            <span className="pollar-bal-asset">{record.code}</span>
+            <span className="pollar-bal-asset-secondary">
+              {secondary}
+              {record.issuer && <CopyButton value={record.issuer} label="Copy issuer address" className="pollar-copy-btn-sm" />}
+            </span>
           </span>
-        )}
+        </span>
         {faucet && (
           <span className="pollar-bal-faucet-hint">
             Need more?{' '}
@@ -82,12 +109,17 @@ export interface WalletBalanceModalTemplateProps {
   walletBalance: WalletBalanceState;
   /** Address of the wallet on {@link selectedChain}. */
   walletAddress: string;
-  /** Networks the user holds a wallet on; the first one is the default. */
-  chains: WalletChain[];
+  /** Asset catalog metadata, when already available in the provider. */
+  assetMetadata?: EnabledAssetRecord[];
+  /**
+   * The networks the user holds a wallet on, in the app's configured order.
+   * The picker renders only with two or more, so a single-chain app shows none.
+   */
+  chains?: WalletChain[];
   selectedChain: WalletChain | null;
   /** testnet vs mainnet - gates the Solana devnet faucet hint. */
   network: StellarNetwork;
-  onSelectChain: (chain: WalletChain) => void;
+  onSelectChain?: (chain: WalletChain) => void;
   onRefresh: () => void;
   onClose: () => void;
 }
@@ -98,6 +130,7 @@ export function WalletBalanceModalTemplate({
   styleOverrides,
   walletBalance,
   walletAddress,
+  assetMetadata = [],
   chains,
   selectedChain,
   network,
@@ -132,24 +165,9 @@ export function WalletBalanceModalTemplate({
             aria-label="Refresh"
             title="Refresh"
           >
-            <svg
-              className={isLoading ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              aria-hidden
-            >
-              <path
-                d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <RefreshIcon spinning={isLoading} />
           </button>
-          <button className="pollar-modal-close" onClick={onClose} aria-label="Close">
+          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
               <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
@@ -157,7 +175,9 @@ export function WalletBalanceModalTemplate({
         </div>
       </div>
 
-      <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoading} />
+      {chains && onSelectChain && (
+        <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoading} />
+      )}
 
       {walletAddress && (
         <div className="pollar-address-row">
@@ -186,6 +206,7 @@ export function WalletBalanceModalTemplate({
             <BalanceItem
               key={(b.chain ?? '') + b.code + (b.issuer ?? '')}
               record={b}
+              metadata={assetMetadataFor(b, assetMetadata)}
               faucet={showFaucets ? faucetFor(b) : null}
             />
           ))}

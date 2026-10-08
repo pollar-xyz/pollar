@@ -38,6 +38,7 @@ import { ModalErrorBoundary, setModalErrorLogger } from './components/commons';
 import { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
 import { EnabledAssetsModal } from './components/enabled-assets-modal/EnabledAssetsModal';
 import { KycModal } from './components/kyc-modal/KycModal';
+import { AppKycFlow } from './components/kyc-modal/AppKycFlow';
 import { LoginModal } from './components/login-modal/LoginModal';
 import { RampWidget } from './components/ramp-widget/RampWidget';
 import { ReceiveModal } from './components/receive-modal/ReceiveModal';
@@ -75,7 +76,12 @@ function sessionsEqual(a: PollarPersistedSession | null, b: PollarPersistedSessi
     a.token?.accessToken === b.token?.accessToken &&
     a.token?.refreshToken === b.token?.refreshToken &&
     a.token?.expiresAt === b.token?.expiresAt &&
-    a.wallet?.address === b.wallet?.address
+    a.wallet?.address === b.wallet?.address &&
+    // The wallet's on-chain account can move from CREATING to READY without any
+    // other field changing. Leaving it out of the comparison is what would make
+    // the whole provisioning UI dead: the short-circuit below would swallow the
+    // one emission that says the wait is over.
+    a.wallet?.provisioning === b.wallet?.provisioning
   );
 }
 
@@ -184,6 +190,8 @@ interface PollarContextValue {
   openEnabledAssetsModal: () => void;
   // kyc
   openKycModal: (options?: {
+    corridorId?: string;
+    providerId?: string;
     country?: string;
     level?: 'basic' | 'intermediate' | 'enhanced';
     onApproved?: () => void;
@@ -572,6 +580,8 @@ export function PollarProvider({
   const [transactionModalOpen, setTransactionModalOpen] = useState(false);
   const [kycModalOpen, setKycModalOpen] = useState(false);
   const [kycModalOptions, setKycModalOptions] = useState<{
+    corridorId?: string;
+    providerId?: string;
     country?: string;
     level?: 'basic' | 'intermediate' | 'enhanced';
     onApproved?: () => void;
@@ -599,6 +609,12 @@ export function PollarProvider({
   // persisted session. For every wallet type, `wallet.address` holds the on-chain
   // address we care about.
   const walletAddress = sessionState?.wallet?.address || '';
+  // A scalar dependency for the context memo below, for the same reason
+  // `walletAddress` is one: the memo reads the wallet through
+  // `pollarClient.getWallet()`, so it only recomputes when something in its
+  // dependency list moves. Without this, a wallet going from CREATING to READY
+  // updates the session and re-renders nothing.
+  const walletProvisioning = sessionState?.wallet?.provisioning;
   const getClient = useCallback(() => pollarClient, [pollarClient]);
   // refreshBalance resolves the own wallet server-side from the session;
   // walletAddress stays in deps so the callback re-binds when the wallet changes.
@@ -700,8 +716,10 @@ export function PollarProvider({
       retryConfig,
       adapters,
     } as PollarContextValue;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- walletProvisioning is an intentional recompute trigger, not read in the body
   }, [
     walletAddress,
+    walletProvisioning,
     verified,
     pollarClient,
     getClient,
@@ -734,12 +752,24 @@ export function PollarProvider({
       )}
       {kycModalOpen && (
         <ModalErrorBoundary onClose={() => setKycModalOpen(false)}>
-          <KycModal
-            onClose={() => setKycModalOpen(false)}
-            {...(kycModalOptions.country !== undefined && { country: kycModalOptions.country })}
-            {...(kycModalOptions.level !== undefined && { level: kycModalOptions.level })}
-            {...(kycModalOptions.onApproved !== undefined && { onApproved: kycModalOptions.onApproved })}
-          />
+          {kycModalOptions.corridorId === undefined && kycModalOptions.providerId === undefined ? (
+            // The app's own KYC: its configured steps, in order.
+            <AppKycFlow
+              onClose={() => setKycModalOpen(false)}
+              {...(kycModalOptions.country !== undefined && { country: kycModalOptions.country })}
+              {...(kycModalOptions.level !== undefined && { level: kycModalOptions.level })}
+              {...(kycModalOptions.onApproved !== undefined && { onApproved: kycModalOptions.onApproved })}
+            />
+          ) : (
+            <KycModal
+              onClose={() => setKycModalOpen(false)}
+              {...(kycModalOptions.country !== undefined && { country: kycModalOptions.country })}
+              {...(kycModalOptions.corridorId !== undefined && { corridorId: kycModalOptions.corridorId })}
+              {...(kycModalOptions.providerId !== undefined && { providerId: kycModalOptions.providerId })}
+              {...(kycModalOptions.level !== undefined && { level: kycModalOptions.level })}
+              {...(kycModalOptions.onApproved !== undefined && { onApproved: kycModalOptions.onApproved })}
+            />
+          )}
         </ModalErrorBoundary>
       )}
       {rampModalOpen && (

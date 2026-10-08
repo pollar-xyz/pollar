@@ -112,6 +112,16 @@
 }
 
 /* ---- Dropdown divider ---- */
+/* Not an item: the account is being prepared, there is nothing to click. Reads
+   as an aside, at 0.8 opacity, so it informs without competing with the actions
+   below it. */
+.pollar-wallet-dropdown-notice {
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0.8;
+}
+
 .pollar-wallet-dropdown-divider {
   height: 1px;
   background: rgba(0, 0, 0, 0.08);

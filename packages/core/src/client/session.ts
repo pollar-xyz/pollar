@@ -1,6 +1,6 @@
 import type { PollarLogger } from '../lib/logger';
 import type { Storage } from '../storage/types';
-import type { PollarPersistedSession } from '../types';
+import type { PollarPersistedSession, WalletProvisioning } from '../types';
 
 /**
  * Persisted session shape (stored via the injected `Storage` adapter).
@@ -20,6 +20,18 @@ import type { PollarPersistedSession } from '../types';
 const SESSION_SUFFIX = ':session';
 const WALLET_TYPE_SUFFIX = ':walletType';
 const DPOP_NONCE_SUFFIX = ':dpopNonce';
+const DPOP_CLOCK_OFFSET_SUFFIX = ':dpopClockOffset';
+
+/**
+ * The only values `wallet.provisioning` may hold.
+ *
+ * `isValidSession` rejects a session carrying anything else, so a value that
+ * reaches storage unchecked costs the user their session on the next reload -
+ * every writer runs it through here first.
+ */
+export function isWalletProvisioning(value: unknown): value is WalletProvisioning {
+  return value === 'READY' || value === 'CREATING' || value === 'FAILED';
+}
 
 export function sessionStorageKey(apiKeyHash: string): string {
   return `pollar:${apiKeyHash}${SESSION_SUFFIX}`;
@@ -41,6 +53,19 @@ export function dpopNonceStorageKey(apiKeyHash: string): string {
   return `pollar:${apiKeyHash}${DPOP_NONCE_SUFFIX}`;
 }
 
+/**
+ * Key for the learned DPoP clock offset (`serverTime - localTime`, in seconds).
+ *
+ * Kept out of `removeStorage` for the same reason as the nonce: it is a property
+ * of the server's clock, not of the session - it carries no user identity and
+ * grants nothing on its own. Persisting it means only a genuine cold start pays
+ * one rejected proof before the offset is learned; every later load signs its
+ * first proof already corrected.
+ */
+export function dpopClockOffsetStorageKey(apiKeyHash: string): string {
+  return `pollar:${apiKeyHash}${DPOP_CLOCK_OFFSET_SUFFIX}`;
+}
+
 export function walletTypeStorageKey(apiKeyHash: string): string {
   return `pollar:${apiKeyHash}${WALLET_TYPE_SUFFIX}`;
 }
@@ -59,6 +84,13 @@ const MAX_WALLET_TYPE = 32;
 const MAX_DPOP_JKT = 64;
 /** Bounds what we accept back from storage as a nonce (sdk-api mints ~60 chars). */
 export const MAX_DPOP_NONCE = 512;
+/**
+ * Bounds the clock offset read back from storage. A day is orders of magnitude
+ * past any real skew, so a larger value is a corrupt/hostile blob - and signing
+ * with it would push every `iat` outside the server's window, wedging auth until
+ * a response re-learns the true offset.
+ */
+export const MAX_DPOP_CLOCK_OFFSET_SEC = 86_400;
 // One wallet per supported chain, with headroom. Bounds the persisted blob so a
 // hostile or buggy `wallets[]` can't blow up storage or the validation loop.
 const MAX_WALLETS = 16;
@@ -210,6 +242,10 @@ function isValidWallet(value: unknown, label: string, logger: PollarLogger): boo
   }
   if (w['existsOnStellar'] !== undefined && typeof w['existsOnStellar'] !== 'boolean') {
     logger.debug(`[PollarClient:session] Invalid session — ${label}.existsOnStellar must be boolean if present`);
+    return false;
+  }
+  if (w['provisioning'] !== undefined && !isWalletProvisioning(w['provisioning'])) {
+    logger.debug(`[PollarClient:session] Invalid session — ${label}.provisioning must be READY|CREATING|FAILED if present`);
     return false;
   }
   if (w['createdAt'] !== undefined && (typeof w['createdAt'] !== 'number' || !Number.isFinite(w['createdAt']))) {
