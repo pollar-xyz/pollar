@@ -17,6 +17,7 @@ type RegistryCopy = Record<
   | 'notApplicable'
   | 'identityRequired'
   | 'nameMismatch'
+  | 'rejected'
   | 'loadError'
   | 'submitError'
   | 'step',
@@ -43,6 +44,7 @@ export const REGISTRY_COPY: Record<FormLanguage, RegistryCopy> = {
       'This check is only for Bolivian ID cards (CI). Your verified document is not one, so this route is not available.',
     identityRequired: 'Verify your identity first.',
     nameMismatch: 'Both surnames together must read as on your document: {full}.',
+    rejected: 'The registry did not confirm: {fields}. Check how they are written and try again.',
     loadError: 'Could not load your details. Please try again.',
     submitError: 'Could not check your details. Please try again.',
     step: 'Step {n} of {total}',
@@ -66,6 +68,7 @@ export const REGISTRY_COPY: Record<FormLanguage, RegistryCopy> = {
       'Esta validación es solo para cédulas bolivianas (CI). Tu documento verificado no lo es, así que esta ruta no está disponible.',
     identityRequired: 'Primero verifica tu identidad.',
     nameMismatch: 'Los dos apellidos juntos deben leerse como en tu documento: {full}.',
+    rejected: 'El registro no confirmó: {fields}. Revisa cómo están escritos e intenta de nuevo.',
     loadError: 'No se pudieron cargar tus datos. Intenta de nuevo.',
     submitError: 'No se pudieron validar tus datos. Intenta de nuevo.',
     step: 'Paso {n} de {total}',

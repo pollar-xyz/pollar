@@ -6848,8 +6848,10 @@ export interface operations {
                         content: {
                             optionId: string;
                             /** @enum {string} */
-                            status: "none" | "pending" | "approved";
+                            status: "none" | "pending" | "approved" | "rejected";
                             reviewReason?: string;
+                            /** The fields the registry did not confirm, when `rejected`; all of them editable. */
+                            rejectedFields?: string[];
                             prefill: {
                                 /** @constant */
                                 applies: false;
@@ -6979,8 +6981,10 @@ export interface operations {
                         content: {
                             optionId: string;
                             /** @enum {string} */
-                            status: "none" | "pending" | "approved";
+                            status: "none" | "pending" | "approved" | "rejected";
                             reviewReason?: string;
+                            /** The fields the registry did not confirm, when `rejected`; all of them editable. */
+                            rejectedFields?: string[];
                         };
                     };
                 };

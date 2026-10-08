@@ -58,6 +58,8 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
         if (loaded.status === 'approved') return onApproved();
         setCheck(loaded);
         if (loaded.status === 'pending') setReview(true);
+        // A check the registry did not confirm on the surnames or the complement: say which, keep the form open.
+        if (loaded.status === 'rejected') setError(rejectedMessage(loaded.rejectedFields));
         if (loaded.prefill.applies) {
           setSurname1(loaded.prefill.surname1);
           setSurname2(loaded.prefill.surname2 ?? '');
@@ -74,6 +76,13 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
 
   const prefill: RegistryCheckPrefill | null = check?.prefill.applies ? check.prefill : null;
 
+  /** The registry's rejected fields, named as the screen names them. */
+  function rejectedMessage(fields: string[] | undefined) {
+    const labels: Record<string, string> = { surname1: copy.surname1, surname2: copy.surname2, complementNumber: copy.complement };
+    const named = (fields ?? []).map((field) => labels[field] ?? field);
+    return copy.rejected.replace('{fields}', named.length ? named.join(', ') : copy.surname2);
+  }
+
   async function submit() {
     if (!prefill) return;
     setSubmitting(true);
@@ -86,6 +95,7 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
       });
       if (!mounted.current) return;
       if (result.status === 'approved') onApproved();
+      else if (result.status === 'rejected') setError(rejectedMessage(result.rejectedFields));
       else setReview(true);
     } catch (e) {
       if (!mounted.current) return;
