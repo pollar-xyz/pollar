@@ -1,6 +1,6 @@
 {
   "name": "@pollar/react-native",
-  "version": "0.11.4-rc.1",
+  "version": "0.11.4-rc.2",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -38,12 +38,12 @@
     "node": ">=20"
   },
   "peerDependencies": {
-    "@pollar/core": "^0.11.4-rc.1",
+    "@pollar/core": "^0.11.4-rc.2",
     "react": ">=18",
     "react-native": ">=0.72"
   },
   "devDependencies": {
-    "@pollar/core": "^0.11.4-rc.1",
+    "@pollar/core": "^0.11.4-rc.2",
     "@types/react": "^18.0.0",
     "react": "^18.0.0",
     "react-native": "^0.72.0",
