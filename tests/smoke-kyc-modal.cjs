@@ -11,7 +11,8 @@ function load(relativePath, overrides = {}) {
   const output = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const scope = { exports: {}, setTimeout, clearTimeout, globalThis };
+  // tsup defines the version at build time; the footer reads it.
+  const scope = { exports: {}, setTimeout, clearTimeout, globalThis, __POLLAR_VERSION__: 'test' };
   // Theme is a .ts utility rather than a React component.
   scope.require = (id) => {
     if (id in overrides) return overrides[id];

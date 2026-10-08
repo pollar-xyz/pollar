@@ -3,6 +3,7 @@
 import type { RequirementForm, RequirementFormField } from '@pollar/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
 import {
   answersOf,
@@ -259,6 +260,7 @@ export function RequirementFormModal({ formId, progress, onClose, onSubmitted }:
             </div>
           </form>
         )}
+        <PollarModalFooter />
       </div>
     </div>
   );

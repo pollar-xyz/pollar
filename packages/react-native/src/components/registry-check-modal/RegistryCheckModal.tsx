@@ -29,6 +29,7 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
   const colors = {
     text: isDark ? '#ffffff' : '#111827',
     muted: isDark ? '#9ca3af' : '#6b7280',
+    error: isDark ? '#f87171' : '#dc2626',
     border: isDark ? '#374151' : '#e5e7eb',
     itemBg: isDark ? '#262626' : '#f9fafb',
   };
@@ -38,6 +39,8 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
   const [surname2, setSurname2] = useState('');
   const [complement, setComplement] = useState('');
   const [error, setError] = useState<string | null>(null);
+  /** Fields the registry did not confirm on the last check, outlined until the next try. */
+  const [rejected, setRejected] = useState<string[]>([]);
   const [review, setReview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const mounted = useRef(true);
@@ -59,7 +62,7 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
         setCheck(loaded);
         if (loaded.status === 'pending') setReview(true);
         // A check the registry did not confirm on the surnames or the complement: say which, keep the form open.
-        if (loaded.status === 'rejected') setError(rejectedMessage(loaded.rejectedFields));
+        if (loaded.status === 'rejected') showRejected(loaded.rejectedFields);
         if (loaded.prefill.applies) {
           setSurname1(loaded.prefill.surname1);
           setSurname2(loaded.prefill.surname2 ?? '');
@@ -76,17 +79,19 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
 
   const prefill: RegistryCheckPrefill | null = check?.prefill.applies ? check.prefill : null;
 
-  /** The registry's rejected fields, named as the screen names them. */
-  function rejectedMessage(fields: string[] | undefined) {
+  /** Say which fields the registry did not confirm and outline them; the form stays open. */
+  function showRejected(fields: string[] | undefined) {
     const labels: Record<string, string> = { surname1: copy.surname1, surname2: copy.surname2, complementNumber: copy.complement };
-    const named = (fields ?? []).map((field) => labels[field] ?? field);
-    return copy.rejected.replace('{fields}', named.length ? named.join(', ') : copy.surname2);
+    const named = fields?.length ? fields : ['surname2'];
+    setRejected(named);
+    setError(copy.rejected.replace('{fields}', named.map((field) => labels[field] ?? field).join(', ')));
   }
 
   async function submit() {
     if (!prefill) return;
     setSubmitting(true);
     setError(null);
+    setRejected([]);
     try {
       const result = await client.submitRegistryCheck(optionId, {
         surname1: surname1.trim(),
@@ -95,7 +100,7 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
       });
       if (!mounted.current) return;
       if (result.status === 'approved') onApproved();
-      else if (result.status === 'rejected') setError(rejectedMessage(result.rejectedFields));
+      else if (result.status === 'rejected') showRejected(result.rejectedFields);
       else setReview(true);
     } catch (e) {
       if (!mounted.current) return;
@@ -118,16 +123,21 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
       <TextInput style={[input, { opacity: 0.6 }]} value={value} editable={false} />
     </View>
   );
-  const editable = (label: string, value: string, onChange: (value: string) => void, extra: { maxLength?: number } = {}) => (
+  const editable = (
+    label: string,
+    value: string,
+    onChange: (value: string) => void,
+    extra: { maxLength?: number; invalid?: boolean } = {},
+  ) => (
     <View style={styles.field}>
       <Text style={[styles.label, { color: colors.text }]}>{label}</Text>
       <TextInput
-        style={input}
+        style={[input, extra.invalid ? { borderColor: colors.error } : null]}
         value={value}
         editable={!submitting}
         autoCapitalize="characters"
         onChangeText={onChange}
-        {...extra}
+        maxLength={extra.maxLength}
       />
     </View>
   );
@@ -178,12 +188,13 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
             <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
               <Text style={{ color: colors.muted, fontSize: 14, marginBottom: 12 }}>{copy.intro}</Text>
               {readOnly(copy.givenNames, prefill.givenNames)}
-              {editable(`${copy.surname1} *`, surname1, setSurname1)}
-              {editable(copy.surname2, surname2, setSurname2)}
+              {editable(`${copy.surname1} *`, surname1, setSurname1, { invalid: rejected.includes('surname1') })}
+              {editable(copy.surname2, surname2, setSurname2, { invalid: rejected.includes('surname2') })}
               {readOnly(copy.birthdate, prefill.birthdate)}
               {readOnly(copy.documentNumber, prefill.documentNumber)}
               {editable(copy.complement, complement, (value) => setComplement(value.toUpperCase().replace(/[^0-9A-Z]/g, '')), {
                 maxLength: 3,
+                invalid: rejected.includes('complementNumber'),
               })}
             </ScrollView>
           )}

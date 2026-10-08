@@ -3,6 +3,7 @@
 import type { RegistryCheck, RegistryCheckPrefill } from '@pollar/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
 import { formLanguage } from '../requirement-form-modal/form-fields';
 import { errorCode, REGISTRY_COPY } from './registry-copy';
@@ -35,6 +36,8 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
   const [surname2, setSurname2] = useState('');
   const [complement, setComplement] = useState('');
   const [error, setError] = useState<string | null>(null);
+  /** Fields the registry did not confirm on the last check, outlined until the next try. */
+  const [rejected, setRejected] = useState<string[]>([]);
   const [review, setReview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const mounted = useRef(true);
@@ -56,7 +59,7 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
         setCheck(loaded);
         if (loaded.status === 'pending') setReview(true);
         // A check the registry did not confirm on the surnames or the complement: say which, keep the form open.
-        if (loaded.status === 'rejected') setError(rejectedMessage(loaded.rejectedFields));
+        if (loaded.status === 'rejected') showRejected(loaded.rejectedFields);
         if (loaded.prefill.applies) {
           setSurname1(loaded.prefill.surname1);
           setSurname2(loaded.prefill.surname2 ?? '');
@@ -73,17 +76,19 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
 
   const prefill: RegistryCheckPrefill | null = check?.prefill.applies ? check.prefill : null;
 
-  /** The registry's rejected fields, named as the screen names them. */
-  function rejectedMessage(fields: string[] | undefined) {
+  /** Say which fields the registry did not confirm and outline them; the form stays open. */
+  function showRejected(fields: string[] | undefined) {
     const labels: Record<string, string> = { surname1: copy.surname1, surname2: copy.surname2, complementNumber: copy.complement };
-    const named = (fields ?? []).map((field) => labels[field] ?? field);
-    return copy.rejected.replace('{fields}', named.length ? named.join(', ') : copy.surname2);
+    const named = fields?.length ? fields : ['surname2'];
+    setRejected(named);
+    setError(copy.rejected.replace('{fields}', named.map((field) => labels[field] ?? field).join(', ')));
   }
 
   async function submit() {
     if (!prefill) return;
     setSubmitting(true);
     setError(null);
+    setRejected([]);
     try {
       const result = await client.submitRegistryCheck(optionId, {
         surname1: surname1.trim(),
@@ -92,7 +97,7 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
       });
       if (!mounted.current) return;
       if (result.status === 'approved') onApproved();
-      else if (result.status === 'rejected') setError(rejectedMessage(result.rejectedFields));
+      else if (result.status === 'rejected') showRejected(result.rejectedFields);
       else setReview(true);
     } catch (e) {
       if (!mounted.current) return;
@@ -187,6 +192,7 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
                 value={surname1}
                 required
                 disabled={submitting}
+                aria-invalid={rejected.includes('surname1') || undefined}
                 onChange={(e) => setSurname1(e.target.value)}
               />
             </div>
@@ -199,6 +205,7 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
                 className="pollar-input"
                 value={surname2}
                 disabled={submitting}
+                aria-invalid={rejected.includes('surname2') || undefined}
                 onChange={(e) => setSurname2(e.target.value)}
               />
             </div>
@@ -214,6 +221,7 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
                 value={complement}
                 maxLength={3}
                 disabled={submitting}
+                aria-invalid={rejected.includes('complementNumber') || undefined}
                 onChange={(e) => setComplement(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, ''))}
               />
             </div>
@@ -227,6 +235,7 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
             </div>
           </form>
         )}
+        <PollarModalFooter />
       </div>
     </div>
   );

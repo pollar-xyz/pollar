@@ -1,6 +1,7 @@
 'use client';
 
 import type { KycProvider, KycStartResponse, KycStatus as KycStatusValue } from '@pollar/core';
+import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { KycStatus as KycStatusBadge } from './KycStatus';
 import { kycProcessingMessage, kycReviewMessage } from './kyc-messages';
@@ -253,6 +254,7 @@ export function KycModalTemplate({
           </div>
         </div>
       )}
+      <PollarModalFooter />
     </div>
   );
 }

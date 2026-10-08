@@ -11,7 +11,7 @@ import type {
   RampTxStatus,
 } from '@pollar/core';
 import { LockedRouteDisplay, RouteDisplay } from './RouteDisplay';
-import { CopyButton } from '../commons';
+import { CopyButton, PollarModalFooter } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 'status' | 'error';
@@ -726,6 +726,7 @@ export function RampWidgetTemplate({
           </div>
         </div>
       )}
+      <PollarModalFooter />
     </div>
   );
 }

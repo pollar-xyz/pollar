@@ -3,6 +3,7 @@
 import type { ProviderRegistration } from '@pollar/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
 import { formLanguage } from '../requirement-form-modal/form-fields';
 import { errorCode, missingFieldsOf, REGISTRATION_COPY, SHARED_FIELD_LABELS } from '../registry-check-modal/registry-copy';
@@ -164,6 +165,7 @@ export function ProviderRegistrationModal({ corridorId, progress, onClose, onReg
             </div>
           </form>
         )}
+        <PollarModalFooter />
       </div>
     </div>
   );

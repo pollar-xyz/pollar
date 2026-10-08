@@ -51,6 +51,9 @@
   font-size: 0.75rem;
   color: var(--pollar-error-text, #dc2626);
 }
+.pollar-input[aria-invalid='true'] {
+  border-color: var(--pollar-error-text, #dc2626);
+}
 .pollar-form-textarea {
   height: auto;
   min-height: 88px;
