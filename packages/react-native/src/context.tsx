@@ -19,6 +19,7 @@ import { ModalErrorBoundary } from './components/commons';
 import { AppKycFlow } from './components/kyc-modal/AppKycFlow';
 import { LoginModal } from './components/login-modal/LoginModal';
 import { RampWidget } from './components/ramp-widget/RampWidget';
+import { CardModal } from './components/card-modal/CardModal';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
@@ -83,6 +84,11 @@ interface PollarContextValue {
   }) => void;
   // ramps
   openRampWidget: () => void;
+  /**
+   * Open the Cards modal: the platform's steps, the provider sign-up and KYC, the
+   * card itself, its activity and funding. The card calls live on {@link PollarClient}.
+   */
+  openCardModal: () => void;
   // tx history
   txHistory: TxHistoryState;
   openTxHistoryModal: () => void;
@@ -203,6 +209,7 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
     onApproved?: () => void;
   }>({});
   const [rampWidgetOpen, setRampWidgetOpen] = useState(false);
+  const [cardModalOpen, setCardModalOpen] = useState(false);
   const [txHistoryModalOpen, setTxHistoryModalOpen] = useState(false);
   const [walletBalanceModalOpen, setWalletBalanceModalOpen] = useState(false);
 
@@ -226,6 +233,7 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
         setKycModalOpen(true);
       },
       openRampWidget: () => setRampWidgetOpen(true),
+      openCardModal: () => setCardModalOpen(true),
       txHistory,
       openTxHistoryModal: () => setTxHistoryModalOpen(true),
       openWalletBalanceModal: () => setWalletBalanceModalOpen(true),
@@ -277,6 +285,11 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
       {rampWidgetOpen && (
         <ModalErrorBoundary onClose={() => setRampWidgetOpen(false)}>
           <RampWidget onClose={() => setRampWidgetOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {cardModalOpen && (
+        <ModalErrorBoundary onClose={() => setCardModalOpen(false)}>
+          <CardModal onClose={() => setCardModalOpen(false)} />
         </ModalErrorBoundary>
       )}
       {txHistoryModalOpen && (

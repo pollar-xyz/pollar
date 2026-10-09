@@ -18,6 +18,8 @@ import { modalChrome } from '../modal-theme';
 
 interface KycModalProps {
   corridorId?: string;
+  /** A card provider's steps, in place of a route's. */
+  cardProviderId?: string;
   /** Open this option directly instead of listing the choices (the one a ramp's KYC gate names). */
   providerId?: string;
   onClose: () => void;
@@ -35,7 +37,15 @@ function newIdempotencyKey(): string {
   return `kyc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
-export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved, corridorId, providerId }: KycModalProps) {
+export function KycModal({
+  onClose,
+  country = 'MX',
+  level = 'basic',
+  onApproved,
+  corridorId,
+  cardProviderId,
+  providerId,
+}: KycModalProps) {
   const { getClient, styles } = usePollar();
 
   const [step, setStep] = useState<KycStep>('select_provider');
@@ -70,7 +80,9 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved,
   }
 
   function readStatus(providerId: string) {
-    return corridorId ? client.getKycStatus(undefined, corridorId) : client.getKycStatus(providerId);
+    return corridorId || cardProviderId
+      ? client.getKycStatus(undefined, corridorId, cardProviderId)
+      : client.getKycStatus(providerId);
   }
 
   // One session request at a time: a second one for the same key would only wait on
@@ -92,6 +104,7 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved,
         listed ? country : undefined,
         corridorId,
         key,
+        cardProviderId,
       );
       if (result.alreadyApproved) {
         finish('approved');
@@ -124,7 +137,7 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved,
     setIsLoading(true);
     setError(null);
     return getClient()
-      .getKycProviders(country, corridorId)
+      .getKycProviders(country, corridorId, cardProviderId)
       .then((result) => {
         setProviders(result.providers);
         return result.providers;
@@ -135,7 +148,7 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved,
         return [] as KycProvider[];
       })
       .finally(() => setIsLoading(false));
-  }, [getClient, country, corridorId]);
+  }, [getClient, country, corridorId, cardProviderId]);
 
   useEffect(() => {
     void loadProviders().then((list) => {
@@ -164,6 +177,7 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', onApproved,
         intervalMs: 3000,
         timeoutMs: 120_000,
         ...(corridorId ? { corridorId } : {}),
+        ...(cardProviderId ? { cardProviderId } : {}),
       });
       finishWith(read);
     } catch {

@@ -105,7 +105,10 @@ export {
   submitCardFundingSignature,
   getCardFunding,
   listCardFundings,
+  getCardRequirements,
+  getCardProviderRegistration,
+  submitCardProviderRegistration,
 } from './api/endpoints/cards';
 export type { EncryptedCardSecrets } from './api/endpoints/cards';
 export { createCardSecretsSession, openCardSecrets } from './lib/card-secrets';
-export type { CardSecretsSession } from './lib/card-secrets';
+export type { CardSecretsSession, CardSecretsEngine } from './lib/card-secrets';

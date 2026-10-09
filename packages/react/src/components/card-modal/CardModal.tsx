@@ -3,21 +3,27 @@
 import {
   isPollarApiError,
   type CardBalance,
+  type CardDepositAddress,
+  type CardFunding,
   type CardHolder,
   type CardIncomeRange,
   type CardInfo,
   type CardKycInput,
   type CardOccupation,
   type CardProvider,
+  type CardRequirements,
   type CardSecrets,
   type CardTransaction,
-  type CardDepositAddress,
-  type CardFunding,
 } from '@pollar/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { CopyButton, PollarModalFooter } from '../commons';
+import { KycModal } from '../kyc-modal/KycModal';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
+import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
+import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
+import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
+import { blockedStepMessage, pendingFromRequirement, requiredCardStep, type PendingCardStep } from './card-kyc';
 import '../shared.css';
 import '../send-modal/SendModal.css';
 import './CardModal.css';
@@ -26,7 +32,7 @@ interface CardModalProps {
   onClose: () => void;
 }
 
-/** How often the holder is re-read while identity verification is pending. */
+/** How often the holder is re-read while the provider's identity verification is pending. */
 const KYC_POLL_MS = 5000;
 /** How long the revealed number stays on screen. */
 const REVEAL_MS = 30_000;
@@ -64,7 +70,8 @@ const TX_LABELS: Record<string, string> = {
 
 const KYC_PENDING_COPY: Record<string, string> = {
   PENDING: 'Your information is being reviewed.',
-  NEEDS_ACTION: 'Finish verifying your identity: you will be asked for a photo of your document and a selfie.',
+  NEEDS_ACTION:
+    'Finish verifying your identity with the card provider: you will be asked for a photo of your document and a selfie.',
   IN_REVIEW: 'Your verification is under manual review. This can take a while.',
 };
 
@@ -129,6 +136,9 @@ export function CardModal({ onClose }: CardModalProps) {
 
   const [providers, setProviders] = useState<CardProvider[] | null>(null);
   const [holder, setHolder] = useState<CardHolder | null | undefined>(undefined);
+  const [requirements, setRequirements] = useState<CardRequirements | null>(null);
+  const [pendingStep, setPendingStep] = useState<PendingCardStep | null>(null);
+  const stepAttempt = useRef<PendingCardStep | null>(null);
   const [cards, setCards] = useState<CardInfo[] | null>(null);
   const [balance, setBalance] = useState<CardBalance | null>(null);
   const [transactions, setTransactions] = useState<CardTransaction[] | null>(null);
@@ -151,11 +161,25 @@ export function CardModal({ onClose }: CardModalProps) {
 
   // --- Loading ----------------------------------------------------------------
   const loadHolder = useCallback(async () => {
-    const client = getClient();
-    const h = await client.getCardHolder();
+    const h = await getClient().getCardHolder();
     setHolder(h);
     return h;
   }, [getClient]);
+
+  /** The platform's steps for the provider. Null for a provider without any, and for a server without the route. */
+  const loadRequirements = useCallback(
+    async (cardProviderId: string) => {
+      try {
+        const r = await getClient().getCardRequirements({ cardProviderId });
+        setRequirements(r);
+        return r;
+      } catch {
+        setRequirements(null);
+        return null;
+      }
+    },
+    [getClient],
+  );
 
   const loadCardData = useCallback(async () => {
     const client = getClient();
@@ -175,7 +199,7 @@ export function CardModal({ onClose }: CardModalProps) {
         if (cancelled) return;
         setProviders(ps);
         if (ps.length === 0) return;
-        const h = await loadHolder();
+        const [h] = await Promise.all([loadHolder(), loadRequirements(ps[0]!.id)]);
         if (cancelled) return;
         if (h?.kycStatus === 'APPROVED') await loadCardData();
       } catch (e) {
@@ -188,9 +212,9 @@ export function CardModal({ onClose }: CardModalProps) {
     return () => {
       cancelled = true;
     };
-  }, [getClient, loadHolder, loadCardData]);
+  }, [getClient, loadHolder, loadRequirements, loadCardData]);
 
-  // Prefill the KYC form from the session profile once the form is the next step.
+  // Prefill the provider's own KYC form from the session profile when it is the next step.
   useEffect(() => {
     if (holder?.kycStatus !== 'NOT_STARTED') return;
     const profile = getClient().getUserProfile();
@@ -205,7 +229,7 @@ export function CardModal({ onClose }: CardModalProps) {
       .catch(() => setOccupations([]));
   }, [holder?.kycStatus, getClient]);
 
-  // Verification in progress: re-read the holder until it settles.
+  // The provider's verification in progress: re-read the holder until it settles.
   const kycPending = holder ? holder.kycStatus in KYC_PENDING_COPY : false;
   useEffect(() => {
     if (!kycPending) return;
@@ -229,6 +253,11 @@ export function CardModal({ onClose }: CardModalProps) {
   );
 
   // --- Actions ------------------------------------------------------------------
+  function openStep(step: PendingCardStep) {
+    stepAttempt.current = step;
+    setPendingStep(step);
+  }
+
   async function run(key: string, work: () => Promise<void>, fallback: string) {
     if (busy) return;
     setBusy(key);
@@ -236,16 +265,33 @@ export function CardModal({ onClose }: CardModalProps) {
     try {
       await work();
     } catch (e) {
-      setError(errorText(e, fallback));
+      // A step the platform asks for opens in place of the modal; anything else is shown.
+      const step = requiredCardStep(e);
+      if (step) openStep(step);
+      else setError(errorText(e, fallback));
     } finally {
       setBusy(null);
     }
   }
 
-  const signUp = () =>
+  /** After a step: re-read where the user stands and, when the provider registered them, their holder. */
+  async function afterStep() {
+    if (!provider) return;
+    const [h, r] = await Promise.all([loadHolder(), loadRequirements(provider.id)]);
+    if (h?.kycStatus === 'APPROVED') await loadCardData();
+    if (r?.next && !blockedStepMessage(r.next)) openStep(pendingFromRequirement(provider.id, r.next));
+  }
+
+  /** The user's first move: the next platform step when one is pending, else the provider sign-up. */
+  const start = () =>
     run(
-      'signup',
+      'start',
       async () => {
+        if (!provider) return;
+        if (requirements?.next) {
+          openStep(pendingFromRequirement(provider.id, requirements.next));
+          return;
+        }
         setHolder(await getClient().createCardHolder());
       },
       'Could not start your card application',
@@ -409,8 +455,50 @@ export function CardModal({ onClose }: CardModalProps) {
     kyc.address.postalCode &&
     kyc.address.countryCode.length === 2;
 
+  // --- Platform steps, in place of the modal -------------------------------------
+  // The modal's state stays while a step is open, so cancelling returns to the same screen.
+  if (pendingStep) {
+    const close = () => {
+      stepAttempt.current = null;
+      setPendingStep(null);
+    };
+    const done = () => {
+      // Ignore a step that finishes after it was cancelled or replaced.
+      if (stepAttempt.current !== pendingStep) return;
+      close();
+      void afterStep();
+    };
+    const progress = pendingStep.progress ? { progress: pendingStep.progress } : {};
+    if (pendingStep.type === 'FORM') {
+      return <RequirementFormModal formId={pendingStep.optionId} {...progress} onClose={close} onSubmitted={done} />;
+    }
+    if (pendingStep.type === 'REGISTRY_CHECK') {
+      return <RegistryCheckModal optionId={pendingStep.optionId} {...progress} onClose={close} onApproved={done} />;
+    }
+    if (pendingStep.type === 'PROVIDER_REGISTRATION') {
+      return (
+        <ProviderRegistrationModal
+          cardProviderId={pendingStep.cardProviderId}
+          {...progress}
+          onClose={close}
+          onRegistered={done}
+        />
+      );
+    }
+    return (
+      <KycModal
+        cardProviderId={pendingStep.cardProviderId}
+        providerId={pendingStep.optionId}
+        onClose={close}
+        onApproved={done}
+      />
+    );
+  }
+
   // --- Render -------------------------------------------------------------------
   const loading = providers === null || (providers.length > 0 && holder === undefined);
+  const blocked = requirements?.next ? blockedStepMessage(requirements.next) : null;
+  const stepsPending = !!requirements?.next;
   const title = panel === 'fund' ? 'Add funds' : card ? (card.nickname ?? 'Your card') : 'Get a card';
 
   return (
@@ -474,28 +562,37 @@ export function CardModal({ onClose }: CardModalProps) {
         )}
 
         {!loading && providers?.length === 0 && <div className="pollar-modal-error">Cards are not available for this app.</div>}
+        {!loading && provider && !provider.available && (
+          <div className="pollar-modal-error">Cards are not available right now.</div>
+        )}
 
-        {/* Step 1: sign up */}
-        {!loading && provider && holder === null && (
+        {/* Step 1: the platform's steps, then the provider sign-up */}
+        {!loading && provider && provider.available && holder === null && (
           <>
             <p>
               Get a {provider.name} card funded from your wallet{wallet ? '' : ' once you sign in'}. You will verify your
               identity first; it takes a few minutes.
             </p>
+            {requirements && requirements.total > 0 && (
+              <p className="pollar-card-note">
+                {requirements.completed} of {requirements.total} steps done
+              </p>
+            )}
+            {blocked && <div className="pollar-modal-error">{blocked}</div>}
             <div className="pollar-modal-actions">
               <button
                 type="button"
                 className="pollar-btn-primary"
-                onClick={() => void signUp()}
-                disabled={busy !== null || !wallet}
+                onClick={() => void start()}
+                disabled={busy !== null || !wallet || !!blocked}
               >
-                {busy === 'signup' ? 'Starting...' : 'Start'}
+                {busy === 'start' ? 'Starting...' : stepsPending ? 'Continue' : 'Start'}
               </button>
             </div>
           </>
         )}
 
-        {/* Step 2: KYC form */}
+        {/* Step 2: the provider's own KYC form, when no platform step registered the user */}
         {!loading && provider && holder?.kycStatus === 'NOT_STARTED' && (
           <>
             <p className="pollar-card-section-title">About you</p>
@@ -565,7 +662,7 @@ export function CardModal({ onClose }: CardModalProps) {
           </>
         )}
 
-        {/* Step 3: verification pending */}
+        {/* Step 3: the provider's verification pending */}
         {!loading && holder && holder.kycStatus in KYC_PENDING_COPY && (
           <>
             <p>{KYC_PENDING_COPY[holder.kycStatus]}</p>

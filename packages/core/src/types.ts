@@ -1194,6 +1194,10 @@ export interface CardProvider {
   /** The provider's terms the user accepts before KYC; null while the platform has none loaded. */
   termsUrl: string | null;
   supports: { freeze: boolean; terminate: boolean; physical: boolean; revealSecrets: boolean };
+  /** The first platform step the user still owes this provider; null when they may proceed. */
+  requirement: CardRequirementStep | null;
+  /** False when a step the provider requires cannot run (an option gone, KYC off): the provider is closed. */
+  available: boolean;
 }
 
 /** The user's registration with a card provider. */
@@ -1319,6 +1323,39 @@ export interface CardFunding {
   createdAt: string;
   updatedAt: string;
 }
+
+/** The first pending platform step of a card provider for this user, as a ramp quote reports a route's. */
+export interface CardRequirementStep {
+  position: number;
+  completed: number;
+  total: number;
+  type: 'KYC' | 'FORM' | 'REGISTRY_CHECK' | 'PROVIDER_REGISTRATION';
+  /** A KYC option, a form, a registry option, or for a registration the card provider. */
+  optionId: string;
+  status: 'none' | 'pending' | 'rejected' | 'expired';
+  reviewReason?: string;
+}
+
+/** A card provider's steps for this app and where the user stands (GET /cards/requirements). */
+export interface CardRequirements {
+  cardProviderId: string;
+  steps: { position: number; type: CardRequirementStep['type']; optionIds: string[]; completed: boolean }[];
+  next: CardRequirementStep | null;
+  completed: number;
+  total: number;
+}
+
+/** A card provider's PROVIDER_REGISTRATION step: status, readiness and what the registration shares. */
+export interface CardProviderRegistration {
+  cardProviderId: string;
+  status: 'none' | 'registered';
+  ready: boolean;
+  fields: string[];
+  /** The provider's terms the user accepts by registering; null while the platform has none loaded. */
+  termsUrl: string | null;
+}
+
+export type CardProviderRegistrationSubmitted = Pick<CardProviderRegistration, 'cardProviderId' | 'status'>;
 
 /** Outcome of {@link PollarClient.fundCard}: `cancelled` when the external wallet declined to sign. */
 export type CardFundingOutcome = { status: 'ok'; funding: CardFunding } | { status: 'cancelled'; funding: CardFunding };
