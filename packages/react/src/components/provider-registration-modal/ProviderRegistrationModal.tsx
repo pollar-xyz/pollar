@@ -6,7 +6,14 @@ import { usePollar } from '../../context';
 import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
 import { formLanguage } from '../requirement-form-modal/form-fields';
-import { errorCode, missingFieldsOf, REGISTRATION_COPY, SHARED_FIELD_LABELS } from '../registry-check-modal/registry-copy';
+import {
+  errorCode,
+  missingFieldsOf,
+  REGISTRATION_COPY,
+  registrationFixOf,
+  SHARED_FIELD_LABELS,
+} from '../registry-check-modal/registry-copy';
+import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
 import '../shared.css';
 import '../requirement-form-modal/RequirementFormModal.css';
 
@@ -46,6 +53,9 @@ export function ProviderRegistrationModal({
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // The form holding answers the registration could not use: reopened to fix them, then the registration is sent again.
+  const [fixForm, setFixForm] = useState<string | null>(null);
+  const [fixing, setFixing] = useState<string | null>(null);
   const mounted = useRef(true);
   useEffect(() => {
     // Set on every mount: development mounts components twice, and the cleanup of the
@@ -77,6 +87,7 @@ export function ProviderRegistrationModal({
   async function submit() {
     setSubmitting(true);
     setError(null);
+    setFixForm(null);
     try {
       if (cardProviderId) await client.submitCardProviderRegistration(cardProviderId);
       else await client.submitProviderRegistration(corridorId ?? '');
@@ -85,19 +96,36 @@ export function ProviderRegistrationModal({
       if (!mounted.current) return;
       const code = errorCode(e);
       if (code === 'KYC_REGISTRATION_MISSING_DATA') {
+        const fix = registrationFixOf(e);
+        const named = (keys: string[]) => keys.map((key) => labels[key] ?? key).join(', ');
+        const missing = missingFieldsOf(e).filter((key) => !fix.invalid.includes(key));
         setError(
-          copy.missing.replace(
-            '{fields}',
-            missingFieldsOf(e)
-              .map((key) => labels[key] ?? key)
-              .join(', '),
-          ),
+          [
+            fix.invalid.length ? copy.invalid.replace('{fields}', named(fix.invalid)) : null,
+            missing.length ? copy.missing.replace('{fields}', named(missing)) : null,
+          ]
+            .filter(Boolean)
+            .join(' '),
         );
+        setFixForm(fix.forms[0]?.formId ?? null);
       } else if (code === 'KYC_REGISTRATION_STEPS_PENDING') setError(copy.notReady);
       else setError(copy.submitError);
     } finally {
       if (mounted.current) setSubmitting(false);
     }
+  }
+
+  if (fixing) {
+    return (
+      <RequirementFormModal
+        formId={fixing}
+        onClose={() => setFixing(null)}
+        onSubmitted={() => {
+          setFixing(null);
+          void submit();
+        }}
+      />
+    );
   }
 
   return (
@@ -130,6 +158,13 @@ export function ProviderRegistrationModal({
           <p className="pollar-form-error" role="alert">
             {error}
           </p>
+        )}
+        {fixForm && !submitting && (
+          <div className="pollar-modal-actions">
+            <button type="button" className="pollar-btn-primary" onClick={() => setFixing(fixForm)}>
+              {copy.fix}
+            </button>
+          </div>
         )}
 
         {!registration && !error && (

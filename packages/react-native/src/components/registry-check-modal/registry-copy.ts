@@ -84,6 +84,8 @@ type RegistrationCopy = Record<
   | 'close'
   | 'notReady'
   | 'missing'
+  | 'invalid'
+  | 'fix'
   | 'loadError'
   | 'submitError'
   | 'step'
@@ -101,6 +103,8 @@ export const REGISTRATION_COPY: Record<FormLanguage, RegistrationCopy> = {
     close: 'Close',
     notReady: 'Complete the previous steps first.',
     missing: 'Some details are missing: {fields}.',
+    invalid: 'Some details need to be corrected: {fields}.',
+    fix: 'Review my details',
     loadError: 'Could not load the registration. Please try again.',
     submitError: 'Could not register you. Please try again.',
     step: 'Step {n} of {total}',
@@ -115,6 +119,8 @@ export const REGISTRATION_COPY: Record<FormLanguage, RegistrationCopy> = {
     close: 'Cerrar',
     notReady: 'Primero completa los pasos anteriores.',
     missing: 'Faltan algunos datos: {fields}.',
+    invalid: 'Hay datos que corregir: {fields}.',
+    fix: 'Revisar mis datos',
     loadError: 'No se pudo cargar el registro. Intenta de nuevo.',
     submitError: 'No se pudo completar el registro. Intenta de nuevo.',
     step: 'Paso {n} de {total}',
@@ -195,4 +201,23 @@ export const errorCode = (error: unknown) =>
 export function missingFieldsOf(error: unknown): string[] {
   const body = error && typeof error === 'object' ? (error as { body?: { missing?: unknown } }).body : undefined;
   return Array.isArray(body?.missing) ? body.missing.filter((item): item is string => typeof item === 'string') : [];
+}
+
+/**
+ * `body.invalid` and `body.forms` of a KYC_REGISTRATION_MISSING_DATA error: the
+ * listed keys that have an answer the provider cannot use, and the forms that hold
+ * the listed keys, to reopen.
+ */
+export function registrationFixOf(error: unknown): { invalid: string[]; forms: { formId: string; keys: string[] }[] } {
+  const body =
+    error && typeof error === 'object' ? (error as { body?: { invalid?: unknown; forms?: unknown } }).body : undefined;
+  const strings = (value: unknown) =>
+    Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+  const forms = Array.isArray(body?.forms)
+    ? body.forms.flatMap((item): { formId: string; keys: string[] }[] => {
+        const form = item && typeof item === 'object' ? (item as { formId?: unknown; keys?: unknown }) : {};
+        return typeof form.formId === 'string' ? [{ formId: form.formId, keys: strings(form.keys) }] : [];
+      })
+    : [];
+  return { invalid: strings(body?.invalid), forms };
 }
