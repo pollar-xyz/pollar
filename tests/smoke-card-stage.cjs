@@ -27,6 +27,9 @@ for (const file of ['packages/react', 'packages/react-native']) {
   const notStarted = { kycStatus: 'NOT_STARTED' };
 
   assert.equal(cardStage(undefined, withRegistration), null, `${file}: nothing while the holder loads`);
+  // Requirements still loading must not read as "no steps": that showed the provider form for a moment.
+  assert.equal(cardStage(notStarted, undefined), null, `${file}: nothing while the requirements load`);
+  assert.equal(cardStage(null, undefined), null, `${file}: no holder, requirements loading`);
   assert.equal(cardStage(null, null), 'steps', `${file}: no holder starts with the steps`);
   assert.equal(cardStage(null, withRegistration), 'steps', `${file}: no holder, steps pending`);
   // A holder signed up before the app added steps still owes them, instead of seeing the provider form.

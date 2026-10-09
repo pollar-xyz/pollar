@@ -54,15 +54,15 @@ export function blockedStepMessage(next: CardRequirementStep): string | null {
  * Which part of the card flow the user is at before the provider has their KYC:
  * `steps` while nobody signed them up or the platform's steps are pending,
  * `provider-form` when the provider's own KYC form is theirs to fill, null past
- * both or while the holder is loading. A holder signed up before the app added
- * steps still owes them. With a PROVIDER_REGISTRATION step the platform sends the
- * provider's KYC itself, so the provider's form never shows.
+ * both or while the holder or the requirements are loading. A holder signed up
+ * before the app added steps still owes them. With a PROVIDER_REGISTRATION step
+ * the platform sends the provider's KYC itself, so the provider's form never shows.
  */
 export function cardStage(
   holder: Pick<CardHolder, 'kycStatus'> | null | undefined,
-  requirements: Pick<CardRequirements, 'steps' | 'next'> | null,
+  requirements: Pick<CardRequirements, 'steps' | 'next'> | null | undefined,
 ): 'steps' | 'provider-form' | null {
-  if (holder === undefined) return null;
+  if (holder === undefined || requirements === undefined) return null;
   if (holder === null || (holder.kycStatus === 'NOT_STARTED' && requirements?.next)) return 'steps';
   if (holder.kycStatus !== 'NOT_STARTED') return null;
   return requirements?.steps.some((step) => step.type === 'PROVIDER_REGISTRATION') ? null : 'provider-form';

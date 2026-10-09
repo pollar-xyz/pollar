@@ -139,7 +139,8 @@ export function CardModal({ onClose }: CardModalProps) {
 
   const [providers, setProviders] = useState<CardProvider[] | null>(null);
   const [holder, setHolder] = useState<CardHolder | null | undefined>(undefined);
-  const [requirements, setRequirements] = useState<CardRequirements | null>(null);
+  // undefined while loading; null when the provider has no steps or the server lacks the route.
+  const [requirements, setRequirements] = useState<CardRequirements | null | undefined>(undefined);
   const [pendingStep, setPendingStep] = useState<PendingCardStep | null>(null);
   const stepAttempt = useRef<PendingCardStep | null>(null);
   const [cards, setCards] = useState<CardInfo[] | null>(null);
@@ -456,7 +457,7 @@ export function CardModal({ onClose }: CardModalProps) {
   }
 
   // --- Render -------------------------------------------------------------------
-  const loading = providers === null || (providers.length > 0 && holder === undefined);
+  const loading = providers === null || (providers.length > 0 && (holder === undefined || requirements === undefined));
   const blocked = requirements?.next ? blockedStepMessage(requirements.next) : null;
   const stepsPending = !!requirements?.next;
   const title = panel === 'fund' ? 'Add funds' : card ? (card.nickname ?? 'Your card') : 'Get a card';
