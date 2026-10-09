@@ -55,7 +55,7 @@ export const PollarModalFooter = () => {
 export function PollarOverlay({ children, onCancel }: { children: ReactNode; onCancel: () => void }) {
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onCancel}>
-      <View style={StyleSheet.absoluteFillObject}>
+      <View style={StyleSheet.absoluteFill}>
         <TouchableWithoutFeedback onPress={onCancel}>
           <View
             style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 20 }}

@@ -79,3 +79,5 @@ export type { ReceiveModalTemplateProps } from './components/receive-modal/Recei
 export { SessionsModalTemplate } from './components/sessions-modal/SessionsModalTemplate';
 export type { SessionsModalTemplateProps, SessionsState } from './components/sessions-modal/SessionsModalTemplate';
 export { DistributionRulesModalTemplate } from './components/distribution-rules-modal/DistributionRulesModalTemplate';
+
+export { RampWorkflow } from './components/ramp-widget/RampWorkflow';

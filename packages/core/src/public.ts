@@ -44,6 +44,7 @@ export type {
 } from './wallets';
 export type * from './types';
 export { AUTH_ERROR_CODES, PollarNetworkError, isPollarNetworkError, PollarApiError, isPollarApiError } from './types';
+export { RampChain } from './types';
 export { WALLET_NOT_READY_CODE, isWalletNotReady } from './types';
 export { PollarApiClient } from './api/client';
 export type { paths as pollarPaths } from './api/schema';
@@ -65,6 +66,8 @@ export {
 
 // --- Ramps endpoints ----------------------------------------------------------
 export {
+  continueRamp,
+  getRampRoutes,
   getRampsQuote,
   getRampCountries,
   createOnRamp,
@@ -86,3 +89,6 @@ export { quoteSwap, getSwapConfig, getSwapTokens } from './api/endpoints/swap';
 
 // --- Earn endpoints -----------------------------------------------------------
 export { getEarnProviders, getEarnOpportunities, getEarnPosition, buildEarnTx } from './api/endpoints/earn';
+
+export { describeRampAction, mergeRampSnapshot, mergeRampCountries } from './ramps/workflow';
+export type { RampSnapshot, RampSigningHandler } from './ramps/workflow';

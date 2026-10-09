@@ -1,6 +1,6 @@
 {
   "name": "@pollar/privy-adapter",
-  "version": "0.11.2",
+  "version": "0.12.0-rc.1",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -50,7 +50,7 @@
     "node": ">=20"
   },
   "peerDependencies": {
-    "@pollar/core": "^0.11.2",
+    "@pollar/core": "^0.11.2 || ^0.12.0-rc.1",
     "@privy-io/expo": ">=0.69 <1",
     "@privy-io/react-auth": "^3",
     "@stellar/stellar-sdk": "^15.1.0",
@@ -74,7 +74,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@pollar/core": "^0.11.4-rc.1",
+    "@pollar/core": "^0.12.0-rc.1",
     "@privy-io/expo": "^0.69.4",
     "@privy-io/react-auth": "^3.32.2",
     "@stellar/stellar-sdk": "^15.1.0",

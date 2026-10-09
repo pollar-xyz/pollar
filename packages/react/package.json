@@ -1,6 +1,6 @@
 {
   "name": "@pollar/react",
-  "version": "0.11.4-rc.1",
+  "version": "0.12.0-rc.1",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -41,7 +41,7 @@
     "node": ">=20"
   },
   "peerDependencies": {
-    "@pollar/core": "^0.11.4-rc.1",
+    "@pollar/core": "^0.12.0-rc.1",
     "react": ">=18",
     "react-dom": ">=18"
   },
@@ -51,7 +51,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@pollar/core": "^0.11.4-rc.1",
+    "@pollar/core": "^0.12.0-rc.1",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "eslint": "^10.5.0",

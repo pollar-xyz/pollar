@@ -1,3 +1,6 @@
+import { assertRampStellarAccount } from '../ramps/stellar-account';
+import { RampSigningRegistry, type RampSigningHandler, type RampSnapshot } from '../ramps/workflow';
+import type { RampChain, RampContinuationBody } from '../types';
 import { createApiClient, fetchWithTimeout, PollarApiClient } from '../api/client';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { getSwapConfig, getSwapTokens, quoteSwap } from '../api/endpoints/swap';
@@ -13,6 +16,8 @@ import {
   submitRequirementForm,
 } from '../api/endpoints/requirements';
 import {
+  continueRamp,
+  getRampRoutes,
   completeWithdraw,
   createOffRamp,
   createOnRamp,
@@ -272,6 +277,7 @@ function warnServerSide(method: string): void {
 }
 
 export class PollarClient {
+  private readonly _rampSigners = new RampSigningRegistry();
   readonly apiKey: string;
   readonly id: string;
   readonly basePath: string;
@@ -3695,6 +3701,56 @@ export class PollarClient {
   }
 
   // --- Ramps ----------------------------------------------------------------
+
+  /** Discover the application's available asset and payment routes. */
+  getRampRoutes(): Promise<import('../types').RampsRoutesResponse> {
+    return getRampRoutes(this._api);
+  }
+  /** Submit an explicit continuation for the saved action and transaction version. */
+  continueRamp(txId: string, body: RampContinuationBody): Promise<RampsTransactionResponse> {
+    return continueRamp(this._api, txId, body);
+  }
+  /** Register a signer for a chain and payload encoding; returns its cleanup function. */
+  registerRampSigningHandler(chain: RampChain, encoding: string, handler: RampSigningHandler): () => void {
+    return this._rampSigners.register(chain, encoding, handler);
+  }
+  /** Explicit user action only. Reading/restoring a workflow never invokes this. */
+  async signRampAction(txId: string, snapshot: RampSnapshot): Promise<RampsTransactionResponse> {
+    const fresh = await this.getRampTransaction(txId);
+    const action = fresh.nextAction;
+    if (
+      snapshot.txId !== txId ||
+      snapshot.transactionVersion !== fresh.transactionVersion ||
+      snapshot.nextAction?.actionId !== action?.actionId ||
+      action?.kind !== 'sign_transaction' ||
+      fresh.reconciliationRequired ||
+      !(Date.parse(action.expiresAt) > Date.now()) ||
+      ['completed', 'failed', 'refunded'].includes(fresh.lifecycleState ?? fresh.status)
+    )
+      throw new Error('The ramp action changed. Refresh before signing.');
+    let handler = this._rampSigners.resolve(action.chain, action.payload.encoding);
+    if (!handler && action.chain === 'STELLAR' && action.payload.encoding === 'xdr') {
+      handler = async (saved) => {
+        const wallet = this.getWallet();
+        if (!wallet || (wallet.chain ?? 'STELLAR') !== saved.chain || this.getNetwork() !== saved.network)
+          throw new Error('Connect the wallet and network required by this ramp action.');
+        await assertRampStellarAccount(saved, wallet.address);
+        const connected = this.getWallet();
+        if (
+          connected?.address !== wallet.address ||
+          (connected?.chain ?? 'STELLAR') !== saved.chain ||
+          this.getNetwork() !== saved.network
+        )
+          throw new Error('The connected wallet changed. Refresh before signing.');
+        const signed = await this.signTx(saved.payload.value, { skipSponsorship: saved.purpose === 'authentication' });
+        if (signed.status !== 'signed') throw new Error(signed.message ?? signed.details ?? 'Signing was cancelled.');
+        return signed.signedXdr;
+      };
+    }
+    if (!handler) throw new Error(`Register a ramp signing handler for ${action.chain}/${action.payload.encoding}.`);
+    const signedPayload = await handler(action);
+    return this.continueRamp(txId, { actionId: action.actionId, transactionVersion: fresh.transactionVersion!, signedPayload });
+  }
 
   getRampsQuote(query: RampsQuoteQuery): Promise<RampsQuoteResponse> {
     return getRampsQuote(this._api, query);

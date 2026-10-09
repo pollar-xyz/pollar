@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { readFileSync } from 'fs';
 import { defineConfig } from 'tsup';
 
@@ -11,7 +12,14 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   treeshake: true,
-  external: ['react', 'react-native', '@pollar/core'],
+  external: [
+    'react',
+    'react-native',
+    '@pollar/core',
+    'react-native-safe-area-context',
+    'react-native-svg',
+    'react-native-qrcode-svg',
+  ],
   esbuildOptions(options) {
     options.jsx = 'automatic';
   },

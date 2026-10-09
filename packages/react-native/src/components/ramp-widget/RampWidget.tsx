@@ -9,9 +9,12 @@ import type {
   RampsOfframpBody,
   RampsOnrampBody,
   RampTxStatus,
+  RampsTransactionResponse,
 } from '@pollar/core';
+import { mergeRampCountries, mergeRampSnapshot, type RampSnapshot, type RampRoute } from '@pollar/core';
+import { RampWorkflow } from './RampWorkflow';
 import { usePollar } from '../../context';
-import { PollarModalFooter } from '../commons';
+import { PollarModalFooter, PollarOverlay } from '../commons';
 import { KycModal } from '../kyc-modal/KycModal';
 import { RouteDisplay } from './RouteDisplay';
 import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
@@ -116,6 +119,8 @@ export interface RampWidgetTemplateProps {
   errorMsg: string | null;
   /** Neutral guidance on the route list, e.g. after identity verification sent the user back to it. */
   noticeMsg?: string | null | undefined;
+  routeSelector?: React.ReactNode;
+  workflowContent?: React.ReactNode;
   onDirectionChange: (d: RampDirection) => void;
   onAmountChange: (v: string) => void;
   onCountryChange: (code: string) => void;
@@ -191,6 +196,8 @@ export function RampWidgetTemplate({
   completing,
   errorMsg,
   noticeMsg,
+  routeSelector,
+  workflowContent,
   onDirectionChange,
   onAmountChange,
   onCountryChange,
@@ -271,6 +278,7 @@ export function RampWidgetTemplate({
                 </TouchableOpacity>
               ))}
             </View>
+            {routeSelector}
             <Text style={[styles.label, { color: colors.text }]}>Country</Text>
             {countriesLoading ? (
               <ActivityIndicator color={accentColor} style={{ marginBottom: 16 }} />
@@ -379,14 +387,15 @@ export function RampWidgetTemplate({
           <>
             <Text style={[styles.label, { color: colors.text }]}>{provider}</Text>
             <Text style={[styles.note, { color: colors.muted }]}>Status: {txStatus ?? 'pending'}</Text>
-            {kycBlocking && (
+            {workflowContent}
+            {!workflowContent && kycBlocking && (
               <Text style={[styles.note, { color: colors.text }]}>
                 The provider needs to verify your identity. Finish it with the provider, then request a new quote.
               </Text>
             )}
-            {!!kycUrl && primary('Open provider verification', () => onOpenUrl(kycUrl))}
-            {!!tosUrl && secondary('Accept the terms of service', () => onOpenUrl(tosUrl))}
-            {depositInstructions && (
+            {!workflowContent && !!kycUrl && primary('Open provider verification', () => onOpenUrl(kycUrl))}
+            {!workflowContent && !!tosUrl && secondary('Accept the terms of service', () => onOpenUrl(tosUrl))}
+            {!workflowContent && depositInstructions && (
               <View style={[styles.instructions, { borderColor: colors.border }]}>
                 {depositInstructions.scannable?.payload && (
                   <View style={{ marginBottom: 8 }}>
@@ -408,12 +417,13 @@ export function RampWidgetTemplate({
                 ))}
               </View>
             )}
-            {!!stellarTxHash && (
+            {!workflowContent && !!stellarTxHash && (
               <Text selectable style={[styles.note, { color: colors.muted }]}>
                 Stellar transaction: {stellarTxHash}
               </Text>
             )}
-            {canComplete &&
+            {!workflowContent &&
+              canComplete &&
               primary(completing ? 'Submitting…' : "I've completed KYC - withdraw", onCompleteWithdraw, completing)}
             {errorLine}
             {secondary(txStatus === 'completed' ? 'Done' : 'Close', onClose)}
@@ -440,8 +450,10 @@ export function RampWidgetTemplate({
  * quotes for the same input, and the user picks one again.
  */
 export function RampWidget({ onClose }: { onClose: () => void }) {
-  const { getClient, walletAddress, styles: pollarStyles } = usePollar();
+  const { getClient, walletAddress, copyText, ramp: savedRamp, setRamp: saveRamp, styles: pollarStyles } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = pollarStyles;
+  const routeTextColor = theme === 'dark' ? '#f3f4f6' : '#111827';
+  const routeBorderColor = theme === 'dark' ? '#374151' : '#e5e7eb';
   const client = getClient();
 
   const [step, setStep] = useState<RampStep>('input');
@@ -450,7 +462,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
   const [currency, setCurrency] = useState('');
   const [country, setCountry] = useState('');
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
-  const [countries, setCountries] = useState<RampCountry[]>([]);
+  const [legacyCountries, setCountries] = useState<RampCountry[]>([]);
   const [countriesLoading, setCountriesLoading] = useState(true);
   const [quotes, setQuotes] = useState<RampQuote[]>([]);
   const [requirementsRequired, setRequirementsRequired] = useState<RampQuoteRequirement[]>([]);
@@ -469,9 +481,49 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
   const [txStatus, setTxStatus] = useState<RampTxStatus | null>(null);
   const [stellarTxHash, setStellarTxHash] = useState<string | null>(null);
   const [depositInstructions, setDepositInstructions] = useState<RampDepositInstructions | null>(null);
+  const [workflow, setWorkflow] = useState<RampSnapshot | null>(null);
+  const workflowRef = useRef<RampSnapshot | null>(null);
+  const [legacySignature, setLegacySignature] = useState<RampResult['pendingSignature']>(undefined);
+  const completionLocked = useRef(false);
+  function acceptWorkflow(incoming: RampSnapshot) {
+    const next = mergeRampSnapshot(workflowRef.current, incoming);
+    workflowRef.current = next;
+    setWorkflow(next);
+    if (next === incoming) saveRamp({ direction, transaction: { ...incoming, provider } as RampsTransactionResponse });
+    return next === incoming;
+  }
+  const [routes, setRoutes] = useState<RampRoute[]>([]);
+  const [routeId, setRouteId] = useState('');
+  const selectedRoute = routes.find((route) => route.routeId === routeId);
+  const countries = mergeRampCountries(legacyCountries, routes);
+  useEffect(() => {
+    let active = true;
+    void client
+      .getRampRoutes()
+      .then((result) => {
+        if (active) setRoutes(result.routes);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [client]);
+  useEffect(() => {
+    if (!country && countries[0]) {
+      setCountry(countries[0].code);
+      setCurrency(countries[0].currency ?? '');
+    }
+  }, [country, countries]);
   const [completing, setCompleting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const initialRamp = useRef(savedRamp);
+  useEffect(() => {
+    if (initialRamp.current) {
+      setDirection(initialRamp.current.direction);
+      void applyResult(initialRamp.current.transaction);
+    }
+  }, []);
   const mounted = useRef(true);
   useEffect(() => {
     // Set on every mount: development mounts components twice, and the cleanup of the
@@ -506,12 +558,17 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
   // Poll the provider transaction while on the status step until terminal.
   useEffect(() => {
     if (step !== 'status' || !txId) return;
-    if (txStatus && TERMINAL.includes(txStatus)) return;
+    if (
+      (workflow && ['completed', 'failed', 'refunded'].includes(workflow.lifecycleState ?? workflow.status)) ||
+      (txStatus && TERMINAL.includes(txStatus))
+    )
+      return;
     let active = true;
     const id = setInterval(async () => {
       try {
         const tx = await client.getRampTransaction(txId);
         if (!active) return;
+        if (tx.transactionVersion !== undefined && !acceptWorkflow(tx)) return;
         setTxStatus(tx.status);
         if (tx.stellarTxHash) setStellarTxHash(tx.stellarTxHash);
         if (tx.kycUrl) setKycUrl(tx.kycUrl);
@@ -524,11 +581,11 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
       active = false;
       clearInterval(id);
     };
-  }, [step, txId, txStatus, client]);
+  }, [step, txId, txStatus, workflow?.lifecycleState, client]);
 
   // A link-less provider KYC gate (Abroad): poll until the user clears it elsewhere.
   useEffect(() => {
-    if (step !== 'status' || !kycPending || kycApproved) return;
+    if (workflow || step !== 'status' || !kycPending || kycApproved) return;
     let active = true;
     const check = async () => {
       try {
@@ -544,9 +601,10 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
       active = false;
       clearInterval(id);
     };
-  }, [step, kycPending, kycApproved, client]);
+  }, [step, kycPending, kycApproved, workflow, client]);
 
   function handleCountryChange(code: string) {
+    setRouteId('');
     setCountry(code);
     const match = countries.find((c) => c.code === code);
     if (match?.currency) setCurrency(match.currency);
@@ -558,6 +616,10 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
     setRequirementsRequired([]);
     setSelectedQuote(null);
     setFieldValues({});
+    setWorkflow(null);
+    workflowRef.current = null;
+    setLegacySignature(undefined);
+    saveRamp(null);
     setTxId(null);
     setProvider('');
     setKycUrl(null);
@@ -577,7 +639,14 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
    */
   async function fetchQuotes(): Promise<{ list: RampQuote[]; locked: RampQuoteRequirement[] } | null> {
     try {
-      const result = await client.getRampsQuote({ country, amount: Number(amount), currency, direction });
+      const result = await client.getRampsQuote({
+        country,
+        amount: Number(amount),
+        amountExact: amount,
+        currency,
+        direction,
+        ...(selectedRoute ? { routeId: selectedRoute.routeId, chain: selectedRoute.asset.chain } : {}),
+      });
       const list = result.quotes ?? [];
       const locked = result.requirementsRequired ?? [];
       if (list.length === 0 && locked.length === 0) {
@@ -633,7 +702,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
   }
 
   async function resumeWithSignature(id: string, ps: NonNullable<RampResult['pendingSignature']>) {
-    const outcome = await client.signTx(ps.unsignedXdr);
+    const outcome = await client.signTx(ps.unsignedXdr, { skipSponsorship: ps.action === 'sep10' });
     if (outcome.status !== 'signed') {
       setErrorMsg(outcome.message ?? outcome.details ?? 'Signing was cancelled.');
       setStep('error');
@@ -647,12 +716,13 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
   }
 
   async function applyResult(result: RampResult) {
+    const generic = result as RampResult & RampSnapshot;
+    if (generic.transactionVersion !== undefined && !acceptWorkflow(generic)) return;
+    saveRamp({ direction: initialRamp.current?.direction ?? direction, transaction: result as RampsTransactionResponse });
+    initialRamp.current = null;
     setTxId(result.txId);
     setProvider(result.provider);
-    if (result.pendingSignature) {
-      await resumeWithSignature(result.txId, result.pendingSignature);
-      return;
-    }
+    setLegacySignature(result.pendingSignature);
     setKycUrl(result.kycUrl ?? null);
     setTosUrl(result.tosUrl ?? null);
     setKycPending(result.kycRequired === true);
@@ -685,7 +755,13 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      const base: Record<string, unknown> = { quoteId: quote.quoteId, amount: Number(amount), currency, country };
+      const base: Record<string, unknown> = {
+        quoteId: quote.quoteId,
+        amount: Number(amount),
+        amountExact: quote.terms?.fiatAmount ?? amount,
+        currency,
+        country,
+      };
       if (walletAddress) base.walletAddress = walletAddress;
       // Same mapping as the web widget: a `bankType` field becomes `bankDetails`,
       // the standard body fields map by name, anything else goes into `fields`.
@@ -727,8 +803,24 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
     }
   }
 
+  async function handleLegacySignature() {
+    if (!txId || !legacySignature || completionLocked.current) return;
+    completionLocked.current = true;
+    setCompleting(true);
+    setErrorMsg(null);
+    try {
+      await resumeWithSignature(txId, legacySignature);
+    } catch (e) {
+      setErrorMsg(rampErrorMessage(e, 'Failed to submit the signature.'));
+    } finally {
+      completionLocked.current = false;
+      setCompleting(false);
+    }
+  }
+
   async function handleCompleteWithdraw() {
-    if (!txId) return;
+    if (!txId || completionLocked.current) return;
+    completionLocked.current = true;
     setCompleting(true);
     setErrorMsg(null);
     try {
@@ -745,6 +837,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
         msg.includes('KYC') ? 'Finish KYC at the provider first, then try again.' : msg || 'Failed to complete the withdrawal.',
       );
     } finally {
+      completionLocked.current = false;
       setCompleting(false);
     }
   }
@@ -763,7 +856,15 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
   }
 
   const kycBlocking = kycPending && !kycApproved;
-  const canComplete = direction === 'offramp' && step === 'status' && txStatus !== 'completed' && !stellarTxHash && !kycPending;
+  const canComplete =
+    !workflow &&
+    !legacySignature &&
+    direction === 'offramp' &&
+    step === 'status' &&
+    txStatus !== 'completed' &&
+    txStatus !== 'failed' &&
+    !stellarTxHash &&
+    !kycPending;
 
   // Keep this widget's state while a step is open so cancelling preserves the form.
   if (pendingKyc?.type === 'FORM') {
@@ -829,9 +930,54 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <View style={styles.overlay}>
+    <PollarOverlay onCancel={onClose}>
       <View style={styles.modalWrapper}>
         <RampWidgetTemplate
+          routeSelector={
+            routes.length > 0 && (
+              <View>
+                <Text style={[styles.label, { color: routeTextColor }]}>Asset and payment route</Text>
+                {routes.map((route) => (
+                  <TouchableOpacity
+                    key={route.routeId}
+                    style={[
+                      styles.chip,
+                      { marginBottom: 8, borderColor: routeId === route.routeId ? accentColor : routeBorderColor },
+                    ]}
+                    disabled={countriesLoading}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: countriesLoading, selected: routeId === route.routeId }}
+                    onPress={() => {
+                      setRouteId(route.routeId);
+                      setCountry(route.country);
+                      setCurrency(route.fiatCurrency);
+                      setDirection(route.direction);
+                    }}
+                  >
+                    <Text style={{ color: routeTextColor }}>
+                      {route.direction} · {route.fiatCurrency} / {route.asset.code} · {route.asset.chain} · {route.rail}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )
+          }
+          workflowContent={
+            workflow ? (
+              <RampWorkflow
+                copyText={copyText}
+                client={client}
+                snapshot={workflow}
+                onChange={(next) => {
+                  if (acceptWorkflow(next)) setTxStatus(next.status);
+                }}
+              />
+            ) : legacySignature && step === 'status' && txStatus !== 'completed' && txStatus !== 'failed' ? (
+              <TouchableOpacity disabled={completing} onPress={() => void handleLegacySignature()}>
+                <Text>Authorize wallet request</Text>
+              </TouchableOpacity>
+            ) : undefined
+          }
           theme={theme}
           accentColor={accentColor}
           step={step}
@@ -857,7 +1003,10 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
           completing={completing}
           errorMsg={errorMsg}
           noticeMsg={noticeMsg}
-          onDirectionChange={setDirection}
+          onDirectionChange={(next) => {
+            setDirection(next);
+            setRouteId('');
+          }}
           onAmountChange={(next) => {
             setAmount(next);
             setErrorMsg(null);
@@ -875,13 +1024,17 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
           onClose={onClose}
         />
       </View>
-    </View>
+    </PollarOverlay>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',

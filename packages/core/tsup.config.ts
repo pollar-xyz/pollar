@@ -6,7 +6,7 @@ const { version } = JSON.parse(readFileSync('./package.json', 'utf8')) as { vers
 export default defineConfig({
   // Replace `__POLLAR_SDK_VERSION__` with the package version at build time so
   // `POLLAR_CORE_VERSION` is available at runtime without importing package.json.
-  define: { __POLLAR_SDK_VERSION__: JSON.stringify(version) },
+  define: { __POLLAR_SDK_VERSION__: JSON.stringify(version), self: 'globalThis' },
   entry: {
     index: 'src/index.ts',
     'index.rn': 'src/index.rn.ts',
@@ -20,5 +20,6 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   treeshake: true,
-  noExternal: ['@stellar/freighter-api', 'openapi-fetch'],
+  noExternal: ['@stellar/freighter-api', '@stellar/stellar-base', 'openapi-fetch'],
+  external: ['react-native', 'expo-secure-store', 'react-native-keychain'],
 });

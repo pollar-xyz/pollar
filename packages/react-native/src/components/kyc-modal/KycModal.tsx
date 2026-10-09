@@ -8,7 +8,7 @@ import {
   type KycStatusContent,
 } from '@pollar/core';
 import { usePollar } from '../../context';
-import { PollarModalFooter } from '../commons';
+import { PollarModalFooter, PollarOverlay } from '../commons';
 import { KycStatus as KycStatusBadge } from './KycStatus';
 import { kycErrorMessage, kycProcessingMessage, kycReviewMessage } from './kyc-messages';
 
@@ -421,7 +421,7 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', corridorId,
   }
 
   return (
-    <View style={styles.overlay}>
+    <PollarOverlay onCancel={onClose}>
       <View style={styles.modalWrapper}>
         <KycModalTemplate
           theme={theme}
@@ -443,13 +443,17 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', corridorId,
           onClose={onClose}
         />
       </View>
-    </View>
+    </PollarOverlay>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',

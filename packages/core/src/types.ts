@@ -1011,6 +1011,14 @@ export type KycStartResponse = pollarPaths['/kyc/start']['post']['responses'][20
 
 // --- Ramps types --------------------------------------------------------------
 
+/** Closed ramp chain catalog, independent of wallet networks. */
+export const RampChain = Object.freeze({
+  STELLAR: 'STELLAR',
+  POLYGON: 'POLYGON',
+  SOLANA: 'SOLANA',
+} as const);
+export type RampChain = (typeof RampChain)[keyof typeof RampChain];
+
 export type RampsQuoteQuery = NonNullable<pollarPaths['/ramps/quote']['get']['parameters']['query']>;
 export type RampQuote =
   pollarPaths['/ramps/quote']['get']['responses'][200]['content']['application/json']['content']['quotes'][number];
@@ -1219,3 +1227,14 @@ export type PollarAdapter = Record<string, AdapterFn<any>>;
 export interface PollarAdapters {
   [key: string]: PollarAdapter;
 }
+
+// Generic ramp workflow, derived from the matching backend OpenAPI schema.
+export type RampAction = NonNullable<RampsTransactionResponse['nextAction']>;
+export type RampTerms = NonNullable<RampsTransactionResponse['terms']>;
+export type RampRoute = NonNullable<RampQuote['route']>;
+export type RampCapabilities = RampsRoutesResponse['routes'][number]['capabilities'];
+export type RampsRoutesResponse =
+  pollarPaths['/ramps/routes']['get']['responses'][200]['content']['application/json']['content'];
+export type RampContinuationBody = NonNullable<
+  pollarPaths['/ramps/transaction/{txId}/continue']['post']['requestBody']
+>['content']['application/json'];

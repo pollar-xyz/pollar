@@ -125,6 +125,8 @@ const widgetScope = {
   clearInterval,
   require: (id) => {
     if (id.startsWith('react')) return require(id);
+    if (id === '@pollar/core') return require('../packages/core/dist/index.js');
+    if (id === './RampWorkflow') return { RampWorkflow: () => null };
     if (id === '../../context')
       return {
         usePollar: () => ({
@@ -183,6 +185,7 @@ async function exercise(direction, outcome) {
     return { txId: 'tx', provider: 'Test ramp', status: 'completed' };
   }
   client = {
+    getRampRoutes: async () => ({ routes: [] }),
     getRampCountries: async () => ({ countries: [{ code: 'BO', currency: 'BOB' }] }),
     getRampsQuote: async () => {
       quoteCalls++;
@@ -262,6 +265,7 @@ async function exerciseLockedRoute(direction) {
   };
   const unlocked = { quoteId: 'unlocked-quote', provider: 'Locked ramp' };
   client = {
+    getRampRoutes: async () => ({ routes: [] }),
     getRampCountries: async () => ({ countries: [{ code: 'BO', currency: 'BOB' }] }),
     getRampsQuote: async () => {
       quoteCalls++;
@@ -332,6 +336,7 @@ async function exerciseStepRoute(type, outcome) {
   };
   const unlocked = { quoteId: 'step-quote', provider: 'Step ramp' };
   client = {
+    getRampRoutes: async () => ({ routes: [] }),
     getRampCountries: async () => ({ countries: [{ code: 'BO', currency: 'BOB' }] }),
     getRampsQuote: async () => {
       quoteCalls++;

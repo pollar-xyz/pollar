@@ -51,7 +51,11 @@ export function RouteDisplay({ quote, busy = false, disabled = false, onSelect }
           <span className="pollar-spinner pollar-spinner-sm" />
         ) : (
           <>
-            <span className="pollar-ramp-route-fee">{quote.fee}% fee</span>
+            <span className="pollar-ramp-route-fee">
+              {quote.terms
+                ? `${quote.terms.fiatAmount} ${quote.terms.fiatCurrency} · ${quote.terms.cryptoAmount} ${quote.terms.assetCode} · Includes ${quote.terms.feeAmount} ${quote.terms.feeCurrency}`
+                : `${quote.fee}% fee`}
+            </span>
             {quote.recommended && <span className="pollar-ramp-route-badge">Best rate</span>}
           </>
         )}

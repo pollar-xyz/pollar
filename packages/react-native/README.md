@@ -221,3 +221,20 @@ the app) and restart Metro with `npm start -- -c`.
 ## License
 
 Apache-2.0
+
+## Reusable native screens and ramp workflows
+
+The package also exports `AppShell`, `FeatureCatalog`, `FeaturePanel`, `FeatureExample`, account onboarding,
+and native panels for payments, assets, history, sessions, swaps, earn and distribution. `PollarProvider`
+accepts optional `appConfig`, `platform` (storage, visibility, auth URL and clipboard adapters), and `privyAdapter`.
+Mount an interactive adapter's native provider above `PollarProvider`.
+
+`RampWidget` and `RampPanel` discover registered routes through `client.getRampRoutes()` and render saved
+exact terms, verification groups, fields, payment instructions, waiting states and verified receipts.
+Signing uses a handler registered for the action's chain and encoding. Financial continuation requires a
+user press; polling and restoring a saved transaction never initiate signing. The backend owns submission.
+Legacy routes retain their KYC, form, registry-check and provider-registration flows.
+
+For an inline saved workflow, use `RampWorkflow` with `client`, `snapshot` and `onChange`.
+Native panels require `react-native-safe-area-context` and `react-native-svg`; QR rendering uses
+`react-native-qrcode-svg`. Run `npm test --workspace=@pollar/react-native` for native behavior tests.

@@ -718,6 +718,8 @@ hold a `PollarApiClient`.
 
 ### Ramps (SEP-24)
 
+The [proposed Ramp API and lifecycle ADR](../../docs/adr/0001-ramp-api-and-lifecycle.md) defines the future common adapter contract, seven-state lifecycle, and compatibility approach. It is pending review; its proposed fields and guarantees are not part of the released API described below.
+
 On/off-ramp fiat through SEP-24 anchors (e.g. Anclap). Get a quote, create the on- or off-ramp, then drive the
 transaction to completion. Embedded wallets receive a `kycUrl` to open; external wallets receive a `pendingSignature`
 to sign and resume via `submitRampSignature`.
@@ -747,6 +749,21 @@ client.pollRampTransaction(txId: string, opts?: { intervalMs?: number; timeoutMs
 
 Each also has a standalone `(api, ...)` export (`getRampsQuote`, `createOnRamp`, …) for callers holding a
 `PollarApiClient`.
+
+### Generic ramp workflows
+
+`getRampRoutes()` returns executable currencies/assets/chains/rails and typed provider capabilities. `amountExact` preserves requested decimal values alongside the legacy numeric amount. Quotes expose exact `terms` and an optional `route`; transactions expose saved actions, versions and verified milestones. Render `describeRampAction(snapshot)` and use `mergeRampSnapshot(previous, incoming)` to ignore stale responses. Both official widgets use these helpers.
+
+`RampChain` is a closed enum (`STELLAR`, `POLYGON`, `SOLANA`), independent of
+wallet networks. Use `RampChain.POLYGON` or `'POLYGON'` for a quote filter,
+route asset or signer registration. Chain and network are separate fields;
+lowercase names, unknown chains and CAIP-2 identifiers are rejected. Adding
+another chain requires a backend enum migration and an updated SDK contract.
+Exact amount strings keep their precision and formatting.
+
+Call `continueRamp(txId, { actionId, transactionVersion, signedPayload?, fields? })` only after user interaction. `signRampAction(txId, snapshot)` refreshes the action, signs it through the matching handler and sends it to backend orchestration. Stellar XDR signing is included. Register a supported chain/encoding with `registerRampSigningHandler(chain, encoding, async action => signedPayload)`; handlers must use the authorized wallet/network and return a signed payload without broadcasting it. Polling and restoring state never invoke signing.
+
+Existing ramp methods remain compatible. Generic identifiers do not make unimplemented routes executable; the backend advertises only configured integrations with required evidence readers.
 
 ---
 

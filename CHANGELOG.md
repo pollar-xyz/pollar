@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.12.0
+
+> Candidate: `0.12.0-rc.1` for `@pollar/core`, `@pollar/react` and
+> `@pollar/react-native` and the four client adapter packages. This minor
+> release includes the 0.11.4 changes below.
+
+- Ramps discover registered assets and payment routes within the closed
+  `RampChain` catalog (`STELLAR`, `POLYGON`, `SOLANA`); preserve exact
+  quote amounts; and resume saved, versioned workflows without signing on restore.
+- `getRampRoutes`, `continueRamp`, `registerRampSigningHandler` and
+  `signRampAction` support explicit workflow actions. Built-in Stellar signing
+  checks the connected chain, network and required account before invoking a wallet.
+- Native provider configuration/platform/Privy adapter changes clean up and replace
+  the owned client. Login Back and Retry keep their modal open; logout still clears
+  saved ramp state. Native route choices follow the theme and show selection.
+- **Migration:** native provider initialization, transaction modal behavior,
+  balance refresh, configuration errors, context types and open-ended bank types
+  have changed. See [UPGRADE.md](./UPGRADE.md#0114---0120).
+
 ## 0.11.4
 
 > First candidate: `0.11.4-rc.1` (`@pollar/core`, `@pollar/react` and

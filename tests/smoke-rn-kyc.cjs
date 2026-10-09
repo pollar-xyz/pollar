@@ -47,7 +47,7 @@ const reactNative = {
 };
 
 let client;
-const pollarContext = { getClient: () => client, walletAddress: 'wallet', styles: {} };
+const pollarContext = { getClient: () => client, walletAddress: 'wallet', styles: {}, ramp: null, setRamp() {} };
 
 function load(file) {
   const filename = path.resolve(__dirname, '..', file);
@@ -58,8 +58,10 @@ function load(file) {
   scope.require = (id) => {
     if (id === 'react-native') return reactNative;
     if (id === '@pollar/core') return core;
-    if (id === '../../context') return { usePollar: () => pollarContext };
-    if (id === '../commons') return { PollarModalFooter: () => null };
+    if (id === 'react-native-qrcode-svg') return () => null;
+    if (id === 'react-native-safe-area-context') return { SafeAreaProvider: passthrough, SafeAreaView: passthrough };
+    if (id === '../../context' || id === '../context') return { usePollar: () => pollarContext };
+    if (id === '../commons') return { PollarModalFooter: () => null, PollarOverlay: passthrough };
     if (id === './KycStatus') return { KycStatus: () => null };
     if (id === './RouteDisplay') {
       return {
@@ -138,6 +140,7 @@ const option = { id: 'option-a', name: 'Didit', flow: 'iframe', levels: ['basic'
   let quoteCalls = 0;
   const starts = [];
   client = {
+    getRampRoutes: async () => ({ routes: [] }),
     getRampCountries: async () => ({ countries: [{ code: 'BO', currency: 'BOB' }] }),
     getRampsQuote: async () => {
       quoteCalls++;
@@ -152,6 +155,7 @@ const option = { id: 'option-a', name: 'Didit', flow: 'iframe', levels: ['basic'
     getKycProviders: async () => ({ providers: [option] }),
     resolveKyc: async () => ({ alreadyApproved: true }),
   };
+  client.getRampRoutes = async () => ({ routes: [] });
   routes = [];
   unmount = await render(React.createElement(RampWidget, { onClose() {} }));
   await React.act(async () => inputs[inputs.length - 1].onChangeText('10'));
@@ -189,6 +193,7 @@ const option = { id: 'option-a', name: 'Didit', flow: 'iframe', levels: ['basic'
   starts.length = 0;
   const resolved = [];
   client = {
+    getRampRoutes: async () => ({ routes: [] }),
     getRampCountries: async () => ({ countries: [{ code: 'BO', currency: 'BOB' }] }),
     getRampsQuote: async () => {
       quoteCalls++;
@@ -211,6 +216,7 @@ const option = { id: 'option-a', name: 'Didit', flow: 'iframe', levels: ['basic'
       return { alreadyApproved: true };
     },
   };
+  client.getRampRoutes = async () => ({ routes: [] });
   routes = [];
   unmount = await render(React.createElement(RampWidget, { onClose() {} }));
   await React.act(async () => inputs[inputs.length - 1].onChangeText('10'));

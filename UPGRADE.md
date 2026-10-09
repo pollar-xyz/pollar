@@ -1,5 +1,67 @@
 # Upgrade guide
 
+## 0.11.4 -> 0.12.0
+
+Use `@pollar/core`, `@pollar/react` and `@pollar/react-native` at matching versions.
+The candidate is `0.12.0-rc.1`; install prerelease versions explicitly. Upgrade
+client adapter packages to their matching 0.12 candidates when using this core
+version. Their peer ranges accept both 0.11.x and 0.12; older adapter releases
+with a core peer range of only `^0.11.2` cannot be used with core 0.12.
+
+### Native provider and context
+
+- Children render after the provider effect creates its owned client. Put startup
+  UI outside the provider if it must display during that initialization.
+- Changing client configuration, `platform.storage`, `platform.visibilityProvider`,
+  `platform.openAuthUrl` or `privyAdapter` cancels login, destroys the previous client
+  and resets provider state before mounting children with the replacement client.
+  Equivalent inline scalar configuration does not restart it. Memoize object-valued
+  configuration, wallet adapter arrays and platform adapters to avoid restarts.
+  Theme, application configuration and clipboard callback updates remain live.
+- `buildTx` opens the transaction modal. Other transaction methods operate through
+  core state without automatically opening it; call `openTransactionModal()` when
+  your flow requires that presentation.
+- `refreshBalance(publicKey)` accepts only the connected address (or no argument).
+  Use `getClient().getWalletBalance(publicKey)` to look up another address.
+- A null or malformed `getAppConfig()` response produces `configStatus: 'error'`
+  with `configError` and `retryConfig()` instead of displaying default configuration.
+  Supply `appConfig` for an application that does not fetch remote configuration.
+- Import the exported `PollarContextValue` for custom native integrations. It now
+  includes configuration status/retry, platform clipboard actions and saved ramp
+  state, alongside the bound core methods and modal actions. Update manually
+  constructed context mocks to match this shape.
+
+### Ramp chain catalog
+
+`RampChain` is a closed enum with `STELLAR`, `POLYGON` and `SOLANA`, exported as
+both a type and a runtime constant from `@pollar/core`. It is independent of
+`WalletChain` / backend `WalletNetwork`. Quotes, route assets, terms,
+transactions and signing handlers use this same catalog. Lowercase values,
+typos and CAIP-2 identifiers are rejected rather than normalized, including at
+runtime for JavaScript callers and API responses. Network remains a separate
+field; derive a CAIP-2 identifier from the chain and network when needed.
+
+Use `RampChain.SOLANA` or the literal `'SOLANA'`. Adding a new chain requires a
+backend enum migration and an updated SDK contract. Provider, asset and payload
+encoding registration stays extensible within these three chains. Exact amount
+strings retain their precision and formatting.
+
+### Ramp templates and signing
+
+`RampWidgetTemplateProps.bankType` (and native template-derived props) accepts a
+`string` instead of the previous fixed bank-type union. Backend routes can add
+bank types. Custom templates should handle unknown strings and retain known-type
+formatting where applicable; exhaustive switches need a fallback.
+
+Supported ramp chains register a signer with `registerRampSigningHandler(chain, encoding,
+handler)` and remove it with the returned cleanup function. Call `signRampAction`
+only from an explicit user action. Its built-in Stellar signer verifies the wallet
+account from the transaction source, or the first SEP-10 manageData operation for
+an authentication challenge. It also verifies chain and network. Restoring or
+polling a workflow does not sign. UI workflow helpers exported from core are
+`describeRampAction`, `mergeRampSnapshot` and `mergeRampCountries`, with
+`RampSnapshot` and `RampSigningHandler` types; registry and URL internals are private.
+
 ## 0.11.3 -> 0.11.4
 
 No migration steps for an app that uses the built-in components. The wallet

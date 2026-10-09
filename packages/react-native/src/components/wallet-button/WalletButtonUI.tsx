@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, TouchableWithoutFeedback } from 'react-native';
 
-interface WalletButtonTemplateProps {
+/** Presentation state, theme colors and actions for the native wallet button and its menu. */
+export interface WalletButtonTemplateProps {
   walletAddress: string | null;
   accentColor: string;
   open: boolean;
@@ -36,8 +37,13 @@ export function WalletButtonTemplate({
 }: WalletButtonTemplateProps) {
   if (!walletAddress) {
     return (
-      <TouchableOpacity style={[styles.loginBtn, { backgroundColor: accentColor }]} onPress={onLogin}>
-        <Text style={styles.loginBtnText}>Connect Wallet</Text>
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Login with Pollar"
+        style={[styles.loginBtn, { backgroundColor: accentColor }]}
+        onPress={onLogin}
+      >
+        <Text style={styles.loginBtnText}>Login with Pollar</Text>
       </TouchableOpacity>
     );
   }
@@ -47,6 +53,8 @@ export function WalletButtonTemplate({
   return (
     <View style={styles.container}>
       <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Open connected wallet"
         style={[styles.walletBtn, { backgroundColor: dropdownBg, borderColor: dropdownBorder }]}
         onPress={onToggleOpen}
       >
@@ -54,7 +62,7 @@ export function WalletButtonTemplate({
         <Text style={[styles.walletBtnText, { color: itemColor }]}>{truncateAddress(walletAddress)}</Text>
       </TouchableOpacity>
 
-      <Modal visible={open} transparent animationType="fade">
+      <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
         <TouchableWithoutFeedback onPress={onClose}>
           <View style={styles.overlay}>
             <TouchableWithoutFeedback>
@@ -64,22 +72,42 @@ export function WalletButtonTemplate({
                     <View style={[styles.circle, { backgroundColor: accentColor }]} />
                     <Text style={[styles.headerAddress, { color: itemColor }]}>{truncateAddress(walletAddress)}</Text>
                   </View>
-                  <TouchableOpacity onPress={onCopy} style={styles.copyBtn}>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Copy wallet address"
+                    onPress={onCopy}
+                    style={styles.copyBtn}
+                  >
                     <Text style={{ color: '#9ca3af', fontSize: 12 }}>{copied ? '✅' : '📋 Copy'}</Text>
                   </TouchableOpacity>
                 </View>
 
                 <View style={styles.dropdownBody}>
-                  <TouchableOpacity style={styles.menuItem} onPress={onWalletBalance}>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Wallet balance"
+                    style={styles.menuItem}
+                    onPress={onWalletBalance}
+                  >
                     <Text style={[styles.menuItemText, { color: itemColor }]}>💰 Wallet Balance</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.menuItem} onPress={onTxHistory}>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Transaction history"
+                    style={styles.menuItem}
+                    onPress={onTxHistory}
+                  >
                     <Text style={[styles.menuItemText, { color: itemColor }]}>⏱️ Transaction History</Text>
                   </TouchableOpacity>
 
                   <View style={[styles.divider, { backgroundColor: dropdownBorder }]} />
 
-                  <TouchableOpacity style={[styles.menuItem, { marginTop: 4 }]} onPress={onLogout}>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Disconnect wallet"
+                    style={[styles.menuItem, { marginTop: 4 }]}
+                    onPress={onLogout}
+                  >
                     <Text style={[styles.menuItemText, { color: '#ef4444' }]}>🚪 Disconnect</Text>
                   </TouchableOpacity>
                 </View>
@@ -110,6 +138,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   walletBtn: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -128,7 +157,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: 'rgba(0,0,0,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -160,10 +193,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   copyBtn: {
+    minHeight: 44,
+    justifyContent: 'center',
     padding: 4,
   },
   dropdownBody: {},
   menuItem: {
+    minHeight: 44,
     paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
