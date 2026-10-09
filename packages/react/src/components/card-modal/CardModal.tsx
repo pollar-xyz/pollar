@@ -212,11 +212,15 @@ export function CardModal({ onClose }: CardModalProps) {
   const loadCardData = useCallback(async () => {
     const client = getClient();
     const list = await client.getCards();
-    setCards(list);
-    if (list.length === 0) return;
+    if (list.length === 0) {
+      setCards(list);
+      return;
+    }
+    // The card, its balance and its movements land together: no card shown with an empty balance first.
     const [b, tx] = await Promise.all([client.getCardBalance(), client.getCardTransactions({ limit: TX_LIMIT })]);
     setBalance(b);
     setTransactions(tx.transactions);
+    setCards(list);
   }, [getClient]);
 
   useEffect(() => {
@@ -537,7 +541,11 @@ export function CardModal({ onClose }: CardModalProps) {
   }
 
   // --- Render -------------------------------------------------------------------
-  const loading = providers === null || (providers.length > 0 && (holder === undefined || requirements === undefined));
+  // An approved holder also waits for its card data, so the modal never shows blank between the holder and the card.
+  const loading =
+    providers === null ||
+    (providers.length > 0 && (holder === undefined || requirements === undefined)) ||
+    (holder?.kycStatus === 'APPROVED' && cards === null && !error);
   const blocked = requirements?.next ? blockedStepMessage(requirements.next) : null;
   const stepsPending = !!requirements?.next;
   const title = panel === 'fund' ? 'Add funds' : card ? (card.nickname ?? 'Your card') : 'Get a card';
