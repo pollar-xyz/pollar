@@ -611,8 +611,8 @@ export function CardModal({ onClose }: CardModalProps) {
         {!loading && provider && provider.available && stage === 'steps' && (
           <>
             <p>
-              Get a {provider.name} card funded from your wallet{wallet ? '' : ' once you sign in'}. You will verify your
-              identity first; it takes a few minutes.
+              Get {provider.cardLabel ?? `a ${provider.name} card`} funded from your wallet{wallet ? '' : ' once you sign in'}.
+              You will verify your identity first; it takes a few minutes.
             </p>
             {requirements && requirements.total > 0 && (
               <p className="pollar-card-note">
@@ -757,7 +757,10 @@ export function CardModal({ onClose }: CardModalProps) {
           <>
             <div className="pollar-card-visual">
               <div className="pollar-card-visual-top">
-                <span>{provider.name}</span>
+                <span className="pollar-card-brand">
+                  {styles.logoUrl && <img src={styles.logoUrl} alt="" className="pollar-card-brand-logo" />}
+                  <span>{provider.cardLabel ?? provider.name}</span>
+                </span>
                 <span className="pollar-card-status">{card.status.toLowerCase()}</span>
               </div>
               <div className="pollar-card-visual-chip" />

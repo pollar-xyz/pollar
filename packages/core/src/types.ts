@@ -1187,6 +1187,8 @@ export type CardIncomeRange = '0-1000' | '1000-5000' | '5000-10000' | '10000+';
 export interface CardProvider {
   id: string;
   name: string;
+  /** What the card face says: the app's label from its dashboard, or "<App>'s card". Absent on older servers. */
+  cardLabel?: string;
   adapter: string;
   countries: string[];
   cardTypes: CardType[];

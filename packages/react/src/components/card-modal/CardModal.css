@@ -26,6 +26,24 @@
   opacity: 0.9;
 }
 
+/* The app's logo and its label for the card, top left. */
+.pollar-card-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.pollar-card-brand-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 2px;
+  flex-shrink: 0;
+}
+
 .pollar-card-visual-chip {
   width: 36px;
   height: 26px;

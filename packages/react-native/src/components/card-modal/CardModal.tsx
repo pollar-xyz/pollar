@@ -14,7 +14,17 @@ import {
   type CardTransaction,
 } from '@pollar/core';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { usePollar } from '../../context';
 import { PollarModalFooter } from '../commons';
 import { KycModal } from '../kyc-modal/KycModal';
@@ -606,8 +616,8 @@ export function CardModal({ onClose }: CardModalProps) {
             {!loading && provider && provider.available && stage === 'steps' && (
               <View>
                 <Text style={{ color: colors.text, lineHeight: 20 }}>
-                  Get a {provider.name} card funded from your wallet. You will verify your identity first; it takes a few
-                  minutes.
+                  Get {provider.cardLabel ?? `a ${provider.name} card`} funded from your wallet. You will verify your identity
+                  first; it takes a few minutes.
                 </Text>
                 {requirements && requirements.total > 0 && (
                   <Text style={noteStyle}>
@@ -763,7 +773,12 @@ export function CardModal({ onClose }: CardModalProps) {
               <View>
                 <View style={[styles.visual, { backgroundColor: accentColor }]}>
                   <View style={styles.visualRow}>
-                    <Text style={styles.visualSmall}>{provider.name}</Text>
+                    <View style={styles.visualBrand}>
+                      {pollarStyles.logoUrl ? (
+                        <Image source={{ uri: pollarStyles.logoUrl }} style={styles.visualLogo} resizeMode="contain" />
+                      ) : null}
+                      <Text style={styles.visualSmall}>{provider.cardLabel ?? provider.name}</Text>
+                    </View>
                     <Text style={styles.visualSmall}>{card.status.toLowerCase()}</Text>
                   </View>
                   <Text style={styles.visualNumber}>
@@ -949,6 +964,8 @@ const styles = StyleSheet.create({
   secondaryBtn: { borderRadius: 10, borderWidth: 1, paddingVertical: 12, alignItems: 'center', marginTop: 10 },
   visual: { borderRadius: 16, padding: 18, marginBottom: 12, aspectRatio: 1.586, justifyContent: 'space-between' },
   visualRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  visualBrand: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  visualLogo: { width: 24, height: 24, borderRadius: 6, backgroundColor: 'rgba(255, 255, 255, 0.9)' },
   visualSmall: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' },
   visualNumber: { color: '#fff', fontSize: 20, letterSpacing: 2, fontWeight: '600' },
   balanceRow: { flexDirection: 'row', gap: 6, marginBottom: 8 },
