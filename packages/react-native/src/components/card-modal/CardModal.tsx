@@ -33,17 +33,35 @@ const KYC_POLL_MS = 5000;
 const REVEAL_MS = 30_000;
 const TX_LIMIT = 10;
 /** How often fundings in flight are re-read while the funding panel is open. */
-const FUNDING_POLL_MS = 10_000;
+const FUNDING_POLL_MS = 5_000;
 const FUNDING_INFLIGHT = new Set(['CREATED', 'BURNED', 'ATTESTED', 'MINTED']);
 
-const FUNDING_COPY: Record<string, string> = {
-  CREATED: 'Waiting for your payment to confirm',
-  BURNED: 'Leaving Stellar',
-  ATTESTED: 'Crossing to Polygon',
-  MINTED: 'Arrived, waiting for the card to credit it',
-  CREDITED: 'Credited',
-  FAILED: 'Failed',
+/** What each funding state means to the user: a title, and for one in flight its step and what it waits on. */
+const FUNDING_COPY: Record<string, { title: string; step?: number; hint?: string }> = {
+  CREATED: {
+    title: 'Confirming your payment',
+    step: 1,
+    hint: 'Your USDC payment is being confirmed on Stellar. This takes a few seconds.',
+  },
+  BURNED: {
+    title: 'Sending it to the card network',
+    step: 2,
+    hint: 'Your USDC left Stellar. Circle is confirming the transfer, usually in about a minute.',
+  },
+  ATTESTED: {
+    title: 'Crossing to the card network',
+    step: 3,
+    hint: 'Transfer confirmed. Delivering the USDC to the card network.',
+  },
+  MINTED: {
+    title: 'Arrived, crediting your card',
+    step: 4,
+    hint: 'The USDC reached the card provider, which is adding it to your card. This can take a few minutes.',
+  },
+  CREDITED: { title: 'Credited to your card' },
+  FAILED: { title: 'Failed' },
 };
+const FUNDING_STEPS = 4;
 
 const INCOME_RANGES: { value: CardIncomeRange; label: string }[] = [
   { value: '0-1000', label: 'Up to 1,000 USD' },
@@ -392,13 +410,23 @@ export function CardModal({ onClose }: CardModalProps) {
     const id = setInterval(() => {
       getClient()
         .listCardFundings()
-        .then((list) => mounted.current && setFundings(list))
+        .then((next) => {
+          if (!mounted.current) return;
+          setFundings((previous) => {
+            // A funding that just got credited moves the card's balance: re-read it.
+            const credited = next.some(
+              (f) => f.status === 'CREDITED' && previous?.find((p) => p.id === f.id)?.status !== 'CREDITED',
+            );
+            if (credited) void loadCardData().catch(() => {});
+            return next;
+          });
+        })
         .catch(() => {
           /* transient; the next tick retries */
         });
     }, FUNDING_POLL_MS);
     return () => clearInterval(id);
-  }, [panel, fundingsInflight, getClient]);
+  }, [panel, fundingsInflight, getClient, loadCardData]);
 
   function openUrl(url: string) {
     Linking.openURL(url).catch(() => setError('Could not open the page. Please try again.'));
@@ -810,20 +838,37 @@ export function CardModal({ onClose }: CardModalProps) {
                 {fundings && fundings.length > 0 && (
                   <View>
                     <Text style={[styles.section, { color: colors.muted }]}>Your fundings</Text>
-                    {fundings.map((f) => (
-                      <View key={f.id} style={[styles.txRow, { borderTopColor: colors.border }]}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ color: colors.text, fontSize: 13 }}>{FUNDING_COPY[f.status] ?? f.status}</Text>
-                          <Text style={{ color: colors.muted, fontSize: 11 }}>
-                            {new Date(f.createdAt).toLocaleString()}
-                            {f.status === 'FAILED' && f.error ? ` ${f.error}` : ''}
+                    {fundings.map((f) => {
+                      const copy = FUNDING_COPY[f.status];
+                      const inflight = FUNDING_INFLIGHT.has(f.status);
+                      return (
+                        <View key={f.id} style={[styles.txRow, { borderTopColor: colors.border }]}>
+                          <View style={{ flex: 1 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              {inflight && <ActivityIndicator size="small" color={accentColor} />}
+                              <Text style={{ color: colors.text, fontSize: 13 }}>{copy?.title ?? f.status}</Text>
+                            </View>
+                            {inflight && copy?.step && (
+                              <Text style={{ color: colors.muted, fontSize: 11 }} accessibilityLiveRegion="polite">
+                                Step {copy.step} of {FUNDING_STEPS} · {copy.hint}
+                              </Text>
+                            )}
+                            <Text style={{ color: colors.muted, fontSize: 11 }}>
+                              {new Date(f.createdAt).toLocaleString()}
+                              {f.status === 'FAILED' && f.error ? ` ${f.error}` : ''}
+                            </Text>
+                          </View>
+                          <Text style={{ color: f.status === 'CREDITED' ? '#15803d' : colors.text, fontSize: 13 }}>
+                            {money(f.amount, 'USD')}
                           </Text>
                         </View>
-                        <Text style={{ color: f.status === 'CREDITED' ? '#15803d' : colors.text, fontSize: 13 }}>
-                          {money(f.amount, 'USD')}
-                        </Text>
-                      </View>
-                    ))}
+                      );
+                    })}
+                    {fundingsInflight && (
+                      <Text style={{ color: colors.muted, fontSize: 12, marginTop: 8 }}>
+                        You can close this window: the funding keeps going and your card is credited when it finishes.
+                      </Text>
+                    )}
                   </View>
                 )}
 
@@ -851,6 +896,13 @@ export function CardModal({ onClose }: CardModalProps) {
                   ))}
                 {showManual && deposit?.length === 0 && (
                   <Text style={{ color: colors.error }}>The provider returned no deposit address.</Text>
+                )}
+                {showManual && (
+                  <TouchableOpacity onPress={() => setShowManual(false)}>
+                    <Text style={{ color: accentColor, textDecorationLine: 'underline', marginTop: 12 }}>
+                      Hide the deposit address
+                    </Text>
+                  </TouchableOpacity>
                 )}
               </View>
             )}
