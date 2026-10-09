@@ -605,6 +605,31 @@ export function PollarProvider({
   const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
   const [distributionRulesModalOpen, setDistributionRulesModalOpen] = useState(false);
 
+  // When the session ends (logout, revoked, ended in another tab) every modal that
+  // acts on it closes, so none keeps the previous user's data on screen; reopening
+  // loads from scratch. Losing the network does not end the session (core keeps it
+  // and retries), so this never fires offline. The login modal stays.
+  useEffect(
+    () =>
+      pollarClient.onAuthStateChange((authState) => {
+        if (authState.step !== 'idle') return;
+        setTransactionModalOpen(false);
+        setKycModalOpen(false);
+        setRampModalOpen(false);
+        setTxHistoryModalOpen(false);
+        setWalletBalanceModalOpen(false);
+        setEnabledAssetsModalOpen(false);
+        setSendModalOpen(false);
+        setSwapModalOpen(false);
+        setEarnModalOpen(false);
+        setCardModalOpen(false);
+        setReceiveModalOpen(false);
+        setSessionsModalOpen(false);
+        setDistributionRulesModalOpen(false);
+      }),
+    [pollarClient],
+  );
+
   // PII (incl. providers.wallet.address) lives on `client.getUserProfile()`, not on the
   // persisted session. For every wallet type, `wallet.address` holds the on-chain
   // address we care about.
@@ -808,7 +833,8 @@ export function PollarProvider({
         </ModalErrorBoundary>
       )}
       {cardModalOpen && (
-        <ModalErrorBoundary key={cardModalKey} onClose={() => setCardModalOpen(false)}>
+        // Keyed by the wallet too: a different user, or signing in with it open, starts it from scratch.
+        <ModalErrorBoundary key={`${cardModalKey}:${walletAddress}`} onClose={() => setCardModalOpen(false)}>
           <CardModal onClose={() => setCardModalOpen(false)} />
         </ModalErrorBoundary>
       )}

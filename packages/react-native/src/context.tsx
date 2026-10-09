@@ -213,6 +213,24 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
   const [txHistoryModalOpen, setTxHistoryModalOpen] = useState(false);
   const [walletBalanceModalOpen, setWalletBalanceModalOpen] = useState(false);
 
+  // When the session ends (logout, revoked, ended elsewhere) every modal that acts
+  // on it closes, so none keeps the previous user's data on screen; reopening loads
+  // from scratch. Losing the network does not end the session (core keeps it and
+  // retries), so this never fires offline. The login modal stays.
+  useEffect(
+    () =>
+      pollarClient.onAuthStateChange((authState) => {
+        if (authState.step !== 'idle') return;
+        setTransactionModalOpen(false);
+        setKycModalOpen(false);
+        setRampWidgetOpen(false);
+        setCardModalOpen(false);
+        setTxHistoryModalOpen(false);
+        setWalletBalanceModalOpen(false);
+      }),
+    [pollarClient],
+  );
+
   const walletAddress = sessionState?.wallet?.address || '';
 
   const contextValue = useMemo<PollarContextValue>(
@@ -288,7 +306,8 @@ export function PollarProvider({ config, styles: propStyles, adapters, children 
         </ModalErrorBoundary>
       )}
       {cardModalOpen && (
-        <ModalErrorBoundary onClose={() => setCardModalOpen(false)}>
+        // Keyed by the wallet: a different user, or signing in with it open, starts it from scratch.
+        <ModalErrorBoundary key={walletAddress} onClose={() => setCardModalOpen(false)}>
           <CardModal onClose={() => setCardModalOpen(false)} />
         </ModalErrorBoundary>
       )}
