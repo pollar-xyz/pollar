@@ -34,8 +34,9 @@ for (const file of ['packages/react', 'packages/react-native']) {
   assert.equal(cardStage(null, withRegistration), 'steps', `${file}: no holder, steps pending`);
   // A holder signed up before the app added steps still owes them, instead of seeing the provider form.
   assert.equal(cardStage(notStarted, withRegistration), 'steps', `${file}: holder with pending steps`);
-  // With a registration step the platform sends the provider's KYC; its own form never shows.
-  assert.equal(cardStage(notStarted, registrationDone), null, `${file}: registration owns the KYC`);
+  // With a registration step the platform owns the KYC: the provider form never shows, and a holder
+  // still NOT_STARTED there (the KYC send failed) stays on the steps instead of a blank modal.
+  assert.equal(cardStage(notStarted, registrationDone), 'steps', `${file}: registration owns the KYC`);
   assert.equal(cardStage(notStarted, kycOnlyDone), 'provider-form', `${file}: steps done, no registration`);
   assert.equal(cardStage(notStarted, null), 'provider-form', `${file}: no steps at all`);
   assert.equal(cardStage({ kycStatus: 'PENDING' }, withRegistration), null, `${file}: KYC already sent`);

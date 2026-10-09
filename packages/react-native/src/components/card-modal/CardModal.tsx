@@ -292,6 +292,8 @@ export function CardModal({ onClose }: CardModalProps) {
           openStep(pendingFromRequirement(provider.id, requirements.next));
           return;
         }
+        // Signed up but not past the steps: read where the user stands again and open what is pending.
+        if (holder) return afterStep();
         const h = await getClient().createCardHolder();
         if (mounted.current) setHolder(h);
       },

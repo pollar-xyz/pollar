@@ -56,7 +56,9 @@ export function blockedStepMessage(next: CardRequirementStep): string | null {
  * `provider-form` when the provider's own KYC form is theirs to fill, null past
  * both or while the holder or the requirements are loading. A holder signed up
  * before the app added steps still owes them. With a PROVIDER_REGISTRATION step
- * the platform sends the provider's KYC itself, so the provider's form never shows.
+ * the platform sends the provider's KYC itself, so the provider's form never shows;
+ * a holder still NOT_STARTED there stays on `steps`, whose action re-reads where
+ * the user stands, instead of a blank modal.
  */
 export function cardStage(
   holder: Pick<CardHolder, 'kycStatus'> | null | undefined,
@@ -65,5 +67,5 @@ export function cardStage(
   if (holder === undefined || requirements === undefined) return null;
   if (holder === null || (holder.kycStatus === 'NOT_STARTED' && requirements?.next)) return 'steps';
   if (holder.kycStatus !== 'NOT_STARTED') return null;
-  return requirements?.steps.some((step) => step.type === 'PROVIDER_REGISTRATION') ? null : 'provider-form';
+  return requirements?.steps.some((step) => step.type === 'PROVIDER_REGISTRATION') ? 'steps' : 'provider-form';
 }

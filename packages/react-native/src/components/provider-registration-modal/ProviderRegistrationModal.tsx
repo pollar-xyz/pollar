@@ -49,7 +49,9 @@ export function ProviderRegistrationModal({
     border: isDark ? '#374151' : '#e5e7eb',
   };
 
-  const [registration, setRegistration] = useState<Pick<ProviderRegistration, 'status' | 'ready' | 'fields'> | null>(null);
+  const [registration, setRegistration] = useState<
+    (Pick<ProviderRegistration, 'ready' | 'fields'> & { status: ProviderRegistration['status'] | 'incomplete' }) | null
+  >(null);
   const [termsUrl, setTermsUrl] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -180,6 +182,11 @@ export function ProviderRegistrationModal({
 
           {registration && ready && (
             <ScrollView style={{ maxHeight: 360 }}>
+              {registration.status === 'incomplete' && (
+                <View style={[styles.notice, { borderColor: colors.border, borderLeftColor: accentColor }]}>
+                  <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }}>{copy.incomplete}</Text>
+                </View>
+              )}
               <Text style={{ color: colors.muted, fontSize: 14, marginBottom: 8 }}>{copy.intro}</Text>
               {registration.fields.map((key) => (
                 <Text key={key} style={{ color: colors.text, fontSize: 14, marginBottom: 4 }}>

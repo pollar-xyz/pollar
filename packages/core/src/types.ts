@@ -1348,7 +1348,11 @@ export interface CardRequirements {
 /** A card provider's PROVIDER_REGISTRATION step: status, readiness and what the registration shares. */
 export interface CardProviderRegistration {
   cardProviderId: string;
-  status: 'none' | 'registered';
+  /**
+   * `incomplete`: a registration was sent and the provider holds the user, but their
+   * KYC did not reach it; registering again sends it.
+   */
+  status: 'none' | 'incomplete' | 'registered';
   ready: boolean;
   fields: string[];
   /** The provider's terms the user accepts by registering; null while the platform has none loaded. */

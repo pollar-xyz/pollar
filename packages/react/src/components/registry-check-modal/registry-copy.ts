@@ -86,6 +86,7 @@ type RegistrationCopy = Record<
   | 'missing'
   | 'invalid'
   | 'fix'
+  | 'incomplete'
   | 'loadError'
   | 'submitError'
   | 'step'
@@ -105,6 +106,7 @@ export const REGISTRATION_COPY: Record<FormLanguage, RegistrationCopy> = {
     missing: 'Some details are missing: {fields}.',
     invalid: 'Some details need to be corrected: {fields}.',
     fix: 'Review my details',
+    incomplete: 'Your registration with the provider did not finish. Register again to complete it.',
     loadError: 'Could not load the registration. Please try again.',
     submitError: 'Could not register you. Please try again.',
     step: 'Step {n} of {total}',
@@ -121,6 +123,7 @@ export const REGISTRATION_COPY: Record<FormLanguage, RegistrationCopy> = {
     missing: 'Faltan algunos datos: {fields}.',
     invalid: 'Hay datos que corregir: {fields}.',
     fix: 'Revisar mis datos',
+    incomplete: 'Tu registro con el proveedor no se completó. Regístrate de nuevo para terminarlo.',
     loadError: 'No se pudo cargar el registro. Intenta de nuevo.',
     submitError: 'No se pudo completar el registro. Intenta de nuevo.',
     step: 'Paso {n} de {total}',

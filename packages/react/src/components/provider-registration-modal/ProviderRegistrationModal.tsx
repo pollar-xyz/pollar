@@ -48,7 +48,9 @@ export function ProviderRegistrationModal({
   const copy = REGISTRATION_COPY[language];
   const labels = SHARED_FIELD_LABELS[language];
 
-  const [registration, setRegistration] = useState<Pick<ProviderRegistration, 'status' | 'ready' | 'fields'> | null>(null);
+  const [registration, setRegistration] = useState<
+    (Pick<ProviderRegistration, 'ready' | 'fields'> & { status: ProviderRegistration['status'] | 'incomplete' }) | null
+  >(null);
   const [termsUrl, setTermsUrl] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -183,6 +185,11 @@ export function ProviderRegistrationModal({
           >
             {registration.ready ? (
               <>
+                {registration.status === 'incomplete' && (
+                  <p className="pollar-form-error" role="status">
+                    {copy.incomplete}
+                  </p>
+                )}
                 <p className="pollar-form-description">{copy.intro}</p>
                 <ul className="pollar-form-description">
                   {registration.fields.map((key) => (
