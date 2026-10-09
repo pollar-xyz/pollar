@@ -118,8 +118,17 @@ function groupPan(pan: string): string {
 }
 
 /** The provider's own words when it rejected something; our code otherwise. */
+/** Errors whose cause the user can act on, said plainly instead of the provider's raw message. */
+const CARD_ERROR_COPY: Record<string, string> = {
+  SDK_CARDS_PROVIDER_ERROR: 'The card provider is not responding right now. Please try again in a few minutes.',
+  SDK_CARDS_IP_NOT_SUPPORTED:
+    'The card provider cannot accept your current connection (IPv6). Please try again from another network, for example Wi-Fi.',
+};
+
 function errorText(e: unknown, fallback: string): string {
   if (isPollarApiError(e)) {
+    const known = CARD_ERROR_COPY[e.code];
+    if (known) return known;
     const providerMessage = e.body.providerMessage;
     if (typeof providerMessage === 'string' && providerMessage) return providerMessage;
     const message = e.body.message;

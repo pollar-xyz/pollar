@@ -87,6 +87,8 @@ type RegistrationCopy = Record<
   | 'invalid'
   | 'fix'
   | 'incomplete'
+  | 'providerDown'
+  | 'ipNotSupported'
   | 'loadError'
   | 'submitError'
   | 'step'
@@ -107,6 +109,9 @@ export const REGISTRATION_COPY: Record<FormLanguage, RegistrationCopy> = {
     invalid: 'Some details need to be corrected: {fields}.',
     fix: 'Review my details',
     incomplete: 'Your registration with the provider did not finish. Register again to complete it.',
+    providerDown: 'The provider is not responding right now. Please try again in a few minutes.',
+    ipNotSupported:
+      'The provider cannot accept your current connection (IPv6). Please try again from another network, for example Wi-Fi.',
     loadError: 'Could not load the registration. Please try again.',
     submitError: 'Could not register you. Please try again.',
     step: 'Step {n} of {total}',
@@ -124,6 +129,8 @@ export const REGISTRATION_COPY: Record<FormLanguage, RegistrationCopy> = {
     invalid: 'Hay datos que corregir: {fields}.',
     fix: 'Revisar mis datos',
     incomplete: 'Tu registro con el proveedor no se completó. Regístrate de nuevo para terminarlo.',
+    providerDown: 'El proveedor no responde en este momento. Intenta de nuevo en unos minutos.',
+    ipNotSupported: 'El proveedor no acepta tu conexión actual (IPv6). Intenta desde otra red, por ejemplo Wi-Fi.',
     loadError: 'No se pudo cargar el registro. Intenta de nuevo.',
     submitError: 'No se pudo completar el registro. Intenta de nuevo.',
     step: 'Paso {n} de {total}',
