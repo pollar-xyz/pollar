@@ -23,7 +23,7 @@ import { buildModalCssVars, modalChrome } from '../modal-theme';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
 import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
 import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
-import { blockedStepMessage, pendingFromRequirement, requiredCardStep, type PendingCardStep } from './card-kyc';
+import { blockedStepMessage, cardStage, pendingFromRequirement, requiredCardStep, type PendingCardStep } from './card-kyc';
 import '../shared.css';
 import '../send-modal/SendModal.css';
 import './CardModal.css';
@@ -214,9 +214,11 @@ export function CardModal({ onClose }: CardModalProps) {
     };
   }, [getClient, loadHolder, loadRequirements, loadCardData]);
 
+  const stage = cardStage(holder, requirements);
+
   // Prefill the provider's own KYC form from the session profile when it is the next step.
   useEffect(() => {
-    if (holder?.kycStatus !== 'NOT_STARTED') return;
+    if (stage !== 'provider-form') return;
     const profile = getClient().getUserProfile();
     setKyc((k) => ({
       ...k,
@@ -227,7 +229,7 @@ export function CardModal({ onClose }: CardModalProps) {
       .getCardOccupations()
       .then(setOccupations)
       .catch(() => setOccupations([]));
-  }, [holder?.kycStatus, getClient]);
+  }, [stage, getClient]);
 
   // The provider's verification in progress: re-read the holder until it settles.
   const kycPending = holder ? holder.kycStatus in KYC_PENDING_COPY : false;
@@ -567,7 +569,7 @@ export function CardModal({ onClose }: CardModalProps) {
         )}
 
         {/* Step 1: the platform's steps, then the provider sign-up */}
-        {!loading && provider && provider.available && holder === null && (
+        {!loading && provider && provider.available && stage === 'steps' && (
           <>
             <p>
               Get a {provider.name} card funded from your wallet{wallet ? '' : ' once you sign in'}. You will verify your
@@ -592,8 +594,8 @@ export function CardModal({ onClose }: CardModalProps) {
           </>
         )}
 
-        {/* Step 2: the provider's own KYC form, when no platform step registered the user */}
-        {!loading && provider && holder?.kycStatus === 'NOT_STARTED' && (
+        {/* Step 2: the provider's own KYC form, when no PROVIDER_REGISTRATION step sends it for the user */}
+        {!loading && provider && stage === 'provider-form' && (
           <>
             <p className="pollar-card-section-title">About you</p>
             <div className="pollar-card-grid">

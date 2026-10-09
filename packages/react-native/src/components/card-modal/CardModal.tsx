@@ -21,7 +21,7 @@ import { KycModal } from '../kyc-modal/KycModal';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
 import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
 import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
-import { blockedStepMessage, pendingFromRequirement, requiredCardStep, type PendingCardStep } from './card-kyc';
+import { blockedStepMessage, cardStage, pendingFromRequirement, requiredCardStep, type PendingCardStep } from './card-kyc';
 
 export interface CardModalProps {
   onClose: () => void;
@@ -222,8 +222,10 @@ export function CardModal({ onClose }: CardModalProps) {
     })();
   }, [getClient, loadHolder, loadRequirements, loadCardData]);
 
+  const stage = cardStage(holder, requirements);
+
   useEffect(() => {
-    if (holder?.kycStatus !== 'NOT_STARTED') return;
+    if (stage !== 'provider-form') return;
     const profile = getClient().getUserProfile();
     setKyc((k) => ({
       ...k,
@@ -234,7 +236,7 @@ export function CardModal({ onClose }: CardModalProps) {
       .getCardOccupations()
       .then((list) => mounted.current && setOccupations(list))
       .catch(() => mounted.current && setOccupations([]));
-  }, [holder?.kycStatus, getClient]);
+  }, [stage, getClient]);
 
   const kycPending = holder ? holder.kycStatus in KYC_PENDING_COPY : false;
   useEffect(() => {
@@ -561,7 +563,7 @@ export function CardModal({ onClose }: CardModalProps) {
             )}
 
             {/* Step 1: the platform's steps, then the provider sign-up */}
-            {!loading && provider && provider.available && holder === null && (
+            {!loading && provider && provider.available && stage === 'steps' && (
               <View>
                 <Text style={{ color: colors.text, lineHeight: 20 }}>
                   Get a {provider.name} card funded from your wallet. You will verify your identity first; it takes a few
@@ -581,8 +583,8 @@ export function CardModal({ onClose }: CardModalProps) {
               </View>
             )}
 
-            {/* Step 2: the provider's own KYC form, when no platform step registered the user */}
-            {!loading && provider && holder?.kycStatus === 'NOT_STARTED' && (
+            {/* Step 2: the provider's own KYC form, when no PROVIDER_REGISTRATION step sends it for the user */}
+            {!loading && provider && stage === 'provider-form' && (
               <View>
                 <Text style={[styles.section, { color: colors.muted }]}>About you</Text>
                 {input(kyc.firstName, (v) => setKyc((k) => ({ ...k, firstName: v })), 'First name')}
