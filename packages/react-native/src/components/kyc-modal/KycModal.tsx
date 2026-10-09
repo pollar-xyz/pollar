@@ -211,6 +211,8 @@ export interface KycModalProps {
   /** Legacy fallback for older backends. Named options select their own workflow. */
   level?: 'basic' | 'intermediate' | 'enhanced' | undefined;
   corridorId?: string | undefined;
+  /** A card provider's steps, in place of a route's. */
+  cardProviderId?: string | undefined;
   /** Open this option directly instead of listing the choices (the one a ramp's KYC gate names). */
   providerId?: string | undefined;
   /** Called when KYC is successfully approved. */
@@ -227,7 +229,15 @@ function newIdempotencyKey(): string {
  * The hosted KYC flow on React Native: the vendor page opens in the system
  * browser (no WebView dependency), and returning to the app checks the status.
  */
-export function KycModal({ onClose, country = 'MX', level = 'basic', corridorId, providerId, onApproved }: KycModalProps) {
+export function KycModal({
+  onClose,
+  country = 'MX',
+  level = 'basic',
+  corridorId,
+  cardProviderId,
+  providerId,
+  onApproved,
+}: KycModalProps) {
   const { getClient, styles: pollarStyles } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = pollarStyles;
 
@@ -272,7 +282,9 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', corridorId,
   }
 
   function readStatus(providerId: string) {
-    return corridorId ? client.getKycStatus(undefined, corridorId) : client.getKycStatus(providerId);
+    return corridorId || cardProviderId
+      ? client.getKycStatus(undefined, corridorId, cardProviderId)
+      : client.getKycStatus(providerId);
   }
 
   // One session request at a time: a second one for the same key would only wait on
@@ -294,6 +306,7 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', corridorId,
         listed ? country : undefined,
         corridorId,
         key,
+        cardProviderId,
       );
       if (!mounted.current) return;
       if (result.alreadyApproved) {
@@ -332,7 +345,7 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', corridorId,
     setIsLoading(true);
     setError(null);
     return client
-      .getKycProviders(country, corridorId)
+      .getKycProviders(country, corridorId, cardProviderId)
       .then((result) => {
         if (mounted.current) setProviders(result.providers);
         return result.providers;
@@ -377,6 +390,7 @@ export function KycModal({ onClose, country = 'MX', level = 'basic', corridorId,
         intervalMs: 3000,
         timeoutMs: 120_000,
         ...(corridorId ? { corridorId } : {}),
+        ...(cardProviderId ? { cardProviderId } : {}),
       });
       if (!mounted.current) return;
       finishWith(read);

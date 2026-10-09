@@ -86,7 +86,8 @@ type RegistrationCopy = Record<
   | 'missing'
   | 'loadError'
   | 'submitError'
-  | 'step',
+  | 'step'
+  | 'terms',
   string
 >;
 
@@ -103,6 +104,7 @@ export const REGISTRATION_COPY: Record<FormLanguage, RegistrationCopy> = {
     loadError: 'Could not load the registration. Please try again.',
     submitError: 'Could not register you. Please try again.',
     step: 'Step {n} of {total}',
+    terms: "Read the provider's terms of service",
   },
   es: {
     title: 'Registro con el proveedor de pagos',
@@ -116,6 +118,7 @@ export const REGISTRATION_COPY: Record<FormLanguage, RegistrationCopy> = {
     loadError: 'No se pudo cargar el registro. Intenta de nuevo.',
     submitError: 'No se pudo completar el registro. Intenta de nuevo.',
     step: 'Paso {n} de {total}',
+    terms: 'Leer los términos de servicio del proveedor',
   },
 };
 
@@ -133,6 +136,23 @@ export const SHARED_FIELD_LABELS: Record<FormLanguage, Record<string, string>> =
     destination_of_funds: 'Use of funds',
     income_level: 'Income level',
     doc_provider_id: 'SEGIP validation',
+    first_name: 'First name',
+    last_name: 'Last name',
+    email: 'Email',
+    birth_date: 'Date of birth',
+    document_country: 'Document country',
+    phone_country_code: 'Phone country code',
+    phone_number: 'Phone number',
+    occupation: 'Occupation',
+    annual_salary: 'Annual income',
+    account_purpose: 'Purpose of the card',
+    expected_monthly_volume: 'Expected monthly spend',
+    address_line1: 'Street address',
+    address_line2: 'Address line 2',
+    city: 'City',
+    region: 'State or province',
+    postal_code: 'Postal code',
+    country_code: 'Country of residence',
   },
   es: {
     name: 'Nombres',
@@ -146,6 +166,23 @@ export const SHARED_FIELD_LABELS: Record<FormLanguage, Record<string, string>> =
     destination_of_funds: 'Destino de los fondos',
     income_level: 'Nivel de ingresos',
     doc_provider_id: 'Validación SEGIP',
+    first_name: 'Nombres',
+    last_name: 'Apellidos',
+    email: 'Correo electrónico',
+    birth_date: 'Fecha de nacimiento',
+    document_country: 'País del documento',
+    phone_country_code: 'Código de país del teléfono',
+    phone_number: 'Teléfono',
+    occupation: 'Ocupación',
+    annual_salary: 'Ingreso anual',
+    account_purpose: 'Uso de la tarjeta',
+    expected_monthly_volume: 'Gasto mensual esperado',
+    address_line1: 'Dirección',
+    address_line2: 'Dirección (línea 2)',
+    city: 'Ciudad',
+    region: 'Estado o provincia',
+    postal_code: 'Código postal',
+    country_code: 'País de residencia',
   },
 };
 

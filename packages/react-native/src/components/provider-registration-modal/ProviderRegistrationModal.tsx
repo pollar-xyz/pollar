@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { ProviderRegistration } from '@pollar/core';
 import { usePollar } from '../../context';
 import { PollarModalFooter } from '../commons';
@@ -7,7 +7,10 @@ import { formLanguage } from '../requirement-form-modal/form-fields';
 import { errorCode, missingFieldsOf, REGISTRATION_COPY, SHARED_FIELD_LABELS } from '../registry-check-modal/registry-copy';
 
 export interface ProviderRegistrationModalProps {
-  corridorId: string;
+  /** The route whose ramp the user registers with. */
+  corridorId?: string | undefined;
+  /** Or the card provider. One of the two. */
+  cardProviderId?: string | undefined;
   /** Position of this step over the route's steps, when known. */
   progress?: { position: number; total: number } | undefined;
   onClose: () => void;
@@ -19,7 +22,13 @@ export interface ProviderRegistrationModalProps {
  * One PROVIDER_REGISTRATION step: what the ramp provider receives, listed before the
  * user consents. Registering is the consent; nothing is sent until then.
  */
-export function ProviderRegistrationModal({ corridorId, progress, onClose, onRegistered }: ProviderRegistrationModalProps) {
+export function ProviderRegistrationModal({
+  corridorId,
+  cardProviderId,
+  progress,
+  onClose,
+  onRegistered,
+}: ProviderRegistrationModalProps) {
   const { getClient, styles: pollarStyles } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = pollarStyles;
   const client = getClient();
@@ -33,7 +42,8 @@ export function ProviderRegistrationModal({ corridorId, progress, onClose, onReg
     border: isDark ? '#374151' : '#e5e7eb',
   };
 
-  const [registration, setRegistration] = useState<ProviderRegistration | null>(null);
+  const [registration, setRegistration] = useState<Pick<ProviderRegistration, 'status' | 'ready' | 'fields'> | null>(null);
+  const [termsUrl, setTermsUrl] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -48,8 +58,13 @@ export function ProviderRegistrationModal({ corridorId, progress, onClose, onReg
   }, []);
 
   useEffect(() => {
-    client
-      .getProviderRegistration(corridorId)
+    const load = cardProviderId
+      ? client.getCardProviderRegistration(cardProviderId).then((loaded) => {
+          setTermsUrl(loaded.termsUrl);
+          return loaded;
+        })
+      : client.getProviderRegistration(corridorId ?? '');
+    load
       .then((loaded) => {
         if (!mounted.current) return;
         if (loaded.status === 'registered') onRegistered();
@@ -60,13 +75,14 @@ export function ProviderRegistrationModal({ corridorId, progress, onClose, onReg
       });
     // The client instance, the copy and the callback do not change while the modal is open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [corridorId]);
+  }, [corridorId, cardProviderId]);
 
   async function submit() {
     setSubmitting(true);
     setError(null);
     try {
-      await client.submitProviderRegistration(corridorId);
+      if (cardProviderId) await client.submitCardProviderRegistration(cardProviderId);
+      else await client.submitProviderRegistration(corridorId ?? '');
       if (mounted.current) onRegistered();
     } catch (e) {
       if (!mounted.current) return;
@@ -137,6 +153,13 @@ export function ProviderRegistrationModal({ corridorId, progress, onClose, onReg
                   {'•'} {labels[key] ?? key}
                 </Text>
               ))}
+              {termsUrl && (
+                <TouchableOpacity onPress={() => void Linking.openURL(termsUrl)}>
+                  <Text style={{ color: accentColor, fontSize: 14, marginTop: 8, textDecorationLine: 'underline' }}>
+                    {copy.terms}
+                  </Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.choice}
                 onPress={() => setConsent((value) => !value)}

@@ -5,6 +5,9 @@ import { buildEarnTx, getEarnOpportunities, getEarnPosition, getEarnProviders } 
 import {
   createCardFunding,
   createCardHolder,
+  getCardProviderRegistration,
+  getCardRequirements,
+  submitCardProviderRegistration,
   getCardBalance,
   getCardDepositAddresses,
   getCardFunding,
@@ -83,6 +86,9 @@ import {
   CardOccupation,
   CardProvider,
   CardProviderParams,
+  CardProviderRegistration,
+  CardProviderRegistrationSubmitted,
+  CardRequirements,
   CardSecrets,
   CardTransactionsPage,
   EnabledAssetRecord,
@@ -3695,32 +3701,40 @@ export class PollarClient {
 
   // --- KYC ------------------------------------------------------------------
 
-  getKycStatus(providerId?: string, corridorId?: string) {
-    return getKycStatus(this._api, providerId, corridorId);
+  /** With `corridorId` or `cardProviderId` the read is scoped to that route's or provider's steps. */
+  getKycStatus(providerId?: string, corridorId?: string, cardProviderId?: string) {
+    return getKycStatus(this._api, providerId, corridorId, cardProviderId);
   }
 
-  getKycProviders(country: string, corridorId?: string) {
-    return getKycProviders(this._api, country, corridorId);
+  getKycProviders(country: string, corridorId?: string, cardProviderId?: string) {
+    return getKycProviders(this._api, country, corridorId, cardProviderId);
   }
 
-  startKyc(body: KycStartBody): Promise<KycStartResponse> {
+  startKyc(body: KycStartBody & { cardProviderId?: string }): Promise<KycStartResponse> {
     return startKyc(this._api, body);
   }
 
-  resolveKyc(providerId: string, level?: KycLevel, country?: string, corridorId?: string, idempotencyKey?: string) {
-    return resolveKyc(this._api, providerId, level, country, corridorId, idempotencyKey);
+  resolveKyc(
+    providerId: string,
+    level?: KycLevel,
+    country?: string,
+    corridorId?: string,
+    idempotencyKey?: string,
+    cardProviderId?: string,
+  ) {
+    return resolveKyc(this._api, providerId, level, country, corridorId, idempotencyKey, cardProviderId);
   }
 
   pollKycDecision(
     providerId: string,
-    opts?: { intervalMs?: number; timeoutMs?: number; corridorId?: string },
+    opts?: { intervalMs?: number; timeoutMs?: number; corridorId?: string; cardProviderId?: string },
   ): Promise<KycStatusContent> {
     return pollKycDecision(this._api, providerId, opts);
   }
 
   pollKycStatus(
     providerId: string,
-    opts?: { intervalMs?: number; timeoutMs?: number; corridorId?: string },
+    opts?: { intervalMs?: number; timeoutMs?: number; corridorId?: string; cardProviderId?: string },
   ): Promise<KycStatus> {
     return pollKycStatus(this._api, providerId, opts);
   }
@@ -3991,6 +4005,27 @@ export class PollarClient {
    */
   async getCardProviders(): Promise<CardProvider[]> {
     return (await getCardProviders(this._api)).providers;
+  }
+
+  /**
+   * The platform's steps before the provider's own onboarding (KYC, forms, registry
+   * checks, registration) and where the user stands. Complete a KYC step with
+   * {@link resolveKyc} passing `cardProviderId`, a form with {@link submitRequirementForm},
+   * a registry check with {@link submitRegistryCheck}, a registration with
+   * {@link submitCardProviderRegistration}.
+   */
+  async getCardRequirements(params: CardProviderParams = {}): Promise<CardRequirements> {
+    return getCardRequirements(this._api, params.cardProviderId);
+  }
+
+  /** The provider registration step: whether the user is registered, can be now, and what is shared. */
+  getCardProviderRegistration(cardProviderId: string): Promise<CardProviderRegistration> {
+    return getCardProviderRegistration(this._api, cardProviderId);
+  }
+
+  /** The user's consent: signs them up with the card provider from the verified identity and form answers. */
+  submitCardProviderRegistration(cardProviderId: string): Promise<CardProviderRegistrationSubmitted> {
+    return submitCardProviderRegistration(this._api, cardProviderId);
   }
 
   /** The user's registration with the provider, or null before {@link createCardHolder}. */

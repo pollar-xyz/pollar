@@ -8,6 +8,9 @@ import type {
   CardKycInput,
   CardOccupation,
   CardProvider,
+  CardProviderRegistration,
+  CardProviderRegistrationSubmitted,
+  CardRequirements,
   CardTransactionsPage,
 } from '../../types';
 import { PollarApiError } from '../../types';
@@ -26,8 +29,11 @@ export interface EncryptedCardSecrets {
 // instance: DPoP, auth refresh and retries all still apply.
 interface LooseApi {
   GET(path: string, init?: { params?: { query?: Record<string, unknown> } }): Promise<{ data?: unknown; error?: unknown }>;
-  POST(path: string, init?: { body?: unknown }): Promise<{ data?: unknown; error?: unknown }>;
+  POST(path: string, init?: { body?: unknown; headers?: Record<string, string> }): Promise<{ data?: unknown; error?: unknown }>;
 }
+
+/** Registering runs the provider's sign-up and KYC in one call; longer than the default client timeout. */
+const REGISTRATION_TIMEOUT_MS = 30_000;
 
 function cardsApiError(error: unknown, fallback: string): PollarApiError {
   const body = (typeof error === 'object' && error !== null ? error : {}) as Record<string, unknown>;
@@ -185,5 +191,37 @@ export async function listCardFundings(api: PollarApiClient, cardProviderId?: st
   return content(
     await loose(api).GET('/cards/funding', { params: { query: query({ cardProviderId }) } }),
     'Failed to load card fundings',
+  );
+}
+
+/** GET /cards/requirements */
+export async function getCardRequirements(api: PollarApiClient, cardProviderId?: string): Promise<CardRequirements> {
+  return content(
+    await loose(api).GET('/cards/requirements', { params: { query: query({ cardProviderId }) } }),
+    'Failed to load the card requirements',
+  );
+}
+
+/** GET /requirements/card-registration/:cardProviderId */
+export async function getCardProviderRegistration(
+  api: PollarApiClient,
+  cardProviderId: string,
+): Promise<CardProviderRegistration> {
+  return content(
+    await loose(api).GET(`/requirements/card-registration/${encodeURIComponent(cardProviderId)}`),
+    'Failed to load the card registration',
+  );
+}
+
+/** POST /requirements/card-registration/:cardProviderId. Sending it is the user's consent. */
+export async function submitCardProviderRegistration(
+  api: PollarApiClient,
+  cardProviderId: string,
+): Promise<CardProviderRegistrationSubmitted> {
+  return content(
+    await loose(api).POST(`/requirements/card-registration/${encodeURIComponent(cardProviderId)}`, {
+      headers: { 'x-pollar-timeout-ms': String(REGISTRATION_TIMEOUT_MS) },
+    }),
+    'Failed to register with the card provider',
   );
 }
