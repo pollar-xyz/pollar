@@ -78,7 +78,11 @@ export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: 
 
   /** Say which fields the registry did not confirm and outline them; the form stays open. */
   function showRejected(fields: string[] | undefined) {
-    const labels: Record<string, string> = { surname1: copy.surname1, surname2: copy.surname2, complementNumber: copy.complement };
+    const labels: Record<string, string> = {
+      surname1: copy.surname1,
+      surname2: copy.surname2,
+      complementNumber: copy.complement,
+    };
     const named = fields?.length ? fields : ['surname2'];
     setRejected(named);
     setError(copy.rejected.replace('{fields}', named.map((field) => labels[field] ?? field).join(', ')));
