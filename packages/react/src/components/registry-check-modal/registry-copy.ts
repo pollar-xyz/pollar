@@ -89,6 +89,7 @@ type RegistrationCopy = Record<
   | 'incomplete'
   | 'providerDown'
   | 'ipNotSupported'
+  | 'emailTaken'
   | 'loadError'
   | 'submitError'
   | 'step'
@@ -112,6 +113,8 @@ export const REGISTRATION_COPY: Record<FormLanguage, RegistrationCopy> = {
     providerDown: 'The provider is not responding right now. Please try again in a few minutes.',
     ipNotSupported:
       'The provider cannot accept your current connection (IPv6). Please try again from another network, for example Wi-Fi.',
+    emailTaken:
+      'This email is already registered with the provider through another app. Use a different email to register here.',
     loadError: 'Could not load the registration. Please try again.',
     submitError: 'Could not register you. Please try again.',
     step: 'Step {n} of {total}',
@@ -131,6 +134,7 @@ export const REGISTRATION_COPY: Record<FormLanguage, RegistrationCopy> = {
     incomplete: 'Tu registro con el proveedor no se completó. Regístrate de nuevo para terminarlo.',
     providerDown: 'El proveedor no responde en este momento. Intenta de nuevo en unos minutos.',
     ipNotSupported: 'El proveedor no acepta tu conexión actual (IPv6). Intenta desde otra red, por ejemplo Wi-Fi.',
+    emailTaken: 'Este email ya está registrado con el proveedor desde otra app. Usa otro email para registrarte aquí.',
     loadError: 'No se pudo cargar el registro. Intenta de nuevo.',
     submitError: 'No se pudo completar el registro. Intenta de nuevo.',
     step: 'Paso {n} de {total}',

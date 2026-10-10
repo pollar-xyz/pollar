@@ -141,6 +141,8 @@ const CARD_ERROR_COPY: Record<string, string> = {
   SDK_CARDS_PROVIDER_ERROR: 'The card provider is not responding right now. Please try again in a few minutes.',
   SDK_CARDS_IP_NOT_SUPPORTED:
     'The card provider cannot accept your current connection (IPv6). Please try again from another network, for example Wi-Fi.',
+  SDK_CARDS_PROVIDER_USER_TAKEN:
+    'This email is already registered with the card provider through another app. Use a different email to get a card here.',
 };
 
 function errorText(e: unknown, fallback: string): string {

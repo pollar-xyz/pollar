@@ -116,6 +116,7 @@ export function ProviderRegistrationModal({
       } else if (code === 'KYC_REGISTRATION_STEPS_PENDING') setError(copy.notReady);
       else if (code === 'SDK_CARDS_PROVIDER_ERROR') setError(copy.providerDown);
       else if (code === 'SDK_CARDS_IP_NOT_SUPPORTED') setError(copy.ipNotSupported);
+      else if (code === 'SDK_CARDS_PROVIDER_USER_TAKEN') setError(copy.emailTaken);
       else setError(copy.submitError);
     } finally {
       if (mounted.current) setSubmitting(false);
