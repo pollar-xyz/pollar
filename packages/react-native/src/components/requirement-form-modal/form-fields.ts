@@ -34,19 +34,43 @@ export function initialValues(fields: RequirementFormField[], answers: Requireme
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * What the inputs can tell before the server does: a number that is not one and a
- * date outside `YYYY-MM-DD`. Both would otherwise leave as `null` or free text and
- * come back as a server error, or be dropped silently when the field is optional.
+ * What one input can tell before the server does, with the same rules the server
+ * applies: a number that is not one or is out of range, a date outside
+ * `YYYY-MM-DD`, text longer than allowed or not matching the field's pattern. The
+ * server checks all of it again, so a custom UI cannot skip it; this only answers
+ * sooner. Empty values are left to the server's `required`.
  */
+export function localFieldError(field: RequirementFormField, value: FormValues[string] | undefined): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const text = value.trim();
+  const rules = field.validation ?? {};
+  if (field.type === 'number') {
+    const number = Number(text);
+    if (!Number.isFinite(number)) return 'invalid_type';
+    if (rules.min !== undefined && number < rules.min) return 'too_small';
+    if (rules.max !== undefined && number > rules.max) return 'too_large';
+    return null;
+  }
+  if (field.type === 'date') {
+    return DATE.test(text) && !Number.isNaN(Date.parse(`${text}T00:00:00Z`)) ? null : 'invalid_format';
+  }
+  if (field.type === 'select' || field.type === 'multiselect' || field.type === 'checkbox') return null;
+  if (rules.maxLength !== undefined && text.length > rules.maxLength) return 'too_long';
+  if (rules.pattern) {
+    try {
+      if (!new RegExp(rules.pattern).test(text)) return 'pattern';
+    } catch {
+      // A pattern this engine cannot compile is left to the server.
+    }
+  }
+  return null;
+}
+
 export function localFieldErrors(fields: RequirementFormField[], values: FormValues): Record<string, string> {
   const errors: Record<string, string> = {};
   for (const field of fields) {
-    const value = values[field.key];
-    if (typeof value !== 'string' || !value.trim()) continue;
-    if (field.type === 'number' && !Number.isFinite(Number(value))) errors[field.key] = 'invalid_type';
-    if (field.type === 'date' && (!DATE.test(value.trim()) || Number.isNaN(Date.parse(`${value.trim()}T00:00:00Z`)))) {
-      errors[field.key] = 'invalid_format';
-    }
+    const error = localFieldError(field, values[field.key]);
+    if (error) errors[field.key] = error;
   }
   return errors;
 }
