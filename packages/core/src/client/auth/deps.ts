@@ -25,6 +25,15 @@ export type FlowDeps = {
    * non-streaming `/auth/session/status/{id}/poll` endpoint instead.
    */
   useStreaming: boolean;
+  /**
+   * Per-request budget for the final `POST /auth/login`, in ms.
+   *
+   * It is not the client's default: that call is the one place a login does real
+   * server-side work (minting tokens, resolving the wallet, and - for an app on
+   * the inline path - creating the account on-chain), so the 10s that protects
+   * every other request would cut a login that is actually succeeding.
+   */
+  loginTimeoutMs: number;
   signal: AbortSignal;
   setAuthState: (state: AuthState) => void;
   /**

@@ -1,7 +1,9 @@
 'use client';
 
+import { isPollarApiError } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { walletNotReadyReason } from '../../lib/wallet-provisioning';
 import { useChains } from '../../useChains';
 import { WalletButtonTemplate } from './WalletButtonTemplate';
 import './WalletButton.css';
@@ -21,18 +23,23 @@ export function WalletButton() {
     openRampModal,
     openDistributionRulesModal,
     tx: transaction,
+    isAuthenticated,
+    createWallet,
+    appConfig,
   } = usePollar();
   // The address shown (and copied) is the one on the app's FIRST configured
   // chain, not `wallet.address` - that field is the Stellar wallet by definition
   // in core, so this button used to say "Stellar" to an app whose users live on
   // Polygon. Falls back to it while `/config` loads and for a legacy session that
   // enumerates no wallets.
-  const { primaryAddress } = useChains();
+  const { primaryChain, primaryAddress } = useChains();
   const walletAddress = primaryAddress || (wallet?.address ?? '');
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState(false);
+  const [creatingWallet, setCreatingWallet] = useState(false);
+  const [createWalletError, setCreateWalletError] = useState<string | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInProgress = transaction.step === 'building' || transaction.step === 'signing';
@@ -43,6 +50,15 @@ export function WalletButton() {
   // only refreshes on the next login/resume).
   const canCreateAccount =
     !created && wallet?.custody === 'external' && wallet.existsOnStellar === false && wallet.fundingMode === 'IMMEDIATE';
+  // A platform-managed wallet whose account is still being created. Surfaced in
+  // the dropdown rather than on the button: the address is real and copyable,
+  // what is missing is the account behind it. `null` for an external wallet,
+  // which the app never provisions (that one gets Create account above).
+  //
+  // Keyed to `primaryChain` - the chain whose address this button SHOWS - so a
+  // Solana-first app does not caption a working Solana address with the wait on
+  // its user's separate Stellar wallet.
+  const notReadyReason = walletNotReadyReason(wallet, primaryChain);
 
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const isDark = theme === 'dark';
@@ -100,6 +116,24 @@ export function WalletButton() {
     }
   }
 
+  async function handleCreateWallet() {
+    if (creatingWallet) return;
+    setCreatingWallet(true);
+    setCreateWalletError(null);
+    try {
+      await createWallet();
+      setOpen(false);
+    } catch (err) {
+      setCreateWalletError(
+        isPollarApiError(err) && err.code === 'SDK_WALLET_PROVISIONING_DISABLED'
+          ? 'This app does not create wallets.'
+          : 'Could not create the wallet. Try again.',
+      );
+    } finally {
+      setCreatingWallet(false);
+    }
+  }
+
   function handleWalletBalance() {
     setOpen(false);
     openWalletBalanceModal();
@@ -152,6 +186,11 @@ export function WalletButton() {
       wrapperRef={wrapperRef}
       isInProgress={isInProgress}
       showCreateAccount={canCreateAccount}
+      signedIn={isAuthenticated}
+      creatingWallet={creatingWallet}
+      createWalletError={createWalletError}
+      {...(appConfig.application?.walletProvisioning === 'NONE' ? {} : { onCreateWallet: handleCreateWallet })}
+      notReadyReason={notReadyReason}
       creatingAccount={creating}
       onToggleOpen={() => setOpen((v) => !v)}
       onCreateAccount={handleCreateAccount}

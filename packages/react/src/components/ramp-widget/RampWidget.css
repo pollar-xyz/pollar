@@ -335,3 +335,19 @@
   text-align: center;
   margin: 0;
 }
+
+/* A route held back by KYC: not selectable as a whole, only its button acts. */
+.pollar-ramp-route-card[data-locked] {
+  cursor: default;
+}
+
+.pollar-ramp-route-card[data-locked]:not([data-disabled]):hover {
+  border-color: var(--pollar-border);
+}
+
+.pollar-ramp-route-verify {
+  height: 2rem;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}

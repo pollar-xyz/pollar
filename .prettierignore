@@ -1,6 +1,7 @@
 # Build output
 **/dist/**
 .turbo/
+.kilo/
 tmp/
 
 # Generated

@@ -32,6 +32,7 @@ type RampResult = {
   kycUrl?: string; // hosted identity check to open
   tosUrl?: string; // hosted terms acceptance, when the provider splits it out
   kycRequired?: boolean; // link-less gate: nothing was signed, nothing moved
+  onboardingStatus?: 'kyc' | 'endorsement' | 'awaiting_provider'; // which part is outstanding
   depositInstructions?: RampDepositInstructions; // on-ramp payment details as data
   stellarTxHash?: string; // set once the on-chain leg has landed
 };
@@ -46,8 +47,18 @@ decides what happens next:
 2. **`kycUrl`** (and `tosUrl`) is set: open it in a new tab. The provider hosts the identity check and
    the transaction advances on its own once the user clears it. Keep polling.
 3. **`kycRequired: true`** is set: the provider gated the flow on identity and offers no hosted URL.
-   Nothing was built or signed and no funds moved. Poll `getRampKycStatus()` until `hasApproved`,
-   then **request a fresh quote**; the provider consumed this one when it answered.
+   Nothing was built or signed and no funds moved. Read `onboardingStatus` before saying anything to
+   the user, because two different situations share this flag:
+
+- `'kyc'` or `'endorsement'`: something is still outstanding on the user's side. Poll
+  `getRampKycStatus()` until `hasApproved`, then **request a fresh quote**; the provider consumed
+  this one when it answered.
+- `'awaiting_provider'`: the user has nothing left to do. The documents are in and the provider is
+  working through its own setup, which finishes separately from the user's verification. Say the
+  account is still being prepared, and **stop polling `getRampKycStatus()`** - it describes a
+  different provider's checks and can never answer for this one. Asking the user to "complete
+  verification" here asks for something that cannot help.
+
 4. **`depositInstructions`** is set (on-ramp): render them. This is where the user is told how to pay.
 5. Otherwise poll `status`.
 
@@ -80,6 +91,38 @@ A quote carries what the UI needs to explain it, and one thing the UI must obey:
 (`'text' | 'email' | 'tel' | 'select'`), and optionally `bankType`, `options`, `placeholder`,
 `hint`, `optional`. Render them from the quote, collect the values, and send them back under
 `fields` on the create call. A form hardcoded for one provider breaks the day a better quote wins.
+
+### Routes locked by a requirement step
+
+A corridor can require steps before it is quoted (`@pollar/core` 0.11.4 and an sdk-api that serves
+`/v2/requirements`). Every step is required, in order, and each accepts any of its equivalent
+options. A route with a pending step is not quoted: it comes back in `requirementsRequired`, with
+the first step still open. So `quotes` can be empty while the country is served.
+
+```ts
+const { quotes, requirementsRequired = [], unavailable = [] } = await client.getRampsQuote(query);
+
+for (const step of requirementsRequired) {
+  step.provider; // the route it locks
+  step.type; // 'KYC' | 'FORM' | 'REGISTRY_CHECK' | 'PROVIDER_REGISTRATION'
+  step.optionId; // what to open for this step
+  step.corridorId;
+  step.status; // 'none' | 'pending' | 'rejected' | 'expired'; 'pending' may carry reviewReason
+}
+// unavailable: [{ provider, code }] - serves the route but failed to quote just now
+```
+
+| `type`                  | Complete it with                                                                                      |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| `KYC`                   | The KYC option `optionId`, scoped to the corridor: `resolveKyc(optionId, level, country, corridorId)` |
+| `FORM`                  | `getRequirementForm(optionId)` (prefilled), then `submitRequirementForm(optionId, answers)`           |
+| `REGISTRY_CHECK`        | `getRegistryCheck(optionId)`, then `submitRegistryCheck(optionId, edit)` (SEGIP)                      |
+| `PROVIDER_REGISTRATION` | `getProviderRegistration(corridorId)`, then `submitProviderRegistration(corridorId)` on consent       |
+
+After a step, **quote again** instead of reusing a quote you held: the price can move while the
+user verifies. The create call has the same gate: a route whose step is still open fails with
+`SDK_RAMPS_KYC_REQUIRED`, and the error body names the step. `<RampWidget>` in `@pollar/react` does
+all of this - it lists locked routes with a Verify action and opens each step's modal.
 
 ## On-ramp (fiat in)
 

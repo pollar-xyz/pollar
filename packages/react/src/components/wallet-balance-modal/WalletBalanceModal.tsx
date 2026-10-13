@@ -15,7 +15,7 @@ interface WalletBalanceModalProps {
 }
 
 export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
-  const { walletBalance, refreshWalletBalance, wallets, network, styles } = usePollar();
+  const { walletBalance, refreshWalletBalance, wallets, network, styles, enabledAssets } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const { chains } = useChains();
@@ -40,6 +40,7 @@ export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
         styleOverrides={styleOverrides}
         walletBalance={walletBalance}
         walletAddress={walletAddress}
+        assetMetadata={enabledAssets.step === 'loaded' ? enabledAssets.data.assets : []}
         chains={chains}
         selectedChain={selectedChain}
         network={network}

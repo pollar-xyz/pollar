@@ -46,18 +46,68 @@ export class ModalErrorBoundary extends Component<{ children: ReactNode; onClose
   }
 }
 
-export const PollarModalFooter = () => {
+export const PollarModalFooter = ({ shield = false }: { shield?: boolean }) => {
   return (
     <div className="pollar-footer">
       <span className="pollar-footer-protected">Protected by</span>
       <div className="pollar-footer-brand">
-        <img src={LOGO_POLLAR} alt="Pollar" className="pollar-footer-logo" />
+        {shield ? (
+          <svg className="pollar-footer-shield" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M12 3.2 19 6v5.3c0 4.4-2.9 7.8-7 9.5-4.1-1.7-7-5.1-7-9.5V6l7-2.8Z" fill="var(--pollar-accent)" />
+            <path d="m8.5 12 2.2 2.2 4.8-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : (
+          <img src={LOGO_POLLAR} alt="Pollar" className="pollar-footer-logo" />
+        )}
         <span className="pollar-footer-name">Pollar</span>
         <span className="pollar-footer-version">v{__POLLAR_VERSION__}</span>
       </div>
     </div>
   );
 };
+
+/** Shared refresh glyph used by compact modal header actions. */
+export function RefreshIcon({ spinning = false, className = '' }: { spinning?: boolean; className?: string }) {
+  return (
+    <svg
+      className={`${spinning ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}${className ? ` ${className}` : ''}`}
+      width="17"
+      height="17"
+      viewBox="0 0 17 17"
+      fill="none"
+      aria-hidden
+    >
+      <path
+        d="M2.125 8.5C2.125 6.80924 2.79665 5.18774 3.99219 3.99219C5.18774 2.79665 6.80924 2.125 8.5 2.125C10.2822 2.1317 11.9928 2.82712 13.2742 4.06583L14.875 5.66667"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M14.8747 2.125V5.66667H11.333"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M14.875 8.5C14.875 10.1908 14.2033 11.8123 13.0078 13.0078C11.8123 14.2033 10.1908 14.875 8.5 14.875C6.7178 14.8683 5.00719 14.1729 3.72583 12.9342L2.125 11.3333"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M2.125 14.875V11.3333H5.66667"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 interface CopyButtonProps {
   /** Text written to the clipboard (the full, un-cropped value). */

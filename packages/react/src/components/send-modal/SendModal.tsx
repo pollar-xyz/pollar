@@ -3,8 +3,9 @@
 import { toBaseUnits, WalletBalanceRecord, WalletChain } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { walletNotReadyReason } from '../../lib/wallet-provisioning';
 import { useChains } from '../../useChains';
-import { addressForChain, resolveChain } from '../ChainSelect';
+import { resolveChain } from '../ChainSelect';
 import '../shared.css';
 import '../transaction-modal/TransactionModal.css';
 import './SendModal.css';
@@ -32,7 +33,6 @@ export function SendModal({ onClose }: SendModalProps) {
     signAndSubmitTx,
     tx: transaction,
     wallet,
-    wallets,
     network,
     styles,
   } = usePollar();
@@ -58,10 +58,14 @@ export function SendModal({ onClose }: SendModalProps) {
     if (selectedChain === null && chains.length > 0) setSelectedChain(chains[0]!);
   }, [chains, selectedChain]);
 
-  const walletAddress = addressForChain(wallets, selectedChain);
   // Solana joined Stellar via the atomic endpoint; Polygon has no transfer path
   // in the backend yet, so it can be browsed but not sent from.
   const canSendOnChain = selectedChain === 'STELLAR' || selectedChain === 'SOLANA';
+  // A Stellar account still being created cannot source a payment: every
+  // operation would come back `op_no_source_account`. The server refuses these
+  // with SDK_WALLET_NOT_READY anyway - saying so here turns that into something
+  // the user can act on (wait) instead of a failed transaction.
+  const notReadyReason = walletNotReadyReason(wallet, selectedChain);
   // Solana amounts are integer base units (lamports / mint units), not decimals.
   const isBaseUnitChain = selectedChain === 'SOLANA';
 
@@ -141,6 +145,10 @@ export function SendModal({ onClose }: SendModalProps) {
       setFormError('Sending is not available on this network yet.');
       return;
     }
+    if (notReadyReason) {
+      setFormError(notReadyReason);
+      return;
+    }
     if (!selectedAsset) {
       setFormError('Select an asset');
       return;
@@ -211,6 +219,32 @@ export function SendModal({ onClose }: SendModalProps) {
     }
   }
 
+  function handleMax() {
+    if (selectedAsset?.available !== null && selectedAsset?.available !== undefined) {
+      setAmount(selectedAsset.available);
+      setFormError('');
+    }
+  }
+
+  async function handlePaste() {
+    if (!navigator.clipboard?.readText) {
+      setFormError('Clipboard access is not available. Paste the address manually.');
+      return;
+    }
+
+    try {
+      const value = (await navigator.clipboard.readText()).trim();
+      if (!value) {
+        setFormError('The clipboard is empty.');
+        return;
+      }
+      setDestination(value);
+      setFormError('');
+    } catch {
+      setFormError('Could not read the clipboard. Paste the address manually.');
+    }
+  }
+
   function handleCopyHash() {
     if (!hash) return;
     navigator.clipboard.writeText(hash).then(() => {
@@ -247,8 +281,8 @@ export function SendModal({ onClose }: SendModalProps) {
         selectedAsset={selectedAsset}
         chains={chains}
         selectedChain={selectedChain}
-        walletAddress={walletAddress}
         canSendOnChain={canSendOnChain}
+        notReadyReason={notReadyReason}
         onSelectChain={setSelectedChain}
         amount={amount}
         destination={destination}
@@ -266,6 +300,8 @@ export function SendModal({ onClose }: SendModalProps) {
         onRefresh={() => void refreshWalletBalance()}
         onSelectAsset={setSelectedAsset}
         onAmountChange={setAmount}
+        onMax={handleMax}
+        onPaste={handlePaste}
         onDestinationChange={setDestination}
         onSubmit={() => void handleSubmit()}
         onSignAndSend={handleSignAndSend}

@@ -29,11 +29,11 @@ jobs:
 
           OPENROUTER__KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
-          config.model: "openrouter/google/gemini-3.1-flash-lite"
+          config.model: 'openrouter/google/gemini-3.1-flash-lite'
           config.fallback_models: '["openrouter/auto"]'
 
-          github_action_config.auto_review: "true"
-          github_action_config.auto_describe: "false"
-          github_action_config.auto_improve: "false"
+          github_action_config.auto_review: 'true'
+          github_action_config.auto_describe: 'false'
+          github_action_config.auto_improve: 'false'
 
           github_action_config.pr_actions: '["opened", "reopened", "ready_for_review", "synchronize"]'

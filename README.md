@@ -9,7 +9,39 @@ This repository is managed with [Turborepo](https://turbo.build/repo) and contai
 
 ## Packages
 
-> **0.11.3 is a patch (no breaking changes).** Session resilience in `@pollar/core`: a session
+> **0.11.4** needs no change in an app that uses the
+> built-in components. **KYC by ramp corridor**: a ramp quote reports the first requirement step a
+> route still needs (`requirementsRequired`), and `@pollar/core` and `@pollar/react` complete every
+> step type - KYC, forms, SEGIP registry checks and provider registration - from `<RampWidget>` or
+> from the app's own KYC flow (`openKycModal()`). The Send, Swap, Receive, Sessions and Wallet
+> balance modals follow the **new design**, keeping the network picker in a multichain app. Apps that
+> mount those templates or call `pollKycStatus()` should
+> read [UPGRADE.md](./UPGRADE.md). From this release the SDK is licensed under **Apache-2.0**.
+>
+> **Cards**: an app that enables a card provider offers its users a card funded from their wallet,
+> through `<CardModal>` (`openCardModal()`, web and React Native) or the card methods on
+> `PollarClient`; the card number is decrypted on the device (`revealCardSecrets()`). **Wallets on
+> demand**: for an app that creates wallets on demand or never, a session without a wallet is signed
+> in, `hasWallet()` says whether there is one and `createWallet()` creates it.
+>
+> **Wallet provisioning.** The platform now creates an end-user's Stellar
+> account **in the background** instead of inside `POST /auth/login`, so a login returns before
+> the account is on the ledger. `@pollar/core` is the SDK half of that: `wallet.provisioning`
+> (`READY | CREATING | FAILED`) says where the account stands, `onWalletStateChange()` fires when
+> it lands, the client polls until it does, and `isWalletNotReady()` names the `SDK_WALLET_NOT_READY`
+> (409) the server returns for an on-chain operation attempted in that window. `@pollar/react`'s
+> **Send, Receive and wallet-button** templates say so instead of letting the first payment fail as
+> an opaque network error. Also in core: a DPoP proof the server rejects over **clock skew** is
+> re-signed rather than clearing the session (it was logging people out), and every request carries
+> **`x-pollar-sdk`** so a stale SDK is visible from the dashboard - this one needs an sdk-api that
+> allows the header in CORS, which the hosted one does. `@pollar/react@0.11.4` and
+> `@pollar/react-native@0.11.4` require `@pollar/core@^0.11.4`; if you pin exact versions, keep
+> them on the same version. `@pollar/react-native` joins the SDK's version line (from `0.1.1`). The
+> adapters are not part of this release: the published stellar-wallets-kit (`0.11.2`) and privy
+> (`0.11.1`) adapters accept core 0.11.4, the accesly one (`0.10.1`, `^0.10.1`) does not - see
+> [UPGRADE.md](./UPGRADE.md).
+>
+> Earlier: **0.11.3** was session resilience in `@pollar/core`: a session
 > **survives reloads when the DPoP keypair fails to persist** (no more thumbprint-mismatch
 > logout loop), `logout()` no longer races an in-flight or newer login (no resurrected or
 > leaked sessions), and cross-tab / multi-client session-row writes are serialized and
@@ -19,8 +51,7 @@ This repository is managed with [Turborepo](https://turbo.build/repo) and contai
 > `@pollar/react`, so the application's single copy of core is the one every package uses
 > (npm 7+ installs peers automatically; npm 6, Yarn 1 and `--legacy-peer-deps` users must
 > add core to their own dependencies), and the new `isPollarClient()` guard recognizes a
-> client even across duplicate copies. `@pollar/react@0.11.3` requires
-> `@pollar/core@^0.11.3`; if you pin exact versions, keep both on the same version.
+> client even across duplicate copies.
 >
 > Earlier: **0.11.2** (additive) added the `client.stellar` namespace: sign **SEP-53
 > message** and **SEP-10 challenge** ownership proofs across embedded and external wallets,
@@ -45,7 +76,7 @@ This repository is managed with [Turborepo](https://turbo.build/repo) and contai
 
 ### [`@pollar/core`](./packages/core)
 
-**Version:** `0.11.3` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/core)
+**Version:** `0.11.4` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/core)
 
 Framework-agnostic TypeScript SDK. Provides the `PollarClient` class and all lower-level utilities needed to integrate
 Pollar authentication and multichain (Stellar + Solana) transactions into any JavaScript environment.
@@ -77,6 +108,10 @@ Pollar authentication and multichain (Stellar + Solana) transactions into any Ja
 - **SEP-24 on/off-ramps** - anchor deposit/withdraw interactive flow via the `ramps` endpoints
 - **Account creation** - `createAccount()` puts an external wallet's classic account on-chain via a sponsored
   `createAccount`; the wallet surfaces `existsOnStellar` + `fundingMode`
+- **Wallets on demand** - for an app that creates wallets on demand or never, a session without a wallet is signed in;
+  `hasWallet()` says whether there is one on any chain and `createWallet()` creates it
+- **Cards** - `getCardProviders()`, `issueCard()`, `fundCard()`, `getCardBalance()` and the rest of the card methods;
+  `revealCardSecrets()` decrypts the card number on the device, on WebCrypto or in plain JavaScript on React Native
 - **Sponsored trustlines** - `setTrustline` lets the app config decide who pays (server-side): embedded wallets hit
   the sponsored/self-pay trustline endpoint, external wallets co-sign whichever XDR the server returns. Pass
   `skipSponsorship` to force the user's own wallet to pay via `change_trust`
@@ -124,7 +159,7 @@ const client = new PollarClient({ apiKey: 'pk_...', storage });
 
 ### [`@pollar/react`](./packages/react)
 
-**Version:** `0.11.3` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react)
+**Version:** `0.11.4` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react)
 
 React bindings built on top of `@pollar/core`. Provides a context provider, hook, and pre-built UI components for
 drop-in authentication in React applications.
@@ -136,16 +171,19 @@ drop-in authentication in React applications.
   points
 - `<WalletButton>` — ready-made button that opens the authentication modal; dropdown includes Send, Receive, balance,
   and tx history; shows an inline spinner during in-progress transactions
-- `<SendModal>` — full send flow in a single modal: asset picker, amount input, destination address, and inline
-  transaction status (build → sign → success/error)
+- `<SendModal>` — full send flow in a single modal: network picker (multichain apps), asset picker, amount with Max, destination
+  with Paste, and inline transaction status (build → sign → success/error)
 - `<ReceiveModal>` — displays the connected wallet address as a QR code with copy-to-clipboard; no external QR
   dependency required
 - `<SwapModal>` - multi-venue swap UI over the core swap API, with a route selector across venues and paste-a-custom-token
 - `<EarnModal>` - deposit/withdraw across DeFindex vaults and Blend pools, with live APY, wallet balance, over-spend
   guards, and auto-trustline on deposit; `usePollar()` mirrors the earn methods
-- `<RampWidget>` - SEP-24 buy/sell flow wired to the core ramps endpoints (external wallets sign the pending XDR inline)
-- `<KycModal>` - identity verification flow with provider selection and status polling _(UI preview - backend coming
-  soon)_
+- `<RampWidget>` - SEP-24 buy/sell flow wired to the core ramps endpoints (external wallets sign the pending XDR inline);
+  a route with a pending requirement step is listed locked and the widget opens that step
+- `<RequirementFormModal>`, `<RegistryCheckModal>`, `<ProviderRegistrationModal>` - the FORM, REGISTRY_CHECK (SEGIP) and
+  PROVIDER_REGISTRATION steps a ramp route can require, as standalone modals for consumers who build their own route list
+- `<KycModal>` - identity verification: hosted (iframe or redirect) flow per option, corridor-scoped when a ramp route
+  asks for it, with review, expiry and retry states; `openKycModal()` without a corridor walks the app's own KYC steps
 - `<TxHistoryModal>` — paginated multichain transaction history viewer with auto-fetch on open, a network picker that
   filters server-side, per-chain explorer links (stellar.expert for Stellar, explorer.solana.com for Solana), and the
   unified `{ amount, unit }` fee per row
@@ -153,6 +191,8 @@ drop-in authentication in React applications.
 - `<EnabledAssetsModal>` — the app's dashboard-enabled assets for the network picked in the header, with per-asset
   trustline state; establish/remove trustlines (Stellar only — other chains are informational)
 - `<DistributionRulesModal>` — manage the wallet's distribution rules
+- `<CardModal>` - cards from the app's card providers: the provider's steps, sign-up, issuing, the card with its balance
+  and movements, funding from the wallet and revealing the number; `openCardModal()` from `usePollar()`
 - `<ChainSelect>` — the shared network picker, exported alongside `chainsOf()` / `addressForChain()` / `resolveChain()`
   so you can drive the templates that take `chains` / `selectedChain` / `onSelectChain` yourself
 - `useChains()` — the recommended hook for the app's configured chain order and primary address (returns
@@ -166,6 +206,35 @@ drop-in authentication in React applications.
 
 ```bash
 npm install @pollar/react @pollar/core
+```
+
+---
+
+### [`@pollar/react-native`](./packages/react-native)
+
+**Version:** `0.11.4` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react-native)
+
+React Native bindings built on top of `@pollar/core`: the same provider-and-hook model as `@pollar/react`, with
+components styled through `StyleSheet`.
+
+**Key features:**
+
+- `<PollarProvider>` - creates the client and mounts the login, transaction, KYC, ramp, tx history and wallet balance
+  modals; accepts `adapters` for custom signing flows
+- `usePollar()` - session state, `login`, `logout`, `buildTx` / `signAndSubmitTx`, balances, tx history, network and
+  modal entry points
+- `<WalletButton>` - opens the login modal, or shows the address with balance, history and logout
+- `<RampWidget>` with the same requirement-step gate as the web widget, and the step modals (`<RequirementFormModal>`,
+  `<RegistryCheckModal>`, `<ProviderRegistrationModal>`)
+- Template components for every modal, for fully custom UIs
+- Storage (Keychain / SecureStore), OAuth opener and polyfills are configured through `@pollar/core`; see the package
+  README
+- `<CardModal>` - the same card flow as the web one; the card number is decrypted on the device without WebCrypto
+- Peer dependencies on `@pollar/core ^0.11.4`, React >= 18 and React Native >= 0.72; versioned with `@pollar/core`
+  and `@pollar/react` from 0.11.4
+
+```bash
+npm install @pollar/react-native @pollar/core
 ```
 
 ---
@@ -356,4 +425,4 @@ npm run clean
 
 ## License
 
-MIT
+Apache-2.0. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE). Versions published before 0.11.4 were released under MIT.

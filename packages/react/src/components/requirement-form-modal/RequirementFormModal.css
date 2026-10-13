@@ -1,0 +1,88 @@
+/* --- Requirement form modal -------------------------------------------------- */
+.pollar-form-modal {
+  max-width: 520px;
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+.pollar-form-modal .pollar-modal-header {
+  gap: 1rem;
+}
+.pollar-form-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.pollar-form-subtitle {
+  margin: 0;
+  font-size: var(--pollar-modal-subtitle-size, 0.9rem);
+  color: var(--pollar-muted);
+}
+.pollar-form-description {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--pollar-muted);
+}
+.pollar-form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.pollar-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+.pollar-form-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--pollar-text);
+}
+.pollar-form-required {
+  color: var(--pollar-error-text, #dc2626);
+}
+.pollar-form-help {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--pollar-muted);
+}
+.pollar-form-field-error {
+  font-size: 0.75rem;
+  color: var(--pollar-error-text, #dc2626);
+}
+.pollar-input[aria-invalid='true'] {
+  border-color: var(--pollar-error-text, #dc2626);
+}
+.pollar-form-textarea {
+  height: auto;
+  min-height: 88px;
+  padding: 0.625rem 1rem;
+  resize: vertical;
+  font-family: inherit;
+}
+.pollar-form-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.pollar-form-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--pollar-text);
+}
+.pollar-form-error {
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--pollar-border);
+  border-left: 3px solid var(--pollar-accent);
+  border-radius: 0.5rem;
+  color: var(--pollar-text);
+  background: var(--pollar-input-bg);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.pollar-form-body .pollar-modal-actions {
+  align-self: stretch;
+}

@@ -95,7 +95,10 @@ for send, receive, copy, balance, history, ramp, KYC, distribution rules, sessio
 
 The rest: `<SendModal>`, `<ReceiveModal>`, `<SwapModal>`, `<EarnModal>`, `<TxHistoryModal>`,
 `<WalletBalanceModal>`, `<EnabledAssetsModal>`, `<SessionsModal>`, `<DistributionRulesModal>`,
-`<KycModal>`, `<RampWidget>`.
+`<KycModal>`, `<RampWidget>`, and the ramp requirement steps `<RequirementFormModal>`,
+`<RegistryCheckModal>` and `<ProviderRegistrationModal>` (`<RampWidget>` opens them itself; see
+[ramps.md](./ramps.md)). In a multichain app, Send, Receive and Wallet balance open on the first
+configured chain and show a network picker; a single-chain app gets no picker.
 
 To keep the data wiring but replace the chrome, use the `Template` companion of any modal
 (`<SendModalTemplate>`, `<LoginModalTemplate>`, and so on). `<TxHistoryModal>` and `<TransactionModal>`

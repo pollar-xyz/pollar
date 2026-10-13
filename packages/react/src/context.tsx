@@ -38,12 +38,14 @@ import { ModalErrorBoundary, setModalErrorLogger } from './components/commons';
 import { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
 import { EnabledAssetsModal } from './components/enabled-assets-modal/EnabledAssetsModal';
 import { KycModal } from './components/kyc-modal/KycModal';
+import { AppKycFlow } from './components/kyc-modal/AppKycFlow';
 import { LoginModal } from './components/login-modal/LoginModal';
 import { RampWidget } from './components/ramp-widget/RampWidget';
 import { ReceiveModal } from './components/receive-modal/ReceiveModal';
 import { SendModal } from './components/send-modal/SendModal';
 import { SwapModal } from './components/swap-modal/SwapModal';
 import { EarnModal } from './components/earn-modal/EarnModal';
+import { CardModal } from './components/card-modal/CardModal';
 import { SessionsModal } from './components/sessions-modal/SessionsModal';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
@@ -74,7 +76,12 @@ function sessionsEqual(a: PollarPersistedSession | null, b: PollarPersistedSessi
     a.token?.accessToken === b.token?.accessToken &&
     a.token?.refreshToken === b.token?.refreshToken &&
     a.token?.expiresAt === b.token?.expiresAt &&
-    a.wallet?.address === b.wallet?.address
+    a.wallet?.address === b.wallet?.address &&
+    // The wallet's on-chain account can move from CREATING to READY without any
+    // other field changing. Leaving it out of the comparison is what would make
+    // the whole provisioning UI dead: the short-circuit below would swallow the
+    // one emission that says the wait is over.
+    a.wallet?.provisioning === b.wallet?.provisioning
   );
 }
 
@@ -98,6 +105,14 @@ interface PollarContextValue {
   openLoginModal: () => void;
 
   isAuthenticated: boolean;
+  /**
+   * Whether the signed-in user has a wallet. False for an app that creates
+   * wallets on demand until {@link createWallet} runs, and always for one that
+   * creates none.
+   */
+  hasWallet: boolean;
+  /** Create the signed-in user's wallet; see `PollarClient.createWallet`. */
+  createWallet: () => Promise<WalletInfo>;
   /**
    * `true` once the server has confirmed the session (login / refresh /
    * `/auth/session/resume`). `false` while a cold-start session is still
@@ -183,6 +198,8 @@ interface PollarContextValue {
   openEnabledAssetsModal: () => void;
   // kyc
   openKycModal: (options?: {
+    corridorId?: string;
+    providerId?: string;
     country?: string;
     level?: 'basic' | 'intermediate' | 'enhanced';
     onApproved?: () => void;
@@ -248,6 +265,13 @@ interface PollarContextValue {
   earnWithdraw: (params: EarnTxParams) => Promise<SubmitOutcome>;
   /** Open the Earn modal. */
   openEarnModal: () => void;
+  // cards
+  /**
+   * Open the Cards modal: sign-up, identity verification, issuing, the card
+   * itself and its activity. The card calls live on {@link PollarClient}
+   * (`getCardProviders`, `issueCard`, `revealCardSecrets`, ...).
+   */
+  openCardModal: () => void;
   // distribution
   openDistributionRulesModal: () => void;
   // adapters
@@ -501,7 +525,7 @@ export function PollarProvider({
             triggered = false;
             return;
           }
-          if (triggered || sessionRef.current?.wallet?.address) return;
+          if (triggered || sessionRef.current) return;
           triggered = true;
           pollarClient.login({ provider: id } as PollarLoginOptions);
         }),
@@ -564,6 +588,8 @@ export function PollarProvider({
   const [transactionModalOpen, setTransactionModalOpen] = useState(false);
   const [kycModalOpen, setKycModalOpen] = useState(false);
   const [kycModalOptions, setKycModalOptions] = useState<{
+    corridorId?: string;
+    providerId?: string;
     country?: string;
     level?: 'basic' | 'intermediate' | 'enhanced';
     onApproved?: () => void;
@@ -581,14 +607,50 @@ export function PollarProvider({
   const [sendModalKey, setSendModalKey] = useState(0);
   const [swapModalKey, setSwapModalKey] = useState(0);
   const [earnModalKey, setEarnModalKey] = useState(0);
+  const [cardModalOpen, setCardModalOpen] = useState(false);
+  const [cardModalKey, setCardModalKey] = useState(0);
   const [receiveModalOpen, setReceiveModalOpen] = useState(false);
   const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
   const [distributionRulesModalOpen, setDistributionRulesModalOpen] = useState(false);
+
+  // When the session ends (logout, revoked, ended in another tab) every modal that
+  // acts on it closes, so none keeps the previous user's data on screen; reopening
+  // loads from scratch. Losing the network does not end the session (core keeps it
+  // and retries), so this never fires offline. The login modal stays.
+  useEffect(
+    () =>
+      pollarClient.onAuthStateChange((authState) => {
+        if (authState.step !== 'idle') return;
+        setTransactionModalOpen(false);
+        setKycModalOpen(false);
+        setRampModalOpen(false);
+        setTxHistoryModalOpen(false);
+        setWalletBalanceModalOpen(false);
+        setEnabledAssetsModalOpen(false);
+        setSendModalOpen(false);
+        setSwapModalOpen(false);
+        setEarnModalOpen(false);
+        setCardModalOpen(false);
+        setReceiveModalOpen(false);
+        setSessionsModalOpen(false);
+        setDistributionRulesModalOpen(false);
+      }),
+    [pollarClient],
+  );
 
   // PII (incl. providers.wallet.address) lives on `client.getUserProfile()`, not on the
   // persisted session. For every wallet type, `wallet.address` holds the on-chain
   // address we care about.
   const walletAddress = sessionState?.wallet?.address || '';
+  // A scalar dependency for the context memo below, for the same reason
+  // `walletAddress` is one: the memo reads the wallet through
+  // `pollarClient.getWallet()`, so it only recomputes when something in its
+  // dependency list moves. Without this, a wallet going from CREATING to READY
+  // updates the session and re-renders nothing.
+  const walletProvisioning = sessionState?.wallet?.provisioning;
+  // Signed in is having a session: a user of an app that creates wallets on
+  // demand is authenticated before they have an address.
+  const hasSession = sessionState !== null;
   const getClient = useCallback(() => pollarClient, [pollarClient]);
   // refreshBalance resolves the own wallet server-side from the session;
   // walletAddress stays in deps so the callback re-binds when the wallet changes.
@@ -605,7 +667,9 @@ export function PollarProvider({
       // session
       wallet: pollarClient.getWallet(),
       wallets: pollarClient.getWallets(),
-      isAuthenticated: !!walletAddress,
+      isAuthenticated: hasSession,
+      hasWallet: pollarClient.hasWallet(),
+      createWallet: () => pollarClient.createWallet(),
       verified,
       // client
       getClient,
@@ -663,6 +727,11 @@ export function PollarProvider({
         setEarnModalKey((k) => k + 1);
         setEarnModalOpen(true);
       },
+      // cards
+      openCardModal: () => {
+        setCardModalKey((k) => k + 1);
+        setCardModalOpen(true);
+      },
       // sessions
       sessions,
       openSessionsModal: () => setSessionsModalOpen(true),
@@ -685,8 +754,11 @@ export function PollarProvider({
       retryConfig,
       adapters,
     } as PollarContextValue;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- walletProvisioning is an intentional recompute trigger, not read in the body
   }, [
     walletAddress,
+    walletProvisioning,
+    hasSession,
     verified,
     pollarClient,
     getClient,
@@ -719,12 +791,24 @@ export function PollarProvider({
       )}
       {kycModalOpen && (
         <ModalErrorBoundary onClose={() => setKycModalOpen(false)}>
-          <KycModal
-            onClose={() => setKycModalOpen(false)}
-            {...(kycModalOptions.country !== undefined && { country: kycModalOptions.country })}
-            {...(kycModalOptions.level !== undefined && { level: kycModalOptions.level })}
-            {...(kycModalOptions.onApproved !== undefined && { onApproved: kycModalOptions.onApproved })}
-          />
+          {kycModalOptions.corridorId === undefined && kycModalOptions.providerId === undefined ? (
+            // The app's own KYC: its configured steps, in order.
+            <AppKycFlow
+              onClose={() => setKycModalOpen(false)}
+              {...(kycModalOptions.country !== undefined && { country: kycModalOptions.country })}
+              {...(kycModalOptions.level !== undefined && { level: kycModalOptions.level })}
+              {...(kycModalOptions.onApproved !== undefined && { onApproved: kycModalOptions.onApproved })}
+            />
+          ) : (
+            <KycModal
+              onClose={() => setKycModalOpen(false)}
+              {...(kycModalOptions.country !== undefined && { country: kycModalOptions.country })}
+              {...(kycModalOptions.corridorId !== undefined && { corridorId: kycModalOptions.corridorId })}
+              {...(kycModalOptions.providerId !== undefined && { providerId: kycModalOptions.providerId })}
+              {...(kycModalOptions.level !== undefined && { level: kycModalOptions.level })}
+              {...(kycModalOptions.onApproved !== undefined && { onApproved: kycModalOptions.onApproved })}
+            />
+          )}
         </ModalErrorBoundary>
       )}
       {rampModalOpen && (
@@ -760,6 +844,12 @@ export function PollarProvider({
       {earnModalOpen && (
         <ModalErrorBoundary key={earnModalKey} onClose={() => setEarnModalOpen(false)}>
           <EarnModal onClose={() => setEarnModalOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {cardModalOpen && (
+        // Keyed by the wallet too: a different user, or signing in with it open, starts it from scratch.
+        <ModalErrorBoundary key={`${cardModalKey}:${walletAddress}`} onClose={() => setCardModalOpen(false)}>
+          <CardModal onClose={() => setCardModalOpen(false)} />
         </ModalErrorBoundary>
       )}
       {receiveModalOpen && (

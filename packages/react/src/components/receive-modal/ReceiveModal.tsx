@@ -3,6 +3,7 @@
 import { WalletChain } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { walletNotReadyReason } from '../../lib/wallet-provisioning';
 import { useChains } from '../../useChains';
 import { addressForChain } from '../ChainSelect';
 import '../shared.css';
@@ -15,7 +16,7 @@ interface ReceiveModalProps {
 }
 
 export function ReceiveModal({ onClose }: ReceiveModalProps) {
-  const { wallets, styles } = usePollar();
+  const { wallet, wallets, styles } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -29,6 +30,10 @@ export function ReceiveModal({ onClose }: ReceiveModalProps) {
   }, [chains, selectedChain]);
 
   const walletAddress = addressForChain(wallets, selectedChain);
+  // The address is real, but until the account is on the ledger a payment to it
+  // is rejected by the network. Handing someone a QR without saying so is the
+  // one place this window can cost a user a failed transfer from a third party.
+  const notReadyReason = walletNotReadyReason(wallet, selectedChain);
 
   useEffect(
     () => () => {
@@ -64,6 +69,7 @@ export function ReceiveModal({ onClose }: ReceiveModalProps) {
           setCopied(false);
           setSelectedChain(chain);
         }}
+        notReadyReason={notReadyReason}
         copied={copied}
         onCopy={handleCopy}
         onClose={onClose}

@@ -7,12 +7,15 @@ language: 'en-US'
 
 # Default tone. These libraries are consumed by external developers, so the
 # review is biased toward API stability, semver and breaking changes.
+#
+# The schema caps this field at 250 characters and rejects the WHOLE file when it
+# is longer - CodeRabbit then reviews with default settings and says so only in a
+# collapsed warning on the PR. Keep it short and put the detail in
+# `path_instructions` below, which allows 20000.
 tone_instructions: >-
-  You are reviewing a published TypeScript SDK (@pollar/*) consumed by external
-  developers. Prioritize public API stability, backward compatibility and semver
-  correctness. Flag any change to an exported symbol's signature, removed exports
-  or changed runtime behavior as a potential breaking change. Be concise and
-  actionable; skip nitpicks already enforced by ESLint or Prettier.
+  You are reviewing a published TypeScript SDK consumed by external developers
+  who cannot patch it. Judge each change by what it does to the public API. Be
+  concise and concrete, and skip anything ESLint or Prettier already enforces.
 
 reviews:
   # "chill" keeps comments focused and low-noise. Switch to "assertive" if you
@@ -55,10 +58,14 @@ reviews:
   path_instructions:
     - path: 'packages/*/src/**/*.{ts,tsx}'
       instructions: >-
-        This is shipped library source. Treat any change to an exported
-        type, function signature or default behavior as a potential breaking
-        change and call it out explicitly. Verify exported APIs have JSDoc and
-        that errors are handled rather than swallowed. Watch for accidental
+        This is shipped library source, published to npm as @pollar/* and
+        consumed by external developers. Treat any change to an exported type or
+        function signature, any change to default runtime behavior, and any
+        export that disappears as a potential breaking change: call it out
+        explicitly and name the semver bump it forces. A new export or a new
+        OPTIONAL field is additive; a narrowed type, a removed field, a widened
+        required set or a changed default is not. Verify exported APIs have JSDoc
+        and that errors are handled rather than swallowed. Watch for accidental
         leakage of internal/private symbols into the public surface.
     - path: 'packages/core/**'
       instructions: >-

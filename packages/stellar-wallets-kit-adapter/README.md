@@ -290,4 +290,4 @@ If `walletAdapters` is omitted from `PollarClientConfig`, `@pollar/core` falls b
 
 ## License
 
-MIT
+Apache-2.0. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).

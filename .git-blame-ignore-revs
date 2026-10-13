@@ -19,3 +19,6 @@ c2c2f31c6934cd9b3748786bb9db336c20f3eef1
 
 # Prettier pass over the comment-ASCII guard (no behavior change)
 143171400435de199d37627d01420267b9f185f4
+
+# Prettier pass over the react-native port, the KYC step modals and the modal redesign (no behavior change)
+f8f290c31b620d5c2e4df968f3fe92715d8c559b

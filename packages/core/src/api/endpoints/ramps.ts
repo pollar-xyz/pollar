@@ -1,5 +1,8 @@
+import { assertRampChain, assertRampRouteChain, assertRampTermsChain, checkedRampSnapshot } from '../../ramps/chains';
 import type { PollarApiClient } from '../client';
 import type {
+  RampContinuationBody,
+  RampsRoutesResponse,
   RampRail,
   RampsCompleteResponse,
   RampsCountriesResponse,
@@ -51,8 +54,13 @@ export async function getRampCountries(api: PollarApiClient): Promise<RampsCount
  * The first quote in the array is the recommended one.
  */
 export async function getRampsQuote(api: PollarApiClient, query: RampsQuoteQuery): Promise<RampsQuoteResponse> {
+  if (query.chain !== undefined) assertRampChain(query.chain);
   const { data, error } = await api.GET('/ramps/quote', { params: { query } });
   if (!data?.content || error) throw rampApiError(error, 'Failed to get ramp quotes');
+  for (const quote of data.content.quotes) {
+    if (quote.route) assertRampRouteChain(quote.route);
+    if (quote.terms) assertRampTermsChain(quote.terms);
+  }
   return data.content;
 }
 
@@ -62,10 +70,18 @@ export async function getRampsQuote(api: PollarApiClient, query: RampsQuoteQuery
  * For embedded users: backend orchestrates the full SEP-24 flow and returns payment instructions.
  * For external wallets: backend may return an unsigned XDR that the client must sign via a wallet adapter.
  */
+/**
+ * Starting a ramp re-quotes and confirms the order at the provider (plus the
+ * requirement gate), which can take well over the 10s default; these two calls get
+ * the longer budget, like startKyc.
+ */
+const RAMP_START_TIMEOUT_MS = 30_000;
+const rampStartHeaders = { 'x-pollar-timeout-ms': String(RAMP_START_TIMEOUT_MS) };
+
 export async function createOnRamp(api: PollarApiClient, body: RampsOnrampBody): Promise<RampsOnrampResponse> {
-  const { data, error } = await api.POST('/ramps/onramp', { body });
+  const { data, error } = await api.POST('/ramps/onramp', { body, headers: rampStartHeaders });
   if (!data?.content || error) throw rampApiError(error, 'Failed to create onramp');
-  return data.content;
+  return checkedRampSnapshot(data.content);
 }
 
 /**
@@ -74,9 +90,9 @@ export async function createOnRamp(api: PollarApiClient, body: RampsOnrampBody):
  * Backend initiates the bank transfer once the Stellar transaction is confirmed.
  */
 export async function createOffRamp(api: PollarApiClient, body: RampsOfframpBody): Promise<RampsOfframpResponse> {
-  const { data, error } = await api.POST('/ramps/offramp', { body });
+  const { data, error } = await api.POST('/ramps/offramp', { body, headers: rampStartHeaders });
   if (!data?.content || error) throw rampApiError(error, 'Failed to create offramp');
-  return data.content;
+  return checkedRampSnapshot(data.content);
 }
 
 /**
@@ -89,7 +105,7 @@ export async function createOffRamp(api: PollarApiClient, body: RampsOfframpBody
 export async function completeWithdraw(api: PollarApiClient, txId: string): Promise<RampsCompleteResponse> {
   const { data, error } = await api.POST('/ramps/transaction/{txId}/complete', { params: { path: { txId } } });
   if (!data?.content || error) throw rampApiError(error, 'Failed to complete withdrawal');
-  return data.content;
+  return checkedRampSnapshot(data.content);
 }
 
 /**
@@ -105,7 +121,7 @@ export async function submitRampSignature(
 ): Promise<RampsSignatureResponse> {
   const { data, error } = await api.POST('/ramps/transaction/{txId}/signature', { params: { path: { txId } }, body });
   if (!data?.content || error) throw rampApiError(error, 'Failed to submit signature');
-  return data.content;
+  return checkedRampSnapshot(data.content);
 }
 
 /**
@@ -115,7 +131,7 @@ export async function submitRampSignature(
 export async function getRampTransaction(api: PollarApiClient, txId: string): Promise<RampsTransactionResponse> {
   const { data, error } = await api.GET('/ramps/transaction/{txId}', { params: { path: { txId } } });
   if (!data?.content || error) throw rampApiError(error, 'Failed to get transaction');
-  return data.content;
+  return checkedRampSnapshot(data.content);
 }
 
 /**
@@ -172,4 +188,20 @@ export async function pollRampTransaction(
     await new Promise((r) => setTimeout(r, intervalMs));
   }
   throw new Error('Ramp transaction polling timed out');
+}
+
+export async function getRampRoutes(api: PollarApiClient): Promise<RampsRoutesResponse> {
+  const { data, error } = await api.GET('/ramps/routes');
+  if (!data?.content || error) throw rampApiError(error, 'Failed to get ramp routes');
+  for (const route of data.content.routes) assertRampRouteChain(route);
+  return data.content;
+}
+export async function continueRamp(
+  api: PollarApiClient,
+  txId: string,
+  body: RampContinuationBody,
+): Promise<RampsTransactionResponse> {
+  const { data, error } = await api.POST('/ramps/transaction/{txId}/continue', { params: { path: { txId } }, body });
+  if (!data?.content || error) throw rampApiError(error, 'Failed to continue ramp');
+  return checkedRampSnapshot(data.content);
 }

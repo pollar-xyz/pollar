@@ -48,6 +48,23 @@
   overflow-y: auto;
 }
 
+/* Host-app dark mode support. Branding remains the source of truth when no
+ * `html.dark` class is present; this override lets applications that already
+ * toggle the standard dark class update every Pollar modal as well. The
+ * `!important` declarations are intentional because the modal chrome is also
+ * represented as inline CSS variables. */
+html.dark .pollar-modal-card {
+  --pollar-bg: #1a1a1a !important;
+  --pollar-border: #374151 !important;
+  --pollar-text: #ffffff !important;
+  --pollar-muted: #9ca3af !important;
+  --pollar-input-bg: #374151 !important;
+  --pollar-error-bg: #2a1515 !important;
+  --pollar-error-border: #7f1d1d !important;
+  --pollar-error-text: #f87171 !important;
+  --pollar-success-text: #4ade80 !important;
+}
+
 /* --- Common input -------------------------------------------------------------- */
 .pollar-input {
   width: 100%;
@@ -341,6 +358,12 @@
   height: 18px;
   width: 18px;
   object-fit: contain;
+}
+
+.pollar-footer-logo-svg {
+  display: block;
+  height: 18px;
+  width: 21px;
 }
 
 .pollar-footer-name {

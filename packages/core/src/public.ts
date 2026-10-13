@@ -44,6 +44,8 @@ export type {
 } from './wallets';
 export type * from './types';
 export { AUTH_ERROR_CODES, PollarNetworkError, isPollarNetworkError, PollarApiError, isPollarApiError } from './types';
+export { RampChain } from './types';
+export { WALLET_NOT_READY_CODE, isWalletNotReady, WALLET_REQUIRED_CODE, isWalletRequired } from './types';
 export { PollarApiClient } from './api/client';
 export type { paths as pollarPaths } from './api/schema';
 export { isValidSession } from './client/session';
@@ -51,10 +53,21 @@ export { StellarClient } from './stellar/StellarClient';
 export type { StellarNetwork, StellarClientConfig, StellarBalance } from './stellar/StellarClient';
 
 // --- KYC endpoints ------------------------------------------------------------
-export { getKycStatus, getKycProviders, startKyc, resolveKyc, pollKycStatus } from './api/endpoints/kyc';
+export { getKycStatus, getKycProviders, startKyc, resolveKyc, pollKycStatus, pollKycDecision } from './api/endpoints/kyc';
+export {
+  getAppRequirements,
+  getRequirementForm,
+  submitRequirementForm,
+  getRegistryCheck,
+  submitRegistryCheck,
+  getProviderRegistration,
+  submitProviderRegistration,
+} from './api/endpoints/requirements';
 
 // --- Ramps endpoints ----------------------------------------------------------
 export {
+  continueRamp,
+  getRampRoutes,
   getRampsQuote,
   getRampCountries,
   createOnRamp,
@@ -76,3 +89,31 @@ export { quoteSwap, getSwapConfig, getSwapTokens } from './api/endpoints/swap';
 
 // --- Earn endpoints -----------------------------------------------------------
 export { getEarnProviders, getEarnOpportunities, getEarnPosition, buildEarnTx } from './api/endpoints/earn';
+
+export { describeRampAction, mergeRampSnapshot, mergeRampCountries, rampReplacementQuote } from './ramps/workflow';
+export type { RampSnapshot, RampSigningAction, RampSigningHandler } from './ramps/workflow';
+// --- Cards endpoints ----------------------------------------------------------
+export {
+  getCardProviders,
+  getCardHolder,
+  createCardHolder,
+  submitCardKyc,
+  getCardOccupations,
+  getCards,
+  issueCard,
+  getCardBalance,
+  getCardTransactions,
+  getCardDepositAddresses,
+  getCardSecretsPublicKey,
+  getCardSecrets,
+  createCardFunding,
+  submitCardFundingSignature,
+  getCardFunding,
+  listCardFundings,
+  getCardRequirements,
+  getCardProviderRegistration,
+  submitCardProviderRegistration,
+} from './api/endpoints/cards';
+export type { EncryptedCardSecrets } from './api/endpoints/cards';
+export { createCardSecretsSession, openCardSecrets } from './lib/card-secrets';
+export type { CardSecretsSession, CardSecretsEngine } from './lib/card-secrets';

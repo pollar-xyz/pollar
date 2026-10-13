@@ -1,116 +1,239 @@
-/* ---- Wallet balance modal ---- */
+/* ---- Wallet balance modal -------------------------------------------------- */
 .pollar-bal-modal {
-  max-width: 380px;
-}
-
-/* Address chip + copy button styles live in shared.css (shared with the asset modal). */
-
-/* Copy button styles live in shared.css (used by every modal via <CopyButton/>). */
-
-/* ---- Balance list ---- */
-.pollar-bal-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  width: 100%;
+  max-width: 400px;
+  max-height: calc(100dvh - 2rem);
+  overflow: hidden;
+  padding: 1.5rem;
+}
+
+/* ---- Total balance summary -------------------------------------------------- */
+.pollar-bal-summary {
+  flex: 0 0 auto;
   margin-bottom: 1rem;
+  padding: 1rem 1.125rem 1.125rem;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, var(--pollar-accent), color-mix(in srgb, var(--pollar-accent) 68%, #0f172a));
+  color: var(--pollar-btn-primary-fg, #ffffff);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--pollar-accent) 18%, transparent);
+}
+
+.pollar-bal-summary-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.pollar-bal-summary-label {
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  opacity: 0.78;
+}
+
+.pollar-bal-summary-address {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.35rem;
+  padding: 0.25rem 0.35rem 0.25rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.2);
+  font-family: monospace;
+  font-size: 0.625rem;
+  white-space: nowrap;
+}
+
+.pollar-bal-summary-copy {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: currentColor;
+}
+
+.pollar-bal-summary-copy:hover {
+  border: 0;
+  color: currentColor;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.pollar-bal-summary-value {
+  margin-top: 1rem;
+  font-size: 1.75rem;
+  font-weight: 750;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.pollar-bal-summary-unavailable {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.6875rem;
+  opacity: 0.78;
+}
+
+/* ---- Balance list ----------------------------------------------------------- */
+.pollar-bal-list {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .pollar-bal-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--pollar-input-bg);
-  border: 1px solid var(--pollar-border);
-  border-radius: var(--pollar-card-border-radius, 10px);
-  padding: 0.75rem 1rem;
+  min-height: 4.25rem;
+  gap: 0.75rem;
+  padding: 0.75rem 0.125rem;
+  border-bottom: 1px solid var(--pollar-border);
+}
+
+.pollar-bal-item:first-child {
+  padding-top: 0.375rem;
+}
+
+.pollar-bal-item:last-child {
+  border-bottom: 0;
 }
 
 .pollar-bal-asset-info {
   display: flex;
-  flex-direction: column;
-  gap: 0.1875rem;
   min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
-.pollar-bal-asset-code-row {
+.pollar-bal-asset-leading {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.625rem;
+}
+
+.pollar-bal-asset-icon {
   display: inline-flex;
   align-items: center;
-  gap: 0.4375rem;
+  justify-content: center;
+  flex: 0 0 2rem;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--pollar-accent) 13%, var(--pollar-input-bg));
+  color: var(--pollar-accent);
+  font-size: 0.625rem;
+  font-weight: 800;
+}
+
+.pollar-bal-asset-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.125rem;
 }
 
 .pollar-bal-asset {
-  font-size: 0.875rem;
-  font-weight: 600;
+  overflow: hidden;
   color: var(--pollar-text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Small print under the native SOL row on testnet: where to top up test funds. */
-.pollar-bal-faucet-hint {
-  font-size: 0.6875rem;
+.pollar-bal-asset-secondary {
+  overflow: hidden;
   color: var(--pollar-muted);
+  font-family: monospace;
+  font-size: 0.625rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pollar-bal-asset-secondary .pollar-copy-btn {
+  margin-left: 0.25rem;
+  vertical-align: middle;
+}
+
+.pollar-bal-faucet-hint {
+  padding-left: 2.625rem;
+  color: var(--pollar-muted);
+  font-size: 0.625rem;
 }
 
 .pollar-bal-faucet-hint a {
   color: var(--pollar-accent);
-  text-decoration: none;
   font-weight: 600;
+  text-decoration: none;
 }
 
 .pollar-bal-faucet-hint a:hover {
   text-decoration: underline;
 }
 
-/* Even smaller than the hint: which cluster the faucet funds. */
 .pollar-bal-faucet-net {
-  font-size: 0.625rem;
+  font-size: 0.5625rem;
   opacity: 0.8;
-}
-
-/* Per-asset network tag, shown only when the app spans more than one chain. The
-   accent is passed in per chain via --pollar-chain-color. */
-.pollar-bal-chain-tag {
-  font-size: 0.625rem;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  padding: 0.1875rem 0.375rem;
-  border-radius: 4px;
-  color: var(--pollar-chain-color, var(--pollar-muted));
-  background: color-mix(in srgb, var(--pollar-chain-color, #6b7280) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--pollar-chain-color, #6b7280) 34%, transparent);
-}
-
-.pollar-bal-issuer {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.pollar-bal-issuer-addr {
-  font-size: 0.6875rem;
-  font-family: monospace;
-  color: var(--pollar-muted);
 }
 
 .pollar-bal-amounts {
   display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
   flex-direction: column;
   align-items: flex-end;
   gap: 0.125rem;
 }
 
-.pollar-bal-amount {
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--pollar-text);
+.pollar-bal-amount,
+.pollar-bal-available {
+  max-width: 11rem;
+  overflow: hidden;
   font-family: monospace;
   font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pollar-bal-amount {
+  color: var(--pollar-text);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .pollar-bal-available {
-  font-size: 0.6875rem;
   color: var(--pollar-muted);
-  font-family: monospace;
-  font-variant-numeric: tabular-nums;
+  font-size: 0.625rem;
+}
+
+@media (max-width: 480px) {
+  .pollar-bal-modal {
+    max-width: calc(100vw - 2rem);
+    padding: 1.25rem;
+  }
+
+  .pollar-bal-summary-topline {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .pollar-bal-summary-address {
+    max-width: 100%;
+  }
+
+  .pollar-bal-item {
+    min-height: 4rem;
+  }
 }

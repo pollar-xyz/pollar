@@ -1,5 +1,211 @@
 # Upgrade guide
 
+## 0.11.4 -> 0.12.0
+
+Use `@pollar/core`, `@pollar/react` and `@pollar/react-native` at matching versions.
+The candidate is `0.12.0-rc.1`; install prerelease versions explicitly. Upgrade
+client adapter packages to their matching 0.12 candidates when using this core
+version. Their peer ranges accept both 0.11.x and 0.12; older adapter releases
+with a core peer range of only `^0.11.2` cannot be used with core 0.12.
+
+### Native provider and context
+
+- Children render after the provider effect creates its owned client. Put startup
+  UI outside the provider if it must display during that initialization.
+- Changing client configuration, `platform.storage`, `platform.visibilityProvider`,
+  `platform.openAuthUrl` or `privyAdapter` cancels login, destroys the previous client
+  and resets provider state before mounting children with the replacement client.
+  Equivalent inline scalar configuration does not restart it. Memoize object-valued
+  configuration, wallet adapter arrays and platform adapters to avoid restarts.
+  Theme, application configuration and clipboard callback updates remain live.
+- `buildTx` opens the transaction modal. Other transaction methods operate through
+  core state without automatically opening it; call `openTransactionModal()` when
+  your flow requires that presentation.
+- `refreshBalance(publicKey)` accepts only the connected address (or no argument).
+  Use `getClient().getWalletBalance(publicKey)` to look up another address.
+- A null or malformed `getAppConfig()` response produces `configStatus: 'error'`
+  with `configError` and `retryConfig()` instead of displaying default configuration.
+  Supply `appConfig` for an application that does not fetch remote configuration.
+- Import the exported `PollarContextValue` for custom native integrations. It now
+  includes configuration status/retry, platform clipboard actions and saved ramp
+  state, alongside the bound core methods and modal actions. Update manually
+  constructed context mocks to match this shape.
+
+### Ramp chain catalog
+
+`RampChain` is a closed enum with `STELLAR`, `POLYGON` and `SOLANA`, exported as
+both a type and a runtime constant from `@pollar/core`. It is independent of
+`WalletChain` / backend `WalletNetwork`. Quotes, route assets, terms,
+transactions and signing handlers use this same catalog. Lowercase values,
+typos and CAIP-2 identifiers are rejected rather than normalized, including at
+runtime for JavaScript callers and API responses. Network remains a separate
+field; derive a CAIP-2 identifier from the chain and network when needed.
+
+Use `RampChain.SOLANA` or the literal `'SOLANA'`. Adding a new chain requires a
+backend enum migration and an updated SDK contract. Provider, asset and payload
+encoding registration stays extensible within these three chains. Exact amount
+strings retain their precision and formatting.
+
+### Ramp templates and signing
+
+`RampWidgetTemplateProps.bankType` (and native template-derived props) accepts a
+`string` instead of the previous fixed bank-type union. Backend routes can add
+bank types. Custom templates should handle unknown strings and retain known-type
+formatting where applicable; exhaustive switches need a fallback.
+
+Supported ramp chains register a signer with `registerRampSigningHandler(chain, encoding,
+handler)` and remove it with the returned cleanup function. Call `signRampAction`
+only from an explicit user action. Its built-in Stellar signer verifies the wallet
+account from the transaction source, or the first SEP-10 manageData operation for
+an authentication challenge. It also verifies chain and network. Restoring or
+polling a workflow does not sign. UI workflow helpers exported from core are
+`describeRampAction`, `mergeRampSnapshot` and `mergeRampCountries`, with
+`RampSnapshot` and `RampSigningHandler` types; registry and URL internals are private.
+
+## 0.11.3 -> 0.11.4
+
+No migration steps for an app that uses the built-in components. The wallet
+reports where its on-chain Stellar account stands, the client watches it until
+the account lands, a DPoP proof rejected over clock skew is re-signed instead of
+clearing the session, every request carries an `x-pollar-sdk` build header,
+ramp quotes report the requirement steps a route still needs, the wallet
+modals follow the new design, apps can offer cards, and an app can create its
+users' wallets on demand. `@pollar/react@0.11.4` and
+`@pollar/react-native@0.11.4` require `@pollar/core@^0.11.4`; if you pin the
+packages to exact versions, keep them on the same version.
+
+**Adapters.** They are not part of this release. On npm,
+`@pollar/stellar-wallets-kit-adapter@0.11.2` (`@pollar/core@^0.11.2`) and
+`@pollar/privy-adapter@0.11.1` (`^0.11.1`) already accept core 0.11.4.
+`@pollar/accesly-adapter@0.10.1` asks for `@pollar/core@^0.10.1`, which does
+not: npm 7+ refuses that install unless you pass `--legacy-peer-deps`.
+
+**`@pollar/react-native` joins the SDK's version line,** from `0.1.1` to
+`0.11.4`. A `^0.1.1` range does not pick it up: install
+`@pollar/react-native@^0.11.4` with `@pollar/core@^0.11.4`.
+
+**License.** From 0.11.4 the packages are licensed under Apache-2.0 (earlier
+versions stay MIT). Both are permissive; Apache-2.0 adds an explicit patent
+grant and asks that the `NOTICE` file each package now ships travels with
+redistributions.
+
+### KYC and ramps
+
+- **`pollKycStatus()` returns when the decision settles.** It used to keep
+  polling until `approved` or `rejected`. It now also returns `'pending'` for a
+  session held for manual review and `'expired'` for one that expired. If you
+  loop on it, treat `'pending'` as "under review, stop polling", and use
+  `pollKycDecision()` when you need the `reviewReason`.
+- **`KycStatus` includes `'expired'`.** An exhaustive `switch` over it needs the
+  new case.
+- **KYC endpoints throw `PollarApiError`.** `getKycStatus`, `getKycProviders`
+  and `startKyc` throw it with the backend code instead of a plain `Error`. The
+  message is still the code; prefer `isPollarApiError(err) && err.code`.
+- **A ramp quote may come back with no quotes and a non-empty
+  `requirementsRequired`.** If you build your own route list, show those routes
+  as locked and open the pending step (`type` and `optionId`); then quote again
+  instead of reusing the quote you held. `<RampWidget>` does this for you. This
+  needs an sdk-api that serves `/v2/requirements`.
+
+### Wallet modal templates
+
+Only for apps that mount the templates themselves:
+
+| Template                          | Change                                                                                                                                    |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `SendModalTemplateProps`          | new required `onMax`, `onPaste`; `chains`, `walletAddress`, `onSelectChain` optional (pass `chains` + `onSelectChain` to show the picker) |
+| `SwapModalTemplateProps`          | new required `onReverse`, `onMax`                                                                                                         |
+| `SessionsModalTemplateProps`      | new required `revokeError` (`string \| null`)                                                                                             |
+| `RampWidgetTemplateProps`         | new required `kycRequired` (`RampQuoteRequirement[]`), `onVerifyRoute`                                                                    |
+| `ReceiveModalTemplateProps`       | `chains`, `onSelectChain` optional (pass both to show the picker)                                                                         |
+| `WalletBalanceModalTemplateProps` | `chains`, `onSelectChain` optional (pass both to show the picker); new optional `assetMetadata`                                           |
+| `KycModalTemplateProps`           | new optional `reviewReason`, `processing`, `error`, `onStartAgain`                                                                        |
+
+The built-in Send, Receive and Wallet balance modals keep the network picker:
+it renders when the app has two or more chains, so a single-chain app shows
+none. A template you mount yourself shows it only when you pass both `chains`
+and `onSelectChain`.
+
+### Wallet provisioning
+
+**One behaviour change to be aware of even if you change no code.** The platform
+now creates the end-user's Stellar account in the background instead of inside
+`POST /auth/login`, so a login returns before the account is on the ledger. An
+on-chain operation attempted in that window comes back as `SDK_WALLET_NOT_READY`
+(409) rather than succeeding. It is a few seconds on a healthy path, and it is
+the same window whether or not you upgrade - the SDK is what makes it visible.
+
+If you built your own send/receive UI, gate it:
+
+```ts
+import { isWalletNotReady } from '@pollar/core';
+
+// Ask before offering the operation...
+const wallet = client.getWallet();
+if (wallet?.provisioning === 'CREATING') {
+  // show "preparing your account", and wait for the transition below
+}
+
+// ...and recognize the server's refusal if one slips through. Wait for
+// onWalletStateChange - do NOT retry in a loop.
+const outcome = await client.signAndSubmitTx(xdr);
+if (isWalletNotReady(outcome)) {
+  /* ... */
+}
+
+const off = client.onWalletStateChange((provisioning) => {
+  if (provisioning === 'READY') enableSending();
+  if (provisioning === 'FAILED') showSupportPath();
+});
+```
+
+`@pollar/react`'s built-in Send, Receive and wallet-button templates already do
+this. These provisioning props are optional on a template you mount yourself:
+`notReadyReason` on `SendModalTemplateProps` / `ReceiveModalTemplateProps` /
+`WalletButtonTemplateProps`, and `onboardingStatus` on
+`RampWidgetTemplateProps` (the redesign's required props are listed in the
+table above). Render `notReadyReason` when it is
+present to phrase the wait the way the built-ins do, or call the exported
+`walletNotReadyReason(wallet, chain)` yourself.
+
+`wallet.provisioning` is absent on a session minted before this release, so read
+it as "not reported" rather than as a problem - `undefined` is not `CREATING`.
+
+**Server requirement.** `x-pollar-sdk` is a non-safelisted request header, so an
+sdk-api that does not list it in its CORS `allowHeaders` fails the preflight and
+takes down every browser app on that origin. Pollar's hosted sdk-api allows it.
+If you run sdk-api yourself, deploy the allowlist change **before** upgrading
+the SDK.
+
+### Wallets created on demand
+
+Nothing changes for an app that creates wallets at login, the default. If you
+set wallet creation to **on demand** (or **never**) in the dashboard, a user
+signs in without a wallet:
+
+- `WalletProvisioning` includes `'NONE'`. An exhaustive `switch` over it needs
+  the new case.
+- Signed in means having a session, not having an address: `getWallet()` can be
+  `null` for a signed-in user. Check `client.hasWallet()` (or `hasWallet` from
+  `usePollar()`), which counts a wallet on any chain.
+- Create the wallet with `client.createWallet()` (or `createWallet` from
+  `usePollar()`) when your app needs it. `<WalletButton>` offers it on its own.
+- A signing call made without a wallet returns `SDK_WALLET_REQUIRED`; recognize
+  it with `isWalletRequired()`.
+
+Turn on demand on only once your app runs 0.11.4: an older SDK cannot create
+the wallet after the login.
+
+### Cards
+
+Additive: nothing to change unless you enable a card provider in the dashboard.
+Then open `<CardModal>` with `openCardModal()` from `usePollar()`, or build your
+own flow on the card methods of `PollarClient`. The card number from
+`revealCardSecrets()` is decrypted on the device: show it and drop it, never
+store or log it.
+
+See the [CHANGELOG](./CHANGELOG.md) for the details.
+
 ## 0.11.2 -> 0.11.3
 
 No breaking changes. 0.11.3 is a patch: sessions survive reloads when the DPoP

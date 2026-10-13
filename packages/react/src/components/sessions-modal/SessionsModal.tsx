@@ -21,6 +21,7 @@ export function SessionsModal({ onClose }: SessionsModalProps) {
   // reader and there's no `await`-then-`setState` to guard against unmount.
   const [revokingFamilyId, setRevokingFamilyId] = useState<string | null>(null);
   const [signingOutEverywhere, setSigningOutEverywhere] = useState(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     void getClient().fetchSessions();
@@ -45,11 +46,11 @@ export function SessionsModal({ onClose }: SessionsModalProps) {
   const handleRevoke = useCallback(
     async (familyId: string) => {
       setRevokingFamilyId(familyId);
+      setRevokeError(null);
       try {
         await getClient().revokeSession(familyId);
       } catch {
-        // Swallow - the refresh below resyncs the list with server truth, so a
-        // failed revoke simply leaves the (still-active) row in place.
+        setRevokeError('Could not sign out that device. Please try again.');
       } finally {
         setRevokingFamilyId(null);
         // Refresh from the server so the row disappears from the list.
@@ -82,6 +83,7 @@ export function SessionsModal({ onClose }: SessionsModalProps) {
         state={sessions}
         revokingFamilyId={revokingFamilyId}
         signingOutEverywhere={signingOutEverywhere}
+        revokeError={revokeError}
         onRefresh={() => load()}
         onRevoke={(familyId) => void handleRevoke(familyId)}
         onLogoutEverywhere={() => void handleLogoutEverywhere()}

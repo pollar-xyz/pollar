@@ -1,0 +1,85 @@
+name: Skill path contract
+
+# skills/pollar-wallet-auth/ is a published path, not an internal one.
+# stellar/stellar-dev-skill hands developers its raw.githubusercontent URL on
+# main as the value they copy to install the skill (site/src/data/skills.ts,
+# ECOSYSTEM_CARDS), so a rename here breaks an install link on someone else's
+# site, silently.
+#
+# This job owns one half of the problem: a rename or a deletion inside this
+# repo. It reads the tree offline on the pull request, which is the only moment
+# the break can still be stopped.
+#
+# The other half — the repo renamed, turned private, or its default branch moved
+# — leaves the tree looking correct, so only a real request over the network
+# sees it. Uptime Kuma watches the published URL for that, hourly, through the
+# notification channel the platform monitors already use. It is not on a cron
+# here: a failed scheduled run only emails whoever last touched the cron, and
+# two owners for one fact means an alert nobody is sure is theirs.
+
+on:
+  pull_request:
+    paths:
+      - 'skills/**'
+  push:
+    branches: [main]
+    paths:
+      - 'skills/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: the published skill path still resolves
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every file the published URL serves is where it expects
+        run: |
+          set -euo pipefail
+          skill="skills/pollar-wallet-auth"
+
+          if [ ! -f "$skill/SKILL.md" ]; then
+            echo "::error::$skill/SKILL.md is missing. stellar/stellar-dev-skill publishes this exact path as an install link."
+            exit 1
+          fi
+
+          # The sibling list is read out of SKILL.md's own links instead of being
+          # hardcoded, so a page added later is covered without touching this
+          # file. They have to sit in the same directory: the mirror serves them
+          # flat next to SKILL.md, which is the only way a relative link resolves.
+          missing=0
+          while read -r page; do
+            [ -n "$page" ] || continue
+            if [ ! -f "$skill/$page" ]; then
+              echo "::error::$skill/SKILL.md links to $page, which is not in that directory."
+              missing=1
+            fi
+          done < <(grep -oE '\]\([A-Za-z0-9._-]+\.md\)' "$skill/SKILL.md" | tr -d '](  )' | sort -u)
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          echo "$skill: SKILL.md and every page it links to are present."
+
+      # On demand only. Uptime Kuma is what watches this continuously; this step
+      # is here to answer "is it broken right now?" without opening Kuma. It is
+      # skipped on a pull request because there it would test main rather than
+      # the branch, and right after a push raw.githubusercontent can still be
+      # serving the previous copy from its cache.
+      - name: The URL stellar/stellar-dev-skill publishes answers 200
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          URL: https://raw.githubusercontent.com/pollar-xyz/pollar/main/skills/pollar-wallet-auth/SKILL.md
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-delay 5 "$URL")"
+          if [ "$code" != "200" ]; then
+            echo "::error::$URL answered $code. The install link published on stellar/stellar-dev-skill is broken."
+            exit 1
+          fi
+          echo "$URL -> 200"
