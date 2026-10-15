@@ -140,11 +140,9 @@ export async function getRampTransaction(api: PollarApiClient, txId: string): Pr
  * to run now. Returns the transaction as it stands; poll for the outcome.
  */
 export async function retryRampTransaction(api: PollarApiClient, txId: string): Promise<RampsTransactionResponse> {
-  // The path is not in the generated schema yet (core:update-openapi).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (api as any).POST('/ramps/transaction/{txId}/retry', { params: { path: { txId } } });
+  const { data, error } = await api.POST('/ramps/transaction/{txId}/retry', { params: { path: { txId } } });
   if (!data?.content || error) throw rampApiError(error, 'Failed to retry transaction');
-  return data.content as RampsTransactionResponse;
+  return checkedRampSnapshot(data.content);
 }
 
 /**

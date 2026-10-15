@@ -87,7 +87,7 @@ interface RampResult {
   tosUrl?: string;
   kycRequired?: boolean;
   stellarTxHash?: string;
-  pendingSignature?: { unsignedXdr: string; action: 'sep10' | 'withdraw_payment' };
+  pendingSignature?: NonNullable<RampsTransactionResponse['pendingSignature']>;
   depositInstructions?: RampDepositInstructions;
 }
 
