@@ -1,4 +1,20 @@
 import type { PollarApiClient } from '../client';
+import type { RampContinuation, RampWorkflowRoutes, RampWorkflowView } from '../ramp-workflow';
+
+export async function getRampRoutes(api: PollarApiClient): Promise<RampWorkflowRoutes> {
+  const { data, error } = await api.GET('/ramps/routes');
+  if (!data?.content || error) throw rampApiError(error, 'Failed to get ramp routes');
+  return data.content;
+}
+export async function continueRampTransaction(
+  api: PollarApiClient,
+  txId: string,
+  body: RampContinuation,
+): Promise<RampWorkflowView> {
+  const { data, error } = await api.POST('/ramps/transaction/{txId}/continue', { params: { path: { txId } }, body });
+  if (!data?.content || error) throw rampApiError(error, 'Failed to continue ramp action');
+  return data.content;
+}
 import type {
   RampRail,
   RampsCompleteResponse,

@@ -5,6 +5,8 @@ import { buildEarnTx, getEarnOpportunities, getEarnPosition, getEarnProviders } 
 import { getKycProviders, getKycStatus, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
 import {
   completeWithdraw,
+  getRampRoutes,
+  continueRampTransaction,
   createOffRamp,
   createOnRamp,
   decodePixQr,
@@ -17,6 +19,7 @@ import {
   submitRampSignature,
 } from '../api/endpoints/ramps';
 import { buildProof } from '../dpop';
+import type { RampContinuation } from '../api/ramp-workflow';
 import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
 import { hashApiKey } from '../lib/api-key-hash';
@@ -3310,6 +3313,14 @@ export class PollarClient {
 
   getRampsQuote(query: RampsQuoteQuery): Promise<RampsQuoteResponse> {
     return getRampsQuote(this._api, query);
+  }
+  /** Registered executable routes; uses the session's authenticated DPoP transport. */
+  getRampRoutes() {
+    return getRampRoutes(this._api);
+  }
+  /** Continues only the saved action/version explicitly accepted by the user. */
+  continueRampTransaction(txId: string, body: RampContinuation) {
+    return continueRampTransaction(this._api, txId, body);
   }
 
   /** Countries (+ fiat currency) the app's enabled ramp anchors support on its network. */

@@ -1,5 +1,6 @@
 import createClient from 'openapi-fetch';
 import type { paths } from './schema';
+import type { RampWorkflowPaths } from './ramp-workflow';
 import type { PollarRetryConfig } from '../types';
 import { PollarNetworkError } from '../types';
 import { anySignal, timeoutController } from '../lib/abort';
@@ -183,5 +184,5 @@ export function createApiClient(baseUrl: string, options: ApiClientOptions = {})
     attempts: options.retry?.attempts ?? DEFAULT_ATTEMPTS,
     baseDelayMs: options.retry?.baseDelayMs ?? DEFAULT_BASE_DELAY_MS,
   };
-  return createClient<paths>({ baseUrl, fetch: makeRetryingFetch(timeoutMs, retry, options.resignRetry) });
+  return createClient<paths & RampWorkflowPaths>({ baseUrl, fetch: makeRetryingFetch(timeoutMs, retry, options.resignRetry) });
 }

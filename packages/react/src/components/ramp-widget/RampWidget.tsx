@@ -192,7 +192,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   // A link-less KYC gate has nothing to open, so poll the provider until the user
   // clears it elsewhere. Stops as soon as it's approved.
   useEffect(() => {
-    if (step !== 'status' || !kycPending || kycApproved) return;
+    if (step !== 'status' || !kycPending || kycApproved || provider?.toLowerCase() !== 'abroad') return;
     let active = true;
     const check = async () => {
       try {
@@ -208,7 +208,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
       active = false;
       clearInterval(id);
     };
-  }, [step, kycPending, kycApproved, client]);
+  }, [step, kycPending, kycApproved, client, provider]);
 
   /**
    * Fetch the ramp countries supported on the app's network. When `resetSelection`

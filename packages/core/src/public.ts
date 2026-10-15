@@ -56,6 +56,8 @@ export { getKycStatus, getKycProviders, startKyc, resolveKyc, pollKycStatus } fr
 // --- Ramps endpoints ----------------------------------------------------------
 export {
   getRampsQuote,
+  getRampRoutes,
+  continueRampTransaction,
   getRampCountries,
   createOnRamp,
   createOffRamp,
@@ -76,3 +78,10 @@ export { quoteSwap, getSwapConfig, getSwapTokens } from './api/endpoints/swap';
 
 // --- Earn endpoints -----------------------------------------------------------
 export { getEarnProviders, getEarnOpportunities, getEarnPosition, buildEarnTx } from './api/endpoints/earn';
+export type {
+  RampContinuation,
+  RampWorkflowAction,
+  RampWorkflowRoutes,
+  RampWorkflowTerms,
+  RampWorkflowView,
+} from './api/ramp-workflow';
