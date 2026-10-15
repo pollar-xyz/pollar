@@ -1225,7 +1225,7 @@ export interface paths {
         };
         /**
          * Get ramp quotes
-         * @description Returns available quotes for converting fiat to crypto (onramp) or crypto to fiat (offramp) for a given country, amount, and currency. Each quote includes a quoteId valid for 15 minutes. Pass the quoteId to POST /ramps/onramp or POST /ramps/offramp to execute the transaction.
+         * @description Returns quotes available to this application, user and network. Availability depends on enabled corridors, requirements, liquidity and implemented integrations; no quote is a guarantee that every provider/direction is available. quoteId expires after 15 minutes. Registered adapter terms are exact decimal totals; providerExpiresAt is informational and refreshed pricing must pass the route policy or return SDK_RAMPS_QUOTE_CHANGED.
          */
         get: operations["getRampsQuote"];
         put?: never;
@@ -1307,7 +1307,7 @@ export interface paths {
         put?: never;
         /**
          * Create onramp transaction
-         * @description Initiates a fiat-to-crypto onramp transaction using a previously obtained quoteId. Returns payment instructions (CLABE, PIX key, etc.) the user must use to send funds. The quote expires in 15 minutes — a new one must be requested after expiry.
+         * @description Starts a deposit from an unexpired quoteId and returns the saved transaction plus any payment, verification or signature action. Creation does not prove receipt or final settlement. Reuse the same quote and identical inputs for supported replay; a timeout is an unknown outcome, not proof that no order exists. A universal client Idempotency-Key contract is not implemented.
          */
         post: operations["postRampsOnramp"];
         delete?: never;
@@ -1327,7 +1327,7 @@ export interface paths {
         put?: never;
         /**
          * Create offramp transaction
-         * @description Initiates a crypto-to-fiat offramp transaction using a previously obtained quoteId. Funds will be sent from the user's wallet to the provided bank account. The quote expires in 15 minutes.
+         * @description Starts a withdrawal from an unexpired quoteId using its saved amount, route and authenticated wallet. The provider pays the fiat destination after the required funding and verification steps; creation or a chain hash alone does not establish bank payout. A universal client Idempotency-Key contract is not implemented.
          */
         post: operations["postRampsOfframp"];
         delete?: never;
@@ -1385,7 +1385,7 @@ export interface paths {
         };
         /**
          * Get ramp transaction status
-         * @description Returns the current status of an onramp or offramp transaction. Use this endpoint to poll for status updates. Only the authenticated user who created the transaction can access it.
+         * @description Reads a transaction owned by the authenticated user. Compatibility status is pending, processing, completed or failed. Enrolled adapter records additionally expose seven-state lifecycleState, exact terms, transactionVersion, nextAction and reconciliationRequired. Refunded projects to compatibility failed. Legacy provider views may refresh status; do not treat a provider-reported hash as verified settlement.
          */
         get: operations["getRampsTransactionByTxId"];
         put?: never;
@@ -1403,7 +1403,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Executable registered ramp routes */
+        /**
+         * Executable registered ramp routes
+         * @description Registered adapters only. Returns configured routes with available wallet/chain execution and trusted settlement integrations. An empty list does not imply that every legacy provider has migrated or that all advertised provider directions are enabled.
+         */
         get: operations["getRampsRoutes"];
         put?: never;
         post?: never;
@@ -1422,7 +1425,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Continue the persisted ramp action */
+        /**
+         * Continue the persisted ramp action
+         * @description Resumes the saved action identified by actionId and transactionVersion. Use the latest transaction snapshot; do not invent an action or interpret a completed hosted page as settlement.
+         */
         post: operations["postRampsTransactionByTxIdContinue"];
         delete?: never;
         options?: never;
@@ -1441,7 +1447,7 @@ export interface paths {
         put?: never;
         /**
          * Retry a ramp whose funds are in transit
-         * @description Queues the step that is pending (swap, bridge or mint) to run now. Returns the transaction as it stands; poll GET /transaction/:txId for the outcome.
+         * @description Queues the step that is pending (swap, bridge or mint) to run now, and opens again a co-signed step the user rejected. Returns the transaction as it stands; poll GET /transaction/:txId for the outcome.
          */
         post: operations["postRampsTransactionByTxIdRetry"];
         delete?: never;
@@ -2420,6 +2426,15 @@ export interface operations {
                                     details?: {
                                         [key: string]: unknown;
                                     };
+                                    stepKey?: string;
+                                    group?: {
+                                        id: string;
+                                        title: string;
+                                        steps: {
+                                            key: string;
+                                            label: string;
+                                        }[];
+                                    };
                                     signedXdr?: string;
                                     submit?: {
                                         hash: string;
@@ -2575,6 +2590,15 @@ export interface operations {
                                     summary?: string;
                                     details?: {
                                         [key: string]: unknown;
+                                    };
+                                    stepKey?: string;
+                                    group?: {
+                                        id: string;
+                                        title: string;
+                                        steps: {
+                                            key: string;
+                                            label: string;
+                                        }[];
                                     };
                                     signedXdr?: string;
                                     submit?: {
@@ -3218,6 +3242,15 @@ export interface operations {
                                     summary?: string;
                                     details?: {
                                         [key: string]: unknown;
+                                    };
+                                    stepKey?: string;
+                                    group?: {
+                                        id: string;
+                                        title: string;
+                                        steps: {
+                                            key: string;
+                                            label: string;
+                                        }[];
                                     };
                                     signedXdr?: string;
                                     submit?: {
@@ -9743,8 +9776,11 @@ export interface operations {
                                 };
                                 terms?: {
                                     fiatCurrency: string;
+                                    /** @description Exact decimal total fiat paid on deposit or received on withdrawal. */
                                     fiatAmount: string;
+                                    /** @description Exact decimal crypto credited on deposit or debited on withdrawal. Do not derive it from rate. */
                                     cryptoAmount: string;
+                                    /** @description Disclosed fee component already included in the totals; do not add it again. */
                                     feeAmount: string;
                                     feeCurrency: string;
                                     assetCode: string;
@@ -10131,8 +10167,10 @@ export interface operations {
                                 kind: "fiat_received" | "fiat_paid" | "source_chain_verified" | "destination_chain_verified" | "refund_verified";
                                 verifiedAt: string;
                             }[];
+                            /** @description Canonical seven-state lifecycle for enrolled adapter transactions; absent/null for legacy records. Refunded projects to compatibility status failed. */
                             lifecycleState?: ("created" | "awaiting_payment" | "processing" | "settling_onchain" | "completed" | "failed" | "refunded") | null;
                             transactionVersion?: number;
+                            /** @description Independent settlement review is required; a provider status or hash alone is not completion proof. */
                             reconciliationRequired?: boolean;
                             nextAction?: ({
                                 /** @constant */
@@ -10249,8 +10287,11 @@ export interface operations {
                             }) | null;
                             terms?: {
                                 fiatCurrency: string;
+                                /** @description Exact decimal total fiat paid on deposit or received on withdrawal. */
                                 fiatAmount: string;
+                                /** @description Exact decimal crypto credited on deposit or debited on withdrawal. Do not derive it from rate. */
                                 cryptoAmount: string;
+                                /** @description Disclosed fee component already included in the totals; do not add it again. */
                                 feeAmount: string;
                                 feeCurrency: string;
                                 assetCode: string;
@@ -10276,7 +10317,7 @@ export interface operations {
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
-                                action: "sep10" | "withdraw_payment";
+                                action: "sep10" | "withdraw_payment" | "cctp_approve" | "cctp_burn";
                             };
                             depositInstructions?: {
                                 scannable?: {
@@ -10442,8 +10483,10 @@ export interface operations {
                                 kind: "fiat_received" | "fiat_paid" | "source_chain_verified" | "destination_chain_verified" | "refund_verified";
                                 verifiedAt: string;
                             }[];
+                            /** @description Canonical seven-state lifecycle for enrolled adapter transactions; absent/null for legacy records. Refunded projects to compatibility status failed. */
                             lifecycleState?: ("created" | "awaiting_payment" | "processing" | "settling_onchain" | "completed" | "failed" | "refunded") | null;
                             transactionVersion?: number;
+                            /** @description Independent settlement review is required; a provider status or hash alone is not completion proof. */
                             reconciliationRequired?: boolean;
                             nextAction?: ({
                                 /** @constant */
@@ -10560,8 +10603,11 @@ export interface operations {
                             }) | null;
                             terms?: {
                                 fiatCurrency: string;
+                                /** @description Exact decimal total fiat paid on deposit or received on withdrawal. */
                                 fiatAmount: string;
+                                /** @description Exact decimal crypto credited on deposit or debited on withdrawal. Do not derive it from rate. */
                                 cryptoAmount: string;
+                                /** @description Disclosed fee component already included in the totals; do not add it again. */
                                 feeAmount: string;
                                 feeCurrency: string;
                                 assetCode: string;
@@ -10587,7 +10633,7 @@ export interface operations {
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
-                                action: "sep10" | "withdraw_payment";
+                                action: "sep10" | "withdraw_payment" | "cctp_approve" | "cctp_burn";
                             };
                             depositInstructions?: {
                                 scannable?: {
@@ -10694,7 +10740,7 @@ export interface operations {
                 "application/json": {
                     signedXdr: string;
                     /** @enum {string} */
-                    action: "sep10" | "withdraw_payment";
+                    action: "sep10" | "withdraw_payment" | "cctp_approve" | "cctp_burn";
                 };
             };
         };
@@ -10739,8 +10785,10 @@ export interface operations {
                                 kind: "fiat_received" | "fiat_paid" | "source_chain_verified" | "destination_chain_verified" | "refund_verified";
                                 verifiedAt: string;
                             }[];
+                            /** @description Canonical seven-state lifecycle for enrolled adapter transactions; absent/null for legacy records. Refunded projects to compatibility status failed. */
                             lifecycleState?: ("created" | "awaiting_payment" | "processing" | "settling_onchain" | "completed" | "failed" | "refunded") | null;
                             transactionVersion?: number;
+                            /** @description Independent settlement review is required; a provider status or hash alone is not completion proof. */
                             reconciliationRequired?: boolean;
                             nextAction?: ({
                                 /** @constant */
@@ -10857,8 +10905,11 @@ export interface operations {
                             }) | null;
                             terms?: {
                                 fiatCurrency: string;
+                                /** @description Exact decimal total fiat paid on deposit or received on withdrawal. */
                                 fiatAmount: string;
+                                /** @description Exact decimal crypto credited on deposit or debited on withdrawal. Do not derive it from rate. */
                                 cryptoAmount: string;
+                                /** @description Disclosed fee component already included in the totals; do not add it again. */
                                 feeAmount: string;
                                 feeCurrency: string;
                                 assetCode: string;
@@ -10884,7 +10935,7 @@ export interface operations {
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
-                                action: "sep10" | "withdraw_payment";
+                                action: "sep10" | "withdraw_payment" | "cctp_approve" | "cctp_burn";
                             };
                             depositInstructions?: {
                                 scannable?: {
@@ -11028,8 +11079,10 @@ export interface operations {
                                 kind: "fiat_received" | "fiat_paid" | "source_chain_verified" | "destination_chain_verified" | "refund_verified";
                                 verifiedAt: string;
                             }[];
+                            /** @description Canonical seven-state lifecycle for enrolled adapter transactions; absent/null for legacy records. Refunded projects to compatibility status failed. */
                             lifecycleState?: ("created" | "awaiting_payment" | "processing" | "settling_onchain" | "completed" | "failed" | "refunded") | null;
                             transactionVersion?: number;
+                            /** @description Independent settlement review is required; a provider status or hash alone is not completion proof. */
                             reconciliationRequired?: boolean;
                             nextAction?: ({
                                 /** @constant */
@@ -11146,8 +11199,11 @@ export interface operations {
                             }) | null;
                             terms?: {
                                 fiatCurrency: string;
+                                /** @description Exact decimal total fiat paid on deposit or received on withdrawal. */
                                 fiatAmount: string;
+                                /** @description Exact decimal crypto credited on deposit or debited on withdrawal. Do not derive it from rate. */
                                 cryptoAmount: string;
+                                /** @description Disclosed fee component already included in the totals; do not add it again. */
                                 feeAmount: string;
                                 feeCurrency: string;
                                 assetCode: string;
@@ -11173,7 +11229,7 @@ export interface operations {
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
-                                action: "sep10" | "withdraw_payment";
+                                action: "sep10" | "withdraw_payment" | "cctp_approve" | "cctp_burn";
                             };
                             depositInstructions?: {
                                 scannable?: {
@@ -11318,8 +11374,10 @@ export interface operations {
                                 kind: "fiat_received" | "fiat_paid" | "source_chain_verified" | "destination_chain_verified" | "refund_verified";
                                 verifiedAt: string;
                             }[];
+                            /** @description Canonical seven-state lifecycle for enrolled adapter transactions; absent/null for legacy records. Refunded projects to compatibility status failed. */
                             lifecycleState?: ("created" | "awaiting_payment" | "processing" | "settling_onchain" | "completed" | "failed" | "refunded") | null;
                             transactionVersion?: number;
+                            /** @description Independent settlement review is required; a provider status or hash alone is not completion proof. */
                             reconciliationRequired?: boolean;
                             nextAction?: ({
                                 /** @constant */
@@ -11436,8 +11494,11 @@ export interface operations {
                             }) | null;
                             terms?: {
                                 fiatCurrency: string;
+                                /** @description Exact decimal total fiat paid on deposit or received on withdrawal. */
                                 fiatAmount: string;
+                                /** @description Exact decimal crypto credited on deposit or debited on withdrawal. Do not derive it from rate. */
                                 cryptoAmount: string;
+                                /** @description Disclosed fee component already included in the totals; do not add it again. */
                                 feeAmount: string;
                                 feeCurrency: string;
                                 assetCode: string;
@@ -11450,7 +11511,7 @@ export interface operations {
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
-                                action: "sep10" | "withdraw_payment";
+                                action: "sep10" | "withdraw_payment" | "cctp_approve" | "cctp_burn";
                             };
                             txId: string;
                             provider: string;
@@ -11680,8 +11741,10 @@ export interface operations {
                                 kind: "fiat_received" | "fiat_paid" | "source_chain_verified" | "destination_chain_verified" | "refund_verified";
                                 verifiedAt: string;
                             }[];
+                            /** @description Canonical seven-state lifecycle for enrolled adapter transactions; absent/null for legacy records. Refunded projects to compatibility status failed. */
                             lifecycleState?: ("created" | "awaiting_payment" | "processing" | "settling_onchain" | "completed" | "failed" | "refunded") | null;
                             transactionVersion?: number;
+                            /** @description Independent settlement review is required; a provider status or hash alone is not completion proof. */
                             reconciliationRequired?: boolean;
                             nextAction?: ({
                                 /** @constant */
@@ -11798,8 +11861,11 @@ export interface operations {
                             }) | null;
                             terms?: {
                                 fiatCurrency: string;
+                                /** @description Exact decimal total fiat paid on deposit or received on withdrawal. */
                                 fiatAmount: string;
+                                /** @description Exact decimal crypto credited on deposit or debited on withdrawal. Do not derive it from rate. */
                                 cryptoAmount: string;
+                                /** @description Disclosed fee component already included in the totals; do not add it again. */
                                 feeAmount: string;
                                 feeCurrency: string;
                                 assetCode: string;
@@ -11812,7 +11878,7 @@ export interface operations {
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
-                                action: "sep10" | "withdraw_payment";
+                                action: "sep10" | "withdraw_payment" | "cctp_approve" | "cctp_burn";
                             };
                             txId: string;
                             provider: string;
@@ -11972,8 +12038,10 @@ export interface operations {
                                 kind: "fiat_received" | "fiat_paid" | "source_chain_verified" | "destination_chain_verified" | "refund_verified";
                                 verifiedAt: string;
                             }[];
+                            /** @description Canonical seven-state lifecycle for enrolled adapter transactions; absent/null for legacy records. Refunded projects to compatibility status failed. */
                             lifecycleState?: ("created" | "awaiting_payment" | "processing" | "settling_onchain" | "completed" | "failed" | "refunded") | null;
                             transactionVersion?: number;
+                            /** @description Independent settlement review is required; a provider status or hash alone is not completion proof. */
                             reconciliationRequired?: boolean;
                             nextAction?: ({
                                 /** @constant */
@@ -12090,8 +12158,11 @@ export interface operations {
                             }) | null;
                             terms?: {
                                 fiatCurrency: string;
+                                /** @description Exact decimal total fiat paid on deposit or received on withdrawal. */
                                 fiatAmount: string;
+                                /** @description Exact decimal crypto credited on deposit or debited on withdrawal. Do not derive it from rate. */
                                 cryptoAmount: string;
+                                /** @description Disclosed fee component already included in the totals; do not add it again. */
                                 feeAmount: string;
                                 feeCurrency: string;
                                 assetCode: string;
@@ -12104,7 +12175,7 @@ export interface operations {
                             pendingSignature?: {
                                 unsignedXdr: string;
                                 /** @enum {string} */
-                                action: "sep10" | "withdraw_payment";
+                                action: "sep10" | "withdraw_payment" | "cctp_approve" | "cctp_burn";
                             };
                             txId: string;
                             provider: string;
@@ -12241,6 +12312,15 @@ export interface operations {
                                 details?: {
                                     [key: string]: unknown;
                                 };
+                                stepKey?: string;
+                                group?: {
+                                    id: string;
+                                    title: string;
+                                    steps: {
+                                        key: string;
+                                        label: string;
+                                    }[];
+                                };
                                 signedXdr?: string;
                                 submit?: {
                                     hash: string;
@@ -12322,6 +12402,15 @@ export interface operations {
                                 summary?: string;
                                 details?: {
                                     [key: string]: unknown;
+                                };
+                                stepKey?: string;
+                                group?: {
+                                    id: string;
+                                    title: string;
+                                    steps: {
+                                        key: string;
+                                        label: string;
+                                    }[];
                                 };
                                 signedXdr?: string;
                                 submit?: {
@@ -12418,6 +12507,15 @@ export interface operations {
                                 details?: {
                                     [key: string]: unknown;
                                 };
+                                stepKey?: string;
+                                group?: {
+                                    id: string;
+                                    title: string;
+                                    steps: {
+                                        key: string;
+                                        label: string;
+                                    }[];
+                                };
                                 signedXdr?: string;
                                 submit?: {
                                     hash: string;
@@ -12512,6 +12610,15 @@ export interface operations {
                                 summary?: string;
                                 details?: {
                                     [key: string]: unknown;
+                                };
+                                stepKey?: string;
+                                group?: {
+                                    id: string;
+                                    title: string;
+                                    steps: {
+                                        key: string;
+                                        label: string;
+                                    }[];
                                 };
                                 signedXdr?: string;
                                 submit?: {
@@ -12631,6 +12738,15 @@ export interface operations {
                                 summary?: string;
                                 details?: {
                                     [key: string]: unknown;
+                                };
+                                stepKey?: string;
+                                group?: {
+                                    id: string;
+                                    title: string;
+                                    steps: {
+                                        key: string;
+                                        label: string;
+                                    }[];
                                 };
                                 signedXdr?: string;
                                 submit?: {
