@@ -1,0 +1,66 @@
+name: Release candidate
+
+on:
+  push:
+    tags: ['v*-rc*']
+
+concurrency:
+  group: release-rc
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PACKAGES: core react react-native privy-adapter accesly-adapter stellar-wallets-kit-adapter solana-wallet-standard-adapter
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Check the version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]] || { echo "::error::$GITHUB_REF_NAME is not vX.Y.Z-rc.N"; exit 1; }
+          # The tagged code has to be on that release line, or a tag on the wrong branch publishes the wrong code.
+          base="$(node -p 'require("./packages/core/package.json").version.split("-")[0]')"
+          [ "${VERSION%-rc.*}" = "$base" ] || { echo "::error::$GITHUB_REF_NAME points at code for $base"; exit 1; }
+          if [ -n "$(npm view "@pollar/core@$VERSION" version 2>/dev/null)" ]; then
+            echo "::error::@pollar/core@$VERSION is already on npm"; exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      # The version comes from the tag and is not committed back: the tag is the record.
+      # ponytail: only the package versions move. Internal ranges (^0.12.0-rc.1)
+      # cover every rc of the same X.Y.Z; a new X.Y.Z needs them bumped by hand first.
+      - name: Set the version
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version $(printf -- '-w packages/%s ' $PACKAGES)
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Smoke tests
+        run: npm run test:smoke
+
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for pkg in $PACKAGES; do
+            (cd "packages/$pkg" && npm publish --access public --tag next) || exit 1
+          done
+          echo "Published $VERSION with dist-tag next" >> "$GITHUB_STEP_SUMMARY"
