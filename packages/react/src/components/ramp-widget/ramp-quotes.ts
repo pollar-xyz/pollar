@@ -20,10 +20,29 @@ export async function quoteRampOptions(
   const matching = routes.filter(
     (route) => route.country === query.country && route.direction === query.direction && route.fiatCurrency === query.currency,
   );
-  const responses = await Promise.allSettled([
-    client.getRampsQuote(query),
-    ...matching.map((route) => client.getRampsQuote({ ...query, routeId: route.routeId, chain: route.asset.chain })),
-  ]);
+  // The default request already quotes each provider's default route. Only
+  // request explicit routes that were not returned, including other chains.
+  const [general] = await Promise.allSettled([client.getRampsQuote(query)]);
+  const covered = new Set(
+    general?.status === 'fulfilled'
+      ? general.value.quotes.flatMap((quote) =>
+          quote.route ? [JSON.stringify([quote.route.routeId, quote.route.asset.chain])] : [],
+        )
+      : [],
+  );
+  const pending = new Map(
+    matching
+      .filter((route) => !covered.has(JSON.stringify([route.routeId, route.asset.chain])))
+      .map((route) => [JSON.stringify([route.routeId, route.asset.chain]), route]),
+  );
+  const responses = [
+    general!,
+    ...(await Promise.allSettled(
+      [...pending.values()].map((route) =>
+        client.getRampsQuote({ ...query, routeId: route.routeId, chain: route.asset.chain }),
+      ),
+    )),
+  ];
   const results = responses.flatMap((response) => (response.status === 'fulfilled' ? [response.value] : []));
   if (!results.length) throw (responses[0] as PromiseRejectedResult).reason;
   const quotes = new Map<string, RampsQuoteResponse['quotes'][number]>();

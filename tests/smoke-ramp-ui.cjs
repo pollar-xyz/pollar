@@ -228,7 +228,7 @@ const base = {
     await React.act(async () => quoteRow.click());
   }
   await startWidget(widgetRoot);
-  assert.ok(quoteQueries.some((query) => query.routeId === route.routeId && query.chain === 'POLYGON'));
+  assert.equal(quoteQueries.length, 1, 'A route returned by the general quote must not be requested again');
   assert.ok(
     quoteQueries.some((query) => query.routeId === undefined),
     'Legacy providers are quoted without a route selector',
