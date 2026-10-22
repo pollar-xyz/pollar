@@ -1,33 +1,22 @@
-import { assertRampChain, assertRampRouteChain, assertRampTermsChain, checkedRampSnapshot } from '../../ramps/chains';
+import { abortError, throwIfAborted } from '../../lib/abort';
 import type { PollarApiClient } from '../client';
 import type {
-  RampContinuationBody,
-  RampsRoutesResponse,
-  RampRail,
-  RampsCompleteResponse,
-  RampsCountriesResponse,
-  RampsKycStatusResponse,
-  RampsLiquidityResponse,
-  RampsOfframpBody,
-  RampsOfframpResponse,
-  RampsOnrampBody,
-  RampsOnrampResponse,
-  RampsPixDecodeResponse,
-  RampsQuoteQuery,
-  RampsQuoteResponse,
-  RampsSignatureBody,
-  RampsSignatureResponse,
-  RampsTransactionResponse,
-  RampTxStatus,
+  RampDirection,
+  RampOrder,
+  RampOrderRequest,
+  RampOrdersPage,
+  RampOrdersQuery,
+  RampQuoteRequest,
+  RampQuotesResponse,
+  RampRoutesResponse,
 } from '../../types';
 import { PollarApiError } from '../../types';
 import { isRecord, stringField } from '../error-fields';
 
 /**
  * Wrap an error body into a {@link PollarApiError}, keeping every field the API
- * sent. Ramp failures are the ones a UI most needs to explain - an amount below
- * the provider's minimum, a stale quote, pending KYC - and collapsing them to
- * the bare code left the caller with nothing to say beyond it.
+ * sent: a quote that found no route carries `rejected` (why each route dropped
+ * out), a refused payee carries `message` (which field and why).
  *
  * `message` stays the code, so anything rendering `err.message` is unaffected.
  */
@@ -37,186 +26,109 @@ function rampApiError(error: unknown, fallback: string): PollarApiError {
   return new PollarApiError(code, body);
 }
 
-/**
- * GET /ramps/countries
- * Returns the ISO country codes (+ primary fiat currency) the app's enabled
- * ramp anchors support on its network. Use it to populate a country selector.
- */
-export async function getRampCountries(api: PollarApiClient): Promise<RampsCountriesResponse> {
-  const { data, error } = await api.GET('/ramps/countries');
-  if (!data?.content || error) throw rampApiError(error, 'Failed to get ramp countries');
-  return data.content;
-}
-
-/**
- * GET /ramps/quote
- * Returns available quotes for an onramp or offramp.
- * The backend ranks providers by country, amount, fee and availability.
- * The first quote in the array is the recommended one.
- */
-export async function getRampsQuote(api: PollarApiClient, query: RampsQuoteQuery): Promise<RampsQuoteResponse> {
-  if (query.chain !== undefined) assertRampChain(query.chain);
-  const { data, error } = await api.GET('/ramps/quote', { params: { query } });
-  if (!data?.content || error) throw rampApiError(error, 'Failed to get ramp quotes');
-  for (const quote of data.content.quotes) {
-    if (quote.route) assertRampRouteChain(quote.route);
-    if (quote.terms) assertRampTermsChain(quote.terms);
-  }
-  return data.content;
-}
-
-/**
- * POST /ramps/onramp
- * Creates an onramp transaction.
- * For embedded users: backend orchestrates the full SEP-24 flow and returns payment instructions.
- * For external wallets: backend may return an unsigned XDR that the client must sign via a wallet adapter.
- */
-/**
- * Starting a ramp re-quotes and confirms the order at the provider (plus the
- * requirement gate), which can take well over the 10s default; these two calls get
- * the longer budget, like startKyc.
- */
-const RAMP_START_TIMEOUT_MS = 30_000;
-const rampStartHeaders = { 'x-pollar-timeout-ms': String(RAMP_START_TIMEOUT_MS) };
-
-export async function createOnRamp(api: PollarApiClient, body: RampsOnrampBody): Promise<RampsOnrampResponse> {
-  const { data, error } = await api.POST('/ramps/onramp', { body, headers: rampStartHeaders });
-  if (!data?.content || error) throw rampApiError(error, 'Failed to create onramp');
-  return checkedRampSnapshot(data.content);
-}
-
-/**
- * POST /ramps/offramp
- * Creates an offramp transaction.
- * Backend initiates the bank transfer once the Stellar transaction is confirmed.
- */
-export async function createOffRamp(api: PollarApiClient, body: RampsOfframpBody): Promise<RampsOfframpResponse> {
-  const { data, error } = await api.POST('/ramps/offramp', { body, headers: rampStartHeaders });
-  if (!data?.content || error) throw rampApiError(error, 'Failed to create offramp');
-  return checkedRampSnapshot(data.content);
-}
-
-/**
- * POST /ramps/transaction/{txId}/complete
- * Completes an offramp once anchor KYC is done: builds + signs + submits the
- * on-chain withdraw payment. Embedded wallets complete server-side and return
- * `stellarTxHash`; EXTERNAL wallets get a `pendingSignature` to sign and then
- * resume via {@link submitRampSignature}.
- */
-export async function completeWithdraw(api: PollarApiClient, txId: string): Promise<RampsCompleteResponse> {
-  const { data, error } = await api.POST('/ramps/transaction/{txId}/complete', { params: { path: { txId } } });
-  if (!data?.content || error) throw rampApiError(error, 'Failed to complete withdrawal');
-  return checkedRampSnapshot(data.content);
-}
-
-/**
- * POST /ramps/transaction/{txId}/signature
- * Resumes an EXTERNAL-wallet flow after the client signs a pending XDR.
- * `action: 'sep10'` exchanges the signed challenge for the anchor session;
- * `action: 'withdraw_payment'` broadcasts the signed on-chain withdraw payment.
- */
-export async function submitRampSignature(
-  api: PollarApiClient,
-  txId: string,
-  body: RampsSignatureBody,
-): Promise<RampsSignatureResponse> {
-  const { data, error } = await api.POST('/ramps/transaction/{txId}/signature', { params: { path: { txId } }, body });
-  if (!data?.content || error) throw rampApiError(error, 'Failed to submit signature');
-  return checkedRampSnapshot(data.content);
-}
-
-/**
- * GET /ramps/transaction/{txId}
- * Returns the current status of a ramp transaction.
- */
-export async function getRampTransaction(api: PollarApiClient, txId: string): Promise<RampsTransactionResponse> {
-  const { data, error } = await api.GET('/ramps/transaction/{txId}', { params: { path: { txId } } });
-  if (!data?.content || error) throw rampApiError(error, 'Failed to get transaction');
-  return checkedRampSnapshot(data.content);
-}
-
-/**
- * POST /ramps/transaction/{txId}/retry
- * Queues the pending step of a ramp whose funds are in transit (`fundsInTransit`)
- * to run now. Returns the transaction as it stands; poll for the outcome.
- */
-export async function retryRampTransaction(api: PollarApiClient, txId: string): Promise<RampsTransactionResponse> {
-  const { data, error } = await api.POST('/ramps/transaction/{txId}/retry', { params: { path: { txId } } });
-  if (!data?.content || error) throw rampApiError(error, 'Failed to retry transaction');
-  return data.content;
-}
-
-/**
- * GET /ramps/liquidity
- * Live liquidity on a payout rail. `available: false` means the rail cannot be
- * served right now - quoting it succeeds and then fails downstream, so check
- * before offering the corridor.
- */
-export async function getRampLiquidity(api: PollarApiClient, rail: RampRail): Promise<RampsLiquidityResponse> {
-  const { data, error } = await api.GET('/ramps/liquidity', { params: { query: { rail } } });
-  if (!data?.content || error) throw rampApiError(error, 'Failed to get ramp liquidity');
-  return data.content;
-}
-
-/**
- * GET /ramps/kyc-status
- * Where the authenticated user stands with the ramp provider's identity checks.
- * Poll after an off-ramp answered `kycRequired: true`: nothing was signed and no
- * funds moved, so wait for `hasApproved` and then request a fresh quote.
- */
-export async function getRampKycStatus(api: PollarApiClient): Promise<RampsKycStatusResponse> {
-  const { data, error } = await api.GET('/ramps/kyc-status');
-  if (!data?.content || error) throw rampApiError(error, 'Failed to get ramp KYC status');
-  return data.content;
-}
-
-/**
- * GET /ramps/pix/decode
- * Reads a Pix "copia e cola" payload into payee + amount. `decoded: null` means
- * the code no longer resolves: dynamic Pix QRs carry a per-charge id and go
- * stale once used or expired. Decode immediately before quoting, quote the
- * amount it returns, and send the ORIGINAL payload as `qrCode` on the off-ramp -
- * paying the bare key it decodes to gets rejected by the payee's bank.
- */
-export async function decodePixQr(api: PollarApiClient, qrCode: string): Promise<RampsPixDecodeResponse> {
-  const { data, error } = await api.GET('/ramps/pix/decode', { params: { query: { qrCode } } });
-  if (!data?.content || error) throw rampApiError(error, 'Failed to decode Pix QR');
-  return data.content;
-}
-
-/**
- * Polls GET /ramps/transaction/{txId} every intervalMs until status is 'completed' or 'failed'.
- * Throws if timeoutMs is exceeded.
- */
-export async function pollRampTransaction(
-  api: PollarApiClient,
-  txId: string,
-  { intervalMs = 5000, timeoutMs = 600_000 }: { intervalMs?: number; timeoutMs?: number } = {},
-): Promise<RampTxStatus> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const { status } = await getRampTransaction(api, txId);
-    if (status === 'completed' || status === 'failed') return status;
-    await new Promise((r) => setTimeout(r, intervalMs));
-  }
-  throw new Error('Ramp transaction polling timed out');
-}
-
-export async function getRampRoutes(api: PollarApiClient): Promise<RampsRoutesResponse> {
-  const { data, error } = await api.GET('/ramps/routes');
+/** GET /ramps/routes: the fiat and asset pairs the app can ramp between. Nothing is quoted. */
+export async function getRampRoutes(api: PollarApiClient, direction: RampDirection): Promise<RampRoutesResponse> {
+  const { data, error } = await api.GET('/ramps/routes', { params: { query: { direction } } });
   if (!data?.content || error) throw rampApiError(error, 'Failed to get ramp routes');
-  for (const route of data.content.routes) assertRampRouteChain(route);
   return data.content;
 }
-export async function continueRamp(
-  api: PollarApiClient,
-  txId: string,
-  body: RampContinuationBody,
-): Promise<RampsTransactionResponse> {
-  const { data, error } = await api.POST('/ramps/transaction/{txId}/continue', { params: { path: { txId } }, body });
-  if (!data?.content || error) throw rampApiError(error, 'Failed to continue ramp');
-  return checkedRampSnapshot(data.content);
+
+/**
+ * POST /ramps/quotes: every route between the fiat and the asset, quoted leg by
+ * leg, best first. No route at all answers 422 SDK_RAMPS_NO_ROUTE with `rejected`.
+ */
+export async function quoteRamp(api: PollarApiClient, body: RampQuoteRequest): Promise<RampQuotesResponse> {
+  const { data, error } = await api.POST('/ramps/quotes', { body });
+  if (!data?.content || error) throw rampApiError(error, 'Failed to quote the ramp');
+  return data.content;
 }
 
-/** Compatibility alias sharing the validated workflow transport. */
-export const continueRampTransaction = continueRamp;
+/**
+ * POST /ramps/orders: turns a quote into an order and runs its first leg, so the
+ * answer carries the first `pendingAction`. `payee` holds a value for each of the
+ * quote's `requiredFields`. The same quote always answers the same order.
+ */
+export async function createRampOrder(api: PollarApiClient, body: RampOrderRequest): Promise<RampOrder> {
+  const { data, error } = await api.POST('/ramps/orders', { body });
+  if (!data?.content || error) throw rampApiError(error, 'Failed to create the ramp order');
+  return data.content;
+}
+
+/** GET /ramps/orders/{id} */
+export async function getRampOrder(api: PollarApiClient, id: string): Promise<RampOrder> {
+  const { data, error } = await api.GET('/ramps/orders/{id}', { params: { path: { id } } });
+  if (!data?.content || error) throw rampApiError(error, 'Failed to get the ramp order');
+  return data.content;
+}
+
+/** GET /ramps/orders: the user's orders, newest first; `pending: 'true'` keeps the ones waiting on the user. */
+export async function listRampOrders(api: PollarApiClient, query: Partial<RampOrdersQuery> = {}): Promise<RampOrdersPage> {
+  const { data, error } = await api.GET('/ramps/orders', { params: { query: query as RampOrdersQuery } });
+  if (!data?.content || error) throw rampApiError(error, 'Failed to list ramp orders');
+  return data.content;
+}
+
+/** POST /ramps/orders/{id}/legs/{index}/signature: the signed payload of a SIGNATURE pending action. */
+export async function submitRampLegSignature(
+  api: PollarApiClient,
+  id: string,
+  index: number,
+  body: { actionId: string; signedPayload: string },
+): Promise<RampOrder> {
+  const { data, error } = await api.POST('/ramps/orders/{id}/legs/{index}/signature', {
+    params: { path: { id, index } },
+    body,
+  });
+  if (!data?.content || error) throw rampApiError(error, 'Failed to submit the ramp signature');
+  return data.content;
+}
+
+const FINAL_STATES = ['completed', 'failed', 'refunded'];
+
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    function onAbort() {
+      clearTimeout(timer);
+      reject(abortError());
+    }
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/** True once the order no longer moves: a final state, or the server stopped suggesting a next read. */
+export function isRampOrderSettled(order: RampOrder): boolean {
+  return FINAL_STATES.includes(order.state) || order.nextPollAfter === null;
+}
+
+/**
+ * Reads the order at the pace the server suggests (`nextPollAfter`) until `until`
+ * holds (by default, until it settles). `onUpdate` sees every read. Transport
+ * errors retry after the last suggested wait; API errors are thrown.
+ */
+export async function pollRampOrder(
+  api: PollarApiClient,
+  id: string,
+  opts: { signal?: AbortSignal; onUpdate?: (order: RampOrder) => void; until?: (order: RampOrder) => boolean } = {},
+): Promise<RampOrder> {
+  const until = opts.until ?? isRampOrderSettled;
+  let waitMs = 5_000;
+  for (;;) {
+    throwIfAborted(opts.signal);
+    let order: RampOrder | null = null;
+    try {
+      order = await getRampOrder(api, id);
+    } catch (error) {
+      if (error instanceof PollarApiError) throw error;
+    }
+    if (order) {
+      opts.onUpdate?.(order);
+      if (until(order) || isRampOrderSettled(order)) return order;
+      waitMs = Math.max(1_000, Date.parse(order.nextPollAfter ?? '') - Date.now() || 5_000);
+    }
+    await delay(waitMs, opts.signal);
+  }
+}

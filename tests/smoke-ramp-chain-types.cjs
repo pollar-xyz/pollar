@@ -20,4 +20,4 @@ assert.equal(
     getNewLine: () => '\n',
   }),
 );
-console.log('Ramp chain types: closed catalog across web, native and all generated ramp API fields passed.');
+console.log('Ramp chain types: closed catalog across web, native and all generated v3 ramp API fields passed.');

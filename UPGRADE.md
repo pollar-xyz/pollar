@@ -23,6 +23,50 @@ must match `/v3/...`.
 A client that receives the `Deprecation` header logs one warning naming the
 `Sunset` date and the migration guide, whatever the version it is on.
 
+### Ramps on API v3
+
+The ramp methods of 0.11.x called endpoints `/v3` does not serve, and they are
+gone: `getRampsQuote`, `getRampCountries`, `createOnRamp`, `createOffRamp`,
+`completeWithdraw`, `submitRampSignature`, `getRampTransaction`,
+`retryRampTransaction`, `pollRampTransaction`, `continueRamp`,
+`continueRampTransaction`, `signRampAction`, `getRampLiquidity`,
+`getRampKycStatus` and `decodePixQr`, with their `Ramps*` types,
+`describeRampAction(snapshot)`, `mergeRampSnapshot`, `mergeRampCountries` and
+the `RampWorkflow*` types. A ramp is now an order of one or more legs (the
+provider, a swap, a bridge) that Pollar runs server-side:
+
+| 0.11.x                                       | 0.12.0                                                                               |
+| -------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `getRampRoutes()`                            | `getRampRoutes(direction)`: fiat and asset pairs, with the legs of each              |
+| `getRampCountries()`                         | `rampCountries(routes)`                                                              |
+| `getRampsQuote(query)`                       | `quoteRamp({ direction, fiat, asset, amount: { value, denomination } })`, best first |
+| quote `requiredFields`                       | `rampQuoteFields(quote)`; send the answers as `payee`                                |
+| `createOnRamp` / `createOffRamp`             | `createRampOrder({ quoteId, payee })`                                                |
+| `getRampTransaction` / `pollRampTransaction` | `getRampOrder(id)` / `pollRampOrder(id, { onUpdate, signal })`                       |
+| `nextAction`                                 | `order.pendingAction`: `FIAT_PAYMENT`, `SIGNATURE`, `COSIGN_APPROVAL`, `KYC`         |
+| `signRampAction(txId, snapshot)`             | `signRampLeg(orderId, actionId)`                                                     |
+| saved transactions in session storage        | `listRampOrders({ pending: 'true' })`                                                |
+
+- A payee the provider would refuse answers `400 VALIDATION_ERROR` with the
+  reason in `body.message`, before anything moves.
+- A `FIAT_PAYMENT` QR carries its code already rendered in
+  `instructions.scannable`, as `depositInstructions.scannable` did.
+- A co-signed step is a `COSIGN_APPROVAL`: the user votes on it like any other
+  co-sign request (`<CosignModal>`).
+- A failure carries `resolutionAction`; `rampResolutionText(failure)` says what
+  the user can do. `rampLegTitle(leg)` and `rampLegStatus(leg)` describe each
+  leg for a progress list.
+- Provider registration, Pix decoding, liquidity and provider KYC status are no
+  longer ramp calls: what a provider needs from the user reaches the order as
+  its `pendingAction`.
+
+The widgets (`<RampWidget>` in React and React Native) are rebuilt on these
+calls. `RampWidgetTemplate` takes the order and the quotes instead of the
+0.11.x transaction fields, `RouteDisplay` renders a v3 quote,
+`RejectedRouteDisplay` shows a route that was dropped, and `RampWorkflow` is
+removed. In React Native the saved ramp in `usePollar()` is
+`{ direction, order }`.
+
 ### Ramp adapter contract version 2
 
 A server adapter built with `@pollar/core/ramps` keeps working as is: every
@@ -91,25 +135,19 @@ backend enum migration and an updated SDK contract. Provider, asset and payload
 encoding registration stays extensible within these three chains. Exact amount
 strings retain their precision and formatting.
 
-### Ramp templates and signing
-
-`RampWidgetTemplateProps.bankType` (and native template-derived props) accepts a
-`string` instead of the previous fixed bank-type union. Backend routes can add
-bank types. Custom templates should handle unknown strings and retain known-type
-formatting where applicable; exhaustive switches need a fallback.
+### Ramp signing
 
 Every chain/encoding pair, including `STELLAR`/`xdr`, requires an explicitly
 registered signer through `registerRampSigningHandler(chain, encoding, handler)`.
 Remove it with the returned cleanup function. Core has no built-in ramp signer
 and does not decode chain-specific payloads or include an XDR library. An
-unregistered pair fails before signing or continuing the transaction.
+unregistered pair fails before signing.
 
 The registered integration must validate the requested payload against the
 authorized wallet account, chain and network before signing, reject cancellation,
-and return the signed payload without broadcasting. Call `signRampAction` only
-from an explicit user action; it refreshes the saved action and delegates to that
-handler. Restoring or polling a workflow does not sign. Existing legacy ramp
-signature methods remain available.
+and return the signed payload without broadcasting. Call `signRampLeg` only
+from an explicit user action; it reads the order again, signs only the action
+the user saw and delegates to that handler. Polling an order does not sign.
 
 For example, with your application's existing chain-specific wallet integration:
 
@@ -120,9 +158,10 @@ const removeSigner = client.registerRampSigningHandler('STELLAR', 'xdr', async (
 });
 ```
 
-UI workflow helpers exported from core are `describeRampAction`,
-`mergeRampSnapshot` and `mergeRampCountries`, with `RampSnapshot` and
-`RampSigningHandler` types; registry and URL internals are private.
+UI helpers exported from core are `describeRampAction(order)`,
+`rampCountries`, `rampQuoteFields`, `rampLegTitle`, `rampLegStatus` and
+`rampResolutionText`, with the `RampSigningHandler` type; registry and URL
+internals are private.
 
 ### Co-sign approval groups removed
 

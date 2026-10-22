@@ -11,13 +11,20 @@ import type {
   SwapToken,
   WalletChain,
   EnabledAssetRecord,
-  RampsQuoteResponse,
-  RampsTransactionResponse,
-  RampsOnrampResponse,
+  RampDirection,
+  RampOrder,
+  RampQuote,
+  RampSignatureAction,
 } from '@pollar/core';
-import { mergeRampSnapshot } from '@pollar/core';
-import { RampWorkflow } from './ramp-widget/RampWorkflow';
-import { usePollar, type NativeRampState } from '../context';
+import {
+  describeRampAction,
+  isRampOrderSettled,
+  rampLegStatus,
+  rampLegTitle,
+  rampQuoteFields,
+  rampResolutionText,
+} from '@pollar/core';
+import { usePollar } from '../context';
 import { ActionButton, ActionState, Card, Choice, Field, Label, ResultView, useAction } from './native-ui';
 
 export type FeatureName =
@@ -781,31 +788,29 @@ export function RampPanel() {
   const p = usePollar();
   const client = p.getClient();
   const action = useAction();
-  const [direction, setDirection] = useState<'onramp' | 'offramp'>(p.ramp?.direction ?? 'onramp');
-  const [country, setCountry] = useState('');
-  const [currency, setCurrency] = useState('');
+  const [direction, setDirection] = useState<RampDirection>(p.ramp?.direction ?? 'ONRAMP');
+  const [routes, setRoutes] = useState<RampRoute[]>([]);
+  const [routeKey, setRouteKey] = useState('');
   const [amount, setAmount] = useState('');
-  const [quotes, setQuotes] = useState<RampsQuoteResponse['quotes']>([]);
+  const [quotes, setQuotes] = useState<RampQuote[]>([]);
   const [quoteId, setQuoteId] = useState('');
   const [fields, setFields] = useState<Record<string, string>>({});
-  const transaction = p.ramp?.transaction;
-  const terminal = ['completed', 'failed', 'refunded'].includes(transaction?.lifecycleState ?? transaction?.status ?? '');
-  const transactionRef = useRef(transaction);
-  transactionRef.current = transaction;
-  // Only some answers carry these: a saved transaction read back has neither.
-  const tosUrl = transaction && 'tosUrl' in transaction ? transaction.tosUrl : undefined;
-  const pendingSignature = transaction && 'pendingSignature' in transaction ? transaction.pendingSignature : undefined;
-  const setTransaction = (next: NativeRampState['transaction'] | undefined) => {
-    const accepted = next ? mergeRampSnapshot(transactionRef.current, next) : undefined;
-    transactionRef.current = accepted;
-    p.setRamp(accepted ? { direction, transaction: accepted } : null);
+  const order = p.ramp?.order;
+  const settled = order ? isRampOrderSettled(order) : false;
+  const setOrder = (next: RampOrder | null) => p.setRamp(next ? { direction: next.direction, order: next } : null);
+  const keyOf = (r: RampRoute) => [r.fiat.country, r.fiat.currency, r.fiat.rail, r.asset.code, r.asset.chain].join(':');
+  const route = routes.find((r) => keyOf(r) === routeKey);
+  const quote = quotes.find((q) => q.quoteId === quoteId);
+  const view = order ? describeRampAction(order) : null;
+  const clearQuotes = () => {
+    setQuotes([]);
+    setQuoteId('');
+    setFields({});
   };
-  const [routes, setRoutes] = useState<RampRoute[]>([]);
-  const [routeId, setRouteId] = useState('');
   useEffect(() => {
     let active = true;
     void client
-      .getRampRoutes()
+      .getRampRoutes(direction)
       .then((result) => {
         if (active) setRoutes(result.routes);
       })
@@ -813,118 +818,58 @@ export function RampPanel() {
     return () => {
       active = false;
     };
-  }, [client]);
+  }, [client, direction]);
   useEffect(() => {
-    if (!transaction || terminal) return;
-    let active = true;
-    const timer = setInterval(() => {
-      void client
-        .getRampTransaction(transaction.txId)
-        .then((next) => {
-          if (active) setTransaction(next);
-        })
-        .catch(() => {});
-    }, 5000);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [transaction?.txId, terminal, client]);
-  const quote = quotes.find((q) => q.quoteId === quoteId);
-  const clearQuotes = () => {
-    setQuotes([]);
-    setQuoteId('');
-    setFields({});
-  };
+    if (!order || settled) return;
+    const controller = new AbortController();
+    client.pollRampOrder(order.id, { signal: controller.signal, onUpdate: setOrder }).catch(() => {});
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.id, settled, client]);
   async function create() {
     if (!quote) throw new Error('Get and select a current quote.');
-    for (const field of quote.requiredFields)
+    const required = rampQuoteFields(quote);
+    for (const field of required)
       if (!field.optional && !fields[field.key]?.trim()) throw new Error(field.label + ' is required.');
-    const body = {
-      quoteId,
-      country,
-      currency,
-      amount: quote.fiatAmount ?? Number(amount),
-      ...(quote.terms ? { amountExact: quote.terms.fiatAmount } : {}),
-      ...(Object.keys(fields).length ? { fields } : {}),
-      walletAddress: p.walletAddress,
-      ...(fields.email ? { email: fields.email } : {}),
-      ...(fields.fullName ? { fullName: fields.fullName } : {}),
-    };
-    const bankField = quote.requiredFields.find((f) => f.bankType && fields[f.key]);
-    const result =
-      direction === 'onramp'
-        ? await p.createOnRamp(body)
-        : await p.createOffRamp({
-            ...body,
-            fields,
-            ...(bankField?.bankType ? { bankDetails: { type: bankField.bankType, value: fields[bankField.key]! } } : {}),
-            ...(fields.taxId ? { taxId: fields.taxId } : {}),
-            ...(fields.qrCode ? { qrCode: fields.qrCode } : {}),
-          });
-    setTransaction(result);
+    const payee = Object.fromEntries(required.filter((f) => fields[f.key]?.trim()).map((f) => [f.key, fields[f.key]!.trim()]));
+    const created = await p.createRampOrder({ quoteId: quote.quoteId, ...(Object.keys(payee).length ? { payee } : {}) });
+    setOrder(created);
     clearQuotes();
-    return result;
+    return created;
   }
   return (
     <Card title="Ramp">
-      {!transaction && routes.length > 0 && (
-        <Choice
-          label="Asset and payment route"
-          value={routeId}
-          options={routes.map((route) => route.routeId)}
-          labels={Object.fromEntries(
-            routes.map((route) => [
-              route.routeId,
-              `${route.direction} · ${route.fiatCurrency} / ${route.asset.code} · ${route.asset.chain} · ${route.rail}`,
-            ]),
-          )}
-          onChange={(value) => {
-            const route = routes.find((item) => item.routeId === value);
-            setRouteId(value);
-            if (route) {
-              setCountry(route.country);
-              setCurrency(route.fiatCurrency);
-              setDirection(route.direction);
-              clearQuotes();
-            }
-          }}
-        />
-      )}
-      <ActionButton
-        title="Load supported countries"
-        disabled={action.busy}
-        onPress={() => void action.run(p.getRampCountries)}
-      />
-      {!transaction ? (
+      {!order ? (
         <>
           <Choice
             label="Direction"
             value={direction}
-            options={['onramp', 'offramp']}
+            options={['ONRAMP', 'OFFRAMP']}
             onChange={(v) => {
               setDirection(v);
+              setRouteKey('');
               clearQuotes();
             }}
           />
+          {routes.length > 0 && (
+            <Choice
+              label="Fiat and asset"
+              value={routeKey}
+              options={routes.map(keyOf)}
+              labels={Object.fromEntries(
+                routes.map((r) => [
+                  keyOf(r),
+                  `${r.fiat.country} ${r.fiat.currency} (${r.fiat.rail}) / ${r.asset.code} on ${r.asset.chain} · ${r.legs.length} step(s)`,
+                ]),
+              )}
+              onChange={(value) => {
+                setRouteKey(value);
+                clearQuotes();
+              }}
+            />
+          )}
           <Field
-            label="Country code (e.g. MX)"
-            value={country}
-            onChangeText={(v) => {
-              setCountry(v.toUpperCase());
-              clearQuotes();
-            }}
-          />
-          <Field
-            label="Currency (e.g. MXN)"
-            value={currency}
-            onChangeText={(v) => {
-              setCurrency(v.toUpperCase());
-              clearQuotes();
-            }}
-          />
-          <Field
-            label="Amount"
+            label="Amount you send"
             keyboardType="decimal-pad"
             value={amount}
             onChangeText={(v) => {
@@ -934,29 +879,27 @@ export function RampPanel() {
           />
           <ActionButton
             title="Get ramp quotes"
-            disabled={action.busy || !country || !currency || Number(amount) <= 0}
+            disabled={action.busy || !route || !(Number(amount) > 0)}
             onPress={() =>
               void action.run(async () => {
-                const q = await p.getRampsQuote({
-                  country,
-                  currency,
-                  amount: Number(amount),
-                  amountExact: amount,
+                const result = await p.quoteRamp({
                   direction,
-                  ...(routeId ? { routeId, chain: routes.find((route) => route.routeId === routeId)!.asset.chain } : {}),
+                  fiat: { currency: route!.fiat.currency, rail: route!.fiat.rail, country: route!.fiat.country },
+                  asset: { code: route!.asset.code, identifier: route!.asset.identifier, chain: route!.asset.chain },
+                  amount: { value: amount.trim(), denomination: 'in' },
                 });
-                setQuotes(q.quotes);
-                return q;
+                setQuotes(result.quotes);
+                return result;
               })
             }
           />
           {quotes.map((q) => (
             <View key={q.quoteId} style={{ gap: 8 }}>
               <Label>
-                {q.provider} · {q.rail} · Fee {q.fee} {q.feeCurrency}
+                {q.amountIn} → {q.amountOut} · {q.legs.map((leg) => rampLegTitle(leg)).join(' · ')}
               </Label>
               <ActionButton
-                title={'Select ' + q.provider}
+                title={q.quoteId === quoteId ? 'Selected' : 'Select this route'}
                 onPress={() => {
                   setQuoteId(q.quoteId);
                   setFields({});
@@ -964,111 +907,96 @@ export function RampPanel() {
               />
             </View>
           ))}
-          {quote?.requiredFields.map((f) =>
-            f.type === 'select' && f.options ? (
-              <Choice
-                key={f.key}
-                label={f.label}
-                value={fields[f.key] ?? ''}
-                options={f.options.map((o) => o.value)}
-                onChange={(v) => setFields((old) => ({ ...old, [f.key]: v }))}
-              />
-            ) : (
-              <Field
-                key={f.key}
-                label={f.label}
-                value={fields[f.key] ?? ''}
-                onChangeText={(v) => setFields((old) => ({ ...old, [f.key]: v }))}
-              />
-            ),
-          )}
+          {quote &&
+            rampQuoteFields(quote).map((f) =>
+              f.type === 'select' && f.options ? (
+                <Choice
+                  key={f.key}
+                  label={f.label}
+                  value={fields[f.key] ?? ''}
+                  options={f.options.map((o) => o.value)}
+                  labels={Object.fromEntries(f.options.map((o) => [o.value, o.label]))}
+                  onChange={(v) => setFields((old) => ({ ...old, [f.key]: v }))}
+                />
+              ) : (
+                <Field
+                  key={f.key}
+                  label={f.label}
+                  value={fields[f.key] ?? ''}
+                  onChangeText={(v) => setFields((old) => ({ ...old, [f.key]: v }))}
+                />
+              ),
+            )}
           {quote && (
-            <ActionButton
-              title={'Confirm ' + direction}
-              disabled={action.busy || !p.verified}
-              onPress={() => void action.run(create)}
-            />
+            <ActionButton title="Create order" disabled={action.busy || !p.verified} onPress={() => void action.run(create)} />
           )}
         </>
       ) : (
         <>
-          {transaction.transactionVersion !== undefined ? (
-            <RampWorkflow
-              client={p.getClient()}
-              snapshot={transaction}
-              onChange={(next) => setTransaction(next)}
-              copyText={p.copyText}
-            />
-          ) : (
-            <>
-              <Label>Provider status: {transaction.status}</Label>
-              <ResultView value={transaction} />
-              {transaction.kycUrl && (
-                <ActionButton
-                  title="Open provider verification"
-                  onPress={() => void action.run(() => Linking.openURL(transaction.kycUrl!))}
-                />
-              )}
-              {tosUrl && (
-                <ActionButton title="Open provider terms" onPress={() => void action.run(() => Linking.openURL(tosUrl))} />
-              )}
-              {transaction.depositInstructions?.scannable?.payload && (
-                <ActionButton
-                  title="Copy payment instructions"
-                  onPress={() =>
-                    void action.run(async () => {
-                      await p.copyText(transaction.depositInstructions!.scannable!.payload!);
-                      return 'Copied';
-                    })
-                  }
-                />
-              )}
-              {pendingSignature && (
-                <ActionButton
-                  title="Sign provider request"
-                  disabled={action.busy}
-                  onPress={() =>
-                    void action.run(async () => {
-                      const pending = pendingSignature;
-                      const signed = await p.signTx(pending.unsignedXdr, { skipSponsorship: pending.action === 'sep10' });
-                      if (signed.status !== 'signed') return signed;
-                      const next = await p.submitRampSignature(transaction.txId, {
-                        signedXdr: signed.signedXdr,
-                        action: pending.action,
-                      });
-                      setTransaction(next);
-                      return next;
-                    })
-                  }
-                />
-              )}
-              <ActionButton
-                title="Refresh provider status"
-                disabled={action.busy}
-                onPress={() =>
-                  void action.run(async () => {
-                    const next = await p.getRampTransaction(transaction.txId);
-                    setTransaction(next);
-                    return next;
-                  })
-                }
-              />
-              {direction === 'offramp' && transaction.status === 'pending' && !terminal && (
-                <ActionButton
-                  title="Complete withdrawal after verification"
-                  disabled={action.busy}
-                  onPress={() => void action.run(() => p.completeWithdraw(transaction.txId))}
-                />
-              )}
-            </>
+          <Label>
+            Order {order.id} · {order.state}
+          </Label>
+          {order.legs.map((leg) => (
+            <Label key={leg.index}>
+              {rampLegTitle(leg)}: {rampLegStatus(leg)}
+              {leg.onchainTxHash ? ` · ${leg.onchainTxHash.slice(0, 10)}…` : ''}
+            </Label>
+          ))}
+          {order.failure && <Label>{rampResolutionText(order.failure)}</Label>}
+          {view && !settled && <Label>{view.title}</Label>}
+          {view?.scannable?.payload && !settled && (
+            <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+              <QRCode value={view.scannable.payload} size={180} />
+            </View>
           )}
-          {terminal && <ActionButton title="New ramp transaction" onPress={() => setTransaction(undefined)} />}
+          {view?.scannable?.payload && !settled && (
+            <ActionButton
+              title="Copy payment code"
+              onPress={() =>
+                void action.run(async () => {
+                  await p.copyText(view.scannable!.payload!);
+                  return 'Copied';
+                })
+              }
+            />
+          )}
+          {view && !settled && view.details.map((d) => <Label key={d.label}>{`${d.label}: ${d.value}`}</Label>)}
+          {view?.canSign && !settled && order.pendingAction?.kind === 'SIGNATURE' && (
+            <ActionButton
+              title="Authorize"
+              disabled={action.busy}
+              onPress={() =>
+                void action.run(async () => {
+                  const next = await p.signRampLeg(order.id, (order.pendingAction as RampSignatureAction).actionId);
+                  setOrder(next);
+                  return next;
+                })
+              }
+            />
+          )}
+          {view?.canApprove && !settled && <ActionButton title="Approve on this device" onPress={p.openCosignModal} />}
+          {view?.link && !settled && (
+            <ActionButton title="Complete verification" onPress={() => void action.run(() => Linking.openURL(view.link!))} />
+          )}
+          <ActionButton
+            title="Refresh order"
+            disabled={action.busy}
+            onPress={() =>
+              void action.run(async () => {
+                const next = await p.getRampOrder(order.id);
+                setOrder(next);
+                return next;
+              })
+            }
+          />
+          <ActionButton title="New ramp order" onPress={() => setOrder(null)} />
         </>
       )}
       <ActionState action={action} />
     </Card>
   );
 }
+
 export function LogoutPanel() {
   const p = usePollar();
   const action = useAction();

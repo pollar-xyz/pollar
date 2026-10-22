@@ -1,5 +1,6 @@
 import { AUTH_ERROR_CODES, type AuthErrorCode } from '../../types';
 import { stringField } from '../../api/error-fields';
+import { APP_UNAVAILABLE_MESSAGE } from '../../lib/tx-error-messages';
 
 /**
  * Maps a backend error `code` (the `ErrorCode` enum returned by sdk-api /
@@ -33,6 +34,14 @@ const CATALOG: Record<string, ResolvedAuthError> = {
   PASSKEY_DEPLOY_FAILED: {
     message: "We couldn't finish creating your wallet. Please try again in a moment.",
     errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED,
+  },
+
+  // -- The app's Pollar credits --------------------------------------------------
+  // The app ran out of credits for what this action costs Pollar (HTTP 402). The
+  // end user can do nothing about it: only the app can top up.
+  SDK_CREDITS_INSUFFICIENT: {
+    message: APP_UNAVAILABLE_MESSAGE,
+    errorCode: AUTH_ERROR_CODES.AUTH_FAILED,
   },
 
   // -- Passkey ceremony --------------------------------------------------------

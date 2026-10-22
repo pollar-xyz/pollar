@@ -1,976 +1,331 @@
 'use client';
 
-import type {
-  RampCountry,
-  RampDepositInstructions,
-  RampDirection,
-  RampQuote,
-  RampQuoteRequirement,
-  RampsOfframpBody,
-  RampsOnrampBody,
-  RampsTransactionResponse,
-  RampsOnrampResponse,
-  RampsOfframpResponse,
-  RampsSignatureResponse,
-  RampsCompleteResponse,
-  RampTxStatus,
-  StellarNetwork,
-} from '@pollar/core';
-import { mergeRampCountries, mergeRampSnapshot, type RampSnapshot, type RampRoute } from '@pollar/core';
-import { RampWorkflow } from './RampWorkflow';
-import { useEffect, useRef, useState } from 'react';
+import type { RampDirection, RampOrder, RampQuote, RampQuoteRejection, RampRoute } from '@pollar/core';
+import { appUnavailableMessage, isPollarApiError, rampCountries, rampQuoteFields } from '@pollar/core';
+import { useEffect, useMemo, useState } from 'react';
 import { usePollar } from '../../context';
-import type { RampFieldSpec, RampStep } from './RampWidgetTemplate';
-import { RampWidgetTemplate } from './RampWidgetTemplate';
+import type { RampStep } from './RampWidgetTemplate';
+import { assetKey, fiatKey, RampWidgetTemplate } from './RampWidgetTemplate';
 import '../shared.css';
 import './RampWidget.css';
 import { modalChrome } from '../modal-theme';
-import { KycModal } from '../kyc-modal/KycModal';
-import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
-import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
-import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
-import { pendingFromQuote, requiredRampKyc, type PendingRequirement } from './ramp-kyc';
-import { quoteRampOptions, unavailableRampMessage } from './ramp-quotes';
 
 interface RampWidgetProps {
   onClose: () => void;
 }
 
-const TERMINAL: RampTxStatus[] = ['completed', 'failed'];
-
-/** Fields the quote declares the client must collect (empty for SEP-24). */
-type RampBankType = NonNullable<RampsOfframpBody['bankDetails']>['type'];
-const BANK_TYPES: readonly RampBankType[] = ['CLABE', 'PIX', 'PSE', 'ACH', 'BREB'];
-
-/** A field's `bankType` the offramp body accepts. */
-function isBankType(value: string): value is RampBankType {
-  return BANK_TYPES.some((type) => type === value);
-}
-
-function requiredFieldsOf(quote: RampQuote): RampFieldSpec[] {
-  return 'requiredFields' in quote ? quote.requiredFields : [];
-}
-
-/**
- * The steps a run actually goes through. Not fixed: 'Details' only exists when
- * the chosen route asks for fields (Bridge wants a name and email; SEP-24
- * anchors collect everything on their own hosted page), so a progress bar that
- * always said "of 4" would lie to half the providers.
- *
- * Before a route is picked the total is a forecast: if any offered route would
- * ask for details, the step is shown, and choosing one settles it.
- */
-function flowStepsOf(quotes: RampQuote[], selected: RampQuote | null): string[] {
-  const needsDetails =
-    selected != null ? requiredFieldsOf(selected).length > 0 : quotes.some((q) => requiredFieldsOf(q).length > 0);
-  return needsDetails ? ['Amount', 'Provider', 'Details', 'Complete'] : ['Amount', 'Provider', 'Complete'];
-}
-
-/** Which of those steps the current widget step sits on. `error` belongs to no
- *  step - the flow stopped rather than advanced - so the bar hides there. */
-const STEP_LABEL: Partial<Record<RampStep, string>> = {
-  input: 'Amount',
-  loading_quote: 'Amount',
-  select_route: 'Provider',
-  contact: 'Details',
-  status: 'Complete',
-};
-
-/** A bound the amount broke, or null when it fits. Providers declare their
- *  limits on the quote (`minAmount` / `maxAmount`); the ones that don't simply
- *  never trip this, and the backend stays the last word either way. */
-function brokenLimitOf(amount: number, quote: RampQuote): { limit: 'min' | 'max'; value: number } | null {
-  const minAmount = 'minAmount' in quote ? quote.minAmount : undefined;
-  const maxAmount = 'maxAmount' in quote ? quote.maxAmount : undefined;
-  if (!Number.isFinite(amount)) return null;
-  if (minAmount != null && amount < minAmount) return { limit: 'min', value: minAmount };
-  if (maxAmount != null && amount > maxAmount) return { limit: 'max', value: maxAmount };
-  return null;
-}
-
-/** "The minimum amount is 11 ARS" - one phrasing, used both when we catch the
- *  limit before submitting and when the backend is the one to report it. */
-function limitMessage(limit: 'min' | 'max', value: number, currency: string): string {
-  return `The ${limit === 'min' ? 'minimum' : 'maximum'} amount for this route is ${value} ${currency}.`;
-}
-
-/** Ramp failures a user can act on. Anything unlisted keeps the raw code, which
- *  is still the most useful thing to show for a cause we can't phrase. */
+/** Ramp failures a user can act on, by API code. */
 const RAMP_ERROR_MESSAGES: Record<string, string> = {
-  SDK_RAMPS_QUOTE_EXPIRED: 'This quote expired. Request a new one and try again.',
-  SDK_RAMPS_ASSET_NOT_ENABLED: 'This currency is not available for that route right now.',
-  SDK_RAMPS_KYC_REQUIRED: 'The provider needs to verify your identity before continuing.',
-  SDK_RAMPS_WALLET_UNSUPPORTED: 'This wallet type cannot be used for this ramp.',
-  SDK_RAMPS_PROVIDER_NOT_CONFIGURED: 'This ramp provider is not configured for this app yet.',
-  SDK_RAMPS_ANCHOR_ERROR: 'The provider rejected the request. Please try again in a moment.',
-  SDK_RAMPS_BRIDGE_ERROR: 'The provider rejected the request. Please try again in a moment.',
-  SDK_RAMPS_ETHERFUSE_ERROR: 'The provider rejected the request. Please try again in a moment.',
-  SDK_RAMPS_INSUFFICIENT_BALANCE: 'This wallet does not hold enough to cover that amount. Try a smaller one.',
-  // Nothing moved on-chain, so the balance is untouched. Almost always no XLM
-  // for the network fee on a wallet the app does not sponsor.
-  SDK_RAMPS_ONCHAIN_SUBMIT_FAILED:
-    'The network rejected the transaction, so nothing was sent. The wallet may need XLM for the fee.',
+  SDK_RAMPS_QUOTE_EXPIRED: 'This quote expired. Find a route again.',
+  SDK_RAMPS_QUOTE_NOT_FOUND: 'This quote is no longer available. Find a route again.',
+  SDK_RAMPS_ACTION_STALE: 'This step changed. It was refreshed; try again.',
+  SDK_RAMPS_TX_NOT_FOUND: 'This operation was not found.',
 };
 
-/**
- * Turn a thrown ramp error into something worth reading. An out-of-range amount
- * arrives with the bound as fields (`limit` / `limitAmount` / `limitCurrency`),
- * so the exact figure gets stated rather than the bare code the modal used to
- * show. Every provider that reports the range gets this for free.
- */
-function rampErrorMessage(e: unknown, fallback: string): string {
-  const code = typeof e === 'object' && e !== null && 'code' in e ? e.code : undefined;
-  if (typeof code !== 'string') return e instanceof Error ? e.message : fallback;
-
-  const raw = typeof e === 'object' && e !== null && 'body' in e ? e.body : undefined;
-  const body = typeof raw === 'object' && raw !== null ? raw : {};
-  const limit = 'limit' in body ? body.limit : undefined;
-  const value = 'limitAmount' in body ? body.limitAmount : undefined;
-  const currency = 'limitCurrency' in body ? body.limitCurrency : undefined;
-  if ((limit === 'min' || limit === 'max') && typeof value === 'number' && typeof currency === 'string') {
-    return limitMessage(limit, value, currency);
+/** The text for a failed ramp call: an app that cannot serve it, a known code, the server's reason, or the fallback. */
+function rampErrorMessage(error: unknown, fallback: string): string {
+  const unavailable = appUnavailableMessage(error);
+  if (unavailable) return unavailable;
+  if (isPollarApiError(error)) {
+    const known = RAMP_ERROR_MESSAGES[error.code];
+    if (known) return known;
+    const message = error.body.message;
+    if (typeof message === 'string' && message && !/^[A-Z0-9_]+$/.test(message)) return message;
   }
-  return RAMP_ERROR_MESSAGES[code] ?? (e instanceof Error ? e.message : fallback);
+  return fallback;
 }
 
-/** Every answer that leaves the widget on a ramp transaction: start, signature and completion. */
-type RampResult = RampsOnrampResponse | RampsOfframpResponse | RampsSignatureResponse | RampsCompleteResponse;
-
-/** The signature a ramp transaction waits on, as the server asks for it. */
-type PendingRampSignature = NonNullable<RampsOnrampResponse['pendingSignature']>;
-
-function readRampStorage(key: string): string | null {
-  try {
-    return typeof window === 'undefined' ? null : window.sessionStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-function writeRampStorage(key: string, value: string | null) {
-  try {
-    if (typeof window === 'undefined') return;
-    if (value === null) window.sessionStorage.removeItem(key);
-    else window.sessionStorage.setItem(key, value);
-  } catch {
-    /* Storage is optional; the API remains the source of truth. */
-  }
-}
-
-type SavedRamp = { txId: string; provider: string };
-function savedRampsOf(key: string): SavedRamp[] {
-  try {
-    const value: unknown = JSON.parse(readRampStorage(`${key}:saved`) ?? '[]');
-    return Array.isArray(value)
-      ? value.filter((item): item is SavedRamp => typeof item?.txId === 'string' && typeof item?.provider === 'string')
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function hiddenRampsOf(key: string): string[] {
-  try {
-    const value: unknown = JSON.parse(readRampStorage(`${key}:hidden`) ?? '[]');
-    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
-type RampChain = NonNullable<RampsTransactionResponse['chain']>;
-
-/** The explorer transaction URL of a ramp's settlement, by its chain; testnet is Solana devnet and Polygon Amoy. */
-function explorerTxUrl(chain: RampChain, hash: string | null, network: StellarNetwork): string | null {
-  if (!hash) return null;
-  const testnet = network === 'testnet';
-  if (chain === 'SOLANA') return `https://explorer.solana.com/tx/${hash}${testnet ? '?cluster=devnet' : ''}`;
-  if (chain === 'POLYGON') return `https://${testnet ? 'amoy.' : ''}polygonscan.com/tx/${hash}`;
-  return `https://stellar.expert/explorer/${testnet ? 'testnet' : 'public'}/tx/${hash}`;
-}
+/** An exact decimal, as the API takes amounts: "10", "10.5", never "1e3" or "-2". */
+const DECIMAL = /^\d+(\.\d+)?$/;
 
 export function RampWidget({ onClose }: RampWidgetProps) {
-  const { getClient, wallet, styles, network } = usePollar();
-  const walletAddress = wallet?.address ?? '';
+  const { getClient, styles, network, openCosignModal } = usePollar();
   const client = getClient();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<RampStep>('input');
-  const [direction, setDirection] = useState<RampDirection>('onramp');
-  const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState('');
-  const [country, setCountry] = useState('');
-  // Values for the fields a provider declares via the quote's `requiredFields`
-  // (e.g. Bridge on-ramp: full name + email; off-ramp: + Pix key). Keyed by
-  // field key; only collected when the selected route needs them.
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
-  const setFieldValue = (key: string, value: string) => setFieldValues((v) => ({ ...v, [key]: value }));
-  const [legacyCountries, setCountries] = useState<RampCountry[]>([]);
-  const [countriesLoading, setCountriesLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [quotes, setQuotes] = useState<RampQuote[]>([]);
-  const [requirementsRequired, setRequirementsRequired] = useState<RampQuoteRequirement[]>([]);
-  const [selectedQuote, setSelectedQuote] = useState<RampQuote | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [pendingKyc, setPendingKyc] = useState<PendingRequirement | null>(null);
-  const [noticeMsg, setNoticeMsg] = useState<string | null>(null);
-  const kycAttempt = useRef<typeof pendingKyc>(null);
-  useEffect(
-    () => () => {
-      kycAttempt.current = null;
-    },
-    [],
-  );
-
-  // status step
-  const [txId, setTxId] = useState<string | null>(null);
-  const [provider, setProvider] = useState('');
-  const [kycUrl, setKycUrl] = useState<string | null>(null);
-  const [tosUrl, setTosUrl] = useState<string | null>(null);
-  // Link-less KYC gate (Abroad): `kycPending` is what the provider told us on
-  // start; `kycApproved` is what polling has since learned.
-  const [kycPending, setKycPending] = useState(false);
-  const [kycApproved, setKycApproved] = useState(false);
-  const [onboardingStatus, setOnboardingStatus] = useState<RampResult['onboardingStatus']>(undefined);
-  const [txStatus, setTxStatus] = useState<RampTxStatus | null>(null);
-  const [stellarTxHash, setStellarTxHash] = useState<string | null>(null);
-  // The settlement on any chain; Stellar-only providers still answer `stellarTxHash` alone.
-  const [txHash, setTxHash] = useState<string | null>(null);
-  const [txChain, setTxChain] = useState<RampChain | null>(null);
-  const [fundsInTransit, setFundsInTransit] = useState(false);
-  const [retrying, setRetrying] = useState(false);
-  const [depositInstructions, setDepositInstructions] = useState<RampDepositInstructions | null>(null);
-  const [workflow, setWorkflow] = useState<RampSnapshot | null>(null);
-  const workflowRef = useRef<RampSnapshot | null>(null);
-  const storageKey = `pollar:ramp:${client.apiKey}:${walletAddress}`;
-  const [savedRamps, setSavedRamps] = useState<SavedRamp[]>([]);
-  const [legacySignature, setLegacySignature] = useState<PendingRampSignature | undefined>(undefined);
-  function acceptWorkflow<T extends RampSnapshot>(incoming: T) {
-    if (hiddenRampsOf(storageKey).includes(incoming.txId)) return false;
-    const next = mergeRampSnapshot(workflowRef.current, incoming);
-    workflowRef.current = next;
-    setWorkflow(next);
-    if (next === incoming) {
-      const pending = savedRampsOf(storageKey).filter((item) => item.txId !== incoming.txId);
-      if (!['completed', 'failed', 'refunded'].includes(incoming.lifecycleState ?? incoming.status))
-        pending.push({
-          txId: incoming.txId,
-          provider: 'provider' in incoming && typeof incoming.provider === 'string' ? incoming.provider : provider || 'Ramp',
-        });
-      writeRampStorage(`${storageKey}:saved`, JSON.stringify(pending));
-      writeRampStorage(storageKey, incoming.txId);
-      writeRampStorage(`${storageKey}:selection`, null);
-      setSavedRamps(pending);
-    }
-    return next === incoming;
-  }
+  const [direction, setDirection] = useState<RampDirection>('ONRAMP');
   const [routes, setRoutes] = useState<RampRoute[]>([]);
-  const countries = mergeRampCountries(legacyCountries, routes);
-  useEffect(() => {
-    if (!country && countries[0]) {
-      setCountry(countries[0].code);
-      setCurrency(countries[0].currency ?? '');
-    }
-  }, [countries, country]);
-  useEffect(() => {
-    let active = true;
-    void client
-      .getRampRoutes()
-      .then((result) => {
-        if (active) setRoutes(result.routes);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [client]);
-  const [completing, setCompleting] = useState(false);
-  const completionLocked = useRef(false);
+  const [routesLoading, setRoutesLoading] = useState(true);
+  const [country, setCountry] = useState('');
+  const [fiatChoice, setFiatChoice] = useState('');
+  const [assetChoice, setAssetChoice] = useState('');
+  const [amount, setAmount] = useState('');
+  const [quotes, setQuotes] = useState<RampQuote[]>([]);
+  const [rejected, setRejected] = useState<RampQuoteRejection[]>([]);
+  const [selected, setSelected] = useState<RampQuote | null>(null);
+  const [startingQuoteId, setStartingQuoteId] = useState<string | null>(null);
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [order, setOrder] = useState<RampOrder | null>(null);
+  const [pendingOrders, setPendingOrders] = useState<RampOrder[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [signing, setSigning] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Restore references only; the API enforces ownership and no action is dispatched.
-  useEffect(() => {
-    if (typeof window === 'undefined' || !walletAddress) return;
-    setSavedRamps(savedRampsOf(storageKey));
-    if (readRampStorage(`${storageKey}:selection`) === '1') return;
-    const hidden = hiddenRampsOf(storageKey);
-    const savedId = [new URLSearchParams(window.location.search).get('rampTxId'), readRampStorage(storageKey)].find(
-      (id) => id && !hidden.includes(id),
-    );
-    if (!savedId) return;
-    let active = true;
-    void client
-      .getRampTransaction(savedId)
-      .then(async (result) => {
-        if (!active || result.transactionVersion === undefined) return;
-        setDirection(result.direction);
-        await applyResult(result);
-      })
-      .catch(() => {
-        if (active)
-          setErrorMsg('Could not restore the saved ramp. Retry opening the modal; do not create a replacement order.');
-      });
-    return () => {
-      active = false;
-    };
-  }, [client, storageKey, walletAddress]);
+  const countries = useMemo(() => rampCountries(routes), [routes]);
+  const fiats = countries.find((c) => c.country === country)?.fiats ?? [];
+  const fiat = fiats.find((f) => fiatKey(f) === fiatChoice) ?? fiats[0] ?? null;
+  const assets = useMemo(() => {
+    const seen = new Map<string, RampRoute['asset']>();
+    for (const route of routes)
+      if (fiat && route.fiat.country === country && fiatKey(route.fiat) === fiatKey(fiat))
+        seen.set(assetKey(route.asset), route.asset);
+    return [...seen.values()];
+  }, [routes, country, fiat]);
+  const asset = assets.find((a) => assetKey(a) === assetChoice) ?? assets[0] ?? null;
+  const fields = selected ? rampQuoteFields(selected) : [];
 
-  async function resumeSavedRamp(id: string) {
-    if (completionLocked.current) return;
+  async function loadRoutes(next: RampDirection) {
+    setRoutesLoading(true);
+    try {
+      const { routes: found } = await client.getRampRoutes(next);
+      setRoutes(found);
+      const first = rampCountries(found)[0]?.country ?? '';
+      setCountry((current) => (found.some((r) => r.fiat.country === current) ? current : first));
+    } catch (error) {
+      setRoutes([]);
+      setErrorMsg(rampErrorMessage(error, 'Could not load the ramp routes.'));
+    } finally {
+      setRoutesLoading(false);
+    }
+  }
+
+  async function loadPendingOrders() {
+    try {
+      const page = await client.listRampOrders({ pending: 'true', limit: 5 });
+      setPendingOrders(page.orders);
+    } catch {
+      setPendingOrders([]);
+    }
+  }
+
+  useEffect(() => {
+    void loadRoutes(direction);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, direction]);
+
+  useEffect(() => {
+    void loadPendingOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client]);
+
+  // Follow the order at the pace the server suggests until it settles. Reading never signs or approves.
+  const orderId = order?.id ?? null;
+  useEffect(() => {
+    if (step !== 'status' || !orderId) return;
+    const controller = new AbortController();
+    client.pollRampOrder(orderId, { signal: controller.signal, onUpdate: setOrder }).catch(() => {});
+    return () => controller.abort();
+  }, [client, step, orderId]);
+
+  function handleDirectionChange(next: RampDirection) {
+    setDirection(next);
+    setErrorMsg(null);
+  }
+
+  async function handleFindRoute() {
+    if (!fiat || !asset) return;
+    if (!DECIMAL.test(amount.trim()) || Number(amount) <= 0) {
+      setErrorMsg('Enter an amount greater than zero.');
+      return;
+    }
+    setStep('loading_quote');
+    setErrorMsg(null);
+    setSelected(null);
+    try {
+      const result = await client.quoteRamp({
+        direction,
+        fiat: { currency: fiat.currency, rail: fiat.rail, country: fiat.country },
+        asset: { code: asset.code, identifier: asset.identifier, chain: asset.chain },
+        amount: { value: amount.trim(), denomination: 'in' },
+      });
+      setQuotes(result.quotes);
+      setRejected(result.rejected);
+      setStep('select_route');
+    } catch (error) {
+      if (isPollarApiError(error) && error.code === 'SDK_RAMPS_NO_ROUTE') {
+        setQuotes([]);
+        setRejected(Array.isArray(error.body.rejected) ? (error.body.rejected as RampQuoteRejection[]) : []);
+        setStep('select_route');
+        return;
+      }
+      setErrorMsg(rampErrorMessage(error, 'Could not find a route. Please try again.'));
+      setStep('error');
+    }
+  }
+
+  function handleSelectQuote(quote: RampQuote) {
+    setSelected(quote);
+    setErrorMsg(null);
+    const missing = rampQuoteFields(quote).some((f) => !f.optional && !(fieldValues[f.key] ?? '').trim());
+    if (missing) setStep('contact');
+    else void startOrder(quote);
+  }
+
+  async function startOrder(quote: RampQuote) {
+    setIsLoading(true);
+    setStartingQuoteId(quote.quoteId);
+    setErrorMsg(null);
+    try {
+      const payee = Object.fromEntries(
+        rampQuoteFields(quote)
+          .map((f) => [f.key, (fieldValues[f.key] ?? '').trim()])
+          .filter(([, value]) => value),
+      );
+      const created = await client.createRampOrder({
+        quoteId: quote.quoteId,
+        ...(Object.keys(payee).length ? { payee } : {}),
+      });
+      setOrder(created);
+      setStep('status');
+    } catch (error) {
+      setErrorMsg(rampErrorMessage(error, 'Could not start the operation. Please try again.'));
+      // A refused detail is fixed on the form; an expired quote needs a new one.
+      if (isPollarApiError(error) && error.code === 'VALIDATION_ERROR' && rampQuoteFields(quote).length) setStep('contact');
+      else setStep('select_route');
+    } finally {
+      setIsLoading(false);
+      setStartingQuoteId(null);
+    }
+  }
+
+  async function handleSign() {
+    const action = order?.pendingAction;
+    if (!order || action?.kind !== 'SIGNATURE' || signing) return;
+    setSigning(true);
+    setErrorMsg(null);
+    try {
+      setOrder(await client.signRampLeg(order.id, action.actionId));
+    } catch (error) {
+      setErrorMsg(rampErrorMessage(error, error instanceof Error && error.message ? error.message : 'Signing was cancelled.'));
+      setOrder(await client.getRampOrder(order.id).catch(() => order));
+    } finally {
+      setSigning(false);
+    }
+  }
+
+  async function handleResumeOrder(id: string) {
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      const result = await client.getRampTransaction(id);
-      if (result.transactionVersion === undefined) throw new Error('This saved ramp cannot be restored.');
-      setDirection(result.direction);
-      await applyResult(result);
+      const found = await client.getRampOrder(id);
+      setDirection(found.direction);
+      setOrder(found);
+      setStep('status');
     } catch (error) {
-      setErrorMsg(rampErrorMessage(error, 'Could not resume the saved ramp.'));
+      setErrorMsg(rampErrorMessage(error, 'Could not resume the operation.'));
     } finally {
       setIsLoading(false);
     }
   }
 
-  const directionRef = useRef(direction);
-  directionRef.current = direction;
-
-  function applySettlement(tx: RampsTransactionResponse) {
-    if (tx.stellarTxHash) setStellarTxHash(tx.stellarTxHash);
-    if (tx.txHash) setTxHash(tx.txHash);
-    if (tx.chain) setTxChain(tx.chain);
-    setFundsInTransit(tx.fundsInTransit === true);
-  }
-
-  async function handleRetryTransit() {
-    if (!txId || retrying) return;
-    setRetrying(true);
+  function handleNewOrder() {
+    setOrder(null);
+    setSelected(null);
+    setQuotes([]);
+    setRejected([]);
     setErrorMsg(null);
-    try {
-      const tx = await client.retryRampTransaction(txId);
-      setTxStatus(tx.status);
-      applySettlement(tx);
-    } catch (e) {
-      setErrorMsg(e instanceof Error && e.message ? e.message : 'Could not retry the transfer. Try again in a moment.');
-    } finally {
-      setRetrying(false);
-    }
+    setStep('input');
+    void loadPendingOrders();
   }
 
-  const workflowTerminal =
-    !!workflow && ['completed', 'failed', 'refunded'].includes(workflow.lifecycleState ?? workflow.status);
-
-  // Poll the anchor transaction status while on the status step until terminal.
-  useEffect(() => {
-    if (step !== 'status' || !txId) return;
-    if (workflowTerminal || (txStatus && TERMINAL.includes(txStatus))) return;
-    let active = true;
-    const id = setInterval(async () => {
-      try {
-        const tx = await client.getRampTransaction(txId);
-        if (!active) return;
-        if (tx.transactionVersion !== undefined && !acceptWorkflow(tx)) return;
-        setTxStatus(tx.status);
-        applySettlement(tx);
-        // The order waits on the user's own wallet (a reload, or the burn the
-        // server asks for once the approve landed). Polling never signs: the
-        // signature waits for the user's explicit Authorize.
-        const pending = 'pendingSignature' in tx ? tx.pendingSignature : undefined;
-        if (pending) setLegacySignature(pending);
-        if (tx.kycUrl) setKycUrl(tx.kycUrl);
-        // depositInstructions is returned by REST providers (Bridge) - e.g. a Pix
-        // `br_code` / bank details for on-ramp.
-        if (tx.depositInstructions) setDepositInstructions(tx.depositInstructions);
-        if (TERMINAL.includes(tx.status)) clearInterval(id);
-      } catch {
-        /* transient - keep polling */
-      }
-    }, 5000);
-    return () => {
-      active = false;
-      clearInterval(id);
-    };
-  }, [step, txId, txStatus, workflowTerminal, client]);
-
-  // A link-less KYC gate has nothing to open, so poll the provider until the user
-  // clears it elsewhere. Stops as soon as it's approved.
-  //
-  // Not for `awaiting_provider`: that gate is not the user's verification and
-  // `getRampKycStatus` answers for a different provider entirely, so polling it
-  // would ask the wrong question every ten seconds and never get an answer. The
-  // transaction poll above is what surfaces movement there.
-  useEffect(() => {
-    if (workflow || step !== 'status' || !kycPending || kycApproved || provider.toLowerCase() !== 'abroad') return;
-    if (onboardingStatus === 'awaiting_provider') return;
-    let active = true;
-    const check = async () => {
-      try {
-        const { hasApproved } = await client.getRampKycStatus();
-        if (active && hasApproved) setKycApproved(true);
-      } catch {
-        /* transient - keep polling */
-      }
-    };
-    void check();
-    const id = setInterval(check, 10000);
-    return () => {
-      active = false;
-      clearInterval(id);
-    };
-  }, [step, kycPending, kycApproved, onboardingStatus, workflow, client, provider]);
-
-  /**
-   * Fetch the ramp countries supported on the app's network. When `resetSelection`
-   * is set (initial load) - or the current selection is no longer offered - pick
-   * the first country and adopt its primary currency.
-   */
-  async function loadCountries(resetSelection: boolean) {
-    setCountriesLoading(true);
-    try {
-      const { countries: list } = await client.getRampCountries();
-      setCountries(list);
-      const available = mergeRampCountries(list, routes);
-      const first = available[0];
-      const stillValid = available.some((c) => c.code === country);
-      if (first && (resetSelection || !stillValid)) {
-        setCountry(first.code);
-        if (first.currency) setCurrency(first.currency);
-      }
-    } catch {
-      setCountries([]);
-    } finally {
-      setCountriesLoading(false);
-    }
+  function handleBack() {
+    setErrorMsg(null);
+    setStep(step === 'contact' ? 'select_route' : 'input');
   }
 
-  // Load the supported countries when the widget opens.
-  useEffect(() => {
-    loadCountries(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function handleCountryChange(code: string) {
-    setCountry(code);
-    const match = countries.find((c) => c.code === code);
-    if (match?.currency) setCurrency(match.currency);
-  }
-
-  // Refresh the data backing the current step: always the country list, plus the
-  // quotes (select_route) or the anchor transaction (status).
   async function handleRefresh() {
     if (refreshing) return;
     setRefreshing(true);
     try {
-      await loadCountries(false);
-      if (step === 'select_route') {
-        const result = await quoteRampOptions(
-          client,
-          {
-            country,
-            amount: Number(amount),
-            amountExact: amount,
-            currency,
-            direction,
-          },
-          routes,
-        );
-        setQuotes(result.quotes ?? []);
-        setRequirementsRequired(result.requirementsRequired ?? []);
-      } else if (step === 'status' && txId) {
-        const tx = await client.getRampTransaction(txId);
-        if (tx.transactionVersion !== undefined && !acceptWorkflow(tx)) return;
-        setTxStatus(tx.status);
-        applySettlement(tx);
-        if (tx.kycUrl) setKycUrl(tx.kycUrl);
-        if (tx.depositInstructions) setDepositInstructions(tx.depositInstructions);
+      if (step === 'status' && order) setOrder(await client.getRampOrder(order.id));
+      else if (step === 'select_route') await handleFindRoute();
+      else {
+        await loadRoutes(direction);
+        await loadPendingOrders();
       }
-    } catch {
-      /* transient - leave the current data in place */
+    } catch (error) {
+      setErrorMsg(rampErrorMessage(error, 'Could not refresh.'));
     } finally {
       setRefreshing(false);
     }
   }
 
-  /** Back to the amount step. `keepMessage` carries the reason forward: when the
-   *  user steps back because the amount missed a route's minimum, dropping the
-   *  figure would leave them correcting it blind. A plain retry clears it. */
-  function resetToInput({ keepMessage = false }: { keepMessage?: boolean } = {}) {
-    writeRampStorage(storageKey, null);
-    writeRampStorage(`${storageKey}:selection`, '1');
-    setStep('input');
-    setQuotes([]);
-    setRequirementsRequired([]);
-    setSelectedQuote(null);
-    // Clear the collected provider fields (name/email/etc.) so a retry re-shows
-    // the 'contact' step. Otherwise a stale (possibly invalid) value keeps the
-    // field non-empty, `handleSelectQuote` treats it as complete, skips the step
-    // and replays the same failing request.
-    setFieldValues({});
-    setWorkflow(null);
-    workflowRef.current = null;
-    setLegacySignature(undefined);
-    setTxId(null);
-    setProvider('');
-    setKycUrl(null);
-    setTosUrl(null);
-    setTxStatus(null);
-    setStellarTxHash(null);
-    setTxHash(null);
-    setTxChain(null);
-    setFundsInTransit(false);
-    setDepositInstructions(null);
-    setKycPending(false);
-    setKycApproved(false);
-    setNoticeMsg(null);
-    if (!keepMessage) setErrorMsg(null);
-  }
-
-  function dismissSavedRamp(id: string) {
-    if (completionLocked.current) return;
-    const pending = savedRampsOf(storageKey).filter((ramp) => ramp.txId !== id);
-    writeRampStorage(`${storageKey}:saved`, JSON.stringify(pending));
-    writeRampStorage(`${storageKey}:hidden`, JSON.stringify([...new Set([...hiddenRampsOf(storageKey), id])]));
-    if (readRampStorage(storageKey) === id) writeRampStorage(storageKey, null);
-    setSavedRamps(pending);
-    if (txId === id) resetToInput();
-    setNoticeMsg(
-      'Removed from this tab’s pending list. The operation may still be active at the provider; no payment was cancelled or refunded.',
-    );
-  }
-
-  /**
-   * EXTERNAL wallets (Freighter/Albedo): the backend returns an unsigned XDR the
-   * user must sign locally, then we resume the flow. `sep10` yields the anchor
-   * session (kycUrl); `withdraw_payment` broadcasts the on-chain withdrawal.
-   */
-  async function resumeWithSignature(id: string, ps: PendingRampSignature) {
-    const outcome = await client.signTx(ps.unsignedXdr, { skipSponsorship: ps.action === 'sep10' });
-    if (outcome.status === 'cosign_pending') {
-      // A co-signed wallet answers with the request the user's device must
-      // approve; the ramp resumes once the signed XDR comes back through it.
-      setErrorMsg('Approve the signature on your device, then resume.');
-      setStep('error');
-      return;
-    }
-    if (outcome.status !== 'signed') {
-      setErrorMsg(outcome.message ?? outcome.details ?? 'Signing was cancelled.');
-      setStep('error');
-      return;
-    }
-    const result = await client.submitRampSignature(id, {
-      signedXdr: outcome.signedXdr,
-      action: ps.action,
-    });
-    await applyResult(result);
-  }
-
-  async function applyResult(result: RampResult) {
-    if ('transactionVersion' in result && result.transactionVersion !== undefined && !acceptWorkflow(result)) return;
-    setTxId(result.txId);
-    setProvider(result.provider);
-    setLegacySignature(result.pendingSignature);
-    setKycUrl(result.kycUrl ?? null);
-    setTosUrl(result.tosUrl ?? null);
-    setOnboardingStatus(result.onboardingStatus);
-    setKycPending(result.kycRequired === true);
-    if (result.kycRequired) setKycApproved(false);
-    setTxStatus(result.status);
-    setStellarTxHash(result.stellarTxHash ?? null);
-    setDepositInstructions(result.depositInstructions ?? null);
-    setStep('status');
-  }
-
-  /**
-   * Quote the current input. A route held back by a requirement step still counts as an answer:
-   * it is shown locked, so "no providers" only means nothing came back at all.
-   */
-  async function loadQuotes(): Promise<boolean> {
-    const result = await quoteRampOptions(
-      client,
-      {
-        country,
-        amount: Number(amount),
-        amountExact: amount,
-        currency,
-        direction,
-      },
-      routes,
-    );
-    const list = result.quotes ?? [];
-    const locked = result.requirementsRequired ?? [];
-    if (list.length === 0 && locked.length === 0) {
-      setErrorMsg(unavailableRampMessage(country, result.unavailable ?? []));
-      setStep('error');
-      return false;
-    }
-    setQuotes(list);
-    setRequirementsRequired(locked);
-    return true;
-  }
-
-  async function handleFindRoute() {
-    setStep('loading_quote');
-    setIsLoading(true);
-    setErrorMsg(null);
-    try {
-      if (!(await loadQuotes())) return;
-      setStep('select_route');
-    } catch (e) {
-      setErrorMsg(rampErrorMessage(e, 'Failed to fetch quotes.'));
-      setStep('error');
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  // Each quote declares the fields it needs (`requiredFields`). If any are unset,
-  // collect them in the 'contact' step first; otherwise start immediately.
-  function handleSelectQuote(quote: RampQuote) {
-    setSelectedQuote(quote);
-    setErrorMsg(null);
-    setNoticeMsg(null);
-    // The limits are per route, and the amount was typed before the routes were
-    // known - so this is the first moment we can check it. Catching it here
-    // states the figure without spending a round trip on a certain rejection.
-    const broken = brokenLimitOf(Number(amount), quote);
-    if (broken) {
-      setErrorMsg(limitMessage(broken.limit, broken.value, currency));
-      return;
-    }
-    const fields = requiredFieldsOf(quote);
-    // An `optional` field left blank is not missing (Abroad's tax id) - it must
-    // not drag the user into the details step on its own.
-    const missing = fields.some((f) => !f.optional && !(fieldValues[f.key] ?? '').trim());
-    if (fields.length > 0 && missing) {
-      setStep('contact');
-      return;
-    }
-    void startRamp(quote);
-  }
-
-  function handleContactContinue() {
-    if (selectedQuote) void startRamp(selectedQuote);
-  }
-
-  async function startRamp(quote: RampQuote) {
-    setIsLoading(true);
-    setErrorMsg(null);
-    try {
-      // The offramp body is the superset; an onramp sends the fields it takes.
-      const body: RampsOfframpBody = {
-        quoteId: quote.quoteId,
-        amount: quote.fiatAmount ?? Number(amount),
-        ...(quote.terms ? { amountExact: quote.terms.fiatAmount } : {}),
-        currency,
-        country,
-        ...(walletAddress ? { walletAddress } : {}),
-      };
-      // Map each declared field to the request body: a field with `bankType`
-      // becomes `bankDetails`; the standard body fields map by name; any other
-      // provider-specific field (e.g. Stereum's bankCode / account holder) goes
-      // into `fields`, which the backend reads per provider.
-      const extraFields: Record<string, string> = {};
-      for (const f of requiredFieldsOf(quote)) {
-        const val = (fieldValues[f.key] ?? '').trim();
-        if (!val) continue;
-        if (f.bankType) {
-          if (isBankType(f.bankType)) body.bankDetails = { type: f.bankType, value: val };
-        } else if (f.key === 'email' || f.key === 'fullName' || f.key === 'taxId' || f.key === 'qrCode') body[f.key] = val;
-        else extraFields[f.key] = val;
-      }
-      if (quote.route)
-        body.fields = Object.fromEntries(
-          requiredFieldsOf(quote)
-            .map((field) => [field.key, (fieldValues[field.key] ?? '').trim()])
-            .filter(([, value]) => value),
-        );
-      else if (Object.keys(extraFields).length > 0) body.fields = extraFields;
-      const onrampBody: RampsOnrampBody = {
-        quoteId: body.quoteId,
-        amount: body.amount,
-        currency: body.currency,
-        country: body.country,
-        ...(body.amountExact !== undefined ? { amountExact: body.amountExact } : {}),
-        ...(body.walletAddress !== undefined ? { walletAddress: body.walletAddress } : {}),
-        ...(body.email !== undefined ? { email: body.email } : {}),
-        ...(body.fullName !== undefined ? { fullName: body.fullName } : {}),
-        ...(body.fields !== undefined ? { fields: body.fields } : {}),
-      };
-      const result = direction === 'onramp' ? await client.createOnRamp(onrampBody) : await client.createOffRamp(body);
-      await applyResult(result);
-    } catch (e) {
-      const requirement = requiredRampKyc(e);
-      if (requirement) {
-        setStep(requiredFieldsOf(quote).length ? 'contact' : 'select_route');
-        setErrorMsg(
-          requirement.type === 'KYC'
-            ? 'Identity verification is required before continuing.'
-            : 'A few more details are required before continuing.',
-        );
-        kycAttempt.current = requirement;
-        setPendingKyc(requirement);
-        return;
-      }
-      setErrorMsg(rampErrorMessage(e, 'Failed to start the ramp.'));
-      setStep('error');
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  /**
-   * Back to the route list with fresh prices for the same input. A verification
-   * takes minutes and quotes live about as long, so the one that hit the gate is
-   * usually expired by now; the user picks again rather than an order starting on
-   * a price they did not see.
-   */
-  async function requoteAfterKyc(completed: PendingRequirement['type'] = 'KYC') {
-    setStep('loading_quote');
-    setIsLoading(true);
-    setErrorMsg(null);
-    setSelectedQuote(null);
-    try {
-      if (!(await loadQuotes())) return;
-      setNoticeMsg(
-        completed === 'KYC'
-          ? 'Your identity is verified. Prices may have changed, so choose a route to continue.'
-          : 'Thanks, your details are saved. Prices may have changed, so choose a route to continue.',
-      );
-      setStep('select_route');
-    } catch (e) {
-      setErrorMsg(rampErrorMessage(e, 'Failed to fetch quotes.'));
-      setStep('error');
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  /** Open the step a locked route names (KYC, form, registry check or registration); completing it re-quotes like the start gate does. */
-  function handleVerifyRoute(requirement: RampQuoteRequirement) {
-    const attempt = pendingFromQuote(requirement);
-    setErrorMsg(null);
-    setNoticeMsg(null);
-    kycAttempt.current = attempt;
-    setPendingKyc(attempt);
-  }
-
-  function handleOpenKyc() {
-    if (kycUrl) window.open(kycUrl, '_blank', 'noopener,noreferrer');
-  }
-
-  function handleOpenTos() {
-    if (tosUrl) window.open(tosUrl, '_blank', 'noopener,noreferrer');
-  }
-
-  async function handleLegacySignature() {
-    if (!txId || !legacySignature || completionLocked.current) return;
-    completionLocked.current = true;
-    setCompleting(true);
-    setErrorMsg(null);
-    try {
-      await resumeWithSignature(txId, legacySignature);
-    } catch (e) {
-      setErrorMsg(rampErrorMessage(e, 'Failed to submit the signature.'));
-      setStep('error');
-    } finally {
-      completionLocked.current = false;
-      setCompleting(false);
-    }
-  }
-
-  async function handleCompleteWithdraw() {
-    if (!txId || completionLocked.current) return;
-    completionLocked.current = true;
-    setCompleting(true);
-    setErrorMsg(null);
-    try {
-      const result = await client.completeWithdraw(txId);
-      if (result.pendingSignature) {
-        await resumeWithSignature(txId, result.pendingSignature);
-        return;
-      }
-      setTxStatus(result.status);
-      setStellarTxHash(result.stellarTxHash ?? null);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '';
-      setErrorMsg(
-        msg.includes('KYC') ? 'Finish KYC at the provider first, then try again.' : msg || 'Failed to complete the withdrawal.',
-      );
-    } finally {
-      completionLocked.current = false;
-      setCompleting(false);
-    }
-  }
-
-  // A link-less KYC gate blocks the withdraw for good: the provider consumed the
-  // quote when it answered `kycRequired`, so completing would either fail or -
-  // worse - move real funds into a deposit it cannot pay out. Approval clears the
-  // gate for the NEXT quote, not for this transaction, so `kycPending` (not
-  // `kycBlocking`) is what keeps the button away.
-  const kycBlocking = kycPending && !kycApproved;
-  const canComplete =
-    !workflow &&
-    !legacySignature &&
-    direction === 'offramp' &&
-    step === 'status' &&
-    txStatus !== 'completed' &&
-    txStatus !== 'failed' &&
-    !stellarTxHash &&
-    !txHash &&
-    !kycPending;
-
-  const flowSteps = flowStepsOf(quotes, selectedQuote);
-  const flowStepIndex = flowSteps.indexOf(STEP_LABEL[step] ?? '');
-
-  // Keep this widget's state while a step is open so cancelling preserves the form.
-  if (pendingKyc?.type === 'FORM') {
-    return (
-      <RequirementFormModal
-        formId={pendingKyc.optionId}
-        {...(pendingKyc.progress ? { progress: pendingKyc.progress } : {})}
-        onClose={() => {
-          kycAttempt.current = null;
-          setPendingKyc(null);
-        }}
-        onSubmitted={() => {
-          if (kycAttempt.current !== pendingKyc) return;
-          kycAttempt.current = null;
-          setPendingKyc(null);
-          void requoteAfterKyc('FORM');
-        }}
-      />
-    );
-  }
-
-  if (pendingKyc?.type === 'REGISTRY_CHECK' || pendingKyc?.type === 'PROVIDER_REGISTRATION') {
-    const close = () => {
-      kycAttempt.current = null;
-      setPendingKyc(null);
-    };
-    const done = () => {
-      if (kycAttempt.current !== pendingKyc) return;
-      close();
-      void requoteAfterKyc(pendingKyc.type);
-    };
-    const progress = pendingKyc.progress ? { progress: pendingKyc.progress } : {};
-    return pendingKyc.type === 'REGISTRY_CHECK' ? (
-      <RegistryCheckModal optionId={pendingKyc.optionId} {...progress} onClose={close} onApproved={done} />
-    ) : (
-      <ProviderRegistrationModal corridorId={pendingKyc.corridorId} {...progress} onClose={close} onRegistered={done} />
-    );
-  }
-
-  if (pendingKyc) {
-    return (
-      <KycModal
-        country={country}
-        corridorId={pendingKyc.corridorId}
-        providerId={pendingKyc.optionId}
-        onClose={() => {
-          kycAttempt.current = null;
-          setPendingKyc(null);
-        }}
-        onApproved={() => {
-          // Ignore duplicate approvals or polling that finishes after cancellation.
-          if (kycAttempt.current !== pendingKyc) return;
-          kycAttempt.current = null;
-          setPendingKyc(null);
-          void requoteAfterKyc();
-        }}
-      />
-    );
-  }
+  const flowSteps =
+    fields.length || quotes.some((q) => rampQuoteFields(q).length)
+      ? ['Amount', 'Route', 'Details', 'Complete']
+      : ['Amount', 'Route', 'Complete'];
+  const stepLabel: Partial<Record<RampStep, string>> = {
+    input: 'Amount',
+    loading_quote: 'Amount',
+    select_route: 'Route',
+    contact: 'Details',
+    status: 'Complete',
+  };
+  const label = stepLabel[step];
 
   return (
     <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
       <RampWidgetTemplate
-        workflowContent={
-          workflow ? (
-            <RampWorkflow
-              client={client}
-              snapshot={workflow}
-              onBusyChange={(busy) => {
-                completionLocked.current = busy;
-                setCompleting(busy);
-              }}
-              onChange={(next) => {
-                if (acceptWorkflow(next)) setTxStatus(next.status);
-              }}
-            />
-          ) : legacySignature && step === 'status' && txStatus !== 'completed' && txStatus !== 'failed' ? (
-            <button type="button" disabled={completing} onClick={() => void handleLegacySignature()}>
-              Authorize wallet request
-            </button>
-          ) : undefined
-        }
         theme={theme}
         accentColor={accentColor}
-        styleOverrides={styleOverrides}
+        {...(styleOverrides ? { styleOverrides } : {})}
+        network={network}
         step={step}
         flowSteps={flowSteps}
-        flowStepIndex={flowStepIndex}
-        startingQuoteId={isLoading && selectedQuote ? selectedQuote.quoteId : null}
+        flowStepIndex={label ? flowSteps.indexOf(label) : -1}
         direction={direction}
-        amount={amount}
-        currency={currency}
-        country={country}
-        requiredFields={selectedQuote ? requiredFieldsOf(selectedQuote) : []}
-        fieldValues={fieldValues}
+        routesLoading={routesLoading}
         countries={countries}
-        countriesLoading={countriesLoading}
-        refreshing={refreshing}
+        country={country}
+        fiats={fiats}
+        fiat={fiat}
+        assets={assets}
+        asset={asset}
+        amount={amount}
         quotes={quotes}
-        kycRequired={requirementsRequired}
+        rejected={rejected}
+        startingQuoteId={startingQuoteId}
+        fields={fields}
+        fieldValues={fieldValues}
+        order={order}
+        pendingOrders={pendingOrders}
         isLoading={isLoading}
-        provider={provider}
-        txStatus={txStatus}
-        kycUrl={kycUrl}
-        tosUrl={tosUrl}
-        kycBlocking={kycBlocking}
-        onboardingStatus={onboardingStatus ?? null}
-        kycJustApproved={kycPending && kycApproved}
-        stellarTxHash={stellarTxHash}
-        txHash={txHash}
-        txChain={txChain}
-        explorerUrl={explorerTxUrl(txChain ?? 'STELLAR', txHash ?? stellarTxHash, network)}
-        fundsInTransit={fundsInTransit}
-        retrying={retrying}
-        onRetryTransit={handleRetryTransit}
-        depositInstructions={depositInstructions}
-        canComplete={canComplete}
-        completing={completing}
-        savedRamps={savedRamps}
-        onResumeRamp={resumeSavedRamp}
-        onDismissRamp={dismissSavedRamp}
-        onDismissCurrentRamp={workflow ? () => dismissSavedRamp(workflow.txId) : undefined}
-        onExploreRoutes={
-          workflow
-            ? () => {
-                if (!completionLocked.current) resetToInput();
-              }
-            : undefined
-        }
+        refreshing={refreshing}
+        signing={signing}
         errorMsg={errorMsg}
-        noticeMsg={noticeMsg}
-        onDirectionChange={(next) => {
-          setDirection(next);
+        onDirectionChange={handleDirectionChange}
+        onCountryChange={(next) => {
+          setCountry(next);
+          setFiatChoice('');
+          setAssetChoice('');
         }}
-        onAmountChange={(next) => {
-          // Editing the amount is the user acting on the limit message, so it
-          // stops applying the moment they type.
-          setAmount(next);
+        onFiatChange={(key) => {
+          setFiatChoice(key);
+          setAssetChoice('');
+        }}
+        onAssetChange={setAssetChoice}
+        onAmountChange={(value) => {
+          setAmount(value);
           setErrorMsg(null);
         }}
-        onFieldChange={setFieldValue}
-        onCountryChange={handleCountryChange}
-        onFindRoute={handleFindRoute}
+        onFindRoute={() => void handleFindRoute()}
         onSelectQuote={handleSelectQuote}
-        onVerifyRoute={handleVerifyRoute}
-        onContactContinue={handleContactContinue}
-        onOpenKyc={handleOpenKyc}
-        onOpenTos={handleOpenTos}
-        onCompleteWithdraw={handleCompleteWithdraw}
-        onBack={() => resetToInput({ keepMessage: true })}
-        onRetry={() => resetToInput()}
-        onRefresh={handleRefresh}
+        onFieldChange={(key, value) => setFieldValues((current) => ({ ...current, [key]: value }))}
+        onContactContinue={() => {
+          if (selected) void startOrder(selected);
+        }}
+        onSign={() => void handleSign()}
+        onApprove={openCosignModal}
+        onResumeOrder={(id) => void handleResumeOrder(id)}
+        onNewOrder={handleNewOrder}
+        onBack={handleBack}
+        onRetry={() => {
+          setErrorMsg(null);
+          setStep('input');
+        }}
+        onRefresh={() => void handleRefresh()}
         onClose={onClose}
       />
     </div>

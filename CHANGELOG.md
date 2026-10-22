@@ -10,14 +10,19 @@
   appends the version; its types are generated from `/openapi.v3.json`
   (`core:update-openapi`). A `Deprecation` header on any answer logs one
   warning with the `Sunset` date. See [UPGRADE.md](./UPGRADE.md#api-v3).
-- Ramps discover registered assets and payment routes within the closed
-  `RampChain` catalog (`STELLAR`, `POLYGON`, `SOLANA`); preserve exact
-  quote amounts; and resume saved, versioned workflows without signing on restore.
-- `getRampRoutes`, `continueRamp`, `registerRampSigningHandler` and
-  `signRampAction` support explicit workflow actions. Every chain/encoding pair
-  requires a registered handler that validates the payload, wallet account and
-  network before signing. Core no longer includes the Stellar XDR parser or a
-  built-in ramp signer; no new network-specific dependency is required.
+- Ramps use the v3 ramps API: routes, quotes leg by leg, orders and a leg's
+  signature (`getRampRoutes(direction)`, `quoteRamp`, `createRampOrder`,
+  `getRampOrder`, `listRampOrders`, `pollRampOrder`, `signRampLeg`). A quote
+  lists the fields it needs (`rampQuoteFields`) and a refused payee answers
+  400 before anything moves. The 0.11.x ramp methods are removed; the widgets
+  are rebuilt on the new calls. See [UPGRADE.md](./UPGRADE.md#ramps-on-api-v3).
+- Ramp chains stay a closed `RampChain` catalog (`STELLAR`, `POLYGON`,
+  `SOLANA`) and amounts stay exact strings.
+- `registerRampSigningHandler` signs a leg for every chain/encoding pair; core
+  has no built-in ramp signer and no Stellar XDR parser.
+- An app out of credits (402 `SDK_CREDITS_INSUFFICIENT`): the user sees a
+  generic text pointing to the app's support (`appUnavailableMessage`), and the
+  developer gets one console warning.
 - Native provider configuration/platform/Privy adapter changes clean up and replace
   the owned client. Login Back and Retry keep their modal open; logout still clears
   saved ramp state. Native route choices follow the theme and show selection.

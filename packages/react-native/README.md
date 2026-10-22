@@ -192,8 +192,8 @@ methods come from the dashboard and can be overridden with the `styles` prop.
 
 ## Requirement step modals
 
-`<RampWidget>` lists a route whose corridor has a pending requirement step as locked and opens that step itself. The
-same modals are exported for apps that build their own route list from the quote's `requirementsRequired`:
+The app's own requirement steps (`client.getAppRequirements()`) open these modals; they are exported for apps that
+drive the steps themselves:
 
 | Component                     | Step                     | Props                                                |
 | ----------------------------- | ------------------------ | ---------------------------------------------------- |
@@ -235,12 +235,11 @@ and native panels for payments, assets, history, sessions, swaps, earn and distr
 accepts optional `appConfig`, `platform` (storage, visibility, auth URL and clipboard adapters), and `privyAdapter`.
 Mount an interactive adapter's native provider above `PollarProvider`.
 
-`RampWidget` and `RampPanel` discover registered routes through `client.getRampRoutes()` and render saved
-exact terms, verification groups, fields, payment instructions, waiting states and verified receipts.
-Signing uses a handler registered for the action's chain and encoding. Financial continuation requires a
-user press; polling and restoring a saved transaction never initiate signing. The backend owns submission.
-Legacy routes retain their KYC, form, registry-check and provider-registration flows.
+`RampWidget` and `RampPanel` run the v3 ramps API: they list the routes (`client.getRampRoutes(direction)`), quote
+them leg by leg, ask for the fields a quote needs, create the order and follow it at the pace the server suggests.
+The order's pending action is shown as it comes: a payment QR or bank details, Authorize for a signature, the
+co-sign approval or a verification link. Signing uses a handler registered for the action's chain and encoding and
+only runs on a user press; polling never signs. The widget keeps the order in `usePollar().ramp` while it is closed.
 
-For an inline saved workflow, use `RampWorkflow` with `client`, `snapshot` and `onChange`.
 Native panels require `react-native-safe-area-context` and `react-native-svg`; QR rendering uses
 `react-native-qrcode-svg`. Run `npm test --workspace=@pollar/react-native` for native behavior tests.

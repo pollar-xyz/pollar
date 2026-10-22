@@ -7,12 +7,9 @@ import type {
   PollarAdapters,
   PollarClientConfig,
   InteractiveAuthAdapter,
+  RampDirection,
+  RampOrder,
   RecoveryState,
-  RampsCompleteResponse,
-  RampsOfframpResponse,
-  RampsOnrampResponse,
-  RampsSignatureResponse,
-  RampsTransactionResponse,
 } from '@pollar/core';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Text } from 'react-native';
@@ -71,15 +68,12 @@ const methods = [
   'getEarnPosition',
   'earnDeposit',
   'earnWithdraw',
-  'getRampsQuote',
-  'getRampCountries',
-  'createOnRamp',
-  'createOffRamp',
-  'getRampTransaction',
-  'getRampKycStatus',
-  'getRampLiquidity',
-  'submitRampSignature',
-  'completeWithdraw',
+  'getRampRoutes',
+  'quoteRamp',
+  'createRampOrder',
+  'getRampOrder',
+  'listRampOrders',
+  'signRampLeg',
   'listDistributionRules',
   'claimDistributionRule',
   'fetchSessions',
@@ -87,15 +81,8 @@ const methods = [
   'fetchTxHistory',
 ] as const;
 type Methods = Pick<PollarClient, (typeof methods)[number]>;
-export type NativeRampState = {
-  direction: 'onramp' | 'offramp';
-  transaction:
-    | RampsOnrampResponse
-    | RampsOfframpResponse
-    | RampsSignatureResponse
-    | RampsCompleteResponse
-    | RampsTransactionResponse;
-};
+/** The ramp order the widget is following, kept while it is closed. */
+export type NativeRampState = { direction: RampDirection; order: RampOrder };
 type ModalMethods =
   | 'openLoginModal'
   | 'openTxModal'

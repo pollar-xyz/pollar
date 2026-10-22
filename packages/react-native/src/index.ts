@@ -91,7 +91,7 @@ export { RecoveryModal } from './components/recovery-modal/RecoveryModal';
 export { CustodyMigrationModal } from './components/custody-migration-modal/CustodyMigrationModal';
 export { CustodyMigrationModalTemplate } from './components/custody-migration-modal/CustodyMigrationModalUI';
 export type { CustodyMigrationModalTemplateProps } from './components/custody-migration-modal/CustodyMigrationModalUI';
-export { RouteDisplay } from './components/ramp-widget/RouteDisplay';
+export { RejectedRouteDisplay, RouteDisplay } from './components/ramp-widget/RouteDisplay';
 export { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 
 // Templates
@@ -111,5 +111,3 @@ export { WalletBalanceModalTemplate } from './components/wallet-balance-modal/Wa
 export type { WalletBalanceModalTemplateProps } from './components/wallet-balance-modal/WalletBalanceModalUI';
 export { WalletButtonTemplate } from './components/wallet-button/WalletButtonUI';
 export type { WalletButtonTemplateProps } from './components/wallet-button/WalletButtonUI';
-
-export { RampWorkflow } from './components/ramp-widget/RampWorkflow';

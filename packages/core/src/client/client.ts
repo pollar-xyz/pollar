@@ -1,5 +1,15 @@
-import { RampSigningRegistry, type RampSigningHandler, type RampSnapshot } from '../ramps/workflow';
-import type { RampChain, RampContinuationBody } from '../types';
+import { RampSigningRegistry, type RampSigningHandler } from '../ramps/workflow';
+import type {
+  RampChain,
+  RampDirection,
+  RampOrder,
+  RampOrderRequest,
+  RampOrdersPage,
+  RampOrdersQuery,
+  RampQuoteRequest,
+  RampQuotesResponse,
+  RampRoutesResponse,
+} from '../types';
 import { createApiClient, fetchWithTimeout, PollarApiClient } from '../api/client';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { getSwapConfig, getSwapTokens, quoteSwap } from '../api/endpoints/swap';
@@ -37,20 +47,13 @@ import {
   submitRequirementForm,
 } from '../api/endpoints/requirements';
 import {
-  continueRamp,
+  createRampOrder,
+  getRampOrder,
   getRampRoutes,
-  completeWithdraw,
-  createOffRamp,
-  createOnRamp,
-  decodePixQr,
-  getRampCountries,
-  getRampKycStatus,
-  getRampLiquidity,
-  getRampsQuote,
-  getRampTransaction,
-  retryRampTransaction,
-  pollRampTransaction,
-  submitRampSignature,
+  listRampOrders,
+  pollRampOrder,
+  quoteRamp,
+  submitRampLegSignature,
 } from '../api/endpoints/ramps';
 import { buildProof } from '../dpop';
 import { CosignManager } from '../cosign/manager';
@@ -137,22 +140,6 @@ import {
   PollarPersistedWallet,
   isPollarNetworkError,
   PollarUserProfile,
-  RampsOfframpBody,
-  RampsOfframpResponse,
-  RampsOnrampBody,
-  RampsOnrampResponse,
-  RampsCompleteResponse,
-  RampsCountriesResponse,
-  RampsKycStatusResponse,
-  RampsLiquidityResponse,
-  RampsPixDecodeResponse,
-  RampsQuoteQuery,
-  RampsQuoteResponse,
-  RampRail,
-  RampsSignatureBody,
-  RampsSignatureResponse,
-  RampsTransactionResponse,
-  RampTxStatus,
   SessionInfo,
   SessionsState,
   Sep10Proof,
@@ -396,6 +383,8 @@ export class PollarClient {
   private _dpopNonce: string | null = null;
   /** The API-retirement warning is for the developer, once; not a log line per request. */
   private _deprecationWarned = false;
+  /** Same for an app out of credits: the user gets a generic text, the developer the reason. */
+  private _creditsWarned = false;
   /**
    * Clock skew compensation, in seconds (`serverTime - localTime`), learned from
    * the `Date` header of every server response and added to the DPoP proof
@@ -1038,6 +1027,13 @@ export class PollarClient {
           self._log.warn(
             `[PollarClient] The Pollar API version this SDK calls is deprecated${sunset ? ` and retires on ${sunset}` : ''}. ` +
               `Upgrade @pollar/core to the current release${guide ? `: ${guide}` : '.'}`,
+          );
+        }
+
+        if (response.status === 402 && !self._creditsWarned) {
+          self._creditsWarned = true;
+          self._log.warn(
+            '[PollarClient] This app is out of Pollar credits (SDK_CREDITS_INSUFFICIENT): billable features are refused until its credits are topped up in the Pollar dashboard.',
           );
         }
 
@@ -4405,108 +4401,62 @@ export class PollarClient {
 
   // --- Ramps ----------------------------------------------------------------
 
-  /** Discover the application's available asset and payment routes. */
-  getRampRoutes(): Promise<import('../types').RampsRoutesResponse> {
-    return getRampRoutes(this._api);
-  }
-  /** Submit an explicit continuation for the saved action and transaction version. */
-  continueRamp(txId: string, body: RampContinuationBody): Promise<RampsTransactionResponse> {
-    return continueRamp(this._api, txId, body);
+  /** The fiat and asset pairs the app can ramp between in a direction. Nothing is quoted. */
+  getRampRoutes(direction: RampDirection): Promise<RampRoutesResponse> {
+    return getRampRoutes(this._api, direction);
   }
 
-  /** Compatibility alias for consumers of the Anclap workflow client. */
-  continueRampTransaction(txId: string, body: RampContinuationBody): Promise<RampsTransactionResponse> {
-    return continueRamp(this._api, txId, body);
+  /** Every route between the fiat and the asset, quoted leg by leg, best first. */
+  quoteRamp(body: RampQuoteRequest): Promise<RampQuotesResponse> {
+    return quoteRamp(this._api, body);
   }
+
+  /**
+   * Turns a quote the user accepted into an order. `payee` holds a value for each
+   * of the quote's `requiredFields` (`rampQuoteFields`); a missing or wrong one is
+   * refused before anything moves. The same quote always answers the same order.
+   */
+  createRampOrder(body: RampOrderRequest): Promise<RampOrder> {
+    return createRampOrder(this._api, body);
+  }
+
+  getRampOrder(id: string): Promise<RampOrder> {
+    return getRampOrder(this._api, id);
+  }
+
+  /** The user's orders, newest first; `pending: 'true'` keeps the ones waiting on the user. */
+  listRampOrders(query: Partial<RampOrdersQuery> = {}): Promise<RampOrdersPage> {
+    return listRampOrders(this._api, query);
+  }
+
+  /** Reads the order at the pace the server suggests until it settles (or `until` holds). */
+  pollRampOrder(
+    id: string,
+    opts?: { signal?: AbortSignal; onUpdate?: (order: RampOrder) => void; until?: (order: RampOrder) => boolean },
+  ): Promise<RampOrder> {
+    return pollRampOrder(this._api, id, opts);
+  }
+
   /** Register a signer for a chain and payload encoding; returns its cleanup function. */
   registerRampSigningHandler(chain: RampChain, encoding: string, handler: RampSigningHandler): () => void {
     return this._rampSigners.register(chain, encoding, handler);
   }
-  /** Explicit user action only. Reading/restoring a workflow never invokes this. */
-  async signRampAction(txId: string, snapshot: RampSnapshot): Promise<RampsTransactionResponse> {
-    const fresh = await this.getRampTransaction(txId);
-    const action = fresh.nextAction;
-    if (
-      snapshot.txId !== txId ||
-      snapshot.transactionVersion !== fresh.transactionVersion ||
-      snapshot.nextAction?.actionId !== action?.actionId ||
-      action?.kind !== 'sign_transaction' ||
-      fresh.reconciliationRequired ||
-      !(Date.parse(action.expiresAt) > Date.now()) ||
-      ['completed', 'failed', 'refunded'].includes(fresh.lifecycleState ?? fresh.status)
-    )
+
+  /**
+   * Signs the order's SIGNATURE action through the handler registered for its
+   * chain and encoding, and sends it. Call it only from the user's explicit
+   * Authorize: the action is read again and must still be the one the user saw
+   * (`actionId`). Every pair, `STELLAR`/`xdr` included, needs a registered handler.
+   */
+  async signRampLeg(orderId: string, actionId: string): Promise<RampOrder> {
+    const order = await getRampOrder(this._api, orderId);
+    const action = order.pendingAction;
+    if (action?.kind !== 'SIGNATURE' || action.actionId !== actionId || !(Date.parse(action.expiresAt) > Date.now()))
       throw new Error('The ramp action changed. Refresh before signing.');
     const handler = this._rampSigners.resolve(action.chain, action.payload.encoding);
     if (!handler) throw new Error(`Register a ramp signing handler for ${action.chain}/${action.payload.encoding}.`);
     const signedPayload = await handler(action);
-    return this.continueRamp(txId, { actionId: action.actionId, transactionVersion: fresh.transactionVersion!, signedPayload });
-  }
-
-  getRampsQuote(query: RampsQuoteQuery): Promise<RampsQuoteResponse> {
-    return getRampsQuote(this._api, query);
-  }
-
-  /** Countries (+ fiat currency) the app's enabled ramp anchors support on its network. */
-  getRampCountries(): Promise<RampsCountriesResponse> {
-    return getRampCountries(this._api);
-  }
-
-  createOnRamp(body: RampsOnrampBody): Promise<RampsOnrampResponse> {
-    return createOnRamp(this._api, body);
-  }
-
-  createOffRamp(body: RampsOfframpBody): Promise<RampsOfframpResponse> {
-    return createOffRamp(this._api, body);
-  }
-
-  /** Complete an offramp once anchor KYC is done (build + sign + submit the withdraw payment). */
-  completeWithdraw(txId: string): Promise<RampsCompleteResponse> {
-    return completeWithdraw(this._api, txId);
-  }
-
-  /** Resume an EXTERNAL-wallet ramp after the client signs a pending XDR (sep10 / withdraw_payment). */
-  submitRampSignature(txId: string, body: RampsSignatureBody): Promise<RampsSignatureResponse> {
-    return submitRampSignature(this._api, txId, body);
-  }
-
-  getRampTransaction(txId: string): Promise<RampsTransactionResponse> {
-    return getRampTransaction(this._api, txId);
-  }
-
-  /** Run the pending step of a ramp whose funds are in transit now, instead of at the next pass. */
-  retryRampTransaction(txId: string): Promise<RampsTransactionResponse> {
-    return retryRampTransaction(this._api, txId);
-  }
-
-  pollRampTransaction(txId: string, opts?: { intervalMs?: number; timeoutMs?: number }): Promise<RampTxStatus> {
-    return pollRampTransaction(this._api, txId, opts);
-  }
-
-  /**
-   * Live liquidity on a payout rail. `available: false` means the rail cannot be
-   * served right now - check before offering the corridor, because quoting it
-   * succeeds and only fails much further downstream.
-   */
-  getRampLiquidity(rail: RampRail): Promise<RampsLiquidityResponse> {
-    return getRampLiquidity(this._api, rail);
-  }
-
-  /**
-   * Where the user stands with the ramp provider's identity checks. Poll after an
-   * off-ramp answered `kycRequired: true`: nothing was signed and no funds moved,
-   * so wait for `hasApproved` and then request a fresh quote.
-   */
-  getRampKycStatus(): Promise<RampsKycStatusResponse> {
-    return getRampKycStatus(this._api);
-  }
-
-  /**
-   * Decode a Pix "copia e cola" payload into payee + amount. `decoded: null` means
-   * the code went stale (dynamic Pix QRs are per-charge). Quote the amount it
-   * returns and pass the ORIGINAL payload as `qrCode` on {@link createOffRamp}.
-   */
-  decodePixQr(qrCode: string): Promise<RampsPixDecodeResponse> {
-    return decodePixQr(this._api, qrCode);
+    return submitRampLegSignature(this._api, orderId, action.legIndex, { actionId, signedPayload });
   }
 
   // --- Distribution ---------------------------------------------------------

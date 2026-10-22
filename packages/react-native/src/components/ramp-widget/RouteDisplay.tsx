@@ -1,41 +1,56 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import type { RampQuote } from '@pollar/core';
+import type { RampQuote, RampQuoteRejection } from '@pollar/core';
+import { rampLegTitle, rampResolutionText } from '@pollar/core';
 
 interface RouteDisplayProps {
   quote: RampQuote;
+  /** The first quote: the most received (or least sent) for the amount. */
+  best?: boolean;
+  disabled?: boolean;
   onSelect: (quote: RampQuote) => void;
 }
 
-const RAIL_LABELS: Record<string, string> = {
-  SPEI: 'SPEI (Mexico)',
-  PIX: 'PIX (Brazil)',
-  PSE: 'PSE (Colombia)',
-  ACH: 'ACH (US)',
-};
+const assetOf = (node: RampQuote['legs'][number]['to']) => (node.kind === 'fiat' ? node.currency : node.code);
 
-export function RouteDisplay({ quote, onSelect }: RouteDisplayProps) {
+export function RouteDisplay({ quote, best = false, disabled = false, onSelect }: RouteDisplayProps) {
+  const first = quote.legs[0];
+  const last = quote.legs[quote.legs.length - 1];
   return (
     <TouchableOpacity
-      style={[styles.card, quote.recommended && styles.recommended]}
+      style={[styles.card, best && styles.recommended, disabled && { opacity: 0.5 }]}
+      disabled={disabled}
       onPress={() => onSelect(quote)}
       activeOpacity={0.7}
     >
       <View style={styles.left}>
-        <Text style={styles.provider}>{quote.provider}</Text>
-        <Text style={styles.meta}>
-          {RAIL_LABELS[quote.rail] ?? quote.rail} · {quote.protocol} · {quote.estimatedTime}
+        <Text style={styles.provider}>
+          {first && last
+            ? `${quote.amountIn} ${assetOf(first.from)} → ${quote.amountOut} ${assetOf(last.to)}`
+            : quote.amountOut}
         </Text>
+        <Text style={styles.meta}>{quote.legs.map((leg) => rampLegTitle(leg)).join(' · ')}</Text>
       </View>
-      <View style={styles.right}>
-        <Text style={styles.fee}>{quote.fee}% fee</Text>
-        {quote.recommended && (
-          <View style={styles.badgeContainer}>
+      {best && (
+        <View style={styles.right}>
+          <View style={styles.badge}>
             <Text style={styles.badgeText}>Best rate</Text>
           </View>
-        )}
-      </View>
+        </View>
+      )}
     </TouchableOpacity>
+  );
+}
+
+/** A route that was planned and dropped, and what the user can do about it. */
+export function RejectedRouteDisplay({ rejection }: { rejection: RampQuoteRejection }) {
+  return (
+    <View style={[styles.card, { opacity: 0.6 }]}>
+      <View style={styles.left}>
+        <Text style={styles.provider}>{rejection.legs.map((leg) => rampLegTitle(leg)).join(' · ')}</Text>
+        <Text style={styles.meta}>{rampResolutionText(rejection.failure)}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -57,32 +72,26 @@ const styles = StyleSheet.create({
   },
   left: {
     flex: 1,
-    marginRight: 12,
+    gap: 4,
+  },
+  right: {
+    alignItems: 'flex-end',
+    marginLeft: 8,
   },
   provider: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#111827',
-    marginBottom: 2,
   },
   meta: {
     fontSize: 12,
     color: '#6b7280',
   },
-  right: {
-    alignItems: 'flex-end',
-  },
-  fee: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  badgeContainer: {
-    marginTop: 4,
+  badge: {
     backgroundColor: '#005DB4',
+    borderRadius: 9999,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 9999,
   },
   badgeText: {
     fontSize: 10,

@@ -93,15 +93,12 @@ function fakeClient() {
     'getEarnPosition',
     'earnDeposit',
     'earnWithdraw',
-    'getRampsQuote',
-    'getRampCountries',
-    'createOnRamp',
-    'createOffRamp',
-    'getRampTransaction',
-    'getRampKycStatus',
-    'getRampLiquidity',
-    'submitRampSignature',
-    'completeWithdraw',
+    'quoteRamp',
+    'createRampOrder',
+    'getRampOrder',
+    'listRampOrders',
+    'signRampLeg',
+    'pollRampOrder',
     'listDistributionRules',
     'claimDistributionRule',
     'fetchSessions',
@@ -232,44 +229,97 @@ test('earn provider changes clear old opportunities and block choices during loa
   expect(view.getByLabelText('blend')).toBeEnabled();
 });
 
-test('ramp route discovery stays stable and refunded lifecycle stops status polling', async () => {
-  jest.useFakeTimers();
-  try {
-    const client = fakeClient();
-    client.auth = { step: 'authenticated', verified: true, session: { clientSessionId: 'refund-session' } };
-    const pending = { txId: 'refund-fixture', provider: 'Fixture', status: 'pending', lifecycleState: 'awaiting_payment' };
-    client.getRampTransaction.mockResolvedValue(pending);
-    function SavedRamp() {
-      const p = usePollar();
-      return (
-        <>
-          <ActionButton title="Load pending" onPress={() => p.setRamp({ direction: 'offramp', transaction: pending })} />
-          <ActionButton
-            title="Load refund"
-            onPress={() => p.setRamp({ direction: 'offramp', transaction: { ...pending, lifecycleState: 'refunded' } })}
-          />
-          <RampPanel />
-        </>
-      );
-    }
-    const view = await renderAsync(
-      <PollarProvider config={{ apiKey: 'test' }} appConfig={config}>
-        <SavedRamp />
-      </PollarProvider>,
+const rampFixtures = () => {
+  const bob = { kind: 'fiat', currency: 'BOB', rail: 'QR', country: 'BO' };
+  const usdc = { kind: 'asset', code: 'USDC', identifier: 'GA5Z', chain: 'STELLAR' };
+  const leg = { index: 0, kind: 'PROVIDER_ONRAMP', from: bob, to: usdc };
+  const order = (pendingAction, patch = {}) => ({
+    id: 'ramp-1',
+    direction: 'ONRAMP',
+    state: 'awaiting_payment',
+    createdAt: '2026-10-22T00:00:00Z',
+    updatedAt: '2026-10-22T00:00:00Z',
+    legs: [
+      {
+        ...leg,
+        status: 'AWAITING_ACTION',
+        amountInPlanned: '100',
+        amountOutPlanned: '14.2',
+        amountInActual: null,
+        amountOutActual: null,
+        onchainTxHash: null,
+        signingMode: null,
+        fundsLocation: null,
+        failure: null,
+      },
+    ],
+    pendingAction,
+    failure: null,
+    nextPollAfter: '2099-01-01T00:00:00Z',
+    ...patch,
+  });
+  const quote = {
+    quoteId: 'quote',
+    expiresAt: '2099-01-01T00:00:00Z',
+    amountIn: '100',
+    amountOut: '14.2',
+    etaSeconds: null,
+    legs: [
+      {
+        ...leg,
+        amountIn: '100',
+        amountOut: '14.2',
+        providerFees: [],
+        fees: [],
+        etaSeconds: null,
+        expiresAt: null,
+        wallet: null,
+        requiredFields: [{ key: 'name', label: 'Full name', type: 'text' }],
+      },
+    ],
+  };
+  const signature = {
+    kind: 'SIGNATURE',
+    actionId: 'sign',
+    legIndex: 0,
+    chain: 'STELLAR',
+    payload: { encoding: 'xdr', value: 'x' },
+    summary: 'payment',
+    expiresAt: '2099-01-01T00:00:00Z',
+  };
+  return { route: { fiat: bob, asset: usdc, legs: ['PROVIDER_ONRAMP'] }, quote, order, signature };
+};
+
+test('ramp route discovery stays stable and a settled order stops polling', async () => {
+  const client = fakeClient();
+  client.auth = { step: 'authenticated', verified: true, session: { clientSessionId: 'refund-session' } };
+  const { order } = rampFixtures();
+  client.pollRampOrder.mockImplementation(() => new Promise(() => {}));
+  function SavedRamp() {
+    const p = usePollar();
+    return (
+      <>
+        <ActionButton title="Load pending" onPress={() => p.setRamp({ direction: 'ONRAMP', order: order(null) })} />
+        <ActionButton
+          title="Load refund"
+          onPress={() => p.setRamp({ direction: 'ONRAMP', order: order(null, { state: 'refunded', nextPollAfter: null }) })}
+        />
+        <RampPanel />
+      </>
     );
-    await act(async () => fireEvent.press(view.getByText('Load pending')));
-    await act(async () => jest.advanceTimersByTime(5000));
-    expect(client.getRampTransaction).toHaveBeenCalledTimes(1);
-    await act(async () => fireEvent.press(view.getByText('Load refund')));
-    expect(view.getByText('New ramp transaction')).toBeTruthy();
-    await act(async () => jest.advanceTimersByTime(15000));
-    expect(client.getRampTransaction).toHaveBeenCalledTimes(1);
-    expect(client.getRampRoutes).toHaveBeenCalledTimes(1);
-    expect(view.queryByText('Complete withdrawal after verification')).toBeNull();
-    await view.unmountAsync();
-  } finally {
-    jest.useRealTimers();
   }
+  const view = await renderAsync(
+    <PollarProvider config={{ apiKey: 'test' }} appConfig={config}>
+      <SavedRamp />
+    </PollarProvider>,
+  );
+  await act(async () => fireEvent.press(view.getByText('Load pending')));
+  expect(client.pollRampOrder).toHaveBeenCalledTimes(1);
+  await act(async () => fireEvent.press(view.getByText('Load refund')));
+  expect(view.getByText('New ramp order')).toBeTruthy();
+  expect(client.pollRampOrder).toHaveBeenCalledTimes(1);
+  expect(client.getRampRoutes).toHaveBeenCalledTimes(1);
+  await view.unmountAsync();
 });
 
 test('exported ramp and KYC components preserve native modal dismissal', async () => {
@@ -784,260 +834,66 @@ test('split signing forwards sponsorship token and pending is not success', asyn
   expect(view.getByText(/"status": "pending"/)).toBeTruthy();
   expect(view.queryByText(/"status": "success"/)).toBeNull();
 });
-test('ramp uses real quotes and preserves a pending transaction across panel remount', async () => {
+test('ramp panel quotes a route, sends the fields as payee and keeps the order across remount', async () => {
   const client = fakeClient();
   client.auth = { step: 'authenticated', verified: true, session: { clientSessionId: 'session' } };
-  client.getRampsQuote.mockResolvedValue({
-    quotes: [{ quoteId: 'quote', provider: 'Bank', rail: 'SPEI', fee: 1, feeCurrency: 'MXN', requiredFields: [] }],
-  });
-  client.createOnRamp.mockResolvedValue({ txId: 'ramp-1', provider: 'Bank', status: 'pending' });
+  const { route, quote, order } = rampFixtures();
+  client.getRampRoutes.mockResolvedValue({ routes: [route] });
+  client.quoteRamp.mockResolvedValue({ quotes: [quote], rejected: [] });
+  client.createRampOrder.mockResolvedValue(order(null));
+  client.pollRampOrder.mockImplementation(() => new Promise(() => {}));
   const view = await renderAsync(
     <PollarProvider config={{ apiKey: 'test' }} appConfig={config}>
       <RampPanel key="first" />
     </PollarProvider>,
   );
-  fireEvent.changeText(view.getByLabelText('Country code (e.g. MX)'), 'MX');
-  fireEvent.changeText(view.getByLabelText('Currency (e.g. MXN)'), 'MXN');
-  fireEvent.changeText(view.getByLabelText('Amount'), '100');
+  await waitFor(() => expect(view.getByText(/BO BOB \(QR\) \/ USDC on STELLAR/)).toBeTruthy());
+  fireEvent.press(view.getByText(/BO BOB \(QR\) \/ USDC on STELLAR/));
+  fireEvent.changeText(view.getByLabelText('Amount you send'), '100');
   await act(async () => fireEvent.press(view.getByText('Get ramp quotes')));
-  fireEvent.press(view.getByText('Select Bank'));
-  await act(async () => fireEvent.press(view.getByText('Confirm onramp')));
-  expect(client.createOnRamp).toHaveBeenCalledWith({
-    quoteId: 'quote',
-    country: 'MX',
-    currency: 'MXN',
-    amount: 100,
-    walletAddress: 'GTEST',
+  expect(client.quoteRamp).toHaveBeenCalledWith({
+    direction: 'ONRAMP',
+    fiat: { currency: 'BOB', rail: 'QR', country: 'BO' },
+    asset: { code: 'USDC', identifier: 'GA5Z', chain: 'STELLAR' },
+    amount: { value: '100', denomination: 'in' },
   });
+  fireEvent.press(view.getByText('Select this route'));
+  fireEvent.changeText(view.getByLabelText('Full name'), 'Ana Perez');
+  await act(async () => fireEvent.press(view.getByText('Create order')));
+  expect(client.createRampOrder).toHaveBeenCalledWith({ quoteId: 'quote', payee: { name: 'Ana Perez' } });
   await view.rerenderAsync(
     <PollarProvider config={{ apiKey: 'test' }} appConfig={config}>
       <RampPanel key="second" />
     </PollarProvider>,
   );
-  expect(view.getByText('Provider status: pending')).toBeTruthy();
-  expect(view.queryByText('Funds Added')).toBeNull();
-  expect(client.createOnRamp).toHaveBeenCalledTimes(1);
+  expect(view.getByText(/Order ramp-1/)).toBeTruthy();
+  expect(client.createRampOrder).toHaveBeenCalledTimes(1);
 });
 
-test('registered Polygon route drives the native widget and resumes without signing again', async () => {
-  const core = jest.requireActual('@pollar/core');
+test('the native widget signs a leg only when the user presses Authorize, once', async () => {
   const client = fakeClient();
-  client.auth = { step: 'authenticated', verified: true, session: { clientSessionId: 'fixture-session' } };
-  const route = {
-    routeId: 'fixture:PE:offramp',
-    direction: 'offramp',
-    country: 'PE',
-    fiatCurrency: 'PEN',
-    rail: 'FUTURE_BANK',
-    asset: { code: 'NATIVE', identifier: null, chain: 'POLYGON', network: 'mainnet', precision: 12 },
-    limits: { denomination: 'crypto', min: '0.000000000001', max: '100' },
-    providerId: 'fixture-provider',
-    provider: 'Registered fixture',
-    capabilities: { polling: true, callbacks: true, refunds: 'unsupported', continuations: ['user_ready', 'signed_payload'] },
-  };
-  const transaction = {
-    txId: 'fixture-tx',
-    provider: 'Registered fixture',
-    status: 'pending',
-    lifecycleState: 'awaiting_payment',
-    transactionVersion: 2,
-    reconciliationRequired: false,
-    terms: {
-      fiatAmount: '20.00',
-      fiatCurrency: 'PEN',
-      cryptoAmount: '1.123456789012',
-      feeAmount: '0',
-      feeCurrency: 'PEN',
-      assetCode: 'NATIVE',
-      assetIssuer: null,
-      assetChain: 'POLYGON',
-    },
-    nextAction: {
-      kind: 'sign_transaction',
-      actionId: 'fixture-action',
-      purpose: 'withdrawal_payment',
-      chain: 'POLYGON',
-      network: 'mainnet',
-      challengeRef: 'fixture-step',
-      payload: { encoding: 'fixture-json', value: 'unsigned' },
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
-    },
-  };
+  client.auth = { step: 'authenticated', verified: true, session: { clientSessionId: 'widget-session' } };
+  const { route, order, signature } = rampFixtures();
   client.getRampRoutes.mockResolvedValue({ routes: [route] });
-  client.getRampsQuote.mockResolvedValue({
-    quotes: [
-      {
-        quoteId: 'fixture-quote',
-        provider: 'Registered fixture',
-        rail: 'FUTURE_BANK',
-        requiredFields: [],
-        fiatAmount: 20,
-        terms: transaction.terms,
-      },
-    ],
-  });
-  client.createOffRamp.mockResolvedValue(transaction);
-  client.getRampTransaction.mockResolvedValue(transaction);
-  client.continueRamp = jest.fn(async () => ({
-    ...transaction,
-    transactionVersion: 3,
-    nextAction: { kind: 'wait', actionId: 'wait', reason: 'settlement_verification' },
-  }));
-  client._rampSigners = new (require('../../core/src/ramps/workflow').RampSigningRegistry)();
-  client.signRampAction = core.PollarClient.prototype.signRampAction;
-  const signer = jest.fn(async () => 'signed:unsigned');
-  core.PollarClient.prototype.registerRampSigningHandler.call(client, 'POLYGON', 'fixture-json', signer);
+  client.listRampOrders.mockResolvedValue({ orders: [order(signature)], nextCursor: null });
+  client.getRampOrder.mockResolvedValue(order(signature));
+  client.pollRampOrder.mockImplementation(() => new Promise(() => {}));
   const view = await renderAsync(
     <PollarProvider config={{ apiKey: 'test' }} appConfig={config}>
-      <RampPanel key="first" />
+      <RampWidget onClose={() => {}} />
     </PollarProvider>,
   );
-  await waitFor(() => expect(view.getByText(/PEN \/ NATIVE/)).toBeTruthy());
-  fireEvent.press(view.getByText(/PEN \/ NATIVE/));
-  fireEvent.changeText(view.getByLabelText('Amount'), '20');
-  await act(async () => fireEvent.press(view.getByText('Get ramp quotes')));
-  expect(client.getRampsQuote).toHaveBeenCalledWith(
-    expect.objectContaining({ chain: 'POLYGON', routeId: route.routeId, currency: 'PEN' }),
-  );
-  fireEvent.press(view.getByText('Select Registered fixture'));
-  await act(async () => fireEvent.press(view.getByText('Confirm offramp')));
-  expect(client.createOffRamp).toHaveBeenCalledWith(expect.objectContaining({ amountExact: '20.00' }));
-  expect(signer).not.toHaveBeenCalled();
-  expect(view.getByText(/1.123456789012 NATIVE/)).toBeTruthy();
+  await waitFor(() => expect(view.getByText(/Resume purchase/)).toBeTruthy());
+  await act(async () => fireEvent.press(view.getByText(/Resume purchase/)));
+  expect(client.signRampLeg).not.toHaveBeenCalled();
+  let finish;
+  client.signRampLeg.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
   await act(async () => fireEvent.press(view.getByText('Authorize')));
-  expect(signer).toHaveBeenCalledTimes(1);
-  await view.rerenderAsync(
-    <PollarProvider config={{ apiKey: 'test' }} appConfig={config}>
-      <RampPanel key="second" />
-    </PollarProvider>,
-  );
-  await waitFor(() => expect(view.getByText('Confirming settlement')).toBeTruthy());
-  expect(signer).toHaveBeenCalledTimes(1);
-  expect(client.createOffRamp).toHaveBeenCalledTimes(1);
-});
-
-test('exported ramp combines registered routes, exact amounts and saved explicit signing', async () => {
-  const client = fakeClient();
-  client.auth = { step: 'authenticated', verified: true, session: { clientSessionId: 'generic-ramp' } };
-  const route = {
-    routeId: 'fixture:MX:offramp',
-    direction: 'offramp',
-    country: 'MX',
-    fiatCurrency: 'MXN',
-    rail: 'BANK',
-    asset: { code: 'NATIVE', identifier: null, chain: 'POLYGON', network: 'mainnet', precision: 12 },
-    limits: { denomination: 'fiat', min: null, max: null },
-  };
-  const terms = {
-    fiatAmount: '20.00',
-    fiatCurrency: 'MXN',
-    cryptoAmount: '1.123456789012',
-    assetCode: 'NATIVE',
-    assetChain: 'POLYGON',
-    assetIssuer: null,
-    feeAmount: '0',
-    feeCurrency: 'MXN',
-  };
-  client.getRampCountries.mockResolvedValue({ countries: [] });
-  client.getRampRoutes.mockResolvedValue({ routes: [route] });
-  client.getRampsQuote.mockResolvedValue({
-    quotes: [
-      {
-        quoteId: 'too-small',
-        provider: 'Minimum route',
-        minAmount: 30,
-        terms: { ...terms, fiatAmount: '30.00' },
-        requiredFields: [],
-        fee: 0,
-        rate: 20,
-        rail: 'BANK',
-        protocol: 'REST',
-      },
-      {
-        quoteId: 'fixture',
-        provider: 'Fixture',
-        route,
-        terms,
-        requiredFields: [],
-        fee: 0,
-        feeCurrency: 'MXN',
-        rate: 20,
-        rail: 'BANK',
-        protocol: 'REST',
-        estimatedTime: 'minutes',
-      },
-    ],
-  });
-  const saved = {
-    txId: 'generic-tx',
-    provider: 'Fixture',
-    status: 'pending',
-    lifecycleState: 'awaiting_payment',
-    transactionVersion: 2,
-    terms,
-    nextAction: {
-      kind: 'sign_transaction',
-      actionId: 'sign',
-      purpose: 'withdrawal_payment',
-      chain: 'POLYGON',
-      network: 'mainnet',
-      payload: { encoding: 'fixture-json', value: 'unsigned' },
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
-    },
-  };
-  client.createOffRamp.mockResolvedValue(saved);
-  client.signRampAction = jest.fn(async () => ({
-    ...saved,
-    transactionVersion: 3,
-    nextAction: { kind: 'wait', actionId: 'wait', reason: 'settlement_verification' },
-  }));
-  function ReopenRamp() {
-    const [open, setOpen] = React.useState(true);
-    return open ? (
-      <RampWidget onClose={() => setOpen(false)} />
-    ) : (
-      <ActionButton title="Reopen ramp" onPress={() => setOpen(true)} />
-    );
-  }
-  const view = await renderAsync(
-    <PollarProvider config={{ apiKey: 'test' }} appConfig={config} styles={{ theme: 'dark', accentColor: '#abcdef' }}>
-      <ReopenRamp />
-    </PollarProvider>,
-  );
-  const routeText = view.getByText('offramp · MXN / NATIVE · POLYGON · BANK');
-  expect(routeText).toHaveStyle({ color: '#f3f4f6' });
-  fireEvent.press(routeText);
-  expect(view.getByRole('button', { selected: true })).toHaveStyle({ borderColor: '#abcdef' });
-  fireEvent.changeText(view.getByPlaceholderText('25.00'), '20');
-  await act(async () => fireEvent.press(view.getByText('Find routes')));
-  expect(client.getRampsQuote).toHaveBeenCalledWith(
-    expect.objectContaining({
-      routeId: route.routeId,
-      country: 'MX',
-      currency: 'MXN',
-      amountExact: '20',
-      chain: 'POLYGON',
-    }),
-  );
-  fireEvent.press(view.getByText('Minimum route'));
-  expect(view.getByText('The minimum amount for this route is 30 MXN.')).toBeTruthy();
-  expect(client.createOffRamp).not.toHaveBeenCalled();
-  await act(async () => fireEvent.press(view.getByText('Fixture')));
-  expect(client.createOffRamp).toHaveBeenCalledWith(expect.objectContaining({ amountExact: '20.00' }));
-  expect(view.getByText(/1.123456789012 NATIVE/)).toBeTruthy();
-  expect(client.signRampAction).not.toHaveBeenCalled();
-  act(() =>
-    view
-      .UNSAFE_getAllByType(Modal)
-      .find((modal) => modal.props.visible)
-      .props.onRequestClose(),
-  );
-  await act(async () => fireEvent.press(view.getByText('Reopen ramp')));
-  expect(view.getByText(/1.123456789012 NATIVE/)).toBeTruthy();
-  expect(client.signRampAction).not.toHaveBeenCalled();
-  await act(async () => fireEvent.press(view.getByText('Authorize')));
-  expect(client.signRampAction).toHaveBeenCalledTimes(1);
-  expect(view.queryByText('Authorize')).toBeNull();
+  // While the wallet is asked, the request cannot be sent again.
+  await act(async () => fireEvent.press(view.getByText('Waiting for your wallet…')));
+  expect(client.signRampLeg).toHaveBeenCalledTimes(1);
+  expect(client.signRampLeg).toHaveBeenCalledWith('ramp-1', 'sign');
+  await act(async () => finish(order(null, { state: 'processing' })));
   await view.unmountAsync();
 });
 

@@ -5,6 +5,13 @@
  * reads as a sentence, and to a generic message otherwise, so a raw code never
  * reaches the screen.
  */
+/**
+ * 402: the app ran out of Pollar credits. The user can do nothing about it, so
+ * the text never says why; the developer gets the reason in the console.
+ */
+export const APP_UNAVAILABLE_MESSAGE =
+  "This isn't available right now. Please try again later, and if it keeps happening, contact this app's support.";
+
 const MESSAGES: Record<string, string> = {
   TX_INSUFFICIENT_BALANCE: 'Not enough balance to cover the amount and the network fee.',
   TX_INSUFFICIENT_FEE: 'The network fee was too low for the network right now. Please try again.',
@@ -33,6 +40,7 @@ const MESSAGES: Record<string, string> = {
   SDK_COSIGN_CUSTODY_SWITCH_PENDING: 'Finish or cancel the pending approvals before changing how this wallet is secured.',
   SDK_COSIGN_CUSTODY_SWITCH_NOT_ALLOWED: "This app doesn't let you change how your wallet is secured.",
   SDK_COSIGN_PASSKEY_UNAVAILABLE: "Passkeys aren't available on this device.",
+  SDK_CREDITS_INSUFFICIENT: APP_UNAVAILABLE_MESSAGE,
 };
 
 const GENERIC = 'Something went wrong. Please try again.';
@@ -45,4 +53,10 @@ export function transactionErrorMessage(code?: string | null, details?: string |
   if (details && MESSAGES[details]) return MESSAGES[details];
   if (details && !CODE_LIKE.test(details.trim())) return details;
   return GENERIC;
+}
+
+/** The text for an error the user cannot fix and the app must (402, out of credits); null for any other error. */
+export function appUnavailableMessage(error: unknown): string | null {
+  const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+  return code === 'SDK_CREDITS_INSUFFICIENT' ? (MESSAGES[code] ?? null) : null;
 }

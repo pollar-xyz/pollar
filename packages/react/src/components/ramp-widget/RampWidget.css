@@ -410,3 +410,62 @@
   font-size: 0.8125rem;
   white-space: nowrap;
 }
+
+/* Progress of an order, one row per leg. */
+.pollar-ramp-legs {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.pollar-ramp-leg {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.875rem;
+  color: var(--pollar-muted);
+}
+
+.pollar-ramp-leg-dot {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  border: 2px solid var(--pollar-border);
+  flex-shrink: 0;
+}
+
+.pollar-ramp-leg[data-status='active'],
+.pollar-ramp-leg[data-status='done'] {
+  color: var(--pollar-text);
+}
+
+.pollar-ramp-leg[data-status='active'] .pollar-ramp-leg-dot {
+  border-color: var(--pollar-accent);
+}
+
+.pollar-ramp-leg[data-status='done'] .pollar-ramp-leg-dot {
+  border-color: var(--pollar-accent);
+  background: var(--pollar-accent);
+}
+
+.pollar-ramp-leg[data-status='failed'] {
+  color: var(--pollar-error-text, #dc2626);
+}
+
+.pollar-ramp-leg[data-status='failed'] .pollar-ramp-leg-dot {
+  border-color: var(--pollar-error-text, #dc2626);
+}
+
+.pollar-ramp-leg-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.pollar-ramp-leg-link {
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--pollar-accent);
+}

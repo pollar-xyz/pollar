@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      PACKAGES: core react react-native privy-adapter accesly-adapter stellar-wallets-kit-adapter solana-wallet-standard-adapter
+      PACKAGES: core react react-native stellar-wallets-kit-adapter solana-wallet-standard-adapter
     steps:
       - uses: actions/checkout@v4
 

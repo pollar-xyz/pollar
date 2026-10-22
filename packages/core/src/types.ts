@@ -1200,17 +1200,48 @@ export const RampChain = Object.freeze({
 } as const);
 export type RampChain = (typeof RampChain)[keyof typeof RampChain];
 
-export type RampsQuoteQuery = NonNullable<pollarPaths['/ramps/quote']['get']['parameters']['query']>;
-export type RampQuote =
-  pollarPaths['/ramps/quote']['get']['responses'][200]['content']['application/json']['content']['quotes'][number];
-export type RampsQuoteResponse = pollarPaths['/ramps/quote']['get']['responses'][200]['content']['application/json']['content'];
+type RampsGet<P extends '/ramps/routes' | '/ramps/orders' | '/ramps/orders/{id}'> =
+  pollarPaths[P]['get']['responses'][200]['content']['application/json']['content'];
+
+export type RampDirection = NonNullable<pollarPaths['/ramps/routes']['get']['parameters']['query']>['direction'];
+/** The fiat and asset pairs the app can ramp between in a direction, each with the legs of its shortest path. */
+export type RampRoutesResponse = RampsGet<'/ramps/routes'>;
+export type RampRoute = RampRoutesResponse['routes'][number];
+export type RampFiat = RampRoute['fiat'];
+export type RampAsset = RampRoute['asset'];
+export type RampLegKind = RampRoute['legs'][number];
+
+export type RampQuoteRequest = NonNullable<pollarPaths['/ramps/quotes']['post']['requestBody']>['content']['application/json'];
+export type RampQuotesResponse =
+  pollarPaths['/ramps/quotes']['post']['responses'][200]['content']['application/json']['content'];
+/** One route quoted leg by leg; `quotes` come best first. */
+export type RampQuote = RampQuotesResponse['quotes'][number];
+export type RampQuoteLeg = RampQuote['legs'][number];
+/** A value the user fills in before the order; its answer goes in `payee` under `key`. */
+export type RampField = RampQuoteLeg['requiredFields'][number];
+/** A route that was planned and dropped, with why (`failure.resolutionAction`). */
+export type RampQuoteRejection = RampQuotesResponse['rejected'][number];
+
+export type RampOrderRequest = NonNullable<pollarPaths['/ramps/orders']['post']['requestBody']>['content']['application/json'];
+/** An order with every leg, what it waits for (`pendingAction`) and when to read it again (`nextPollAfter`). */
+export type RampOrder = RampsGet<'/ramps/orders/{id}'>;
+export type RampOrderLeg = RampOrder['legs'][number];
+export type RampPendingAction = NonNullable<RampOrder['pendingAction']>;
+export type RampSignatureAction = Extract<RampPendingAction, { kind: 'SIGNATURE' }>;
+/** How to pay the fiat side: a QR (its code already rendered in `scannable`) or bank coordinates. */
+export type RampFiatInstructions = Extract<RampPendingAction, { kind: 'FIAT_PAYMENT' }>['instructions'];
 /**
- * A route left out of the quotes because a requirement step of its corridor is
- * pending. For a `KYC` step, open KYC on `optionId` for `corridorId`; for `FORM`, the
- * form `optionId`; for `REGISTRY_CHECK`, the registry option `optionId`; for
- * `PROVIDER_REGISTRATION`, the registration of `corridorId`. Then quote again.
+ * A code to scan, rendered by the server so no QR encoder is needed. A Pollar-made
+ * SVG (`image.inlineSafe`) uses `currentColor` and can be injected as markup; a
+ * provider's bitmap goes through `<img src="data:...">`. Show `payload` as text
+ * when `payloadLabel` is set: a phone cannot scan its own screen.
  */
-export type RampQuoteRequirement = NonNullable<RampsQuoteResponse['requirementsRequired']>[number];
+export type RampScannable = NonNullable<Extract<RampFiatInstructions, { kind: 'qr' }>['scannable']>;
+export type RampFailure = NonNullable<RampOrder['failure']>;
+export type RampOrdersQuery = NonNullable<pollarPaths['/ramps/orders']['get']['parameters']['query']>;
+export type RampOrdersPage = RampsGet<'/ramps/orders'>;
+/** The order lifecycle; `completed`, `failed` and `refunded` are final. */
+export type RampOrderState = NonNullable<RampOrdersQuery['state']>;
 
 /** A form asked by a FORM requirement step, with the user's previous answers. */
 export type RequirementForm =
@@ -1242,68 +1273,6 @@ export type ProviderRegistrationSubmitted =
   pollarPaths['/requirements/registration/{corridorId}']['post']['responses'][200]['content']['application/json']['content'];
 /** One field the server refused, from a KYC_FORM_INVALID_ANSWERS error's `body.errors`. */
 export type RequirementFormAnswerError = { key: string; code: string };
-
-export type RampsOnrampBody = NonNullable<pollarPaths['/ramps/onramp']['post']['requestBody']>['content']['application/json'];
-export type RampsOnrampResponse =
-  pollarPaths['/ramps/onramp']['post']['responses'][200]['content']['application/json']['content'];
-
-export type RampsOfframpBody = NonNullable<pollarPaths['/ramps/offramp']['post']['requestBody']>['content']['application/json'];
-export type RampsOfframpResponse =
-  pollarPaths['/ramps/offramp']['post']['responses'][200]['content']['application/json']['content'];
-
-// `fundsInTransit` is declared by sdk-api and not yet in the generated schema.
-export type RampsTransactionResponse =
-  pollarPaths['/ramps/transaction/{txId}']['get']['responses'][200]['content']['application/json']['content'] & {
-    fundsInTransit?: boolean;
-  };
-export type RampTxStatus = RampsTransactionResponse['status'];
-export type RampDirection = RampsTransactionResponse['direction'];
-
-/**
- * How to pay, in one shape for every provider. Named so a consumer that renders
- * its own payment screen can type it without reaching into the generated schema.
- *
- * `fields` arrive labelled and formatted: iterate and display, no per-provider
- * knowledge needed. `scannable` carries the code the user points a camera at,
- * with the image already rendered so no QR encoder is required - Pollar-made
- * SVGs (`image.inlineSafe`) use `currentColor` and can be injected as markup to
- * follow the host's theme; a provider's own bitmap must go through
- * `<img src="data:...">`. `scannable.payload` is the raw string behind the code:
- * show it as text when `payloadLabel` is set, since a user on the phone that
- * holds the screen has nothing to scan.
- */
-export type RampDepositInstructions = NonNullable<RampsTransactionResponse['depositInstructions']>;
-export type RampScannable = NonNullable<RampDepositInstructions['scannable']>;
-export type RampInstructionField = RampDepositInstructions['fields'][number];
-
-// SEP-24 anchor flow (e.g. Anclap): embedded wallets get a `kycUrl` to open;
-// EXTERNAL wallets get a `pendingSignature` to sign and resume.
-export type RampsPendingSignature = NonNullable<RampsOnrampResponse['pendingSignature']>;
-export type RampsSignatureBody = NonNullable<
-  pollarPaths['/ramps/transaction/{txId}/signature']['post']['requestBody']
->['content']['application/json'];
-export type RampsSignatureResponse =
-  pollarPaths['/ramps/transaction/{txId}/signature']['post']['responses'][200]['content']['application/json']['content'];
-export type RampsCompleteResponse =
-  pollarPaths['/ramps/transaction/{txId}/complete']['post']['responses'][200]['content']['application/json']['content'];
-export type RampsCountriesResponse =
-  pollarPaths['/ramps/countries']['get']['responses'][200]['content']['application/json']['content'];
-export type RampCountry = RampsCountriesResponse['countries'][number];
-
-// Provider utilities: reads that inform a ramp before or during a quote.
-export type RampsLiquidityResponse =
-  pollarPaths['/ramps/liquidity']['get']['responses'][200]['content']['application/json']['content'];
-export type RampRail = RampsLiquidityResponse['rail'];
-/**
- * Where the user stands with the provider's identity checks. Polled after an
- * off-ramp answered `kycRequired: true` - that provider (Abroad) publishes no
- * hosted KYC link, so the client waits for `hasApproved` and re-quotes.
- */
-export type RampsKycStatusResponse =
-  pollarPaths['/ramps/kyc-status']['get']['responses'][200]['content']['application/json']['content'];
-export type RampsPixDecodeResponse =
-  pollarPaths['/ramps/pix/decode']['get']['responses'][200]['content']['application/json']['content'];
-export type RampsPixDecoded = NonNullable<RampsPixDecodeResponse['decoded']>;
 
 // --- Distribution types -------------------------------------------------------
 
@@ -1611,14 +1580,3 @@ export type PollarAdapter = Record<string, AdapterFn<any>>;
 export interface PollarAdapters {
   [key: string]: PollarAdapter;
 }
-
-// Generic ramp workflow, derived from the matching backend OpenAPI schema.
-export type RampAction = NonNullable<RampsTransactionResponse['nextAction']>;
-export type RampTerms = NonNullable<RampsTransactionResponse['terms']>;
-export type RampRoute = NonNullable<RampQuote['route']>;
-export type RampCapabilities = RampsRoutesResponse['routes'][number]['capabilities'];
-export type RampsRoutesResponse =
-  pollarPaths['/ramps/routes']['get']['responses'][200]['content']['application/json']['content'];
-export type RampContinuationBody = NonNullable<
-  pollarPaths['/ramps/transaction/{txId}/continue']['post']['requestBody']
->['content']['application/json'];

@@ -1,17 +1,19 @@
 'use client';
 
 import type {
-  RampCountry,
-  RampDepositInstructions,
+  RampAsset,
   RampDirection,
-  RampInstructionField,
+  RampField,
+  RampFiat,
+  RampOrder,
   RampQuote,
-  RampQuoteRequirement,
+  RampQuoteRejection,
   RampScannable,
-  RampTxStatus,
+  StellarNetwork,
 } from '@pollar/core';
-import { LockedRouteDisplay, RouteDisplay } from './RouteDisplay';
-import { CopyButton, PollarModalFooter } from '../commons';
+import { describeRampAction, rampLegStatus, rampLegTitle, rampResolutionText } from '@pollar/core';
+import { RejectedRouteDisplay, RouteDisplay } from './RouteDisplay';
+import { CopyButton } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 'status' | 'error';
@@ -25,7 +27,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * An `optional` field is complete while blank, but still has to be well-formed
  * once something is typed into it.
  */
-function isFieldValid(spec: RampFieldSpec, raw: string | undefined): boolean {
+function isFieldValid(spec: RampField, raw: string | undefined): boolean {
   const value = (raw ?? '').trim();
   if (!value) return spec.optional === true;
   if (spec.type === 'email') return EMAIL_RE.test(value);
@@ -34,36 +36,14 @@ function isFieldValid(spec: RampFieldSpec, raw: string | undefined): boolean {
 
 /**
  * The `src` for a scannable that is not inline-safe. `encoding` and `inlineSafe`
- * are independent in the contract: an SVG a provider sent (so not inline-safe)
- * still arrives as `utf8`, and base64-wrapping that text yields a data URL the
- * browser cannot decode - a blank QR on the payment screen.
+ * are independent: an SVG a provider sent (so not inline-safe) still arrives as
+ * `utf8`, and base64-wrapping that text yields a data URL the browser cannot
+ * decode - a blank QR on the payment screen.
  */
 function scannableImageSrc(image: RampScannable['image']): string {
   return image.encoding === 'base64'
     ? `data:${image.mediaType};base64,${image.data}`
     : `data:${image.mediaType};charset=utf-8,${encodeURIComponent(image.data)}`;
-}
-
-/** A field a provider declares (via the quote) that the client must collect. */
-export interface RampFieldSpec {
-  key: string;
-  label: string;
-  type: 'text' | 'email' | 'tel' | 'select';
-  bankType?: string;
-  /** For `type: 'select'` - dropdown choices (e.g. Stereum's Bolivian banks). */
-  options?: { value: string; label: string; placeholder?: string }[];
-  /** Declared but not mandatory (Abroad's tax id). Blank must not block Continue. */
-  optional?: boolean;
-  /** Example of the expected shape, for formats a user cannot guess. */
-  placeholder?: string;
-  /**
-   * Key of a sibling `select` whose chosen option supplies the placeholder. One
-   * Pix field can then show a CPF mask, an email or a +55 number as the user
-   * switches kind, without this component knowing what a Pix key is.
-   */
-  placeholderFrom?: string;
-  /** Secondary line under the field, for a rule the label has no room for. */
-  hint?: string;
 }
 
 /** "a", "a and b", "a, b and c" - for naming what a step is asking for. */
@@ -75,7 +55,7 @@ function listOf(items: string[]): string {
 }
 
 /** The placeholder to show: the one a sibling select dictates, else the static one. */
-function placeholderFor(field: RampFieldSpec, fields: RampFieldSpec[], values: Record<string, string>): string | undefined {
+function placeholderFor(field: RampField, fields: RampField[], values: Record<string, string>): string | undefined {
   if (field.placeholderFrom) {
     const source = fields.find((f) => f.key === field.placeholderFrom);
     const chosen = source?.options?.find((o) => o.value === values[field.placeholderFrom as string]);
@@ -83,103 +63,6 @@ function placeholderFor(field: RampFieldSpec, fields: RampFieldSpec[], values: R
   }
   return field.placeholder;
 }
-
-const CHAIN_NAME = { STELLAR: 'Stellar', POLYGON: 'Polygon', SOLANA: 'Solana' } as const;
-const EXPLORER_NAME = { STELLAR: 'Stellar Expert', POLYGON: 'Polygonscan', SOLANA: 'Solana Explorer' } as const;
-
-interface RampWidgetTemplateProps {
-  workflowContent?: React.ReactNode;
-  routeSelector?: React.ReactNode;
-  theme: string;
-  accentColor: string;
-  /** Per-app modal chrome overrides (background, card + button radius). */
-  styleOverrides?: ModalStyleOverrides;
-  step: RampStep;
-  /** Labels of the steps this run goes through. Length varies by route: only
-   *  providers that collect fields add a 'Details' step. */
-  flowSteps: string[];
-  /** Index into `flowSteps`, or -1 when the current step is outside the flow
-   *  (the error step) and the progress bar should be hidden. */
-  flowStepIndex: number;
-  /** Quote whose start request is in flight, so its row can show it. */
-  startingQuoteId: string | null;
-  direction: RampDirection;
-  amount: string;
-  currency: string;
-  country: string;
-  requiredFields: RampFieldSpec[];
-  fieldValues: Record<string, string>;
-  countries: RampCountry[];
-  countriesLoading: boolean;
-  refreshing: boolean;
-  quotes: RampQuote[];
-  /** Routes not quoted until the user completes the requirement step their corridor names (KYC, form, registry check or provider registration). */
-  kycRequired: RampQuoteRequirement[];
-  isLoading: boolean;
-  // status step
-  provider: string;
-  txStatus: RampTxStatus | null;
-  kycUrl: string | null;
-  tosUrl: string | null;
-  /** Provider gated the flow on KYC and published no link; nothing was signed. */
-  kycBlocking: boolean;
-  /**
-   * Which part of provider onboarding is outstanding, when any is. Optional
-   * because this template is exported for integrators who render their own
-   * chrome: a required prop would break every one of them on upgrade. Omitted,
-   * the gate falls back to the identity-verification wording.
-   */
-  onboardingStatus?: 'kyc' | 'endorsement' | 'awaiting_provider' | null;
-  /** The gate has since cleared - the user needs a fresh quote to continue. */
-  kycJustApproved: boolean;
-  /** Superseded by `txHash`, which carries the settlement on any chain; read when `txHash` is absent. */
-  stellarTxHash: string | null;
-  /** The on-chain transaction that settled the ramp, on `txChain`. */
-  txHash?: string | null;
-  /** Chain of `txHash`; Stellar when omitted. */
-  txChain?: 'STELLAR' | 'POLYGON' | 'SOLANA' | null;
-  /** Explorer URL for the transaction (chain- and network-aware); null when unknown. */
-  explorerUrl: string | null;
-  /**
-   * The user's money is in one of their wallets between two steps of the route.
-   * Optional for integrators rendering their own chrome; omitted, the state is
-   * not shown.
-   */
-  fundsInTransit?: boolean;
-  /** A retry of the pending step is in flight. */
-  retrying?: boolean;
-  onRetryTransit?: () => void;
-  depositInstructions: RampDepositInstructions | null;
-  canComplete: boolean;
-  completing: boolean;
-  savedRamps?: Array<{ txId: string; provider: string }>;
-  onResumeRamp?: (id: string) => void;
-  onDismissRamp?: (id: string) => void;
-  onDismissCurrentRamp?: (() => void) | undefined;
-  onExploreRoutes?: (() => void) | undefined;
-  errorMsg: string | null;
-  /** Neutral guidance on the route list, e.g. after identity verification sent the user back to it. */
-  noticeMsg?: string | null;
-  onDirectionChange: (d: RampDirection) => void;
-  onAmountChange: (v: string) => void;
-  onFieldChange: (key: string, value: string) => void;
-  onCountryChange: (v: string) => void;
-  onFindRoute: () => void;
-  onSelectQuote: (q: RampQuote) => void;
-  onVerifyRoute: (requirement: RampQuoteRequirement) => void;
-  onContactContinue: () => void;
-  onOpenKyc: () => void;
-  onOpenTos: () => void;
-  onCompleteWithdraw: () => void;
-  /** Step back to the amount, keeping what was entered. Distinct from `onRetry`
-   *  (which restarts a failed flow) so a "Back" button reads as navigation. */
-  onBack: () => void;
-  onRetry: () => void;
-  onRefresh: () => void;
-  onClose: () => void;
-}
-
-const LOADING_STEPS = ['Detecting your country…', 'Consulting providers…', 'Route found!'];
 
 /**
  * Flag emoji from a 2-letter ISO 3166-1 alpha-2 country code by mapping each
@@ -193,111 +76,147 @@ function flagEmoji(code: string): string {
   return String.fromCodePoint(base + (cc.charCodeAt(0) - 65), base + (cc.charCodeAt(1) - 65));
 }
 
-const STATUS_LABEL: Record<RampTxStatus, string> = {
-  pending: 'Pending',
-  processing: 'Processing',
-  completed: 'Completed',
-  failed: 'Failed',
-};
+const CHAIN_NAME: Record<string, string> = { STELLAR: 'Stellar', POLYGON: 'Polygon', SOLANA: 'Solana' };
 
-/**
- * A timestamp field arrives as ISO-8601; render it in the viewer's locale.
- * Anything unparseable falls back to the raw string rather than showing
- * "Invalid Date".
- */
-function displayValue(field: RampInstructionField): string {
-  if (field.type !== 'datetime') return field.value;
-  const at = new Date(field.value);
-  return Number.isNaN(at.getTime()) ? field.value : at.toLocaleString();
+/** The explorer transaction URL by chain; testnet is Solana devnet and Polygon Amoy. */
+function explorerTxUrl(chain: string, hash: string, network: StellarNetwork): string {
+  const testnet = network === 'testnet';
+  if (chain === 'SOLANA') return `https://explorer.solana.com/tx/${hash}${testnet ? '?cluster=devnet' : ''}`;
+  if (chain === 'POLYGON') return `https://${testnet ? 'amoy.' : ''}polygonscan.com/tx/${hash}`;
+  return `https://stellar.expert/explorer/${testnet ? 'testnet' : 'public'}/tx/${hash}`;
 }
 
+/** The chain a leg's on-chain transaction ran on: where its funds left from, else where they arrived. */
+function legChain(leg: RampOrder['legs'][number]): string {
+  if (leg.from.kind === 'asset') return leg.from.chain;
+  return leg.to.kind === 'asset' ? leg.to.chain : 'STELLAR';
+}
+
+export const fiatKey = (fiat: Pick<RampFiat, 'currency' | 'rail'>) => `${fiat.currency}:${fiat.rail}`;
+export const assetKey = (asset: Pick<RampAsset, 'code' | 'chain' | 'identifier'>) =>
+  `${asset.code}:${asset.chain}:${asset.identifier ?? ''}`;
+
+interface RampWidgetTemplateProps {
+  theme: string;
+  accentColor: string;
+  /** Per-app modal chrome overrides (background, card + button radius). */
+  styleOverrides?: ModalStyleOverrides;
+  network: StellarNetwork;
+  step: RampStep;
+  /** Labels of the steps this run goes through: 'Details' only when the route asks for fields. */
+  flowSteps: string[];
+  /** Index into `flowSteps`, or -1 outside the flow (the error step). */
+  flowStepIndex: number;
+  direction: RampDirection;
+  routesLoading: boolean;
+  countries: Array<{ country: string; fiats: RampFiat[] }>;
+  country: string;
+  fiats: RampFiat[];
+  fiat: RampFiat | null;
+  assets: RampAsset[];
+  asset: RampAsset | null;
+  amount: string;
+  quotes: RampQuote[];
+  rejected: RampQuoteRejection[];
+  /** Quote whose order request is in flight, so its row can show it. */
+  startingQuoteId: string | null;
+  fields: RampField[];
+  fieldValues: Record<string, string>;
+  order: RampOrder | null;
+  /** Orders waiting on the user, to resume. */
+  pendingOrders: RampOrder[];
+  isLoading: boolean;
+  refreshing: boolean;
+  signing: boolean;
+  errorMsg: string | null;
+  onDirectionChange: (direction: RampDirection) => void;
+  onCountryChange: (country: string) => void;
+  onFiatChange: (key: string) => void;
+  onAssetChange: (key: string) => void;
+  onAmountChange: (value: string) => void;
+  onFindRoute: () => void;
+  onSelectQuote: (quote: RampQuote) => void;
+  onFieldChange: (key: string, value: string) => void;
+  onContactContinue: () => void;
+  onSign: () => void;
+  onApprove: () => void;
+  onResumeOrder: (id: string) => void;
+  onNewOrder: () => void;
+  /** Step back, keeping what was entered. */
+  onBack: () => void;
+  onRetry: () => void;
+  onRefresh: () => void;
+  onClose: () => void;
+}
+
+const LOADING_STEPS = ['Checking routes…', 'Quoting each step…', 'Route found!'];
+
 export function RampWidgetTemplate({
-  workflowContent,
-  routeSelector,
   theme,
   accentColor,
   styleOverrides,
+  network,
   step,
   flowSteps,
   flowStepIndex,
-  startingQuoteId,
   direction,
-  amount,
-  currency,
-  country,
-  requiredFields,
-  fieldValues,
+  routesLoading,
   countries,
-  countriesLoading,
-  refreshing,
+  country,
+  fiats,
+  fiat,
+  assets,
+  asset,
+  amount,
   quotes,
-  kycRequired,
+  rejected,
+  startingQuoteId,
+  fields,
+  fieldValues,
+  order,
+  pendingOrders,
   isLoading,
-  provider,
-  txStatus,
-  kycUrl,
-  tosUrl,
-  kycBlocking,
-  onboardingStatus,
-  kycJustApproved,
-  stellarTxHash,
-  txHash,
-  txChain,
-  explorerUrl,
-  fundsInTransit = false,
-  retrying = false,
-  onRetryTransit,
-  depositInstructions,
-  canComplete,
-  completing,
-  savedRamps = [],
-  onResumeRamp,
-  onDismissRamp,
-  onDismissCurrentRamp,
-  onExploreRoutes,
+  refreshing,
+  signing,
   errorMsg,
-  noticeMsg,
   onDirectionChange,
-  onAmountChange,
-  onFieldChange,
   onCountryChange,
+  onFiatChange,
+  onAssetChange,
+  onAmountChange,
   onFindRoute,
   onSelectQuote,
-  onVerifyRoute,
+  onFieldChange,
   onContactContinue,
-  onOpenKyc,
-  onOpenTos,
-  onCompleteWithdraw,
+  onSign,
+  onApprove,
+  onResumeOrder,
+  onNewOrder,
   onBack,
   onRetry,
   onRefresh,
   onClose,
 }: RampWidgetTemplateProps) {
-  const settledHash = txHash ?? stellarTxHash;
-  const chainName = CHAIN_NAME[txChain ?? 'STELLAR'];
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
+  const onramp = direction === 'ONRAMP';
+  const sendUnit = onramp ? fiat?.currency : asset?.code;
+  const view = order ? describeRampAction(order) : null;
+  const settled = order ? ['completed', 'failed', 'refunded'].includes(order.state) : false;
 
   const stepTitle: Record<RampStep, string> = {
-    input: direction === 'onramp' ? 'Buy crypto' : 'Sell crypto',
-    loading_quote: 'Finding best route',
-    select_route: 'Select provider',
+    input: onramp ? 'Buy crypto' : 'Sell crypto',
+    loading_quote: 'Finding the best route',
+    select_route: 'Choose a route',
     contact: 'Your details',
-    status: direction === 'onramp' ? 'Complete your deposit' : 'Complete your withdrawal',
+    status: order?.state === 'completed' ? 'Transfer completed' : onramp ? 'Your purchase' : 'Your sale',
     error: 'Something went wrong',
   };
-
   const stepSubtitle: Record<RampStep, string> = {
-    input: direction === 'onramp' ? 'Enter the amount you want to deposit' : 'Enter the amount you want to withdraw',
-    loading_quote: 'Comparing providers in real time…',
-    select_route: 'All prices include fees',
-    // What this step actually asks for is whatever the route declared, and that
-    // is rarely a name and an email: an Abroad off-ramp asks where to send the
-    // money, not who you are. Say which, rather than asserting the Bridge case
-    // over every provider.
-    contact: `${provider || 'This provider'} needs ${listOf(requiredFields.filter((f) => !f.optional).map((f) => f.label.toLowerCase()))} to continue`,
-    status: workflowContent
-      ? 'Follow the next step below to continue'
-      : `Finish the flow at ${provider || 'the provider'} to continue`,
+    input: onramp ? 'Pick what you receive and how much you pay' : 'Pick what you sell and how much',
+    loading_quote: 'Comparing routes in real time…',
+    select_route: 'All amounts include fees',
+    contact: `This route needs ${listOf(fields.filter((f) => !f.optional).map((f) => f.label.toLowerCase()))} to continue`,
+    status: view?.title ?? 'Processing',
     error: 'Please try again',
   };
 
@@ -335,9 +254,6 @@ export function RampWidgetTemplate({
         </div>
       </div>
 
-      {/* How far along the run is. The segment count comes from the route, not
-          from a constant: a provider that collects no fields genuinely has one
-          step fewer. Hidden on the error step, which is not part of the flow. */}
       {flowStepIndex >= 0 && flowSteps.length > 0 && (
         <div className="pollar-ramp-steps">
           <span className="pollar-ramp-steps-label">
@@ -358,109 +274,121 @@ export function RampWidgetTemplate({
         </div>
       )}
 
-      {step === 'input' && savedRamps.length > 0 && (
+      {step === 'input' && pendingOrders.length > 0 && (
         <section className="pollar-ramp-payment pollar-ramp-saved" aria-label="Pending operations">
           <p className="pollar-ramp-payment-note">
-            Your pending operations are saved. Starting another route does not cancel them.
+            These operations are waiting for you. Starting another does not cancel them.
           </p>
-          {savedRamps.map((ramp) => (
-            <div className="pollar-ramp-saved-row" key={ramp.txId}>
+          {pendingOrders.map((pending) => (
+            <div className="pollar-ramp-saved-row" key={pending.id}>
               <button
                 type="button"
                 className="pollar-btn-secondary"
                 disabled={isLoading}
-                onClick={() => onResumeRamp?.(ramp.txId)}
+                onClick={() => onResumeOrder(pending.id)}
               >
-                Resume {ramp.provider} · {ramp.txId.slice(-8)}
+                Resume {pending.direction === 'ONRAMP' ? 'purchase' : 'sale'} · {pending.id.slice(-8)}
               </button>
-              {onDismissRamp && (
-                <button
-                  type="button"
-                  className="pollar-btn-secondary"
-                  disabled={isLoading}
-                  aria-label={`Remove ${ramp.provider} ${ramp.txId.slice(-8)} from pending list`}
-                  onClick={() => onDismissRamp(ramp.txId)}
-                >
-                  Remove
-                </button>
-              )}
             </div>
           ))}
         </section>
       )}
+
       {step === 'input' && (
         <>
-          {noticeMsg && (
-            <p className="pollar-ramp-payment-note" role="status">
-              {noticeMsg}
-            </p>
-          )}
           <div className="pollar-tabs">
-            <button
-              type="button"
-              className="pollar-tab"
-              data-active={direction === 'onramp'}
-              onClick={() => onDirectionChange('onramp')}
-            >
+            <button type="button" className="pollar-tab" data-active={onramp} onClick={() => onDirectionChange('ONRAMP')}>
               Buy
             </button>
-            <button
-              type="button"
-              className="pollar-tab"
-              data-active={direction === 'offramp'}
-              onClick={() => onDirectionChange('offramp')}
-            >
+            <button type="button" className="pollar-tab" data-active={!onramp} onClick={() => onDirectionChange('OFFRAMP')}>
               Sell
             </button>
           </div>
 
-          <div className="pollar-ramp-field">
-            <label className="pollar-ramp-label" htmlFor="pollar-ramp-country">
-              Country
-            </label>
-            {countriesLoading ? (
-              <div className="pollar-ramp-input pollar-select-loading">
-                <span className="pollar-spinner pollar-spinner-sm" />
-                <span>Loading countries…</span>
+          {routesLoading ? (
+            <div className="pollar-ramp-input pollar-select-loading">
+              <span className="pollar-spinner pollar-spinner-sm" />
+              <span>Loading routes…</span>
+            </div>
+          ) : countries.length === 0 ? (
+            <div className="pollar-modal-error">No ramp routes are available for this app yet.</div>
+          ) : (
+            <>
+              <div className="pollar-ramp-field">
+                <label className="pollar-ramp-label" htmlFor="pollar-ramp-country">
+                  Country
+                </label>
+                <select
+                  id="pollar-ramp-country"
+                  className="pollar-ramp-input"
+                  value={country}
+                  onChange={(e) => onCountryChange(e.target.value)}
+                >
+                  {countries.map((c) => (
+                    <option key={c.country} value={c.country}>
+                      {flagEmoji(c.country)} {c.country}
+                    </option>
+                  ))}
+                </select>
               </div>
-            ) : countries.length === 0 ? (
-              <div className="pollar-modal-error">No ramp providers available on this network yet.</div>
-            ) : (
-              <select
-                id="pollar-ramp-country"
-                className="pollar-ramp-input"
-                value={country}
-                onChange={(e) => onCountryChange(e.target.value)}
-              >
-                {countries.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {flagEmoji(c.code)} {c.code}
-                    {c.currency ? ` — ${c.currency}` : ''}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
 
-          {routeSelector}
+              {fiats.length > 1 && (
+                <div className="pollar-ramp-field">
+                  <label className="pollar-ramp-label" htmlFor="pollar-ramp-fiat">
+                    {onramp ? 'Pay with' : 'Receive in'}
+                  </label>
+                  <select
+                    id="pollar-ramp-fiat"
+                    className="pollar-ramp-input"
+                    value={fiat ? fiatKey(fiat) : ''}
+                    onChange={(e) => onFiatChange(e.target.value)}
+                  >
+                    {fiats.map((f) => (
+                      <option key={fiatKey(f)} value={fiatKey(f)}>
+                        {f.currency} · {f.rail}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-          <div className="pollar-ramp-field">
-            <label className="pollar-ramp-label" htmlFor="pollar-ramp-amount">
-              Amount{currency ? ` (${currency})` : ''}
-            </label>
-            <input
-              id="pollar-ramp-amount"
-              type="number"
-              className="pollar-ramp-input"
-              placeholder="0.00"
-              value={amount}
-              min="0"
-              onChange={(e) => onAmountChange(e.target.value)}
-            />
-            {/* Why the user was sent back here (e.g. the route's minimum), kept
-                under the field they came to fix. Clears as soon as they type. */}
-            {errorMsg && <span className="pollar-ramp-field-error">{errorMsg}</span>}
-          </div>
+              <div className="pollar-ramp-field">
+                <label className="pollar-ramp-label" htmlFor="pollar-ramp-asset">
+                  {onramp ? 'Receive' : 'Sell'}
+                </label>
+                <select
+                  id="pollar-ramp-asset"
+                  className="pollar-ramp-input"
+                  value={asset ? assetKey(asset) : ''}
+                  onChange={(e) => onAssetChange(e.target.value)}
+                >
+                  {assets.map((a) => (
+                    <option key={assetKey(a)} value={assetKey(a)}>
+                      {a.code} on {CHAIN_NAME[a.chain] ?? a.chain}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pollar-ramp-field">
+                <label className="pollar-ramp-label" htmlFor="pollar-ramp-amount">
+                  {onramp ? 'You pay' : 'You sell'}
+                  {sendUnit ? ` (${sendUnit})` : ''}
+                </label>
+                <input
+                  id="pollar-ramp-amount"
+                  type="number"
+                  inputMode="decimal"
+                  className="pollar-ramp-input"
+                  placeholder="0.00"
+                  value={amount}
+                  min="0"
+                  onChange={(e) => onAmountChange(e.target.value)}
+                />
+                {errorMsg && <span className="pollar-ramp-field-error">{errorMsg}</span>}
+              </div>
+            </>
+          )}
 
           <div className="pollar-modal-actions">
             <button type="button" className="pollar-btn-secondary" onClick={onClose}>
@@ -469,7 +397,7 @@ export function RampWidgetTemplate({
             <button
               type="button"
               className="pollar-btn-primary"
-              disabled={!amount || isLoading || countriesLoading || countries.length === 0}
+              disabled={!amount || !fiat || !asset || isLoading || routesLoading}
               onClick={onFindRoute}
             >
               Find best route
@@ -492,38 +420,34 @@ export function RampWidgetTemplate({
 
       {step === 'select_route' && (
         <>
-          {noticeMsg && <p className="pollar-ramp-payment-note">{noticeMsg}</p>}
           <div className="pollar-ramp-route-list">
             {quotes.map((q, i) => (
               <RouteDisplay
-                key={i}
+                key={q.quoteId}
                 quote={q}
-                busy={startingQuoteId != null && q.quoteId === startingQuoteId}
+                best={i === 0}
+                busy={startingQuoteId === q.quoteId}
                 disabled={startingQuoteId != null && q.quoteId !== startingQuoteId}
                 onSelect={onSelectQuote}
               />
             ))}
-            {kycRequired.map((r) => (
-              <LockedRouteDisplay
-                key={`${r.rampProviderId}:${r.corridorId}`}
-                requirement={r}
-                disabled={startingQuoteId != null}
-                onVerify={onVerifyRoute}
-              />
+            {rejected.map((r, i) => (
+              <RejectedRouteDisplay key={i} rejection={r} />
             ))}
           </div>
-          {/* A route whose limits the amount breaks reports it here, so the user
-              can pick another route or go back and edit - without leaving the
-              list for the error step. */}
+          {quotes.length === 0 && (
+            <p className="pollar-ramp-payment-note">No route can take this amount right now. Try another amount.</p>
+          )}
           {errorMsg && (
             <p className="pollar-ramp-payment-note" style={{ color: 'var(--pollar-error-text)' }}>
               {errorMsg}
             </p>
           )}
-          {/* Back returns to the amount, which is the only way out of a route
-              whose minimum the amount misses - so it takes the primary weight
-              while that message is up. The header's X still closes the modal. */}
-          <button type="button" className={errorMsg ? 'pollar-btn-primary' : 'pollar-btn-secondary'} onClick={onBack}>
+          <button
+            type="button"
+            className={errorMsg || !quotes.length ? 'pollar-btn-primary' : 'pollar-btn-secondary'}
+            onClick={onBack}
+          >
             Back
           </button>
         </>
@@ -531,7 +455,7 @@ export function RampWidgetTemplate({
 
       {step === 'contact' && (
         <>
-          {requiredFields.map((f) => (
+          {fields.map((f) => (
             <div key={f.key} className="pollar-ramp-field">
               <label className="pollar-ramp-label">
                 {f.label}
@@ -557,7 +481,7 @@ export function RampWidgetTemplate({
                   type={f.type}
                   className="pollar-ramp-input"
                   value={fieldValues[f.key] ?? ''}
-                  placeholder={placeholderFor(f, requiredFields, fieldValues)}
+                  placeholder={placeholderFor(f, fields, fieldValues)}
                   autoComplete={f.type === 'email' ? 'email' : 'off'}
                   onChange={(e) => onFieldChange(f.key, e.target.value)}
                 />
@@ -568,6 +492,7 @@ export function RampWidgetTemplate({
               )}
             </div>
           ))}
+          {errorMsg && <p className="pollar-ramp-field-error">{errorMsg}</p>}
 
           <div className="pollar-modal-actions">
             <button type="button" className="pollar-btn-secondary" onClick={onBack}>
@@ -576,7 +501,7 @@ export function RampWidgetTemplate({
             <button
               type="button"
               className="pollar-btn-primary"
-              disabled={requiredFields.some((f) => !isFieldValid(f, fieldValues[f.key])) || isLoading}
+              disabled={fields.some((f) => !isFieldValid(f, fieldValues[f.key])) || isLoading}
               onClick={onContactContinue}
             >
               {isLoading ? (
@@ -592,119 +517,58 @@ export function RampWidgetTemplate({
         </>
       )}
 
-      {step === 'status' && workflowContent}
-      {step === 'status' && onDismissCurrentRamp && txStatus !== 'completed' && txStatus !== 'failed' && (
-        <div className="pollar-ramp-explore">
-          <button type="button" className="pollar-btn-secondary" disabled={completing} onClick={onDismissCurrentRamp}>
-            Remove from pending list
-          </button>
-          <p className="pollar-ramp-payment-note">
-            This only hides the operation in this tab. To request cancellation, open the provider link above when available or
-            contact the provider’s support. Payments and refunds must be confirmed by the provider.
-          </p>
-        </div>
-      )}
-      {step === 'status' && onExploreRoutes && (
-        <div className="pollar-ramp-explore">
-          <button type="button" className="pollar-btn-secondary" disabled={completing} onClick={onExploreRoutes}>
-            {txStatus === 'completed' || txStatus === 'failed' ? 'Start another operation' : 'Try another route'}
-          </button>
-          {txStatus !== 'completed' && txStatus !== 'failed' && (
-            <p className="pollar-ramp-payment-note">Your current operation stays saved so you can resume it later.</p>
-          )}
-        </div>
-      )}
-      {step === 'status' && !workflowContent && (
+      {step === 'status' && order && view && (
         <div className="pollar-ramp-payment">
-          <div className="pollar-ramp-payment-field">
-            <span className="pollar-ramp-payment-label">Provider</span>
-            <div className="pollar-ramp-payment-value">
-              <code>{provider}</code>
-            </div>
-          </div>
+          <ol className="pollar-ramp-legs" aria-label="Progress">
+            {order.legs.map((leg) => {
+              const status = rampLegStatus(leg);
+              const hash = leg.onchainTxHash;
+              return (
+                <li key={leg.index} className="pollar-ramp-leg" data-status={status}>
+                  <span className="pollar-ramp-leg-dot" aria-hidden />
+                  <span className="pollar-ramp-leg-title">{rampLegTitle(leg)}</span>
+                  {status === 'active' && !settled && (
+                    <span className="pollar-spinner pollar-spinner-sm" aria-label="In progress" />
+                  )}
+                  {hash && (
+                    <a
+                      className="pollar-ramp-leg-link"
+                      href={explorerTxUrl(legChain(leg), hash, network)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {hash.slice(0, 6)}…{hash.slice(-4)}
+                    </a>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
 
-          <div className="pollar-ramp-payment-field">
-            <span className="pollar-ramp-payment-label">Status</span>
-            <div className="pollar-ramp-payment-value">
-              <code style={{ color: txStatus === 'completed' ? 'var(--pollar-success-text)' : undefined }}>
-                {txStatus ? STATUS_LABEL[txStatus] : 'Processing'}
-              </code>
-              {txStatus !== 'completed' && txStatus !== 'failed' && (
-                <span className="pollar-spinner pollar-spinner-sm" aria-label="Checking status" />
-              )}
-            </div>
-          </div>
-
-          {fundsInTransit && txStatus !== 'completed' && txStatus !== 'failed' && (
+          {order.failure && (
             <div className="pollar-ramp-payment-field">
-              <span className="pollar-ramp-payment-label">Funds in transit</span>
-              <p className="pollar-ramp-payment-note">
-                Your money is safe in your own wallet, waiting for the next step of the transfer.
-              </p>
-              {onRetryTransit && (
-                <button type="button" className="pollar-btn-secondary" onClick={onRetryTransit} disabled={retrying}>
-                  {retrying ? 'Retrying...' : 'Retry now'}
-                </button>
-              )}
-            </div>
-          )}
-
-          {settledHash && (
-            <div className="pollar-ramp-payment-field">
-              <span className="pollar-ramp-payment-label">{chainName} tx</span>
+              <span className="pollar-ramp-payment-label">What to do</span>
+              <p className="pollar-ramp-payment-note">{rampResolutionText(order.failure)}</p>
               <div className="pollar-ramp-payment-value" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <code style={{ flex: 1, wordBreak: 'break-all' }}>
-                  {settledHash.slice(0, 8)}…{settledHash.slice(-8)}
-                </code>
-                <CopyButton value={settledHash} label="Copy transaction hash" />
-                {explorerUrl && (
-                  <a
-                    href={explorerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="pollar-copy-btn"
-                    aria-label={`View on ${EXPLORER_NAME[txChain ?? 'STELLAR']}`}
-                    title={`View on ${EXPLORER_NAME[txChain ?? 'STELLAR']}`}
-                  >
-                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
-                      <path
-                        d="M6 3H3v8h8V8"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M8.5 2.5h3v3M11 3L6.5 7.5"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </a>
-                )}
+                <code style={{ flex: 1, wordBreak: 'break-all' }}>Order {order.id}</code>
+                <CopyButton value={order.id} label="Copy order id" />
               </div>
             </div>
           )}
 
-          {/* The code to scan. The server sends it rendered, so there is no QR
-              library here and no per-provider branch: a Pollar-made SVG is
-              inlined (it uses `currentColor`, so it follows the modal's theme),
-              and a provider's own bitmap goes through an <img>. */}
-          {depositInstructions?.scannable && txStatus !== 'completed' && (
+          {!settled && view.scannable && (
             <div className="pollar-ramp-payment-field">
               <span className="pollar-ramp-payment-label">Payment QR</span>
               <div className="pollar-ramp-payment-value">
-                {depositInstructions.scannable.image.inlineSafe ? (
+                {view.scannable.image.inlineSafe ? (
                   <div
                     className="pollar-ramp-qr"
                     aria-label="Payment QR"
-                    dangerouslySetInnerHTML={{ __html: depositInstructions.scannable.image.data }}
+                    dangerouslySetInnerHTML={{ __html: view.scannable.image.data }}
                   />
                 ) : (
                   <img
-                    src={scannableImageSrc(depositInstructions.scannable.image)}
+                    src={scannableImageSrc(view.scannable.image)}
                     alt="Payment QR"
                     style={{ width: '100%', maxWidth: 220, height: 'auto', display: 'block', margin: '0 auto' }}
                   />
@@ -712,133 +576,67 @@ export function RampWidgetTemplate({
               </div>
             </div>
           )}
-
-          {/* The payload as text, when it is worth pasting. On the phone holding
-              the screen there is nothing to scan, and a Pix code is designed to
-              be pasted. The server decides by setting `payloadLabel`. */}
-          {depositInstructions?.scannable?.payload &&
-            depositInstructions.scannable.payloadLabel &&
-            txStatus !== 'completed' && (
-              <div className="pollar-ramp-payment-field">
-                <span className="pollar-ramp-payment-label">{depositInstructions.scannable.payloadLabel}</span>
+          {!settled && view.scannable?.payload && view.scannable.payloadLabel && (
+            <div className="pollar-ramp-payment-field">
+              <span className="pollar-ramp-payment-label">{view.scannable.payloadLabel}</span>
+              <div className="pollar-ramp-payment-value">
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <code style={{ flex: 1, wordBreak: 'break-all' }}>{view.scannable.payload}</code>
+                  <CopyButton value={view.scannable.payload} label={`Copy ${view.scannable.payloadLabel}`} />
+                </span>
+              </div>
+            </div>
+          )}
+          {!settled &&
+            view.details.map((d) => (
+              <div key={d.label} className="pollar-ramp-payment-field">
+                <span className="pollar-ramp-payment-label">{d.label}</span>
                 <div className="pollar-ramp-payment-value">
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <code style={{ flex: 1, wordBreak: 'break-all' }}>{depositInstructions.scannable.payload}</code>
-                    <CopyButton
-                      value={depositInstructions.scannable.payload}
-                      label={`Copy ${depositInstructions.scannable.payloadLabel}`}
-                    />
+                    <code style={{ flex: 1, wordBreak: 'break-all' }}>{d.value}</code>
+                    <CopyButton value={d.value} label={`Copy ${d.label}`} />
                   </span>
-                </div>
-              </div>
-            )}
-
-          {/* Everything else. Labelled and formatted server-side, so this only
-              iterates - it knows nothing about which provider served the route. */}
-          {depositInstructions &&
-            txStatus !== 'completed' &&
-            depositInstructions.fields.map((f) => (
-              <div key={f.key} className="pollar-ramp-payment-field">
-                <span className="pollar-ramp-payment-label">{f.label}</span>
-                <div className="pollar-ramp-payment-value">
-                  {f.copyable ? (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <code style={{ flex: 1, wordBreak: 'break-all' }}>{f.value}</code>
-                      <CopyButton value={f.value} label={`Copy ${f.label}`} />
-                    </span>
-                  ) : f.type === 'url' ? (
-                    <a href={f.value} target="_blank" rel="noopener noreferrer">
-                      {f.value}
-                    </a>
-                  ) : (
-                    <span>{displayValue(f)}</span>
-                  )}
                 </div>
               </div>
             ))}
 
-          {/* KYC / ToS onboarding steps at the provider. Hidden once deposit
-              instructions exist - by then onboarding is done and the only
-              remaining action is to pay using the instructions above. */}
-          {tosUrl && !depositInstructions && txStatus !== 'completed' && (
-            <button type="button" className="pollar-btn-primary" onClick={onOpenTos}>
-              Accept terms at {provider}
+          {!settled && view.canSign && (
+            <button type="button" className="pollar-btn-primary" disabled={signing} onClick={onSign}>
+              {signing ? 'Waiting for your wallet…' : 'Authorize'}
             </button>
           )}
-
-          {kycUrl && !depositInstructions && txStatus !== 'completed' && (
-            <button type="button" className="pollar-btn-primary" onClick={onOpenKyc}>
-              Continue at {provider}
+          {!settled && view.canApprove && (
+            <button type="button" className="pollar-btn-primary" onClick={onApprove}>
+              Approve on this device
             </button>
           )}
-
-          {/* Link-less gate: there is nowhere to send the user, so say what is
-              blocking and keep the withdraw button out of reach. No funds have
-              moved and nothing was signed.
-
-              Two different situations reach this, and telling the user the wrong
-              one is worse than saying nothing: `awaiting_provider` means their
-              verification is already done and the provider is finishing its own
-              setup, so asking them to "complete verification" sends them back
-              through a flow that cannot change anything. */}
-          {kycBlocking && onboardingStatus === 'awaiting_provider' && (
-            <p className="pollar-ramp-payment-note">
-              {provider} is still setting up your account for this payment method. Your verification is complete and there is
-              nothing left for you to do — nothing has been sent, and this will update on its own once {provider} is ready.
-            </p>
+          {!settled && view.link && (
+            <a
+              className="pollar-btn-primary pollar-ramp-hosted-link"
+              href={view.link}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Complete verification
+            </a>
           )}
-
-          {kycBlocking && onboardingStatus !== 'awaiting_provider' && (
-            <p className="pollar-ramp-payment-note">
-              {provider} needs to verify your identity before this payout. Nothing has been sent yet — complete verification
-              with {provider}, and this will update on its own.
-            </p>
+          {!settled && order.pendingAction?.kind === 'KYC' && !view.link && (
+            <p className="pollar-ramp-payment-note">The provider is reviewing your details. This updates on its own.</p>
           )}
+          {errorMsg && <p className="pollar-ramp-field-error">{errorMsg}</p>}
 
-          {/* Approval unblocks the next quote, not this one: the provider consumed
-              this transaction's quote when it asked for KYC. So the withdraw stays
-              out of reach and the only way forward is a fresh quote. */}
-          {kycJustApproved && (
-            <>
-              <p className="pollar-ramp-payment-note">
-                {provider} approved your verification. Request a new quote to continue — the previous one was consumed.
-              </p>
-              <button type="button" className="pollar-btn-primary" onClick={onRetry}>
-                Request a new quote
-              </button>
-            </>
-          )}
-
-          {canComplete && (
-            <button type="button" className="pollar-btn-primary" disabled={completing} onClick={onCompleteWithdraw}>
-              {completing ? (
-                <>
-                  <span className="pollar-spinner pollar-spinner-sm" />
-                  Submitting…
-                </>
-              ) : (
-                'Check verification and continue'
-              )}
+          <div className="pollar-ramp-explore">
+            <button type="button" className="pollar-btn-secondary" onClick={onNewOrder}>
+              Start another operation
             </button>
-          )}
-
-          {errorMsg && (
-            <p className="pollar-ramp-payment-note" style={{ color: 'var(--pollar-error-text)' }}>
-              {errorMsg}
-            </p>
-          )}
-
-          <button type="button" className="pollar-btn-secondary" onClick={onClose}>
-            {txStatus === 'completed' ? 'Done' : 'Close'}
-          </button>
+            {!settled && <p className="pollar-ramp-payment-note">This one keeps going; you can resume it later.</p>}
+          </div>
         </div>
       )}
 
       {step === 'error' && (
-        <div className="pollar-ramp-payment">
-          <p className="pollar-ramp-payment-note" style={{ color: 'var(--pollar-error-text)' }}>
-            {errorMsg ?? 'Unexpected error.'}
-          </p>
+        <>
+          <div className="pollar-modal-error">{errorMsg ?? 'Something went wrong.'}</div>
           <div className="pollar-modal-actions">
             <button type="button" className="pollar-btn-secondary" onClick={onClose}>
               Close
@@ -847,9 +645,8 @@ export function RampWidgetTemplate({
               Try again
             </button>
           </div>
-        </div>
+        </>
       )}
-      <PollarModalFooter />
     </div>
   );
 }

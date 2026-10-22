@@ -1,12 +1,24 @@
 import { assertRampChain } from './chains';
-import type { RampChain, RampAction, RampRoute, RampCountry, RampsTransactionResponse } from '../types';
-export type RampSigningAction = Extract<RampAction, { kind: 'sign_transaction' }>;
+import type {
+  RampChain,
+  RampFailure,
+  RampField,
+  RampFiat,
+  RampOrder,
+  RampOrderLeg,
+  RampPendingAction,
+  RampQuote,
+  RampRoute,
+  RampScannable,
+  RampSignatureAction,
+} from '../types';
+
 /**
  * The integration must validate the payload, required account and network before
  * signing. Reject invalid requests or cancellation; return the signed payload
  * without broadcasting. Core treats the chain's payload encoding as opaque.
  */
-export type RampSigningHandler = (action: RampSigningAction) => Promise<string>;
+export type RampSigningHandler = (action: RampSignatureAction) => Promise<string>;
 export class RampSigningRegistry {
   private readonly handlers = new Map<string, RampSigningHandler>();
   register(chain: RampChain, encoding: string, handler: RampSigningHandler) {
@@ -23,16 +35,7 @@ export class RampSigningRegistry {
     return this.handlers.get(JSON.stringify([chain, encoding]));
   }
 }
-export type RampSnapshot = Pick<
-  RampsTransactionResponse,
-  'txId' | 'status' | 'nextAction' | 'transactionVersion' | 'reconciliationRequired' | 'lifecycleState' | 'terms' | 'milestones'
->;
-/** Responses from another transaction or an older revision cannot replace progress. */
-export function mergeRampSnapshot<T extends RampSnapshot>(previous: T | null | undefined, incoming: T): T {
-  if (previous && (previous.txId !== incoming.txId || (previous.transactionVersion ?? 0) > (incoming.transactionVersion ?? 0)))
-    return previous;
-  return incoming;
-}
+
 export function safeRampUrl(value: string): string | null {
   try {
     const url = new URL(value);
@@ -41,112 +44,107 @@ export function safeRampUrl(value: string): string | null {
     return null;
   }
 }
-/** Capabilities also supply countries for providers outside the legacy catalog. */
-export function mergeRampCountries(legacy: RampCountry[], routes: RampRoute[]): RampCountry[] {
-  const countries = new Map(legacy.map((country) => [country.code, country]));
-  for (const route of routes)
-    if (!countries.has(route.country)) countries.set(route.country, { code: route.country, currency: route.fiatCurrency });
-  return [...countries.values()];
+
+/** The countries the routes reach, each with the fiat currencies and rails offered there. */
+export function rampCountries(routes: RampRoute[]): Array<{ country: string; fiats: RampFiat[] }> {
+  const byCountry = new Map<string, RampFiat[]>();
+  for (const { fiat } of routes) {
+    const fiats = byCountry.get(fiat.country) ?? [];
+    if (!fiats.some((known) => known.currency === fiat.currency && known.rail === fiat.rail)) fiats.push(fiat);
+    byCountry.set(fiat.country, fiats);
+  }
+  return [...byCountry].map(([country, fiats]) => ({ country, fiats }));
 }
-/** Shared interpretation; platforms supply controls, links and QR rendering. */
-export function describeRampAction(snapshot: RampSnapshot) {
-  const action = snapshot.nextAction;
-  const blocked =
-    snapshot.reconciliationRequired === true ||
-    ['completed', 'failed', 'refunded'].includes(snapshot.lifecycleState ?? snapshot.status);
-  const base = {
-    action,
-    canContinue: false,
-    canSign: false,
-    title: 'Waiting for the next step',
-    details: [] as Array<{ label: string; value: string }>,
-    links: [] as Array<{ label: string; url: string }>,
-    qr: null as string | null,
-  };
-  if (snapshot.reconciliationRequired)
-    return { ...base, title: 'We are checking your transfer. You do not need to start again.' };
-  if (snapshot.lifecycleState === 'completed' || snapshot.status === 'completed')
-    return { ...base, title: 'Transfer completed' };
+
+/** Every field the quote asks the user for, across its legs, once per key. */
+export function rampQuoteFields(quote: RampQuote): RampField[] {
+  const fields = new Map<string, RampField>();
+  for (const leg of quote.legs)
+    for (const field of leg.requiredFields) if (!fields.has(field.key)) fields.set(field.key, field);
+  return [...fields.values()];
+}
+
+const CHAIN_NAME: Record<string, string> = { STELLAR: 'Stellar', POLYGON: 'Polygon', SOLANA: 'Solana' };
+const nodeName = (node: RampOrderLeg['to']) =>
+  node.kind === 'fiat' ? node.currency : `${node.code} on ${CHAIN_NAME[node.chain] ?? node.chain}`;
+
+/** What a leg does, in the user's terms: "Pay in BOB", "Convert USDT to USDC", "Send USDC to Stellar". */
+export function rampLegTitle(leg: Pick<RampOrderLeg, 'kind' | 'from' | 'to'>): string {
+  if (leg.kind === 'PROVIDER_ONRAMP') return `Buy ${nodeName(leg.to)}`;
+  if (leg.kind === 'PROVIDER_OFFRAMP') return `Receive ${nodeName(leg.to)}`;
+  if (leg.kind === 'SWAP' && leg.from.kind === 'asset' && leg.to.kind === 'asset')
+    return `Convert ${leg.from.code} to ${leg.to.code}`;
+  return `Send to ${leg.to.kind === 'asset' ? (CHAIN_NAME[leg.to.chain] ?? leg.to.chain) : nodeName(leg.to)}`;
+}
+
+/** The step a leg is on, as a short status for a progress list. */
+export function rampLegStatus(leg: Pick<RampOrderLeg, 'status' | 'failure'>): 'pending' | 'active' | 'done' | 'failed' {
+  if (leg.status === 'COMPLETED') return 'done';
+  if (leg.failure || ['HELD', 'FAILED', 'CANCELLED'].includes(leg.status)) return 'failed';
+  return leg.status === 'PENDING' ? 'pending' : 'active';
+}
+
+/** What the user is asked to do about a failure, by its `resolutionAction`. */
+const RESOLUTION: Record<string, string> = {
+  accept_new_quote: 'The price changed. Get a new quote to continue.',
+  add_funds: 'The wallet does not hold enough. Add funds and try again.',
+  approve_again: 'The approval expired. Approve the step again.',
+  automatic_retry: 'Retrying on its own. You do not need to do anything.',
+  change_amount: 'This amount is outside what the route accepts. Try another amount.',
+  complete_verification: 'Complete the identity verification to continue.',
+  correct_input: 'Some details were not accepted. Check them and start again.',
+  link_wallet: 'This route needs a wallet on another network.',
+  sign_again: 'The signature expired. Sign the step again.',
+  start_again: 'This transfer could not go through. Start a new one; nothing was charged.',
+  wait_reconciliation: 'We are confirming where the funds are. You do not need to start again.',
+  pollar_follows_up: 'We are looking into it. Your funds are safe; contact support with the order id if you need help.',
+  contact_pollar: 'Something went wrong on our side. Contact support with the order id.',
+};
+
+/** The text for a failure's `resolutionAction`; anything unknown asks the user to contact support. */
+export function rampResolutionText(failure: Pick<RampFailure, 'resolutionAction'>): string {
+  return RESOLUTION[failure.resolutionAction] ?? RESOLUTION.contact_pollar!;
+}
+
+/** The action as a screen shows it; platforms supply the controls, links and QR rendering. */
+export function describeRampAction(order: Pick<RampOrder, 'pendingAction' | 'state'>): {
+  action: RampPendingAction | null;
+  title: string;
+  canSign: boolean;
+  canApprove: boolean;
+  scannable: RampScannable | null;
+  details: Array<{ label: string; value: string }>;
+  link: string | null;
+} {
+  const action = order.pendingAction;
+  const base = { action, title: 'Processing', canSign: false, canApprove: false, scannable: null, details: [], link: null };
+  if (order.state === 'completed') return { ...base, title: 'Transfer completed' };
   if (!action) return base;
-  if ('expiresAt' in action && action.expiresAt !== null && !(Date.parse(action.expiresAt) > Date.now()))
-    return { ...base, title: 'These instructions have expired. Refresh the transfer status.' };
   switch (action.kind) {
-    case 'verification':
+    case 'FIAT_PAYMENT': {
+      const instructions = action.instructions;
+      const title = `Pay ${instructions.amount} ${instructions.currency}`;
+      if (instructions.kind === 'qr') return { ...base, title, scannable: instructions.scannable ?? null };
+      return {
+        ...base,
+        title,
+        details: [
+          ...instructions.details,
+          ...(instructions.reference ? [{ label: 'Reference', value: instructions.reference }] : []),
+        ],
+      };
+    }
+    case 'SIGNATURE':
+      return { ...base, title: 'Authorize your transfer', canSign: Date.parse(action.expiresAt) > Date.now() };
+    case 'COSIGN_APPROVAL':
+      return { ...base, title: 'Approve on your device', canApprove: true };
+    case 'KYC':
       return {
         ...base,
         title: 'Complete verification',
-        canContinue: !blocked,
-        details: action.steps.map((step) => ({ label: step.purpose, value: step.instructions + ' (' + step.status + ')' })),
-        links: action.steps
-          .filter(
-            (step, index) =>
-              step.status === 'required' &&
-              step.url &&
-              (action.order === 'parallel' ||
-                action.steps.slice(0, index).every((previous) => previous.status === 'completed')),
-          )
-          .flatMap((step) => {
-            const url = safeRampUrl(step.url!);
-            return url ? [{ label: step.purpose === 'terms' ? 'Review terms' : 'Open verification', url }] : [];
-          }),
-      };
-    case 'sign_transaction':
-      return {
-        ...base,
-        title:
-          action.purpose === 'authentication'
-            ? 'Authorize verification'
-            : action.purpose === 'onramp_claim'
-              ? 'Authorize receipt of your assets'
-              : 'Authorize your transfer',
-        canSign: !blocked && Date.parse(action.expiresAt) > Date.now(),
-      };
-    case 'user_ready':
-      return { ...base, title: 'Ready to continue', canContinue: !blocked };
-    case 'hosted_redirect': {
-      const url = safeRampUrl(action.url);
-      return {
-        ...base,
-        title: action.purpose === 'payment' ? 'Open payment instructions' : 'Open verification',
-        links: url ? [{ label: 'Open', url }] : [],
-      };
-    }
-    case 'qr_payment':
-      return {
-        ...base,
-        title: `Pay ${action.amount} ${action.currency}`,
-        qr: action.payload,
-        details: [{ label: 'Payment code', value: action.payload }],
-      };
-    case 'bank_transfer':
-      return {
-        ...base,
-        title: `Pay ${action.amount} ${action.currency}`,
-        details: [...action.details, ...(action.reference ? [{ label: 'Reference', value: action.reference }] : [])],
-      };
-    case 'chain_transfer':
-      return {
-        ...base,
-        title: `Transfer ${action.amount} ${action.asset.code}`,
-        details: [
-          { label: 'Chain', value: action.chain },
-          { label: 'Destination', value: action.destination },
-          ...(action.memo ? [{ label: action.memo.type, value: action.memo.value }] : []),
-        ],
-      };
-    case 'collect_information':
-      return { ...base, title: 'Provide the required information', canContinue: !blocked };
-    case 'wait':
-      return {
-        ...base,
-        title: {
-          verification_pending: 'Verification is under review',
-          provider_processing: 'Transfer is processing',
-          settlement_verification: 'Confirming settlement',
-          reconciliation: 'Checking your transfer',
-        }[action.reason],
+        link: action.url ? safeRampUrl(action.url) : null,
       };
     default:
-      return { ...base, title: `This action is unsupported. Reference: ${snapshot.txId}` };
+      return base;
   }
 }

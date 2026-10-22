@@ -1,5 +1,5 @@
-// @pollar smoke test — every request goes to /v3, and a retiring API version is
-// reported to the developer once.
+// @pollar smoke test — every request goes to /v3, and a retiring API version or
+// an app out of credits is reported to the developer once.
 //
 // Run with `node tests/smoke-api-v3.cjs` after `npm run build`. Mocks `fetch`
 // so no real network is required.
@@ -30,8 +30,14 @@ function check(label, ok, extra) {
 (async () => {
   const urls = [];
   let deprecate = false;
+  let outOfCredits = false;
   globalThis.fetch = async (req) => {
     urls.push(req.url);
+    if (outOfCredits)
+      return new Response(JSON.stringify({ success: false, code: 'SDK_CREDITS_INSUFFICIENT' }), {
+        status: 402,
+        headers: { 'content-type': 'application/json' },
+      });
     const headers = { 'content-type': 'application/json' };
     if (deprecate) {
       headers.Deprecation = 'true';
@@ -85,6 +91,21 @@ function check(label, ok, extra) {
     retire[0]?.includes('https://docs.pollar.xyz/docs/sdk-reference/api-versions'),
     retire[0],
   );
+
+  console.log('── 3. An app out of credits is reported once ─────────────────');
+  outOfCredits = true;
+  for (let i = 0; i < 2; i++) await client.getAppConfig().catch(() => {});
+  const credits = warnings.filter((w) => w.includes('SDK_CREDITS_INSUFFICIENT'));
+  check('one warning for two 402 answers', credits.length === 1, warnings);
+  check('  tells the developer to top up', credits[0]?.includes('topped up'), credits[0]);
+  const shown = sdk.appUnavailableMessage({ code: 'SDK_CREDITS_INSUFFICIENT' });
+  check('the user text points to the app, not to credits', shown?.includes("app's support") && !/credit/i.test(shown), shown);
+  check(
+    '  is the same text a failed transaction shows',
+    sdk.transactionErrorMessage('SDK_CREDITS_INSUFFICIENT') === shown,
+    sdk.transactionErrorMessage('SDK_CREDITS_INSUFFICIENT'),
+  );
+  check('any other error is not this one', sdk.appUnavailableMessage({ code: 'TX_SUBMIT_FAILED' }) === null);
   client.destroy();
 
   console.log(`\n${pass} passed, ${fail} failed`);

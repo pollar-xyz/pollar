@@ -1,10 +1,12 @@
 'use client';
 
-import type { RampQuote, RampQuoteRequirement } from '@pollar/core';
-import { lockedRouteCopy } from './ramp-kyc';
+import type { RampQuote, RampQuoteRejection } from '@pollar/core';
+import { rampLegTitle, rampResolutionText } from '@pollar/core';
 
 interface RouteDisplayProps {
   quote: RampQuote;
+  /** The first quote: the most received (or least sent) for the amount. */
+  best?: boolean;
   /** This route is the one being started - it owns the in-flight request. */
   busy?: boolean;
   /** Another route is starting, so this one is not selectable meanwhile. */
@@ -12,25 +14,27 @@ interface RouteDisplayProps {
   onSelect: (quote: RampQuote) => void;
 }
 
-const RAIL_LABELS: Record<string, string> = {
-  SPEI: 'SPEI (Mexico)',
-  PIX: 'PIX (Brazil)',
-  PSE: 'PSE (Colombia)',
-  ACH: 'ACH (US)',
-};
+const assetOf = (node: RampQuote['legs'][number]['to']) => (node.kind === 'fiat' ? node.currency : node.code);
 
-export function RouteDisplay({ quote, busy = false, disabled = false, onSelect }: RouteDisplayProps) {
-  // Picking a route fires a request that can take seconds (the provider is
-  // contacted server-side). Without this the card looked inert and the only
-  // hint that anything happened was the network tab.
+/** "~3 min" for a route's total; nothing when no leg could estimate it. */
+function etaText(seconds: number | null): string | null {
+  if (seconds === null) return null;
+  if (seconds < 90) return `~${Math.max(1, Math.round(seconds))} s`;
+  if (seconds < 5400) return `~${Math.round(seconds / 60)} min`;
+  return `~${Math.round(seconds / 3600)} h`;
+}
+
+export function RouteDisplay({ quote, best = false, busy = false, disabled = false, onSelect }: RouteDisplayProps) {
   const inert = busy || disabled;
   const select = () => {
     if (!inert) onSelect(quote);
   };
+  const first = quote.legs[0];
+  const last = quote.legs[quote.legs.length - 1];
   return (
     <div
       className="pollar-ramp-route-card"
-      data-recommended={quote.recommended}
+      data-recommended={best}
       data-busy={busy || undefined}
       data-disabled={disabled || undefined}
       role="button"
@@ -41,17 +45,15 @@ export function RouteDisplay({ quote, busy = false, disabled = false, onSelect }
       onKeyDown={(e) => e.key === 'Enter' && select()}
     >
       <div className="pollar-ramp-route-left">
-        <span className="pollar-ramp-route-provider">{quote.provider}</span>
+        <span className="pollar-ramp-route-provider">
+          {first && last
+            ? `${quote.amountIn} ${assetOf(first.from)} → ${quote.amountOut} ${assetOf(last.to)}`
+            : quote.amountOut}
+        </span>
         <span className="pollar-ramp-route-meta">
           {busy
             ? 'Starting…'
-            : [
-                quote.route ? `${quote.route.asset.code} on ${quote.route.asset.chain}` : null,
-                RAIL_LABELS[quote.rail] ?? quote.rail,
-                quote.estimatedTime,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
+            : [quote.legs.map((leg) => rampLegTitle(leg)).join(' · '), etaText(quote.etaSeconds)].filter(Boolean).join(' · ')}
         </span>
       </div>
       <div className="pollar-ramp-route-right">
@@ -60,11 +62,9 @@ export function RouteDisplay({ quote, busy = false, disabled = false, onSelect }
         ) : (
           <>
             <span className="pollar-ramp-route-fee">
-              {quote.terms
-                ? `${quote.terms.fiatAmount} ${quote.terms.fiatCurrency} · ${quote.terms.cryptoAmount} ${quote.terms.assetCode} · Includes ${quote.terms.feeAmount} ${quote.terms.feeCurrency}`
-                : `${quote.fee}% fee`}
+              {quote.legs.length === 1 ? '1 step' : `${quote.legs.length} steps`} · fees included
             </span>
-            {quote.recommended && <span className="pollar-ramp-route-badge">Best rate</span>}
+            {best && <span className="pollar-ramp-route-badge">Best rate</span>}
           </>
         )}
       </div>
@@ -72,39 +72,14 @@ export function RouteDisplay({ quote, busy = false, disabled = false, onSelect }
   );
 }
 
-interface LockedRouteDisplayProps {
-  requirement: RampQuoteRequirement;
-  /** A route is starting, so verification cannot be opened meanwhile. */
-  disabled?: boolean;
-  onVerify: (requirement: RampQuoteRequirement) => void;
-}
-
-/** A route the backend did not quote because its corridor has a requirement step the user has not completed. */
-export function LockedRouteDisplay({ requirement, disabled = false, onVerify }: LockedRouteDisplayProps) {
-  const { message, action } = lockedRouteCopy(requirement);
+/** A route that was planned and dropped, and what the user can do about it. */
+export function RejectedRouteDisplay({ rejection }: { rejection: RampQuoteRejection }) {
   return (
-    <div
-      className="pollar-ramp-route-card"
-      data-locked
-      data-kyc-status={requirement.status}
-      data-disabled={disabled || undefined}
-    >
+    <div className="pollar-ramp-route-card" data-locked data-disabled>
       <div className="pollar-ramp-route-left">
-        <span className="pollar-ramp-route-provider">{requirement.provider}</span>
-        <span className="pollar-ramp-route-meta">{message}</span>
+        <span className="pollar-ramp-route-provider">{rejection.legs.map((leg) => rampLegTitle(leg)).join(' · ')}</span>
+        <span className="pollar-ramp-route-meta">{rampResolutionText(rejection.failure)}</span>
       </div>
-      {action && (
-        <div className="pollar-ramp-route-right">
-          <button
-            type="button"
-            className="pollar-btn-secondary pollar-ramp-route-verify"
-            disabled={disabled}
-            onClick={() => onVerify(requirement)}
-          >
-            {action}
-          </button>
-        </div>
-      )}
     </div>
   );
 }
