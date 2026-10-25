@@ -25,6 +25,7 @@ jobs:
           - packages/react-native
           - packages/privy-adapter
           - packages/stellar-wallets-kit-adapter
+          - packages/migrate
     steps:
       - uses: actions/checkout@v7
 

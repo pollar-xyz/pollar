@@ -14,6 +14,27 @@
   `SDK_AUTH_DPOP_INVALID` until the page was reloaded.
 - `@pollar/react` and `@pollar/react-native` require `@pollar/core@^0.12.1`.
 
+## `@pollar/migrate` 0.12.0
+
+> First release. A command that upgrades an app on any `@pollar` release from
+> 0.5 onwards to 0.12: `npx @pollar/migrate` reports, `--fix` applies. Versioned
+> by the SDK line it upgrades to.
+
+- Reads the release the app is on from `node_modules` or `package.json`
+  (`--from` overrides it) and reports only the changes made after it, each with
+  the file, line and the section of the upgrade guide that explains it.
+- `--fix` applies the mechanical changes: the `usePollar()` renames of 0.6, the
+  adapter type renames of 0.7, `<PollarProvider config>`, `wallet.publicKey`,
+  `walletAddress` / `walletType`, `loginWallet`, the Stellar Wallets Kit factory,
+  a versioned `baseUrl`, the `sponsored` trustline flag and the `@pollar/*`
+  ranges. Files are written only after every file was read.
+- Everything else is reported to do by hand: removed ramp and co-sign APIs, the
+  user profile, `styles`, a missing kit `network`, nullable balances, a headless
+  app without a confirmation handler, direct calls to SDK API v1 or v2, and any
+  import 0.12 no longer exports (checked against a list generated from the
+  build; `tests/smoke-migrate.cjs` fails when it is stale).
+- `--json` prints the result for scripts and coding agents.
+
 ## 0.12.0
 
 > `@pollar/core`, `@pollar/react`, `@pollar/react-native`,
