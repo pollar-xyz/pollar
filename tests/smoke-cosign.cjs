@@ -281,6 +281,19 @@ function request(overrides = {}) {
         content: { pendingSignature: { kind: 'cosign', request: signingRequest() } },
       });
     }
+    // A co-signed wallet's auth entry (an x402 payment) is a request its device approves too.
+    if (url.pathname === '/v3/tx/sign-auth-entry') {
+      return json(202, {
+        success: true,
+        code: 'SDK_COSIGN_PENDING',
+        content: {
+          pendingSignature: {
+            kind: 'cosign',
+            request: request({ id: 'req-auth', kind: 'AUTH_ENTRY', intent: 'sign', operation: 'soroban_auth' }),
+          },
+        },
+      });
+    }
     // A co-signed wallet's trustline is the request its device approves, never a custodial signature.
     if (url.pathname === '/v3/wallet/assets/trustline') {
       return json(202, {
@@ -451,6 +464,15 @@ function request(overrides = {}) {
 
   const sendOutcome = await client.signAndSubmitTx(UNSIGNED_XDR);
   check('signAndSubmitTx answers cosign_pending too', sendOutcome.status === 'cosign_pending');
+
+  // A client of its own: the request it opens stays pending in that client's store.
+  const authClient = await makeClient({ cosignManual: true });
+  const authOutcome = await authClient.signAuthEntry('AAAA', { validUntilLedger: 1100 });
+  check(
+    'signAuthEntry on a co-signed wallet answers cosign_pending with the AUTH_ENTRY request',
+    authOutcome.status === 'cosign_pending' && authOutcome.request.kind === 'AUTH_ENTRY',
+    authOutcome,
+  );
 
   const trustOutcome = await client.setTrustline({ code: 'USDC', issuer: SOURCE });
   check(

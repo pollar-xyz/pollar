@@ -19,7 +19,7 @@ function readUint32(bytes: Uint8Array, offset: number): number {
   return ((bytes[offset]! << 24) | (bytes[offset + 1]! << 16) | (bytes[offset + 2]! << 8) | bytes[offset + 3]!) >>> 0;
 }
 
-function base64ToBytes(b64: string): Uint8Array {
+export function base64ToBytes(b64: string): Uint8Array {
   // XDR travels as standard base64; reuse the base64url decoder over the mapped alphabet.
   return base64urlDecode(b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
 }

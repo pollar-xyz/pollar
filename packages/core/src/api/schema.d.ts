@@ -2589,6 +2589,7 @@ export interface operations {
                                     };
                                     stepKey?: string;
                                     signedXdr?: string;
+                                    signedAuthEntry?: string;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
@@ -2747,6 +2748,7 @@ export interface operations {
                                     };
                                     stepKey?: string;
                                     signedXdr?: string;
+                                    signedAuthEntry?: string;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
@@ -2858,6 +2860,65 @@ export interface operations {
                         success: true;
                         content: {
                             signedAuthEntry: string;
+                        };
+                    };
+                };
+            };
+            /** @description Co-signed (Turnkey) wallet: the request the user's device must approve before the entry is signed */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_COSIGN_PENDING";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            pendingSignature: {
+                                /** @constant */
+                                kind: "cosign";
+                                request: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                    /** @enum {string} */
+                                    network: "STELLAR" | "POLYGON" | "SOLANA";
+                                    /** @enum {string} */
+                                    status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "FAILED";
+                                    subOrgId: string;
+                                    activityId: string | null;
+                                    fingerprint: string | null;
+                                    signWith: string;
+                                    account?: string;
+                                    unsignedPayload: string;
+                                    payloadHash: string;
+                                    refreshable: boolean;
+                                    /** @enum {string} */
+                                    intent: "sign" | "sign_and_send" | "account_create" | "add_accounts";
+                                    operation?: string;
+                                    summary?: string;
+                                    details?: {
+                                        [key: string]: unknown;
+                                    };
+                                    stepKey?: string;
+                                    signedXdr?: string;
+                                    signedAuthEntry?: string;
+                                    submit?: {
+                                        hash: string;
+                                        /** @enum {string} */
+                                        status: "PENDING" | "SUCCESS" | "FAILED";
+                                        resultCode?: string;
+                                        message?: string;
+                                    };
+                                    txRecordId?: string;
+                                    failureReason?: string;
+                                    expiresAt: string;
+                                    createdAt: string;
+                                    resolvedAt: string | null;
+                                };
+                            };
                         };
                     };
                 };
@@ -3402,6 +3463,7 @@ export interface operations {
                                     };
                                     stepKey?: string;
                                     signedXdr?: string;
+                                    signedAuthEntry?: string;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
@@ -4172,6 +4234,7 @@ export interface operations {
                                     };
                                     stepKey?: string;
                                     signedXdr?: string;
+                                    signedAuthEntry?: string;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
@@ -9992,6 +10055,7 @@ export interface operations {
                                 };
                                 stepKey?: string;
                                 signedXdr?: string;
+                                signedAuthEntry?: string;
                                 submit?: {
                                     hash: string;
                                     /** @enum {string} */
@@ -10076,6 +10140,7 @@ export interface operations {
                                 };
                                 stepKey?: string;
                                 signedXdr?: string;
+                                signedAuthEntry?: string;
                                 submit?: {
                                     hash: string;
                                     /** @enum {string} */
@@ -10173,6 +10238,7 @@ export interface operations {
                                 };
                                 stepKey?: string;
                                 signedXdr?: string;
+                                signedAuthEntry?: string;
                                 submit?: {
                                     hash: string;
                                     /** @enum {string} */
@@ -10270,6 +10336,7 @@ export interface operations {
                                 };
                                 stepKey?: string;
                                 signedXdr?: string;
+                                signedAuthEntry?: string;
                                 submit?: {
                                     hash: string;
                                     /** @enum {string} */
@@ -10394,6 +10461,7 @@ export interface operations {
                                 };
                                 stepKey?: string;
                                 signedXdr?: string;
+                                signedAuthEntry?: string;
                                 submit?: {
                                     hash: string;
                                     /** @enum {string} */

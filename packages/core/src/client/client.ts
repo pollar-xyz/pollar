@@ -3104,6 +3104,9 @@ export class PollarClient {
    *   entry's invocation tree against the app's contract/function allowlist and
    *   caps the validity window - entries touching a non-allowlisted contract or
    *   function, or expiring too far ahead, are rejected.
+   * - Co-signed (Turnkey) wallets pass the same checks, then the device votes:
+   *   it recomputes the entry's hash itself before approving, like a
+   *   transaction. With `cosignManual` the outcome is `cosign_pending`.
    *
    * @param entryXdr base64 XDR of the unsigned `SorobanAuthorizationEntry`.
    * @param options.validUntilLedger absolute ledger the signature expires at
@@ -3157,7 +3160,9 @@ export class PollarClient {
       const { data, error } = await this._api.POST('/tx/sign-auth-entry', {
         body: { address, entryXdr, validUntilLedger: options.validUntilLedger },
       });
-      if (!error && data?.success && data.content?.signedAuthEntry) {
+      const pendingRequest = this._cosignPendingOf(data);
+      if (pendingRequest) return this._settleCosignAuthEntry(pendingRequest);
+      if (!error && data?.success && data.content && 'signedAuthEntry' in data.content) {
         return { status: 'signed', signedAuthEntry: data.content.signedAuthEntry };
       }
       const details = apiErrorFields(error).details;
@@ -3485,6 +3490,38 @@ export class PollarClient {
         ...(buildData && { buildData }),
         ...(details && { details }),
         ...(code && { code }),
+      });
+      return { status: 'error', ...(details && { details }), ...(code && { code }) };
+    } finally {
+      this._autoHandling.delete(request.id);
+    }
+  }
+
+  /**
+   * {@link _settleCosign} for an auth entry: the same vote and the same
+   * failure handling, ending in the signed entry. An auth entry moves no
+   * transaction state.
+   */
+  private async _settleCosignAuthEntry(request: CosignRequest): Promise<SignAuthEntryOutcome> {
+    if (this._cosignManual) return { status: 'cosign_pending', request };
+    this._autoHandling.add(request.id);
+    try {
+      return authEntryOutcomeOf(await this.cosign.settle(await this.cosign.approve(request)));
+    } catch (err) {
+      if (isRetryableTransportError(err)) {
+        try {
+          return authEntryOutcomeOf(await this.cosign.settle(await this.cosign.get(request.id, { sync: true })));
+        } catch {
+          return { status: 'cosign_pending', request };
+        }
+      }
+      const code = err instanceof PollarApiError ? err.code : undefined;
+      let details = err instanceof Error ? err.message : undefined;
+      if (err instanceof PollarApiError && code === 'SDK_COSIGN_VERIFICATION_FAILED') {
+        details = stringField(err.body.verification, 'reason') ?? details;
+      }
+      await this.cosign.reject(request).catch((rejectErr) => {
+        this._log.warn('[PollarClient] could not reject a co-sign request after a failed auth-entry signing', rejectErr);
       });
       return { status: 'error', ...(details && { details }), ...(code && { code }) };
     } finally {
@@ -5804,4 +5841,18 @@ export class PollarClient {
 function stellarBuildOf(content: TxBuildResponse['content'] | undefined): TxBuildContent | null {
   if (!content || ('chain' in content && content.chain === 'SOLANA')) return null;
   return content as TxBuildContent;
+}
+
+/** What a final (or still pending) co-sign request for an auth entry amounts to. */
+function authEntryOutcomeOf(resolved: CosignRequest): SignAuthEntryOutcome {
+  if (resolved.status === 'PENDING') return { status: 'cosign_pending', request: resolved };
+  if (resolved.status !== 'APPROVED') {
+    return {
+      status: 'error',
+      code: `SDK_COSIGN_${resolved.status}`,
+      details: resolved.failureReason ?? `co-sign request ${resolved.status.toLowerCase()}`,
+    };
+  }
+  if (resolved.signedAuthEntry) return { status: 'signed', signedAuthEntry: resolved.signedAuthEntry };
+  return { status: 'error', code: 'SDK_COSIGN_NO_SIGNATURE', details: 'the approved request carries no signed entry' };
 }

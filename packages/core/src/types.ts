@@ -754,6 +754,9 @@ export type SignOutcome =
  */
 export type SignAuthEntryOutcome =
   | { status: 'signed'; signedAuthEntry: string }
+  // A co-signed (Turnkey) wallet with `cosignManual`, or a vote Turnkey has not
+  // settled yet: the request is what `client.cosign.approve()` takes.
+  | { status: 'cosign_pending'; request: CosignRequest }
   | { status: 'error'; details?: string; code?: string };
 
 // --- Stellar SEP ownership proofs (client.stellar.*) ----------------------------

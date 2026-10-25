@@ -19,6 +19,7 @@ import { checkCustodySwitchStep, type CustodySwitchStep } from './custody';
 import { CosignRecovery } from './recovery';
 import { checkEvmRequest, polygonChainIdFor } from './evm';
 import { checkSolanaRequest } from './solana';
+import { stellarAuthEntryHashHex } from './stellar-auth-entry';
 import { stellarTransactionHashHex } from './stellar-hash';
 import { isRecord, stringField } from '../api/error-fields';
 
@@ -275,14 +276,24 @@ export class CosignManager {
     }
 
     if (request.network === 'STELLAR') {
+      // An AUTH_ENTRY payload is a Soroban authorization entry, signed the same
+      // way as a transaction: ed25519 over the hash recomputed here.
+      const what = request.kind === 'AUTH_ENTRY' ? 'auth entry' : 'transaction';
       let localHash: string;
       try {
-        localHash = await stellarTransactionHashHex(request.unsignedPayload, this.deps.networkPassphrase());
+        localHash =
+          request.kind === 'AUTH_ENTRY'
+            ? await stellarAuthEntryHashHex(
+                request.unsignedPayload,
+                this.deps.networkPassphrase(),
+                request.account ?? request.signWith,
+              )
+            : await stellarTransactionHashHex(request.unsignedPayload, this.deps.networkPassphrase());
       } catch (err) {
-        return { ok: false, reason: `could not hash the transaction: ${err instanceof Error ? err.message : String(err)}` };
+        return { ok: false, reason: `could not hash the ${what}: ${err instanceof Error ? err.message : String(err)}` };
       }
       if (localHash !== request.payloadHash.toLowerCase()) {
-        return { ok: false, reason: 'the transaction does not hash to what Pollar asks to sign', localHash };
+        return { ok: false, reason: `the ${what} does not hash to what Pollar asks to sign`, localHash };
       }
       return {
         ok: true,
