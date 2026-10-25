@@ -31,12 +31,15 @@ function solanaMaxAfterFee(available: string): string {
 /** A Stellar memo as the build endpoint takes it, undefined when the field is
  *  empty, or an error string the form shows. Text is capped at 28 BYTES on-chain
  *  (a multibyte character counts more than once); an ID is an unsigned 64-bit
- *  integer. */
+ *  integer; a hash is 32 bytes written as 64 hex characters. */
 function parseMemo(type: SendMemoType, raw: string): { type: SendMemoType; value: string } | undefined | string {
-  const value = type === 'id' ? raw.trim() : raw;
+  const value = type === 'text' ? raw : raw.trim();
   if (value.trim() === '') return undefined;
   if (type === 'text') {
     return new TextEncoder().encode(value).length > 28 ? 'The memo text can be at most 28 bytes.' : { type, value };
+  }
+  if (type === 'hash') {
+    return /^[0-9a-fA-F]{64}$/.test(value) ? { type, value } : 'The memo hash must be 32 bytes as 64 hex characters.';
   }
   if (!/^\d+$/.test(value) || BigInt(value) > MAX_MEMO_ID) return 'The memo ID must be a whole number up to 2^64 - 1.';
   return { type, value };

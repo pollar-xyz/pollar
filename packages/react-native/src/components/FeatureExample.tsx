@@ -287,7 +287,7 @@ export function PaymentForm({
   const [destination, setDestination] = useState(initial?.destination ?? '');
   const [amount, setAmount] = useState(initial?.amount ?? '');
   const [memo, setMemo] = useState(initial?.memo ?? '');
-  const [memoType, setMemoType] = useState<'text' | 'id'>('text');
+  const [memoType, setMemoType] = useState<'text' | 'id' | 'hash'>('text');
   const [token, setToken] = useState(initial?.assetCode ? 'Issued asset' : 'Native');
   const [code, setCode] = useState(initial?.assetCode ?? 'USDC');
   const [issuer, setIssuer] = useState(initial?.assetIssuer ?? '');
@@ -319,7 +319,7 @@ export function PaymentForm({
         <>
           <Choice
             label="Memo type"
-            options={['text', 'id']}
+            options={['text', 'id', 'hash']}
             value={memoType}
             onChange={(value) => {
               setMemoType(value);
@@ -357,6 +357,8 @@ export function PaymentForm({
               throw new Error('Memo exceeds 28 UTF-8 bytes.');
             if (memo && memoType === 'id' && (!/^\d+$/.test(memo) || BigInt(memo) > 18446744073709551615n))
               throw new Error('Memo ID must be an unsigned 64-bit integer.');
+            if (memo && memoType === 'hash' && !/^[0-9a-fA-F]{64}$/.test(memo))
+              throw new Error('Memo hash must be 32 bytes as 64 hex characters.');
             if (!review) {
               setReview(true);
               return;

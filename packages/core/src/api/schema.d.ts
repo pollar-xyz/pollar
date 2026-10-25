@@ -1999,7 +1999,7 @@ export interface paths {
         put?: never;
         /**
          * Check a fiat payment now
-         * @description For a user who says they paid: the provider is asked about the `FIAT_PAYMENT` pending action now instead of at its next recheck, at most once every 10 seconds per order. Any other order is answered as it stands.
+         * @description For a user who says they paid: the provider is asked about the `FIAT_PAYMENT` pending action now instead of at its next recheck, at most once every 10 seconds per order. Any other order is answered as it stands. The legs after the payment run after the answer; read the order to follow them.
          */
         post: operations["postRampsOrdersByIdCheck"];
         delete?: never;
@@ -2208,6 +2208,10 @@ export interface operations {
                         } | {
                             /** @constant */
                             type: "id";
+                            value: string;
+                        } | {
+                            /** @constant */
+                            type: "hash";
                             value: string;
                         };
                         maxFeeStroops?: number;
@@ -3123,6 +3127,10 @@ export interface operations {
                         } | {
                             /** @constant */
                             type: "id";
+                            value: string;
+                        } | {
+                            /** @constant */
+                            type: "hash";
                             value: string;
                         };
                         maxFeeStroops?: number;

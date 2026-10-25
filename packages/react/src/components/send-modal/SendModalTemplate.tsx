@@ -156,7 +156,7 @@ function SendAssetSelector({ assets, selectedAsset, loading, onSelectAsset }: Se
 }
 
 /** The memo types the backend accepts on a Stellar payment. */
-export type SendMemoType = 'text' | 'id';
+export type SendMemoType = 'text' | 'id' | 'hash';
 
 export interface SendModalTemplateProps {
   theme: string;
@@ -412,13 +412,16 @@ export function SendModalTemplate({
                 >
                   <option value="text">Text</option>
                   <option value="id">ID</option>
+                  <option value="hash">Hash</option>
                 </select>
                 <input
                   id="pollar-send-memo"
                   className="pollar-input pollar-send-memo-input"
                   type="text"
                   inputMode={memoType === 'id' ? 'numeric' : 'text'}
-                  placeholder={memoType === 'id' ? '123456789' : 'Up to 28 characters'}
+                  placeholder={
+                    memoType === 'id' ? '123456789' : memoType === 'hash' ? '64 hex characters' : 'Up to 28 characters'
+                  }
                   value={memo}
                   onChange={(e) => onMemoChange(e.target.value)}
                 />
