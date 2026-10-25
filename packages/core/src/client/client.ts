@@ -1009,7 +1009,15 @@ export class PollarClient {
         // sdk-api lists it in `exposeHeaders`. Dropping it there silently
         // disables every line below and hands a drifting server clock a mass
         // logout - which is exactly what it did until 2026-09-02.
-        const serverDate = response.headers.get('Date');
+        //
+        // A GET/HEAD answer can come from the browser cache with the `Date` of
+        // the moment it was stored: learning from it pins `iat` to that moment
+        // and every proof after it fails `iat-skew`. So learn only from answers
+        // no cache hands back - another method, or a 401 (the `iat-skew`
+        // rejection of a GET is one, and its retry below needs the offset).
+        const requestMethod = request.method.toUpperCase();
+        const fromNetwork = (requestMethod !== 'GET' && requestMethod !== 'HEAD') || response.status === 401;
+        const serverDate = fromNetwork ? response.headers.get('Date') : null;
         if (serverDate) {
           const serverSec = Math.floor(Date.parse(serverDate) / 1000);
           // Only learn the offset from a PLAUSIBLE absolute server time (the
