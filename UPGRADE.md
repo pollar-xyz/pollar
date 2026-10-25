@@ -1,5 +1,12 @@
 # Upgrade guide
 
+## 0.12.0 -> 0.12.1
+
+No code change is needed. Upgrade `@pollar/core`, `@pollar/react` and
+`@pollar/react-native` together: `@pollar/react@0.12.1` and
+`@pollar/react-native@0.12.1` require `@pollar/core@^0.12.1`. The adapters stay
+at `0.12.0`.
+
 ## 0.11.5 -> 0.12.0
 
 Use `@pollar/core`, `@pollar/react` and `@pollar/react-native` at matching

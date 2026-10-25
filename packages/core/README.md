@@ -14,7 +14,10 @@ Pollar runs on Solana end to end for wallets and payments:
   fees** and token accounts created for the recipient.
 - **Fiat on/off-ramps to Solana**: Bolivia (BOB, via Stereum + CCTP) and Brazil (BRL via Pix, PagFinance).
 
-> **0.12.0** calls sdk-api **`/v3`** (`baseUrl` stays an origin) and warns once on a `Deprecation` header.
+> **0.12.1** learns the DPoP clock offset only from answers that cannot come from the browser cache (a non-GET/HEAD
+> request, or a 401), so a cached response no longer pins every proof's `iat` and fails later requests. No API change.
+>
+> Earlier: **0.12.0** calls sdk-api **`/v3`** (`baseUrl` stays an origin) and warns once on a `Deprecation` header.
 > **Ramps are orders**: `getRampRoutes(direction)`, `quoteRamp`, `rampQuoteFields`, `createRampOrder`,
 > `getRampOrder`, `listRampOrders`, `pollRampOrder` and `signRampLeg` replace the 0.11.x ramp methods, a ramp leg
 > is signed only through a handler the app registers (`registerRampSigningHandler`, `assertRampStellarSigner`),

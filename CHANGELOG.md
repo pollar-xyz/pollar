@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.12.1
+
+> `@pollar/core`, `@pollar/react` and `@pollar/react-native`. A patch on 0.12.0
+> with no API change. The Stellar Wallets Kit and Solana Wallet Standard
+> adapters stay at `0.12.0`; their `^0.12.0` core range accepts 0.12.1.
+
+- `@pollar/core` learns the DPoP clock offset only from answers that cannot come
+  from the browser cache: a non-GET/HEAD request, or a 401 (the `iat-skew`
+  rejection of a GET, whose retry still uses it). A cached GET carries the
+  `Date` of the moment it was stored; learning from it pinned every proof's
+  `iat` to that moment, and each later request failed with
+  `SDK_AUTH_DPOP_INVALID` until the page was reloaded.
+- `@pollar/react` and `@pollar/react-native` require `@pollar/core@^0.12.1`.
+
 ## 0.12.0
 
 > `@pollar/core`, `@pollar/react`, `@pollar/react-native`,

@@ -3,7 +3,9 @@
 React bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI, transaction modals, and hooks for
 Stellar and Solana applications.
 
-> **0.12.0** (requires `@pollar/core@^0.12.0`). `<RampWidget>` runs on the v3 ramps API: routes, quotes leg by
+> **0.12.1** (requires `@pollar/core@^0.12.1`). No component change; it follows the core patch on the DPoP clock offset.
+>
+> Earlier: **0.12.0** (requires `@pollar/core@^0.12.0`). `<RampWidget>` runs on the v3 ramps API: routes, quotes leg by
 > leg, the fields a quote asks for, the order's progress and its pending action; it signs a leg with the connected
 > Stellar or Solana wallet only when the leg was built for it. **Wallets the user holds**: the wallet button lets the
 > user pick co-signed or self-custody when the app leaves it to them, `<RecoveryModal>` manages passkeys, email,
