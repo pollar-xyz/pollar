@@ -84,6 +84,7 @@ import { onChainErrorCode } from '../lib/tx-error-messages';
 import { apiErrorFields, isRecord, stringField } from '../api/error-fields';
 import { bytesToHex, hexToBytes } from '../cosign/encoding';
 import { base64urlDecode, base64urlEncode } from '../lib/base64url';
+import { createAuthEntrySigner } from '../stellar/auth-entry-signer';
 import { StellarNetwork } from '../stellar/StellarClient';
 import { defaultStorage } from '../storage/autodetect';
 import type { OnStorageDegrade, Storage, StorageDegradeReason } from '../storage/types';
@@ -693,6 +694,15 @@ export class PollarClient {
     this.stellar = {
       sep53: { signMessage: (message: string) => this._sep53SignMessage(message) },
       sep10: { sign: (params: Sep10SignParams) => this._sep10Sign(params) },
+      authEntrySigner: (options) =>
+        createAuthEntrySigner(
+          {
+            address: () => this._session?.wallet?.address ?? undefined,
+            networkPassphrase: () => this._networkPassphrase(),
+            sign: (entryXdr, signOptions) => this.signAuthEntry(entryXdr, signOptions),
+          },
+          options,
+        ),
     };
 
     this._networkState = { step: 'connected', network: config.stellarNetwork ?? 'testnet' };

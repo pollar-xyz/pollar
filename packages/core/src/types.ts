@@ -6,6 +6,7 @@ import type { OnStorageDegrade, Storage } from './storage/types';
 import type { VisibilityProvider } from './visibility/types';
 import { WalletAdapter, WalletId } from './wallets';
 import { stringField } from './api/error-fields';
+import type { AuthEntrySignerOptions, Sep43AuthEntrySigner } from './stellar/auth-entry-signer';
 
 export type PollarApplicationConfigResponse =
   pollarPaths['/auth/login']['post']['responses'][200]['content']['application/json'];
@@ -797,7 +798,16 @@ export interface StellarSepApi {
   sep53: { signMessage(message: string): Promise<StellarMessageProof> };
   /** SEP-10: sign a web-auth challenge transaction (transaction ownership proof). */
   sep10: { sign(params: Sep10SignParams): Promise<Sep10Proof> };
+  /**
+   * A SEP-43 signer over the user's wallet, for libraries that sign Soroban auth
+   * entries themselves: stellar-sdk's contract client, x402's `ExactStellarScheme`.
+   * Each signature goes through {@link PollarClient.signAuthEntry}, so the app's
+   * allowlist, the validity window and a co-signed wallet's vote all apply.
+   */
+  authEntrySigner(options?: AuthEntrySignerOptions): Sep43AuthEntrySigner;
 }
+
+export type { AuthEntrySignerOptions, Sep43AuthEntrySigner };
 
 /**
  * A payment, addressed per chain.
@@ -1594,7 +1604,31 @@ export type EarnTxParams = {
 
 export type AdapterFn<TParams = unknown> = (params: TParams) => Promise<{ unsignedTransaction: string }>;
 
-export type PollarAdapter = Record<string, AdapterFn<any>>;
+/**
+ * What an adapter returns when the user authorizes a Soroban call instead of
+ * sending a transaction: someone else submits it and pays the fee (an x402
+ * facilitator, a contract that sponsors the gas). The adapter builds the
+ * entry, Pollar signs it and submits nothing, and `complete` carries on with
+ * the signed entry; whatever it returns is the call's result.
+ */
+export interface AuthEntryAdapterStep<TResult = unknown> {
+  /** Base64 XDR of the unsigned `SorobanAuthorizationEntry`. */
+  unsignedAuthEntry: string;
+  /** Absolute ledger the signature expires at; within the app's validity window. */
+  validUntilLedger: number;
+  complete: (signedAuthEntry: string) => Promise<TResult>;
+}
+
+export type AuthEntryAdapterFn<TParams = unknown, TResult = unknown> = (
+  params: TParams,
+) => Promise<AuthEntryAdapterStep<TResult>>;
+
+/** An auth-entry adapter call: what `complete` returned, or why nothing was signed. */
+export type AuthEntryAdapterOutcome<TResult = unknown> =
+  | { status: 'completed'; result: TResult }
+  | Exclude<SignAuthEntryOutcome, { status: 'signed' }>;
+
+export type PollarAdapter = Record<string, AdapterFn<any> | AuthEntryAdapterFn<any, any>>;
 
 export interface PollarAdapters {
   [key: string]: PollarAdapter;

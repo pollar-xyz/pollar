@@ -66,6 +66,8 @@ export { PollarApiClient } from './api/client';
 export type { paths as pollarPaths } from './api/schema';
 export { isValidSession } from './client/session';
 export { StellarClient } from './stellar/StellarClient';
+export { createAuthEntrySigner } from './stellar/auth-entry-signer';
+export { completeAuthEntryStep, isAuthEntryAdapterStep } from './adapter-steps';
 export type { StellarNetwork, StellarClientConfig, StellarBalance } from './stellar/StellarClient';
 
 // --- KYC endpoints ------------------------------------------------------------
