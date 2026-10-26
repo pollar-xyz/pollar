@@ -578,7 +578,7 @@ export function RampWidgetTemplate({
           {/* A dead end keeps a button out: the step bar alone is too quiet as the only way forward. */}
           {(errorMsg || !quotes.length) && (
             <button type="button" className="pollar-btn-primary" onClick={onBack}>
-              Back
+              {!errorMsg && rejected.some((r) => r.failure.resolutionAction === 'change_amount') ? 'Change amount' : 'Back'}
             </button>
           )}
         </>

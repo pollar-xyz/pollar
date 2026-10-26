@@ -14501,6 +14501,13 @@ export interface operations {
                                     resolutionOwner: string;
                                     resolutionAction: string;
                                     detail?: string;
+                                    limit?: {
+                                        min: string | null;
+                                        max: string | null;
+                                        /** @enum {string} */
+                                        side: "in" | "out";
+                                        currency: string;
+                                    };
                                 };
                                 requirement?: {
                                     corridorId: string;

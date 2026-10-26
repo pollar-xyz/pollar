@@ -591,7 +591,11 @@ export function RampWidgetTemplate({
             )}
             {errorLine}
             {/* A dead end keeps a button out: the step bar alone is too quiet as the only way forward. */}
-            {(errorMsg || !quotes.length) && primary('Back', onBack)}
+            {(errorMsg || !quotes.length) &&
+              primary(
+                !errorMsg && rejected.some((r) => r.failure.resolutionAction === 'change_amount') ? 'Change amount' : 'Back',
+                onBack,
+              )}
           </>
         )}
 

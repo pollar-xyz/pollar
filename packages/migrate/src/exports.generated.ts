@@ -175,6 +175,7 @@ export const TARGET_EXPORTS: Record<string, readonly string[]> = {
     'RampPendingAction',
     'RampQuote',
     'RampQuoteLeg',
+    'RampQuoteLimit',
     'RampQuoteRejection',
     'RampQuoteRequest',
     'RampQuoteRequirement',

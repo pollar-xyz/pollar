@@ -9,6 +9,7 @@ import type {
   RampOrderLegStep,
   RampPendingAction,
   RampQuote,
+  RampQuoteLimit,
   RampQuoteRejection,
   RampQuoteRequirement,
   RampRoute,
@@ -277,9 +278,36 @@ const RESOLUTION: Record<string, string> = {
   contact_pollar: 'Something went wrong on our side. Contact support with the order id.',
 };
 
-/** The text for a failure's `resolutionAction`; anything unknown asks the user to contact support. */
-export function rampResolutionText(failure: Pick<RampFailure, 'resolutionAction'>): string {
-  return RESOLUTION[failure.resolutionAction] ?? RESOLUTION.contact_pollar!;
+/** A decimal string with its thousands grouped: `14500` reads `14,500`. */
+function groupedAmount(value: string): string {
+  const [whole = '', fraction] = value.split('.');
+  let grouped = '';
+  for (let i = 0; i < whole.length; i++) {
+    if (i > 0 && (whole.length - i) % 3 === 0) grouped += ',';
+    grouped += whole[i];
+  }
+  return fraction ? `${grouped}.${fraction}` : grouped;
+}
+
+/** The bound the amount broke, worded for the user; null when the rejection names none. */
+function limitText(code: string | undefined, limit: RampQuoteLimit | undefined): string | null {
+  if (!limit) return null;
+  const takes = limit.side === 'in' ? 'takes' : 'pays out';
+  if (code === 'LIMIT_BELOW_MINIMUM' && limit.min !== null)
+    return `This route ${takes} at least ${groupedAmount(limit.min)} ${limit.currency}. Try a larger amount.`;
+  if (code === 'LIMIT_ABOVE_MAXIMUM' && limit.max !== null)
+    return `This route ${takes} at most ${groupedAmount(limit.max)} ${limit.currency}. Try a smaller amount.`;
+  return null;
+}
+
+/**
+ * The text for a failure's `resolutionAction`; anything unknown asks the user to contact support.
+ * An amount out of a route's limits names the bound when the failure carries it (`limit`).
+ */
+export function rampResolutionText(
+  failure: Pick<RampFailure, 'resolutionAction'> & { code?: string; limit?: RampQuoteLimit | undefined },
+): string {
+  return limitText(failure.code, failure.limit) ?? RESOLUTION[failure.resolutionAction] ?? RESOLUTION.contact_pollar!;
 }
 
 /** A wallet step a dropped route asks for, and the button that runs it (`PollarClient.runRampWalletStep`). */
@@ -392,10 +420,10 @@ export function rampNoRouteText(
       ? 'Your identity verification was not approved, so no route is available.'
       : 'Your verification is under review. You do not need to do anything; refresh later to check again.';
   }
-  const actions = [...new Set(rejected.map((r) => r.failure.resolutionAction))];
-  return actions.length === 1
-    ? rampResolutionText({ resolutionAction: actions[0]! })
-    : 'No route can take this amount right now. Try another amount.';
+  // Nothing was even tried: no rail joins this currency and asset, whatever the amount.
+  if (!rejected.length) return 'There is no route for this currency and asset right now. Choose another one.';
+  const texts = [...new Set(rejected.map((r) => rampResolutionText(r.failure)))];
+  return texts.length === 1 ? texts[0]! : 'No route can take this amount right now. Try another amount.';
 }
 
 /** What the provider says to do for the verification steps still on the user, joined; null when none says. */

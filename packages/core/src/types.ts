@@ -1244,6 +1244,11 @@ export type RampField = RampQuoteLeg['requiredFields'][number];
 export type RampQuoteRejection = RampQuotesResponse['rejected'][number];
 /** The verification step a dropped route waits on: complete it (KYC, form, registry check, registration), then quote again. */
 export type RampQuoteRequirement = NonNullable<RampQuoteRejection['requirement']>;
+/**
+ * The window a dropped route refused the amount against (`LIMIT_BELOW_MINIMUM` / `LIMIT_ABOVE_MAXIMUM`),
+ * in `currency`, on what its leg takes in or pays out (`side`). A null bound is no bound.
+ */
+export type RampQuoteLimit = NonNullable<RampQuoteRejection['failure']['limit']>;
 
 export type RampOrderRequest = NonNullable<pollarPaths['/ramps/orders']['post']['requestBody']>['content']['application/json'];
 /** An order with every leg, what it waits for (`pendingAction`) and when to read it again (`nextPollAfter`). */
