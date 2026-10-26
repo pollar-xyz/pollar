@@ -2311,7 +2311,15 @@ export class PollarClient {
 
   onTransactionStateChange(cb: (state: TransactionState) => void): () => void {
     this._transactionStateListeners.add(cb);
-    if (this._transactionState) cb(this._transactionState);
+    // As with the wallet state: a callback that throws on the replay would take
+    // the unsubscribe handle down with it.
+    if (this._transactionState) {
+      try {
+        cb(this._transactionState);
+      } catch (err) {
+        this._log.error('[PollarClient] onTransactionStateChange listener threw on replay', err);
+      }
+    }
     return () => this._transactionStateListeners.delete(cb);
   }
 
@@ -5792,7 +5800,23 @@ export class PollarClient {
     if (this._sessionGeneration !== this._txStartGen) return;
     this._transactionState = next;
     this._log.debug(`[PollarClient] transaction:${next.step}`);
-    for (const cb of this._transactionStateListeners) cb(next);
+    this._dispatchTransactionState(next);
+  }
+
+  /**
+   * Hand a transaction state to every subscriber, each isolated from the rest.
+   * The dispatch runs inside the call that signs or submits, so a subscriber
+   * that throws (an audit trail anchoring each `success`) must neither fail
+   * that call nor cost the others the state.
+   */
+  private _dispatchTransactionState(state: TransactionState): void {
+    for (const cb of this._transactionStateListeners) {
+      try {
+        cb(state);
+      } catch (err) {
+        this._log.error('[PollarClient] onTransactionStateChange listener threw', err);
+      }
+    }
   }
 
   /**
@@ -5811,7 +5835,7 @@ export class PollarClient {
    */
   private _resetReactiveStores(): void {
     this._transactionState = { step: 'idle' };
-    for (const cb of this._transactionStateListeners) cb(this._transactionState);
+    this._dispatchTransactionState(this._transactionState);
     this._txHistoryGen++;
     this._walletBalanceGen++;
     this._enabledAssetsGen++;
