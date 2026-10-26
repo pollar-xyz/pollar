@@ -5,7 +5,7 @@
 // Run with `npm test` in packages/core.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Address, authorizeEntry, Keypair, nativeToScVal, Networks, xdr } from '@stellar/stellar-sdk';
+import { Address, authorizeEntry, hash, Keypair, nativeToScVal, Networks, xdr } from '@stellar/stellar-sdk';
 import { completeAuthEntryStep, isAuthEntryAdapterStep } from '../src/adapter-steps';
 import { createAuthEntrySigner, entryFromAuthPreimage, signatureOfSignedEntry } from '../src/stellar/auth-entry-signer';
 import type { SignAuthEntryOutcome } from '../src/types';
@@ -188,4 +188,26 @@ test('an auth-entry adapter step is signed, then completed with the signed entry
   }));
   assert.equal(pending.status, 'cosign_pending');
   assert.equal(completed, false, 'nothing is completed without a signature');
+});
+
+test('a wallet that signs with a key other than its address is refused with a reason, not a bad signature', async () => {
+  const turnkeyKey = Keypair.random();
+  const signer = signerWith(async (entryXdr, options) => {
+    const signed = await authorizeEntry(
+      xdr.SorobanAuthorizationEntry.fromXDR(entryXdr, 'base64'),
+      async (preimage) => ({ signature: turnkeyKey.sign(hash(preimage.toXDR())), publicKey: turnkeyKey.publicKey() }),
+      options.validUntilLedger,
+      Networks.PUBLIC,
+    );
+    return { status: 'signed', signedAuthEntry: signed.toXDR('base64') };
+  });
+  await assert.rejects(
+    authorizeEntry(
+      simulatedEntry(),
+      async (preimage) => Buffer.from((await signer.signAuthEntry(preimage.toXDR('base64'))).signedAuthEntry, 'base64'),
+      VALID_UNTIL,
+      Networks.PUBLIC,
+    ),
+    /key other than its address/,
+  );
 });

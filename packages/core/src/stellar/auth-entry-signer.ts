@@ -133,12 +133,16 @@ function readBytes(bytes: Uint8Array, offset: number): { value: Uint8Array; next
 }
 
 /**
- * The account's ed25519 signature out of a signed address-credentials entry
- * and the expiration it signed: the signature is a one-element vec holding the
- * map `{ public_key: bytes(32), signature: bytes(64) }`, the shape
- * stellar-sdk's `authorizeEntry` writes.
+ * The ed25519 signature out of a signed address-credentials entry, the key
+ * that made it and the expiration it signed: the signature is a one-element
+ * vec holding the map `{ public_key: bytes(32), signature: bytes(64) }`, the
+ * shape stellar-sdk's `authorizeEntry` writes.
  */
-export function signatureOfSignedEntry(signedEntryBase64: string): { signature: Uint8Array; validUntilLedger: number } {
+export function signatureOfSignedEntry(signedEntryBase64: string): {
+  signature: Uint8Array;
+  publicKey: Uint8Array;
+  validUntilLedger: number;
+} {
   const entry = base64ToBytes(signedEntryBase64);
   if (u32(entry, 0) !== SOROBAN_CREDENTIALS_ADDRESS) throw new Error('the signed entry has no address credentials');
   const addressType = u32(entry, 4);
@@ -154,14 +158,17 @@ export function signatureOfSignedEntry(signedEntryBase64: string): { signature: 
   const count = u32(entry, offset + 8);
   offset += 12;
   let signature: Uint8Array | null = null;
+  let publicKey: Uint8Array | null = null;
   for (let i = 0; i < count; i++) {
     const key = readSymbol(entry, offset);
     const val = readBytes(entry, key.next);
     if (key.value === 'signature') signature = val.value;
+    if (key.value === 'public_key') publicKey = val.value;
     offset = val.next;
   }
   if (!signature || signature.length !== 64) throw new Error('the signed entry carries no ed25519 signature');
-  return { signature, validUntilLedger };
+  if (!publicKey || publicKey.length !== 32) throw new Error('the signed entry names no ed25519 key');
+  return { signature, publicKey, validUntilLedger };
 }
 
 function outcomeError(outcome: Exclude<SignAuthEntryOutcome, { status: 'signed' }>): Error {
@@ -206,6 +213,15 @@ export function createAuthEntrySigner(deps: AuthEntrySignerDeps, options: AuthEn
         // The expiration is inside the hash the caller verifies: another one is a signature over something else.
         if (signed.validUntilLedger !== validUntilLedger) {
           throw new Error(`the entry was signed to expire at ledger ${signed.validUntilLedger}, not ${validUntilLedger}`);
+        }
+        // A wallet that moved from Pollar's custody to Turnkey kept its address and
+        // signs with another key. The network accepts that key, but this path hands
+        // back only the signature, which stellar-sdk checks against the address.
+        if (!sameBytes(signed.publicKey, stellarAccountBytes(account)!)) {
+          throw new Error(
+            "this wallet signs with a key other than its address, and stellar-sdk's signAuthEntries only accepts the " +
+              "address's own key: sign the entry with pollar.signAuthEntry() and put it in the transaction yourself",
+          );
         }
         return { signedAuthEntry: bytesToBase64(signed.signature), signerAddress: account };
       }
