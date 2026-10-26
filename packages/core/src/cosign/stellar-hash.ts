@@ -1,5 +1,5 @@
 import { sha256 } from '../lib/sha256';
-import { base64urlDecode } from '../lib/base64url';
+import { base64urlDecode, stripBase64Padding } from '../lib/base64url';
 
 /**
  * The hash a Stellar account signs, computed from an unsigned (or sponsor-signed)
@@ -21,7 +21,7 @@ function readUint32(bytes: Uint8Array, offset: number): number {
 
 export function base64ToBytes(b64: string): Uint8Array {
   // XDR travels as standard base64; reuse the base64url decoder over the mapped alphabet.
-  return base64urlDecode(b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
+  return base64urlDecode(stripBase64Padding(b64.replace(/\+/g, '-').replace(/\//g, '_')));
 }
 
 /** The transaction body bytes of a v1 envelope, with the signatures array removed. */
