@@ -3,7 +3,9 @@
 React bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI, transaction modals, and hooks for
 Stellar and Solana applications.
 
-> **0.12.1** (requires `@pollar/core@^0.12.1`). No component change; it follows the core patch on the DPoP clock offset.
+> **0.12.1** (requires `@pollar/core@^0.12.1`). `<SendModal>` offers a Hash memo next to Text and ID. A hook built
+> with `createPollarAdapterHook` signs the auth entry an adapter answers with, without submitting anything, and hands
+> it to the adapter's `complete`.
 >
 > Earlier: **0.12.0** (requires `@pollar/core@^0.12.0`). `<RampWidget>` runs on the v3 ramps API: routes, quotes leg by
 > leg, the fields a quote asks for, the order's progress and its pending action; it signs a leg with the connected

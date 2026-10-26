@@ -21,9 +21,11 @@ Pollar runs on Solana end to end for wallets and payments:
 
 ## Packages
 
-> **0.12.1** is a patch on 0.12.0: `@pollar/core` learns the DPoP clock offset only from answers that cannot come from the
-> browser cache, so a cached response no longer makes every later request fail with `SDK_AUTH_DPOP_INVALID`. No code
-> change is needed; see [UPGRADE.md](./UPGRADE.md).
+> **0.12.1** adds Soroban auth entries signed by the Pollar wallet for **x402** and other sponsored-fee flows
+> (`client.stellar.authEntrySigner()`, a SEP-43 signer for x402's `ExactStellarScheme`), co-signed wallets signing those
+> entries, and hash memos on Stellar sends. `@pollar/core` also learns the DPoP clock offset only from answers that
+> cannot come from the browser cache, so a cached response no longer makes every later request fail with
+> `SDK_AUTH_DPOP_INVALID`. No code change is needed; see [UPGRADE.md](./UPGRADE.md).
 >
 > **0.12.0** moves the SDK to the sdk-api **`/v3`** API. **Ramps are orders**: `getRampRoutes`, `quoteRamp`,
 > `createRampOrder`, `pollRampOrder` and `signRampLeg` replace the 0.11.x ramp methods, and Pollar runs each leg (the

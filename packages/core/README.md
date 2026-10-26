@@ -14,8 +14,12 @@ Pollar runs on Solana end to end for wallets and payments:
   fees** and token accounts created for the recipient.
 - **Fiat on/off-ramps to Solana**: Bolivia (BOB, via Stereum + CCTP) and Brazil (BRL via Pix, PagFinance).
 
-> **0.12.1** learns the DPoP clock offset only from answers that cannot come from the browser cache (a non-GET/HEAD
-> request, or a 401), so a cached response no longer pins every proof's `iat` and fails later requests. No API change.
+> **0.12.1** adds `client.stellar.authEntrySigner()`, a SEP-43 signer over the user's wallet for **x402**
+> (`new ExactStellarScheme(client.stellar.authEntrySigner(), { url })`) and stellar-sdk's contract client; a co-signed
+> wallet signs Soroban auth entries through its device's vote; a wallet adapter can answer with an auth entry to sign
+> (`isAuthEntryAdapterStep`, `completeAuthEntryStep`); a Stellar send takes a hash memo; and a transaction-state
+> listener that throws no longer fails the transaction. It also learns the DPoP clock offset only from answers that
+> cannot come from the browser cache (a non-GET/HEAD request, or a 401). Additive: nothing an app calls changes.
 >
 > Earlier: **0.12.0** calls sdk-api **`/v3`** (`baseUrl` stays an origin) and warns once on a `Deprecation` header.
 > **Ramps are orders**: `getRampRoutes(direction)`, `quoteRamp`, `rampQuoteFields`, `createRampOrder`,

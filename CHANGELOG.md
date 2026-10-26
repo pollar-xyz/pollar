@@ -2,10 +2,43 @@
 
 ## 0.12.1
 
-> `@pollar/core`, `@pollar/react` and `@pollar/react-native`. A patch on 0.12.0
-> with no API change. The Stellar Wallets Kit and Solana Wallet Standard
-> adapters stay at `0.12.0`; their `^0.12.0` core range accepts 0.12.1.
+> `@pollar/core`, `@pollar/react` and `@pollar/react-native`. Additive on top of
+> 0.12.0: Soroban auth entries signed by the Pollar wallet for x402 and other
+> sponsored-fee flows, co-signed wallets signing those entries, hash memos, and
+> fixes. Nothing an app already calls changes. The Stellar Wallets Kit and
+> Solana Wallet Standard adapters stay at `0.12.0`; their `^0.12.0` core range
+> accepts 0.12.1.
 
+- **x402 and sponsored-fee flows sign with the Pollar wallet.**
+  `client.stellar.authEntrySigner()` is a SEP-43 signer over the user's wallet,
+  the one stellar-sdk's contract client and x402's `ExactStellarScheme` take
+  (`new ExactStellarScheme(client.stellar.authEntrySigner(), { url })`). It
+  rebuilds the entry from the preimage stellar-sdk hands it, signs it through
+  `signAuthEntry` (the app's allowlist, the validity window, a co-signed
+  wallet's vote) and returns the raw signature; a preimage for another network
+  or an entry signed to another expiration is refused. `createAuthEntrySigner`
+  is exported for a client built elsewhere.
+- A wallet adapter can answer `{ unsignedAuthEntry, validUntilLedger, complete }`
+  instead of `{ unsignedTransaction }`: the React and React Native adapter hooks
+  sign the entry without submitting anything and pass it to `complete`, whose
+  result is the call's outcome (`isAuthEntryAdapterStep`,
+  `completeAuthEntryStep`).
+- **A co-signed wallet signs Soroban auth entries.** `signAuthEntry` on a
+  Turnkey wallet follows sdk-api's 202: the device recomputes the entry's hash
+  (the Soroban authorization preimage, read field by field), refuses an entry
+  for another account, one already signed or one without address credentials,
+  votes on the `AUTH_ENTRY` request, and returns the signed entry
+  (`cosign_pending` under `cosignManual`).
+- The x402 signer refuses a wallet whose signing key is not its address (a
+  wallet moved to Turnkey keeps its address and signs with its Turnkey key),
+  and says why, instead of the network failing later with "signature doesn't
+  match payload".
+- **Hash memos.** A Stellar send takes `memo: { type: 'hash', value }`, 32 bytes
+  as 64 hex characters, so an app can anchor a digest (a SHA-256 receipt).
+  `<SendModal>` offers Hash next to Text and ID.
+- A transaction-state listener that throws no longer fails the transaction:
+  each `onTransactionStateChange` listener is isolated and its error logged, and
+  a throw on the subscribe replay keeps the unsubscribe handle.
 - `@pollar/core` learns the DPoP clock offset only from answers that cannot come
   from the browser cache: a non-GET/HEAD request, or a 401 (the `iat-skew`
   rejection of a GET, whose retry still uses it). A cached GET carries the

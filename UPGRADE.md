@@ -2,8 +2,9 @@
 
 ## 0.12.0 -> 0.12.1
 
-No code change is needed. Upgrade `@pollar/core`, `@pollar/react` and
-`@pollar/react-native` together: `@pollar/react@0.12.1` and
+No code change is needed: 0.12.1 adds `client.stellar.authEntrySigner()`, the
+auth-entry adapter step and hash memos, and changes nothing an app already
+calls. Upgrade `@pollar/core`, `@pollar/react` and `@pollar/react-native` together: `@pollar/react@0.12.1` and
 `@pollar/react-native@0.12.1` require `@pollar/core@^0.12.1`. The adapters stay
 at `0.12.0`.
 

@@ -10,7 +10,7 @@ authentication and transactions in Stellar mobile applications. Built on top of
 npm install @pollar/react-native @pollar/core
 ```
 
-**Peer dependencies:** `@pollar/core ^0.12.1`, `react >= 18`, `react-native >= 0.72`. 0.12.1 follows the core patch on the DPoP clock offset, with no component change. 0.12.0 puts `<RampWidget>` on
+**Peer dependencies:** `@pollar/core ^0.12.1`, `react >= 18`, `react-native >= 0.72`. 0.12.1 lets the adapter hooks sign an auth entry an adapter answers with, without submitting anything. 0.12.0 puts `<RampWidget>` on
 the v3 ramps API (the saved ramp in `usePollar()` is `{ direction, order }`), adds `<RecoveryModal>`,
 `<CustodyMigrationModal>` and the custody choice after sign-in, and changes how the provider initializes and restarts;
 see [UPGRADE.md](../../UPGRADE.md).
