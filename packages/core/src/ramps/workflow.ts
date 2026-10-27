@@ -266,7 +266,7 @@ const RESOLUTION: Record<string, string> = {
   set_up_wallet: 'This route runs through another network. Set up your wallet there to continue.',
   migrate_custody: "Your wallet is still held by Pollar alone. Move it to your app's secure wallet to continue.",
   set_up_recovery: 'Your wallet needs a way to be recovered before it can sign. Add one, then try again.',
-  add_trustline: 'Your Stellar wallet must trust USDC to receive it. Add the USDC trustline and try again.',
+  add_trustline: 'Your Stellar wallet must trust the asset this route delivers. Add its trustline and try again.',
   sign_again: 'The signature expired. Sign the step again.',
   start_again: 'This transfer could not go through. Start a new one; nothing was charged.',
   // The app's gas wallet is short, which the user cannot fix: no support call, no order id (none exists yet).
@@ -300,13 +300,27 @@ function limitText(code: string | undefined, limit: RampQuoteLimit | undefined):
   return null;
 }
 
+/** The asset a missing trustline names in its `detail` (`CODE:ISSUER`); null for any other detail. */
+function trustlineCode(action: string, detail: string | null | undefined): string | null {
+  if (action !== 'add_trustline' || !detail) return null;
+  const [code, issuer, ...rest] = detail.split(':');
+  return code && issuer && !rest.length && /^[A-Za-z0-9]{1,12}$/.test(code) && /^G[A-Z2-7]{55}$/.test(issuer) ? code : null;
+}
+
 /**
  * The text for a failure's `resolutionAction`; anything unknown asks the user to contact support.
- * An amount out of a route's limits names the bound when the failure carries it (`limit`).
+ * An amount out of a route's limits names the bound when the failure carries it (`limit`), and a
+ * missing trustline names its asset.
  */
 export function rampResolutionText(
-  failure: Pick<RampFailure, 'resolutionAction'> & { code?: string; limit?: RampQuoteLimit | undefined },
+  failure: Pick<RampFailure, 'resolutionAction'> & {
+    code?: string;
+    detail?: string | null | undefined;
+    limit?: RampQuoteLimit | undefined;
+  },
 ): string {
+  const trust = trustlineCode(failure.resolutionAction, failure.detail);
+  if (trust) return `Your Stellar wallet must trust ${trust} to receive it. Add the ${trust} trustline and try again.`;
   return limitText(failure.code, failure.limit) ?? RESOLUTION[failure.resolutionAction] ?? RESOLUTION.contact_pollar!;
 }
 

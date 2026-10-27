@@ -324,3 +324,21 @@ test('a running leg counts down its quoted time and stops at zero once late', ()
   assert.equal(rampLegTimeLeft({ etaSeconds: 30, startedAt }, at(45)), 0);
   assert.equal(rampLegTimeLeft({ etaSeconds: null, startedAt }, at(1)), null);
 });
+
+test('a missing trustline names the asset the route delivers; a detail that is not CODE:ISSUER names none', () => {
+  const ars = 'ARS:GCLAJ3NUQJPUIXMOP6EEQOOK556X6JUBSQEDGIYN2QD4MBEF3EVKCMDR';
+  assert.equal(
+    rampResolutionText({ code: 'WALLET_TRUSTLINE_MISSING', resolutionAction: 'add_trustline', detail: ars }),
+    'Your Stellar wallet must trust ARS to receive it. Add the ARS trustline and try again.',
+  );
+  const generic = 'Your Stellar wallet must trust the asset this route delivers. Add its trustline and try again.';
+  assert.equal(
+    rampResolutionText({ resolutionAction: 'add_trustline', detail: 'the Stellar wallet does not trust USDC' }),
+    generic,
+  );
+  assert.equal(rampResolutionText({ resolutionAction: 'add_trustline' }), generic);
+  assert.equal(
+    rampNoRouteText([{ failure: { resolutionAction: 'add_trustline', detail: ars } }] as never),
+    rampResolutionText({ resolutionAction: 'add_trustline', detail: ars }),
+  );
+});
