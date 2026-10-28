@@ -142,6 +142,8 @@ export type RampAdapterQuoteRequest = {
   route: RampAdapterRoute;
   amount: { value: RampDecimal; denomination: 'fiat' | 'crypto' };
   user: RampAdapterUserContext;
+  /** The order's payee, once the user gave it: the quote taken right before an order carries it. */
+  payee?: Record<string, string>;
 };
 /** One fee line of an offer: who collects it, who pays it and how it settles. */
 export type RampAdapterLegFee = {
