@@ -165,8 +165,31 @@ function errorText(e: unknown, fallback: string): string {
  * The card flow on React Native: the same screens as the web modal, with the
  * provider's hosted verification opened in the system browser.
  */
+/** A copy control on the card art: white like the art's text, "Copied" for a moment after a tap. */
+function CardCopy({ value, label, copy }: { value: string; label: string; copy: (text: string) => Promise<void> }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return (
+    <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={8}
+      onPress={() =>
+        void copy(value).then(() => {
+          setCopied(true);
+          clearTimeout(timer.current);
+          timer.current = setTimeout(() => setCopied(false), 1500);
+        })
+      }
+    >
+      <Text style={styles.copyLabel}>{copied ? 'Copied' : 'Copy'}</Text>
+    </TouchableOpacity>
+  );
+}
+
 export function CardModal({ onClose }: CardModalProps) {
-  const { getClient, styles: pollarStyles } = usePollar();
+  const { getClient, copyText, styles: pollarStyles } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = pollarStyles;
   const isDark = theme === 'dark';
   const colors = {
@@ -216,6 +239,7 @@ export function CardModal({ onClose }: CardModalProps) {
   // Funding signs a Stellar payment from the wallet, so its balance is the Stellar one.
   const fundAvailable = useWalletAvailable(panel === 'fund' ? { chain: 'STELLAR', code: fundingAsset } : null);
   const card = cards?.[0] ?? null;
+  const expiry = card?.expMonth && card.expYear ? `${card.expMonth}/${card.expYear.slice(-2)}` : null;
 
   // --- Loading ----------------------------------------------------------------
   const loadHolder = useCallback(async () => {
@@ -796,14 +820,21 @@ export function CardModal({ onClose }: CardModalProps) {
                     </View>
                     <Text style={styles.visualSmall}>{card.status.toLowerCase()}</Text>
                   </View>
-                  <Text style={styles.visualNumber}>
-                    {secrets ? groupPan(secrets.pan) : `**** **** **** ${card.last4 ?? '****'}`}
-                  </Text>
-                  <View style={styles.visualRow}>
-                    <Text style={styles.visualSmall}>
-                      EXP {card.expMonth && card.expYear ? `${card.expMonth}/${card.expYear.slice(-2)}` : '--/--'}
+                  <View style={styles.copyRow}>
+                    <Text style={styles.visualNumber}>
+                      {secrets ? groupPan(secrets.pan) : `**** **** **** ${card.last4 ?? '****'}`}
                     </Text>
-                    <Text style={styles.visualSmall}>CVC {secrets ? secrets.cvc : '***'}</Text>
+                    {secrets && <CardCopy value={secrets.pan} label="Copy card number" copy={copyText} />}
+                  </View>
+                  <View style={styles.visualRow}>
+                    <View style={styles.copyRow}>
+                      <Text style={styles.visualSmall}>EXP {expiry ?? '--/--'}</Text>
+                      {expiry && <CardCopy value={expiry} label="Copy expiry date" copy={copyText} />}
+                    </View>
+                    <View style={styles.copyRow}>
+                      <Text style={styles.visualSmall}>CVC {secrets ? secrets.cvc : '***'}</Text>
+                      {secrets && <CardCopy value={secrets.cvc} label="Copy CVC" copy={copyText} />}
+                    </View>
                     <Text style={styles.visualSmall}>{card.currency}</Text>
                   </View>
                 </View>
@@ -992,6 +1023,8 @@ const styles = StyleSheet.create({
   visualBrand: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   visualLogo: { width: 24, height: 24, borderRadius: 6, backgroundColor: 'rgba(255, 255, 255, 0.9)' },
   visualSmall: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' },
+  copyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  copyLabel: { color: '#fff', fontSize: 11, fontWeight: '700', textDecorationLine: 'underline' },
   visualNumber: { color: '#fff', fontSize: 20, letterSpacing: 2, fontWeight: '600' },
   balanceRow: { flexDirection: 'row', gap: 6, marginBottom: 8 },
   balanceCell: { flex: 1, borderRadius: 10, padding: 10 },

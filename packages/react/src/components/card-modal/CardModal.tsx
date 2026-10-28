@@ -193,6 +193,7 @@ export function CardModal({ onClose }: CardModalProps) {
   // Funding signs a Stellar payment from the wallet, so its balance is the Stellar one.
   const fundAvailable = useWalletAvailable(panel === 'fund' ? { chain: 'STELLAR', code: fundingAsset } : null);
   const card = cards?.[0] ?? null;
+  const expiry = card?.expMonth && card.expYear ? `${card.expMonth}/${card.expYear.slice(-2)}` : null;
 
   // --- Loading ----------------------------------------------------------------
   const loadHolder = useCallback(async () => {
@@ -779,17 +780,30 @@ export function CardModal({ onClose }: CardModalProps) {
                 <span className="pollar-card-status">{card.status.toLowerCase()}</span>
               </div>
               <div className="pollar-card-visual-chip" />
-              <div className="pollar-card-visual-number">
+              <div className="pollar-card-visual-number pollar-card-copy-row">
                 {secrets ? groupPan(secrets.pan) : `•••• •••• •••• ${card.last4 ?? '••••'}`}
+                {secrets && (
+                  <CopyButton value={secrets.pan} label="Copy card number" className="pollar-copy-btn-sm pollar-card-copy" />
+                )}
               </div>
               <div className="pollar-card-visual-bottom">
                 <div>
                   <span>Expires</span>
-                  <strong>{card.expMonth && card.expYear ? `${card.expMonth}/${card.expYear.slice(-2)}` : '--/--'}</strong>
+                  <div className="pollar-card-copy-row">
+                    <strong>{expiry ?? '--/--'}</strong>
+                    {expiry && (
+                      <CopyButton value={expiry} label="Copy expiry date" className="pollar-copy-btn-sm pollar-card-copy" />
+                    )}
+                  </div>
                 </div>
                 <div>
                   <span>CVC</span>
-                  <strong>{secrets ? secrets.cvc : '•••'}</strong>
+                  <div className="pollar-card-copy-row">
+                    <strong>{secrets ? secrets.cvc : '•••'}</strong>
+                    {secrets && (
+                      <CopyButton value={secrets.cvc} label="Copy CVC" className="pollar-copy-btn-sm pollar-card-copy" />
+                    )}
+                  </div>
                 </div>
                 <div>
                   <span>{card.type.toLowerCase()}</span>
