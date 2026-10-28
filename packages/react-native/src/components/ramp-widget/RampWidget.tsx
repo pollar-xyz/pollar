@@ -29,6 +29,8 @@ import type {
 } from '@pollar/core';
 import {
   appUnavailableMessage,
+  languageFromTag,
+  type PollarLanguage,
   assertRampStellarSigner,
   describeRampAction,
   isPollarApiError,
@@ -55,7 +57,8 @@ import { usePollar } from '../../context';
 import { useWalletAvailable } from '../../useWalletAvailable';
 import { AmountField } from '../AmountField';
 import { PollarOverlay } from '../commons';
-import { formLanguage } from '../requirement-form-modal/form-fields';
+import { deviceLanguageTag } from '../requirement-form-modal/form-fields';
+import { useModalLanguage } from '../../language';
 import { RejectedRouteDisplay, RouteDisplay } from './RouteDisplay';
 import { KycModal } from '../kyc-modal/KycModal';
 import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
@@ -161,6 +164,8 @@ const assetKey = (asset: Pick<RampAsset, 'code' | 'chain' | 'identifier'>) =>
   `${asset.code}:${asset.chain}:${asset.identifier ?? ''}`;
 
 export interface RampWidgetTemplateProps {
+  /** Language of the rail labels. Defaults to the user's device; the widget passes the resolved one. */
+  language?: PollarLanguage;
   theme?: string;
   accentColor?: string;
   step: RampStep;
@@ -324,6 +329,7 @@ export function RampWidgetTemplate({
   onStepSelect,
   onRetry,
   onClose,
+  language = languageFromTag(deviceLanguageTag()) ?? 'en',
 }: RampWidgetTemplateProps) {
   const isDark = theme === 'dark';
   const colors = {
@@ -519,7 +525,7 @@ export function RampWidgetTemplate({
                     {chips(
                       fiats.map((f) => ({
                         key: fiatKey(f),
-                        label: `${f.currency} · ${rampRailLabel(f.rail, { language: formLanguage() })}`,
+                        label: `${f.currency} · ${rampRailLabel(f.rail, { language })}`,
                       })),
                       fiat ? fiatKey(fiat) : '',
                       onFiatChange,
@@ -787,7 +793,14 @@ export function RampWidgetTemplate({
   );
 }
 
-export function RampWidget({ onClose }: { onClose: () => void }) {
+export function RampWidget({
+  onClose,
+  language: languageProp,
+}: {
+  onClose: () => void;
+  /** Language of the widget and the steps it opens, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
+  language?: string | undefined;
+}) {
   const {
     getClient,
     copyText,
@@ -804,6 +817,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
     refreshWalletBalance,
   } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = pollarStyles;
+  const language = useModalLanguage(languageProp);
   const client = getClient();
 
   const [step, setStep] = useState<RampStep>(saved ? 'status' : 'input');
@@ -1203,16 +1217,29 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
     const done = () => verificationDone(verifying);
     if (verifying.type === 'FORM')
       return (
-        <RequirementFormModal formId={verifying.optionId} progress={progress} onClose={closeVerification} onSubmitted={done} />
+        <RequirementFormModal
+          formId={verifying.optionId}
+          progress={progress}
+          language={languageProp}
+          onClose={closeVerification}
+          onSubmitted={done}
+        />
       );
     if (verifying.type === 'REGISTRY_CHECK')
       return (
-        <RegistryCheckModal optionId={verifying.optionId} progress={progress} onClose={closeVerification} onApproved={done} />
+        <RegistryCheckModal
+          optionId={verifying.optionId}
+          progress={progress}
+          language={languageProp}
+          onClose={closeVerification}
+          onApproved={done}
+        />
       );
     if (verifying.type === 'PROVIDER_REGISTRATION')
       return (
         <ProviderRegistrationModal
           corridorId={verifying.corridorId}
+          language={languageProp}
           progress={progress}
           onClose={closeVerification}
           onRegistered={done}
@@ -1233,6 +1260,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
     <PollarOverlay onCancel={onClose}>
       <View style={styles.modalWrapper}>
         <RampWidgetTemplate
+          language={language}
           theme={theme}
           accentColor={accentColor}
           step={step}

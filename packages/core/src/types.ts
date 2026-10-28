@@ -189,6 +189,14 @@ export interface PollarClientConfig {
   baseUrl?: string;
   apiKey: string;
   /**
+   * Language of the SDK's modals: a BCP 47 tag such as `'es'`, `'pt-BR'` or `'en'`,
+   * typically your app's own current language. A language pinned in the dashboard
+   * (Branding > Language) wins over it; with the dashboard on "device language" it
+   * applies, and without it the modals follow the browser or device. A tag the
+   * modals have no translation for is skipped.
+   */
+  locale?: string;
+  /**
    * Pluggable storage. Defaults to `defaultStorage()` on web (localStorage
    * with memory fallback). On RN you must inject one of the adapters from
    * `@pollar/core/adapters/expo` or `@pollar/core/adapters/react-native-keychain`.

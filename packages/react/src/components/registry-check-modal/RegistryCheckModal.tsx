@@ -1,11 +1,11 @@
 'use client';
 
 import type { RegistryCheck, RegistryCheckPrefill } from '@pollar/core';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
-import { formLanguage } from '../requirement-form-modal/form-fields';
+import { useModalLanguage } from '../../language';
 import { errorCode, REGISTRY_COPY } from './registry-copy';
 import '../shared.css';
 import '../requirement-form-modal/RequirementFormModal.css';
@@ -17,18 +17,26 @@ interface RegistryCheckModalProps {
   onClose: () => void;
   /** Called once the registry confirmed the data. */
   onApproved: () => void;
+  /** Language of the modal, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
+  language?: string | undefined;
 }
 
 /**
  * One REGISTRY_CHECK step (SEGIP): the user's verified data, prefilled and read-only
  * except for the surname split and the CI complement, sent to the registry on confirm.
  */
-export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: RegistryCheckModalProps) {
+export function RegistryCheckModal({
+  optionId,
+  progress,
+  onClose,
+  onApproved,
+  language: languageProp,
+}: RegistryCheckModalProps) {
   const { getClient, styles } = usePollar();
   const client = getClient();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
-  const language = useMemo(formLanguage, []);
+  const language = useModalLanguage(languageProp);
   const copy = REGISTRY_COPY[language];
 
   const [check, setCheck] = useState<RegistryCheck | null>(null);

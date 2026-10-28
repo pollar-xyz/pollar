@@ -1,11 +1,11 @@
 'use client';
 
 import type { ProviderRegistration } from '@pollar/core';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
-import { formLanguage } from '../requirement-form-modal/form-fields';
+import { useModalLanguage } from '../../language';
 import {
   errorCode,
   missingFieldsOf,
@@ -27,6 +27,8 @@ interface ProviderRegistrationModalProps {
   onClose: () => void;
   /** Called once the user is registered with the provider. */
   onRegistered: () => void;
+  /** Language of the modal, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
+  language?: string | undefined;
 }
 
 /**
@@ -39,12 +41,13 @@ export function ProviderRegistrationModal({
   progress,
   onClose,
   onRegistered,
+  language: languageProp,
 }: ProviderRegistrationModalProps) {
   const { getClient, styles } = usePollar();
   const client = getClient();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
-  const language = useMemo(formLanguage, []);
+  const language = useModalLanguage(languageProp);
   const copy = REGISTRATION_COPY[language];
   const labels = SHARED_FIELD_LABELS[language];
 
@@ -124,6 +127,7 @@ export function ProviderRegistrationModal({
     return (
       <RequirementFormModal
         formId={fixing}
+        language={languageProp}
         onClose={() => setFixing(null)}
         onSubmitted={() => {
           setFixing(null);

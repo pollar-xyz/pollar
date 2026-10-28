@@ -61,10 +61,12 @@ export function rampCountries(routes: RampRoute[]): Array<{ country: string; fia
   return [...byCountry].map(([country, fiats]) => ({ country, fiats }));
 }
 
-const RAIL_LABEL: Record<'en' | 'es', Record<string, string>> = {
+const RAIL_LABEL: Record<'en' | 'es' | 'pt', Record<string, string>> = {
   en: { BANK_TRANSFER: 'Bank transfer', CASH: 'Cash', CARD: 'Card', HOSTED: 'Chosen at the provider' },
   es: { BANK_TRANSFER: 'Transferencia bancaria', CASH: 'Efectivo', CARD: 'Tarjeta', HOSTED: 'Se elige en el proveedor' },
+  pt: { BANK_TRANSFER: 'Transferência bancária', CASH: 'Dinheiro', CARD: 'Cartão', HOSTED: 'Escolhido no provedor' },
 };
+const HOSTED_AT = { en: 'Chosen at', es: 'Se elige en', pt: 'Escolhido no' } as const;
 
 /**
  * A rail as the user reads it. Named schemes (SPEI, PIX, PSE, ACH, BREB, QR) keep
@@ -73,11 +75,10 @@ const RAIL_LABEL: Record<'en' | 'es', Record<string, string>> = {
  */
 export function rampRailLabel(
   rail: RampFiat['rail'] | (string & {}),
-  options: { language?: 'en' | 'es'; provider?: string } = {},
+  options: { language?: 'en' | 'es' | 'pt'; provider?: string } = {},
 ): string {
-  const language = options.language === 'es' ? 'es' : 'en';
-  if (rail === 'HOSTED' && options.provider)
-    return language === 'es' ? `Se elige en ${options.provider}` : `Chosen at ${options.provider}`;
+  const language = options.language ?? 'en';
+  if (rail === 'HOSTED' && options.provider) return `${HOSTED_AT[language]} ${options.provider}`;
   return RAIL_LABEL[language][rail] ?? rail;
 }
 

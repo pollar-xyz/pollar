@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type {
   CosignCustody,
+  PollarLanguage,
   RampAsset,
   RampDirection,
   RampField,
@@ -17,6 +18,7 @@ import type {
 } from '@pollar/core';
 import {
   describeRampAction,
+  languageFromTag,
   rampLegStatus,
   rampLegNote,
   rampLegTimeLeft,
@@ -33,7 +35,7 @@ import {
   rampOrderResolutionText,
   rampTrustlineAsset,
 } from '@pollar/core';
-import { formLanguage } from '../requirement-form-modal/form-fields';
+import { deviceLanguageTag } from '../requirement-form-modal/form-fields';
 import { RejectedRouteDisplay, RouteDisplay } from './RouteDisplay';
 import { AmountField } from '../AmountField';
 import { CopyButton } from '../commons';
@@ -128,6 +130,8 @@ export const assetKey = (asset: Pick<RampAsset, 'code' | 'chain' | 'identifier'>
   `${asset.code}:${asset.chain}:${asset.identifier ?? ''}`;
 
 interface RampWidgetTemplateProps {
+  /** Language of the rail labels. Defaults to the user's device; the widget passes the resolved one. */
+  language?: PollarLanguage;
   theme: string;
   accentColor: string;
   /** Per-app modal chrome overrides (background, card + button radius). */
@@ -297,6 +301,7 @@ export function RampWidgetTemplate({
   onRetry,
   onRefresh,
   onClose,
+  language = languageFromTag(deviceLanguageTag()) ?? 'en',
 }: RampWidgetTemplateProps) {
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
   const onramp = direction === 'ONRAMP';
@@ -473,7 +478,7 @@ export function RampWidgetTemplate({
                   >
                     {fiats.map((f) => (
                       <option key={fiatKey(f)} value={fiatKey(f)}>
-                        {f.currency} · {rampRailLabel(f.rail, { language: formLanguage() })}
+                        {f.currency} · {rampRailLabel(f.rail, { language })}
                       </option>
                     ))}
                   </select>

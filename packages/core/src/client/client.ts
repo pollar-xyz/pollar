@@ -367,6 +367,7 @@ export class PollarClient {
 
   private readonly _api: PollarApiClient;
   private readonly _log: PollarLogger;
+  private readonly _locale: string | undefined;
   private readonly _storage: Storage;
   private readonly _keyManager: KeyManager;
   /** Resolves once `keyManager.init()` and the initial session restore complete. */
@@ -600,6 +601,7 @@ export class PollarClient {
     // the same handlers v2 had for every module Pollar v3 did not redefine.
     this.basePath = `${config.baseUrl || 'https://sdk.api.pollar.xyz'}/v3`;
     this._log = createLogger(config.logLevel ?? 'info', config.logger);
+    this._locale = config.locale;
 
     this._storage =
       config.storage ??
@@ -2291,6 +2293,11 @@ export class PollarClient {
    */
   getLogger(): PollarLogger {
     return this._log;
+  }
+
+  /** The `locale` this client was configured with, if any. See {@link PollarClientConfig.locale}. */
+  getLocale(): string | undefined {
+    return this._locale;
   }
 
   setNetwork(network: StellarNetwork): void {

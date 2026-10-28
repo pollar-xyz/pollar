@@ -34,9 +34,12 @@ import { KycModal } from '../kyc-modal/KycModal';
 import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
 import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
+import { useModalLanguage } from '../../language';
 
 interface RampWidgetProps {
   onClose: () => void;
+  /** Language of the widget and the steps it opens, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
+  language?: string | undefined;
 }
 
 /** After "I've paid", the payment is checked this often for this long, then the order goes back to the server's pace. */
@@ -121,7 +124,7 @@ async function signLegWithWallet(client: PollarClient, orderId: string, actionId
   }
 }
 
-export function RampWidget({ onClose }: RampWidgetProps) {
+export function RampWidget({ onClose, language: languageProp }: RampWidgetProps) {
   const {
     getClient,
     styles,
@@ -136,6 +139,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     refreshWalletBalance,
   } = usePollar();
   const client = getClient();
+  const language = useModalLanguage(languageProp);
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<RampStep>('input');
@@ -631,14 +635,31 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     const progress = { progress: { position: verifying.completed + 1, total: verifying.total } };
     const done = () => verificationDone(verifying);
     if (verifying.type === 'FORM')
-      return <RequirementFormModal formId={verifying.optionId} {...progress} onClose={closeVerification} onSubmitted={done} />;
+      return (
+        <RequirementFormModal
+          formId={verifying.optionId}
+          {...progress}
+          language={languageProp}
+          onClose={closeVerification}
+          onSubmitted={done}
+        />
+      );
     if (verifying.type === 'REGISTRY_CHECK')
-      return <RegistryCheckModal optionId={verifying.optionId} {...progress} onClose={closeVerification} onApproved={done} />;
+      return (
+        <RegistryCheckModal
+          optionId={verifying.optionId}
+          {...progress}
+          language={languageProp}
+          onClose={closeVerification}
+          onApproved={done}
+        />
+      );
     if (verifying.type === 'PROVIDER_REGISTRATION')
       return (
         <ProviderRegistrationModal
           corridorId={verifying.corridorId}
           {...progress}
+          language={languageProp}
           onClose={closeVerification}
           onRegistered={done}
         />
@@ -657,6 +678,7 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   return (
     <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
       <RampWidgetTemplate
+        language={language}
         theme={theme}
         accentColor={accentColor}
         {...(styleOverrides ? { styleOverrides } : {})}

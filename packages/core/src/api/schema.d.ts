@@ -9846,6 +9846,8 @@ export interface operations {
                                 modalBorderRadius?: number;
                                 buttonBorderRadius?: number;
                                 modalZIndex?: number;
+                                /** @enum {string} */
+                                language?: "device" | "en" | "es" | "pt";
                                 emailEnabled?: boolean;
                                 embeddedWallets?: boolean;
                                 smartWallet?: boolean;
@@ -13311,10 +13313,12 @@ export interface operations {
                                 label: {
                                     en: string;
                                     es: string;
+                                    pt?: string;
                                 };
                                 help?: {
                                     en?: string;
                                     es?: string;
+                                    pt?: string;
                                 };
                                 /** @default false */
                                 required: boolean;
@@ -13323,6 +13327,7 @@ export interface operations {
                                     label: {
                                         en: string;
                                         es: string;
+                                        pt?: string;
                                     };
                                 }[];
                                 validation?: {
@@ -13330,6 +13335,10 @@ export interface operations {
                                     max?: number;
                                     maxLength?: number;
                                     pattern?: string;
+                                };
+                                showIf?: {
+                                    key: string;
+                                    in: string[];
                                 };
                             }[];
                             answers: {
