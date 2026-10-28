@@ -1517,11 +1517,51 @@ export interface paths {
         };
         /**
          * Get enabled swap venues for this app
-         * @description Returns the swap venues the application exposes to end-users (the operator's dashboard selection, intersected with server capability — e.g. Soroswap only appears when the server has an API key). An empty list means swap is disabled for this app and the SDK should render no swap UI.
+         * @description The swap venues the application exposes to end-users on a chain: the operator's selection intersected with what the platform serves. `chain=SOLANA` lists the Solana venues (Jupiter, Titan; mainnet only); without it, the Stellar ones. An empty list means no swap on that chain.
          */
         get: operations["getSwapConfig"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/swap/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quote an asset swap
+         * @description Prices a swap across the requested venue(s), best output first. Read-only. With `"chain": "SOLANA"` it quotes Jupiter and Titan for the signed-in user's Solana wallet, in base units of each mint; without `chain`, the Stellar venues as in v2, with a ready-to-execute `build` payload. An empty `quotes` array means no route exists for the pair.
+         */
+        post: operations["postSwapQuote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/swap/build": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Build a Solana swap for the user to sign
+         * @description Builds the swap the user picked from a quote (`chain: "SOLANA"`, a concrete `provider`) as an unsigned v0 transaction for the user's Solana wallet. The route is asked for again, so `quote` may differ a little from the earlier one. The wallet signs `unsignedTransaction` as is and sends it to POST /v3/tx/submit with the same `idempotencyKey`, before `lastValidBlockHeight`. When `sponsored`, the app's GAS wallet pays the fee and signs last, at submit. A co-signed wallet answers 202 with the pending co-sign request instead: the SDK refreshes it right before the vote (the route is asked for again) and the platform broadcasts it once the user approves. Custodial wallets are refused.
+         */
+        post: operations["postSwapBuild"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1542,26 +1582,6 @@ export interface paths {
         get: operations["getSwapTokens"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/swap/quote": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Quote an asset swap (DEX/AMM)
-         * @description Prices a swap of one asset for another across the requested venue(s). Read-only: returns the estimated output, price impact and minimum received (after slippage), plus a ready-to-execute `build` payload to pass to POST /tx/build (operation invoke_contract). With provider "auto" it ranks every available venue by output, best first; an empty `quotes` array means no route exists for the pair on this network. Phase 1 implements the Aquarius AMM; Soroswap and SDEX are added later.
-         */
-        post: operations["postSwapQuote"];
         delete?: never;
         options?: never;
         head?: never;
@@ -11562,7 +11582,9 @@ export interface operations {
     };
     getSwapConfig: {
         parameters: {
-            query?: never;
+            query?: {
+                chain?: "STELLAR" | "SOLANA";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -11582,6 +11604,8 @@ export interface operations {
                         success: true;
                         content: {
                             venues: ("aquarius" | "soroswap" | "sdex")[];
+                        } | {
+                            venues: ("jupiter" | "titan")[];
                         };
                     };
                 };
@@ -11618,69 +11642,6 @@ export interface operations {
             };
         };
     };
-    getSwapTokens: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Curated swap buy tokens (possibly empty) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_SWAP_TOKENS";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            tokens: {
-                                code: string;
-                                issuer: string;
-                                name: string;
-                                domain: string | null;
-                            }[];
-                        };
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Error */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-        };
-    };
     postSwapQuote: {
         parameters: {
             query?: never;
@@ -11691,6 +11652,19 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @constant */
+                    chain: "SOLANA";
+                    inputMint: string;
+                    outputMint: string;
+                    amount: string;
+                    /**
+                     * @default auto
+                     * @enum {string}
+                     */
+                    provider?: "auto" | "jupiter" | "titan";
+                    /** @default 50 */
+                    slippageBps?: number;
+                } | {
                     publicKey?: string;
                     address?: string;
                     sellAsset: {
@@ -11893,6 +11867,24 @@ export interface operations {
                             }[];
                             /** @enum {string} */
                             best?: "aquarius" | "soroswap" | "sdex";
+                        } | {
+                            quotes: {
+                                /** @constant */
+                                chain: "SOLANA";
+                                /** @enum {string} */
+                                provider: "jupiter" | "titan";
+                                inputMint: string;
+                                outputMint: string;
+                                inAmount: string;
+                                outAmount: string;
+                                minOut: string;
+                                priceImpactPct: string | null;
+                                route: {
+                                    hops: string[];
+                                };
+                            }[];
+                            /** @enum {string} */
+                            best?: "jupiter" | "titan";
                         };
                     };
                 };
@@ -11927,6 +11919,21 @@ export interface operations {
                     };
                 };
             };
+            /** @description The user has no Solana wallet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
             /** @description No route for the pair */
             422: {
                 headers: {
@@ -11942,7 +11949,285 @@ export interface operations {
                     };
                 };
             };
-            /** @description Quote error (Soroban RPC/provider) */
+            /** @description Quote error (RPC or aggregator) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postSwapBuild: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @constant */
+                    chain: "SOLANA";
+                    /** @enum {string} */
+                    provider: "jupiter" | "titan";
+                    inputMint: string;
+                    outputMint: string;
+                    amount: string;
+                    /** @default 50 */
+                    slippageBps?: number;
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The unsigned swap transaction */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_TX_BUILT";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            /** @constant */
+                            chain: "SOLANA";
+                            quote: {
+                                /** @constant */
+                                chain: "SOLANA";
+                                /** @enum {string} */
+                                provider: "jupiter" | "titan";
+                                inputMint: string;
+                                outputMint: string;
+                                inAmount: string;
+                                outAmount: string;
+                                minOut: string;
+                                priceImpactPct: string | null;
+                                route: {
+                                    hops: string[];
+                                };
+                            };
+                            unsignedTransaction: string;
+                            idempotencyKey: string;
+                            recentBlockhash: string;
+                            lastValidBlockHeight: number;
+                            feeLamports: string;
+                            feePayer: string;
+                            sponsored: boolean;
+                        };
+                    };
+                };
+            };
+            /** @description A co-signed wallet: the pending request the user approves on their device */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_COSIGN_PENDING";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            pendingSignature: {
+                                /** @constant */
+                                kind: "cosign";
+                                request: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                    /** @enum {string} */
+                                    network: "STELLAR" | "POLYGON" | "SOLANA";
+                                    /** @enum {string} */
+                                    status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "FAILED";
+                                    subOrgId: string;
+                                    activityId: string | null;
+                                    fingerprint: string | null;
+                                    signWith: string;
+                                    account?: string;
+                                    unsignedPayload: string;
+                                    payloadHash: string;
+                                    refreshable: boolean;
+                                    /** @enum {string} */
+                                    intent: "sign" | "sign_and_send" | "account_create" | "add_accounts";
+                                    operation?: string;
+                                    summary?: string;
+                                    details?: {
+                                        [key: string]: unknown;
+                                    };
+                                    stepKey?: string;
+                                    signedXdr?: string;
+                                    signedAuthEntry?: string;
+                                    submit?: {
+                                        hash: string;
+                                        /** @enum {string} */
+                                        status: "PENDING" | "SUCCESS" | "FAILED";
+                                        resultCode?: string;
+                                        message?: string;
+                                    };
+                                    txRecordId?: string;
+                                    failureReason?: string;
+                                    expiresAt: string;
+                                    createdAt: string;
+                                    resolvedAt: string | null;
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description The idempotencyKey belongs to another user */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description No Solana wallet, or the idempotencyKey was already submitted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description No route for the pair on that venue */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Aggregator or custody error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getSwapTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Curated swap buy tokens (possibly empty) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_SWAP_TOKENS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            tokens: {
+                                code: string;
+                                issuer: string;
+                                name: string;
+                                domain: string | null;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Error */
             502: {
                 headers: {
                     [name: string]: unknown;

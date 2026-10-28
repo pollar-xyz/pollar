@@ -1338,12 +1338,19 @@ export type DistributionRulesState =
 
 // --- Swap types (DEX/AMM) ------------------------------------------------------
 
-export type SwapQuoteBody = NonNullable<pollarPaths['/swap/quote']['post']['requestBody']>['content']['application/json'];
+// POST /swap/quote and GET /swap/config answer for Stellar, or for Solana when
+// the request says `chain: 'SOLANA'`. The unprefixed names are the Stellar side.
+type SwapQuoteRequest = NonNullable<pollarPaths['/swap/quote']['post']['requestBody']>['content']['application/json'];
+type AnySwapQuoteContent = pollarPaths['/swap/quote']['post']['responses'][200]['content']['application/json']['content'];
+type AnySwapQuote = AnySwapQuoteContent['quotes'][number];
+type AnySwapConfigContent = pollarPaths['/swap/config']['get']['responses'][200]['content']['application/json']['content'];
 
-export type SwapQuoteContent = pollarPaths['/swap/quote']['post']['responses'][200]['content']['application/json']['content'];
+export type SwapQuoteBody = Exclude<SwapQuoteRequest, { chain: 'SOLANA' }>;
 
-/** A single priced swap route, including a ready-to-run `build` payload. */
-export type SwapQuote = SwapQuoteContent['quotes'][number];
+/** A single priced Stellar swap route, including a ready-to-run `build` payload. */
+export type SwapQuote = Exclude<AnySwapQuote, { chain: 'SOLANA' }>;
+
+export type SwapQuoteContent = Extract<AnySwapQuoteContent, { quotes: SwapQuote[] }>;
 
 /** Route the caller requests: `auto` (best of every venue) or a concrete venue. */
 export type SwapProvider = NonNullable<SwapQuoteBody['provider']>;
@@ -1352,7 +1359,42 @@ export type SwapProvider = NonNullable<SwapQuoteBody['provider']>;
 export type SwapVenue = SwapQuote['provider'];
 
 /** Venues this app exposes to end-users (from GET /swap/config). Empty = disabled. */
-export type SwapConfigContent = pollarPaths['/swap/config']['get']['responses'][200]['content']['application/json']['content'];
+export type SwapConfigContent = Extract<AnySwapConfigContent, { venues: SwapVenue[] }>;
+
+/** A Solana quote request: mints and an integer amount in base units of the sold mint. */
+export type SolanaSwapQuoteBody = Extract<SwapQuoteRequest, { chain: 'SOLANA' }>;
+
+/**
+ * A priced Solana swap route (Jupiter or Titan). Amounts are base units of each
+ * mint. It carries no transaction: {@link PollarClient.swapSolana} has the route
+ * built for the user's wallet when the swap runs.
+ */
+export type SolanaSwapQuote = Extract<AnySwapQuote, { chain: 'SOLANA' }>;
+
+export type SolanaSwapQuoteContent = Extract<AnySwapQuoteContent, { quotes: SolanaSwapQuote[] }>;
+
+/** `auto` (best of the app's Solana venues) or a concrete one. */
+export type SolanaSwapProvider = NonNullable<SolanaSwapQuoteBody['provider']>;
+
+/** A Solana venue: `jupiter` or `titan`. */
+export type SolanaSwapVenue = SolanaSwapQuote['provider'];
+
+/** Solana venues this app exposes (GET /swap/config?chain=SOLANA). Empty = no swap on Solana. */
+export type SolanaSwapConfigContent = Extract<AnySwapConfigContent, { venues: SolanaSwapVenue[] }>;
+
+export type SolanaSwapBuildBody = NonNullable<pollarPaths['/swap/build']['post']['requestBody']>['content']['application/json'];
+
+/** Input to `client.getSolanaSwapQuote`; the wallet is the session user's own Solana wallet. */
+export type SolanaSwapQuoteParams = {
+  /** Mint sold; wrapped SOL (So11111111111111111111111111111111111111112) for SOL. */
+  inputMint: string;
+  outputMint: string;
+  /** Integer amount of `inputMint` in base units. */
+  amount: string;
+  provider?: SolanaSwapProvider;
+  /** Default 50 (0.5%). */
+  slippageBps?: number;
+};
 
 /** Curated "buy" tokens the app opted into (from GET /swap/tokens). */
 export type SwapTokensContent = pollarPaths['/swap/tokens']['get']['responses'][200]['content']['application/json']['content'];

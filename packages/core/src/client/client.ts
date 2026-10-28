@@ -14,7 +14,14 @@ import type {
 } from '../types';
 import { createApiClient, fetchWithTimeout, isRetryableTransportError, PollarApiClient } from '../api/client';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
-import { getSwapConfig, getSwapTokens, quoteSwap } from '../api/endpoints/swap';
+import {
+  buildSolanaSwap,
+  getSolanaSwapConfig,
+  getSwapConfig,
+  getSwapTokens,
+  quoteSolanaSwap,
+  quoteSwap,
+} from '../api/endpoints/swap';
 import { buildEarnTx, getEarnOpportunities, getEarnPosition, getEarnProviders } from '../api/endpoints/earn';
 import {
   createCardFunding,
@@ -97,6 +104,9 @@ import {
   DistributionClaimBody,
   DistributionClaimContent,
   DistributionRule,
+  SolanaSwapQuote,
+  SolanaSwapQuoteParams,
+  SolanaSwapVenue,
   SwapQuote,
   SwapQuoteBody,
   SwapQuoteParams,
@@ -4274,10 +4284,24 @@ export class PollarClient {
       return { status: 'error', ...(details && { details }) };
     }
 
+    return this._signAndSubmitSolana(adapter.signSolanaTransaction.bind(adapter), unsignedTransaction, idempotencyKey);
+  }
+
+  /**
+   * The second half of a Solana split flow: the connected wallet signs the
+   * transaction the backend built, and the backend broadcasts it under the
+   * build's `idempotencyKey` (`/tx/submit`), adding the app's sponsor signature
+   * when the build was sponsored. Shared by an external wallet's transfer and swap.
+   */
+  private async _signAndSubmitSolana(
+    sign: (transaction: Uint8Array, chain: string) => Promise<Uint8Array>,
+    unsignedTransaction: string,
+    idempotencyKey: string,
+  ): Promise<SubmitOutcome> {
     this._setTransactionState({ step: 'signing' });
     let signedTransaction: string;
     try {
-      const signed = await adapter.signSolanaTransaction(hexToBytes(unsignedTransaction), this._solanaChainId());
+      const signed = await sign(hexToBytes(unsignedTransaction), this._solanaChainId());
       signedTransaction = bytesToHex(signed);
     } catch (err) {
       const details = err instanceof Error ? err.message : undefined;
@@ -4832,6 +4856,124 @@ export class PollarClient {
     const build = quote.build;
     if ('unsignedXdr' in build) return this.signAndSubmitTx(build.unsignedXdr);
     return this.runTx(build.operation, build.params);
+  }
+
+  /**
+   * The Solana swap venues this app exposes (`jupiter`, `titan`), mainnet only.
+   * An empty array means no swap on Solana for this app.
+   */
+  async getSolanaSwapConfig(): Promise<SolanaSwapVenue[]> {
+    const content = await getSolanaSwapConfig(this._api);
+    return content.venues;
+  }
+
+  /**
+   * Quote a swap from the session user's Solana wallet on Jupiter and Titan.
+   * Read-only. Amounts are integer base units of each mint; quotes come best
+   * output first, an empty array means no route. The quotes carry no
+   * transaction: {@link swapSolana} has the picked one built when it runs.
+   */
+  async getSolanaSwapQuote(params: SolanaSwapQuoteParams): Promise<SolanaSwapQuote[]> {
+    const content = await quoteSolanaSwap(this._api, {
+      chain: 'SOLANA',
+      inputMint: params.inputMint,
+      outputMint: params.outputMint,
+      amount: params.amount,
+      ...(params.provider !== undefined && { provider: params.provider }),
+      ...(params.slippageBps !== undefined && { slippageBps: params.slippageBps }),
+    });
+    return content.quotes;
+  }
+
+  /**
+   * Run a Solana swap from a quote returned by {@link getSolanaSwapQuote}. The
+   * backend asks the quote's venue for the route again and builds it for the
+   * user's wallet, refusing one whose simulation pays the user less than its
+   * minimum, so the amounts can move a little from the quote. A co-signed wallet
+   * approves it on the device; an external wallet signs it in the connected
+   * wallet and the backend broadcasts it. Custodial wallets cannot swap on
+   * Solana. Drives the same transaction state machine as {@link sendPayment}.
+   */
+  async swapSolana(quote: SolanaSwapQuote, opts?: { slippageBps?: number }): Promise<SubmitOutcome> {
+    this._txStartGen = this._sessionGeneration;
+    const wallet = this.getWallets().find((w) => w.chain === 'SOLANA');
+    if (!wallet) {
+      this._setTransactionState({ step: 'error', phase: 'building', details: 'No Solana wallet' });
+      return { status: 'error', details: 'No Solana wallet' };
+    }
+    const answer = await this._confirm({
+      kind: 'build_sign_submit',
+      network: 'SOLANA',
+      operation: 'swap',
+      details: {
+        provider: quote.provider,
+        inputMint: quote.inputMint,
+        outputMint: quote.outputMint,
+        inAmount: quote.inAmount,
+        outAmount: quote.outAmount,
+        minOut: quote.minOut,
+      },
+    });
+    if (!answer.ok) return this._declined('building', undefined, answer);
+
+    const external = wallet.custody === 'external';
+    const adapter = this._walletAdapter;
+    if (external) {
+      const noSigner = this._externalSignerMissing();
+      if (noSigner) {
+        this._setTransactionState({ step: 'error', phase: 'building', details: noSigner.details });
+        return noSigner;
+      }
+      if (!adapter?.signSolanaTransaction) {
+        const details = `Wallet "${adapter?.type}" cannot sign a Solana transaction.`;
+        this._setTransactionState({ step: 'error', phase: 'building', details });
+        return { status: 'error', details };
+      }
+    }
+
+    // One key ties the build to its submit (external) or to the co-sign request.
+    const idempotencyKey = randomUUID();
+    this._setTransactionState({ step: 'building' });
+    let unsignedTransaction: string;
+    try {
+      const { data, error } = await buildSolanaSwap(this._api, {
+        chain: 'SOLANA',
+        provider: quote.provider,
+        inputMint: quote.inputMint,
+        outputMint: quote.outputMint,
+        amount: quote.inAmount,
+        ...(opts?.slippageBps !== undefined && { slippageBps: opts.slippageBps }),
+        idempotencyKey,
+      });
+      const pendingRequest = this._cosignPendingOf(data);
+      if (pendingRequest) {
+        return this._settleCosign(pendingRequest, { intent: 'sign_and_send', phase: 'building-signing-submitting' });
+      }
+      const content = !error && data?.success && data.content && 'unsignedTransaction' in data.content ? data.content : null;
+      if (!content) {
+        const { details, code, message } = this._resolveTxApiError(error, data);
+        this._setTransactionState({
+          step: 'error',
+          phase: 'building',
+          ...(details && { details }),
+          ...(code && { code }),
+          ...(message && { message }),
+        });
+        return { status: 'error', ...(details && { details }), ...(code && { code }), ...(message && { message }) };
+      }
+      unsignedTransaction = content.unsignedTransaction;
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      this._setTransactionState({ step: 'error', phase: 'building', ...(details && { details }) });
+      return { status: 'error', ...(details && { details }) };
+    }
+
+    if (!adapter?.signSolanaTransaction) {
+      const details = 'This Solana wallet signs on the device; the build did not open a co-sign request.';
+      this._setTransactionState({ step: 'error', phase: 'building', details });
+      return { status: 'error', details };
+    }
+    return this._signAndSubmitSolana(adapter.signSolanaTransaction.bind(adapter), unsignedTransaction, idempotencyKey);
   }
 
   // --- Earn (yield vaults / lending) ------------------------------------------
