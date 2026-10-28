@@ -1,7 +1,7 @@
 import { TransactionState, WalletId, WalletType } from '@pollar/core';
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Linking, Image } from 'react-native';
-import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
+import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR_MARK_ON_DARK, LOGO_POLLAR_MARK_ON_LIGHT } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter, PollarOverlay } from '../commons';
 
 export interface TransactionModalTemplateProps {
@@ -141,7 +141,9 @@ export function TransactionModalTemplate({
                       ? LOGO_FREIGHTER
                       : walletType === WalletType.ALBEDO
                         ? LOGO_ALBEDO
-                        : LOGO_POLLAR,
+                        : isDark
+                          ? LOGO_POLLAR_MARK_ON_DARK
+                          : LOGO_POLLAR_MARK_ON_LIGHT,
                 }}
                 style={styles.walletImage}
               />

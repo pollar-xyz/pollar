@@ -40,10 +40,10 @@
   min-width: 0;
   gap: 0.35rem;
   padding: 0.25rem 0.35rem 0.25rem 0.55rem;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid color-mix(in srgb, var(--pollar-btn-primary-fg) 22%, transparent);
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.2);
-  font-family: monospace;
+  background: color-mix(in srgb, var(--pollar-btn-primary-fg) 14%, transparent);
+  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.625rem;
   white-space: nowrap;
 }
@@ -60,7 +60,7 @@
 .pollar-bal-summary-copy:hover {
   border: 0;
   color: currentColor;
-  background: rgba(255, 255, 255, 0.14);
+  background: color-mix(in srgb, var(--pollar-btn-primary-fg) 14%, transparent);
 }
 
 .pollar-bal-summary-value {
@@ -155,7 +155,7 @@
 .pollar-bal-asset-secondary {
   overflow: hidden;
   color: var(--pollar-muted);
-  font-family: monospace;
+  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.625rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -200,7 +200,7 @@
 .pollar-bal-available {
   max-width: 11rem;
   overflow: hidden;
-  font-family: monospace;
+  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;

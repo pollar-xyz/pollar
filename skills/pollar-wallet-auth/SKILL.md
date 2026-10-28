@@ -289,12 +289,15 @@ These are the failures that look like SDK bugs and are not:
 
 ## Version note
 
-This skill tracks `@pollar/core` and `@pollar/react` `0.11.x`, which moved every request to the `/v2`
-API and added Solana alongside Stellar. `0.11.4` is where `wallet.provisioning`, `onWalletStateChange()` and `isWalletNotReady()` come from, along
-with ramp requirement steps (`requirementsRequired`, see [ramps.md](ramps.md)); on an older SDK the
-background-creation window exists but nothing in the client describes it. `0.11.5` adds Turnkey co-signed wallets,
-settled by the device on its own under the default `confirmation: 'auto'`, and `confirmation: 'prompt'`
-to show the user every signature first. Two
+This skill tracks `@pollar/core` and `@pollar/react` `0.12.x`. `0.12.0` moves every request to the `/v3`
+API and rebuilds ramps on it as orders of legs (`getRampRoutes`, `quoteRamp`, `createRampOrder`,
+`pollRampOrder`, `signRampLeg`; see [ramps.md](ramps.md)); the 0.11.x ramp methods do not exist in it.
+`0.12.0` also makes `confirmation: 'prompt'` the default: every signature waits for the user unless the
+app's dashboard policy says otherwise, a `confirmation` set in code and the dashboard policy combine
+to the stricter of the two, and a ramp leg always asks. `0.11.x` added Solana alongside Stellar;
+`0.11.4` is where `wallet.provisioning`, `onWalletStateChange()` and `isWalletNotReady()` come from (on
+an older SDK the background-creation window exists but nothing in the client describes it), and
+`0.11.5` adds Turnkey co-signed wallets. Two
 earlier breaks matter if an existing integration is being upgraded: `0.11.1` made balances nullable, and `0.10.0` replaced the
 singular `walletAdapter` resolver and `loginWallet(id)` with a `walletAdapters: WalletAdapter[]` array. Check
 [UPGRADE.md](https://github.com/pollar-xyz/pollar/blob/main/UPGRADE.md) before bumping versions.

@@ -21,7 +21,17 @@ Pollar runs on Solana end to end for wallets and payments:
 
 ## Packages
 
-> **0.11.5** adds **Turnkey co-signed wallets**: for a mainnet
+> **0.12.0** moves the SDK to the sdk-api **`/v3`** API. **Ramps are orders**: `getRampRoutes`, `quoteRamp`,
+> `createRampOrder`, `pollRampOrder` and `signRampLeg` replace the 0.11.x ramp methods, and Pollar runs each leg (the
+> provider, a swap, a bridge) server-side. **Wallets the user holds**: a Turnkey wallet can be self-custody or
+> co-signed and switch between the two, is recovered with a passkey, an email code or another device
+> (`<RecoveryModal>`), and a custodial wallet moves to Turnkey from the device (`<CustodyMigrationModal>`). Every
+> signature asks the user by default, and the app's dashboard sets a window of minutes and USD. Branding in
+> `@pollar/react` yields to the host stylesheet. This release has breaking changes; read [UPGRADE.md](./UPGRADE.md)
+> before upgrading. `@pollar/react` and `@pollar/react-native` require `@pollar/core@^0.12.0`; the Stellar Wallets
+> Kit and Solana Wallet Standard adapters are released as `0.12.0` with a `^0.11.2 || ^0.12.0` core range.
+>
+> Earlier: **0.11.5** added **Turnkey co-signed wallets**: for a mainnet
 > app in `COSIGNED` custody, each user's wallet is a 2-of-2 quorum with this device's key. By default
 > (`confirmation: 'auto'`) the device verifies each request against Turnkey and votes on its own, so a
 > signing call ends exactly as for a custodial wallet; `confirmation: 'prompt'` shows the user every
@@ -88,8 +98,7 @@ Pollar runs on Solana end to end for wallets and payments:
 > (`<ChainSelect>`) that scopes the wallet-balance, enabled-assets, send and receive modals to
 > one chain instead of tagging every row.
 >
-> Earlier breaks worth knowing before you jump versions: **0.11.0** moved every request to the
-> **`/v2`** API and went multichain (Solana joins Stellar). **0.10.0** replaced the singular
+> Earlier breaks worth knowing before you jump versions: **0.11.0** moved every request to the `/v2` API and went multichain (Solana joins Stellar). **0.10.0** replaced the singular
 > `walletAdapter` resolver and `loginWallet(id)` with a `walletAdapters: WalletAdapter[]` array
 > (`login({ provider: id })`), and forced every user to re-authenticate once.
 >
@@ -98,7 +107,7 @@ Pollar runs on Solana end to end for wallets and payments:
 
 ### [`@pollar/core`](./packages/core)
 
-**Version:** `0.11.5` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/core)
+**Version:** `0.12.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/core)
 
 Framework-agnostic TypeScript SDK. Provides the `PollarClient` class and all lower-level utilities needed to integrate
 Pollar authentication and multichain (Stellar + Solana) transactions into any JavaScript environment.
@@ -181,7 +190,7 @@ const client = new PollarClient({ apiKey: 'pk_...', storage });
 
 ### [`@pollar/react`](./packages/react)
 
-**Version:** `0.11.5` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react)
+**Version:** `0.12.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react)
 
 React bindings built on top of `@pollar/core`. Provides a context provider, hook, and pre-built UI components for
 drop-in authentication in React applications.
@@ -224,7 +233,7 @@ drop-in authentication in React applications.
 - `createPollarAdapterHook(key)` — factory for fully-typed hooks that wrap custom adapters with automatic XDR signing
 - Template components for every modal — pure presentational layer for fully custom UIs
 - Bundled stylesheet (`@pollar/react/styles.css`) with `pollar-` namespaced class names
-- Peer dependency on React >= 18
+- Peer dependencies on `@pollar/core ^0.12.0` and React >= 18
 
 ```bash
 npm install @pollar/react @pollar/core
@@ -234,7 +243,7 @@ npm install @pollar/react @pollar/core
 
 ### [`@pollar/react-native`](./packages/react-native)
 
-**Version:** `0.11.5` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react-native)
+**Version:** `0.12.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/react-native)
 
 React Native bindings built on top of `@pollar/core`: the same provider-and-hook model as `@pollar/react`, with
 components styled through `StyleSheet`.
@@ -252,7 +261,7 @@ components styled through `StyleSheet`.
 - Storage (Keychain / SecureStore), OAuth opener and polyfills are configured through `@pollar/core`; see the package
   README
 - `<CardModal>` - the same card flow as the web one; the card number is decrypted on the device without WebCrypto
-- Peer dependencies on `@pollar/core ^0.11.5`, React >= 18 and React Native >= 0.72; versioned with `@pollar/core`
+- Peer dependencies on `@pollar/core ^0.12.0`, React >= 18 and React Native >= 0.72; versioned with `@pollar/core`
   and `@pollar/react` from 0.11.4
 
 ```bash
@@ -263,7 +272,7 @@ npm install @pollar/react-native @pollar/core
 
 ### [`@pollar/privy-adapter`](./packages/privy-adapter)
 
-**Version:** `0.11.2` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-adapter)
+**Version:** `0.11.1` (core `^0.11.1`; no 0.12 release) &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-adapter)
 
 Client-side **Privy** wallet adapter for `@pollar/core`. It drives the whole Privy flow itself - email / Google / GitHub
 login, creating the user's Privy embedded wallet (Stellar or Solana), and raw-hash signing - then hands the signature to Pollar for
@@ -317,7 +326,7 @@ npm install @pollar/privy-server-adapter
 
 ### [`@pollar/accesly-adapter`](./packages/accesly-adapter)
 
-**Version:** `0.11.2` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/accesly-adapter)
+**Version:** `0.10.1` (core `^0.10.1`; no 0.12 release) &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/accesly-adapter)
 
 Client-side **Accesly** smart-account wallet adapter for `@pollar/core`. Signs Stellar transactions with a user's
 Accesly C-address (passkey + MPC) smart wallet, client-side.
@@ -335,7 +344,7 @@ npm install @pollar/accesly-adapter @pollar/core @accesly/react @accesly/core
 
 ### [`@pollar/stellar-wallets-kit-adapter`](./packages/stellar-wallets-kit-adapter)
 
-**Version:** `0.11.2` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/stellar-wallets-kit-adapter)
+**Version:** `0.12.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/stellar-wallets-kit-adapter)
 
 Plugs [Stellar Wallets Kit](https://stellarwalletskit.dev) into Pollar as a set of wallet adapters, without
 `@pollar/core` having to depend on the kit. One install gives Pollar access to **every wallet module the kit
@@ -351,7 +360,7 @@ plus Ledger / Trezor / WalletConnect via opt-in.
   trim the bundle
 - SSR-safe: `stellarWalletsKitAdapters()` returns `[]` when there is no `window` (Next.js / Remix) and builds the real
   list when it re-runs on the client
-- Peer deps: `@creit.tech/stellar-wallets-kit@^2.0.0` and `@pollar/core@^0.11.2` (the kit is **not** bundled)
+- Peer deps: `@creit.tech/stellar-wallets-kit@^2.0.0` and `@pollar/core@^0.11.2 || ^0.12.0` (the kit is **not** bundled)
 
 ```bash
 npm install @pollar/stellar-wallets-kit-adapter @pollar/core @creit.tech/stellar-wallets-kit
@@ -361,7 +370,7 @@ npm install @pollar/stellar-wallets-kit-adapter @pollar/core @creit.tech/stellar
 
 ### [`@pollar/solana-wallet-standard-adapter`](./packages/solana-wallet-standard-adapter)
 
-**Version:** `0.11.5` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/solana-wallet-standard-adapter)
+**Version:** `0.12.0` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/solana-wallet-standard-adapter)
 
 The Solana counterpart to `@pollar/stellar-wallets-kit-adapter`. Connects user-controlled Solana wallets (Phantom,
 Solflare, Backpack, ...) to `@pollar/core` through the [Wallet Standard](https://github.com/wallet-standard/wallet-standard),
@@ -373,7 +382,7 @@ without bundling any wallet SDK into `@pollar/core`. Login uses **SIWS (Sign In 
 - `solanaWalletStandardAdapters(options?)` - discovers every installed Solana wallet and returns one `WalletAdapter`
   each to pass to `PollarClientConfig.walletAdapters`; SSR-safe (returns `[]` when there is no `window`)
 - `SolanaWalletStandardAdapter` - direct `WalletAdapter` implementation for use outside `PollarClient`
-- Peer dep: `@pollar/core@^0.11.2` only. The `@wallet-standard/*` packages and `@solana/wallet-standard-features` are
+- Peer dep: `@pollar/core@^0.11.2 || ^0.12.0` only. The `@wallet-standard/*` packages and `@solana/wallet-standard-features` are
   bundled as regular dependencies, so consumers don't install them; no wallet SDK is bundled
 
 ```bash
@@ -442,6 +451,26 @@ npm run lint
 ```bash
 npm run clean
 ```
+
+### Release a candidate
+
+```bash
+npm run release:rc -- 0.12.0-rc.5
+```
+
+Tags the current commit as `v0.12.0-rc.5` and pushes the tag, which runs
+`.github/workflows/release-rc.yml` (build, unit + smoke tests, publish every SDK package to npm
+on the `next` dist-tag) and `e2e-rc.yml`. Nothing is published from your machine.
+
+The script refuses to tag unless:
+
+- the version is `X.Y.Z-rc.N` and `X.Y.Z` matches `packages/core/package.json` on this commit
+- the working tree is clean
+- `HEAD` is already on a remote branch (push it first)
+- the tag does not exist locally or on `origin`
+
+The workflow can also be started by hand from the Actions tab (`workflow_dispatch` with a
+`version` input).
 
 ---
 

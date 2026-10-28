@@ -68,7 +68,7 @@
   padding: 0.75rem 0.875rem;
   gap: 0.75rem;
   border: 1px solid var(--pollar-border);
-  border-radius: 0.75rem;
+  border-radius: var(--pollar-input-border-radius, 0.5rem);
   background: var(--pollar-input-bg);
   color: var(--pollar-text);
   text-align: left;
@@ -159,7 +159,7 @@
   padding: 0.375rem;
   overflow-y: auto;
   border: 1px solid var(--pollar-border);
-  border-radius: 0.75rem;
+  border-radius: var(--pollar-input-border-radius, 0.5rem);
   background: var(--pollar-bg);
   box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16);
 }
@@ -171,7 +171,7 @@
   gap: 0.625rem;
   padding: 0.625rem;
   border: 1px solid transparent;
-  border-radius: 0.5rem;
+  border-radius: max(0px, calc(var(--pollar-input-border-radius, 0.5rem) - 6px));
   background: transparent;
   color: var(--pollar-text);
   text-align: left;
@@ -194,12 +194,12 @@
 }
 
 .pollar-send-amount-input {
-  font-family: Geist, sans-serif;
+  font-family: inherit;
   font-size: 20px;
   font-style: normal;
   font-weight: 500;
   line-height: 30px;
-  color: var(--Color-Neutral-400, #94a3b8);
+  color: var(--pollar-text);
 }
 
 .pollar-send-label-optional {
@@ -223,7 +223,7 @@
 }
 
 .pollar-send-destination-input {
-  font-family: 'Geist Mono', monospace;
+  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 14px;
   font-style: normal;
   font-weight: 400;
@@ -252,10 +252,10 @@
   height: 28px;
   padding: 0 0.5rem;
   border: 0;
-  border-radius: 0.375rem;
-  background: var(--pollar-btn-secondary-bg, #eaf2fa);
+  border-radius: var(--pollar-buttons-border-radius, 0.375rem);
+  background: var(--pollar-btn-secondary-bg, color-mix(in srgb, var(--pollar-accent) 10%, var(--pollar-bg)));
   box-shadow: none;
-  color: var(--pollar-accent);
+  color: var(--pollar-btn-secondary-fg, var(--pollar-accent));
   font: inherit;
   font-size: 0.75rem;
   font-weight: 700;
@@ -265,7 +265,11 @@
 }
 
 .pollar-send-inline-action:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--pollar-btn-secondary-bg, #eaf2fa) 82%, var(--pollar-accent));
+  background: color-mix(
+    in srgb,
+    var(--pollar-btn-secondary-bg, color-mix(in srgb, var(--pollar-accent) 10%, var(--pollar-bg))) 82%,
+    var(--pollar-accent)
+  );
   color: var(--pollar-btn-secondary-fg, var(--pollar-text));
 }
 
@@ -282,17 +286,12 @@
   transform: translateY(-50%);
 }
 
-html.dark .pollar-send-inline-action {
-  background: var(--pollar-btn-secondary-bg, #253b52);
-}
-
 .pollar-send-modal .pollar-modal-actions {
   margin-top: 0.25rem;
 }
 
 .pollar-send-modal .pollar-btn-primary {
   min-height: 48px;
-  border-radius: 999px;
   font-size: 0.9375rem;
 }
 
@@ -330,4 +329,44 @@ html.dark .pollar-send-inline-action {
   background: linear-gradient(90deg, var(--pollar-input-bg) 25%, var(--pollar-border) 50%, var(--pollar-input-bg) 75%);
   background-size: 200% 100%;
   animation: pollar-pulse 1.4s ease-in-out infinite;
+}
+
+/* ---- Destination without an account ---- */
+.pollar-send-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius, 12px);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--pollar-text);
+}
+
+.pollar-send-notice p {
+  margin: 0;
+}
+
+.pollar-send-notice-title {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.pollar-send-notice-address {
+  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.75rem;
+  color: var(--pollar-muted);
+  word-break: break-all;
+}
+
+.pollar-send-notice-warning {
+  color: var(--pollar-error-text, #dc2626);
+}
+
+.pollar-send-account-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
 }

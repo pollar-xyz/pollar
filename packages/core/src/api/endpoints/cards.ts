@@ -14,6 +14,7 @@ import type {
   CardTransactionsPage,
 } from '../../types';
 import { PollarApiError } from '../../types';
+import { isRecord, stringField } from '../error-fields';
 
 /** Ciphertext as the provider returns it: AES-GCM `iv` and `data` (ciphertext + tag), both base64. */
 export interface EncryptedCardSecrets {
@@ -28,8 +29,8 @@ export interface EncryptedCardSecrets {
 const REGISTRATION_TIMEOUT_MS = 30_000;
 
 function cardsApiError(error: unknown, fallback: string): PollarApiError {
-  const body = (typeof error === 'object' && error !== null ? error : {}) as Record<string, unknown>;
-  const code = typeof body.code === 'string' ? body.code : typeof body.error === 'string' ? body.error : fallback;
+  const body = isRecord(error) ? error : {};
+  const code = stringField(body, 'code') ?? stringField(body, 'error') ?? fallback;
   return new PollarApiError(code, body);
 }
 

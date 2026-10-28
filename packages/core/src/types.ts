@@ -5,6 +5,7 @@ import type { LogLevel, PollarLogger } from './lib/logger';
 import type { OnStorageDegrade, Storage } from './storage/types';
 import type { VisibilityProvider } from './visibility/types';
 import { WalletAdapter, WalletId } from './wallets';
+import { stringField } from './api/error-fields';
 
 export type PollarApplicationConfigResponse =
   pollarPaths['/auth/login']['post']['responses'][200]['content']['application/json'];
@@ -340,15 +341,27 @@ export interface PollarClientConfig {
    */
   cosignKeyManager?: KeyManager;
   /**
-   * How a signing call treats the user, whatever the wallet's custody.
-   * `'auto'` (default) signs without a prompt: a custodial wallet signs on the
-   * server, a co-signed one has the device verify and vote on its own, an
-   * external one shows only its own wallet's popup. `'prompt'` shows the
-   * transaction and waits for the user before any signature; `@pollar/react`
-   * renders the prompt, a headless app subscribes with
-   * `onConfirmationRequest`. The same code works on testnet and mainnet.
+   * The passkey ceremonies a Turnkey wallet's recovery uses (add a passkey,
+   * recover with one). Injected by `@pollar/react` with the browser's
+   * WebAuthn; a React Native app passes its own, or the passkey methods of
+   * `client.cosign.recovery` are unavailable.
    */
-  confirmation?: 'auto' | 'prompt';
+  recoveryPasskey?: RecoveryPasskeyCeremony;
+  /**
+   * How a signing call treats the user, whatever the wallet's custody.
+   * `'prompt'` shows the transaction and waits for the user before any
+   * signature; `@pollar/react` renders the prompt, a headless app subscribes
+   * with `onConfirmationRequest`. `{ window }`: a confirmed signature opens a
+   * window of `seconds` in which the next ones, up to `maxUsd` in total, sign
+   * without asking; a signature whose USD value the SDK cannot read (anything
+   * but a payment it builds) always asks. `'auto'` signs without a prompt.
+   *
+   * Unset, the app's dashboard setting applies, and that defaults to
+   * `'prompt'`. Set, the stricter of this and the dashboard setting applies.
+   * A ramp leg always asks, whatever the policy. The same code works on
+   * testnet and mainnet.
+   */
+  confirmation?: ConfirmationPolicy;
   /**
    * Keep the raw co-sign flow: signing calls on a co-signed wallet return
    * `cosign_pending` and the app approves through `client.cosign.*` and its
@@ -356,6 +369,9 @@ export interface PollarClientConfig {
    */
   cosignManual?: boolean;
 }
+
+/** See `PollarClientConfig.confirmation`. */
+export type ConfirmationPolicy = 'auto' | 'prompt' | { window: { seconds: number; maxUsd: number } };
 
 /** What a signing call is about to do, shown to the user under `confirmation: 'prompt'`. */
 export interface ConfirmationRequest {
@@ -393,6 +409,41 @@ export type CosignRelayPath = NonNullable<
 /** The 202 a signing call answers with for a co-signed wallet. */
 export type CosignPendingContent = pollarPaths['/tx/sign']['post']['responses'][202]['content']['application/json']['content'];
 
+/**
+ * Whether the user's Stellar wallet, one Pollar custodies, has to move to
+ * Turnkey because the app's wallets live there, and where the move stands.
+ */
+export type CustodyMigrationState =
+  pollarPaths['/cosign/custody/migration']['get']['responses'][200]['content']['application/json']['content'];
+
+/** A chain whose custodial wallet can move to Turnkey. */
+export type CustodyMigrationChain = CustodyMigrationState['wallets'][number]['chain'];
+
+/** Whether the user's Turnkey wallet can be recovered without this device, and the methods it has. */
+export type RecoveryState = pollarPaths['/cosign/recovery']['get']['responses'][200]['content']['application/json']['content'];
+
+/**
+ * The passkey ceremonies wallet recovery needs, injected by the runtime layer
+ * (`@pollar/react` uses `navigator.credentials`). All binary fields are
+ * base64url, as WebAuthn's JSON serialization gives them.
+ */
+export interface RecoveryPasskeyCeremony {
+  /** Register a passkey for the wallet; `challenge` goes to `navigator.credentials.create`. */
+  create(options: { challenge: string; userName: string }): Promise<{
+    credentialId: string;
+    clientDataJson: string;
+    attestationObject: string;
+    transports: string[];
+  }>;
+  /** Sign `challenge` with one of `allowCredentials`. */
+  get(options: { challenge: string; allowCredentials: string[] }): Promise<{
+    credentialId: string;
+    authenticatorData: string;
+    clientDataJson: string;
+    signature: string;
+  }>;
+}
+
 /** The requests waiting for this device's vote, as `client.cosign` knows them. */
 export interface CosignState {
   pending: CosignRequest[];
@@ -400,13 +451,32 @@ export interface CosignState {
   lastResolved?: CosignRequest;
 }
 
+/** The Turnkey request a device submits to propose a co-signed request, built from what it verified. */
+export interface CosignProposal {
+  path: Extract<
+    CosignRelayPath,
+    '/public/v1/submit/sign_raw_payload' | '/public/v1/submit/sign_transaction' | '/public/v1/submit/create_wallet_accounts'
+  >;
+  body: { type: string; timestampMs: string; organizationId: string; parameters: Record<string, unknown> };
+}
+
 export type CosignVerification =
-  | { ok: true; localHash: string; turnkeyPayload: string | null }
-  | { ok: false; reason: string; localHash?: string; turnkeyPayload?: string | null };
+  | { ok: true; localHash: string; proposal: CosignProposal }
+  | { ok: false; reason: string; localHash?: string };
+
+/** The custody of the user's Turnkey wallet: co-signed (2-of-2 with Pollar's approver) or self-custody (1-of-1). */
+export type CosignCustody = NonNullable<CosignDevicesContent['custody']>;
 
 export type CosignQuorumReport =
-  | { ok: true; threshold: number; rootUsers: number; deviceRegistered: boolean }
-  | { ok: false; reason: string; threshold?: number; rootUsers?: number; deviceRegistered?: boolean };
+  | { ok: true; custody: CosignCustody; threshold: number; rootUsers: number; deviceRegistered: boolean }
+  | {
+      ok: false;
+      reason: string;
+      custody?: CosignCustody;
+      threshold?: number;
+      rootUsers?: number;
+      deviceRegistered?: boolean;
+    };
 
 /**
  * Runs the device WebAuthn ceremony for a server-issued challenge and returns
@@ -493,7 +563,12 @@ export type SessionsState =
   | { step: 'loaded'; sessions: SessionInfo[] }
   | { step: 'error'; message: string };
 
-export type TxBuildBody = NonNullable<pollarPaths['/tx/build']['post']['requestBody']>['content']['application/json'];
+// The Stellar build body. `/tx/build` also takes a Solana body for an external
+// wallet (`chain: 'SOLANA'`), which only `sendPayment` sends and builds itself.
+export type TxBuildBody = Exclude<
+  NonNullable<pollarPaths['/tx/build']['post']['requestBody']>['content']['application/json'],
+  { chain: 'SOLANA' }
+>;
 export type TxBuildResponse = pollarPaths['/tx/build']['post']['responses'][200]['content']['application/json'];
 
 export type TxSignAndSendBody = NonNullable<
@@ -507,7 +582,11 @@ export type TxSignBody = NonNullable<pollarPaths['/tx/sign']['post']['requestBod
 export type TxSignResponse = pollarPaths['/tx/sign']['post']['responses'][200]['content']['application/json'];
 export type TxSignContent = TxSignResponse['content'];
 
-export type TxSubmitSignedBody = NonNullable<pollarPaths['/tx/submit']['post']['requestBody']>['content']['application/json'];
+// The Stellar submit body; `/tx/submit` also takes the signed Solana transaction of an external wallet.
+export type TxSubmitSignedBody = Exclude<
+  NonNullable<pollarPaths['/tx/submit']['post']['requestBody']>['content']['application/json'],
+  { chain: 'SOLANA' }
+>;
 
 export type TxBuildSignSubmitBody = NonNullable<
   pollarPaths['/tx/build-sign-submit']['post']['requestBody']
@@ -545,7 +624,7 @@ export interface AuthProviderContext {
   readonly signal: AbortSignal;
   /** Typed `openapi-fetch` client, already wired with DPoP + refresh middleware. */
   readonly api: PollarApiClient;
-  /** API origin + version prefix (e.g. `https://sdk.api.pollar.xyz/v2`). */
+  /** API origin + version prefix (e.g. `https://sdk.api.pollar.xyz/v3`). */
   readonly basePath: string;
   readonly apiKey: string;
   readonly logger: PollarLogger;
@@ -778,7 +857,7 @@ export type TrustlineOutcome =
   | { status: 'success'; hash?: string }
   | { status: 'pending'; hash?: string }
   | { status: 'cosign_pending'; request: CosignRequest; buildData?: TxBuildContent }
-  | { status: 'error'; details?: string };
+  | { status: 'error'; details?: string; code?: string };
 
 export const AUTH_ERROR_CODES = {
   SESSION_CREATE_FAILED: 'SESSION_CREATE_FAILED',
@@ -924,8 +1003,7 @@ export const WALLET_NOT_READY_CODE = 'SDK_WALLET_NOT_READY';
  * when the account lands - not to retry immediately.
  */
 export function isWalletNotReady(errorOrOutcome: unknown): boolean {
-  if (typeof errorOrOutcome !== 'object' || errorOrOutcome === null) return false;
-  return (errorOrOutcome as { code?: unknown }).code === WALLET_NOT_READY_CODE;
+  return stringField(errorOrOutcome, 'code') === WALLET_NOT_READY_CODE;
 }
 
 /**
@@ -940,8 +1018,7 @@ export const WALLET_REQUIRED_CODE = 'SDK_WALLET_REQUIRED';
  * The fix is {@link PollarClient.createWallet}, not a retry.
  */
 export function isWalletRequired(errorOrOutcome: unknown): boolean {
-  if (typeof errorOrOutcome !== 'object' || errorOrOutcome === null) return false;
-  return (errorOrOutcome as { code?: unknown }).code === WALLET_REQUIRED_CODE;
+  return stringField(errorOrOutcome, 'code') === WALLET_REQUIRED_CODE;
 }
 
 /** Type guard for {@link PollarNetworkError} (instanceof is unreliable across
@@ -981,8 +1058,8 @@ export type WalletChain = 'STELLAR' | 'POLYGON' | 'SOLANA';
 
 /**
  * One asset the wallet holds, tagged with the chain it lives on. `chain` is
- * populated on the multichain own-wallet balance (`GET /v2/wallet/balance`); the
- * single-wallet lookup (`GET /v2/wallet/{publicKey}/balance`, Stellar-only) omits
+ * populated on the multichain own-wallet balance (`GET /v3/wallet/balance`); the
+ * single-wallet lookup (`GET /v3/wallet/{publicKey}/balance`, Stellar-only) omits
  * it.
  *
  * Every chain reports its native coin plus each token the app enabled. `type` is
@@ -1025,6 +1102,14 @@ export interface WalletBalanceContent {
   balances: WalletBalanceRecord[];
 }
 
+/** `GET /wallet/balance` as v2 answers it: one entry per chain, or an `error` for a chain it could not read. */
+export type WalletBalanceAnswer =
+  pollarPaths['/wallet/balance']['get']['responses'][200]['content']['application/json']['content'];
+
+/** `GET /wallet/assets` as v2 answers it, per chain like {@link WalletBalanceAnswer}. */
+export type WalletAssetsAnswer =
+  pollarPaths['/wallet/assets']['get']['responses'][200]['content']['application/json']['content'];
+
 export type WalletBalanceState =
   | { step: 'idle' }
   | { step: 'loading' }
@@ -1036,10 +1121,8 @@ export type WalletBalanceState =
 /**
  * One asset the app offers, tagged with the chain it lives on.
  *
- * Hand-written rather than derived from `pollarPaths['/wallet/assets']`: that
- * generated type describes v1's Stellar-only shape, while v2 answers for every
- * chain the app is provisioned on. Mirrors {@link WalletBalanceRecord}, which is
- * hand-written for the same reason.
+ * The flat, chain-tagged view of {@link WalletAssetsAnswer}: v2 answers per
+ * chain, and the UI reads one list. Mirrors {@link WalletBalanceRecord}.
  *
  * `trustlineEstablished`, `limit` and `sponsored` are Stellar-only - a trustline
  * is a Stellar concept, so an ERC-20 or SPL token needs no per-user opt-in to be
@@ -1125,17 +1208,56 @@ export const RampChain = Object.freeze({
 } as const);
 export type RampChain = (typeof RampChain)[keyof typeof RampChain];
 
-export type RampsQuoteQuery = NonNullable<pollarPaths['/ramps/quote']['get']['parameters']['query']>;
-export type RampQuote =
-  pollarPaths['/ramps/quote']['get']['responses'][200]['content']['application/json']['content']['quotes'][number];
-export type RampsQuoteResponse = pollarPaths['/ramps/quote']['get']['responses'][200]['content']['application/json']['content'];
+type RampsGet<P extends '/ramps/routes' | '/ramps/orders' | '/ramps/orders/{id}'> =
+  pollarPaths[P]['get']['responses'][200]['content']['application/json']['content'];
+
+export type RampDirection = NonNullable<pollarPaths['/ramps/routes']['get']['parameters']['query']>['direction'];
+/** The fiat and asset pairs the app can ramp between in a direction, each with the legs of its shortest path. */
+export type RampRoutesResponse = RampsGet<'/ramps/routes'>;
+export type RampRoute = RampRoutesResponse['routes'][number];
+export type RampFiat = RampRoute['fiat'];
+export type RampAsset = RampRoute['asset'];
+export type RampLegKind = RampRoute['legs'][number];
+
+export type RampQuoteRequest = NonNullable<pollarPaths['/ramps/quotes']['post']['requestBody']>['content']['application/json'];
+export type RampQuotesResponse =
+  pollarPaths['/ramps/quotes']['post']['responses'][200]['content']['application/json']['content'];
+/** One route quoted leg by leg; `quotes` come best first. */
+export type RampQuote = RampQuotesResponse['quotes'][number];
+export type RampQuoteLeg = RampQuote['legs'][number];
+/** A value the user fills in before the order; its answer goes in `payee` under `key`. */
+export type RampField = RampQuoteLeg['requiredFields'][number];
+/** A route that was planned and dropped, with why (`failure.resolutionAction`). */
+export type RampQuoteRejection = RampQuotesResponse['rejected'][number];
+/** The verification step a dropped route waits on: complete it (KYC, form, registry check, registration), then quote again. */
+export type RampQuoteRequirement = NonNullable<RampQuoteRejection['requirement']>;
+
+export type RampOrderRequest = NonNullable<pollarPaths['/ramps/orders']['post']['requestBody']>['content']['application/json'];
+/** An order with every leg, what it waits for (`pendingAction`) and when to read it again (`nextPollAfter`). */
+export type RampOrder = RampsGet<'/ramps/orders/{id}'>;
+export type RampOrderLeg = RampOrder['legs'][number];
+export type RampOrderLegStep = RampOrderLeg['steps'][number];
+export type RampPendingAction = NonNullable<RampOrder['pendingAction']>;
+export type RampSignatureAction = Extract<RampPendingAction, { kind: 'SIGNATURE' }>;
+/** How to pay the fiat side: a QR (its code already rendered in `scannable`) or bank coordinates. */
+export type RampFiatInstructions = Extract<RampPendingAction, { kind: 'FIAT_PAYMENT' }>['instructions'];
 /**
- * A route left out of the quotes because a requirement step of its corridor is
- * pending. For a `KYC` step, open KYC on `optionId` for `corridorId`; for `FORM`, the
- * form `optionId`; for `REGISTRY_CHECK`, the registry option `optionId`; for
- * `PROVIDER_REGISTRATION`, the registration of `corridorId`. Then quote again.
+ * A code to scan, rendered by the server so no QR encoder is needed. A Pollar-made
+ * SVG (`image.inlineSafe`) uses `currentColor` and can be injected as markup; a
+ * provider's bitmap goes through `<img src="data:...">`. Show `payload` as text
+ * when `payloadLabel` is set: a phone cannot scan its own screen.
  */
-export type RampQuoteRequirement = NonNullable<RampsQuoteResponse['requirementsRequired']>[number];
+export type RampScannable = NonNullable<Extract<RampFiatInstructions, { kind: 'qr' }>['scannable']>;
+export type RampFailure = NonNullable<RampOrder['failure']>;
+export type RampOrdersQuery = NonNullable<pollarPaths['/ramps/orders']['get']['parameters']['query']>;
+export type RampOrdersPage = RampsGet<'/ramps/orders'>;
+/** A chain a route passes through where the user's device sets up their wallet (`set_up_wallet`). */
+export type RampWalletSetupChain = pollarPaths['/ramps/wallets/{chain}']['post']['parameters']['path']['chain'];
+/** The wallet the device set up; it signs once `recoveryConfigured`. */
+export type RampWalletSetup =
+  pollarPaths['/ramps/wallets/{chain}']['post']['responses'][200]['content']['application/json']['content'];
+/** The order lifecycle; `completed`, `failed` and `refunded` are final. */
+export type RampOrderState = NonNullable<RampOrdersQuery['state']>;
 
 /** A form asked by a FORM requirement step, with the user's previous answers. */
 export type RequirementForm =
@@ -1167,68 +1289,6 @@ export type ProviderRegistrationSubmitted =
   pollarPaths['/requirements/registration/{corridorId}']['post']['responses'][200]['content']['application/json']['content'];
 /** One field the server refused, from a KYC_FORM_INVALID_ANSWERS error's `body.errors`. */
 export type RequirementFormAnswerError = { key: string; code: string };
-
-export type RampsOnrampBody = NonNullable<pollarPaths['/ramps/onramp']['post']['requestBody']>['content']['application/json'];
-export type RampsOnrampResponse =
-  pollarPaths['/ramps/onramp']['post']['responses'][200]['content']['application/json']['content'];
-
-export type RampsOfframpBody = NonNullable<pollarPaths['/ramps/offramp']['post']['requestBody']>['content']['application/json'];
-export type RampsOfframpResponse =
-  pollarPaths['/ramps/offramp']['post']['responses'][200]['content']['application/json']['content'];
-
-// `fundsInTransit` is declared by sdk-api and not yet in the generated schema.
-export type RampsTransactionResponse =
-  pollarPaths['/ramps/transaction/{txId}']['get']['responses'][200]['content']['application/json']['content'] & {
-    fundsInTransit?: boolean;
-  };
-export type RampTxStatus = RampsTransactionResponse['status'];
-export type RampDirection = RampsTransactionResponse['direction'];
-
-/**
- * How to pay, in one shape for every provider. Named so a consumer that renders
- * its own payment screen can type it without reaching into the generated schema.
- *
- * `fields` arrive labelled and formatted: iterate and display, no per-provider
- * knowledge needed. `scannable` carries the code the user points a camera at,
- * with the image already rendered so no QR encoder is required - Pollar-made
- * SVGs (`image.inlineSafe`) use `currentColor` and can be injected as markup to
- * follow the host's theme; a provider's own bitmap must go through
- * `<img src="data:...">`. `scannable.payload` is the raw string behind the code:
- * show it as text when `payloadLabel` is set, since a user on the phone that
- * holds the screen has nothing to scan.
- */
-export type RampDepositInstructions = NonNullable<RampsTransactionResponse['depositInstructions']>;
-export type RampScannable = NonNullable<RampDepositInstructions['scannable']>;
-export type RampInstructionField = RampDepositInstructions['fields'][number];
-
-// SEP-24 anchor flow (e.g. Anclap): embedded wallets get a `kycUrl` to open;
-// EXTERNAL wallets get a `pendingSignature` to sign and resume.
-export type RampsPendingSignature = NonNullable<RampsOnrampResponse['pendingSignature']>;
-export type RampsSignatureBody = NonNullable<
-  pollarPaths['/ramps/transaction/{txId}/signature']['post']['requestBody']
->['content']['application/json'];
-export type RampsSignatureResponse =
-  pollarPaths['/ramps/transaction/{txId}/signature']['post']['responses'][200]['content']['application/json']['content'];
-export type RampsCompleteResponse =
-  pollarPaths['/ramps/transaction/{txId}/complete']['post']['responses'][200]['content']['application/json']['content'];
-export type RampsCountriesResponse =
-  pollarPaths['/ramps/countries']['get']['responses'][200]['content']['application/json']['content'];
-export type RampCountry = RampsCountriesResponse['countries'][number];
-
-// Provider utilities: reads that inform a ramp before or during a quote.
-export type RampsLiquidityResponse =
-  pollarPaths['/ramps/liquidity']['get']['responses'][200]['content']['application/json']['content'];
-export type RampRail = RampsLiquidityResponse['rail'];
-/**
- * Where the user stands with the provider's identity checks. Polled after an
- * off-ramp answered `kycRequired: true` - that provider (Abroad) publishes no
- * hosted KYC link, so the client waits for `hasApproved` and re-quotes.
- */
-export type RampsKycStatusResponse =
-  pollarPaths['/ramps/kyc-status']['get']['responses'][200]['content']['application/json']['content'];
-export type RampsPixDecodeResponse =
-  pollarPaths['/ramps/pix/decode']['get']['responses'][200]['content']['application/json']['content'];
-export type RampsPixDecoded = NonNullable<RampsPixDecodeResponse['decoded']>;
 
 // --- Distribution types -------------------------------------------------------
 
@@ -1536,14 +1596,3 @@ export type PollarAdapter = Record<string, AdapterFn<any>>;
 export interface PollarAdapters {
   [key: string]: PollarAdapter;
 }
-
-// Generic ramp workflow, derived from the matching backend OpenAPI schema.
-export type RampAction = NonNullable<RampsTransactionResponse['nextAction']>;
-export type RampTerms = NonNullable<RampsTransactionResponse['terms']>;
-export type RampRoute = NonNullable<RampQuote['route']>;
-export type RampCapabilities = RampsRoutesResponse['routes'][number]['capabilities'];
-export type RampsRoutesResponse =
-  pollarPaths['/ramps/routes']['get']['responses'][200]['content']['application/json']['content'];
-export type RampContinuationBody = NonNullable<
-  pollarPaths['/ramps/transaction/{txId}/continue']['post']['requestBody']
->['content']['application/json'];

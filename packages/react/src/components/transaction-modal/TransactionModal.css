@@ -96,7 +96,7 @@
 
 .pollar-tx-summary-line {
   font-size: 0.875rem;
-  font-family: monospace;
+  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   white-space: nowrap;
   color: var(--pollar-text);
 }
@@ -154,7 +154,7 @@
 
 .pollar-tx-result-hash {
   font-size: 0.8125rem;
-  font-family: monospace;
+  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   color: var(--pollar-text);
 }
 
@@ -241,7 +241,7 @@
   background: var(--pollar-input-bg);
   border: 1px solid var(--pollar-border);
   border-radius: var(--pollar-card-border-radius, 10px);
-  font-family: monospace;
+  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.6875rem;
   color: var(--pollar-text);
   overflow-x: auto;
@@ -271,7 +271,7 @@
   background: var(--pollar-input-bg);
   border: 1px solid var(--pollar-border);
   border-radius: var(--pollar-card-border-radius, 10px);
-  font-family: monospace;
+  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.6875rem;
   color: var(--pollar-error-text);
   white-space: pre-wrap;

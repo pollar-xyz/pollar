@@ -55,6 +55,8 @@ time (via `ensureInit()`), building one `StellarWalletsKitAdapter` per module up
 front. It is not lazy - a later `login({ provider })` just routes to the
 matching adapter that was already built.
 
+> **0.12.0** accepts `@pollar/core@^0.11.2 || ^0.12.0`; no adapter changes.
+>
 > **0.11.2** requires `@pollar/core@^0.11.2` / `@pollar/react@^0.11.2`. The
 > adapter now implements `signStellarMessage` (via `kit.signMessage`), so every
 > kit wallet that supports message signing can back a SEP-53 ownership proof

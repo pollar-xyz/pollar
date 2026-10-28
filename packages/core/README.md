@@ -14,7 +14,18 @@ Pollar runs on Solana end to end for wallets and payments:
   fees** and token accounts created for the recipient.
 - **Fiat on/off-ramps to Solana**: Bolivia (BOB, via Stereum + CCTP) and Brazil (BRL via Pix, PagFinance).
 
-> **0.11.5**. **Turnkey co-signed wallets** and a
+> **0.12.0** calls sdk-api **`/v3`** (`baseUrl` stays an origin) and warns once on a `Deprecation` header.
+> **Ramps are orders**: `getRampRoutes(direction)`, `quoteRamp`, `rampQuoteFields`, `createRampOrder`,
+> `getRampOrder`, `listRampOrders`, `pollRampOrder` and `signRampLeg` replace the 0.11.x ramp methods, a ramp leg
+> is signed only through a handler the app registers (`registerRampSigningHandler`, `assertRampStellarSigner`),
+> and `@pollar/core/ramps` defines a server-side ramp provider adapter. **Wallets the user holds**:
+> `createWallet({ custody })`, `client.cosign.switchCustody()`, `client.cosign.recovery` (passkeys, email code,
+> device enrollment, phrase export) and `client.cosign.migrateWallets()` for a custodial wallet moving to
+> Turnkey. The device proposes each co-signed activity (`verify()` returns `proposal`). `confirmation`
+> defaults to `'prompt'` and follows the app's dashboard; the stricter policy wins. **Breaking**; see
+> [UPGRADE.md](../../UPGRADE.md).
+>
+> Earlier: **0.11.5**. **Turnkey co-signed wallets** and a
 > **confirmation policy**: `config.confirmation` `'auto'` (default; a co-signed wallet's device verifies
 > against Turnkey and votes on its own) or `'prompt'` (every signature waits for the user, through
 > `onConfirmationRequest()`); `config.cosignManual` keeps the raw `{ status: 'cosign_pending', request }`
@@ -41,7 +52,7 @@ Pollar runs on Solana end to end for wallets and payments:
 >   and replays the current value on subscribe, the same contract as `onAuthStateChange`;
 >   `refreshWalletState()` for a host that knows better than a timer; and `isWalletNotReady()` +
 >   `WALLET_NOT_READY_CODE`, which name the `SDK_WALLET_NOT_READY` (409) the server returns for an
->   on-chain operation attempted before the account lands. The client polls `GET /v2/wallet/state`
+>   on-chain operation attempted before the account lands. The client polls `GET /v3/wallet/state`
 >   while a wallet is `CREATING` and stops on `READY`/`FAILED`, on logout and on `destroy()`.
 >   Also: **a DPoP proof the server rejects over clock skew is re-signed instead of clearing the
 >   session** - an `iat-skew` 401 on `/auth/refresh` was logging the user out even though the same
@@ -83,8 +94,8 @@ Pollar runs on Solana end to end for wallets and payments:
 > could not be read, and must render as unavailable rather than as `0`. Every chain reports its
 > native coin plus each token the app enabled (0.11.0 reported only the native token off
 > Stellar), and balances gained `decimals`, `limit` and `sponsored`. `signTx` accepts
-> `skipSponsorship`. **0.11.0** went multichain (Solana joins Stellar) and moved every request to the
-> **`/v2`** API. **0.10.0** unified external wallets into `walletAdapters: WalletAdapter[]` and
+> `skipSponsorship`. **0.11.0** went multichain
+> (Solana joins Stellar) and moved every request to the `/v2` API. **0.10.0** unified external wallets into `walletAdapters: WalletAdapter[]` and
 > removed the singular `walletAdapter` resolver and `client.loginWallet()`.
 >
 > See [UPGRADE.md](../../UPGRADE.md) for migration steps and the
@@ -159,7 +170,7 @@ import 'react-native-polyfill-globals/auto'; // TextEncoder/TextDecoder + URL
   chain could not be read, which must render as unavailable rather than as zero
 - **Solana**: log in with **Sign In With Solana (SIWS)** and sign Solana transactions for sponsored external transfers
   (external-wallet connect via `@pollar/solana-wallet-standard-adapter`, preview)
-- Swap assets across venues (SDEX / Soroswap / Aquarius) and run SEP-24 on/off-ramps
+- Swap assets across venues (SDEX / Soroswap / Aquarius) and run fiat on/off-ramps, routed across providers, swaps and bridges
 - React to real-time authentication state changes
 
 ## Quick Start (web)
@@ -461,7 +472,7 @@ Aborts any in-flight login flow and resets `authState` to `idle`. Safe to call f
 
 #### `client.logout(options?): Promise<void>`
 
-Server-side revokes the refresh-token family via `POST /v2/auth/logout`, then clears local storage and resets the
+Server-side revokes the refresh-token family via `POST /v3/auth/logout`, then clears local storage and resets the
 keypair. Server revocation is best-effort: a failed POST still clears local state.
 
 ```ts
@@ -501,7 +512,7 @@ environments that re-instantiate `PollarClient`.
 
 #### `client.refresh(): Promise<void>`
 
-Forces an access-token refresh. Race-safe: concurrent calls coalesce into a single `/v2/auth/refresh` request.
+Forces an access-token refresh. Race-safe: concurrent calls coalesce into a single `/v3/auth/refresh` request.
 Request middleware calls this automatically on a **token-expiry 401**, then retries idempotent GET/HEAD requests. A
 **DPoP-Nonce challenge** or a **replayed-proof 401** does not refresh — it is retried with a freshly re-signed proof
 carrying the new nonce, so a polling loop can't burn the refresh rate limit on nonce rotation.
@@ -564,7 +575,7 @@ const off = client.onWalletStateChange((provisioning) => {
 });
 ```
 
-While a wallet is `CREATING` the client polls `GET /v2/wallet/state` - 1s, 2s, 3s ... to a 10s
+While a wallet is `CREATING` the client polls `GET /v3/wallet/state` - 1s, 2s, 3s ... to a 10s
 ceiling, at most 12 checks - and stops on `READY` or `FAILED`, on `logout()` and on `destroy()`.
 Giving up is safe: the next login or session resume re-enqueues a creation that never landed.
 
@@ -745,45 +756,45 @@ hold a `PollarApiClient`.
 
 ---
 
-### Ramps (SEP-24)
+### Ramps
 
-The [proposed Ramp API and lifecycle ADR](../../docs/adr/0001-ramp-api-and-lifecycle.md) defines the future common adapter contract, seven-state lifecycle, and compatibility approach. It is pending review; its proposed fields and guarantees are not part of the released API described below.
-
-On/off-ramp fiat through SEP-24 anchors (e.g. Anclap). Get a quote, create the on- or off-ramp, then drive the
-transaction to completion. Embedded wallets receive a `kycUrl` to open; external wallets receive a `pendingSignature`
-to sign and resume via `submitRampSignature`.
-
-```ts
-const quote = await client.getRampsQuote({
-  /* RampsQuoteQuery */
-});
-const onramp = await client.createOnRamp({
-  /* RampsOnrampBody */
-});
-const status = await client.pollRampTransaction(onramp.txId);
-```
-
-Available methods (all thin wrappers over the ramps endpoints):
+A ramp is an order of one or more legs that Pollar runs server-side: the
+provider's leg (fiat in or out), and a swap or a bridge when the asset or chain
+the user wants is not the provider's. Pick a pair from the routes, quote it,
+turn the quote the user accepts into an order, and follow the order.
 
 ```ts
-client.getRampsQuote(query: RampsQuoteQuery): Promise<RampsQuoteResponse>;
-client.getRampCountries(): Promise<RampsCountriesResponse>;
-client.createOnRamp(body: RampsOnrampBody): Promise<RampsOnrampResponse>;
-client.createOffRamp(body: RampsOfframpBody): Promise<RampsOfframpResponse>;
-client.completeWithdraw(txId: string): Promise<RampsCompleteResponse>;
-client.submitRampSignature(txId: string, body: RampsSignatureBody): Promise<RampsSignatureResponse>;
-client.getRampTransaction(txId: string): Promise<RampsTransactionResponse>;
-client.pollRampTransaction(txId: string, opts?: { intervalMs?: number; timeoutMs?: number }): Promise<RampTxStatus>;
+import { describeRampAction, rampQuoteFields } from '@pollar/core';
+
+const { routes } = await client.getRampRoutes('ONRAMP');
+const { fiat, asset } = routes[0];
+const { quotes, rejected } = await client.quoteRamp({
+  direction: 'ONRAMP',
+  fiat: { currency: fiat.currency, rail: fiat.rail, country: fiat.country },
+  asset: { code: asset.code, identifier: asset.identifier, chain: asset.chain },
+  amount: { value: '100', denomination: 'in' }, // 'out' fixes what the user receives
+});
+// Ask the user for rampQuoteFields(quotes[0]) and send the answers as `payee`.
+const order = await client.createRampOrder({ quoteId: quotes[0].quoteId, payee: { name: 'Ana Perez' } });
+await client.pollRampOrder(order.id, { onUpdate: (o) => render(describeRampAction(o)) });
 ```
 
-Each also has a standalone `(api, ...)` export (`getRampsQuote`, `createOnRamp`, …) for callers holding a
-`PollarApiClient`.
+- `pendingAction` says what the order waits for: `FIAT_PAYMENT` (a QR, already
+  rendered in `instructions.scannable`, or bank details), `SIGNATURE` (sign with
+  `signRampLeg(orderId, actionId)` from an explicit Authorize),
+  `COSIGN_APPROVAL` (vote on it like any co-sign request) or `KYC` (a link).
+- `nextPollAfter` is when to read the order again; `pollRampOrder` follows it
+  and stops once the order settles.
+- A failure carries `resolutionAction`; `rampResolutionText(failure)` turns it
+  into what the user can do. `rampLegTitle` and `rampLegStatus` describe each leg.
+- A payee the provider would refuse answers `400 VALIDATION_ERROR` with the
+  reason in `body.message`; a quote with no route answers `422
+SDK_RAMPS_NO_ROUTE` with `body.rejected`.
+- `listRampOrders({ pending: 'true' })` returns the orders waiting on the user.
 
-### Generic ramp workflows
+### Ramp adapters
 
-To build a provider package for Pollar's backend, use `RampAdapter`, `defineRampAdapter` and `defineRampAdapterRegistration` from `@pollar/core` or `@pollar/core/ramps`. Install its server registration in the backend, then consume its enabled routes through the existing `PollarClient` API methods. Pollar retains credentials, persistence, lifecycle and reconciliation. See the [server registration guide](../../docs/development/custom-ramp-adapters.md), [provider implementation](../../examples/custom-ramp/adapter.ts) and [application example](../../examples/custom-ramp/client.ts).
-
-`getRampRoutes()` returns executable currencies/assets/chains/rails and typed provider capabilities. `amountExact` preserves requested decimal values alongside the legacy numeric amount. Quotes expose exact `terms` and an optional `route`; transactions expose saved actions, versions and verified milestones. Render `describeRampAction(snapshot)` and use `mergeRampSnapshot(previous, incoming)` to ignore stale responses. Both official widgets use these helpers.
+To build a provider package for Pollar's backend, use `RampAdapter`, `defineRampAdapter` and `defineRampAdapterRegistration` from `@pollar/core` or `@pollar/core/ramps`. Install its server registration in the backend; its rails then appear in the routes above. Pollar retains credentials, persistence, lifecycle and reconciliation. See the [server registration guide](../../docs/development/custom-ramp-adapters.md), [provider implementation](../../examples/custom-ramp/adapter.ts) and [application example](../../examples/custom-ramp/client.ts).
 
 `RampChain` is a closed enum (`STELLAR`, `POLYGON`, `SOLANA`), independent of
 wallet networks. Use `RampChain.POLYGON` or `'POLYGON'` for a quote filter,
@@ -792,9 +803,9 @@ lowercase names, unknown chains and CAIP-2 identifiers are rejected. Adding
 another chain requires a backend enum migration and an updated SDK contract.
 Exact amount strings keep their precision and formatting.
 
-Call `continueRamp(txId, { actionId, transactionVersion, signedPayload?, fields? })` only after user interaction. `signRampAction(txId, snapshot)` refreshes the action, signs it through the matching handler and sends it to backend orchestration. Every chain/encoding pair requires a registered signing handler, including `STELLAR`/`xdr`; core treats payloads as opaque and has no built-in ramp signer. Register a supported chain/encoding with `registerRampSigningHandler(chain, encoding, async action => signedPayload)`; handlers must validate the payload and authorized wallet account, chain and network before returning a signed payload without broadcasting it. Polling and restoring state never invoke signing.
+Register a signer for each chain/encoding pair a leg may ask for with `registerRampSigningHandler(chain, encoding, async action => signedPayload)`, `STELLAR`/`xdr` included: core has no built-in ramp signer. In a Stellar signer, `assertRampStellarSigner(action, address)` refuses a transaction that does not spend from `address` (or a SEP-10 login that is not the anchor's challenge for it). Handlers must validate the payload and authorized wallet account, chain and network before returning a signed payload without broadcasting it. Polling never invokes signing.
 
-Existing ramp methods remain compatible. Generic identifiers do not make unimplemented routes executable; the backend advertises only configured integrations with required evidence readers.
+The backend lists only the routes its configured rails, venues and bridges can run.
 
 ---
 
@@ -878,7 +889,7 @@ client.submitProviderRegistration(corridorId: string): Promise<ProviderRegistrat
 
 For a `KYC` step, open the option the step names (`optionId`) with the step's `corridorId`. The v2 quote also lists, in
 `unavailable`, the providers that serve the route but failed to quote it just now (`{ provider, code }`), so an empty
-`quotes` is not always "no provider serves this country". These need an sdk-api that serves `/v2/requirements`.
+`quotes` is not always "no provider serves this country". These need an sdk-api that serves `/v3/requirements`.
 
 ---
 

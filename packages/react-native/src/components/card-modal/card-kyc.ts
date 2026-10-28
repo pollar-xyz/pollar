@@ -16,9 +16,12 @@ const nonEmpty = (value: unknown): value is string => typeof value === 'string' 
 /** The step a cards call named in its 409, or null for any other error. */
 export function requiredCardStep(error: unknown): PendingCardStep | null {
   if (!error || typeof error !== 'object') return null;
-  const { code, body } = error as { code?: unknown; body?: unknown };
-  if (code !== 'SDK_CARDS_REQUIREMENT_REQUIRED' || !body || typeof body !== 'object') return null;
-  const { cardProviderId, requirementType, optionId } = body as Record<string, unknown>;
+  if (!('code' in error) || error.code !== 'SDK_CARDS_REQUIREMENT_REQUIRED') return null;
+  const body = 'body' in error ? error.body : undefined;
+  if (typeof body !== 'object' || body === null) return null;
+  const cardProviderId = 'cardProviderId' in body ? body.cardProviderId : undefined;
+  const requirementType = 'requirementType' in body ? body.requirementType : undefined;
+  const optionId = 'optionId' in body ? body.optionId : undefined;
   if (!nonEmpty(cardProviderId) || !nonEmpty(optionId)) return null;
   if (
     requirementType === 'KYC' ||

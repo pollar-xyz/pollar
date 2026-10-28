@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import { AUTH_ERROR_CODES, AuthState } from '@pollar/core';
-import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR } from '../../constants';
+import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR_MARK_ON_DARK, LOGO_POLLAR_MARK_ON_LIGHT } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter, PollarOverlay } from '../commons';
 
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
@@ -134,7 +134,10 @@ export function LoginModalTemplate({
 
         <View style={styles.header}>
           <View style={styles.logoWrap}>
-            <Image source={{ uri: logoUrl ?? LOGO_POLLAR }} style={styles.logo} />
+            <Image
+              source={{ uri: logoUrl ?? (isDark ? LOGO_POLLAR_MARK_ON_DARK : LOGO_POLLAR_MARK_ON_LIGHT) }}
+              style={styles.logo}
+            />
           </View>
           <Text style={[styles.title, { color: colors.text }]}>{appName}</Text>
           <Text style={[styles.subtitle, { color: colors.muted }]}>Log in or sign up</Text>

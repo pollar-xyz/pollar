@@ -4,8 +4,7 @@ import { AUTH_ERROR_CODES, AuthState, WalletId } from '@pollar/core';
 
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 import { useState } from 'react';
-import { LOGO_POLLAR } from '../../constants';
-import { ModalStatusBanner, PollarModalFooter } from '../commons';
+import { ModalLogo, ModalStatusBanner, PollarModalFooter } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
@@ -239,7 +238,7 @@ export function LoginModalTemplate({
       </button>
       <div className="pollar-header">
         <div className="pollar-logo-wrap">
-          <img src={logoUrl ?? LOGO_POLLAR} alt="Logo" className="pollar-logo" />
+          <ModalLogo logoUrl={logoUrl} />
         </div>
         <h2 className="pollar-title">{appName}</h2>
         <p className="pollar-subtitle">Log in or sign up</p>
@@ -435,7 +434,7 @@ export function LoginModalStatus({
       </button>
       <div className="pollar-header">
         <div className="pollar-logo-wrap">
-          <img src={logoUrl ?? LOGO_POLLAR} alt="Logo" className="pollar-logo" />
+          <ModalLogo logoUrl={logoUrl} />
         </div>
         <h2 className="pollar-title">{appName}</h2>
         <p className="pollar-subtitle">Log in or sign up</p>

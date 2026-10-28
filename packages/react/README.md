@@ -3,7 +3,17 @@
 React bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI, transaction modals, and hooks for
 Stellar and Solana applications.
 
-> **0.11.5** (requires `@pollar/core@^0.11.5`).
+> **0.12.0** (requires `@pollar/core@^0.12.0`). `<RampWidget>` runs on the v3 ramps API: routes, quotes leg by
+> leg, the fields a quote asks for, the order's progress and its pending action; it signs a leg with the connected
+> Stellar or Solana wallet only when the leg was built for it. **Wallets the user holds**: the wallet button lets the
+> user pick co-signed or self-custody when the app leaves it to them, `<RecoveryModal>` manages passkeys, email,
+> devices and the recovery phrase (`recoveryLocked`, `openRecoveryModal()`), and `<CustodyMigrationModal>` moves a
+> custodial wallet to Turnkey after login. `<SendModal>` offers to create a Stellar account that does not exist.
+> Branding yields to the host stylesheet, with `--pollar-font-family` and `--pollar-font-family-mono`;
+> `WalletButtonTemplateProps` takes `theme`, `accentColor` and `styleOverrides`. **Breaking**; see
+> [UPGRADE.md](../../UPGRADE.md).
+>
+> Earlier: **0.11.5** (requires `@pollar/core@^0.11.5`).
 > **Turnkey co-signed wallets**: `<CosignModal>` opens for a request the device did not settle and enables
 > Approve only after it verifies against Turnkey; `useCosign()` exposes the pending requests.
 > `<ConfirmModal>` shows every signature first under `confirmation: 'prompt'`. The ramp widget links the
@@ -139,7 +149,7 @@ Context provider that initialises the Pollar client and makes it available to ch
 <PollarProvider
   client={{
     apiKey: 'your-api-key',
-    baseUrl: 'https://sdk.api.pollar.xyz', // optional, origin only — the SDK appends /v2
+    baseUrl: 'https://sdk.api.pollar.xyz', // optional, origin only — the SDK appends /v3
     stellarNetwork: 'testnet', // optional, default: 'testnet'
     storage, // optional, RN apps inject this
     keyManager, // optional, autodetects on web
@@ -258,7 +268,7 @@ const {
   // KYC: without corridorId/providerId it walks the app's own KYC steps
   openKycModal, // (options?: { corridorId?, providerId?, country?, level?, onApproved? }) => void
 
-  // Ramp (SEP-24 on/off-ramps, wired through core)
+  // Ramp (fiat on/off-ramps on the v3 ramps API, wired through core)
   openRampModal, // () => void
 
   // App config / styles served by the Pollar API
@@ -369,7 +379,7 @@ already wired inside `<PollarProvider>` — and most are exported in case you wa
 | `<DistributionRulesModal>`    | Manage the wallet's distribution rules                                                                                                                                                                                                                                                                                                                                                                               |
 | `<SessionsModal>`             | Lists every active refresh-token family for the current user with device metadata, marks the local session, per-row revoke, and a "Sign out everywhere" button                                                                                                                                                                                                                                                       |
 | `<KycModal>`                  | Identity verification: hosted (iframe or redirect) flow per option, corridor-scoped when a ramp route asks for it (`corridorId`), or started on one option (`providerId`). Shows review, expiry and retry states; without either id it walks the app's own KYC steps                                                                                                                                                 |
-| `<RampWidget>`                | Buy/sell crypto via SEP-24 - direction tabs, route comparison, payment instructions (wired to `client.createOnRamp` / `client.createOffRamp`). A route whose corridor has a pending requirement step is listed locked, and the widget opens that step's modal (below) and re-quotes once it is done                                                                                                                  |
+| `<RampWidget>`                | Buy/sell crypto: direction tabs, country, fiat and asset pickers, route comparison leg by leg, the fields a route asks for, then the order's progress with its pending action (payment QR or bank details, Authorize, co-sign approval, verification link) and what to do when a leg fails. Orders waiting on the user can be resumed.                                                                               |
 | `<RequirementFormModal>`      | One `FORM` requirement step of a ramp route: renders the form the backend names (`formId`), prefilled with the user's previous answers, and stores the answers encrypted. `<RampWidget>` opens it itself; exported for consumers who build their own route list from `requirementsRequired`                                                                                                                          |
 | `<RegistryCheckModal>`        | One `REGISTRY_CHECK` step (SEGIP through Stereum, `optionId`): the verified identity prefilled and read-only except the surname split and the CI complement; a check the registry did not confirm shows the review state with nothing to retry                                                                                                                                                                       |
 | `<ProviderRegistrationModal>` | One `PROVIDER_REGISTRATION` step (`corridorId`): lists what the ramp provider receives and registers the user with it on consent; an already registered user is passed through                                                                                                                                                                                                                                       |

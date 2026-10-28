@@ -2,21 +2,279 @@
 
 ## 0.12.0
 
-> Candidate: `0.12.0-rc.1` for `@pollar/core`, `@pollar/react` and
-> `@pollar/react-native` and the four client adapter packages. This minor
-> release includes the 0.11.5 changes below.
+> `@pollar/core`, `@pollar/react`, `@pollar/react-native`,
+> `@pollar/solana-wallet-standard-adapter` and
+> `@pollar/stellar-wallets-kit-adapter`. `0.12.0-rc.2` was published on the
+> `next` tag; `0.12.0-rc.1` was never published.
+>
+> **API v3, ramps as orders, and wallets the user holds.** The SDK calls
+> sdk-api `/v3`. A ramp is an order of legs that Pollar runs server-side. A
+> Turnkey wallet can be self-custody or co-signed and switch between the two,
+> is recovered with a passkey, an email code or another device, and a
+> custodial wallet moves to Turnkey from the device. Every signature asks the
+> user unless the app's dashboard says otherwise. This release breaks
+> integrations that call ramps, use the co-sign verification directly or
+> render custom wallet button templates; read
+> [UPGRADE.md](./UPGRADE.md#0115---0120). `@pollar/privy-adapter` and
+> `@pollar/accesly-adapter` are not part of it: their published core ranges do
+> not accept 0.12.
 
-- Ramps discover registered assets and payment routes within the closed
-  `RampChain` catalog (`STELLAR`, `POLYGON`, `SOLANA`); preserve exact
-  quote amounts; and resume saved, versioned workflows without signing on restore.
-- `getRampRoutes`, `continueRamp`, `registerRampSigningHandler` and
-  `signRampAction` support explicit workflow actions. Every chain/encoding pair
-  requires a registered handler that validates the payload, wallet account and
-  network before signing. Core no longer includes the Stellar XDR parser or a
-  built-in ramp signer; no new network-specific dependency is required.
+- `@pollar/core` calls sdk-api `/v3`: `baseUrl` stays an origin and the SDK
+  appends the version; its types are generated from `/openapi.v3.json`
+  (`core:update-openapi`). A `Deprecation` header on any answer logs one
+  warning with the `Sunset` date. See [UPGRADE.md](./UPGRADE.md#api-v3).
+- Ramps use the v3 ramps API: routes, quotes leg by leg, orders and a leg's
+  signature (`getRampRoutes(direction)`, `quoteRamp`, `createRampOrder`,
+  `getRampOrder`, `listRampOrders`, `pollRampOrder`, `signRampLeg`). A quote
+  lists the fields it needs (`rampQuoteFields`) and a refused payee answers
+  400 before anything moves. The 0.11.x ramp methods are removed; the widgets
+  are rebuilt on the new calls. See [UPGRADE.md](./UPGRADE.md#ramps-on-api-v3).
+- A route waiting on a verification step carries it as `requirement`
+  (`RampQuoteRequirement`); `rampRequirementCopy(requirement)` gives its text
+  and button. `<RampWidget>` opens the step (`<KycModal>`,
+  `<RequirementFormModal>`, `<RegistryCheckModal>` or
+  `<ProviderRegistrationModal>`) from the route's row and quotes again when it is
+  done.
+- A route dropped because the Stellar wallet does not trust the asset it
+  delivers names that asset: `rampTrustlineAsset(rejection)` returns its `code`
+  and `issuer`. `<RampWidget>` adds the trustline from the route's row with
+  `setTrustline` (a co-signed wallet opens the approval) and quotes again. The
+  `onVerify` and `onTrust` handlers of `RejectedRouteDisplay` and the matching
+  `RampWidgetTemplate` props are optional: without one the row describes the
+  fix and offers no button.
+- A route waiting on a wallet offers the fix from its row.
+  `rampWalletStep(rejection)` names the step and its button: create the wallet
+  (`create_wallet`), set one up on a chain the route passes through
+  (`set_up_wallet`, the chain in `failure.detail`), or move a wallet Pollar
+  still holds to the app's custody (`migrate_custody`).
+  `client.runRampWalletStep(step, custody?)` runs it with `createWallet`,
+  `setUpRampWallet(chain, custody?)` (a Turnkey wallet with this device as its
+  first credential) or `cosign.migrateWallets`, and reports `recoveryRequired`
+  when the Turnkey wallet it leaves needs a recovery method before it signs; the
+  widgets open the recovery modal then, and quote again otherwise. Under
+  `USER_CHOICE`, creating the wallet stays in the wallet menu, and setting one up
+  or moving it offers one button per custody. `RejectedRouteDisplay` and
+  `RampWidgetTemplate` take `onWalletStep`, `walletBusy` and `custodyChoice`
+  (`onCreateWallet` and `creatingWallet` in `0.12.0-rc.2`). An app with no
+  chains enabled says so (`noChains`) instead of showing an empty route list.
+- Following an order survives the network: `pollRampOrder` reports a failed
+  read to `onError` and reads again (1 second, doubling up to 60), ending only
+  when the order is gone (`SDK_RAMPS_TX_NOT_FOUND`).
+  `listRampOrders({ open: 'true' })` lists every order not final yet, so an
+  order already paid is resumed too. `client.retryRampOrder(id)` runs a held
+  order again when the user is the one who resolves it.
+  `rampOrderReceive(order)` gives what the user receives, `rampOrderStopped`
+  tells an order that no longer moves on its own, and
+  `rampOrderResolutionText(order)` the text for its failure (a held order whose
+  provider order lapsed says its funds are safe and a retry places a new one).
+  `describeRampAction` returns the action's `expiresAt`. The widgets show the
+  payment window and the amount, open the approval of each co-signed step,
+  offer Try again on a held order, and drop the Authorize button the moment a
+  signature lapses.
+- A provider field can carry a `pattern` (`RampAdapterField.pattern`, a
+  regular expression the whole value must match). `rampFieldValid` checks it,
+  and `rampFieldError(field, value)` says what is wrong with a filled-in value;
+  the widgets show it under the field. React Native checks email fields too.
+- `client.checkRampOrder(id)` asks the provider about an order's fiat payment
+  now instead of at the next recheck (at most once every 10 seconds per order)
+  and returns the order. The widgets' "I've paid" calls it at once and every 10
+  seconds for two minutes.
+- A ramp payment can carry the provider's own page: `describeRampAction`
+  returns its `link` and `linkLabel` for a QR or bank payment too, and a payment
+  that has only the page is paid there. It also returns `codeMissing` (a QR
+  payment that arrived without its rendered code, which the widgets say instead
+  of showing an empty screen), `paymentClosed` (the window has closed, so the
+  code, details and page are hidden) and `note` (what the provider asks, for a
+  verification step with nothing to open). A rendered QR can be a JPEG, GIF or
+  WebP image besides SVG and PNG.
+- A route or a held order that waits on the wallet's recovery offers "Set up
+  recovery": `rampWalletStep` returns the `set_up_recovery` step, and
+  `client.runRampWalletStep` reports `recoveryRequired` for it without doing
+  anything else. The widgets open the recovery modal, then quote again or try
+  the order again; a held order hides the button once the wallet has a method,
+  keeps Try again disabled until then, and retries by itself when recovery is
+  set up. `RampWalletStep['action']` gains `'set_up_recovery'`, so an
+  exhaustive switch over it needs the new case.
+- Quoted and planned output amounts read as estimates with a leading `~` (route
+  cards, swap output, the order's You receive). `rampOrderReceive` returns
+  `estimated`, true until the last leg reports what arrived.
+- `rampLegNote(leg)` says when a provider leg paid out an accepted substitute
+  (Stereum's USDT for USDC) and that the next step converts it; the widgets
+  show it under the leg's title.
+- A ramp order shows its chain steps live: each step of a swap or bridge leg
+  (approve, swap, send, Circle's confirmation, arrival) with what it is doing,
+  the running leg's time left and the approval that comes next
+  (`rampStepTitle`, `rampStepStatusText`, `rampLegTimeLeft`,
+  `rampNextApproval`). The approval prompt stays open between two approvals of
+  an order and shows the next request when it arrives (`setCosignNextStep` in
+  the React and React Native context); every transaction is still approved on
+  its own.
+- `rampNoRouteText` reads the routes' `requirement` too: when every route waits
+  on a verification the user cannot act on (under review or rejected), the note
+  says so instead of asking to complete it.
+- Confirming a recovery email works when the wallet already holds that address
+  unconfirmed (the sign-in email it was created with). `cosignRefusalMessage(error)`
+  gives the text for `SDK_COSIGN_TURNKEY_REJECTED` with Turnkey's own reason,
+  and `<RecoveryModal>` shows it instead of "The signing service didn't answer".
+- The approval modal shows the Turnkey check as a chip next to the request title
+  (Checking..., then Verified) and spells out what was verified when the chip is
+  clicked; a failed check stays written out, since it says why Approve is off. A
+  sent transaction's hash has a copy button, and the modal closes on its own
+  after a 5-second countdown.
+- The ramp widget's step bar names each step and goes back to an earlier one,
+  in place of the Cancel and Back buttons, and React Native titles each step
+  like the web. Send, Ramp, Earn and Card share one amount field with the
+  balance and Max inside, read per chain and token; selling shows the wallet's
+  balance of the asset.
+- `@pollar/react`: inputs, selects and the send asset picker take the
+  dashboard's button radius (`--pollar-input-border-radius`, which defaults to
+  `--pollar-buttons-border-radius`).
+- `setTrustline` on a co-signed wallet settles the request its device approves
+  (the 202 `SDK_COSIGN_PENDING`) like any co-signed send, and answers
+  `cosign_pending` under `cosignManual`. A failed `TrustlineOutcome` carries
+  the API `code`, and `rampTrustlineErrorText(outcome, assetCode)` turns it into
+  a message for the user.
+- A co-signed vote gets 60 seconds. If the connection drops while it settles,
+  the client reads the request back and reports it as it stands instead of
+  rejecting a send that may have landed; `reject` cancels a request only while
+  it is still pending.
+- Ramp quotes and order creation wait up to 30 seconds for the providers,
+  instead of the 10-second default of every other call.
+- `<KycModal>` shows the session it is opening and keeps it while the list
+  reloads; an option opened for the user (a ramp step) opens behind a spinner
+  instead of the list. `KycModalTemplate` gains the optional
+  `startingProviderId` and `directOpen` props.
+- With no route to offer, `rampNoRouteText(rejected)` gives the fix every
+  rejected route shares (or a change of amount), and the widgets show it.
+  `SDK_RAMPS_WALLET_NOT_READY` asks the user to approve the new wallet account
+  first. `pollRampOrder` takes an `until(order)` stop condition, and
+  `isRampOrderSettled(order)` tells a final order apart.
+- Ramp chains stay a closed `RampChain` catalog (`STELLAR`, `POLYGON`,
+  `SOLANA`) and amounts stay exact strings.
+- Ramp rails add `BANK_TRANSFER`, `CASH`, `CARD` and `HOSTED` to `SPEI`,
+  `PIX`, `PSE`, `ACH`, `BREB` and `QR`, in `RampAdapterRail` and in the v3
+  types (`fiat.rail` is now that enum). `HOSTED` means the user picks the
+  method inside the provider's flow (SEP-24 anchors such as Anclap).
+  `rampRailLabel(rail, { language, provider })` gives the text to show, in
+  English or Spanish, and returns an unknown rail as it came; the ramp widgets
+  use it. See [UPGRADE.md](./UPGRADE.md#ramp-rails).
+- `registerRampSigningHandler` signs a leg for every chain/encoding pair; core
+  has no built-in ramp signer and no Stellar library.
+  `assertRampStellarSigner(action, address)` reads a Stellar ramp XDR's sources
+  without one and refuses a step that does not spend from `address`.
+  `<RampWidget>` lends the connected wallet as the Stellar and Solana signer
+  while the user authorizes, unless the app registered its own; it signs only a
+  step built for the connected account, and drops the signature if the wallet
+  changed meanwhile.
+- `<SendModal>` looks a Stellar destination up before paying it. When it has
+  no account, the modal says so and offers to create it with the XLM being sent
+  (a `create_account` with that starting balance, at least 1 XLM) or to wait
+  until another wallet funds it; a non-XLM asset only gets the explanation.
+- A transaction that fails on-chain names its cause: `getTxStatus` returns
+  `operationCodes`, and a failed tx's state and outcome carry the matching
+  `code` (`paymentNoDestination` is `TX_DESTINATION_NOT_FOUND`).
+  `transactionErrorMessage` maps on-chain codes too, so a bare `txFailed` never
+  reaches the screen.
+- `signSolanaTransaction(base64)`: the user's external Solana wallet signs a
+  serialized transaction, without broadcasting it.
+- An app out of credits (402 `SDK_CREDITS_INSUFFICIENT`): the user sees a
+  generic text pointing to the app's support (`appUnavailableMessage`), and the
+  developer gets one console warning.
 - Native provider configuration/platform/Privy adapter changes clean up and replace
   the owned client. Login Back and Retry keep their modal open; logout still clears
   saved ramp state. Native route choices follow the theme and show selection.
+- Co-signed approvals are one per transaction: the approval groups of 0.11.5
+  (one confirmation for a ramp's swap or bridge steps, later steps voted on a
+  stored consent) are removed. `cosignGroupOf`, `cosignStepKeyOf`,
+  `stepInGroup` and `CosignGroup` are no longer exported. See
+  [UPGRADE.md](./UPGRADE.md#co-sign-approval-groups-removed).
+- Nothing on a co-signed wallet is approved without the user: its setup
+  (account creation, trustlines, an account on a new chain) is a request the
+  user votes on like any other. `recognizedSetupRequest` still tells setup
+  apart, for an app that labels it.
+- Approving a co-sign request that was proposed meanwhile (another tab, a late
+  copy in the store) returns its outcome instead of failing with
+  `SDK_COSIGN_REQUEST_NOT_PENDING`, and a copy older than what the client saw
+  no longer reopens the prompt. `client.cosign.settle(request)` reads a proposed
+  request back until Turnkey settles it.
+- Signature confirmation defaults to `'prompt'` and follows the app's
+  dashboard setting: always ask, ask and then sign for a window (minutes and a
+  USD total), or never ask. `confirmation` in the client config takes
+  `'auto'`, `'prompt'` or `{ window: { seconds, maxUsd } }`; set, the stricter
+  of it and the dashboard applies. A ramp leg always asks. See
+  [UPGRADE.md](./UPGRADE.md#signature-confirmation).
+- **Self-custody and co-signed Turnkey wallets.** `createWallet({ custody })`
+  carries the user's choice for an app whose custody mode is `USER_CHOICE`
+  (which creates no wallet at login); the React wallet button and the React
+  Native one after sign-in offer both kinds and create a self-custody wallet
+  only after the user accepts its risks. `client.cosign.inspectQuorum()`
+  checks the quorum the custody implies (2-of-2 with Pollar's approver, or the
+  user alone at threshold 1) and `client.cosign.switchCustody(to)` moves a
+  wallet between the two, checking each step before the device stamps it.
+- **Wallet recovery.** `client.cosign.recovery` adds and removes passkeys,
+  confirms an email with an OTP code (sent encrypted to Turnkey's enclave,
+  never through Pollar), lets a new device ask to join and an enrolled one
+  approve or reject it, recovers a device that lost access with a passkey or an
+  email code, and exports the recovery phrase (`exportWallet()`). The passkey
+  ceremony comes from the platform layer (`PollarClientConfig.recoveryPasskey`,
+  also accepted by `setPasskeyDefaults`; `browserRecoveryPasskey` in React).
+  `<RecoveryModal>` (React and React Native) is the UI; the context exposes
+  `recovery`, `recoveryLocked` and `openRecoveryModal()`, and a wallet with no
+  recovery method stays locked, with the reason shown, until it has one. Core
+  depends on `@turnkey/crypto`, loaded only while a recovery or an export runs.
+- **Custodial wallets move to Turnkey from the device.**
+  `client.cosign.custodyMigration()` reports what must move;
+  `migrateWallet(custody, { chain })` and `migrateWallets(custody)` move the
+  Stellar, Solana and Polygon wallets, the device voting the account each one
+  moves to. `SDK_CUSTODY_MIGRATION_BLOCKED` carries `body.reasons` while
+  something prevents it. `<CustodyMigrationModal>` runs it before anything else
+  after login, lists every wallet that moves, warns when an address changes and
+  lets a blocked user continue later.
+- **The device proposes each co-signed activity.** `cosign.verify()` reads the
+  unsigned payload and builds the Turnkey request from the values it checked;
+  `approve()` relays that proposal and Pollar's approver votes second;
+  `reject()` closes the request. `verify()` returns `proposal` instead of
+  `turnkeyPayload`, `approve()` has no `verify` option, and
+  `readActivityIntent()` and `readActivityPayload()` are gone. See
+  [UPGRADE.md](./UPGRADE.md#co-signed-activity-proposed-by-the-device).
+- Co-signed Solana: the device checks a transfer against the destination,
+  amount and mint it approves, and refuses a request whose fee can pass
+  custody's 0.001 SOL cap. Co-signed and historical Solana amounts and fees show
+  in units, not base units. An adapter that cannot sign a Solana transaction
+  ends the send in an error state.
+- A wallet derived after login (a Polygon account approved later, or one found
+  on session resume) reaches the session and its network pickers without a
+  new login.
+- `@pollar/react`: Max on a self-paid SOL send leaves the network fee behind.
+- `@pollar/solana-wallet-standard-adapter`: a session restored after a reload
+  signs without reconnecting, and a wallet without `solana:signIn` logs in
+  through `signMessage`. The core peer range is `^0.11.2 || ^0.12.0`, as in
+  `@pollar/stellar-wallets-kit-adapter`, which has no other change.
+- **Branding follows the host page.** In `@pollar/react` the dashboard's
+  Branding is written as private `--pollar-brand-*` variables mapped onto the
+  public `--pollar-*` ones at zero specificity, so a host stylesheet beats the
+  dashboard, which beats the theme defaults. Every button, the remaining
+  hardcoded colors and radii, and the overlay follow the theme variables;
+  `--pollar-font-family` and `--pollar-font-family-mono` set the fonts (the
+  page's font when unset). `WalletButtonTemplateProps` takes `theme`,
+  `accentColor` and `styleOverrides` instead of `dropdownBg`, `dropdownBorder`
+  and `itemColor`. See [UPGRADE.md](./UPGRADE.md#branding-and-the-wallet-button-template).
+- The Pollar mark from the brandkit replaces `logo_pollar.png` in React and
+  React Native; a configured Branding background picks the visible mark by its
+  own luminance.
+- An app with an overdue Pollar statement (402 `SDK_BILLING_OVERDUE`) reads as
+  the same `appUnavailableMessage` as an app out of credits.
+- `rampResolutionText` covers `add_trustline`, the action of a route refused
+  because the Stellar wallet does not trust USDC.
+- **New `@pollar/core/ramps` subpath** for a server-side ramp provider adapter
+  registered with Pollar. Its contract is version 2: `actor` and
+  `wallet.signingMode` in the user context, `prebuiltPayload` and `expiresAt`
+  (the order's deposit window) on a payment,
+  `recorder` in the dependencies, `providerCode` and `detail` on
+  `RampAdapterError`, `fees` on an offer, a declared `validity`,
+  `configurationRevision` next to a stable `configurationId`, and
+  `contractVersion` on the registration (1 when absent). A version 1 adapter
+  keeps compiling. See [UPGRADE.md](./UPGRADE.md#ramp-adapter-contract-version-2).
 - **Migration:** native provider initialization, transaction modal behavior,
   balance refresh, configuration errors, context types and open-ended bank types
   have changed. See [UPGRADE.md](./UPGRADE.md#0115---0120).

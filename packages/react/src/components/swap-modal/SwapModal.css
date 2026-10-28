@@ -79,7 +79,7 @@
   outline: 0;
   background: transparent;
   color: var(--pollar-text);
-  font-family: Geist, inherit;
+  font-family: inherit;
   font-size: 1.75rem;
   font-weight: 600;
   letter-spacing: -0.04em;
@@ -194,10 +194,10 @@
 .pollar-swap-custom-toggle {
   min-height: 1.75rem;
   padding: 0.25rem 0.625rem;
-  border-radius: 0.375rem;
+  border-radius: var(--pollar-buttons-border-radius, 0.375rem);
   border: 0;
-  background: var(--pollar-btn-secondary-bg, #eaf2fa);
-  color: var(--pollar-accent);
+  background: var(--pollar-btn-secondary-bg, color-mix(in srgb, var(--pollar-accent) 10%, var(--pollar-bg)));
+  color: var(--pollar-btn-secondary-fg, var(--pollar-accent));
   font-size: 0.6875rem;
   font-weight: 700;
   cursor: pointer;
@@ -292,8 +292,8 @@
 .pollar-swap-rate-row {
   margin-top: 0.75rem;
   min-height: 2.25rem;
-  color: var(--Color-Neutral-600, #475569);
-  font-family: Geist, sans-serif;
+  color: var(--pollar-muted);
+  font-family: inherit;
   font-size: 0.875rem;
   font-style: normal;
   font-weight: 400;
@@ -376,7 +376,6 @@
 
 .pollar-swap-modal .pollar-btn-primary {
   min-height: 3rem;
-  border-radius: 999px;
   font-size: 0.9375rem;
 }
 

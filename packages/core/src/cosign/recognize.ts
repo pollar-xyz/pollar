@@ -2,15 +2,13 @@ import type { CosignRequest } from '../types';
 import { transactionBodyOf } from './stellar-hash';
 
 /**
- * Which co-sign requests the device may approve without asking the user.
- *
- * A custodial wallet performs its own setup silently: the account is created
- * and its trustlines added without a prompt. A co-signed wallet keeps that
- * behaviour only for requests the device can read and recognize as setup of
- * the wallet it holds the key for, so that a server cannot slip a payment
- * through under the name of a trustline. The XDR is read here without a
- * parser library, the same way the transaction hash is: field by field, and
- * any shape this reader does not know is "not recognized", never guessed.
+ * Which co-sign requests are setup of the wallet the device holds the key for
+ * (its account creation, a trustline, an account on a new chain), read from
+ * the transaction itself, so an app can present them as setup without trusting
+ * the server's label: a payment cannot pass as a trustline. Every request still
+ * needs the user's vote. The XDR is read here without a parser library, the
+ * same way the transaction hash is: field by field, and any shape this reader
+ * does not know is "not recognized", never guessed.
  */
 
 export type SetupRecognition =
@@ -177,12 +175,11 @@ function same(a: Uint8Array | null | undefined, b: Uint8Array): boolean {
 }
 
 /**
- * Whether a request Pollar opened on its own is setup of this wallet and may
- * be approved without a prompt: the wallet's own Stellar account creation, a
- * trustline on it (both possibly sponsored, so wrapped in begin/end
- * sponsoring operations whose sponsored account is this one), or an account
- * derived for a chain the app enabled later. Every operation must be one of
- * those and name this account; anything else needs the user.
+ * Whether a request Pollar opened on its own is setup of this wallet: the
+ * wallet's own Stellar account creation, a trustline on it (both possibly
+ * sponsored, so wrapped in begin/end sponsoring operations whose sponsored
+ * account is this one), or an account derived for a chain the app enabled
+ * later. Every operation must be one of those and name this account.
  */
 export function recognizedSetupRequest(request: CosignRequest): SetupRecognition {
   if (request.status !== 'PENDING') return { ok: false, reason: 'not pending' };
@@ -199,8 +196,10 @@ export function recognizedSetupRequest(request: CosignRequest): SetupRecognition
         ? ('change_trust' as const)
         : null;
   if (!setupKind) return { ok: false, reason: 'not a setup operation' };
-  const me = stellarAccountBytes(request.signWith);
-  if (!me) return { ok: false, reason: 'the signing account is not a Stellar address' };
+  // A wallet that moved from Pollar's custody keeps its own address, and the
+  // Turnkey key only signs for it: the setup is checked against the account.
+  const me = stellarAccountBytes(request.account ?? request.signWith);
+  if (!me) return { ok: false, reason: 'the account is not a Stellar address' };
 
   let parsed: ReturnType<typeof parseTransaction>;
   try {

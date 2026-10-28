@@ -1,6 +1,9 @@
 import {
   defineRampAdapter,
+  isRampAdapterError,
+  RampAdapterError,
   type RampAdapter,
+  type RampAdapterAttemptRecorder,
   type RampAdapterObservation,
   type RampAdapterRoute,
   type RampAdapterUserContext,
@@ -72,10 +75,43 @@ function observe(order: ExampleProviderOrder): RampAdapterObservation {
   };
 }
 
+/**
+ * Records one provider call as an attempt of the leg. Request and response are
+ * what an operator sees; the payee's bank details go in `sensitive` only.
+ */
+async function recorded<T>(
+  recorder: RampAdapterAttemptRecorder | undefined,
+  step: string,
+  request: unknown,
+  call: () => Promise<T>,
+  sensitive?: unknown,
+): Promise<T> {
+  const started = Date.now();
+  try {
+    const response = await call();
+    await recorder?.record({ step, request, response, sensitive, latencyMs: Date.now() - started });
+    return response;
+  } catch (error) {
+    const code = isRampAdapterError(error) ? error.code : 'PROVIDER_ERROR';
+    await recorder?.record({ step, request, sensitive, latencyMs: Date.now() - started, errorCode: code });
+    if (isRampAdapterError(error)) throw error;
+    throw new RampAdapterError('PROVIDER_UNAVAILABLE', 'retry_read', undefined, {
+      providerCode: error instanceof Error ? error.name : 'UNKNOWN',
+      detail: step,
+    });
+  }
+}
+
 /** Installed in Pollar's backend; application code uses the standard PollarClient methods. */
-export function createExampleRampAdapter(provider: ExampleProviderClient): RampAdapter {
+export function createExampleRampAdapter(provider: ExampleProviderClient, recorder?: RampAdapterAttemptRecorder): RampAdapter {
   return defineRampAdapter({
     adapterId: 'example-bank',
+    validity: {
+      source: 'provider_quote',
+      beforeFundsMove: 'requote',
+      afterFundsMove: 'hold',
+      description: 'The bank quote is firm until expiresAt; an order placed after it is quoted again.',
+    },
     async capabilities(_user: RampAdapterUserContext) {
       return {
         routes,
@@ -88,11 +124,8 @@ export function createExampleRampAdapter(provider: ExampleProviderClient): RampA
       };
     },
     async quote({ route, amount }) {
-      const quote = await provider.quote({
-        direction: route.direction,
-        amount: amount.value,
-        denomination: amount.denomination,
-      });
+      const input = { direction: route.direction, amount: amount.value, denomination: amount.denomination };
+      const quote = await recorded(recorder, 'quote', input, () => provider.quote(input));
       return {
         providerQuoteRef: quote.reference,
         providerExpiresAt: quote.expiresAt,
@@ -109,18 +142,31 @@ export function createExampleRampAdapter(provider: ExampleProviderClient): RampA
         requiredFields: [],
         availableAmount: null,
         kind: 'firm',
+        fees: [
+          {
+            beneficiary: 'PROVIDER',
+            payer: 'END_USER',
+            settlement: 'INLINE',
+            basis: 'FIAT_AMOUNT',
+            basisAmount: quote.fiatAmount,
+            basisCurrency: route.fiatCurrency,
+            amount: quote.feeAmount,
+            currency: route.fiatCurrency,
+            usdValue: null,
+          },
+        ],
       };
     },
     async create({ operation, user, route, offer, payee }) {
-      const order = await provider.createOrder({
+      const input = {
         idempotencyKey: operation.idempotencyKey,
         transactionId: operation.transactionId,
         configurationId: user.configurationId,
         quoteReference: offer.providerQuoteRef,
         direction: route.direction,
         walletAddress: user.wallet.address,
-        payee,
-      });
+      };
+      const order = await recorded(recorder, 'create_order', input, () => provider.createOrder({ ...input, payee }), { payee });
       return { outcome: 'accepted', observation: observe(order) };
     },
     async status({ providerOrderRef }) {

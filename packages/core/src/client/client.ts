@@ -1,6 +1,18 @@
-import { RampSigningRegistry, type RampSigningHandler, type RampSnapshot } from '../ramps/workflow';
-import type { RampChain, RampContinuationBody } from '../types';
-import { createApiClient, fetchWithTimeout, PollarApiClient } from '../api/client';
+import { RampSigningRegistry, type RampSigningHandler, type RampWalletStep } from '../ramps/workflow';
+import type {
+  RampChain,
+  RampDirection,
+  RampOrder,
+  RampOrderRequest,
+  RampOrdersPage,
+  RampOrdersQuery,
+  RampQuoteRequest,
+  RampQuotesResponse,
+  RampRoutesResponse,
+  RampWalletSetup,
+  RampWalletSetupChain,
+} from '../types';
+import { createApiClient, fetchWithTimeout, isRetryableTransportError, PollarApiClient } from '../api/client';
 import { claimDistributionRule, listDistributionRules } from '../api/endpoints/distribution';
 import { getSwapConfig, getSwapTokens, quoteSwap } from '../api/endpoints/swap';
 import { buildEarnTx, getEarnOpportunities, getEarnPosition, getEarnProviders } from '../api/endpoints/earn';
@@ -37,33 +49,41 @@ import {
   submitRequirementForm,
 } from '../api/endpoints/requirements';
 import {
-  continueRamp,
+  createRampOrder,
+  getRampOrder,
+  retryRampOrder,
+  checkRampOrder,
+  setUpRampWallet,
   getRampRoutes,
-  completeWithdraw,
-  createOffRamp,
-  createOnRamp,
-  decodePixQr,
-  getRampCountries,
-  getRampKycStatus,
-  getRampLiquidity,
-  getRampsQuote,
-  getRampTransaction,
-  retryRampTransaction,
-  pollRampTransaction,
-  submitRampSignature,
+  listRampOrders,
+  pollRampOrder,
+  quoteRamp,
+  submitRampLegSignature,
 } from '../api/endpoints/ramps';
 import { buildProof } from '../dpop';
 import { CosignManager } from '../cosign/manager';
-import type { ConfirmationRequest, CosignRequest, CosignState, PendingConfirmation, TxErrorPhase } from '../types';
-import { CosignGroupConsents } from '../cosign/groups';
-import { recognizedSetupRequest } from '../cosign/recognize';
+import { type AppSignConfirmation, ConfirmationWindow, effectivePolicy, type UsdPrice, usdValueOf } from '../lib/confirmation';
+import type {
+  ConfirmationPolicy,
+  ConfirmationRequest,
+  CosignCustody,
+  CosignRequest,
+  CosignState,
+  PendingConfirmation,
+  RecoveryPasskeyCeremony,
+  TxErrorPhase,
+} from '../types';
+import { isStaleCosignCopy } from '../cosign/stale';
 import { defaultKeyManager } from '../keys/factory';
 import type { KeyManager } from '../keys/types';
 import { hashApiKey } from '../lib/api-key-hash';
 import { createLogger, type PollarLogger } from '../lib/logger';
 import { redactBody, redactDeep } from '../lib/logging';
 import { randomUUID } from '../lib/random-uuid';
+import { onChainErrorCode } from '../lib/tx-error-messages';
+import { apiErrorFields, isRecord, stringField } from '../api/error-fields';
 import { bytesToHex, hexToBytes } from '../cosign/encoding';
+import { base64urlDecode, base64urlEncode } from '../lib/base64url';
 import { StellarNetwork } from '../stellar/StellarClient';
 import { defaultStorage } from '../storage/autodetect';
 import type { OnStorageDegrade, Storage, StorageDegradeReason } from '../storage/types';
@@ -129,22 +149,6 @@ import {
   PollarPersistedWallet,
   isPollarNetworkError,
   PollarUserProfile,
-  RampsOfframpBody,
-  RampsOfframpResponse,
-  RampsOnrampBody,
-  RampsOnrampResponse,
-  RampsCompleteResponse,
-  RampsCountriesResponse,
-  RampsKycStatusResponse,
-  RampsLiquidityResponse,
-  RampsPixDecodeResponse,
-  RampsQuoteQuery,
-  RampsQuoteResponse,
-  RampRail,
-  RampsSignatureBody,
-  RampsSignatureResponse,
-  RampsTransactionResponse,
-  RampTxStatus,
   SessionInfo,
   SessionsState,
   Sep10Proof,
@@ -166,6 +170,8 @@ import {
   WalletAssetsContent,
   WalletBalanceContent,
   WalletBalanceRecord,
+  WalletBalanceAnswer,
+  WalletAssetsAnswer,
   WalletBalanceState,
   WalletChain,
   PollarApiError,
@@ -210,6 +216,9 @@ const isReactNative = typeof navigator !== 'undefined' && (navigator as { produc
  * treats RN (no `localStorage`) as server-side.
  */
 const isClientRuntime = isBrowser || isReactNative;
+
+/** How long the dashboard's confirmation setting and the USD prices are reused. */
+const CONFIRMATION_DATA_TTL_MS = 60_000;
 
 type ConfirmationAnswer =
   | { ok: true }
@@ -384,6 +393,10 @@ export class PollarClient {
   private _profile: PollarUserProfile | null = null;
   /** Last `DPoP-Nonce` we saw from a server response. Carried into the next proof. */
   private _dpopNonce: string | null = null;
+  /** The API-retirement warning is for the developer, once; not a log line per request. */
+  private _deprecationWarned = false;
+  /** Same for an app out of credits: the user gets a generic text, the developer the reason. */
+  private _creditsWarned = false;
   /**
    * Clock skew compensation, in seconds (`serverTime - localTime`), learned from
    * the `Date` header of every server response and added to the DPoP proof
@@ -530,21 +543,21 @@ export class PollarClient {
   readonly cosign: CosignManager;
   private _cosignState: CosignState = { pending: [] };
   private _cosignStateListeners = new Set<(state: CosignState) => void>();
-  /** The approval groups the user consented to on this device; see `cosign/groups`. */
-  private readonly _cosignGroups = new CosignGroupConsents({
-    load: async () => (this._apiKeyHash ? await this._storage.get(`pollar:${this._apiKeyHash}:cosign-groups`) : null),
-    save: async (value) => {
-      if (this._apiKeyHash) await this._storage.set(`pollar:${this._apiKeyHash}:cosign-groups`, value);
-    },
-  });
 
   /** The confirmation policy; see `PollarClientConfig.confirmation` and `cosignManual`. */
-  private readonly _confirmation: 'auto' | 'prompt';
+  private readonly _confirmation: ConfirmationPolicy | undefined;
+  private readonly _confirmWindow = new ConfirmationWindow();
+  /** Above zero while a ramp leg is being signed: its signature always asks. */
+  private _rampSigning = 0;
+  private _appSignConfirmationCache: { at: number; value: AppSignConfirmation | null } | null = null;
+  private _usdPricesCache: { at: number; value: UsdPrice[] } | null = null;
   private readonly _cosignManual: boolean;
   /** Requests this client is settling itself: they stay out of the pending list a UI prompts for. */
   private readonly _autoHandling = new Set<string>();
   /** Requests already seen in a final state: a pending copy arriving later is stale, never a reopening. */
   private readonly _settledCosign = new Set<string>();
+  /** Requests already seen with their Turnkey activity: a copy from before the proposal is stale. */
+  private readonly _proposedCosign = new Set<string>();
   private readonly _confirmations = new Map<string, PendingConfirmation>();
   private readonly _confirmationListeners = new Set<(pending: PendingConfirmation[]) => void>();
   private _loginController: AbortController | null = null;
@@ -581,11 +594,10 @@ export class PollarClient {
     Object.defineProperty(this, POLLAR_CLIENT_BRAND, { value: true, enumerable: false });
     this.apiKey = config.apiKey;
     this.id = randomUUID();
-    // v2 is the multichain SDK surface. It is a superset of v1 - every v1 route is
-    // re-exposed unchanged, with a `chain` discriminator added where a feature went
-    // multichain (today: wallet balance/tokens/transfer). So the whole client rides
-    // /v2 and only the shapes that actually changed are handled specially.
-    this.basePath = `${config.baseUrl || 'https://sdk.api.pollar.xyz'}/v2`;
+    // v3 is the only sdk-api surface that receives features: v1 and v2 are frozen
+    // and v1 retires on 2026-11-30. The whole client rides /v3; the server mounts
+    // the same handlers v2 had for every module Pollar v3 did not redefine.
+    this.basePath = `${config.baseUrl || 'https://sdk.api.pollar.xyz'}/v3`;
     this._log = createLogger(config.logLevel ?? 'info', config.logger);
 
     this._storage =
@@ -665,7 +677,7 @@ export class PollarClient {
 
     // The co-signing device key is a key of its own: the DPoP key is reset on
     // logout, and the user's vote must outlive a logout.
-    this._confirmation = config.confirmation ?? 'auto';
+    this._confirmation = config.confirmation;
     this._cosignManual = config.cosignManual === true;
     this.cosign = new CosignManager({
       api: this._api,
@@ -673,19 +685,7 @@ export class PollarClient {
       logger: this._log,
       networkPassphrase: () => this._networkPassphrase(),
       onRequest: (request) => this._noteCosignRequest(request),
-      // Setup Pollar opens on its own (account creation, trustlines, a new
-      // chain) is approved without a prompt only when the device can read it
-      // and it names this wallet; a custodial wallet does the same setup
-      // silently. Under `cosignManual` the app votes on everything itself.
-      // A step of a group the user already approved (a ramp's swap after its
-      // approve) is voted without asking again, verified like any other.
-      autoApprove: (request) =>
-        !this._cosignManual && (recognizedSetupRequest(request).ok || this._cosignGroups.covers(request)),
-      markAutoHandled: (id, handled) => {
-        if (handled) this._autoHandling.add(id);
-        else this._autoHandling.delete(id);
-      },
-      onApproved: (request) => this._cosignGroups.grant(request),
+      ...(config.recoveryPasskey ? { recoveryPasskey: config.recoveryPasskey } : {}),
     });
 
     // Stellar SEP ownership-proof namespace. Thin object over the private
@@ -762,7 +762,9 @@ export class PollarClient {
     // Compute the storage namespace first - every subsequent storage op
     // (including the cross-tab listener below and `_restoreSession`) reads it.
     this._apiKeyHash = await hashApiKey(this.apiKey);
-    await this._cosignGroups.load();
+    // An earlier SDK stored approval consents for grouped ramp steps here; every
+    // co-signed transaction now asks for itself, so none may be left behind.
+    await this._storage.remove(`pollar:${this._apiKeyHash}:cosign-groups`).catch(() => undefined);
     // `destroy()` can only unhook a listener that is already attached, so a
     // client destroyed during the await above would otherwise leave the handler
     // below wired to `window` for the document's lifetime - a dead client that
@@ -1024,6 +1026,26 @@ export class PollarClient {
           }
         }
 
+        // The server announces the retirement of the API version this client
+        // calls with `Deprecation` and `Sunset` (sdk-api exposes both to a
+        // browser). Nothing else changes: the request was served.
+        if (!self._deprecationWarned && response.headers.get('Deprecation')) {
+          self._deprecationWarned = true;
+          const sunset = response.headers.get('Sunset');
+          const guide = /<([^>]+)>/.exec(response.headers.get('Link') ?? '')?.[1];
+          self._log.warn(
+            `[PollarClient] The Pollar API version this SDK calls is deprecated${sunset ? ` and retires on ${sunset}` : ''}. ` +
+              `Upgrade @pollar/core to the current release${guide ? `: ${guide}` : '.'}`,
+          );
+        }
+
+        if (response.status === 402 && !self._creditsWarned) {
+          self._creditsWarned = true;
+          self._log.warn(
+            "[PollarClient] Pollar refuses this app's billable features (402): it is out of credits (SDK_CREDITS_INSUFFICIENT) or has an overdue statement (SDK_BILLING_OVERDUE). Top up or pay it in the Pollar dashboard.",
+          );
+        }
+
         if (response.status !== 401) return self._logHttp(request, response);
 
         // Case-insensitive: RFC 9449 carries this as `error="use_dpop_nonce"`,
@@ -1210,9 +1232,9 @@ export class PollarClient {
    */
   private async _dpopRejectionReason(response: Response): Promise<string | null> {
     try {
-      const body = (await response.clone().json()) as { code?: unknown; reason?: unknown };
-      if (body?.code !== 'SDK_AUTH_DPOP_INVALID' || typeof body?.reason !== 'string') return null;
-      return body.reason;
+      const body: unknown = await response.clone().json();
+      if (stringField(body, 'code') !== 'SDK_AUTH_DPOP_INVALID') return null;
+      return stringField(body, 'reason') ?? null;
     } catch {
       return null;
     }
@@ -1364,12 +1386,11 @@ export class PollarClient {
       throw new Error('No refresh token available');
     }
 
-    let data: unknown;
-    let error: unknown;
+    const refreshCall = () => this._api.POST('/auth/refresh', { body: { refreshToken } });
+    let data: Awaited<ReturnType<typeof refreshCall>>['data'];
+    let error: Awaited<ReturnType<typeof refreshCall>>['error'];
     try {
-      const response = await this._api.POST('/auth/refresh', { body: { refreshToken } });
-      data = response.data;
-      error = response.error;
+      ({ data, error } = await refreshCall());
     } catch (err) {
       // A transient transport failure (timeout / dropped connection) must NOT
       // tear down the session: the refresh token is almost certainly still
@@ -1392,7 +1413,7 @@ export class PollarClient {
       await this._clearIfCurrent(gen);
       throw new Error('Refresh failed');
     }
-    const successData = data as { success?: boolean; content?: { token?: PollarPersistedSession['token'] } };
+    const successData = data;
     if (!successData.success || !successData.content?.token) {
       // Don't log `successData` - its `content.token` would write access/refresh
       // tokens to the console. Log only the non-sensitive shape.
@@ -1622,6 +1643,7 @@ export class PollarClient {
     const seq = ++this._provisioningSeq;
     try {
       const { data } = await this._api.GET('/wallet/state');
+      await this._addStateWallets(gen, data?.content?.wallets);
       const provisioning = data?.content?.provisioning;
       // A value outside the union would be persisted and then rejected by
       // `isValidSession` on the next reload, costing the user the session over a
@@ -1643,6 +1665,37 @@ export class PollarClient {
     } catch (err) {
       this._log.debug('[PollarClient] wallet state check failed', err);
       return null;
+    }
+  }
+
+  /**
+   * Add to the session the wallets `/wallet/state` lists that it does not hold
+   * yet. The login lists the wallets that exist when it answers; a co-signed
+   * account the device derives afterwards (a chain the app enabled) only
+   * reaches a live session here. Entries already held are kept as they are,
+   * since the login's copy carries fields this answer does not.
+   */
+  private async _addStateWallets(gen: number, listed: PollarApplicationConfigContent['wallet'][] | undefined): Promise<void> {
+    if (!listed || this._destroyed || this._sessionGeneration !== gen || !this._session) return;
+    const held = this._session.wallets ?? [this._session.wallet];
+    const same = (a: string | null | undefined, b: string | null | undefined) =>
+      !!a && !!b && (a.startsWith('0x') ? a.toLowerCase() === b.toLowerCase() : a === b);
+    const added = listed
+      .map(toPersistedWallet)
+      .filter(
+        (w) => w.address && !held.some((h) => (h.chain ?? 'STELLAR') === (w.chain ?? 'STELLAR') && same(h.address, w.address)),
+      );
+    if (added.length === 0) return;
+
+    this._session = { ...this._session, wallets: [...held, ...added] };
+    try {
+      await this._persistSession(gen, this._session);
+    } catch (err) {
+      this._log.error('[PollarClient] Failed to persist the wallets listed by /wallet/state', err);
+    }
+    if (this._destroyed || this._sessionGeneration !== gen) return;
+    if (this._authState.step === 'authenticated') {
+      this._setAuthState({ ...this._authState, session: this._session });
     }
   }
 
@@ -1988,9 +2041,14 @@ export class PollarClient {
    * Reading `_passkey`/`_passkeySign` happens per login/signature (never
    * latched at construction), so filling them later takes effect immediately.
    */
-  setPasskeyDefaults(defaults: { passkey?: PasskeyCeremony; passkeySign?: PasskeySigner }): void {
+  setPasskeyDefaults(defaults: {
+    passkey?: PasskeyCeremony;
+    passkeySign?: PasskeySigner;
+    recoveryPasskey?: RecoveryPasskeyCeremony;
+  }): void {
     if (!this._passkey && defaults.passkey) this._passkey = defaults.passkey;
     if (!this._passkeySign && defaults.passkeySign) this._passkeySign = defaults.passkeySign;
+    if (defaults.recoveryPasskey) this.cosign.recovery.setDefaultPasskey(defaults.recoveryPasskey);
   }
 
   // --- Cancel ---------------------------------------------------------------
@@ -2273,7 +2331,7 @@ export class PollarClient {
       if (!error && data?.success && data.content) {
         this._setTxHistoryState({ step: 'loaded', params, data: data.content });
       } else {
-        const message = (error as { message?: string } | undefined)?.message ?? 'Failed to load history';
+        const message = apiErrorFields(error).message ?? 'Failed to load history';
         this._setTxHistoryState({ step: 'error', params, message });
       }
     } catch {
@@ -2338,37 +2396,33 @@ export class PollarClient {
    * per-asset network tag. A chain that failed to resolve carries `error` instead
    * of `balances` and contributes nothing.
    */
-  private _flattenBalances(content: unknown, ownAddress: string): WalletBalanceContent {
-    const chains = (content as { chains?: unknown[] })?.chains ?? [];
+  private _flattenBalances(content: WalletBalanceAnswer, ownAddress: string): WalletBalanceContent {
     const flat: WalletBalanceRecord[] = [];
     let exists = false;
     let network = this.getNetwork() as string;
 
-    for (const entry of chains as Array<Record<string, unknown>>) {
-      const chain = entry.chain as WalletChain | undefined;
-      if (!chain || entry.error) continue;
+    for (const entry of content.chains) {
+      if ('error' in entry) continue;
       if (entry.exists) exists = true;
       // Only Stellar's entry carries the session's network; the other chains ride
       // the same testnet/mainnet choice and don't restate it.
-      if (chain === 'STELLAR' && typeof entry.network === 'string') network = entry.network;
+      if (entry.chain === 'STELLAR' && entry.network) network = entry.network;
 
-      for (const b of (entry.balances as Array<Record<string, unknown>>) ?? []) {
+      for (const b of entry.balances) {
         // null balance = the chain could not be read. Preserved, never coerced to
         // '0', so the UI can tell "unavailable" from "empty".
-        const balance = typeof b.balance === 'string' ? b.balance : null;
-        const available = typeof b.available === 'string' ? b.available : balance;
         flat.push({
-          chain,
-          ...(typeof b.type === 'string' ? { type: b.type as NonNullable<WalletBalanceRecord['type']> } : {}),
-          code: String(b.code ?? ''),
-          ...(typeof b.issuer === 'string' ? { issuer: b.issuer } : {}),
-          ...(typeof b.decimals === 'number' ? { decimals: b.decimals } : {}),
-          balance,
-          available,
-          ...(typeof b.limit === 'string' ? { limit: b.limit } : {}),
-          ...(typeof b.enabledInApp === 'boolean' ? { enabledInApp: b.enabledInApp } : {}),
-          ...(typeof b.trustlineRemoved === 'boolean' ? { trustlineRemoved: b.trustlineRemoved } : {}),
-          ...(typeof b.sponsored === 'boolean' ? { sponsored: b.sponsored } : {}),
+          chain: entry.chain,
+          type: b.type,
+          code: b.code,
+          ...(b.issuer !== undefined ? { issuer: b.issuer } : {}),
+          ...(b.decimals !== undefined ? { decimals: b.decimals } : {}),
+          balance: b.balance,
+          available: b.available ?? b.balance,
+          ...(b.limit !== undefined ? { limit: b.limit } : {}),
+          enabledInApp: b.enabledInApp,
+          ...(b.trustlineRemoved !== undefined ? { trustlineRemoved: b.trustlineRemoved } : {}),
+          ...(b.sponsored !== undefined ? { sponsored: b.sponsored } : {}),
         });
       }
     }
@@ -2377,7 +2431,7 @@ export class PollarClient {
       publicKey: ownAddress,
       network,
       exists,
-      multichain: chains.length > 1,
+      multichain: content.chains.length > 1,
       balances: flat,
     };
   }
@@ -2385,38 +2439,34 @@ export class PollarClient {
   /**
    * The {@link _flattenBalances} twin for `/wallet/assets`: collapses the v2
    * per-chain answer into one chain-tagged catalog. Same envelope (`chains`),
-   * same rules - a chain carrying `error` contributes nothing, and only Stellar
-   * restates the network.
+   * same rule: a chain carrying `error` contributes nothing.
    */
-  private _flattenAssets(content: unknown, ownAddress: string): WalletAssetsContent {
-    const chains = (content as { chains?: unknown[] })?.chains ?? [];
+  private _flattenAssets(content: WalletAssetsAnswer, ownAddress: string): WalletAssetsContent {
     const flat: EnabledAssetRecord[] = [];
     let exists = false;
-    let network = this.getNetwork() as string;
+    const network = this.getNetwork() as string;
 
-    for (const entry of chains as Array<Record<string, unknown>>) {
-      const chain = entry.chain as WalletChain | undefined;
-      if (!chain || entry.error) continue;
+    for (const entry of content.chains) {
+      if ('error' in entry) continue;
       if (entry.exists) exists = true;
-      if (chain === 'STELLAR' && typeof entry.network === 'string') network = entry.network;
 
-      for (const a of (entry.assets as Array<Record<string, unknown>>) ?? []) {
+      for (const a of entry.assets) {
         flat.push({
-          chain,
-          ...(typeof a.type === 'string' ? { type: a.type as NonNullable<EnabledAssetRecord['type']> } : {}),
-          code: String(a.code ?? ''),
-          ...(typeof a.issuer === 'string' ? { issuer: a.issuer } : {}),
-          ...(typeof a.decimals === 'number' ? { decimals: a.decimals } : {}),
-          ...(typeof a.name === 'string' ? { name: a.name } : {}),
-          ...(typeof a.trustlineEstablished === 'boolean' ? { trustlineEstablished: a.trustlineEstablished } : {}),
-          ...(typeof a.limit === 'string' ? { limit: a.limit } : {}),
-          ...(typeof a.enabledInApp === 'boolean' ? { enabledInApp: a.enabledInApp } : {}),
-          ...(typeof a.sponsored === 'boolean' ? { sponsored: a.sponsored } : {}),
+          chain: entry.chain,
+          type: a.type,
+          code: a.code,
+          ...(a.issuer !== undefined ? { issuer: a.issuer } : {}),
+          ...(a.decimals !== undefined ? { decimals: a.decimals } : {}),
+          ...(a.name !== undefined ? { name: a.name } : {}),
+          ...(a.trustlineEstablished !== undefined ? { trustlineEstablished: a.trustlineEstablished } : {}),
+          ...(a.limit !== undefined ? { limit: a.limit } : {}),
+          enabledInApp: a.enabledInApp,
+          ...(a.sponsored !== undefined ? { sponsored: a.sponsored } : {}),
         });
       }
     }
 
-    return { publicKey: ownAddress, network, exists, multichain: chains.length > 1, assets: flat };
+    return { publicKey: ownAddress, network, exists, multichain: content.chains.length > 1, assets: flat };
   }
 
   /**
@@ -2491,8 +2541,10 @@ export class PollarClient {
    * mirroring the opt-out on the payment / swap / contract fee-bump surfaces. The
    * route is by wallet type, and each server endpoint sponsors-or-self-pays:
    *  - **Embedded** (internal wallet, no adapter) -> one call to
-   *    `/wallet/assets/trustline`: the server holds the trustor key and either
-   *    sponsors or self-pays, then submits, returning the refreshed asset list.
+   *    `/wallet/assets/trustline`: the server signs the way the wallet's signer
+   *    allows. A custodial wallet is sponsored or self-paid and submitted there,
+   *    returning the refreshed asset list; a co-signed one answers with the
+   *    request its device approves, settled like any other co-signed send.
    *  - **External/adapter** -> `/wallet/assets/trustline/build` returns a
    *    `changeTrust` XDR (sponsor-signed when covered, or a plain self-pay one
    *    otherwise); the user's own wallet adds the trustor signature and submits.
@@ -2555,7 +2607,12 @@ export class PollarClient {
         const { data, error } = await this._api.POST('/wallet/assets/trustline', {
           body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
         });
-        if (!error && data?.success) {
+        // Read before success: the 202 a co-signed wallet answers is a 2xx too.
+        const pendingRequest = this._cosignPendingOf(data);
+        if (pendingRequest) {
+          return this._settleCosign(pendingRequest, { intent: 'sign_and_send', phase: 'signing-submitting' });
+        }
+        if (!error && data?.code === 'SDK_WALLET_TRUSTLINE') {
           if (data.content) {
             // Bump the assets generation so a refreshAssets() that was in flight
             // can't clobber this post-trustline (fresher) snapshot.
@@ -2564,9 +2621,7 @@ export class PollarClient {
           }
           return { status: 'success' };
         }
-        const details =
-          (error as { details?: string; code?: string } | undefined)?.details ?? (error as { code?: string } | undefined)?.code;
-        return { status: 'error', ...(details && { details }) };
+        return this._trustlineError(error);
       } catch (err) {
         const details = err instanceof Error ? err.message : undefined;
         return { status: 'error', ...(details && { details }) };
@@ -2583,11 +2638,7 @@ export class PollarClient {
       });
       // Sponsor-signed when the app covers it, plain self-pay otherwise; sign + submit either.
       const xdr = data?.content?.sponsorSignedXdr ?? data?.content?.unsignedXdr;
-      if (error || !data?.success || !xdr) {
-        const details =
-          (error as { details?: string; code?: string } | undefined)?.details ?? (error as { code?: string } | undefined)?.code;
-        return { status: 'error', ...(details && { details }) };
-      }
+      if (error || !data?.success || !xdr) return this._trustlineError(error);
       const signed = await this._signTx(xdr, undefined, false);
       if (signed.status === 'error') {
         return { status: 'error', ...(signed.details && { details: signed.details }) };
@@ -2598,6 +2649,13 @@ export class PollarClient {
       const details = err instanceof Error ? err.message : undefined;
       return { status: 'error', ...(details && { details }) };
     }
+  }
+
+  /** A refused trustline call, with the API's code so a UI can say what to do about it. */
+  private _trustlineError(error: unknown): TrustlineOutcome {
+    const fields = apiErrorFields(error);
+    const details = fields.details ?? fields.message ?? fields.code;
+    return { status: 'error', ...(details && { details }), ...(fields.code && { code: fields.code }) };
   }
 
   /**
@@ -2627,8 +2685,7 @@ export class PollarClient {
     try {
       const { data, error } = await this._api.POST('/wallet/account/create/build', {});
       if (error || !data?.success || !data.content?.sponsorSignedXdr) {
-        const details =
-          (error as { details?: string; code?: string } | undefined)?.details ?? (error as { code?: string } | undefined)?.code;
+        const details = apiErrorFields(error).details ?? apiErrorFields(error).code;
         return { status: 'error', ...(details && { details }) };
       }
       const signed = await this._signTx(data.content.sponsorSignedXdr, undefined, false);
@@ -2783,25 +2840,31 @@ export class PollarClient {
 
   /**
    * Create the signed-in user's wallet, for an app whose wallet creation is set
-   * to "on demand" in the dashboard. Idempotent: a user who already has one gets
-   * it back. Updates the session and notifies subscribers the way a login does.
+   * to "on demand" in the dashboard, or whose custody is left to the user
+   * (`walletCustodyMode: 'USER_CHOICE'` in the app config): such an app creates
+   * no wallet at login, and `custody` names what the user chose. Idempotent: a
+   * user who already has one gets it back. Updates the session and notifies
+   * subscribers the way a login does.
    *
    * Throws {@link PollarApiError}: `SDK_WALLET_PROVISIONING_DISABLED` when the
    * app creates no wallets, `SDK_WALLET_PROVISIONING_UNSUPPORTED` for a user who
    * signed in with their own wallet or a passkey.
    */
-  async createWallet(): Promise<WalletInfo> {
+  async createWallet(options?: { custody?: CosignCustody }): Promise<WalletInfo> {
     if (!this._session) throw new PollarApiError('SDK_AUTH_INVALID_TOKEN');
     const gen = this._sessionGeneration;
-    // Only a co-signed (Turnkey) wallet needs the device key; a custodial app ignores it.
+    // Only a Turnkey wallet needs the device key; a custodial app ignores it.
     const devicePublicKey = await this.cosign.publicKeyHex().catch(() => undefined);
     const { data, error } = await this._api.POST('/wallet/provision', {
-      body: devicePublicKey ? { devicePublicKey } : {},
+      body: {
+        ...(devicePublicKey ? { devicePublicKey } : {}),
+        ...(options?.custody ? { custody: options.custody } : {}),
+      },
     });
     const content = data?.content;
     if (error || !content) {
-      const body = (typeof error === 'object' && error !== null ? error : {}) as Record<string, unknown>;
-      throw new PollarApiError(typeof body.code === 'string' ? body.code : 'SDK_WALLET_PROVISIONING_FAILED', body);
+      const body = isRecord(error) ? error : {};
+      throw new PollarApiError(stringField(body, 'code') ?? 'SDK_WALLET_PROVISIONING_FAILED', body);
     }
     if (this._destroyed || this._sessionGeneration !== gen || !this._session) {
       throw new PollarApiError('SDK_AUTH_INVALID_TOKEN');
@@ -2919,6 +2982,8 @@ export class PollarClient {
         details: 'signTx is not supported for smart (passkey) wallets; use signAndSubmitTx.',
       };
     }
+    // Before the prompt: a user with no wallet is never asked to sign.
+    if (!this._walletAdapter && !this._session?.wallet?.address) return this._walletRequired();
     const buildData = this._currentBuildData();
     if (confirm) {
       const answer = await this._confirm({ kind: 'sign', network: 'STELLAR', unsignedXdr, ...(buildData && { buildData }) });
@@ -3072,7 +3137,7 @@ export class PollarClient {
       if (!error && data?.success && data.content?.signedAuthEntry) {
         return { status: 'signed', signedAuthEntry: data.content.signedAuthEntry };
       }
-      const details = (error as { details?: string } | undefined)?.details;
+      const details = apiErrorFields(error).details;
       return { status: 'error', ...(details && { details }) };
     } catch (err) {
       const details = err instanceof Error ? err.message : undefined;
@@ -3129,7 +3194,7 @@ export class PollarClient {
           scheme: 'sep53',
         };
       }
-      const details = (error as { details?: string } | undefined)?.details;
+      const details = apiErrorFields(error).details;
       return { status: 'error', ...(details && { details }) };
     } catch (err) {
       const details = err instanceof Error ? err.message : undefined;
@@ -3188,7 +3253,7 @@ export class PollarClient {
       if (!error && data?.success && data.content?.signedXdr) {
         return { status: 'signed', signedXdr: data.content.signedXdr, signerAddress: data.content.signerAddress };
       }
-      const details = (error as { details?: string } | undefined)?.details;
+      const details = apiErrorFields(error).details;
       return { status: 'error', ...(details && { details }) };
     } catch (err) {
       const details = err instanceof Error ? err.message : undefined;
@@ -3275,12 +3340,26 @@ export class PollarClient {
   }
 
   /**
-   * Ask the user before a signature, per the confirmation policy: `'auto'`
-   * answers yes at once, `'prompt'` publishes the request to the subscribers
-   * and waits for one of them to settle it. Setup signatures never come here.
+   * Ask the user before a signature, per the confirmation policy (see
+   * `PollarClientConfig.confirmation`): `'auto'` answers yes at once, an open
+   * window answers yes while the signature fits in it, and otherwise the
+   * request goes to the subscribers until one of them settles it. A ramp leg
+   * always asks. Setup signatures never come here.
    */
-  private _confirm(input: Omit<ConfirmationRequest, 'id' | 'createdAt'>): Promise<ConfirmationAnswer> {
-    if (this._confirmation === 'auto') return Promise.resolve({ ok: true });
+  private async _confirm(input: Omit<ConfirmationRequest, 'id' | 'createdAt'>): Promise<ConfirmationAnswer> {
+    const policy: ConfirmationPolicy =
+      this._rampSigning > 0 ? 'prompt' : effectivePolicy(this._confirmation, await this._appSignConfirmation());
+    if (policy === 'auto') return { ok: true };
+    if (policy !== 'prompt' && this._confirmWindow.isOpen(policy.window.seconds, Date.now())) {
+      const usd = usdValueOf(input, await this._usdPrices());
+      if (this._confirmWindow.take(usd, policy.window.maxUsd)) return { ok: true };
+    }
+    const answer = await this._askUser(input);
+    if (answer.ok && policy !== 'prompt') this._confirmWindow.open(Date.now());
+    return answer;
+  }
+
+  private _askUser(input: Omit<ConfirmationRequest, 'id' | 'createdAt'>): Promise<ConfirmationAnswer> {
     if (this._confirmationListeners.size === 0) {
       return Promise.resolve({
         ok: false,
@@ -3349,18 +3428,23 @@ export class PollarClient {
     if (this._cosignManual) return { status: 'cosign_pending', request, ...(buildData && { buildData }) };
     this._autoHandling.add(request.id);
     try {
-      let resolved = await this.cosign.approve(request);
-      for (let i = 0; i < 10 && resolved.status === 'PENDING'; i++) {
-        await new Promise((r) => setTimeout(r, 500));
-        resolved = await this.cosign.get(request.id, { sync: true });
-      }
+      const resolved = await this.cosign.settle(await this.cosign.approve(request));
       return await this._outcomeOfCosign(resolved, ctx);
     } catch (err) {
+      // A call that never answered says nothing about the vote: it may have landed
+      // (Turnkey signed, Pollar voted, the transaction went out). The request says
+      // what happened; rejecting it here could report a send that succeeded as failed.
+      if (isRetryableTransportError(err)) {
+        try {
+          return await this._outcomeOfCosign(await this.cosign.settle(await this.cosign.get(request.id, { sync: true })), ctx);
+        } catch {
+          return { status: 'cosign_pending', request, ...(buildData && { buildData }) };
+        }
+      }
       const code = err instanceof PollarApiError ? err.code : undefined;
       let details = err instanceof Error ? err.message : undefined;
       if (err instanceof PollarApiError && code === 'SDK_COSIGN_VERIFICATION_FAILED') {
-        const verification = err.body.verification as { reason?: string } | undefined;
-        details = verification?.reason ?? details;
+        details = stringField(err.body.verification, 'reason') ?? details;
       }
       // This call reports the send as failed, so the request must not stay
       // approvable: the prompt would later offer a send the user was told failed.
@@ -3425,8 +3509,16 @@ export class PollarClient {
    * (atomic flows) or ended it.
    */
   private _noteCosignRequest(request: CosignRequest): void {
-    if (request.status !== 'PENDING') this._settledCosign.add(request.id);
-    else if (this._settledCosign.has(request.id)) return;
+    if (isStaleCosignCopy(request, { settled: this._settledCosign, proposed: this._proposedCosign })) return;
+    if (request.activityId) this._proposedCosign.add(request.id);
+    if (request.status !== 'PENDING') {
+      // An approved derivation added a wallet on a new chain; the session
+      // learns of it from the server, not from the request.
+      if (request.kind === 'ACCOUNT' && request.status === 'APPROVED' && !this._settledCosign.has(request.id)) {
+        void this.refreshWalletState();
+      }
+      this._settledCosign.add(request.id);
+    }
     const pending = this._cosignState.pending.filter((r) => r.id !== request.id);
     if (request.status === 'PENDING' && !this._autoHandling.has(request.id)) pending.push(request);
     const lastResolved = request.status !== 'PENDING' ? request : this._cosignState.lastResolved;
@@ -3478,9 +3570,9 @@ export class PollarClient {
     // On a non-2xx the failure envelope is in `error`; on a 2xx with
     // `success:false` it rides in `data` - fall back to it so the backend's
     // code/message contract isn't dropped on the 2xx-failure path.
-    const e = (error ?? data) as { details?: string; code?: string; message?: string } | undefined;
-    const details = e?.details ?? e?.message;
-    const code = e?.code;
+    const e = apiErrorFields(error ?? data);
+    const details = e.details ?? e.message;
+    const code = e.code;
     if (!code) return details ? { details } : {};
     const { message } = resolveAuthError(code, details ?? code);
     return { code, message, ...(details && { details }) };
@@ -3497,6 +3589,8 @@ export class PollarClient {
     hash: string;
     status: 'PENDING' | 'SUCCESS' | 'FAILED';
     resultCode?: string;
+    /** A Stellar tx that failed on its operations: each operation's result code (e.g. `paymentNoDestination`). */
+    operationCodes?: string[];
     message?: string;
     ledger?: number;
   }> {
@@ -3548,11 +3642,13 @@ export class PollarClient {
         return { status: 'success', hash, ...outcomeExtra };
       }
       if (status.status === 'FAILED') {
+        const code = onChainErrorCode(status.resultCode, ...(status.operationCodes ?? []));
         this._setTransactionState({
           step: 'error',
           phase: errorPhase,
           ...(buildData && { buildData }),
           ...(status.resultCode && { details: status.resultCode }),
+          ...(code && { code }),
           ...(status.message && { message: status.message }),
         });
         return {
@@ -3560,6 +3656,7 @@ export class PollarClient {
           hash,
           ...outcomeExtra,
           ...(status.resultCode && { details: status.resultCode, resultCode: status.resultCode }),
+          ...(code && { code }),
           ...(status.message && { message: status.message }),
         };
       }
@@ -3693,6 +3790,7 @@ export class PollarClient {
       this._setTransactionState({ step: 'error', phase: 'signing', details: 'missing unsigned transaction' });
       return { status: 'error', details: 'missing unsigned transaction' };
     }
+    if (!this._walletAdapter && !this._session?.wallet?.address) return this._walletRequired();
 
     const confirmBuild = this._currentBuildData();
     const answer = await this._confirm({
@@ -3737,15 +3835,8 @@ export class PollarClient {
         headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
       });
       if (!error && data?.success && data.content && 'hash' in data.content) {
-        const {
-          hash,
-          status: backendStatus,
-          resultCode,
-        } = data.content as {
-          hash: string;
-          status: 'SUCCESS' | 'FAILED' | 'PENDING';
-          resultCode?: string;
-        };
+        const { hash, status: backendStatus } = data.content;
+        const resultCode = 'resultCode' in data.content ? data.content.resultCode : undefined;
         if (backendStatus === 'SUCCESS') {
           this._setTransactionState({ step: 'success', hash, ...(buildData && { buildData }) });
           return { status: 'success', hash, ...outcomeExtra };
@@ -3990,13 +4081,12 @@ export class PollarClient {
           // converges on the original transfer instead of sending twice.
           idempotencyKey: randomUUID(),
           waitForConfirmation: false,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the generated body type is a union, and its Polygon member is not in the generated schema until it is regenerated from this sdk-api
-        } as any,
+        },
         headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
       });
 
       if (!error && data?.success && data.content && 'hash' in data.content) {
-        const { hash, status: backendStatus } = data.content as { hash: string; status: string };
+        const { hash, status: backendStatus } = data.content;
         if (backendStatus === 'SUCCESS') {
           this._setTransactionState({ step: 'success', hash });
           return { status: 'success', hash };
@@ -4045,12 +4135,14 @@ export class PollarClient {
     }
     const adapter = this._walletAdapter;
     if (!adapter?.signSolanaTransaction) {
-      throw new Error(`[PollarClient] wallet adapter "${adapter?.type}" cannot sign a Solana transaction`);
+      const details = `Wallet "${adapter?.type}" cannot sign a Solana transaction.`;
+      this._setTransactionState({ step: 'error', phase: 'building', details });
+      return { status: 'error', details };
     }
     const idempotencyKey = randomUUID();
     const body = {
-      chain: 'SOLANA',
-      operation: 'payment',
+      chain: 'SOLANA' as const,
+      operation: 'payment' as const,
       params: { destination: params.destination, amount: params.amount, ...(params.mint ? { mint: params.mint } : {}) },
       idempotencyKey,
     };
@@ -4058,9 +4150,8 @@ export class PollarClient {
     this._setTransactionState({ step: 'building' });
     let unsignedTransaction: string;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the generated body type is a union; this is the Solana member
-      const { data, error } = await this._api.POST('/tx/build', { body: body as any });
-      const content = !error && data?.success ? (data.content as unknown as { unsignedTransaction?: string }) : null;
+      const { data, error } = await this._api.POST('/tx/build', { body });
+      const content = !error && data?.success && data.content && 'unsignedTransaction' in data.content ? data.content : null;
       if (!content?.unsignedTransaction) {
         const { details, code, message } = this._resolveTxApiError(error, data);
         this._setTransactionState({
@@ -4093,12 +4184,11 @@ export class PollarClient {
     this._setTransactionState({ step: 'submitting' });
     try {
       const { data, error } = await this._api.POST('/tx/submit', {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the generated body type is a union; this is the Solana member
-        body: { chain: 'SOLANA', signedTransaction, idempotencyKey, waitForConfirmation: false } as any,
+        body: { chain: 'SOLANA', signedTransaction, idempotencyKey, waitForConfirmation: false },
         headers: { 'x-pollar-timeout-ms': String(this._submitTimeoutMs) },
       });
       if (!error && data?.success && data.content && 'hash' in data.content) {
-        const { hash, status: backendStatus } = data.content as { hash: string; status: string };
+        const { hash, status: backendStatus } = data.content;
         if (backendStatus === 'SUCCESS') {
           this._setTransactionState({ step: 'success', hash });
           return { status: 'success', hash };
@@ -4127,6 +4217,27 @@ export class PollarClient {
   }
 
   /** The Wallet Standard chain id the connected Solana wallet signs for; testnet means devnet here. */
+  /**
+   * Signs a serialized Solana transaction with the user's own connected wallet
+   * and returns it signed, without broadcasting. The wallet shows the
+   * transaction and the user approves it there; Pollar adds no prompt of its
+   * own. Base64 in and out, as Solana RPC and ramp payloads carry it. Throws
+   * when the session has no external Solana wallet that can sign.
+   */
+  async signSolanaTransaction(transaction: string): Promise<string> {
+    const noSigner = this._externalSignerMissing();
+    if (noSigner) throw new Error(noSigner.details);
+    const adapter = this._walletAdapter;
+    if (!adapter?.signSolanaTransaction)
+      throw new Error(`Wallet "${adapter?.type ?? 'none'}" cannot sign a Solana transaction.`);
+    const signed = await adapter.signSolanaTransaction(
+      base64urlDecode(transaction.replace(/\+/g, '-').replace(/\//g, '_')),
+      this._solanaChainId(),
+    );
+    const encoded = base64urlEncode(signed).replace(/-/g, '+').replace(/_/g, '/');
+    return encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '=');
+  }
+
   private _solanaChainId(): 'solana:mainnet' | 'solana:devnet' {
     return this.getNetwork() === 'mainnet' ? 'solana:mainnet' : 'solana:devnet';
   }
@@ -4177,7 +4288,7 @@ export class PollarClient {
       const { data, error } = await this._api.POST('/tx/build', { body });
       const built = !error && data?.success ? stellarBuildOf(data.content) : null;
       if (!built?.smart) {
-        const details = (error as { details?: string } | undefined)?.details ?? 'Failed to build transaction';
+        const details = apiErrorFields(error).details ?? 'Failed to build transaction';
         this._setTransactionState({ step: 'error', phase: 'building', details });
         return { status: 'error', details };
       }
@@ -4278,6 +4389,31 @@ export class PollarClient {
 
   // --- App config -----------------------------------------------------------
 
+  /** The dashboard's confirmation setting, read at most once a minute; null when it cannot be read. */
+  private async _appSignConfirmation(): Promise<AppSignConfirmation | null> {
+    const cached = this._appSignConfirmationCache;
+    if (cached && Date.now() - cached.at < CONFIRMATION_DATA_TTL_MS) return cached.value;
+    const config = (await this.getAppConfig()) as { application?: { signConfirmation?: AppSignConfirmation } } | null;
+    const value = config?.application?.signConfirmation ?? null;
+    this._appSignConfirmationCache = { at: Date.now(), value };
+    return value;
+  }
+
+  /** USD prices for the confirmation window, read at most once a minute; empty when they cannot be read. */
+  private async _usdPrices(): Promise<UsdPrice[]> {
+    const cached = this._usdPricesCache;
+    if (cached && Date.now() - cached.at < CONFIRMATION_DATA_TTL_MS) return cached.value;
+    let value: UsdPrice[] = [];
+    try {
+      const { data } = await this._api.GET('/prices/usd');
+      value = data?.content.prices ?? [];
+    } catch {
+      // No prices: every signature in the window asks.
+    }
+    this._usdPricesCache = { at: Date.now(), value };
+    return value;
+  }
+
   async getAppConfig(): Promise<unknown> {
     try {
       const { data, error } = await this._api.GET('/applications/config');
@@ -4360,108 +4496,128 @@ export class PollarClient {
 
   // --- Ramps ----------------------------------------------------------------
 
-  /** Discover the application's available asset and payment routes. */
-  getRampRoutes(): Promise<import('../types').RampsRoutesResponse> {
-    return getRampRoutes(this._api);
-  }
-  /** Submit an explicit continuation for the saved action and transaction version. */
-  continueRamp(txId: string, body: RampContinuationBody): Promise<RampsTransactionResponse> {
-    return continueRamp(this._api, txId, body);
+  /** The fiat and asset pairs the app can ramp between in a direction. Nothing is quoted. */
+  getRampRoutes(direction: RampDirection): Promise<RampRoutesResponse> {
+    return getRampRoutes(this._api, direction);
   }
 
-  /** Compatibility alias for consumers of the Anclap workflow client. */
-  continueRampTransaction(txId: string, body: RampContinuationBody): Promise<RampsTransactionResponse> {
-    return continueRamp(this._api, txId, body);
+  /** Every route between the fiat and the asset, quoted leg by leg, best first. */
+  quoteRamp(body: RampQuoteRequest): Promise<RampQuotesResponse> {
+    return quoteRamp(this._api, body);
   }
+
+  /**
+   * Turns a quote the user accepted into an order. `payee` holds a value for each
+   * of the quote's `requiredFields` (`rampQuoteFields`); a missing or wrong one is
+   * refused before anything moves. The same quote always answers the same order.
+   */
+  createRampOrder(body: RampOrderRequest): Promise<RampOrder> {
+    return createRampOrder(this._api, body);
+  }
+
+  getRampOrder(id: string): Promise<RampOrder> {
+    return getRampOrder(this._api, id);
+  }
+
+  /** Asks about the order's fiat payment now, for a user who says they paid. */
+  checkRampOrder(id: string): Promise<RampOrder> {
+    return checkRampOrder(this._api, id);
+  }
+
+  /** Runs the user's held order again from where it stopped (their failure to resolve, e.g. an approval). */
+  retryRampOrder(id: string): Promise<RampOrder> {
+    return retryRampOrder(this._api, id);
+  }
+
+  /**
+   * Sets up the user's wallet on a chain a dropped route passes through
+   * (`set_up_wallet`, the chain in the failure's `detail`): a Turnkey wallet with
+   * this device as its first credential, in the app's custody. `custody` is the
+   * user's pick when the app leaves it to them. Like any new Turnkey wallet, it
+   * signs once it has a recovery method (`recoveryConfigured`); then quote again.
+   */
+  async setUpRampWallet(chain: RampWalletSetupChain, custody?: CosignCustody): Promise<RampWalletSetup> {
+    const devicePublicKey = await this.cosign.publicKeyHex();
+    const wallet = await setUpRampWallet(this._api, chain, { devicePublicKey, ...(custody ? { custody } : {}) });
+    await this.cosign
+      .inspectQuorum()
+      .catch((err: unknown) => this._log.warn('[PollarClient] could not read the quorum of the new wallet', err));
+    return wallet;
+  }
+
+  /**
+   * Runs the wallet step a dropped route asks for (`rampWalletStep`): creates the
+   * wallet on the app's chains, sets one up on the route's chain, or moves the
+   * wallets Pollar still holds to the app's custody. `custody` is the user's pick
+   * when the app leaves it to them. `recoveryRequired` when the Turnkey wallet it
+   * leaves needs a recovery method before it signs: the route quotes, but its
+   * steps would wait on it. A `set_up_recovery` step does nothing itself: its
+   * `recoveryRequired` tells the caller to open the recovery flow.
+   */
+  async runRampWalletStep(step: RampWalletStep, custody?: CosignCustody): Promise<{ recoveryRequired: boolean }> {
+    if (step.action === 'create_wallet') await this.createWallet(custody ? { custody } : undefined);
+    else if (step.action === 'set_up_wallet' && step.chain) await this.setUpRampWallet(step.chain, custody);
+    else if (step.action === 'migrate_custody') await this.cosign.migrateWallets(custody);
+    // Recovery is added in the recovery flow; the status below tells the caller to open it.
+    else if (step.action !== 'set_up_recovery')
+      throw new PollarApiError('VALIDATION_ERROR', { reason: `no wallet step ${step.action}` });
+    const recovery = await this.cosign.recovery.status().catch(() => null);
+    return { recoveryRequired: !!recovery?.required && !recovery.configured };
+  }
+
+  /**
+   * The user's orders, newest first; `pending: 'true'` keeps the ones waiting on the
+   * user, `open: 'true'` every one not final yet (what a client resumes).
+   */
+  listRampOrders(query: Partial<RampOrdersQuery> = {}): Promise<RampOrdersPage> {
+    return listRampOrders(this._api, query);
+  }
+
+  /**
+   * Reads the order at the pace the server suggests until it settles (or `until`
+   * holds). A failed read goes to `onError` and is read again; only an order that
+   * no longer exists for this user ends it.
+   */
+  pollRampOrder(
+    id: string,
+    opts?: {
+      signal?: AbortSignal;
+      onUpdate?: (order: RampOrder) => void;
+      onError?: (error: unknown) => void;
+      until?: (order: RampOrder) => boolean;
+    },
+  ): Promise<RampOrder> {
+    return pollRampOrder(this._api, id, opts);
+  }
+
   /** Register a signer for a chain and payload encoding; returns its cleanup function. */
   registerRampSigningHandler(chain: RampChain, encoding: string, handler: RampSigningHandler): () => void {
     return this._rampSigners.register(chain, encoding, handler);
   }
-  /** Explicit user action only. Reading/restoring a workflow never invokes this. */
-  async signRampAction(txId: string, snapshot: RampSnapshot): Promise<RampsTransactionResponse> {
-    const fresh = await this.getRampTransaction(txId);
-    const action = fresh.nextAction;
-    if (
-      snapshot.txId !== txId ||
-      snapshot.transactionVersion !== fresh.transactionVersion ||
-      snapshot.nextAction?.actionId !== action?.actionId ||
-      action?.kind !== 'sign_transaction' ||
-      fresh.reconciliationRequired ||
-      !(Date.parse(action.expiresAt) > Date.now()) ||
-      ['completed', 'failed', 'refunded'].includes(fresh.lifecycleState ?? fresh.status)
-    )
+
+  /**
+   * Signs the order's SIGNATURE action through the handler registered for its
+   * chain and encoding, and sends it. Call it only from the user's explicit
+   * Authorize: the action is read again and must still be the one the user saw
+   * (`actionId`). Every pair, `STELLAR`/`xdr` included, needs a registered handler.
+   */
+  async signRampLeg(orderId: string, actionId: string): Promise<RampOrder> {
+    const order = await getRampOrder(this._api, orderId);
+    const action = order.pendingAction;
+    if (action?.kind !== 'SIGNATURE' || action.actionId !== actionId || !(Date.parse(action.expiresAt) > Date.now()))
       throw new Error('The ramp action changed. Refresh before signing.');
     const handler = this._rampSigners.resolve(action.chain, action.payload.encoding);
     if (!handler) throw new Error(`Register a ramp signing handler for ${action.chain}/${action.payload.encoding}.`);
-    const signedPayload = await handler(action);
-    return this.continueRamp(txId, { actionId: action.actionId, transactionVersion: fresh.transactionVersion!, signedPayload });
-  }
-
-  getRampsQuote(query: RampsQuoteQuery): Promise<RampsQuoteResponse> {
-    return getRampsQuote(this._api, query);
-  }
-
-  /** Countries (+ fiat currency) the app's enabled ramp anchors support on its network. */
-  getRampCountries(): Promise<RampsCountriesResponse> {
-    return getRampCountries(this._api);
-  }
-
-  createOnRamp(body: RampsOnrampBody): Promise<RampsOnrampResponse> {
-    return createOnRamp(this._api, body);
-  }
-
-  createOffRamp(body: RampsOfframpBody): Promise<RampsOfframpResponse> {
-    return createOffRamp(this._api, body);
-  }
-
-  /** Complete an offramp once anchor KYC is done (build + sign + submit the withdraw payment). */
-  completeWithdraw(txId: string): Promise<RampsCompleteResponse> {
-    return completeWithdraw(this._api, txId);
-  }
-
-  /** Resume an EXTERNAL-wallet ramp after the client signs a pending XDR (sep10 / withdraw_payment). */
-  submitRampSignature(txId: string, body: RampsSignatureBody): Promise<RampsSignatureResponse> {
-    return submitRampSignature(this._api, txId, body);
-  }
-
-  getRampTransaction(txId: string): Promise<RampsTransactionResponse> {
-    return getRampTransaction(this._api, txId);
-  }
-
-  /** Run the pending step of a ramp whose funds are in transit now, instead of at the next pass. */
-  retryRampTransaction(txId: string): Promise<RampsTransactionResponse> {
-    return retryRampTransaction(this._api, txId);
-  }
-
-  pollRampTransaction(txId: string, opts?: { intervalMs?: number; timeoutMs?: number }): Promise<RampTxStatus> {
-    return pollRampTransaction(this._api, txId, opts);
-  }
-
-  /**
-   * Live liquidity on a payout rail. `available: false` means the rail cannot be
-   * served right now - check before offering the corridor, because quoting it
-   * succeeds and only fails much further downstream.
-   */
-  getRampLiquidity(rail: RampRail): Promise<RampsLiquidityResponse> {
-    return getRampLiquidity(this._api, rail);
-  }
-
-  /**
-   * Where the user stands with the ramp provider's identity checks. Poll after an
-   * off-ramp answered `kycRequired: true`: nothing was signed and no funds moved,
-   * so wait for `hasApproved` and then request a fresh quote.
-   */
-  getRampKycStatus(): Promise<RampsKycStatusResponse> {
-    return getRampKycStatus(this._api);
-  }
-
-  /**
-   * Decode a Pix "copia e cola" payload into payee + amount. `decoded: null` means
-   * the code went stale (dynamic Pix QRs are per-charge). Quote the amount it
-   * returns and pass the ORIGINAL payload as `qrCode` on {@link createOffRamp}.
-   */
-  decodePixQr(qrCode: string): Promise<RampsPixDecodeResponse> {
-    return decodePixQr(this._api, qrCode);
+    // A ramp leg moves the user's funds through a rail wallet: whatever the
+    // policy, the signature the handler asks for is confirmed by the user.
+    this._rampSigning++;
+    let signedPayload: string;
+    try {
+      signedPayload = await handler(action);
+    } finally {
+      this._rampSigning--;
+    }
+    return submitRampLegSignature(this._api, orderId, action.legIndex, { actionId, signedPayload });
   }
 
   // --- Distribution ---------------------------------------------------------
@@ -5202,7 +5358,7 @@ export class PollarClient {
         return;
       }
 
-      const content = (data as { content?: PollarUserProfile }).content;
+      const content = data.content;
       if (!content) return;
       this._profile = { ...content };
       this._resetResumeBackoff();
@@ -5211,6 +5367,12 @@ export class PollarClient {
       // resume re-enqueues a creation that never landed, so by the time the
       // first check fires there is something to wait for again.
       this._startProvisioningWatch();
+      // A ready platform wallet is read once more for the wallets the restored
+      // session lacks: a chain account derived after its login.
+      const wallet = this._session.wallet;
+      if (wallet.type === 'internal' && wallet.address && wallet.provisioning !== 'CREATING') {
+        void this.refreshWalletState();
+      }
     } catch (err) {
       if ((err as { name?: string })?.name === 'AbortError') return;
       // Network failure (no response) - keep the optimistic (unverified) session
@@ -5514,12 +5676,14 @@ export class PollarClient {
     for (const cb of this._authStateListeners) cb(snapshot);
     // Nobody is left to answer a prompt once the session is gone; the signing
     // calls waiting on one end as declined instead of hanging.
-    if (next.step === 'idle') for (const c of [...this._confirmations.values()]) c.reject();
-    // A co-signed wallet may have setup waiting for this device (its account
-    // creation, a trustline the app enabled): read the list once the session
-    // is in place so recognized setup is approved without a prompt. Anything
-    // else reaches the store, and the UI, as usual. Custodial wallets get an
-    // empty list back.
+    if (next.step === 'idle') {
+      for (const c of [...this._confirmations.values()]) c.reject();
+      this._confirmWindow.close();
+    }
+    // A co-signed wallet may have setup waiting for the user's vote (its
+    // account creation, a trustline the app enabled): read the list once the
+    // session is in place so the store, and the UI, show it. Custodial wallets
+    // get an empty list back.
     if (
       !wasAuthenticated &&
       next.step === 'authenticated' &&

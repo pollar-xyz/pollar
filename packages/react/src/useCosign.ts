@@ -1,6 +1,13 @@
 'use client';
 
-import type { CosignDevicesContent, CosignQuorumReport, CosignRequest, CosignState, CosignVerification } from '@pollar/core';
+import type {
+  CosignCustody,
+  CosignDevicesContent,
+  CosignQuorumReport,
+  CosignRequest,
+  CosignState,
+  CosignVerification,
+} from '@pollar/core';
 import { useCallback, useEffect, useState } from 'react';
 import { usePollar } from './context';
 
@@ -19,12 +26,14 @@ export interface UseCosignResult {
   reject: (request: CosignRequest) => Promise<CosignRequest>;
   /** The verification a UI can show before the user decides. */
   verify: (request: CosignRequest) => Promise<CosignVerification>;
-  /** Read the sub-organization from Turnkey with the device key and record whether it is the promised 2-of-2. */
+  /** Read the sub-organization from Turnkey with the device key and record whether it is the quorum its custody promises. */
   inspectQuorum: () => Promise<CosignQuorumReport>;
   /** The user's enrolled devices and the quorum state as sdk-api records it. */
   devices: () => Promise<CosignDevicesContent>;
   /** Revoke another enrolled device; `force` to revoke this one. */
   revokeDevice: (deviceId: string, options?: { force?: boolean }) => Promise<CosignDevicesContent>;
+  /** Move the wallet between co-signed and self-custody; only an app in USER_CHOICE custody allows it. */
+  switchCustody: (to: CosignCustody) => Promise<CosignQuorumReport>;
 }
 
 /**
@@ -66,5 +75,6 @@ export function useCosign(): UseCosignResult {
       (deviceId: string, options?: { force?: boolean }) => getClient().cosign.revokeDevice(deviceId, options),
       [getClient],
     ),
+    switchCustody: useCallback((to: CosignCustody) => getClient().cosign.switchCustody(to), [getClient]),
   };
 }

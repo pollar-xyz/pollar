@@ -371,7 +371,13 @@ export function SwapModalTemplate({
               </div>
               <div className="pollar-swap-panel-main">
                 <div className={`pollar-swap-output${quoteLoading ? ' is-loading' : ''}`} aria-live="polite">
-                  {quoteLoading ? <span className="pollar-spinner pollar-spinner-sm" /> : formatAmount(quote?.amountOut)}
+                  {quoteLoading ? (
+                    <span className="pollar-spinner pollar-spinner-sm" />
+                  ) : quote ? (
+                    `~${formatAmount(quote.amountOut)}`
+                  ) : (
+                    '—'
+                  )}
                 </div>
                 <div className="pollar-swap-panel-selector">
                   <AssetPill

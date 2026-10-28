@@ -1,6 +1,6 @@
 /** What a failed KYC call means for the user, by backend code. */
 export function kycErrorMessage(error: unknown, phase: 'load' | 'start'): string {
-  const code = (error as { code?: unknown } | null)?.code;
+  const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
   switch (code) {
     case 'SDK_KYC_NOT_CONFIGURED':
       return 'Identity verification is not available for this app yet.';

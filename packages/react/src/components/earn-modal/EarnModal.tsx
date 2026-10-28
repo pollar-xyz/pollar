@@ -3,6 +3,8 @@
 import { EarnOpportunity, EarnPosition, EarnProviderId } from '@pollar/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useWalletAvailable } from '../../useWalletAvailable';
+import { AmountField } from '../AmountField';
 import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
@@ -47,7 +49,6 @@ export function EarnModal({ onClose }: EarnModalProps) {
     earnWithdraw,
     tx: transaction,
     wallet,
-    walletBalance,
     refreshWalletBalance,
     enabledAssets,
     refreshAssets,
@@ -156,15 +157,9 @@ export function EarnModal({ onClose }: EarnModalProps) {
   const assetCode = selectedOpportunity?.asset.code ?? '';
   const amountUnitLabel = tab === 'deposit' ? assetCode : withdrawUnit === 'shares' ? 'shares' : assetCode;
 
-  // The wallet's spendable balance of the selected opportunity's asset (native
-  // XLM matches by type; issued assets by code + issuer). `null` = unknown yet.
-  const walletAvailable = (() => {
-    if (!selectedOpportunity) return null;
-    const balances = walletBalance.step === 'loaded' ? walletBalance.data.balances : [];
-    const issuer = selectedOpportunity.asset.issuer;
-    const rec = balances.find((b) => (issuer === null ? b.type === 'native' : b.code === assetCode && b.issuer === issuer));
-    return rec ? rec.available : null;
-  })();
+  const walletAvailable = useWalletAvailable(
+    selectedOpportunity ? { chain: 'STELLAR', code: assetCode, issuer: selectedOpportunity.asset.issuer } : null,
+  );
 
   // Depositing an issued asset (e.g. USDC) needs the wallet to trust it first.
   // Native XLM and pure Soroban tokens (no classic issuer) never do; smart
@@ -487,32 +482,14 @@ export function EarnModal({ onClose }: EarnModalProps) {
             )}
 
             {/* Amount */}
-            <div className="pollar-send-field">
-              <div className="pollar-send-label-row">
-                <label className="pollar-send-label">{tab === 'deposit' ? 'Amount' : 'Withdraw amount'}</label>
-                {tab === 'deposit' && walletAvailable != null && (
-                  <button type="button" className="pollar-swap-custom-toggle" onClick={() => setAmount(walletAvailable)}>
-                    Max: {formatAmount(walletAvailable)} {amountUnitLabel}
-                  </button>
-                )}
-                {tab === 'withdraw' && position && (
-                  <button type="button" className="pollar-swap-custom-toggle" onClick={() => setAmount(position.withdrawable)}>
-                    Max: {formatAmount(position.withdrawable)} {amountUnitLabel}
-                  </button>
-                )}
-              </div>
-              <div className="pollar-earn-amount">
-                <input
-                  className="pollar-input"
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                />
-                {amountUnitLabel && <span className="pollar-earn-amount-unit">{amountUnitLabel}</span>}
-              </div>
-            </div>
+            <AmountField
+              id="pollar-earn-amount"
+              label={tab === 'deposit' ? 'Amount' : 'Withdraw amount'}
+              value={amount}
+              onChange={setAmount}
+              unit={amountUnitLabel}
+              available={tab === 'deposit' ? walletAvailable : position ? position.withdrawable : undefined}
+            />
 
             {formError && <div className="pollar-modal-error">{formError}</div>}
 

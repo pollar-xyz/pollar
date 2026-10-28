@@ -1,6 +1,6 @@
 'use client';
 
-import { TxHistoryRecord, TxHistoryState, WalletChain } from '@pollar/core';
+import { fromBaseUnits, TxHistoryRecord, TxHistoryState, WalletChain } from '@pollar/core';
 import { type ReactNode } from 'react';
 import { ChainSelect } from '../ChainSelect';
 import { CopyButton, cropAddress, explorerTxUrl, PollarModalFooter } from '../commons';
@@ -42,6 +42,30 @@ function formatDate(iso: string): string {
 /** Shorten a long identifier (issuer, hash, address) to `head...tail`. */
 function truncateMiddle(value: string, head = 4, tail = 4): string {
   return value.length <= head + tail + 1 ? value : `${value.slice(0, head)}…${value.slice(-tail)}`;
+}
+
+/** The fee as the user reads it: a Solana fee arrives in lamports. */
+function formatFee(fee: NonNullable<TxHistoryRecord['fee']>): string {
+  if (fee.unit === 'lamports') {
+    try {
+      return `${fromBaseUnits(fee.amount, 9)} SOL`;
+    } catch {
+      // Not an integer amount: shown as it arrived.
+    }
+  }
+  return `${fee.amount} ${fee.unit}`;
+}
+
+/** A base-unit `amount` with its `decimals` (and `symbol`, when present) as the user reads it; null otherwise. */
+function formatAmount(details: TxHistoryRecord['details']): string | null {
+  const { amount, decimals, symbol } = details ?? {};
+  if (typeof amount !== 'string' || typeof decimals !== 'number') return null;
+  try {
+    const value = fromBaseUnits(amount, decimals);
+    return typeof symbol === 'string' ? `${value} ${symbol}` : value;
+  } catch {
+    return null;
+  }
 }
 
 // Stellar account (G) and contract (C) strkeys are 56 base32 chars.
@@ -215,14 +239,11 @@ export function TxHistoryModalTemplate({
 
               <span className="pollar-hist-item-meta">
                 <span>{record.operation}</span>
+                {record.chain !== 'STELLAR' && formatAmount(record.details) && <span>· {formatAmount(record.details)}</span>}
                 {typeof record.details?.sponsored === 'boolean' && (
                   <span>· {record.details.sponsored ? 'Sponsored' : 'Self-paid'}</span>
                 )}
-                {record.fee && (
-                  <span>
-                    · {record.fee.amount} {record.fee.unit}
-                  </span>
-                )}
+                {record.fee && <span>· {formatFee(record.fee)}</span>}
               </span>
 
               <div className="pollar-hist-item-footer">

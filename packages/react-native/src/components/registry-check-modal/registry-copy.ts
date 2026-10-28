@@ -207,14 +207,19 @@ export const SHARED_FIELD_LABELS: Record<FormLanguage, Record<string, string>> =
 };
 
 export const errorCode = (error: unknown) =>
-  error && typeof error === 'object' && typeof (error as { code?: unknown }).code === 'string'
-    ? (error as { code: string }).code
-    : null;
+  typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string' ? error.code : null;
+
+/** The `body` a thrown API error carries, when it has one. */
+const errorBody = (error: unknown): object | undefined => {
+  const body = typeof error === 'object' && error !== null && 'body' in error ? error.body : undefined;
+  return typeof body === 'object' && body !== null ? body : undefined;
+};
 
 /** `body.missing` of a KYC_REGISTRATION_MISSING_DATA error. */
 export function missingFieldsOf(error: unknown): string[] {
-  const body = error && typeof error === 'object' ? (error as { body?: { missing?: unknown } }).body : undefined;
-  return Array.isArray(body?.missing) ? body.missing.filter((item): item is string => typeof item === 'string') : [];
+  const body = errorBody(error);
+  const missing = body && 'missing' in body ? body.missing : undefined;
+  return Array.isArray(missing) ? missing.filter((item): item is string => typeof item === 'string') : [];
 }
 
 /**
@@ -223,15 +228,16 @@ export function missingFieldsOf(error: unknown): string[] {
  * the listed keys, to reopen.
  */
 export function registrationFixOf(error: unknown): { invalid: string[]; forms: { formId: string; keys: string[] }[] } {
-  const body =
-    error && typeof error === 'object' ? (error as { body?: { invalid?: unknown; forms?: unknown } }).body : undefined;
+  const body = errorBody(error);
+  const invalid = body && 'invalid' in body ? body.invalid : undefined;
+  const formList = body && 'forms' in body ? body.forms : undefined;
   const strings = (value: unknown) =>
     Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
-  const forms = Array.isArray(body?.forms)
-    ? body.forms.flatMap((item): { formId: string; keys: string[] }[] => {
-        const form = item && typeof item === 'object' ? (item as { formId?: unknown; keys?: unknown }) : {};
-        return typeof form.formId === 'string' ? [{ formId: form.formId, keys: strings(form.keys) }] : [];
+  const forms = Array.isArray(formList)
+    ? formList.flatMap((item: unknown): { formId: string; keys: string[] }[] => {
+        if (typeof item !== 'object' || item === null || !('formId' in item) || typeof item.formId !== 'string') return [];
+        return [{ formId: item.formId, keys: strings('keys' in item ? item.keys : undefined) }];
       })
     : [];
-  return { invalid: strings(body?.invalid), forms };
+  return { invalid: strings(invalid), forms };
 }

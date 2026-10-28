@@ -61,6 +61,16 @@ async function clientWith(wallets, apiKey) {
   const bodies = [];
   globalThis.fetch = async (req) => {
     const url = new URL(req.url);
+    // The app's dashboard signs without asking: these checks are about the send, not the prompt.
+    if (url.pathname.endsWith('/applications/config')) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          content: { application: { signConfirmation: { mode: 'AUTO', windowSeconds: 0, maxUsd: '0' } } },
+        }),
+        { status: 200 },
+      );
+    }
     if (url.pathname.endsWith('/tx/build-sign-submit')) {
       bodies.push(JSON.parse(await req.text()));
       return new Response(

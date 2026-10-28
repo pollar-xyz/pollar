@@ -16,7 +16,7 @@ interface ReceiveModalProps {
 }
 
 export function ReceiveModal({ onClose }: ReceiveModalProps) {
-  const { wallet, wallets, styles } = usePollar();
+  const { wallet, wallets, styles, recoveryLocked, openRecoveryModal } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -70,6 +70,11 @@ export function ReceiveModal({ onClose }: ReceiveModalProps) {
           setSelectedChain(chain);
         }}
         notReadyReason={notReadyReason}
+        recoveryLocked={recoveryLocked}
+        onSetupRecovery={() => {
+          onClose();
+          openRecoveryModal();
+        }}
         copied={copied}
         onCopy={handleCopy}
         onClose={onClose}

@@ -1,6 +1,6 @@
 'use client';
 
-import { toBaseUnits, WalletBalanceRecord, WalletChain } from '@pollar/core';
+import { fromBaseUnits, toBaseUnits, WalletBalanceRecord, WalletChain } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { walletNotReadyReason } from '../../lib/wallet-provisioning';
@@ -18,6 +18,16 @@ interface SendModalProps {
 
 const MAX_MEMO_ID = 18446744073709551615n;
 
+// A self-paid SOL send needs the fee on top of the amount: 5000 lamports per
+// signature plus the priority fee. Max leaves this much behind.
+const SOLANA_FEE_MARGIN_LAMPORTS = 10_000n;
+
+/** The most a native SOL send can move out of `available` (decimal SOL) once the fee is left behind. */
+function solanaMaxAfterFee(available: string): string {
+  const lamports = BigInt(toBaseUnits(available, 9)) - SOLANA_FEE_MARGIN_LAMPORTS;
+  return fromBaseUnits((lamports > 0n ? lamports : 0n).toString(), 9);
+}
+
 /** A Stellar memo as the build endpoint takes it, undefined when the field is
  *  empty, or an error string the form shows. Text is capped at 28 BYTES on-chain
  *  (a multibyte character counts more than once); an ID is an unsigned 64-bit
@@ -31,6 +41,9 @@ function parseMemo(type: SendMemoType, raw: string): { type: SendMemoType; value
   if (!/^\d+$/.test(value) || BigInt(value) > MAX_MEMO_ID) return 'The memo ID must be a whole number up to 2^64 - 1.';
   return { type, value };
 }
+
+/** The least a new Stellar account can start with: two base reserves of 0.5 XLM. */
+const MIN_STARTING_BALANCE_XLM = 1;
 
 function assetParam(record: WalletBalanceRecord) {
   if (record.type === 'native') return { type: 'native' as const };
@@ -51,13 +64,17 @@ export function SendModal({ onClose }: SendModalProps) {
     wallet,
     network,
     styles,
+    getClient,
   } = usePollar();
   // External-wallet signing-adapter id (freighter/albedo) drives the wallet logo;
   // null for embedded/smart, which fall back to the Pollar logo.
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
-  const [step, setStep] = useState<'form' | 'tx'>('form');
+  const [step, setStep] = useState<'form' | 'create-account' | 'tx'>('form');
+  // The destination had no Stellar account, so the tx being built creates it.
+  const [createsAccount, setCreatesAccount] = useState(false);
+  const [checkingDestination, setCheckingDestination] = useState(false);
   const [amount, setAmount] = useState('');
   const [destination, setDestination] = useState('');
   const [memo, setMemo] = useState('');
@@ -150,15 +167,34 @@ export function SendModal({ onClose }: SendModalProps) {
     'building-signing-submitting',
   ] as const;
   const isInProgress = (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step);
-  const showBack = step === 'tx' && (transaction.step === 'error' || transaction.step === 'success') && !isInProgress;
+  const showBack =
+    step === 'create-account' ||
+    (step === 'tx' && (transaction.step === 'error' || transaction.step === 'success') && !isInProgress);
 
-  const txTitle = isInProgress
-    ? 'Sending…'
-    : transaction.step === 'success'
-      ? 'Sent!'
-      : transaction.step === 'error'
-        ? 'Send failed'
-        : 'Confirm Send';
+  const txTitle = createsAccount
+    ? isInProgress
+      ? 'Creating account…'
+      : transaction.step === 'success'
+        ? 'Account created!'
+        : transaction.step === 'error'
+          ? 'Create account failed'
+          : 'Confirm Create Account'
+    : isInProgress
+      ? 'Sending…'
+      : transaction.step === 'success'
+        ? 'Sent!'
+        : transaction.step === 'error'
+          ? 'Send failed'
+          : 'Confirm Send';
+
+  /** Whether `address` has a Stellar account; null when that could not be read. */
+  async function stellarAccountExists(address: string): Promise<boolean | null> {
+    try {
+      return (await getClient().getWalletBalance(address)).exists;
+    } catch {
+      return null;
+    }
+  }
 
   async function handleSubmit() {
     setFormError('');
@@ -223,6 +259,20 @@ export function SendModal({ onClose }: SendModalProps) {
       }
     }
 
+    // A payment to a Stellar address with no account fails on-chain
+    // (`paymentNoDestination`), so the user picks between creating it and waiting.
+    // An unreadable lookup sends the payment as asked.
+    if (selectedChain === 'STELLAR') {
+      setCheckingDestination(true);
+      const exists = await stellarAccountExists(destination.trim());
+      setCheckingDestination(false);
+      if (exists === false) {
+        setStep('create-account');
+        return;
+      }
+    }
+
+    setCreatesAccount(false);
     setStep('tx');
 
     if (selectedChain === 'SOLANA' || selectedChain === 'POLYGON') {
@@ -244,6 +294,18 @@ export function SendModal({ onClose }: SendModalProps) {
     );
   }
 
+  async function handleCreateAccount() {
+    const parsedMemo = parseMemo(memoType, memo);
+    if (typeof parsedMemo === 'string' || parseFloat(amount) < MIN_STARTING_BALANCE_XLM) return;
+    setCreatesAccount(true);
+    setStep('tx');
+    await buildTx(
+      'create_account',
+      { destination: destination.trim(), startingBalance: amount },
+      parsedMemo ? { memo: parsedMemo } : undefined,
+    );
+  }
+
   function handleSignAndSend() {
     if (transaction.step === 'built') {
       void signAndSubmitTx(transaction.buildData.unsignedXdr);
@@ -252,7 +314,16 @@ export function SendModal({ onClose }: SendModalProps) {
 
   function handleMax() {
     if (selectedAsset?.available !== null && selectedAsset?.available !== undefined) {
-      setAmount(selectedAsset.available);
+      const paysOwnSolFee = selectedChain === 'SOLANA' && selectedAsset.type === 'native' && selectedAsset.sponsored !== true;
+      let max = selectedAsset.available;
+      if (paysOwnSolFee) {
+        try {
+          max = solanaMaxAfterFee(selectedAsset.available);
+        } catch {
+          // Not a readable SOL amount: the submit check reports it.
+        }
+      }
+      setAmount(max);
       setFormError('');
     }
   }
@@ -296,6 +367,7 @@ export function SendModal({ onClose }: SendModalProps) {
 
   function handleBack() {
     setStep('form');
+    setCreatesAccount(false);
     setShowXdr(false);
     setCopied(false);
   }
@@ -319,6 +391,9 @@ export function SendModal({ onClose }: SendModalProps) {
         destination={destination}
         formError={formError}
         isLoadingBalance={walletBalance.step === 'loading'}
+        isCheckingDestination={checkingDestination}
+        minStartingBalance={MIN_STARTING_BALANCE_XLM}
+        onCreateAccount={() => void handleCreateAccount()}
         transaction={transaction}
         showXdr={showXdr}
         copied={copied}

@@ -77,22 +77,27 @@ const portable = require('@pollar/core/ramps');
     const path = new URL(request.url).pathname;
     const content = path.endsWith('/routes')
       ? { routes: [] }
-      : path.endsWith('/quote')
-        ? { quotes: [] }
-        : { txId: 'backend-issued-tx', chain: 'STELLAR', status: 'pending', lifecycleState: 'created' };
+      : path.endsWith('/quotes')
+        ? { quotes: [], rejected: [] }
+        : { id: 'backend-issued-order', direction: 'ONRAMP', state: 'created', legs: [], pendingAction: null };
     return new Response(JSON.stringify({ success: true, content }), { headers: { 'content-type': 'application/json' } });
   };
   try {
-    await client.getRampRoutes();
-    await client.getRampsQuote({ direction: 'onramp', country: 'US', currency: 'USD', amount: 10 });
-    const tx = await client.createOnRamp({ quoteId: 'backend-issued-quote', country: 'US', currency: 'USD', amount: 10 });
-    assert.equal(tx.txId, 'backend-issued-tx');
-    await client.getRampTransaction(tx.txId);
+    await client.getRampRoutes('ONRAMP');
+    await client.quoteRamp({
+      direction: 'ONRAMP',
+      fiat: { currency: 'USD', rail: 'ACH', country: 'US' },
+      asset: { code: 'USDC', identifier: null, chain: 'STELLAR' },
+      amount: { value: '10', denomination: 'in' },
+    });
+    const order = await client.createRampOrder({ quoteId: 'backend-issued-quote' });
+    assert.equal(order.id, 'backend-issued-order');
+    await client.getRampOrder(order.id);
     assert.deepEqual(requests, [
-      { method: 'GET', path: '/v2/ramps/routes' },
-      { method: 'GET', path: '/v2/ramps/quote' },
-      { method: 'POST', path: '/v2/ramps/onramp' },
-      { method: 'GET', path: '/v2/ramps/transaction/backend-issued-tx' },
+      { method: 'GET', path: '/v3/ramps/routes' },
+      { method: 'POST', path: '/v3/ramps/quotes' },
+      { method: 'POST', path: '/v3/ramps/orders' },
+      { method: 'GET', path: '/v3/ramps/orders/backend-issued-order' },
     ]);
   } finally {
     globalThis.fetch = originalFetch;

@@ -90,12 +90,12 @@
 }
 
 .pollar-dist-item-status[data-kind='claimed'] {
-  background: rgba(22, 163, 74, 0.12);
+  background: color-mix(in srgb, var(--pollar-success-text) 12%, transparent);
   color: var(--pollar-success-text, #16a34a);
 }
 
 .pollar-dist-item-status[data-kind='unavailable'] {
-  background: rgba(107, 114, 128, 0.12);
+  background: color-mix(in srgb, var(--pollar-muted) 12%, transparent);
   color: var(--pollar-muted);
 }
 

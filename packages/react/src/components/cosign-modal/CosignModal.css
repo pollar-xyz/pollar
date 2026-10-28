@@ -8,18 +8,6 @@
   padding-bottom: 0.75rem;
 }
 
-html.dark .pollar-cosign-modal {
-  --pollar-bg: #1a1a1a !important;
-  --pollar-border: #374151 !important;
-  --pollar-text: #ffffff !important;
-  --pollar-muted: #9ca3af !important;
-  --pollar-input-bg: #374151 !important;
-  --pollar-error-bg: #2a1515 !important;
-  --pollar-error-border: #7f1d1d !important;
-  --pollar-error-text: #f87171 !important;
-  --pollar-success-text: #4ade80 !important;
-}
-
 .pollar-cosign-muted {
   color: var(--pollar-muted);
   font-size: 0.85rem;
@@ -39,12 +27,32 @@ html.dark .pollar-cosign-modal {
 
 .pollar-cosign-tx-link {
   color: var(--pollar-accent);
-  font-family: 'Geist Mono', monospace;
+  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   text-decoration: none;
 }
 
 .pollar-cosign-tx-link:hover {
   text-decoration: underline;
+}
+
+.pollar-cosign-copy {
+  margin-left: 0.15rem;
+  vertical-align: middle;
+}
+
+.pollar-cosign-closing {
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+}
+
+.pollar-cosign-next {
+  margin: 0.75rem 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--pollar-text);
 }
 
 .pollar-cosign-empty-title {
@@ -87,6 +95,37 @@ html.dark .pollar-cosign-modal {
   padding: 1rem;
   border: 1px solid var(--pollar-border);
   border-radius: calc(var(--pollar-card-border-radius, 10px) + 2px);
+}
+
+.pollar-cosign-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.pollar-cosign-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--pollar-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--pollar-muted);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.pollar-cosign-chip-ok {
+  cursor: pointer;
+  color: var(--pollar-success-text, #15803d);
+  border-color: color-mix(in srgb, var(--pollar-success-text, #15803d) 40%, var(--pollar-border));
+}
+
+.pollar-cosign-chip-ok:hover {
+  background: color-mix(in srgb, var(--pollar-success-text, #15803d) 8%, transparent);
 }
 
 .pollar-cosign-detail-title {
@@ -153,7 +192,7 @@ html.dark .pollar-cosign-modal {
 .pollar-cosign-btn {
   flex: 1;
   padding: 0.65rem 0.75rem;
-  border-radius: var(--pollar-button-border-radius, 10px);
+  border-radius: var(--pollar-buttons-border-radius, 10px);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -166,33 +205,12 @@ html.dark .pollar-cosign-modal {
 }
 
 .pollar-cosign-btn-secondary {
-  background: transparent;
-  color: var(--pollar-text);
+  background: var(--pollar-btn-secondary-bg, transparent);
+  color: var(--pollar-btn-secondary-fg, var(--pollar-text));
 }
 
 .pollar-cosign-btn-primary {
   background: var(--pollar-accent);
   border-color: var(--pollar-accent);
-  color: var(--pollar-accent-text, #fff);
-}
-
-.pollar-cosign-group {
-  margin: 8px 0 12px;
-  padding: 10px 12px;
-  border-radius: var(--pollar-card-border-radius);
-  border: 1px solid var(--pollar-border);
-}
-
-.pollar-cosign-group-title {
-  margin: 0 0 4px;
-  font-weight: 600;
-}
-
-.pollar-cosign-group-steps {
-  margin: 8px 0 0;
-  padding-left: 20px;
-}
-
-.pollar-cosign-group-step-current {
-  font-weight: 600;
+  color: var(--pollar-btn-primary-fg, #fff);
 }

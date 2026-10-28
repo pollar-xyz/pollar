@@ -1,15 +1,17 @@
 /* ---- Unauthenticated: login button ---- */
-/* flex items-center gap-3 rounded-xl px-6 py-3.5 text-base font-bold text-white shadow-lg transition-all */
+/* flex items-center gap-3 rounded-xl px-6 py-3.5 text-base font-bold shadow-lg transition-all */
 .pollar-wallet-login-btn {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  border-radius: 0.75rem;
+  border-radius: var(--pollar-buttons-border-radius, 0.75rem);
   border: none;
   padding: 0.875rem 1.5rem;
+  font-family: var(--pollar-font-family, inherit);
   font-size: 1rem;
   font-weight: 700;
-  color: #fff;
+  background-color: var(--pollar-accent);
+  color: var(--pollar-btn-primary-fg, #fff);
   cursor: pointer;
   box-shadow:
     0 10px 15px -3px rgba(0, 0, 0, 0.1),
@@ -30,27 +32,27 @@
   transform: scale(0.98);
 }
 
-/* brightness-0 invert - white logo on colored background */
 .pollar-wallet-btn-logo {
   width: 22px;
   height: 22px;
   object-fit: contain;
-  filter: brightness(0) invert(1);
 }
 
 /* ---- Authenticated: wrapper + dropdown ---- */
 .pollar-wallet-wrapper {
   position: relative;
   display: inline-block;
+  font-family: var(--pollar-font-family, inherit);
 }
 
-.pollar-wallet-btn {
+.pollar-wallet-wrapper > .pollar-wallet-btn {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  border-radius: 6px;
-  color: #fff;
+  border-radius: var(--pollar-buttons-border-radius, 6px);
+  background-color: var(--pollar-accent);
+  color: var(--pollar-btn-primary-fg, #fff);
   font-size: 14px;
   font-weight: 500;
   border: none;
@@ -58,7 +60,7 @@
   transition: background 0.15s;
 }
 
-.pollar-wallet-btn:hover {
+.pollar-wallet-wrapper > .pollar-wallet-btn:hover {
   opacity: 0.9;
 }
 
@@ -77,8 +79,10 @@
   top: calc(100% + 6px);
   right: 0;
   min-width: 180px;
-  border: 1px solid;
+  border: 1px solid var(--pollar-border);
   border-radius: 6px;
+  background-color: var(--pollar-bg);
+  color: var(--pollar-text);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   overflow: hidden;
   z-index: 50;
@@ -93,6 +97,7 @@
   font-size: 14px;
   font-weight: 400;
   background: none;
+  color: inherit;
   border: none;
   cursor: pointer;
   text-align: left;
@@ -100,15 +105,15 @@
 }
 
 .pollar-wallet-dropdown-item:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: color-mix(in srgb, var(--pollar-text) 6%, transparent);
 }
 
 .pollar-wallet-dropdown-item.pollar-danger {
-  color: #dc2626;
+  color: var(--pollar-error-text);
 }
 
 .pollar-wallet-dropdown-item.pollar-danger:hover {
-  background: #fef2f2;
+  background: var(--pollar-error-bg);
 }
 
 /* ---- Dropdown divider ---- */
@@ -124,7 +129,7 @@
 
 .pollar-wallet-dropdown-divider {
   height: 1px;
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--pollar-border);
   margin: 2px 0;
 }
 
@@ -138,7 +143,7 @@
 }
 
 /* ---- In-progress: small inline spinner (same size as chevron) ---- */
-.pollar-wallet-btn:disabled {
+.pollar-wallet-wrapper > .pollar-wallet-btn:disabled {
   cursor: not-allowed;
   opacity: 1;
 }

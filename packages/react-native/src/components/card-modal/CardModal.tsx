@@ -26,6 +26,8 @@ import {
   View,
 } from 'react-native';
 import { usePollar } from '../../context';
+import { useWalletAvailable } from '../../useWalletAvailable';
+import { AmountField } from '../AmountField';
 import { PollarModalFooter } from '../commons';
 import { KycModal } from '../kyc-modal/KycModal';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
@@ -210,6 +212,9 @@ export function CardModal({ onClose }: CardModalProps) {
   }, []);
 
   const provider = providers?.[0] ?? null;
+  const fundingAsset = provider?.fundingAssets[0] ?? 'USDC';
+  // Funding signs a Stellar payment from the wallet, so its balance is the Stellar one.
+  const fundAvailable = useWalletAvailable(panel === 'fund' ? { chain: 'STELLAR', code: fundingAsset } : null);
   const card = cards?.[0] ?? null;
 
   // --- Loading ----------------------------------------------------------------
@@ -850,10 +855,16 @@ export function CardModal({ onClose }: CardModalProps) {
                   Move {provider.fundingAssets.join(' or ') || 'USDC'} from your wallet to your card. It takes a few minutes to
                   cross to the card network.
                 </Text>
-                {input(fundAmount, (v) => setFundAmount(v.replace(/[^0-9.]/g, '')), 'Amount (USDC)', {
-                  placeholder: '10',
-                  keyboardType: 'decimal-pad',
-                })}
+                <AmountField
+                  theme={theme}
+                  accentColor={accentColor}
+                  label="Amount"
+                  value={fundAmount}
+                  onChange={(v) => setFundAmount(v.replace(/[^0-9.]/g, ''))}
+                  unit={fundingAsset}
+                  available={fundAvailable}
+                  placeholder="10"
+                />
                 {primary(
                   busy === 'fund-send' ? 'Sending...' : 'Fund from my wallet',
                   () => void fund(),

@@ -11,10 +11,11 @@ import type {
 } from '../../types';
 import { PollarApiError } from '../../types';
 import type { PollarApiClient } from '../client';
+import { isRecord, stringField } from '../error-fields';
 
 function requirementApiError(error: unknown, fallback: string): PollarApiError {
-  const body = (typeof error === 'object' && error !== null ? error : {}) as Record<string, unknown>;
-  const code = typeof body.code === 'string' ? body.code : typeof body.error === 'string' ? body.error : fallback;
+  const body = isRecord(error) ? error : {};
+  const code = stringField(body, 'code') ?? stringField(body, 'error') ?? fallback;
   return new PollarApiError(code, body);
 }
 

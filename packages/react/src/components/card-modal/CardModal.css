@@ -52,7 +52,7 @@
 }
 
 .pollar-card-visual-number {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 1.25rem;
   letter-spacing: 0.14em;
   word-break: break-all;
@@ -74,7 +74,7 @@
 }
 
 .pollar-card-visual-bottom strong {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-weight: 600;
   font-size: 0.875rem;
 }
@@ -140,7 +140,7 @@
 }
 
 .pollar-card-tx-amount[data-direction='credit'] {
-  color: #15803d;
+  color: var(--pollar-success-text);
 }
 
 /* --- Forms ---------------------------------------------------------------------- */

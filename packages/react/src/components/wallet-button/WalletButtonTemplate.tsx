@@ -1,20 +1,27 @@
 'use client';
 
-import { LOGO_POLLAR } from '../../constants';
+import type { CosignCustody } from '@pollar/core';
+import { useState } from 'react';
+import { LOGO_POLLAR_MARK_ON_DARK, LOGO_POLLAR_MARK_ON_LIGHT } from '../../constants';
+import { buildModalCssVars, readableTextOn, type ModalStyleOverrides } from '../modal-theme';
+import '../shared.css';
 import './WalletButton.css';
 
-function ButtonLogo() {
-  return <img src={LOGO_POLLAR} alt="Pollar" width={22} height={22} className="pollar-wallet-btn-logo" />;
+/** The Pollar mark that reads on the accent fill: white on a dark accent, the
+ *  blue one on a pale accent (where the label turns dark too). */
+function ButtonLogo({ accentColor }: { accentColor: string }) {
+  const src = readableTextOn(accentColor) === '#ffffff' ? LOGO_POLLAR_MARK_ON_DARK : LOGO_POLLAR_MARK_ON_LIGHT;
+  return <img src={src} alt="Pollar" width={22} height={22} className="pollar-wallet-btn-logo" />;
 }
 
 export interface WalletButtonTemplateProps {
   walletAddress: string | null;
+  theme: string;
   accentColor: string;
+  /** The app's Branding, as every modal template takes it. */
+  styleOverrides?: ModalStyleOverrides;
   open: boolean;
   copied: boolean;
-  dropdownBg: string;
-  dropdownBorder: string;
-  itemColor: string;
   wrapperRef: React.RefObject<HTMLDivElement>;
   isInProgress: boolean;
   /** Show the "Create account" action (external wallet not yet on-chain, IMMEDIATE funding). */
@@ -26,6 +33,13 @@ export interface WalletButtonTemplateProps {
    * custom template written before this existed keeps compiling.
    */
   notReadyReason?: string | null;
+  /**
+   * The wallet has no recovery method yet and signs nothing but its own setup.
+   * Shown at the top of the menu with a way to fix it. Optional for custom templates.
+   */
+  recoveryLocked?: boolean;
+  /** Open the recovery methods; the item shows only when set. */
+  onRecovery?: () => void;
   creatingAccount: boolean;
   /**
    * Signed in with no wallet yet (an app that creates wallets on demand, or
@@ -36,7 +50,13 @@ export interface WalletButtonTemplateProps {
   signedIn?: boolean;
   creatingWallet?: boolean;
   createWalletError?: string | null;
-  onCreateWallet?: () => void;
+  /**
+   * The app leaves the custody to the user (USER_CHOICE): Create wallet offers
+   * co-signed and self-custody, and calls `onCreateWallet` with the pick. A
+   * self-custody wallet is created only after the user accepts its risks.
+   */
+  custodyChoice?: boolean;
+  onCreateWallet?: (custody?: CosignCustody) => void;
   onToggleOpen: () => void;
   onCreateAccount: () => void;
   onCopy: () => void;
@@ -59,16 +79,17 @@ function cropWallet(address: string) {
 
 export function WalletButtonTemplate({
   walletAddress,
+  theme,
   accentColor,
+  styleOverrides,
   open,
   copied,
-  dropdownBg,
-  dropdownBorder,
-  itemColor,
   wrapperRef,
   isInProgress,
   showCreateAccount,
   notReadyReason,
+  recoveryLocked,
+  onRecovery,
   creatingAccount,
   onToggleOpen,
   onCreateAccount,
@@ -86,12 +107,16 @@ export function WalletButtonTemplate({
   signedIn,
   creatingWallet,
   createWalletError,
+  custodyChoice,
   onCreateWallet,
 }: WalletButtonTemplateProps) {
+  const [selfCustodyNotice, setSelfCustodyNotice] = useState(false);
+  const [risksAccepted, setRisksAccepted] = useState(false);
+  const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
   if (!walletAddress && signedIn) {
     return (
-      <div className="pollar-wallet-wrapper" ref={wrapperRef}>
-        <button className="pollar-wallet-btn" style={{ backgroundColor: accentColor }} onClick={onToggleOpen}>
+      <div className="pollar-wallet-wrapper" ref={wrapperRef} style={cssVars}>
+        <button className="pollar-wallet-btn" onClick={onToggleOpen}>
           <span className="pollar-wallet-btn-label">{onCreateWallet ? 'No wallet' : 'Signed in'}</span>
           <svg
             className={`pollar-wallet-chevron${open ? ' pollar-open' : ''}`}
@@ -107,29 +132,85 @@ export function WalletButtonTemplate({
         </button>
 
         {open && (
-          <div className="pollar-wallet-dropdown" style={{ backgroundColor: dropdownBg, borderColor: dropdownBorder }}>
+          <div className="pollar-wallet-dropdown">
             {createWalletError && (
               <>
-                <div className="pollar-wallet-dropdown-notice" style={{ color: itemColor }} role="status">
+                <div className="pollar-wallet-dropdown-notice" role="status">
                   {createWalletError}
                 </div>
                 <div className="pollar-wallet-dropdown-divider" />
               </>
             )}
-            {onCreateWallet && (
+            {onCreateWallet && !custodyChoice && (
               <>
-                <button
-                  className="pollar-wallet-dropdown-item"
-                  style={{ color: itemColor }}
-                  onClick={onCreateWallet}
-                  disabled={creatingWallet}
-                >
+                <button className="pollar-wallet-dropdown-item" onClick={() => onCreateWallet()} disabled={creatingWallet}>
                   {creatingWallet ? 'Creating wallet…' : 'Create wallet'}
                 </button>
                 <div className="pollar-wallet-dropdown-divider" />
               </>
             )}
-            <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onSessions}>
+            {onCreateWallet && custodyChoice && !selfCustodyNotice && (
+              <>
+                <button
+                  className="pollar-wallet-dropdown-item"
+                  onClick={() => onCreateWallet('COSIGNED')}
+                  disabled={creatingWallet}
+                >
+                  {creatingWallet ? 'Creating wallet…' : 'Create co-signed wallet'}
+                </button>
+                <div className="pollar-wallet-dropdown-notice">
+                  You and the app approve every signature together. Your wallet can be recovered with help.
+                </div>
+                <button
+                  className="pollar-wallet-dropdown-item"
+                  onClick={() => setSelfCustodyNotice(true)}
+                  disabled={creatingWallet}
+                >
+                  Create self-custody wallet
+                </button>
+                <div className="pollar-wallet-dropdown-notice">
+                  Only your device signs. Nobody else can move or recover your funds.
+                </div>
+                <div className="pollar-wallet-dropdown-divider" />
+              </>
+            )}
+            {onCreateWallet && custodyChoice && selfCustodyNotice && (
+              <>
+                <div className="pollar-wallet-dropdown-notice" role="alert">
+                  In a self-custody wallet only your device can sign. If you lose this device and every recovery method, nobody
+                  can recover the wallet or its funds, not the app and not Pollar. Nobody can undo or freeze a transaction you
+                  sign.
+                </div>
+                <label className="pollar-wallet-dropdown-notice">
+                  <input
+                    type="checkbox"
+                    checked={risksAccepted}
+                    onChange={(e) => setRisksAccepted(e.target.checked)}
+                    disabled={creatingWallet}
+                  />{' '}
+                  I understand and accept these risks
+                </label>
+                <button
+                  className="pollar-wallet-dropdown-item"
+                  onClick={() => onCreateWallet('SELF_CUSTODY')}
+                  disabled={creatingWallet || !risksAccepted}
+                >
+                  {creatingWallet ? 'Creating wallet…' : 'Create self-custody wallet'}
+                </button>
+                <button
+                  className="pollar-wallet-dropdown-item"
+                  onClick={() => {
+                    setSelfCustodyNotice(false);
+                    setRisksAccepted(false);
+                  }}
+                  disabled={creatingWallet}
+                >
+                  Back
+                </button>
+                <div className="pollar-wallet-dropdown-divider" />
+              </>
+            )}
+            <button className="pollar-wallet-dropdown-item" onClick={onSessions}>
               Active sessions
             </button>
             <div className="pollar-wallet-dropdown-divider" />
@@ -144,18 +225,17 @@ export function WalletButtonTemplate({
 
   if (!walletAddress) {
     return (
-      <button type="button" className="pollar-wallet-login-btn" style={{ backgroundColor: accentColor }} onClick={onLogin}>
-        <ButtonLogo />
+      <button type="button" className="pollar-wallet-login-btn" style={cssVars} onClick={onLogin}>
+        <ButtonLogo accentColor={accentColor} />
         Login with Pollar
       </button>
     );
   }
 
   return (
-    <div className="pollar-wallet-wrapper" ref={wrapperRef}>
+    <div className="pollar-wallet-wrapper" ref={wrapperRef} style={cssVars}>
       <button
         className="pollar-wallet-btn"
-        style={{ backgroundColor: accentColor }}
         onClick={isInProgress ? undefined : onToggleOpen}
         disabled={isInProgress}
         aria-busy={isInProgress}
@@ -191,10 +271,19 @@ export function WalletButtonTemplate({
       </button>
 
       {open && (
-        <div className="pollar-wallet-dropdown" style={{ backgroundColor: dropdownBg, borderColor: dropdownBorder }}>
+        <div className="pollar-wallet-dropdown">
+          {recoveryLocked && (
+            <>
+              <div className="pollar-wallet-dropdown-notice pollar-danger" role="alert">
+                Locked: add a way to recover this wallet before sending or receiving. If you lose this device without one, the
+                funds are lost.
+              </div>
+              <div className="pollar-wallet-dropdown-divider" />
+            </>
+          )}
           {notReadyReason && (
             <>
-              <div className="pollar-wallet-dropdown-notice" style={{ color: itemColor }} role="status">
+              <div className="pollar-wallet-dropdown-notice" role="status">
                 {notReadyReason}
               </div>
               <div className="pollar-wallet-dropdown-divider" />
@@ -202,12 +291,7 @@ export function WalletButtonTemplate({
           )}
           {showCreateAccount && (
             <>
-              <button
-                className="pollar-wallet-dropdown-item"
-                style={{ color: itemColor }}
-                onClick={onCreateAccount}
-                disabled={creatingAccount}
-              >
+              <button className="pollar-wallet-dropdown-item" onClick={onCreateAccount} disabled={creatingAccount}>
                 <svg
                   width="14"
                   height="14"
@@ -228,7 +312,7 @@ export function WalletButtonTemplate({
               <div className="pollar-wallet-dropdown-divider" />
             </>
           )}
-          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onSend}>
+          <button className="pollar-wallet-dropdown-item" onClick={onSend}>
             <svg
               width="14"
               height="14"
@@ -244,7 +328,7 @@ export function WalletButtonTemplate({
             </svg>
             Send
           </button>
-          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onReceive}>
+          <button className="pollar-wallet-dropdown-item" onClick={onReceive}>
             <svg
               width="14"
               height="14"
@@ -262,7 +346,7 @@ export function WalletButtonTemplate({
             Receive
           </button>
           <div className="pollar-wallet-dropdown-divider" />
-          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onCopy}>
+          <button className="pollar-wallet-dropdown-item" onClick={onCopy}>
             <svg
               width="14"
               height="14"
@@ -278,7 +362,7 @@ export function WalletButtonTemplate({
             </svg>
             {copied ? 'Copied!' : 'Copy address'}
           </button>
-          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onWalletBalance}>
+          <button className="pollar-wallet-dropdown-item" onClick={onWalletBalance}>
             <svg
               width="14"
               height="14"
@@ -295,7 +379,7 @@ export function WalletButtonTemplate({
             </svg>
             Wallet balance
           </button>
-          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onTxHistory}>
+          <button className="pollar-wallet-dropdown-item" onClick={onTxHistory}>
             <svg
               width="14"
               height="14"
@@ -316,7 +400,7 @@ export function WalletButtonTemplate({
           </button>
           <div className="pollar-wallet-dropdown-divider" />
           {/* Buy / Sell (ramp) */}
-          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onRamp}>
+          <button className="pollar-wallet-dropdown-item" onClick={onRamp}>
             <svg
               width="14"
               height="14"
@@ -335,7 +419,7 @@ export function WalletButtonTemplate({
             Buy / Sell
           </button>
           {/* Identity verification */}
-          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onKyc}>
+          <button className="pollar-wallet-dropdown-item" onClick={onKyc}>
             <svg
               width="14"
               height="14"
@@ -352,7 +436,7 @@ export function WalletButtonTemplate({
             </svg>
             Identity verification
           </button>
-          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onDistributionRules}>
+          <button className="pollar-wallet-dropdown-item" onClick={onDistributionRules}>
             <svg
               width="14"
               height="14"
@@ -371,7 +455,7 @@ export function WalletButtonTemplate({
             </svg>
             Distribution rules
           </button>
-          <button className="pollar-wallet-dropdown-item" style={{ color: itemColor }} onClick={onSessions}>
+          <button className="pollar-wallet-dropdown-item" onClick={onSessions}>
             <svg
               width="14"
               height="14"
@@ -388,6 +472,23 @@ export function WalletButtonTemplate({
             </svg>
             Active sessions
           </button>
+          {onRecovery && (
+            <button className={`pollar-wallet-dropdown-item${recoveryLocked ? ' pollar-danger' : ''}`} onClick={onRecovery}>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5l-8-3z" />
+              </svg>
+              {recoveryLocked ? 'Set up wallet recovery' : 'Wallet recovery'}
+            </button>
+          )}
           <div className="pollar-wallet-dropdown-divider" />
           <button className="pollar-wallet-dropdown-item pollar-danger" onClick={onLogout}>
             <svg

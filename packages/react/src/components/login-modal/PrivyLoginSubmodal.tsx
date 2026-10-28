@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import type { InteractiveAuthAdapter } from '@pollar/core';
-import { LOGO_POLLAR } from '../../constants';
-import { ModalStatusBanner, PollarModalFooter } from '../commons';
+import { ModalLogo, ModalStatusBanner, PollarModalFooter } from '../commons';
 import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
@@ -141,7 +140,7 @@ export function PrivyLoginSubmodal({
 
       <div className="pollar-header">
         <div className="pollar-logo-wrap">
-          <img src={logoUrl ?? LOGO_POLLAR} alt="Logo" className="pollar-logo" />
+          <ModalLogo logoUrl={logoUrl} />
         </div>
         <h2 className="pollar-title">{appName}</h2>
         <p className="pollar-subtitle">{adapter.meta.label}</p>

@@ -17,6 +17,8 @@ import {
 } from '@pollar/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useWalletAvailable } from '../../useWalletAvailable';
+import { AmountField } from '../AmountField';
 import { CopyButton, PollarModalFooter } from '../commons';
 import { KycModal } from '../kyc-modal/KycModal';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
@@ -187,6 +189,9 @@ export function CardModal({ onClose }: CardModalProps) {
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const provider = providers?.[0] ?? null;
+  const fundingAsset = provider?.fundingAssets[0] ?? 'USDC';
+  // Funding signs a Stellar payment from the wallet, so its balance is the Stellar one.
+  const fundAvailable = useWalletAvailable(panel === 'fund' ? { chain: 'STELLAR', code: fundingAsset } : null);
   const card = cards?.[0] ?? null;
 
   // --- Loading ----------------------------------------------------------------
@@ -829,15 +834,12 @@ export function CardModal({ onClose }: CardModalProps) {
             {transactions === null && <p className="pollar-card-note">Loading...</p>}
             {transactions?.length === 0 && <p className="pollar-card-note">No movements yet.</p>}
             {transactions?.map((tx) => {
-              const purchase = tx.purchase as {
-                localAmount?: number | null;
-                localCurrency?: string | null;
-                status?: string;
-              } | null;
+              // `purchase` is the provider's own record, passed through as is.
+              const localAmount = typeof tx.purchase?.localAmount === 'number' ? tx.purchase.localAmount : null;
+              const localCurrency = typeof tx.purchase?.localCurrency === 'string' ? tx.purchase.localCurrency : null;
+              const purchaseStatus = typeof tx.purchase?.status === 'string' ? tx.purchase.status : null;
               const local =
-                purchase?.localAmount && purchase.localCurrency && purchase.localCurrency !== 'USD'
-                  ? money(String(purchase.localAmount), purchase.localCurrency)
-                  : null;
+                localAmount && localCurrency && localCurrency !== 'USD' ? money(String(localAmount), localCurrency) : null;
               return (
                 <div key={tx.id} className="pollar-card-tx">
                   <div>
@@ -845,7 +847,7 @@ export function CardModal({ onClose }: CardModalProps) {
                     <span className="pollar-card-tx-meta">
                       {new Date(tx.occurredAt).toLocaleDateString()}
                       {tx.merchantName ? ` · ${TX_LABELS[tx.type] ?? tx.type}` : ''}
-                      {purchase?.status && purchase.status !== 'completed' ? ` · ${purchase.status}` : ''}
+                      {purchaseStatus && purchaseStatus !== 'completed' ? ` · ${purchaseStatus}` : ''}
                     </span>
                   </div>
                   <div className="pollar-card-tx-amount" data-direction={tx.direction ?? undefined}>
@@ -866,16 +868,15 @@ export function CardModal({ onClose }: CardModalProps) {
               Move {provider.fundingAssets.join(' or ') || 'USDC'} from your wallet to your card. It takes a few minutes to
               cross to the card network.
             </p>
-            <label className="pollar-send-field">
-              <span className="pollar-send-label">Amount (USDC)</span>
-              <input
-                className="pollar-input"
-                inputMode="decimal"
-                placeholder="10"
-                value={fundAmount}
-                onChange={(e) => setFundAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-              />
-            </label>
+            <AmountField
+              id="pollar-card-fund-amount"
+              label="Amount"
+              value={fundAmount}
+              onChange={(value) => setFundAmount(value.replace(/[^0-9.]/g, ''))}
+              unit={fundingAsset}
+              available={fundAvailable}
+              placeholder="10"
+            />
             <div className="pollar-modal-actions">
               <button
                 type="button"

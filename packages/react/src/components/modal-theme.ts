@@ -7,8 +7,9 @@ import type { PollarStyles } from '../types';
 export interface ModalStyleOverrides {
   /** Card background. Overrides the theme's white / #1a1a1a. */
   backgroundColor?: string | null | undefined;
-  /** Body text. Overrides the theme's #111827 / white. Secondary ("muted") text
-   *  keeps its theme color, so the two stay distinguishable. */
+  /** Body text. Overrides the theme's #111827 / white. With a background or a
+   *  text color set, borders, secondary ("muted") text and input fills are
+   *  blended from the pair instead of taken from the theme. */
   textColor?: string | null | undefined;
   /** Fill of the SECONDARY buttons (the wallet / social / provider entries, the
    *  retry button). The primary button is the accent's job. Unset => the theme's
@@ -68,9 +69,52 @@ export function readableTextOn(background: string): string {
  *  ...), which keeps the card's own 1.75rem padding. */
 export type ModalVariant = 'hero' | 'compact';
 
-/** Theme-derived CSS custom properties shared by every Pollar modal, plus the
- *  per-app overrides on top. One definition so the whole modal family stays
- *  visually in lockstep - a var added here reaches all of them at once. */
+/** The two theme palettes. `shared.css` repeats them as the fallbacks of its
+ *  variable mapping (light on every Pollar root, dark under a host `html.dark`);
+ *  change one, change the other. */
+const PALETTES = {
+  light: {
+    bg: '#ffffff',
+    border: '#e5e7eb',
+    text: '#111827',
+    muted: '#6b7280',
+    'input-bg': '#f9fafb',
+    'error-bg': '#fef2f2',
+    'error-border': '#fecaca',
+    'error-text': '#dc2626',
+    'success-text': '#16a34a',
+  },
+  dark: {
+    bg: '#1a1a1a',
+    border: '#374151',
+    text: '#ffffff',
+    muted: '#9ca3af',
+    'input-bg': '#374151',
+    'error-bg': '#2a1515',
+    'error-border': '#7f1d1d',
+    'error-text': '#f87171',
+    'success-text': '#4ade80',
+  },
+} as const;
+
+/** `percent` of `fg` blended into `bg`. */
+function mix(fg: string, percent: number, bg: string): string {
+  return `color-mix(in srgb, ${fg} ${percent}%, ${bg})`;
+}
+
+/** The app's Branding as inline CSS custom properties for a Pollar root (a modal
+ *  card, the wallet button).
+ *
+ *  Everything is written under the private `--pollar-brand-*` names, never the
+ *  public `--pollar-*` ones: `shared.css` maps brand onto public inside a
+ *  zero-specificity `:where()`, so a host stylesheet that sets a public variable
+ *  on a Pollar root beats the Branding, and the Branding beats the theme
+ *  defaults. An inline `--pollar-*` would beat every stylesheet instead.
+ *
+ *  The palette (background, text, borders, status colors) is only written when
+ *  the app pinned it: a dark theme, or a background or text color of its own.
+ *  Left out, the light defaults in `shared.css` apply, and a host `html.dark`
+ *  swaps them for the dark ones. */
 export function buildModalCssVars(
   theme: string,
   accentColor: string,
@@ -78,48 +122,54 @@ export function buildModalCssVars(
   variant: ModalVariant = 'compact',
 ): CSSProperties {
   const isDark = theme === 'dark';
-  const textColor = color(overrides.textColor, isDark ? '#ffffff' : '#111827');
+  const palette = isDark ? PALETTES.dark : PALETTES.light;
+  const bg = color(overrides.backgroundColor, '');
+  const text = color(overrides.textColor, '');
+  const pinned = isDark || bg !== '' || text !== '';
   // Only emitted when actually configured. Left out, the secondary buttons fall
   // back inside the CSS to whatever each already used - the theme surface for
   // the filled ones, `transparent` for the ghost one - so an unset field can't
   // flatten those two into the same look.
   const secondaryBg = color(overrides.buttonColor, '');
-  return {
-    '--pollar-accent': accentColor,
-    '--pollar-bg': color(overrides.backgroundColor, isDark ? '#1a1a1a' : '#ffffff'),
-    '--pollar-border': isDark ? '#374151' : '#e5e7eb',
-    '--pollar-text': textColor,
-    '--pollar-muted': isDark ? '#9ca3af' : '#6b7280',
+
+  const vars: Record<string, string> = {
+    '--pollar-brand-accent': accentColor,
     // The primary button is the accent's, straight up; its label follows the
     // accent's luminance so a pale accent doesn't render white-on-white.
-    '--pollar-btn-primary-fg': readableTextOn(accentColor),
-    ...(secondaryBg
-      ? {
-          '--pollar-btn-secondary-bg': secondaryBg,
-          '--pollar-btn-secondary-fg': readableTextOn(secondaryBg),
-        }
-      : {}),
-    '--pollar-input-bg': isDark ? '#374151' : '#f9fafb',
-    '--pollar-error-bg': isDark ? '#2a1515' : '#fef2f2',
-    '--pollar-error-border': isDark ? '#7f1d1d' : '#fecaca',
-    '--pollar-error-text': isDark ? '#f87171' : '#dc2626',
-    '--pollar-success-text': isDark ? '#4ade80' : '#16a34a',
-    '--pollar-logo-on-light-display': isDark ? 'none' : 'block',
-    '--pollar-logo-on-dark-display': isDark ? 'block' : 'none',
-    '--pollar-modal-border-radius': px(overrides.modalBorderRadius, DEFAULT_MODAL_BORDER_RADIUS),
-    '--pollar-buttons-border-radius': px(overrides.buttonBorderRadius, DEFAULT_BUTTON_BORDER_RADIUS),
-    '--pollar-buttons-height': '44px',
-    '--pollar-input-height': '44px',
-    '--pollar-input-border-radius': '0.5rem',
-    '--pollar-card-border-radius': '10px',
-    ...(variant === 'hero'
-      ? {
-          '--pollar-modal-padding': '2rem',
-          '--pollar-modal-heading-size': '1.375rem',
-          '--pollar-modal-subtitle-size': '0.9rem',
-        }
-      : {}),
-  } as CSSProperties;
+    '--pollar-brand-btn-primary-fg': readableTextOn(accentColor),
+    '--pollar-brand-modal-border-radius': px(overrides.modalBorderRadius, DEFAULT_MODAL_BORDER_RADIUS),
+    '--pollar-brand-buttons-border-radius': px(overrides.buttonBorderRadius, DEFAULT_BUTTON_BORDER_RADIUS),
+  };
+  if (secondaryBg) {
+    vars['--pollar-brand-btn-secondary-bg'] = secondaryBg;
+    vars['--pollar-brand-btn-secondary-fg'] = readableTextOn(secondaryBg);
+  }
+  if (pinned) {
+    for (const [name, value] of Object.entries(palette)) vars[`--pollar-brand-${name}`] = value;
+    vars['--pollar-brand-logo-on-light-display'] = isDark ? 'none' : 'block';
+    vars['--pollar-brand-logo-on-dark-display'] = isDark ? 'block' : 'none';
+  }
+  if (bg || text) {
+    // A custom pair would clash with the theme's grays, so borders, secondary
+    // text and input fills are blended from the pair itself.
+    const surface = bg || palette.bg;
+    const ink = text || palette.text;
+    vars['--pollar-brand-bg'] = surface;
+    vars['--pollar-brand-text'] = ink;
+    vars['--pollar-brand-border'] = mix(ink, 14, surface);
+    vars['--pollar-brand-muted'] = mix(ink, 62, surface);
+    vars['--pollar-brand-input-bg'] = mix(ink, 4, surface);
+    // The Pollar marks and wordmarks follow the surface, not the theme name.
+    const darkSurface = readableTextOn(surface) === '#ffffff';
+    vars['--pollar-brand-logo-on-light-display'] = darkSurface ? 'none' : 'block';
+    vars['--pollar-brand-logo-on-dark-display'] = darkSurface ? 'block' : 'none';
+  }
+  if (variant === 'hero') {
+    vars['--pollar-brand-modal-padding'] = '2rem';
+    vars['--pollar-brand-modal-heading-size'] = '1.375rem';
+    vars['--pollar-brand-modal-subtitle-size'] = '0.9rem';
+  }
+  return vars as CSSProperties;
 }
 
 /** Everything a modal wrapper needs to dress itself from the app's branding:
@@ -148,7 +198,8 @@ export function modalChrome(styles: PollarStyles): ModalChrome {
       buttonBorderRadius: styles.buttonBorderRadius,
     },
     overlayStyle: {
-      '--pollar-overlay-z-index': typeof zIndex === 'number' && Number.isFinite(zIndex) ? zIndex : DEFAULT_OVERLAY_Z_INDEX,
+      '--pollar-brand-overlay-z-index':
+        typeof zIndex === 'number' && Number.isFinite(zIndex) ? zIndex : DEFAULT_OVERLAY_Z_INDEX,
     } as CSSProperties,
   };
 }
