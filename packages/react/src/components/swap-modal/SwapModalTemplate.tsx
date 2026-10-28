@@ -1,29 +1,51 @@
 'use client';
 
-import { SwapProvider, SwapQuote, SwapQuoteParams, TransactionState, WalletId } from '@pollar/core';
+import { SwapQuoteParams, TransactionState, WalletId } from '@pollar/core';
 import { useState } from 'react';
 import { PollarModalFooter, RefreshIcon } from '../commons';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
+/** The chain a swap runs on; the modal shows a selector when the app offers both. */
+export type SwapChain = 'STELLAR' | 'SOLANA';
+
 export interface SwapAssetOption {
-  ref: SwapQuoteParams['sellAsset'];
+  /** Stellar: the asset ref the quote takes. */
+  ref?: SwapQuoteParams['sellAsset'] | undefined;
   code: string;
+  /** Stellar: the issuer. Solana: the mint (wrapped SOL for SOL). */
   issuer?: string | undefined;
+  /** Solana: the mint's decimals, to turn a decimal amount into base units. */
+  decimals?: number | undefined;
   available?: string | undefined;
   enabledInApp?: boolean | undefined;
+}
+
+/** A quote as the form shows it, whichever chain priced it: decimal amounts. */
+export interface SwapQuoteView {
+  provider: string;
+  amountOut: string;
+  minReceived: string;
+  /** Percent; null when the venue does not report it. */
+  priceImpactPct: string | null;
 }
 
 export function assetOptionKey(o: SwapAssetOption): string {
   return `${o.code}:${o.issuer ?? 'native'}`;
 }
 
-const PROVIDER_LABELS: Record<SwapProvider, string> = {
+const PROVIDER_LABELS: Record<string, string> = {
   auto: 'Best price',
   aquarius: 'Aquarius',
   soroswap: 'Soroswap',
   sdex: 'Stellar DEX',
+  jupiter: 'Jupiter',
+  titan: 'Titan',
 };
+
+const providerLabel = (provider: string) => PROVIDER_LABELS[provider] ?? provider;
+
+const CHAIN_LABELS: Record<SwapChain, string> = { STELLAR: 'Stellar', SOLANA: 'Solana' };
 
 function formatAmount(value: string | undefined): string {
   if (value === undefined) return '—';
@@ -132,9 +154,12 @@ export interface SwapModalTemplateProps {
   selectedSell: SwapAssetOption | null;
   selectedBuy: SwapAssetOption | null;
   amount: string;
-  provider: SwapProvider;
-  providers: SwapProvider[];
-  quote: SwapQuote | null;
+  /** The chains the app offers swaps on; a selector shows when there are two. */
+  chains: SwapChain[];
+  chain: SwapChain;
+  provider: string;
+  providers: string[];
+  quote: SwapQuoteView | null;
   quoteLoading: boolean;
   quoteError: string;
   formError: string;
@@ -159,7 +184,8 @@ export interface SwapModalTemplateProps {
   onMax: () => void;
   onAddCustomToken: (code: string, issuer: string) => string | null;
   onAmountChange: (value: string) => void;
-  onProviderChange: (p: SwapProvider) => void;
+  onChainChange: (chain: SwapChain) => void;
+  onProviderChange: (p: string) => void;
   onSwap: () => void;
   onToggleXdr: () => void;
   onCopyHash: () => void;
@@ -178,6 +204,8 @@ export function SwapModalTemplate({
   selectedSell,
   selectedBuy,
   amount,
+  chains,
+  chain,
   provider,
   providers,
   quote,
@@ -205,6 +233,7 @@ export function SwapModalTemplate({
   onReverse,
   onMax,
   onAmountChange,
+  onChainChange,
   onProviderChange,
   onSwap,
   onToggleXdr,
@@ -300,7 +329,26 @@ export function SwapModalTemplate({
 
       {step === 'form' && !swapUnavailable && (
         <>
-          {smartUnsupported && (
+          {chains.length > 1 && (
+            <label className="pollar-swap-route-wrap pollar-swap-chain-wrap">
+              <span className="sr-only">Network</span>
+              <select
+                className="pollar-swap-route-pill"
+                aria-label="Network"
+                value={chain}
+                disabled={configLoading || isLoadingData}
+                onChange={(event) => onChainChange(event.target.value as SwapChain)}
+              >
+                {chains.map((c) => (
+                  <option key={c} value={c}>
+                    {CHAIN_LABELS[c]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {smartUnsupported && chain === 'STELLAR' && (
             <div className="pollar-modal-error">Swaps are not yet available for smart (passkey) wallets.</div>
           )}
 
@@ -393,52 +441,54 @@ export function SwapModalTemplate({
             </section>
           </div>
 
-          {/* A buy token the app has not enabled, by code and issuer */}
-          <div className="pollar-swap-custom-area">
-            {customOpen ? (
-              <div className="pollar-swap-custom">
-                <input
-                  className="pollar-input"
-                  type="text"
-                  placeholder="Code (e.g. USDC)"
-                  value={customCode}
-                  onChange={(e) => setCustomCode(e.target.value)}
-                />
-                <input
-                  className="pollar-input"
-                  type="text"
-                  placeholder="Issuer (G...)"
-                  value={customIssuer}
-                  onChange={(e) => setCustomIssuer(e.target.value)}
-                />
-                {customError && <div className="pollar-modal-error">{customError}</div>}
-                <div className="pollar-swap-custom-actions">
-                  <button type="button" className="pollar-btn-primary" onClick={submitCustomToken}>
-                    Add token
-                  </button>
-                  <button
-                    type="button"
-                    className="pollar-swap-custom-cancel"
-                    onClick={() => {
-                      setCustomOpen(false);
-                      setCustomError('');
-                    }}
-                  >
-                    Cancel
-                  </button>
+          {/* A Stellar buy token the app has not enabled, by code and issuer */}
+          {chain === 'STELLAR' && (
+            <div className="pollar-swap-custom-area">
+              {customOpen ? (
+                <div className="pollar-swap-custom">
+                  <input
+                    className="pollar-input"
+                    type="text"
+                    placeholder="Code (e.g. USDC)"
+                    value={customCode}
+                    onChange={(e) => setCustomCode(e.target.value)}
+                  />
+                  <input
+                    className="pollar-input"
+                    type="text"
+                    placeholder="Issuer (G...)"
+                    value={customIssuer}
+                    onChange={(e) => setCustomIssuer(e.target.value)}
+                  />
+                  {customError && <div className="pollar-modal-error">{customError}</div>}
+                  <div className="pollar-swap-custom-actions">
+                    <button type="button" className="pollar-btn-primary" onClick={submitCustomToken}>
+                      Add token
+                    </button>
+                    <button
+                      type="button"
+                      className="pollar-swap-custom-cancel"
+                      onClick={() => {
+                        setCustomOpen(false);
+                        setCustomError('');
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="pollar-swap-custom-toggle"
-                disabled={configLoading}
-                onClick={() => setCustomOpen(true)}
-              >
-                + Add a token by code / issuer
-              </button>
-            )}
-          </div>
+              ) : (
+                <button
+                  type="button"
+                  className="pollar-swap-custom-toggle"
+                  disabled={configLoading}
+                  onClick={() => setCustomOpen(true)}
+                >
+                  + Add a token by code / issuer
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="pollar-swap-rate-row">
             <div className="pollar-swap-rate" aria-live="polite">
@@ -464,14 +514,14 @@ export function SwapModalTemplate({
                   aria-label="Route"
                   value={provider}
                   disabled={providers.length === 0}
-                  onChange={(event) => onProviderChange(event.target.value as SwapProvider)}
+                  onChange={(event) => onProviderChange(event.target.value)}
                 >
                   {providers.length === 0 ? (
-                    <option value={provider}>{PROVIDER_LABELS[provider]}</option>
+                    <option value={provider}>{providerLabel(provider)}</option>
                   ) : (
                     providers.map((p) => (
                       <option key={p} value={p}>
-                        {PROVIDER_LABELS[p]}
+                        {providerLabel(p)}
                       </option>
                     ))
                   )}
@@ -494,11 +544,11 @@ export function SwapModalTemplate({
               </div>
               <div className="pollar-swap-quote-row">
                 <span>Price impact</span>
-                <strong>{quote.priceImpactPct}%</strong>
+                <strong>{quote.priceImpactPct === null ? '—' : `${quote.priceImpactPct}%`}</strong>
               </div>
               <div className="pollar-swap-quote-row">
                 <span>Route</span>
-                <strong>{PROVIDER_LABELS[quote.provider]}</strong>
+                <strong>{providerLabel(quote.provider)}</strong>
               </div>
             </div>
           )}

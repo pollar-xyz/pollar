@@ -18,6 +18,9 @@ import {
   SignOutcome,
   StellarNetwork,
   SubmitOutcome,
+  SolanaSwapQuote,
+  SolanaSwapQuoteParams,
+  SolanaSwapVenue,
   SwapQuote,
   SwapQuoteParams,
   SwapToken,
@@ -275,6 +278,12 @@ interface PollarContextValue {
    * needed). Drives the transaction state machine. Mirrors {@link PollarClient.swap}.
    */
   swap: (quote: SwapQuote, opts?: { autoTrustline?: boolean }) => Promise<SubmitOutcome>;
+  /** The Solana venues this app exposes (`jupiter`, `titan`). Mirrors {@link PollarClient.getSolanaSwapConfig}. */
+  getSolanaSwapConfig: () => Promise<SolanaSwapVenue[]>;
+  /** Quote a swap from the user's Solana wallet, in base units. Mirrors {@link PollarClient.getSolanaSwapQuote}. */
+  getSolanaSwapQuote: (params: SolanaSwapQuoteParams) => Promise<SolanaSwapQuote[]>;
+  /** Run a Solana swap from a quote. Drives the transaction state machine. Mirrors {@link PollarClient.swapSolana}. */
+  swapSolana: (quote: SolanaSwapQuote, opts?: { slippageBps?: number }) => Promise<SubmitOutcome>;
   /** Open the swap modal. */
   openSwapModal: () => void;
   // earn (yield vaults / lending)
@@ -830,6 +839,9 @@ export function PollarProvider({
       getSwapTokens: () => pollarClient.getSwapTokens(),
       getSwapQuote: (params) => pollarClient.getSwapQuote(params),
       swap: (quote, opts) => pollarClient.swap(quote, opts),
+      getSolanaSwapConfig: () => pollarClient.getSolanaSwapConfig(),
+      getSolanaSwapQuote: (params) => pollarClient.getSolanaSwapQuote(params),
+      swapSolana: (quote, opts) => pollarClient.swapSolana(quote, opts),
       openSwapModal: () => {
         pollarClient.resetTransactionState();
         setSwapModalKey((k) => k + 1);
