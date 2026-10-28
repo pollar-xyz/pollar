@@ -3,9 +3,14 @@
 React bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI, transaction modals, and hooks for
 Stellar and Solana applications.
 
-> **0.12.1** (requires `@pollar/core@^0.12.1`). `<SendModal>` offers a Hash memo next to Text and ID. A hook built
-> with `createPollarAdapterHook` signs the auth entry an adapter answers with, without submitting anything, and hands
-> it to the adapter's `complete`.
+> **0.12.1** (requires `@pollar/core@^0.12.1`). Every modal and exported template speaks English, Spanish and
+> Portuguese: the dashboard's language wins, then a component's `language` prop, the client's `locale`, and the
+> browser's. `<SwapModal>` swaps on Solana too, with a Network selector when the app has venues on both chains.
+> `<SendModal>` offers a Hash memo next to Text and ID. `<RequirementFormModal>` asks a field with `showIf` only while
+> the answer it depends on matches. The card modal copies the number, expiry date and CVC, the email code input takes
+> an autofilled one-time code, and the ramp widget says a route's minimum or maximum. A hook built with
+> `createPollarAdapterHook` signs the auth entry an adapter answers with, without submitting anything, and hands it to
+> the adapter's `complete`.
 >
 > Earlier: **0.12.0** (requires `@pollar/core@^0.12.0`). `<RampWidget>` runs on the v3 ramps API: routes, quotes leg by
 > leg, the fields a quote asks for, the order's progress and its pending action; it signs a leg with the connected
@@ -248,6 +253,9 @@ const {
   swap, // (quote: SwapQuote, opts?) => Promise<SubmitOutcome>
   getSwapConfig, // () => Promise<SwapVenue[]>  (which venues this app offers)
   getSwapTokens, // () => Promise<SwapToken[]>
+  getSolanaSwapConfig, // () => Promise<SolanaSwapVenue[]>  (Jupiter, Titan; mainnet)
+  getSolanaSwapQuote, // (params: SolanaSwapQuoteParams) => Promise<SolanaSwapQuote[]>
+  swapSolana, // (quote: SolanaSwapQuote, opts?) => Promise<SubmitOutcome>
   openSwapModal, // () => void
 
   // Earn (yield vaults + lending — DeFindex + Blend)
@@ -374,7 +382,7 @@ already wired inside `<PollarProvider>` — and most are exported in case you wa
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `<WalletButton>`              | Drop-in button. Opens login when signed out; signed in, shows the wallet address with a dropdown (Send, Receive, copy address, balance, history, ramp, KYC, distribution rules, sessions, sign out, plus a "Create account" action when the external wallet has no on-chain account yet). Inline arc spinner during in-progress transactions                                                                         |
 | `<SendModal>`                 | Full send flow: network picker (shown when the app has more than one chain), asset picker, amount with Max (from the available balance), destination with Paste, inline build > sign > success/error. Sending is available on Stellar and Solana; Polygon can be browsed but not sent from                                                                                                                           |
-| `<SwapModal>`                 | On-chain asset-to-asset swap: pick from/to assets and amount, quote across venues, execute (auto-trustline on the buy asset when needed); paste a custom buy token (code + issuer)                                                                                                                                                                                                                                   |
+| `<SwapModal>`                 | On-chain asset-to-asset swap on Stellar and Solana (a Network selector when the app has venues on both): pick from/to assets and amount, quote across venues, execute (auto-trustline on the buy asset when needed); paste a custom Stellar buy token (code + issuer)                                                                                                                                                |
 | `<EarnModal>`                 | Deposit/withdraw across DeFindex vaults and Blend pools: provider + opportunity selection with live APY, wallet balance, over-spend guards, and auto-trustline on deposit                                                                                                                                                                                                                                            |
 | `<ReceiveModal>`              | Wallet address as QR code with copy-to-clipboard (no external QR dependency required)                                                                                                                                                                                                                                                                                                                                |
 | `<TxHistoryModal>`            | Paginated multichain transaction history with auto-fetch on open. A `<ChainSelect>` in the header filters server-side (switching networks refetches and resets to page 1); rows link to their own chain's explorer (stellar.expert for Stellar, explorer.solana.com for Solana) and show the unified `{ amount, unit }` fee                                                                                          |

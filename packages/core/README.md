@@ -17,9 +17,12 @@ Pollar runs on Solana end to end for wallets and payments:
 > **0.12.1** adds `client.stellar.authEntrySigner()`, a SEP-43 signer over the user's wallet for **x402**
 > (`new ExactStellarScheme(client.stellar.authEntrySigner(), { url })`) and stellar-sdk's contract client; a co-signed
 > wallet signs Soroban auth entries through its device's vote; a wallet adapter can answer with an auth entry to sign
-> (`isAuthEntryAdapterStep`, `completeAuthEntryStep`); a Stellar send takes a hash memo; and a transaction-state
-> listener that throws no longer fails the transaction. It also learns the DPoP clock offset only from answers that
-> cannot come from the browser cache (a non-GET/HEAD request, or a 401). Additive: nothing an app calls changes.
+> (`isAuthEntryAdapterStep`, `completeAuthEntryStep`); a Stellar send takes a hash memo; swaps run on Solana
+> (`getSolanaSwapConfig`, `getSolanaSwapQuote`, `swapSolana`); the user-facing texts come in English, Spanish and
+> Portuguese (`resolveLanguage`, `client.getLocale()`); a ramp route refused for its amount carries `failure.limit`;
+> and a transaction-state listener that throws no longer fails the transaction. It also learns the DPoP clock offset
+> only from answers that cannot come from the browser cache (a non-GET/HEAD request, or a 401). One change to an
+> existing call: `signAuthEntry` passes the signature confirmation; see [UPGRADE.md](../../UPGRADE.md).
 >
 > Earlier: **0.12.0** calls sdk-api **`/v3`** (`baseUrl` stays an origin) and warns once on a `Deprecation` header.
 > **Ramps are orders**: `getRampRoutes(direction)`, `quoteRamp`, `rampQuoteFields`, `createRampOrder`,
@@ -761,6 +764,31 @@ client.swap(quote: SwapQuote, opts?: { autoTrustline?: boolean }): Promise<Submi
 The standalone `quoteSwap(api, body): Promise<SwapQuoteContent>` export is available for advanced callers that already
 hold a `PollarApiClient`.
 
+On Solana, `getSolanaSwapQuote` quotes from the user's Solana wallet on Jupiter and Titan (mainnet). Amounts are integer
+base units of each mint, quotes come best output first, and they carry no transaction: `swapSolana` asks for the
+signature confirmation, then has the backend build the picked route for the wallet, refusing one whose simulation pays
+less than its minimum. A co-signed wallet approves it on the device, an external wallet signs it in the connected
+wallet; custodial wallets cannot swap on Solana.
+
+```ts
+const venues = await client.getSolanaSwapConfig(); // [] means no swap on Solana for this app
+
+const [best] = await client.getSolanaSwapQuote({
+  inputMint: 'So11111111111111111111111111111111111111112', // wrapped SOL for SOL
+  outputMint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+  amount: '100000000', // 0.1 SOL in lamports
+  slippageBps: 50,
+});
+
+const outcome = await client.swapSolana(best); // SubmitOutcome
+```
+
+```ts
+client.getSolanaSwapConfig(): Promise<SolanaSwapVenue[]>;
+client.getSolanaSwapQuote(params: SolanaSwapQuoteParams): Promise<SolanaSwapQuote[]>;
+client.swapSolana(quote: SolanaSwapQuote, opts?: { slippageBps?: number }): Promise<SubmitOutcome>;
+```
+
 ---
 
 ### Ramps
@@ -1179,6 +1207,9 @@ import type {
   SwapQuote,
   SwapProvider,
   SwapVenue,
+  SolanaSwapQuoteParams,
+  SolanaSwapQuote,
+  SolanaSwapVenue,
 
   // Earn (yield vaults + lending)
   EarnProviderId,

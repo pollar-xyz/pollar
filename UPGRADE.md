@@ -2,11 +2,19 @@
 
 ## 0.12.0 -> 0.12.1
 
-No code change is needed: 0.12.1 adds `client.stellar.authEntrySigner()`, the
-auth-entry adapter step and hash memos, and changes nothing an app already
-calls. Upgrade `@pollar/core`, `@pollar/react` and `@pollar/react-native` together: `@pollar/react@0.12.1` and
+0.12.1 adds `client.stellar.authEntrySigner()`, the auth-entry adapter step,
+hash memos and swaps on Solana. Upgrade `@pollar/core`, `@pollar/react` and
+`@pollar/react-native` together: `@pollar/react@0.12.1` and
 `@pollar/react-native@0.12.1` require `@pollar/core@^0.12.1`. The adapters stay
 at `0.12.0`.
+
+`signAuthEntry` now passes the signature confirmation, like every other
+signature, so an x402 payment asks the user on an app that says to ask. An
+agent that pays unattended sets the app to `AUTO` in the dashboard, or
+`WINDOW` with a USD cap; a headless client under `'prompt'` with nothing
+subscribed to `client.onConfirmationRequest()` gets
+`SDK_CONFIRMATION_UNAVAILABLE`. See
+[Signature confirmation](#signature-confirmation).
 
 The modals now follow the language set in the dashboard (Branding > Language)
 or the browser's. To keep them in the language of your app, pass it as

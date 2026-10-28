@@ -5,9 +5,10 @@
 > `@pollar/core`, `@pollar/react` and `@pollar/react-native`. Additive on top of
 > 0.12.0: Soroban auth entries signed by the Pollar wallet for x402 and other
 > sponsored-fee flows, co-signed wallets signing those entries, hash memos,
-> every modal in English, Spanish and Portuguese, conditional KYC form fields,
-> and fixes. One call an app may already make changes: `signAuthEntry` now
-> passes the signature confirmation (below). The Stellar Wallets Kit and
+> swaps on Solana, every modal in English, Spanish and Portuguese, conditional
+> KYC form fields, ramp texts that name a route's limit, and fixes. One call
+> an app may already make changes: `signAuthEntry` now passes the signature
+> confirmation (below). The Stellar Wallets Kit and
 > Solana Wallet Standard adapters stay at `0.12.0`; their `^0.12.0` core range
 > accepts 0.12.1.
 
@@ -46,6 +47,27 @@
 - **Hash memos.** A Stellar send takes `memo: { type: 'hash', value }`, 32 bytes
   as 64 hex characters, so an app can anchor a digest (a SHA-256 receipt).
   `<SendModal>` offers Hash next to Text and ID.
+- **Swaps on Solana.** `getSolanaSwapConfig()` lists the app's Solana venues
+  (Jupiter and Titan, mainnet only);
+  `getSolanaSwapQuote({ inputMint, outputMint, amount, provider?, slippageBps? })`
+  quotes from the user's Solana wallet, amounts in base units of each mint,
+  best output first; and
+  `swapSolana(quote)` asks for the signature confirmation like `sendPayment`,
+  then has the backend build the quoted route for the user's wallet, refusing
+  one whose simulation pays less than its minimum. A co-signed wallet approves
+  it on the device, an external wallet signs it in the connected wallet;
+  custodial wallets cannot swap on Solana. `getSwapQuote` and `swap` stay
+  Stellar and unchanged; the Solana types are `SolanaSwapQuote`,
+  `SolanaSwapQuoteParams` and the rest. The React and React Native contexts
+  expose the three methods.
+- `<SwapModal>` swaps on Solana too. With venues on both chains a Network
+  selector picks between them; on Solana it sells what the Solana wallet holds,
+  buys SOL or a token the app enabled, shows the route's output and minimum,
+  and links the swap to Solscan.
+- A co-signed device recognizes a Solana swap before it votes: the swap must
+  call a known router (Jupiter v6, Titan), be paid and signed by the user
+  alone and stay under the fee cap, and beside the router it may only create,
+  wrap into, sync or close the user's own token accounts.
 - A transaction-state listener that throws no longer fails the transaction:
   each `onTransactionStateChange` listener is isolated and its error logged, and
   a throw on the subscribe replay keeps the unsubscribe handle.
@@ -55,6 +77,22 @@
   `Date` of the moment it was stored; learning from it pinned every proof's
   `iat` to that moment, and each later request failed with
   `SDK_AUTH_DPOP_INVALID` until the page was reloaded.
+- **A route refused for its amount says the minimum or maximum it takes.** A
+  `LIMIT_BELOW_MINIMUM` or `LIMIT_ABOVE_MAXIMUM` rejection carries
+  `failure.limit` (`RampQuoteLimit`: `min`, `max`, `side`, `currency`) and
+  `rampResolutionText` words it ("This route takes at least 1,450 ARS. Try a
+  larger amount."). `rampNoRouteText` says there is no route for the currency
+  and asset when nothing was rejected, instead of asking for another amount.
+  The React and React Native ramp widgets label the dead-end button "Change
+  amount" when a route asks for another amount.
+- A route dropped for a missing trustline names the asset it delivers ("Your
+  Stellar wallet must trust ARS to receive it."), instead of always saying
+  USDC.
+- `RampAdapterQuoteRequest` carries `payee`: the quote taken right before an
+  order has the payee the user gave.
+- Base64 padding is stripped by index in the auth-entry and Stellar hash
+  decoders, which read input from outside: the regular expression it replaces
+  took half a second on a long run of `=` (CodeQL `js/polynomial-redos`).
 - **Every modal in English, Spanish and Portuguese.** The language is, in
   order: the one the app pins in the dashboard (Branding > Language, returned
   as `styles.language` by `/applications/config`), the `language` prop of
@@ -89,6 +127,10 @@
 - **The card modal copies the card details.** Next to the card number and the
   CVC while the details are shown, and next to the expiry date always; the
   number is copied without spaces and the expiry as `MM/YY`.
+- The email code input takes a one-time code the browser or keyboard
+  autofills, and spreads it across the six boxes; a paste, or a code typed next
+  to a digit already there, fills them the same way
+  ([#89](https://github.com/pollar-xyz/pollar/pull/89)).
 - `@pollar/react` and `@pollar/react-native` require `@pollar/core@^0.12.1`.
 
 ## `@pollar/migrate` 0.12.0

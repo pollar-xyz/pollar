@@ -23,9 +23,11 @@ Pollar runs on Solana end to end for wallets and payments:
 
 > **0.12.1** adds Soroban auth entries signed by the Pollar wallet for **x402** and other sponsored-fee flows
 > (`client.stellar.authEntrySigner()`, a SEP-43 signer for x402's `ExactStellarScheme`), co-signed wallets signing those
-> entries, and hash memos on Stellar sends. `@pollar/core` also learns the DPoP clock offset only from answers that
+> entries, and hash memos on Stellar sends. It adds **swaps on Solana** (Jupiter and Titan, `swapSolana`, and a Network
+> selector in `<SwapModal>`), every modal in **English, Spanish and Portuguese**, conditional KYC form fields, and ramp
+> texts that name a route's minimum or maximum. `@pollar/core` also learns the DPoP clock offset only from answers that
 > cannot come from the browser cache, so a cached response no longer makes every later request fail with
-> `SDK_AUTH_DPOP_INVALID`. No code change is needed; see [UPGRADE.md](./UPGRADE.md).
+> `SDK_AUTH_DPOP_INVALID`. `signAuthEntry` now passes the signature confirmation; see [UPGRADE.md](./UPGRADE.md).
 >
 > **0.12.0** moves the SDK to the sdk-api **`/v3`** API. **Ramps are orders**: `getRampRoutes`, `quoteRamp`,
 > `createRampOrder`, `pollRampOrder` and `signRampLeg` replace the 0.11.x ramp methods, and Pollar runs each leg (the
@@ -461,10 +463,10 @@ npm run clean
 ### Release a candidate
 
 ```bash
-npm run release:rc -- 0.12.0-rc.5
+npm run release:rc -- 0.12.1-rc.1
 ```
 
-Tags the current commit as `v0.12.0-rc.5` and pushes the tag, which runs
+Tags the current commit as `v0.12.1-rc.1` and pushes the tag, which runs
 `.github/workflows/release-rc.yml` (build, unit + smoke tests, publish every SDK package to npm
 on the `next` dist-tag) and `e2e-rc.yml`. Nothing is published from your machine.
 
