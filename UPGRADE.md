@@ -279,7 +279,8 @@ template uses.
 ### Signature confirmation
 
 The default is now `'prompt'`: every signing call waits for the user, whatever
-the wallet's custody, unless the app's dashboard says otherwise. A headless
+the wallet's custody, unless the app's dashboard says otherwise. From 0.12.1
+that includes `signAuthEntry`, and with it every x402 payment. A headless
 app with nothing subscribed to `client.onConfirmationRequest()` gets
 `SDK_CONFIRMATION_UNAVAILABLE` on every signature: subscribe, or mount the
 provider, which renders `<ConfirmModal>`.

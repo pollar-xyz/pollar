@@ -92,6 +92,8 @@ import { apiErrorFields, isRecord, stringField } from '../api/error-fields';
 import { bytesToHex, hexToBytes } from '../cosign/encoding';
 import { base64urlDecode, base64urlEncode } from '../lib/base64url';
 import { createAuthEntrySigner } from '../stellar/auth-entry-signer';
+import { authEntryTransfer, formatStroops, stellarAssetContractId } from '../stellar/auth-entry-value';
+import { encodeStellarAddress } from '../cosign/recognize';
 import { StellarNetwork } from '../stellar/StellarClient';
 import { defaultStorage } from '../storage/autodetect';
 import type { OnStorageDegrade, Storage, StorageDegradeReason } from '../storage/types';
@@ -3143,6 +3145,10 @@ export class PollarClient {
    *   it recomputes the entry's hash itself before approving, like a
    *   transaction. With `cosignManual` the outcome is `cosign_pending`.
    *
+   * Like every signature, it passes the confirmation policy first. A token
+   * `transfer` whose contract is a priced Stellar asset counts its USD value
+   * against a window; any other entry has no known value and asks.
+   *
    * @param entryXdr base64 XDR of the unsigned `SorobanAuthorizationEntry`.
    * @param options.validUntilLedger absolute ledger the signature expires at
    *   (computed from the network's latest ledger). Ignored on the external-wallet
@@ -3151,6 +3157,10 @@ export class PollarClient {
   async signAuthEntry(entryXdr: string, options: { validUntilLedger: number }): Promise<SignAuthEntryOutcome> {
     const noSigner = this._externalSignerMissing();
     if (noSigner) return noSigner;
+    if (this._session?.wallet?.type !== 'smart') {
+      const answer = await this._confirm(await this._authEntryConfirmation(entryXdr));
+      if (!answer.ok) return { status: 'error', code: answer.code, details: answer.details };
+    }
     // External adapter: the provider signs the entry directly. Skip it for a
     // smart-wallet session (passkey-signed) so a stale/foreign adapter can't
     // hijack signing - consistent with the type-first signing paths.
@@ -3530,6 +3540,36 @@ export class PollarClient {
     } finally {
       this._autoHandling.delete(request.id);
     }
+  }
+
+  /**
+   * What the confirmation shows for an auth entry: a token transfer with its
+   * destination and amount, and the asset when the contract is the Stellar asset
+   * contract of a priced asset (the window counts it then); otherwise the bare
+   * entry, which always asks.
+   */
+  private async _authEntryConfirmation(entryXdr: string): Promise<Omit<ConfirmationRequest, 'id' | 'createdAt'>> {
+    const base = { kind: 'sign_auth_entry' as const, network: 'STELLAR' as const, authEntryXdr: entryXdr };
+    const transfer = authEntryTransfer(entryXdr);
+    if (!transfer) return { ...base, operation: 'invoke_contract' };
+    const contract = encodeStellarAddress('contract', transfer.contract);
+    const details: Record<string, unknown> = {
+      destination: transfer.to,
+      amount: formatStroops(transfer.amount),
+      asset: contract,
+      contract,
+    };
+    const passphrase = this._networkPassphrase();
+    for (const price of await this._usdPrices()) {
+      if (price.chain !== 'STELLAR') continue;
+      const id = await stellarAssetContractId(price.asset, passphrase);
+      if (id && id.every((b, i) => b === transfer.contract[i])) {
+        details.asset = price.asset === 'native' ? 'XLM' : price.asset.split(':')[0];
+        details.assetKey = price.asset;
+        break;
+      }
+    }
+    return { ...base, operation: 'transfer', details };
   }
 
   /**

@@ -903,6 +903,19 @@ function request(overrides = {}) {
     declinedRun,
   );
   check('nothing was sent for the declined calls', calls.length === callsBeforeDecline);
+  const declinedAuth = await prompt.signAuthEntry('AAAA', { validUntilLedger: 1100 });
+  check(
+    'prompt: an auth entry (an x402 payment) asks too, and a decline signs nothing',
+    declinedAuth.status === 'error' &&
+      declinedAuth.code === 'SDK_CONFIRMATION_DECLINED' &&
+      seen[3]?.kind === 'sign_auth_entry' &&
+      seen[3]?.authEntryXdr === 'AAAA',
+    declinedAuth,
+  );
+  check(
+    'nothing was sent for the declined auth entry',
+    !calls.slice(callsBeforeDecline).includes('POST /v3/tx/sign-auth-entry'),
+  );
   check('no confirmation is left pending', prompt.getPendingConfirmations().length === 0);
   unsubscribe();
   prompt.destroy();

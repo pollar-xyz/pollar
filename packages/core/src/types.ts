@@ -385,10 +385,12 @@ export type ConfirmationPolicy = 'auto' | 'prompt' | { window: { seconds: number
 /** What a signing call is about to do, shown to the user under `confirmation: 'prompt'`. */
 export interface ConfirmationRequest {
   id: string;
-  kind: 'sign' | 'sign_and_send' | 'build_sign_submit';
+  kind: 'sign' | 'sign_and_send' | 'build_sign_submit' | 'sign_auth_entry';
   network: 'STELLAR' | 'SOLANA' | 'POLYGON';
   /** The unsigned Stellar envelope, when the call carries one. */
   unsignedXdr?: string;
+  /** `sign_auth_entry`: the unsigned Soroban authorization entry (base64 XDR). */
+  authEntryXdr?: string;
   /** The build this signature completes, when the client built it. */
   buildData?: TxBuildContent;
   operation?: string;

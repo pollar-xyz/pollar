@@ -6,7 +6,8 @@
 > 0.12.0: Soroban auth entries signed by the Pollar wallet for x402 and other
 > sponsored-fee flows, co-signed wallets signing those entries, hash memos,
 > every modal in English, Spanish and Portuguese, conditional KYC form fields,
-> and fixes. Nothing an app already calls changes. The Stellar Wallets Kit and
+> and fixes. One call an app may already make changes: `signAuthEntry` now
+> passes the signature confirmation (below). The Stellar Wallets Kit and
 > Solana Wallet Standard adapters stay at `0.12.0`; their `^0.12.0` core range
 > accepts 0.12.1.
 
@@ -34,6 +35,14 @@
   wallet moved to Turnkey keeps its address and signs with its Turnkey key),
   and says why, instead of the network failing later with "signature doesn't
   match payload".
+- **`signAuthEntry` passes the signature confirmation**, like every other
+  signature, so an x402 payment no longer signs without asking on an app that
+  says to ask. A token `transfer` whose contract is the Stellar asset contract
+  of a priced asset shows its destination, amount and asset in
+  `<ConfirmModal>` (`kind: 'sign_auth_entry'`, `operation: 'transfer'`) and
+  counts its USD value against a window; any other entry asks. An agent that
+  pays unattended sets the app to `AUTO`, or `WINDOW` with a USD cap; a headless
+  client under `'prompt'` gets `SDK_CONFIRMATION_UNAVAILABLE`.
 - **Hash memos.** A Stellar send takes `memo: { type: 'hash', value }`, 32 bytes
   as 64 hex characters, so an app can anchor a digest (a SHA-256 receipt).
   `<SendModal>` offers Hash next to Text and ID.
