@@ -1,6 +1,8 @@
-import type { CosignCustody } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { type CosignCustody, type PollarLanguage } from '@pollar/core';
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, TouchableWithoutFeedback } from 'react-native';
+import { WALLET_BUTTON_COPY } from './wallet-button-copy';
 
 /** Presentation state, theme colors and actions for the native wallet button and its menu. */
 export interface WalletButtonTemplateProps {
@@ -32,6 +34,8 @@ export interface WalletButtonTemplateProps {
    */
   custodyChoice?: boolean;
   onCreateWallet?: (custody?: CosignCustody) => void;
+  /** Language of the button and its menu. Defaults to the user's device; the button passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
 
 export function WalletButtonTemplate({
@@ -56,7 +60,10 @@ export function WalletButtonTemplate({
   createWalletError,
   custodyChoice,
   onCreateWallet,
+  language: languageProp,
 }: WalletButtonTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = WALLET_BUTTON_COPY[language];
   const [selfCustodyNotice, setSelfCustodyNotice] = useState(false);
   const [risksAccepted, setRisksAccepted] = useState(false);
   if (!walletAddress && signedIn) {
@@ -72,16 +79,16 @@ export function WalletButtonTemplate({
       </TouchableOpacity>
     );
     const note = (text: string) => <Text style={[styles.note, { color: itemColor }]}>{text}</Text>;
-    const creatingLabel = 'Creating wallet...';
+    const creatingLabel = copy.creatingWallet;
     return (
       <View style={styles.container}>
         <TouchableOpacity
           accessibilityRole="button"
-          accessibilityLabel={onCreateWallet ? 'No wallet' : 'Signed in'}
+          accessibilityLabel={onCreateWallet ? copy.noWallet : copy.signedIn}
           style={[styles.loginBtn, { backgroundColor: accentColor }]}
           onPress={onToggleOpen}
         >
-          <Text style={styles.loginBtnText}>{onCreateWallet ? 'No wallet' : 'Signed in'}</Text>
+          <Text style={styles.loginBtnText}>{onCreateWallet ? copy.noWallet : copy.signedIn}</Text>
         </TouchableOpacity>
         <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
           <TouchableWithoutFeedback onPress={onClose}>
@@ -91,25 +98,23 @@ export function WalletButtonTemplate({
                   {createWalletError ? note(createWalletError) : null}
                   {onCreateWallet &&
                     !custodyChoice &&
-                    item(creatingWallet ? creatingLabel : 'Create wallet', () => onCreateWallet(), !!creatingWallet)}
+                    item(creatingWallet ? creatingLabel : copy.createWallet, () => onCreateWallet(), !!creatingWallet)}
                   {onCreateWallet && custodyChoice && !selfCustodyNotice && (
                     <>
                       {item(
-                        creatingWallet ? creatingLabel : 'Create co-signed wallet',
+                        creatingWallet ? creatingLabel : copy.createCosigned,
                         () => onCreateWallet('COSIGNED'),
                         !!creatingWallet,
                       )}
-                      {note('You and the app approve every signature together. Your wallet can be recovered with help.')}
-                      {item('Create self-custody wallet', () => setSelfCustodyNotice(true), !!creatingWallet)}
-                      {note('Only your device signs. Nobody else can move or recover your funds.')}
+                      {note(copy.cosignedNote)}
+                      {item(copy.createSelfCustody, () => setSelfCustodyNotice(true), !!creatingWallet)}
+                      {note(copy.selfCustodyNote)}
                     </>
                   )}
                   {onCreateWallet && custodyChoice && selfCustodyNotice && (
                     <>
                       <Text accessibilityRole="alert" style={[styles.note, { color: itemColor }]}>
-                        In a self-custody wallet only your device can sign. If you lose this device and every recovery method,
-                        nobody can recover the wallet or its funds, not the app and not Pollar. Nobody can undo or freeze a
-                        transaction you sign.
+                        {copy.selfCustodyRisks}
                       </Text>
                       <TouchableOpacity
                         accessibilityRole="checkbox"
@@ -125,17 +130,15 @@ export function WalletButtonTemplate({
                             risksAccepted ? { backgroundColor: accentColor, borderColor: accentColor } : null,
                           ]}
                         />
-                        <Text style={[styles.menuItemText, { color: itemColor, flexShrink: 1 }]}>
-                          I understand and accept these risks
-                        </Text>
+                        <Text style={[styles.menuItemText, { color: itemColor, flexShrink: 1 }]}>{copy.acceptRisks}</Text>
                       </TouchableOpacity>
                       {item(
-                        creatingWallet ? creatingLabel : 'Create self-custody wallet',
+                        creatingWallet ? creatingLabel : copy.createSelfCustody,
                         () => onCreateWallet('SELF_CUSTODY'),
                         !!creatingWallet || !risksAccepted,
                       )}
                       {item(
-                        'Back',
+                        copy.back,
                         () => {
                           setSelfCustodyNotice(false);
                           setRisksAccepted(false);
@@ -145,7 +148,7 @@ export function WalletButtonTemplate({
                     </>
                   )}
                   <View style={[styles.divider, { backgroundColor: dropdownBorder }]} />
-                  {item('Log out', onLogout, false, '#ef4444')}
+                  {item(copy.logout, onLogout, false, '#ef4444')}
                 </View>
               </TouchableWithoutFeedback>
             </View>
@@ -159,11 +162,11 @@ export function WalletButtonTemplate({
     return (
       <TouchableOpacity
         accessibilityRole="button"
-        accessibilityLabel="Login with Pollar"
+        accessibilityLabel={copy.loginWithPollar}
         style={[styles.loginBtn, { backgroundColor: accentColor }]}
         onPress={onLogin}
       >
-        <Text style={styles.loginBtnText}>Login with Pollar</Text>
+        <Text style={styles.loginBtnText}>{copy.loginWithPollar}</Text>
       </TouchableOpacity>
     );
   }
@@ -174,7 +177,7 @@ export function WalletButtonTemplate({
     <View style={styles.container}>
       <TouchableOpacity
         accessibilityRole="button"
-        accessibilityLabel="Open connected wallet"
+        accessibilityLabel={copy.openWallet}
         style={[styles.walletBtn, { backgroundColor: dropdownBg, borderColor: dropdownBorder }]}
         onPress={onToggleOpen}
       >
@@ -194,59 +197,54 @@ export function WalletButtonTemplate({
                   </View>
                   <TouchableOpacity
                     accessibilityRole="button"
-                    accessibilityLabel="Copy wallet address"
+                    accessibilityLabel={copy.copyWalletAddress}
                     onPress={onCopy}
                     style={styles.copyBtn}
                   >
-                    <Text style={{ color: '#9ca3af', fontSize: 12 }}>{copied ? '✅' : '📋 Copy'}</Text>
+                    <Text style={{ color: '#9ca3af', fontSize: 12 }}>{copied ? '✅' : `📋 ${copy.copy}`}</Text>
                   </TouchableOpacity>
                 </View>
 
                 <View style={styles.dropdownBody}>
-                  {recoveryLocked && (
-                    <Text style={styles.lockNotice}>
-                      Your wallet is locked until you add a way to recover it. Without one, losing this device means losing the
-                      funds.
-                    </Text>
-                  )}
+                  {recoveryLocked && <Text style={styles.lockNotice}>{copy.lockedNoticeShort}</Text>}
                   {onRecovery && (
                     <TouchableOpacity
                       accessibilityRole="button"
-                      accessibilityLabel={recoveryLocked ? 'Set up wallet recovery' : 'Wallet recovery'}
+                      accessibilityLabel={recoveryLocked ? copy.setUpRecovery : copy.walletRecovery}
                       style={styles.menuItem}
                       onPress={onRecovery}
                     >
                       <Text style={[styles.menuItemText, { color: recoveryLocked ? '#b45309' : itemColor }]}>
-                        {recoveryLocked ? 'Set up wallet recovery' : 'Wallet recovery'}
+                        {recoveryLocked ? copy.setUpRecovery : copy.walletRecovery}
                       </Text>
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity
                     accessibilityRole="button"
-                    accessibilityLabel="Wallet balance"
+                    accessibilityLabel={copy.walletBalance}
                     style={styles.menuItem}
                     onPress={onWalletBalance}
                   >
-                    <Text style={[styles.menuItemText, { color: itemColor }]}>💰 Wallet Balance</Text>
+                    <Text style={[styles.menuItemText, { color: itemColor }]}>💰 {copy.walletBalance}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     accessibilityRole="button"
-                    accessibilityLabel="Transaction history"
+                    accessibilityLabel={copy.txHistory}
                     style={styles.menuItem}
                     onPress={onTxHistory}
                   >
-                    <Text style={[styles.menuItemText, { color: itemColor }]}>⏱️ Transaction History</Text>
+                    <Text style={[styles.menuItemText, { color: itemColor }]}>⏱️ {copy.txHistory}</Text>
                   </TouchableOpacity>
 
                   <View style={[styles.divider, { backgroundColor: dropdownBorder }]} />
 
                   <TouchableOpacity
                     accessibilityRole="button"
-                    accessibilityLabel="Disconnect wallet"
+                    accessibilityLabel={copy.disconnectWallet}
                     style={[styles.menuItem, { marginTop: 4 }]}
                     onPress={onLogout}
                   >
-                    <Text style={[styles.menuItemText, { color: '#ef4444' }]}>🚪 Disconnect</Text>
+                    <Text style={[styles.menuItemText, { color: '#ef4444' }]}>🚪 {copy.disconnect}</Text>
                   </TouchableOpacity>
                 </View>
               </View>

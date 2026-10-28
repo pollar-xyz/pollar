@@ -1,5 +1,6 @@
 'use client';
 
+import { useInheritedLanguage } from '../../language-context';
 import { useEffect, useState } from 'react';
 import type {
   CosignCustody,
@@ -18,7 +19,6 @@ import type {
 } from '@pollar/core';
 import {
   describeRampAction,
-  languageFromTag,
   rampLegStatus,
   rampLegNote,
   rampLegTimeLeft,
@@ -35,7 +35,7 @@ import {
   rampOrderResolutionText,
   rampTrustlineAsset,
 } from '@pollar/core';
-import { deviceLanguageTag } from '../requirement-form-modal/form-fields';
+import { RAMP_COPY, type RampCopy } from './ramp-copy';
 import { RejectedRouteDisplay, RouteDisplay } from './RouteDisplay';
 import { AmountField } from '../AmountField';
 import { CopyButton } from '../commons';
@@ -56,11 +56,11 @@ function scannableImageSrc(image: RampScannable['image']): string {
 }
 
 /** "a", "a and b", "a, b and c" - for naming what a step is asking for. */
-function listOf(items: string[]): string {
+function listOf(items: string[], copy: RampCopy): string {
   const last = items[items.length - 1];
-  if (last === undefined) return 'a few details';
+  if (last === undefined) return copy.fewDetails;
   if (items.length === 1) return last;
-  return `${items.slice(0, -1).join(', ')} and ${last}`;
+  return `${items.slice(0, -1).join(', ')} ${copy.and} ${last}`;
 }
 
 /** The placeholder to show: the one a sibling select dictates, else the static one. */
@@ -107,13 +107,6 @@ function stepChain(kind: string, leg: RampOrder['legs'][number]): string {
   return legChain(leg);
 }
 
-const timeLeftText = (seconds: number) =>
-  seconds <= 0
-    ? 'Taking a little longer than usual'
-    : seconds < 60
-      ? `About ${seconds}s left`
-      : `About ${Math.ceil(seconds / 60)} min left`;
-
 /** The current time, every second while `running`: what a countdown reads. */
 function useNowEverySecond(running: boolean): number {
   const [now, setNow] = useState(() => Date.now());
@@ -130,7 +123,7 @@ export const assetKey = (asset: Pick<RampAsset, 'code' | 'chain' | 'identifier'>
   `${asset.code}:${asset.chain}:${asset.identifier ?? ''}`;
 
 interface RampWidgetTemplateProps {
-  /** Language of the rail labels. Defaults to the user's device; the widget passes the resolved one. */
+  /** Language of the widget's text and rail labels. Defaults to the user's device; the widget passes the resolved one. */
   language?: PollarLanguage;
   theme: string;
   accentColor: string;
@@ -227,8 +220,6 @@ function trustKey(rejection: RampQuoteRejection): string | null {
   return asset ? `${asset.code}:${asset.issuer}` : null;
 }
 
-const LOADING_STEPS = ['Checking routes…', 'Quoting each step…', 'Route found!'];
-
 /** Renders again at `at` (ms since epoch), so what lapses then (a signature's button) goes then, not at the next read. */
 function useRenderAt(at: number | null) {
   const [, setTick] = useState(0);
@@ -301,17 +292,19 @@ export function RampWidgetTemplate({
   onRetry,
   onRefresh,
   onClose,
-  language = languageFromTag(deviceLanguageTag()) ?? 'en',
+  language: languageProp,
 }: RampWidgetTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
+  const copy = RAMP_COPY[language];
   const onramp = direction === 'ONRAMP';
   const sendUnit = onramp ? fiat?.currency : asset?.code;
-  const view = order ? describeRampAction(order) : null;
+  const view = order ? describeRampAction(order, language) : null;
   const settled = order ? ['completed', 'failed', 'refunded'].includes(order.state) : false;
   // A leg running on its own (not waiting on the user) counts down its quoted time.
   const running = order?.legs.find((leg) => rampLegStatus(leg) === 'active' && order.pendingAction?.legIndex !== leg.index);
   const now = useNowEverySecond(step === 'status' && !settled && !!running && running.etaSeconds !== null);
-  const nextApproval = order && !settled ? rampNextApproval(order) : null;
+  const nextApproval = order && !settled ? rampNextApproval(order, language) : null;
   // Held (no next read) or final: the order no longer moves on its own.
   const stopped = order ? rampOrderStopped(order) : false;
   const receive = order ? rampOrderReceive(order) : null;
@@ -329,20 +322,25 @@ export function RampWidgetTemplate({
     walletBusy === null;
 
   const stepTitle: Record<RampStep, string> = {
-    input: onramp ? 'Buy crypto' : 'Sell crypto',
-    loading_quote: 'Finding the best route',
-    select_route: 'Choose a route',
-    contact: 'Your details',
-    status: order?.state === 'completed' ? 'Transfer completed' : onramp ? 'Your purchase' : 'Your sale',
-    error: 'Something went wrong',
+    input: onramp ? copy.title.buy : copy.title.sell,
+    loading_quote: copy.title.finding,
+    select_route: copy.title.chooseRoute,
+    contact: copy.title.details,
+    status: order?.state === 'completed' ? copy.title.completed : onramp ? copy.title.purchase : copy.title.sale,
+    error: copy.title.error,
   };
   const stepSubtitle: Record<RampStep, string> = {
-    input: onramp ? 'Pick what you receive and how much you pay' : 'Pick what you sell and how much',
-    loading_quote: 'Comparing routes in real time…',
-    select_route: 'All amounts include fees',
-    contact: `This route needs ${listOf(fields.filter((f) => !f.optional).map((f) => f.label.toLowerCase()))} to continue`,
-    status: view?.title ?? 'Processing',
-    error: 'Please try again',
+    input: onramp ? copy.subtitle.buy : copy.subtitle.sell,
+    loading_quote: copy.subtitle.comparing,
+    select_route: copy.subtitle.feesIncluded,
+    contact: copy.subtitle.needs(
+      listOf(
+        fields.filter((f) => !f.optional).map((f) => f.label.toLowerCase()),
+        copy,
+      ),
+    ),
+    status: view?.title ?? copy.subtitle.processing,
+    error: copy.subtitle.error,
   };
 
   return (
@@ -353,7 +351,13 @@ export function RampWidgetTemplate({
           <p className="pollar-ramp-subtitle">{stepSubtitle[step]}</p>
         </div>
         <div className="pollar-modal-header-actions">
-          <button type="button" className="pollar-modal-close" onClick={onRefresh} disabled={refreshing} aria-label="Refresh">
+          <button
+            type="button"
+            className="pollar-modal-close"
+            onClick={onRefresh}
+            disabled={refreshing}
+            aria-label={copy.refresh}
+          >
             <svg
               className={refreshing ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
               width="16"
@@ -371,7 +375,7 @@ export function RampWidgetTemplate({
               />
             </svg>
           </button>
-          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
+          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
               <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
@@ -381,9 +385,7 @@ export function RampWidgetTemplate({
 
       {flowStepIndex >= 0 && flowSteps.length > 0 && (
         <div className="pollar-ramp-steps">
-          <span className="pollar-ramp-steps-label">
-            Step {flowStepIndex + 1} of {flowSteps.length}
-          </span>
+          <span className="pollar-ramp-steps-label">{copy.stepOf(flowStepIndex + 1, flowSteps.length)}</span>
           <ol className="pollar-ramp-steps-track">
             {flowSteps.map((label, i) => (
               <li key={label} className="pollar-ramp-steps-item" aria-current={i === flowStepIndex ? 'step' : undefined}>
@@ -404,10 +406,8 @@ export function RampWidgetTemplate({
       )}
 
       {step === 'input' && pendingOrders.length > 0 && (
-        <section className="pollar-ramp-payment pollar-ramp-saved" aria-label="Pending operations">
-          <p className="pollar-ramp-payment-note">
-            These operations are waiting for you. Starting another does not cancel them.
-          </p>
+        <section className="pollar-ramp-payment pollar-ramp-saved" aria-label={copy.pendingAria}>
+          <p className="pollar-ramp-payment-note">{copy.pendingNote}</p>
           {pendingOrders.map((pending) => (
             <div className="pollar-ramp-saved-row" key={pending.id}>
               <button
@@ -416,7 +416,7 @@ export function RampWidgetTemplate({
                 disabled={isLoading}
                 onClick={() => onResumeOrder(pending.id)}
               >
-                Resume {pending.direction === 'ONRAMP' ? 'purchase' : 'sale'} · {pending.id.slice(-8)}
+                {copy.resume(pending.direction === 'ONRAMP', pending.id.slice(-8))}
               </button>
             </div>
           ))}
@@ -427,29 +427,25 @@ export function RampWidgetTemplate({
         <>
           <div className="pollar-tabs">
             <button type="button" className="pollar-tab" data-active={onramp} onClick={() => onDirectionChange('ONRAMP')}>
-              Buy
+              {copy.buy}
             </button>
             <button type="button" className="pollar-tab" data-active={!onramp} onClick={() => onDirectionChange('OFFRAMP')}>
-              Sell
+              {copy.sell}
             </button>
           </div>
 
           {routesLoading ? (
             <div className="pollar-ramp-input pollar-select-loading">
               <span className="pollar-spinner pollar-spinner-sm" />
-              <span>Loading routes…</span>
+              <span>{copy.loadingRoutes}</span>
             </div>
           ) : countries.length === 0 ? (
-            <div className="pollar-modal-error">
-              {noChains
-                ? 'This app has no chains enabled, so there is nothing to buy or sell yet.'
-                : 'No ramp routes are available for this app yet.'}
-            </div>
+            <div className="pollar-modal-error">{noChains ? copy.noChains : copy.noRoutes}</div>
           ) : (
             <>
               <div className="pollar-ramp-field">
                 <label className="pollar-ramp-label" htmlFor="pollar-ramp-country">
-                  Country
+                  {copy.country}
                 </label>
                 <select
                   id="pollar-ramp-country"
@@ -468,7 +464,7 @@ export function RampWidgetTemplate({
               {fiats.length > 1 && (
                 <div className="pollar-ramp-field">
                   <label className="pollar-ramp-label" htmlFor="pollar-ramp-fiat">
-                    {onramp ? 'Pay with' : 'Receive in'}
+                    {onramp ? copy.payWith : copy.receiveIn}
                   </label>
                   <select
                     id="pollar-ramp-fiat"
@@ -487,7 +483,7 @@ export function RampWidgetTemplate({
 
               <div className="pollar-ramp-field">
                 <label className="pollar-ramp-label" htmlFor="pollar-ramp-asset">
-                  {onramp ? 'Receive' : 'Sell'}
+                  {onramp ? copy.receive : copy.sell}
                 </label>
                 <select
                   id="pollar-ramp-asset"
@@ -497,7 +493,7 @@ export function RampWidgetTemplate({
                 >
                   {assets.map((a) => (
                     <option key={assetKey(a)} value={assetKey(a)}>
-                      {a.code} on {CHAIN_NAME[a.chain] ?? a.chain}
+                      {copy.assetOn(a.code, CHAIN_NAME[a.chain] ?? a.chain)}
                     </option>
                   ))}
                 </select>
@@ -506,11 +502,12 @@ export function RampWidgetTemplate({
               <div className="pollar-ramp-field">
                 <AmountField
                   id="pollar-ramp-amount"
-                  label={onramp ? 'You pay' : 'You sell'}
+                  label={onramp ? copy.youPay : copy.youSell}
                   value={amount}
                   onChange={onAmountChange}
                   unit={sendUnit}
                   available={onramp ? undefined : sellAvailable}
+                  language={language}
                 />
                 {errorMsg && <span className="pollar-ramp-field-error">{errorMsg}</span>}
               </div>
@@ -524,7 +521,7 @@ export function RampWidgetTemplate({
               disabled={!amount || !fiat || !asset || isLoading || routesLoading}
               onClick={onFindRoute}
             >
-              Find best route
+              {copy.findBestRoute}
             </button>
           </div>
         </>
@@ -533,7 +530,7 @@ export function RampWidgetTemplate({
       {step === 'loading_quote' && (
         <div className="pollar-ramp-loading">
           <div className="pollar-spinner pollar-ramp-loading-spinner" />
-          {LOADING_STEPS.map((text, i) => (
+          {copy.loadingSteps.map((text, i) => (
             <div key={i} className="pollar-ramp-loading-row">
               <div className="pollar-ramp-loading-dot" />
               <span>{text}</span>
@@ -553,6 +550,7 @@ export function RampWidgetTemplate({
                 busy={startingQuoteId === q.quoteId}
                 disabled={startingQuoteId != null && q.quoteId !== startingQuoteId}
                 onSelect={onSelectQuote}
+                language={language}
               />
             ))}
             {rejected.map((r, i) => (
@@ -566,10 +564,11 @@ export function RampWidgetTemplate({
                 onVerify={onVerifyRoute}
                 onTrust={onTrustAsset}
                 onWalletStep={onWalletStep && ((step, custody) => onWalletStep(step, i, custody))}
+                language={language}
               />
             ))}
           </div>
-          {quotes.length === 0 && <p className="pollar-ramp-payment-note">{rampNoRouteText(rejected)}</p>}
+          {quotes.length === 0 && <p className="pollar-ramp-payment-note">{rampNoRouteText(rejected, language)}</p>}
           {notice && (
             <p className="pollar-ramp-payment-note">
               <span className="pollar-spinner pollar-spinner-sm" aria-hidden /> {notice}
@@ -583,7 +582,9 @@ export function RampWidgetTemplate({
           {/* A dead end keeps a button out: the step bar alone is too quiet as the only way forward. */}
           {(errorMsg || !quotes.length) && (
             <button type="button" className="pollar-btn-primary" onClick={onBack}>
-              {!errorMsg && rejected.some((r) => r.failure.resolutionAction === 'change_amount') ? 'Change amount' : 'Back'}
+              {!errorMsg && rejected.some((r) => r.failure.resolutionAction === 'change_amount')
+                ? copy.changeAmount
+                : copy.back}
             </button>
           )}
         </>
@@ -595,7 +596,7 @@ export function RampWidgetTemplate({
             <div key={f.key} className="pollar-ramp-field">
               <label className="pollar-ramp-label">
                 {f.label}
-                {f.optional && <span className="pollar-ramp-field-optional"> (optional)</span>}
+                {f.optional && <span className="pollar-ramp-field-optional"> ({copy.optional})</span>}
               </label>
               {f.type === 'select' ? (
                 <select
@@ -604,7 +605,7 @@ export function RampWidgetTemplate({
                   onChange={(e) => onFieldChange(f.key, e.target.value)}
                 >
                   <option value="" disabled>
-                    Select…
+                    {copy.select}
                   </option>
                   {(f.options ?? []).map((o) => (
                     <option key={o.value} value={o.value}>
@@ -623,8 +624,8 @@ export function RampWidgetTemplate({
                 />
               )}
               {f.hint && <span className="pollar-ramp-field-hint">{f.hint}</span>}
-              {rampFieldError(f, fieldValues[f.key]) && (
-                <span className="pollar-ramp-field-error">{rampFieldError(f, fieldValues[f.key])}</span>
+              {rampFieldError(f, fieldValues[f.key], language) && (
+                <span className="pollar-ramp-field-error">{rampFieldError(f, fieldValues[f.key], language)}</span>
               )}
             </div>
           ))}
@@ -640,10 +641,10 @@ export function RampWidgetTemplate({
               {isLoading ? (
                 <>
                   <span className="pollar-spinner pollar-spinner-sm" />
-                  Starting…
+                  {copy.starting}
                 </>
               ) : (
-                'Continue'
+                copy.continue
               )}
             </button>
           </div>
@@ -652,17 +653,17 @@ export function RampWidgetTemplate({
 
       {step === 'status' && order && view && (
         <div className="pollar-ramp-payment">
-          <ol className="pollar-ramp-legs" aria-label="Progress">
+          <ol className="pollar-ramp-legs" aria-label={copy.progress}>
             {order.legs.map((leg) => {
               const status = rampLegStatus(leg);
               const hash = leg.onchainTxHash;
-              const note = rampLegNote(leg);
+              const note = rampLegNote(leg, language);
               return (
                 <li key={leg.index} className="pollar-ramp-leg" data-status={status}>
                   <span className="pollar-ramp-leg-dot" aria-hidden />
-                  <span className="pollar-ramp-leg-title">{rampLegTitle(leg)}</span>
+                  <span className="pollar-ramp-leg-title">{rampLegTitle(leg, language)}</span>
                   {status === 'active' && !settled && (
-                    <span className="pollar-spinner pollar-spinner-sm" aria-label="In progress" />
+                    <span className="pollar-spinner pollar-spinner-sm" aria-label={copy.inProgress} />
                   )}
                   {hash && (
                     <a
@@ -679,7 +680,7 @@ export function RampWidgetTemplate({
                     <ol className="pollar-ramp-steps">
                       {leg.steps.map((s) => (
                         <li key={s.kind} className="pollar-ramp-step" data-status={s.status}>
-                          <span className="pollar-ramp-step-title">{rampStepTitle(s, leg)}</span>
+                          <span className="pollar-ramp-step-title">{rampStepTitle(s, leg, language)}</span>
                           <span className="pollar-ramp-step-state">
                             {s.status === 'confirming' && <span className="pollar-spinner pollar-spinner-sm" aria-hidden />}
                             {s.hash ? (
@@ -689,10 +690,10 @@ export function RampWidgetTemplate({
                                 target="_blank"
                                 rel="noopener noreferrer"
                               >
-                                {rampStepStatusText(s)}
+                                {rampStepStatusText(s, language)}
                               </a>
                             ) : (
-                              rampStepStatusText(s)
+                              rampStepStatusText(s, language)
                             )}
                           </span>
                         </li>
@@ -700,20 +701,20 @@ export function RampWidgetTemplate({
                     </ol>
                   )}
                   {running === leg && !settled && rampLegTimeLeft(leg, now) !== null && (
-                    <span className="pollar-ramp-leg-eta">{timeLeftText(rampLegTimeLeft(leg, now)!)}</span>
+                    <span className="pollar-ramp-leg-eta">{copy.timeLeft(rampLegTimeLeft(leg, now)!)}</span>
                   )}
                 </li>
               );
             })}
           </ol>
 
-          {nextApproval && !order.pendingAction && (
-            <p className="pollar-ramp-next">Next: {nextApproval}. You approve it on this device when it comes up.</p>
-          )}
+          {nextApproval && !order.pendingAction && <p className="pollar-ramp-next">{copy.next(nextApproval)}</p>}
 
           {receive && (
             <div className="pollar-ramp-payment-field">
-              <span className="pollar-ramp-payment-label">{order.state === 'completed' ? 'You received' : 'You receive'}</span>
+              <span className="pollar-ramp-payment-label">
+                {order.state === 'completed' ? copy.youReceived : copy.youReceive}
+              </span>
               <div className="pollar-ramp-payment-value">
                 {receive.estimated && '~'}
                 {receive.amount} {receive.unit}
@@ -723,15 +724,15 @@ export function RampWidgetTemplate({
 
           {order.failure && (
             <div className="pollar-ramp-payment-field">
-              <span className="pollar-ramp-payment-label">What to do</span>
-              <p className="pollar-ramp-payment-note">{rampOrderResolutionText(order)}</p>
+              <span className="pollar-ramp-payment-label">{copy.whatToDo}</span>
+              <p className="pollar-ramp-payment-note">{rampOrderResolutionText(order, language)}</p>
               {stopped && !settled && waitsOnRecovery && recoveryMissing !== false && onSetUpRecovery && (
                 <button type="button" className="pollar-btn-secondary" onClick={onSetUpRecovery}>
-                  Set up recovery
+                  {copy.setUpRecovery}
                 </button>
               )}
               {stopped && !settled && waitsOnRecovery && recoveryMissing === true && (
-                <p className="pollar-ramp-payment-note">Once it is set up, the order goes on by itself.</p>
+                <p className="pollar-ramp-payment-note">{copy.recoveryNote}</p>
               )}
               {stopped && !settled && order.failure.resolutionOwner === 'END_USER' && onRetryOrder && (
                 <button
@@ -742,16 +743,18 @@ export function RampWidgetTemplate({
                 >
                   {retrying ? (
                     <>
-                      <span className="pollar-spinner pollar-spinner-sm" /> Trying again…
+                      <span className="pollar-spinner pollar-spinner-sm" /> {copy.tryingAgain}
                     </>
                   ) : (
-                    'Try again'
+                    copy.tryAgain
                   )}
                 </button>
               )}
               <div className="pollar-ramp-payment-value" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <code style={{ flex: 1, wordBreak: 'break-all' }}>Order {order.id}</code>
-                <CopyButton value={order.id} label="Copy order id" />
+                <code style={{ flex: 1, wordBreak: 'break-all' }}>
+                  {copy.order} {order.id}
+                </code>
+                <CopyButton value={order.id} label={copy.copyOrderId} language={language} />
               </div>
             </div>
           )}
@@ -759,24 +762,24 @@ export function RampWidgetTemplate({
           {!settled && payBy !== null && (
             <p className="pollar-ramp-payment-note">
               {payBy > Date.now()
-                ? `Pay before ${new Date(payBy).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
-                : 'This payment window has closed. If you have not paid, start a new operation.'}
+                ? copy.payBefore(new Date(payBy).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+                : copy.windowClosed}
             </p>
           )}
           {!settled && view.scannable && (
             <div className="pollar-ramp-payment-field">
-              <span className="pollar-ramp-payment-label">Payment QR</span>
+              <span className="pollar-ramp-payment-label">{copy.paymentQr}</span>
               <div className="pollar-ramp-payment-value">
                 {view.scannable.image.inlineSafe ? (
                   <div
                     className="pollar-ramp-qr"
-                    aria-label="Payment QR"
+                    aria-label={copy.paymentQr}
                     dangerouslySetInnerHTML={{ __html: view.scannable.image.data }}
                   />
                 ) : (
                   <img
                     src={scannableImageSrc(view.scannable.image)}
-                    alt="Payment QR"
+                    alt={copy.paymentQr}
                     style={{ width: '100%', maxWidth: 220, height: 'auto', display: 'block', margin: '0 auto' }}
                   />
                 )}
@@ -785,7 +788,7 @@ export function RampWidgetTemplate({
           )}
           {!settled && view.codeMissing && (
             <p className="pollar-ramp-payment-note" style={{ color: 'var(--pollar-error-text)' }}>
-              The payment code could not be shown. Refresh; if it still does not appear, contact this app's support.
+              {copy.codeMissing}
             </p>
           )}
           {!settled && view.scannable?.payload && view.scannable.payloadLabel && (
@@ -794,7 +797,11 @@ export function RampWidgetTemplate({
               <div className="pollar-ramp-payment-value">
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <code style={{ flex: 1, wordBreak: 'break-all' }}>{view.scannable.payload}</code>
-                  <CopyButton value={view.scannable.payload} label={`Copy ${view.scannable.payloadLabel}`} />
+                  <CopyButton
+                    value={view.scannable.payload}
+                    label={copy.copyLabel(view.scannable.payloadLabel)}
+                    language={language}
+                  />
                 </span>
               </div>
             </div>
@@ -806,7 +813,7 @@ export function RampWidgetTemplate({
                 <div className="pollar-ramp-payment-value">
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <code style={{ flex: 1, wordBreak: 'break-all' }}>{d.value}</code>
-                    <CopyButton value={d.value} label={`Copy ${d.label}`} />
+                    <CopyButton value={d.value} label={copy.copyLabel(d.label)} language={language} />
                   </span>
                 </div>
               </div>
@@ -816,25 +823,25 @@ export function RampWidgetTemplate({
             <button type="button" className="pollar-btn-primary" disabled={checkingPayment} onClick={onCheckPayment}>
               {checkingPayment ? (
                 <>
-                  <span className="pollar-spinner pollar-spinner-sm" /> Checking your payment...
+                  <span className="pollar-spinner pollar-spinner-sm" /> {copy.checkingPayment}
                 </>
               ) : (
-                "I've paid"
+                copy.paid
               )}
             </button>
           )}
 
           {!settled && view.canSign && (
             <button type="button" className="pollar-btn-primary" disabled={signing} onClick={onSign}>
-              {signing ? 'Waiting for your wallet…' : 'Authorize'}
+              {signing ? copy.waitingWallet : copy.authorize}
             </button>
           )}
           {!settled && view.action?.kind === 'SIGNATURE' && !view.canSign && (
-            <p className="pollar-ramp-payment-note">Preparing a new signature request…</p>
+            <p className="pollar-ramp-payment-note">{copy.preparingSignature}</p>
           )}
           {!settled && view.canApprove && (
             <button type="button" className="pollar-btn-primary" onClick={onApprove}>
-              Approve on this device
+              {copy.approveOnDevice}
             </button>
           )}
           {!settled && view.link && (
@@ -848,31 +855,29 @@ export function RampWidgetTemplate({
             </a>
           )}
           {!settled && order.pendingAction?.kind === 'KYC' && !view.link && (
-            <p className="pollar-ramp-payment-note">
-              {view.note ?? 'The provider is reviewing your details. This updates on its own.'}
-            </p>
+            <p className="pollar-ramp-payment-note">{view.note ?? copy.providerReviewing}</p>
           )}
-          {pollTrouble && !settled && <p className="pollar-ramp-payment-note">Having trouble reaching the server. Retrying…</p>}
+          {pollTrouble && !settled && <p className="pollar-ramp-payment-note">{copy.serverTrouble}</p>}
           {errorMsg && <p className="pollar-ramp-field-error">{errorMsg}</p>}
 
           <div className="pollar-ramp-explore">
             <button type="button" className="pollar-btn-secondary" onClick={onNewOrder}>
-              Start another operation
+              {copy.startAnother}
             </button>
-            {!stopped && <p className="pollar-ramp-payment-note">This one keeps going; you can resume it later.</p>}
+            {!stopped && <p className="pollar-ramp-payment-note">{copy.keepsGoing}</p>}
           </div>
         </div>
       )}
 
       {step === 'error' && (
         <>
-          <div className="pollar-modal-error">{errorMsg ?? 'Something went wrong.'}</div>
+          <div className="pollar-modal-error">{errorMsg ?? copy.somethingWrong}</div>
           <div className="pollar-modal-actions">
             <button type="button" className="pollar-btn-secondary" onClick={onClose}>
-              Close
+              {copy.close}
             </button>
             <button type="button" className="pollar-btn-primary" onClick={onRetry}>
-              Try again
+              {copy.tryAgain}
             </button>
           </div>
         </>

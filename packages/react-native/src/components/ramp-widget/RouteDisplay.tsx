@@ -1,9 +1,16 @@
+import { useInheritedLanguage } from '../../language-context';
 import React from 'react';
 import { ActivityIndicator, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import type { CosignCustody, RampQuote, RampQuoteRejection, RampQuoteRequirement, RampWalletStep } from '@pollar/core';
+import type {
+  CosignCustody,
+  PollarLanguage,
+  RampQuote,
+  RampQuoteRejection,
+  RampQuoteRequirement,
+  RampWalletStep,
+} from '@pollar/core';
 import { rampLegTitle, rampRequirementCopy, rampResolutionText, rampTrustlineAsset, rampWalletStep } from '@pollar/core';
-
-const CUSTODY_LABEL: Record<CosignCustody, string> = { COSIGNED: 'co-signed', SELF_CUSTODY: 'self-custody' };
+import { RAMP_COPY } from './ramp-copy';
 
 interface RouteDisplayProps {
   quote: RampQuote;
@@ -11,11 +18,14 @@ interface RouteDisplayProps {
   best?: boolean;
   disabled?: boolean;
   onSelect: (quote: RampQuote) => void;
+  /** Defaults to the user's device; the widget passes the resolved one. */
+  language?: PollarLanguage;
 }
 
 const assetOf = (node: RampQuote['legs'][number]['to']) => (node.kind === 'fiat' ? node.currency : node.code);
 
-export function RouteDisplay({ quote, best = false, disabled = false, onSelect }: RouteDisplayProps) {
+export function RouteDisplay({ quote, best = false, disabled = false, onSelect, language: languageProp }: RouteDisplayProps) {
+  const language = useInheritedLanguage(languageProp);
   const first = quote.legs[0];
   const last = quote.legs[quote.legs.length - 1];
   return (
@@ -31,12 +41,12 @@ export function RouteDisplay({ quote, best = false, disabled = false, onSelect }
             ? `${quote.amountIn} ${assetOf(first.from)} → ~${quote.amountOut} ${assetOf(last.to)}`
             : `~${quote.amountOut}`}
         </Text>
-        <Text style={styles.meta}>{quote.legs.map((leg) => rampLegTitle(leg)).join(' · ')}</Text>
+        <Text style={styles.meta}>{quote.legs.map((leg) => rampLegTitle(leg, language)).join(' · ')}</Text>
       </View>
       {best && (
         <View style={styles.right}>
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>Best rate</Text>
+            <Text style={styles.badgeText}>{RAMP_COPY[language].bestRate}</Text>
           </View>
         </View>
       )}
@@ -58,6 +68,7 @@ export function RejectedRouteDisplay({
   onVerify,
   onTrust,
   onWalletStep,
+  language: languageProp,
 }: {
   rejection: RampQuoteRejection;
   accentColor?: string;
@@ -79,25 +90,25 @@ export function RejectedRouteDisplay({
    * the custody to the user creates the wallet from the wallet menu instead.
    */
   onWalletStep?: ((step: RampWalletStep, custody?: CosignCustody) => void) | undefined;
+  /** Defaults to the user's device; the widget passes the resolved one. */
+  language?: PollarLanguage;
 }) {
+  const language = useInheritedLanguage(languageProp);
+  const text = RAMP_COPY[language];
   const requirement = rejection.requirement;
-  const copy = requirement ? rampRequirementCopy(requirement) : null;
+  const copy = requirement ? rampRequirementCopy(requirement, language) : null;
   const trustAsset = !requirement && onTrust ? rampTrustlineAsset(rejection) : null;
-  const step = !requirement ? rampWalletStep(rejection) : null;
+  const step = !requirement ? rampWalletStep(rejection, language) : null;
   const fromMenu = step?.action === 'create_wallet' && custodyChoice;
   const walletStep = onWalletStep && !fromMenu ? step : null;
   // Only a step that creates or moves a wallet picks its custody; adding recovery does not.
   const picks: Array<CosignCustody | undefined> =
     custodyChoice && step?.action !== 'set_up_recovery' ? ['COSIGNED', 'SELF_CUSTODY'] : [undefined];
-  const meta = copy
-    ? copy.message
-    : fromMenu
-      ? 'You need a wallet to receive this. Create it from the wallet menu, then find the route again.'
-      : rampResolutionText(rejection.failure);
+  const meta = copy ? copy.message : fromMenu ? text.needWallet : rampResolutionText(rejection.failure, language);
   return (
     <View style={[styles.card, !(copy?.action && onVerify) && !trustAsset && !walletStep && { opacity: 0.6 }]}>
       <View style={styles.left}>
-        <Text style={styles.provider}>{rejection.legs.map((leg) => rampLegTitle(leg)).join(' · ')}</Text>
+        <Text style={styles.provider}>{rejection.legs.map((leg) => rampLegTitle(leg, language)).join(' · ')}</Text>
         <Text style={styles.meta}>{meta}</Text>
       </View>
       {trustAsset && (
@@ -110,10 +121,10 @@ export function RejectedRouteDisplay({
           {trusting ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <ActivityIndicator size="small" color={accentColor} />
-              <Text style={{ color: accentColor, fontWeight: '600', fontSize: 13 }}>Adding…</Text>
+              <Text style={{ color: accentColor, fontWeight: '600', fontSize: 13 }}>{text.adding}</Text>
             </View>
           ) : (
-            <Text style={{ color: accentColor, fontWeight: '600', fontSize: 13 }}>Add {trustAsset.code} trustline</Text>
+            <Text style={{ color: accentColor, fontWeight: '600', fontSize: 13 }}>{text.addTrustline(trustAsset.code)}</Text>
           )}
         </TouchableOpacity>
       )}
@@ -135,7 +146,7 @@ export function RejectedRouteDisplay({
               onPress={() => onWalletStep!(walletStep, custody)}
             >
               <Text style={{ color: accentColor, fontWeight: '600', fontSize: 13 }}>
-                {custody ? `${walletStep.label} (${CUSTODY_LABEL[custody]})` : walletStep.label}
+                {custody ? `${walletStep.label} (${text.custody[custody]})` : walletStep.label}
               </Text>
             </TouchableOpacity>
           ))

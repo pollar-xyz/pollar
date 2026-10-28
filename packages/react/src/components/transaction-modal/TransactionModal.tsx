@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import '../shared.css';
 import './TransactionModal.css';
 import { TransactionModalTemplate } from './TransactionModalTemplate';
@@ -17,6 +18,7 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
   // null for embedded/smart, which fall back to the Pollar logo.
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
+  const language = useModalLanguage();
 
   const [showXdr, setShowXdr] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -80,6 +82,7 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
         onToggleXdr={() => setShowXdr((v) => !v)}
         onCopyHash={handleCopyHash}
         onRetry={handleRetry}
+        language={language}
       />
     </div>
   );

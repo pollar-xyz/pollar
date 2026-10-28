@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, TouchableWithoutFeedback, Linking } from 'react-native';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { TransactionModalTemplate } from './TransactionModalUI';
 
 interface TransactionModalProps {
@@ -10,6 +11,7 @@ interface TransactionModalProps {
 export function TransactionModal({ onClose }: TransactionModalProps) {
   const { getClient, styles, transaction, network, walletType } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const language = useModalLanguage();
 
   const [showXdr, setShowXdr] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -63,6 +65,7 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
               onToggleXdr={() => setShowXdr((v) => !v)}
               onCopyHash={handleCopyHash}
               onRetry={handleRetry}
+              language={language}
             />
           </View>
         </TouchableWithoutFeedback>

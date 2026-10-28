@@ -3,12 +3,14 @@
 import { EnabledAssetRecord, WalletChain } from '@pollar/core';
 import { useCallback, useEffect, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { useChains } from '../../useChains';
 import { addressForChain } from '../ChainSelect';
 import '../shared.css';
 import './EnabledAssetsModal.css';
 import { CustomTrustlineModalTemplate, EnabledAssetsModalTemplate } from './EnabledAssetsModalTemplate';
 import { modalChrome } from '../modal-theme';
+import { ENABLED_ASSETS_COPY } from './enabled-assets-copy';
 
 interface EnabledAssetsModalProps {
   onClose: () => void;
@@ -21,6 +23,8 @@ function assetKey(record: { code: string; issuer?: string }): string {
 export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
   const { enabledAssets, refreshAssets, setTrustline, wallets, styles } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
+  const language = useModalLanguage();
+  const updateFailed = ENABLED_ASSETS_COPY[language].updateFailed;
 
   const { chains } = useChains();
   const [selectedChain, setSelectedChain] = useState<WalletChain | null>(null);
@@ -51,7 +55,7 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
       setActionError(null);
       const res = await setTrustline(asset, opts);
       if (res.status === 'error') {
-        setActionError(res.details || 'Trustline update failed. Please try again.');
+        setActionError(res.details || updateFailed);
         setBusyKey(null);
         return false;
       }
@@ -59,7 +63,7 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
       setBusyKey(null);
       return true;
     },
-    [setTrustline, refreshAssets],
+    [setTrustline, refreshAssets, updateFailed],
   );
 
   const handleToggle = useCallback(
@@ -109,6 +113,7 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
             setActionError(null);
             setView('custom');
           }}
+          language={language}
         />
       ) : (
         <CustomTrustlineModalTemplate
@@ -123,6 +128,7 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
           }}
           onClose={onClose}
           onSubmit={handleCustomSubmit}
+          language={language}
         />
       )}
     </div>

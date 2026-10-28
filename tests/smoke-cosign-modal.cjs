@@ -161,6 +161,7 @@ async function mount(element) {
     const load = loader({
       'react-native': reactNative,
       '../../context': { usePollar: () => context },
+      './context': { usePollar: () => context },
       '../commons': { PollarOverlay: passthrough, PollarModalFooter: () => null },
     });
     const { CosignModal } = load('packages/react-native/src/components/cosign-modal/CosignModal.tsx');
@@ -224,6 +225,7 @@ async function mount(element) {
         ({ CosignModal } = loader({
           'react-native': reactNative,
           '../../context': { usePollar: () => context },
+          './context': { usePollar: () => context },
           '../commons': { PollarOverlay: passthrough, PollarModalFooter: () => null },
         })('packages/react-native/src/components/cosign-modal/CosignModal.tsx'));
         Host = () => {

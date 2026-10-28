@@ -25,6 +25,8 @@ import {
   rampOrderResolutionText,
 } from '@pollar/core';
 import { usePollar } from '../context';
+import { useModalLanguage } from '../language';
+import { FEATURE_COPY } from './feature-copy';
 import { ActionButton, ActionState, Card, Choice, Field, Label, ResultView, useAction } from './native-ui';
 
 export type FeatureName =
@@ -45,8 +47,9 @@ export type FeatureName =
   | 'distribution';
 export function ChainSelect({ value, onChange }: { value: WalletChain; onChange: (value: WalletChain) => void }) {
   const { wallets } = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const chains = [...new Set(wallets.map((w) => w.chain ?? 'STELLAR'))];
-  return <Choice label="Chain" value={value} options={chains.length ? chains : ['STELLAR']} onChange={onChange} />;
+  return <Choice label={copy.chain} value={value} options={chains.length ? chains : ['STELLAR']} onChange={onChange} />;
 }
 export function AssetSelect({
   assets,
@@ -57,13 +60,15 @@ export function AssetSelect({
   value: string;
   onChange: (value: string) => void;
 }) {
-  return <Choice label="Asset" value={value} options={assets.map(assetKey)} onChange={onChange} />;
+  const copy = FEATURE_COPY[useModalLanguage()];
+  return <Choice label={copy.asset} value={value} options={assets.map(assetKey)} onChange={onChange} />;
 }
 export const assetKey = (asset: { chain?: WalletChain; code: string; issuer?: string }) =>
   [asset.chain ?? 'STELLAR', asset.code, asset.issuer ?? 'native'].join(':');
 
 export function AuthPanel() {
   const p = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   const [provider, setProvider] = useState('Pollar');
   const [email, setEmail] = useState('');
@@ -88,7 +93,7 @@ export function AuthPanel() {
     };
   }, [client]);
   async function send() {
-    if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error('Enter a valid email address.');
+    if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error(copy.auth.invalidEmail);
     if (provider === 'Privy') {
       await p.privyAdapter!.sendEmailCode(email);
       setSent(true);
@@ -99,7 +104,7 @@ export function AuthPanel() {
     }
   }
   async function verify() {
-    if (!code.trim()) throw new Error('Enter your verification code.');
+    if (!code.trim()) throw new Error(copy.auth.missingCode);
     const current = generation.current;
     if (provider === 'Privy') {
       await p.privyAdapter!.verifyEmailCode(code);
@@ -115,18 +120,18 @@ export function AuthPanel() {
   }
   const authBusy = !['idle', 'error', 'entering_email', 'entering_code', 'authenticated'].includes(p.authState.step);
   return (
-    <Card title="Authentication">
+    <Card title={copy.auth.title}>
       {p.isAuthenticated ? (
         <>
-          <Label>{p.verified ? 'Session verified' : 'Restoring session…'}</Label>
+          <Label>{p.verified ? copy.auth.verified : copy.auth.restoring}</Label>
           <ResultView value={p.wallet} />
-          <ActionButton title="Log out" disabled={action.busy} onPress={() => void action.run(p.logout)} />
+          <ActionButton title={copy.auth.logOut} disabled={action.busy} onPress={() => void action.run(p.logout)} />
         </>
       ) : (
         <>
           {p.privyAdapter && (
             <Choice
-              label="Provider"
+              label={copy.provider}
               options={['Pollar', 'Privy']}
               value={provider}
               onChange={(value) => {
@@ -138,16 +143,20 @@ export function AuthPanel() {
               }}
             />
           )}
-          <Field label="Email" keyboardType="email-address" value={email} onChangeText={setEmail} />
+          <Field label={copy.auth.email} keyboardType="email-address" value={email} onChangeText={setEmail} />
           <ActionButton
-            title={sent ? 'Resend code' : 'Send code'}
+            title={sent ? copy.auth.resendCode : copy.auth.sendCode}
             disabled={action.busy || authBusy}
             onPress={() => void action.run(send)}
           />
           {sent && (
             <>
-              <Field label="Verification code" keyboardType="number-pad" value={code} onChangeText={setCode} />
-              <ActionButton title="Verify code" disabled={action.busy || authBusy} onPress={() => void action.run(verify)} />
+              <Field label={copy.auth.code} keyboardType="number-pad" value={code} onChangeText={setCode} />
+              <ActionButton
+                title={copy.auth.verifyCode}
+                disabled={action.busy || authBusy}
+                onPress={() => void action.run(verify)}
+              />
             </>
           )}
           {(['google', 'github'] as const)
@@ -155,13 +164,13 @@ export function AuthPanel() {
             .map((name) => (
               <ActionButton
                 key={name}
-                title={'Continue with ' + name}
+                title={copy.auth.continueWith(name)}
                 disabled={action.busy || authBusy}
                 onPress={() => void action.run(() => social(name))}
               />
             ))}
           <ActionButton
-            title="Cancel login"
+            title={copy.auth.cancel}
             onPress={() => {
               generation.current++;
               pending.current = '';
@@ -180,12 +189,13 @@ export function AuthPanel() {
 
 export function WalletPanel() {
   const p = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   useEffect(() => {
     if (p.verified) void action.run(p.refreshWalletBalance);
   }, [p.verified]);
   return (
-    <Card title="Wallet balances">
+    <Card title={copy.wallet.title}>
       {p.wallets.map((wallet) => (
         <View key={(wallet.chain ?? 'STELLAR') + wallet.address} style={{ gap: 8 }}>
           <Label>
@@ -193,21 +203,25 @@ export function WalletPanel() {
           </Label>
           <ResultView value={wallet.address} />
           <ActionButton
-            title={'Copy ' + (wallet.chain ?? 'STELLAR') + ' address'}
+            title={copy.copyChainAddress(wallet.chain ?? 'STELLAR')}
             onPress={() =>
               void action.run(async () => {
                 await p.copyText(wallet.address);
-                return 'Copied';
+                return copy.copied;
               })
             }
           />
         </View>
       ))}
-      <ActionButton title="Refresh balances" disabled={action.busy} onPress={() => void action.run(p.refreshWalletBalance)} />
+      <ActionButton
+        title={copy.wallet.refresh}
+        disabled={action.busy}
+        onPress={() => void action.run(p.refreshWalletBalance)}
+      />
       {p.walletBalance.step === 'loaded' ? (
         p.walletBalance.data.balances.map((b) => (
           <Label key={assetKey(b)}>
-            {b.chain ?? 'STELLAR'} · {b.code}: {b.balance ?? 'Unavailable'}
+            {b.chain ?? 'STELLAR'} · {b.code}: {b.balance ?? copy.wallet.unavailable}
           </Label>
         ))
       ) : (
@@ -219,20 +233,18 @@ export function WalletPanel() {
 }
 export function ReceivePanel() {
   const p = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   const [chain, setChain] = useState<WalletChain>('STELLAR');
   const address = p.wallets.find((w) => (w.chain ?? 'STELLAR') === chain)?.address;
   return (
-    <Card title="Receive">
+    <Card title={copy.receive.title}>
       <ChainSelect value={chain} onChange={setChain} />
       {p.recoveryLocked ? (
         // A locked wallet signs nothing, so funds sent to it now could not leave.
         <>
-          <Label>
-            Your wallet is locked until you add a way to recover it. Without one, losing this device means losing the funds. Set
-            up recovery before receiving funds.
-          </Label>
-          <ActionButton title="Set up recovery" onPress={p.openRecoveryModal} />
+          <Label>{copy.receive.locked}</Label>
+          <ActionButton title={copy.receive.setUpRecovery} onPress={p.openRecoveryModal} />
         </>
       ) : address ? (
         <>
@@ -241,17 +253,17 @@ export function ReceivePanel() {
           </View>
           <ResultView value={address} />
           <ActionButton
-            title="Copy address"
+            title={copy.copyAddress}
             onPress={() =>
               void action.run(async () => {
                 await p.copyText(address);
-                return 'Copied';
+                return copy.copied;
               })
             }
           />
         </>
       ) : (
-        <Label>No wallet available for this chain.</Label>
+        <Label>{copy.receive.noWallet}</Label>
       )}
       <ActionState action={action} />
     </Card>
@@ -259,6 +271,7 @@ export function ReceivePanel() {
 }
 export function SendPanel() {
   const p = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   const [chain, setChain] = useState<WalletChain>('STELLAR');
   const [destination, setDestination] = useState('');
@@ -272,8 +285,7 @@ export function SendPanel() {
   }, [p.verified]);
   const asset = assets.find((a) => assetKey(a) === selected);
   async function send() {
-    if (!destination.trim() || !/^(?:\d+)(?:\.\d+)?$/.test(amount) || Number(amount) <= 0)
-      throw new Error('Enter a destination and positive amount.');
+    if (!destination.trim() || !/^(?:\d+)(?:\.\d+)?$/.test(amount) || Number(amount) <= 0) throw new Error(copy.send.invalid);
     if (chain === 'STELLAR') {
       if (asset?.issuer && asset.issuer !== '0')
         return p.sendPayment({
@@ -287,12 +299,12 @@ export function SendPanel() {
         });
       return p.sendPayment({ destination: destination.trim(), amount, asset: { type: 'native' } });
     }
-    if (p.wallet?.provider === 'privy') throw new Error('Privy supports Stellar signing only.');
-    if (!/^\d+$/.test(amount)) throw new Error('Use integer base units for this chain.');
+    if (p.wallet?.provider === 'privy') throw new Error(copy.privyStellarOnly);
+    if (!/^\d+$/.test(amount)) throw new Error(copy.send.baseUnits);
     return p.sendPayment({ chain, destination: destination.trim(), amount, ...(asset?.issuer ? { mint: asset.issuer } : {}) });
   }
   return (
-    <Card title="Send payment">
+    <Card title={copy.send.title}>
       <ChainSelect
         value={chain}
         onChange={(v) => {
@@ -302,7 +314,8 @@ export function SendPanel() {
         }}
       />
       <Choice
-        label="Token"
+        label={copy.send.token}
+        labels={{ Native: copy.send.native }}
         options={['Native', ...assets.filter((a) => a.issuer && a.issuer !== '0').map(assetKey)]}
         value={selected || 'Native'}
         onChange={(v) => {
@@ -311,7 +324,7 @@ export function SendPanel() {
         }}
       />
       <Field
-        label="Destination address"
+        label={copy.send.destination}
         value={destination}
         onChangeText={(v) => {
           setDestination(v);
@@ -319,7 +332,7 @@ export function SendPanel() {
         }}
       />
       <Field
-        label={chain === 'STELLAR' ? 'Amount' : 'Amount in base units'}
+        label={chain === 'STELLAR' ? copy.amount : copy.send.amountBaseUnits}
         keyboardType="decimal-pad"
         value={amount}
         onChangeText={(v) => {
@@ -327,13 +340,9 @@ export function SendPanel() {
           setReview(false);
         }}
       />
-      {review && (
-        <Label>
-          {p.network}: send {amount} {asset?.code ?? 'native'} to {destination}
-        </Label>
-      )}
+      {review && <Label>{copy.send.review(p.network, amount, asset?.code ?? copy.send.nativeAsset, destination)}</Label>}
       <ActionButton
-        title={review ? 'Confirm payment' : 'Review payment'}
+        title={review ? copy.confirmPayment : copy.reviewPayment}
         disabled={action.busy || !p.verified}
         onPress={() =>
           review
@@ -352,25 +361,28 @@ export function SendPanel() {
 }
 export function TransactionStatus() {
   const p = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   const hash = 'hash' in p.tx ? p.tx.hash : undefined;
   return (
     <View style={{ gap: 8 }}>
-      <Label>Transaction: {p.tx.step}</Label>
+      <Label>
+        {copy.transaction}: {p.tx.step}
+      </Label>
       <ResultView value={p.tx} />
       {hash && (
         <>
           <ActionButton
-            title="Copy transaction hash"
+            title={copy.copyHash}
             onPress={() =>
               void action.run(async () => {
                 await p.copyText(hash);
-                return 'Copied';
+                return copy.copied;
               })
             }
           />
           <ActionButton
-            title="Check confirmation"
+            title={copy.checkConfirmation}
             disabled={action.busy}
             onPress={() => void action.run(() => p.getClient().getTxStatus(hash))}
           />
@@ -382,6 +394,7 @@ export function TransactionStatus() {
 }
 export function TransactionPanel() {
   const p = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   const [xdr, setXdr] = useState('');
   const [signed, setSigned] = useState('');
@@ -399,38 +412,35 @@ export function TransactionPanel() {
     }
   }, [builtXdr]);
   return (
-    <Card title="Transaction playground">
-      <Label>
-        Build an operation, inspect the unsigned XDR, then sign and submit separately. Contract arguments use the core SDK's
-        typed JSON format.
-      </Label>
+    <Card title={copy.playground.title}>
+      <Label>{copy.playground.intro}</Label>
       <Choice
-        label="Operation"
+        label={copy.playground.operation}
         value={operation}
         options={['payment', 'create_account', 'change_trust', 'invoke_contract', 'path_payment_strict_send']}
         onChange={setOperation}
       />
       <Field
-        label="Operation parameters (JSON)"
+        label={copy.playground.parameters}
         multiline
         value={parameters}
         onChangeText={setParameters}
         editable={!action.busy}
       />
       <ActionButton
-        title="Build unsigned transaction"
+        title={copy.playground.build}
         disabled={action.busy || !p.verified}
         onPress={() =>
           void action.run(async () => {
             const params: unknown = JSON.parse(parameters);
-            if (!params || typeof params !== 'object' || Array.isArray(params)) throw new Error('Enter a parameter object.');
+            if (!params || typeof params !== 'object' || Array.isArray(params)) throw new Error(copy.playground.notObject);
             return p.getClient().buildTx(operation, params as Parameters<typeof p.buildTx>[1]);
           })
         }
       />
       <TransactionStatus />
       <Field
-        label="Unsigned Stellar XDR"
+        label={copy.playground.xdr}
         multiline
         value={xdr}
         onChangeText={(v) => {
@@ -440,7 +450,7 @@ export function TransactionPanel() {
         }}
       />
       <ActionButton
-        title="Sign transaction"
+        title={copy.playground.sign}
         disabled={action.busy || !xdr || !p.verified}
         onPress={() =>
           void action.run(async () => {
@@ -454,33 +464,34 @@ export function TransactionPanel() {
         }
       />
       <ActionButton
-        title="Submit signed transaction"
+        title={copy.playground.submit}
         disabled={action.busy || !signed || !p.verified}
         onPress={() => void action.run(() => p.submitTx(signed, submissionToken ? { submissionToken } : undefined))}
       />
-      <ActionButton title="Open payment form" onPress={p.openSendModal} />
+      <ActionButton title={copy.playground.openPayment} onPress={p.openSendModal} />
       <ActionState action={action} />
     </Card>
   );
 }
 export function AssetsPanel() {
   const p = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   useEffect(() => {
     void action.run(p.refreshAssets);
   }, []);
   return (
-    <Card title="Assets and trustlines">
-      <ActionButton title="Refresh assets" disabled={action.busy} onPress={() => void action.run(p.refreshAssets)} />
+    <Card title={copy.assets.title}>
+      <ActionButton title={copy.assets.refresh} disabled={action.busy} onPress={() => void action.run(p.refreshAssets)} />
       {p.enabledAssets.step === 'loaded' ? (
         p.enabledAssets.data.assets.map((a) => (
           <View key={assetKey(a)} style={{ gap: 8 }}>
             <Label>
-              {a.chain ?? 'STELLAR'} · {a.code} · {a.trustlineEstablished ? 'Enabled' : 'Available'}
+              {a.chain ?? 'STELLAR'} · {a.code} · {a.trustlineEstablished ? copy.assets.enabled : copy.assets.available}
             </Label>
             {(a.chain ?? 'STELLAR') === 'STELLAR' && a.issuer && a.issuer !== '0' && !a.trustlineEstablished && (
               <ActionButton
-                title={'Enable ' + a.code}
+                title={copy.assets.enable(a.code)}
                 disabled={action.busy}
                 onPress={() => void action.run(() => p.setTrustline({ code: a.code, issuer: a.issuer! }))}
               />
@@ -496,13 +507,18 @@ export function AssetsPanel() {
 }
 export function HistoryPanel() {
   const p = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   useEffect(() => {
     void action.run(() => p.fetchTxHistory());
   }, []);
   return (
-    <Card title="Transaction history">
-      <ActionButton title="Refresh history" disabled={action.busy} onPress={() => void action.run(() => p.fetchTxHistory())} />
+    <Card title={copy.history.title}>
+      <ActionButton
+        title={copy.history.refresh}
+        disabled={action.busy}
+        onPress={() => void action.run(() => p.fetchTxHistory())}
+      />
       <ResultView value={p.txHistory} />
       <ActionState action={action} />
     </Card>
@@ -510,23 +526,26 @@ export function HistoryPanel() {
 }
 export function SessionsPanel() {
   const p = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   useEffect(() => {
     void action.run(p.fetchSessions);
   }, []);
   return (
-    <Card title="Active sessions">
-      <ActionButton title="Refresh sessions" disabled={action.busy} onPress={() => void action.run(p.fetchSessions)} />
+    <Card title={copy.sessions.title}>
+      <ActionButton title={copy.sessions.refresh} disabled={action.busy} onPress={() => void action.run(p.fetchSessions)} />
       {p.sessions.step === 'loaded' ? (
         p.sessions.sessions.map((s) => (
           <View key={s.familyId} style={{ gap: 8 }}>
             <Label>
-              {s.deviceLabel ?? s.userAgent ?? 'Device'}
-              {s.current ? ' · This device' : ''}
+              {s.deviceLabel ?? s.userAgent ?? copy.sessions.device}
+              {s.current ? copy.sessions.thisDevice : ''}
             </Label>
-            <Label>Last used: {s.lastUsedAt ?? s.createdAt}</Label>
+            <Label>
+              {copy.sessions.lastUsed} {s.lastUsedAt ?? s.createdAt}
+            </Label>
             <ActionButton
-              title={s.current ? 'Log out this device' : 'Revoke session'}
+              title={s.current ? copy.sessions.logOutDevice : copy.sessions.revoke}
               disabled={action.busy}
               onPress={() => void action.run(() => (s.current ? p.logout() : p.revokeSession(s.familyId)))}
             />
@@ -540,17 +559,17 @@ export function SessionsPanel() {
   );
 }
 export function KycPreview() {
+  const copy = FEATURE_COPY[useModalLanguage()];
   return (
-    <Card title="Identity verification · Preview">
-      <Label>
-        Identity verification is a preview in this demo. No documents are collected and no verification status is changed.
-      </Label>
-      <Label>Providers may request their own verification during a ramp transaction.</Label>
+    <Card title={copy.kyc.title}>
+      <Label>{copy.kyc.preview}</Label>
+      <Label>{copy.kyc.providers}</Label>
     </Card>
   );
 }
 export function SwapPanel() {
   const p = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   const [tokens, setTokens] = useState<SwapToken[]>([]);
   const [sell, setSell] = useState('');
@@ -578,10 +597,10 @@ export function SwapPanel() {
           issuer: t.issuer,
         };
   return (
-    <Card title="Swap">
-      <ActionButton title="Refresh swap markets" disabled={action.busy} onPress={() => void action.run(refreshSwap)} />
+    <Card title={copy.swap.title}>
+      <ActionButton title={copy.swap.refresh} disabled={action.busy} onPress={() => void action.run(refreshSwap)} />
       <Choice
-        label="Sell asset"
+        label={copy.swap.sell}
         options={tokens.map(tokenKey)}
         value={sell}
         onChange={(v) => {
@@ -590,7 +609,7 @@ export function SwapPanel() {
         }}
       />
       <Choice
-        label="Buy asset"
+        label={copy.swap.buy}
         options={tokens.map(tokenKey)}
         value={buy}
         onChange={(v) => {
@@ -599,7 +618,7 @@ export function SwapPanel() {
         }}
       />
       <Field
-        label="Amount"
+        label={copy.amount}
         value={amount}
         keyboardType="decimal-pad"
         onChangeText={(v) => {
@@ -608,7 +627,7 @@ export function SwapPanel() {
         }}
       />
       <ActionButton
-        title="Get quotes"
+        title={copy.swap.getQuotes}
         disabled={action.busy || !sell || !buy || Number(amount) <= 0}
         onPress={() =>
           void action.run(async () => {
@@ -627,7 +646,7 @@ export function SwapPanel() {
         <View key={i} style={{ gap: 8 }}>
           <ResultView value={q} />
           <ActionButton
-            title={'Confirm swap via ' + q.provider}
+            title={copy.swap.confirmVia(q.provider)}
             disabled={action.busy || !p.verified}
             onPress={() =>
               void action.run(async () => {
@@ -638,7 +657,7 @@ export function SwapPanel() {
           />
         </View>
       ))}
-      {!tokens.length && <Label>No supported tokens loaded. Check your app configuration or retry.</Label>}
+      {!tokens.length && <Label>{copy.swap.noTokens}</Label>}
       <TransactionStatus />
       <ActionState action={action} />
     </Card>
@@ -646,6 +665,7 @@ export function SwapPanel() {
 }
 export function EarnPanel() {
   const p = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   const [providers, setProviders] = useState<EarnProviderId[]>([]);
   const [provider, setProvider] = useState<EarnProviderId>();
@@ -668,10 +688,10 @@ export function EarnPanel() {
     void action.run(refreshEarn);
   }, []);
   return (
-    <Card title="Earn">
-      <ActionButton title="Refresh earn providers" disabled={action.busy} onPress={() => void action.run(refreshEarn)} />
+    <Card title={copy.earn.title}>
+      <ActionButton title={copy.earn.refresh} disabled={action.busy} onPress={() => void action.run(refreshEarn)} />
       <Choice
-        label="Provider"
+        label={copy.provider}
         disabled={action.busy}
         options={providers}
         value={provider ?? ''}
@@ -689,7 +709,7 @@ export function EarnPanel() {
         }}
       />
       <Choice
-        label="Opportunity"
+        label={copy.earn.opportunity}
         disabled={action.busy}
         options={opportunities.map((o) => o.id)}
         value={opportunity}
@@ -708,7 +728,7 @@ export function EarnPanel() {
       <ResultView value={opportunities.find((o) => o.id === opportunity)} />
       <ResultView value={position} />
       <Field
-        label="Amount"
+        label={copy.amount}
         value={amount}
         keyboardType="decimal-pad"
         onChangeText={(v) => {
@@ -716,13 +736,11 @@ export function EarnPanel() {
           setConfirmation(undefined);
         }}
       />
-      <Label>
-        Deposits use underlying asset units. Withdrawals use {position?.withdrawUnit ?? 'the position’s withdrawal unit'}.
-      </Label>
+      <Label>{copy.earn.units(position?.withdrawUnit)}</Label>
       {(['deposit', 'withdraw'] as const).map((direction) => (
         <ActionButton
           key={direction}
-          title={confirmation === direction ? 'Confirm ' + direction : 'Review ' + direction}
+          title={confirmation === direction ? copy.earn.confirm[direction] : copy.earn.review[direction]}
           disabled={action.busy || !provider || !opportunity || !position || Number(amount) <= 0 || !p.verified}
           onPress={() =>
             confirmation !== direction
@@ -736,7 +754,7 @@ export function EarnPanel() {
           }
         />
       ))}
-      {!providers.length && <Label>No earn providers loaded for this application.</Label>}
+      {!providers.length && <Label>{copy.earn.noProviders}</Label>}
       <TransactionStatus />
       <ActionState action={action} />
     </Card>
@@ -744,6 +762,7 @@ export function EarnPanel() {
 }
 export function DistributionPanel() {
   const p = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   const [rules, setRules] = useState<DistributionRule[]>([]);
   const [confirm, setConfirm] = useState('');
@@ -756,16 +775,16 @@ export function DistributionPanel() {
     void action.run(refresh);
   }, []);
   return (
-    <Card title="Distribution">
-      <ActionButton title="Refresh rules" disabled={action.busy} onPress={() => void action.run(refresh)} />
+    <Card title={copy.distribution.title}>
+      <ActionButton title={copy.distribution.refresh} disabled={action.busy} onPress={() => void action.run(refresh)} />
       {rules.map((rule) => (
         <View key={rule.id} style={{ gap: 8 }}>
           <Label>
             {rule.name} · {rule.amount} {rule.assetCode}
           </Label>
-          <Label>{rule.claimable ? 'Available to claim' : (rule.reason ?? 'Not claimable')}</Label>
+          <Label>{rule.claimable ? copy.distribution.claimable : (rule.reason ?? copy.distribution.notClaimable)}</Label>
           <ActionButton
-            title={confirm === rule.id ? 'Confirm claim' : 'Review claim'}
+            title={confirm === rule.id ? copy.distribution.confirm : copy.distribution.review}
             disabled={action.busy || !rule.claimable}
             onPress={() =>
               confirm !== rule.id
@@ -786,6 +805,8 @@ export function DistributionPanel() {
 }
 export function RampPanel() {
   const p = usePollar();
+  const language = useModalLanguage();
+  const copy = FEATURE_COPY[language];
   const client = p.getClient();
   const action = useAction();
   const [direction, setDirection] = useState<RampDirection>(p.ramp?.direction ?? 'ONRAMP');
@@ -801,7 +822,7 @@ export function RampPanel() {
   const keyOf = (r: RampRoute) => [r.fiat.country, r.fiat.currency, r.fiat.rail, r.asset.code, r.asset.chain].join(':');
   const route = routes.find((r) => keyOf(r) === routeKey);
   const quote = quotes.find((q) => q.quoteId === quoteId);
-  const view = order ? describeRampAction(order) : null;
+  const view = order ? describeRampAction(order, language) : null;
   const clearQuotes = () => {
     setQuotes([]);
     setQuoteId('');
@@ -827,10 +848,10 @@ export function RampPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.id, settled, client]);
   async function create() {
-    if (!quote) throw new Error('Get and select a current quote.');
+    if (!quote) throw new Error(copy.ramp.noQuote);
     const required = rampQuoteFields(quote);
     for (const field of required)
-      if (!field.optional && !fields[field.key]?.trim()) throw new Error(field.label + ' is required.');
+      if (!field.optional && !fields[field.key]?.trim()) throw new Error(copy.ramp.required(field.label));
     const payee = Object.fromEntries(required.filter((f) => fields[f.key]?.trim()).map((f) => [f.key, fields[f.key]!.trim()]));
     const created = await p.createRampOrder({ quoteId: quote.quoteId, ...(Object.keys(payee).length ? { payee } : {}) });
     setOrder(created);
@@ -838,11 +859,11 @@ export function RampPanel() {
     return created;
   }
   return (
-    <Card title="Ramp">
+    <Card title={copy.ramp.title}>
       {!order ? (
         <>
           <Choice
-            label="Direction"
+            label={copy.ramp.direction}
             value={direction}
             options={['ONRAMP', 'OFFRAMP']}
             onChange={(v) => {
@@ -853,13 +874,18 @@ export function RampPanel() {
           />
           {routes.length > 0 && (
             <Choice
-              label="Fiat and asset"
+              label={copy.ramp.route}
               value={routeKey}
               options={routes.map(keyOf)}
               labels={Object.fromEntries(
                 routes.map((r) => [
                   keyOf(r),
-                  `${r.fiat.country} ${r.fiat.currency} (${r.fiat.rail}) / ${r.asset.code} on ${r.asset.chain} · ${r.legs.length} step(s)`,
+                  copy.ramp.routeLabel(
+                    `${r.fiat.country} ${r.fiat.currency} (${r.fiat.rail})`,
+                    r.asset.code,
+                    r.asset.chain,
+                    r.legs.length,
+                  ),
                 ]),
               )}
               onChange={(value) => {
@@ -869,7 +895,7 @@ export function RampPanel() {
             />
           )}
           <Field
-            label="Amount you send"
+            label={copy.ramp.amount}
             keyboardType="decimal-pad"
             value={amount}
             onChangeText={(v) => {
@@ -878,7 +904,7 @@ export function RampPanel() {
             }}
           />
           <ActionButton
-            title="Get ramp quotes"
+            title={copy.ramp.getQuotes}
             disabled={action.busy || !route || !(Number(amount) > 0)}
             onPress={() =>
               void action.run(async () => {
@@ -896,10 +922,10 @@ export function RampPanel() {
           {quotes.map((q) => (
             <View key={q.quoteId} style={{ gap: 8 }}>
               <Label>
-                {q.amountIn} → ~{q.amountOut} · {q.legs.map((leg) => rampLegTitle(leg)).join(' · ')}
+                {q.amountIn} → ~{q.amountOut} · {q.legs.map((leg) => rampLegTitle(leg, language)).join(' · ')}
               </Label>
               <ActionButton
-                title={q.quoteId === quoteId ? 'Selected' : 'Select this route'}
+                title={q.quoteId === quoteId ? copy.ramp.selected : copy.ramp.select}
                 onPress={() => {
                   setQuoteId(q.quoteId);
                   setFields({});
@@ -928,21 +954,25 @@ export function RampPanel() {
               ),
             )}
           {quote && (
-            <ActionButton title="Create order" disabled={action.busy || !p.verified} onPress={() => void action.run(create)} />
+            <ActionButton
+              title={copy.ramp.create}
+              disabled={action.busy || !p.verified}
+              onPress={() => void action.run(create)}
+            />
           )}
         </>
       ) : (
         <>
           <Label>
-            Order {order.id} · {order.state}
+            {copy.ramp.order} {order.id} · {order.state}
           </Label>
           {order.legs.map((leg) => (
             <Label key={leg.index}>
-              {rampLegTitle(leg)}: {rampLegStatus(leg)}
+              {rampLegTitle(leg, language)}: {rampLegStatus(leg)}
               {leg.onchainTxHash ? ` · ${leg.onchainTxHash.slice(0, 10)}…` : ''}
             </Label>
           ))}
-          {order.failure && <Label>{rampOrderResolutionText(order)}</Label>}
+          {order.failure && <Label>{rampOrderResolutionText(order, language)}</Label>}
           {view && !settled && <Label>{view.title}</Label>}
           {view?.scannable?.payload && !settled && (
             <View style={{ alignItems: 'center', paddingVertical: 8 }}>
@@ -951,11 +981,11 @@ export function RampPanel() {
           )}
           {view?.scannable?.payload && !settled && (
             <ActionButton
-              title="Copy payment code"
+              title={copy.ramp.copyPaymentCode}
               onPress={() =>
                 void action.run(async () => {
                   await p.copyText(view.scannable!.payload!);
-                  return 'Copied';
+                  return copy.copied;
                 })
               }
             />
@@ -963,7 +993,7 @@ export function RampPanel() {
           {view && !settled && view.details.map((d) => <Label key={d.label}>{`${d.label}: ${d.value}`}</Label>)}
           {view?.canSign && !settled && order.pendingAction?.kind === 'SIGNATURE' && (
             <ActionButton
-              title="Authorize"
+              title={copy.ramp.authorize}
               disabled={action.busy}
               onPress={() =>
                 void action.run(async () => {
@@ -974,12 +1004,12 @@ export function RampPanel() {
               }
             />
           )}
-          {view?.canApprove && !settled && <ActionButton title="Approve on this device" onPress={p.openCosignModal} />}
+          {view?.canApprove && !settled && <ActionButton title={copy.ramp.approve} onPress={p.openCosignModal} />}
           {view?.link && !settled && (
-            <ActionButton title="Complete verification" onPress={() => void action.run(() => Linking.openURL(view.link!))} />
+            <ActionButton title={copy.ramp.verify} onPress={() => void action.run(() => Linking.openURL(view.link!))} />
           )}
           <ActionButton
-            title="Refresh order"
+            title={copy.ramp.refresh}
             disabled={action.busy}
             onPress={() =>
               void action.run(async () => {
@@ -989,7 +1019,7 @@ export function RampPanel() {
               })
             }
           />
-          <ActionButton title="New ramp order" onPress={() => setOrder(null)} />
+          <ActionButton title={copy.ramp.newOrder} onPress={() => setOrder(null)} />
         </>
       )}
       <ActionState action={action} />
@@ -999,27 +1029,29 @@ export function RampPanel() {
 
 export function LogoutPanel() {
   const p = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   return (
-    <Card title="Wallet logout">
-      <Label>This disconnects the wallet and clears its session. Your Pollar account and selected application stay open.</Label>
-      <ActionButton title="Disconnect wallet" disabled={action.busy} onPress={() => void action.run(p.logout)} />
+    <Card title={copy.logout.title}>
+      <Label>{copy.logout.intro}</Label>
+      <ActionButton title={copy.logout.disconnect} disabled={action.busy} onPress={() => void action.run(p.logout)} />
       <ActionState action={action} />
     </Card>
   );
 }
 export function ChainsPanel() {
   const p = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   return (
-    <Card title="Connected chains">
-      <Label>Wallet addresses are chain-specific. Privy native signing is Stellar-only.</Label>
+    <Card title={copy.chains.title}>
+      <Label>{copy.chains.intro}</Label>
       {p.wallets.map((wallet) => (
         <View key={wallet.chain + ':' + wallet.address} style={{ gap: 8 }}>
           <Label>{wallet.chain ?? 'STELLAR'}</Label>
           <ResultView value={wallet.address} />
           <ActionButton
-            title={'Copy ' + wallet.chain + ' address'}
+            title={copy.copyChainAddress(String(wallet.chain))}
             onPress={() => void action.run(() => p.copyText(wallet.address))}
           />
         </View>
@@ -1047,24 +1079,25 @@ const panels: Record<FeatureName, React.ComponentType> = {
 };
 export function FeaturePanel({ feature }: { feature: FeatureName }) {
   const p = usePollar();
+  const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   const Panel = panels[feature];
   if (p.configStatus === 'error')
     return (
-      <Card title="Unable to load application">
-        <Label>{p.configError ?? 'Application configuration is unavailable.'}</Label>
-        <ActionButton title="Retry configuration" onPress={p.retryConfig} />
+      <Card title={copy.gate.configTitle}>
+        <Label>{p.configError ?? copy.gate.configUnavailable}</Label>
+        <ActionButton title={copy.gate.retryConfig} onPress={p.retryConfig} />
       </Card>
     );
-  if (p.configStatus === 'loading') return <Label>Loading application…</Label>;
+  if (p.configStatus === 'loading') return <Label>{copy.gate.loading}</Label>;
   if (!p.verified && feature !== 'authentication' && feature !== 'kyc')
     return (
-      <Card title="Connect your wallet">
-        <Label>{p.isAuthenticated ? 'Verifying your restored session…' : 'Sign in to explore this feature.'}</Label>
-        {!p.isAuthenticated && <ActionButton title="Sign in" onPress={p.openLoginModal} />}
+      <Card title={copy.gate.connectTitle}>
+        <Label>{p.isAuthenticated ? copy.gate.verifying : copy.gate.signInPrompt}</Label>
+        {!p.isAuthenticated && <ActionButton title={copy.gate.signIn} onPress={p.openLoginModal} />}
         {p.isAuthenticated && (
           <ActionButton
-            title="Retry session verification"
+            title={copy.gate.retrySession}
             disabled={action.busy}
             onPress={() => void action.run(() => p.getClient().refresh())}
           />

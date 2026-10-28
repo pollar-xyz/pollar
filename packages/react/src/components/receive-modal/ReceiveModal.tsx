@@ -3,6 +3,7 @@
 import { WalletChain } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { walletNotReadyReason } from '../../lib/wallet-provisioning';
 import { useChains } from '../../useChains';
 import { addressForChain } from '../ChainSelect';
@@ -18,6 +19,7 @@ interface ReceiveModalProps {
 export function ReceiveModal({ onClose }: ReceiveModalProps) {
   const { wallet, wallets, styles, recoveryLocked, openRecoveryModal } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
+  const language = useModalLanguage();
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -33,7 +35,7 @@ export function ReceiveModal({ onClose }: ReceiveModalProps) {
   // The address is real, but until the account is on the ledger a payment to it
   // is rejected by the network. Handing someone a QR without saying so is the
   // one place this window can cost a user a failed transfer from a third party.
-  const notReadyReason = walletNotReadyReason(wallet, selectedChain);
+  const notReadyReason = walletNotReadyReason(wallet, selectedChain, language);
 
   useEffect(
     () => () => {
@@ -78,6 +80,7 @@ export function ReceiveModal({ onClose }: ReceiveModalProps) {
         copied={copied}
         onCopy={handleCopy}
         onClose={onClose}
+        language={language}
       />
     </div>
   );

@@ -282,6 +282,7 @@ export const TARGET_EXPORTS: Record<string, readonly string[]> = {
     'WebCryptoKeyManager',
     'appUnavailableMessage',
     'assertRampStellarSigner',
+    'authErrorMessage',
     'buildEarnTx',
     'buildProof',
     'canonicalEcJwk',

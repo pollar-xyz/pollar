@@ -3,10 +3,12 @@
 import { type CosignCustody, isPollarApiError } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { walletNotReadyReason } from '../../lib/wallet-provisioning';
 import { useChains } from '../../useChains';
 import { modalChrome } from '../modal-theme';
 import { WalletButtonTemplate } from './WalletButtonTemplate';
+import { WALLET_BUTTON_COPY } from './wallet-button-copy';
 import './WalletButton.css';
 
 export function WalletButton() {
@@ -31,6 +33,8 @@ export function WalletButton() {
     recoveryLocked,
     openRecoveryModal,
   } = usePollar();
+  const language = useModalLanguage();
+  const copy = WALLET_BUTTON_COPY[language];
   // The address shown (and copied) is the one on the app's FIRST configured
   // chain, not `wallet.address` - that field is the Stellar wallet by definition
   // in core, so this button used to say "Stellar" to an app whose users live on
@@ -62,7 +66,7 @@ export function WalletButton() {
   // Keyed to `primaryChain` - the chain whose address this button SHOWS - so a
   // Solana-first app does not caption a working Solana address with the wait on
   // its user's separate Stellar wallet.
-  const notReadyReason = walletNotReadyReason(wallet, primaryChain);
+  const notReadyReason = walletNotReadyReason(wallet, primaryChain, language);
 
   const { theme, accentColor, styleOverrides } = modalChrome(styles);
 
@@ -126,8 +130,8 @@ export function WalletButton() {
     } catch (err) {
       setCreateWalletError(
         isPollarApiError(err) && err.code === 'SDK_WALLET_PROVISIONING_DISABLED'
-          ? 'This app does not create wallets.'
-          : 'Could not create the wallet. Try again.',
+          ? copy.provisioningDisabled
+          : copy.createWalletFailed,
       );
     } finally {
       setCreatingWallet(false);
@@ -213,6 +217,7 @@ export function WalletButton() {
       onDistributionRules={handleDistributionRules}
       onLogout={handleLogout}
       onLogin={openLoginModal}
+      language={language}
     />
   );
 }

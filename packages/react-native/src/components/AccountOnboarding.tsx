@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type { PollarLanguage } from '@pollar/core';
 import { ScreenLayout as Screen } from './layout';
+import { LANGUAGE_NAMES, NEXT_LANGUAGE, ONBOARDING_COPY } from './shell-copy';
 export interface ApplicationSummary {
   id: string;
   name: string;
@@ -27,17 +29,17 @@ export interface AccountOnboardingProps {
       logout: () => Promise<unknown>;
     };
   };
-  settings: { theme: 'light' | 'dark'; language: 'en' | 'es' };
+  settings: { theme: 'light' | 'dark'; language: PollarLanguage };
   onPreferencesChange: (next: AccountOnboardingProps['settings']) => Promise<void>;
 }
 
 export function AccountOnboarding({ account, settings, onPreferencesChange: save }: AccountOnboardingProps) {
   const [name, setName] = useState('');
-  const es = settings.language === 'es';
+  const copy = ONBOARDING_COPY[settings.language];
+  const next = NEXT_LANGUAGE[settings.language];
   const dark = settings.theme === 'dark';
   const foreground = dark ? '#f0f5ff' : '#152237';
   const muted = dark ? '#b6c7dd' : '#506680';
-  const text = (en: string, spanish: string) => (es ? spanish : en);
   const button = (title: string, onPress: () => void, disabled = account.busy, secondary = false) => (
     <Pressable
       accessibilityRole="button"
@@ -67,7 +69,7 @@ export function AccountOnboarding({ account, settings, onPreferencesChange: save
   if (!account.loaded)
     return (
       <SafeAreaView style={{ flex: 1, justifyContent: 'center' }}>
-        <ActivityIndicator accessibilityLabel="Restoring Pollar account" />
+        <ActivityIndicator accessibilityLabel={copy.restoring} />
       </SafeAreaView>
     );
   return (
@@ -77,78 +79,41 @@ export function AccountOnboarding({ account, settings, onPreferencesChange: save
           <Text style={[styles.brand, { color: foreground }]}>pollar</Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Change language"
-            onPress={() => void save({ ...settings, language: es ? 'en' : 'es' })}
+            accessibilityLabel={copy.changeLanguage}
+            onPress={() => void save({ ...settings, language: next })}
           >
-            <Text style={{ color: muted }}>{es ? 'English' : 'Español'}</Text>
+            <Text style={{ color: muted }}>{LANGUAGE_NAMES[next]}</Text>
           </Pressable>
         </View>
         <View style={styles.hero}>
           <Text style={{ color: '#9ac5ff', fontWeight: '800', letterSpacing: 2 }}>POLLAR · MOBILE</Text>
-          <Text style={styles.heading}>
-            {account.session
-              ? text('Your applications', 'Tus aplicaciones')
-              : text('Build with Pollar.\nFrom your phone.', 'Crea con Pollar.\nDesde tu teléfono.')}
-          </Text>
-          <Text style={styles.description}>
-            {account.session
-              ? text(
-                  'Choose an application or create a new one to start using Pollar.',
-                  'Elige una aplicación o crea una nueva para empezar a usar Pollar.',
-                )
-              : text(
-                  'Sign in, create your application, and explore wallets, payments and Pollar products.',
-                  'Inicia sesión, crea tu aplicación y explora billeteras, pagos y productos Pollar.',
-                )}
-          </Text>
+          <Text style={styles.heading}>{account.session ? copy.yourApplications : copy.heroSignedOut}</Text>
+          <Text style={styles.description}>{account.session ? copy.introSignedIn : copy.introSignedOut}</Text>
         </View>
         {!!account.error && (
           <View accessibilityRole="alert" style={styles.error}>
             <Text style={{ color: '#8c2525' }}>
-              {account.error === 'ORIGIN_NOT_ALLOWED'
-                ? text(
-                    'The deployed SDK API rejected native access. Your application was not opened. Retry after the backend configuration is updated.',
-                    'La API rechazó el acceso nativo. No se abrió tu aplicación. Reintenta después de actualizar la configuración del servidor.',
-                  )
-                : account.error}
+              {account.error === 'ORIGIN_NOT_ALLOWED' ? copy.originNotAllowed : account.error}
             </Text>
           </View>
         )}
-        {account.busy && <ActivityIndicator accessibilityLabel={text('Working', 'Procesando')} />}
+        {account.busy && <ActivityIndicator accessibilityLabel={copy.working} />}
         {!account.session ? (
           <View style={styles.group}>
-            <Text style={[styles.title, { color: foreground }]}>
-              {text('Sign in to your Pollar account', 'Inicia sesión en tu cuenta Pollar')}
-            </Text>
-            {button(
-              text('Continue with Google', 'Continuar con Google'),
-              () => void account.client.signIn(),
-              account.busy || account.cleanupRequired,
-            )}
-            {account.cleanupRequired &&
-              button(
-                text('Retry removing saved credentials', 'Reintentar borrar credenciales'),
-                () => void account.client.clearSavedCredentials(),
-              )}
-            {account.busy &&
-              button(text('Cancel sign-in', 'Cancelar inicio de sesión'), account.client.cancelSignIn, false, true)}
-            <Text style={{ color: muted, lineHeight: 22 }}>
-              {text(
-                'Use the same Google account as the Pollar dashboard. No API key is needed to sign in.',
-                'Usa la misma cuenta de Google que en el dashboard de Pollar. No necesitas una clave API para iniciar sesión.',
-              )}
-            </Text>
+            <Text style={[styles.title, { color: foreground }]}>{copy.signInTitle}</Text>
+            {button(copy.continueWithGoogle, () => void account.client.signIn(), account.busy || account.cleanupRequired)}
+            {account.cleanupRequired && button(copy.retryClear, () => void account.client.clearSavedCredentials())}
+            {account.busy && button(copy.cancelSignIn, account.client.cancelSignIn, false, true)}
+            <Text style={{ color: muted, lineHeight: 22 }}>{copy.signInHint}</Text>
           </View>
         ) : (
           <>
-            <Text style={{ color: muted }}>
-              {account.session.data?.mail || text('Pollar account connected', 'Cuenta Pollar conectada')}
-            </Text>
+            <Text style={{ color: muted }}>{account.session.data?.mail || copy.connected}</Text>
             <View style={styles.group}>
-              <Text style={[styles.title, { color: foreground }]}>{text('Create an application', 'Crear una aplicación')}</Text>
+              <Text style={[styles.title, { color: foreground }]}>{copy.createTitle}</Text>
               <TextInput
-                accessibilityLabel={text('Application name', 'Nombre de la aplicación')}
-                placeholder={text('My Pollar application', 'Mi aplicación Pollar')}
+                accessibilityLabel={copy.appName}
+                placeholder={copy.appNamePlaceholder}
                 placeholderTextColor={muted}
                 value={name}
                 onChangeText={setName}
@@ -156,25 +121,12 @@ export function AccountOnboarding({ account, settings, onPreferencesChange: save
                 editable={!account.busy}
                 style={[styles.input, { color: foreground, borderColor: muted }]}
               />
-              <Text style={{ color: muted }}>
-                {text('New applications start on Stellar testnet.', 'Las nuevas aplicaciones empiezan en Stellar testnet.')}
-              </Text>
-              {button(
-                text('Create testnet application', 'Crear aplicación testnet'),
-                () => void account.client.create(name),
-                account.busy || name.trim().length < 3,
-              )}
+              <Text style={{ color: muted }}>{copy.testnetNote}</Text>
+              {button(copy.createTestnet, () => void account.client.create(name), account.busy || name.trim().length < 3)}
             </View>
             <View style={styles.group}>
-              <Text style={[styles.title, { color: foreground }]}>{text('Your applications', 'Tus aplicaciones')}</Text>
-              {!account.applications.length && (
-                <Text style={{ color: muted }}>
-                  {text(
-                    'No applications yet. Create your first one above.',
-                    'Aún no tienes aplicaciones. Crea la primera arriba.',
-                  )}
-                </Text>
-              )}
+              <Text style={[styles.title, { color: foreground }]}>{copy.yourApplications}</Text>
+              {!account.applications.length && <Text style={{ color: muted }}>{copy.noApplications}</Text>}
               {account.applications.map((app) => (
                 <View key={app.id} style={[styles.app, { borderColor: muted }]}>
                   <Text style={[styles.title, { color: foreground }]}>{app.name}</Text>
@@ -182,46 +134,22 @@ export function AccountOnboarding({ account, settings, onPreferencesChange: save
                     {app.network.toUpperCase()} · {app.accessType || 'member'}
                   </Text>
                   {button(
-                    text('Open application', 'Abrir aplicación'),
+                    copy.open,
                     () =>
-                      Alert.alert(
-                        text('Use this application on mobile?', '¿Usar esta aplicación en el teléfono?'),
-                        text(
-                          'If this device has no saved mobile key, Pollar will create a native-enabled publishable key for this application. Existing web keys are unchanged.',
-                          'Si este dispositivo no tiene una clave móvil guardada, Pollar creará una clave pública con acceso nativo. Las claves web no cambian.',
-                        ),
-                        [
-                          { text: text('Cancel', 'Cancelar'), style: 'cancel' },
-                          {
-                            text: text('Continue', 'Continuar'),
-                            onPress: () => void account.client.select(app),
-                          },
-                        ],
-                      ),
+                      Alert.alert(copy.confirmTitle, copy.confirmBody, [
+                        { text: copy.cancel, style: 'cancel' },
+                        {
+                          text: copy.continue,
+                          onPress: () => void account.client.select(app),
+                        },
+                      ]),
                     account.busy || app.network !== 'testnet' || ['viewer', 'support'].includes(app.accessType || ''),
                   )}
-                  {app.network === 'mainnet' && (
-                    <Text style={{ color: muted }}>
-                      {text(
-                        'Mainnet onboarding is not enabled in this testnet demo.',
-                        'La incorporación mainnet no está habilitada en esta demo testnet.',
-                      )}
-                    </Text>
-                  )}
+                  {app.network === 'mainnet' && <Text style={{ color: muted }}>{copy.mainnetDisabled}</Text>}
                 </View>
               ))}
-              {button(
-                text('Refresh applications', 'Actualizar aplicaciones'),
-                () => void account.client.reload(),
-                account.busy,
-                true,
-              )}
-              {button(
-                text('Sign out of Pollar', 'Cerrar sesión en Pollar'),
-                () => void account.client.logout(),
-                account.busy,
-                true,
-              )}
+              {button(copy.refresh, () => void account.client.reload(), account.busy, true)}
+              {button(copy.signOut, () => void account.client.logout(), account.busy, true)}
             </View>
           </>
         )}

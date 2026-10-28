@@ -4,6 +4,8 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { FeaturePanel, type FeatureName } from './FeaturePanel';
 import { ActionButton } from './native-ui';
 import { useSurfaceColors } from './layout';
+import { useModalLanguage } from '../language';
+import { FEATURE_COPY } from './feature-copy';
 
 export interface FeatureModalProps {
   onClose: () => void;
@@ -12,13 +14,14 @@ export interface FeatureModalProps {
 /** Shared native modal chrome used by both provider openers and standalone components. */
 export function FeatureModal({ feature, visible = true, onClose }: FeatureModalProps & { feature: FeatureName | null }) {
   const c = useSurfaceColors();
+  const copy = FEATURE_COPY[useModalLanguage()];
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet">
       <SafeAreaProvider>
         <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 24, gap: 16 }}>
-              <ActionButton title="Close" onPress={onClose} />
+              <ActionButton title={copy.close} onPress={onClose} />
               {visible && feature && <FeaturePanel key={feature} feature={feature} />}
             </ScrollView>
           </KeyboardAvoidingView>

@@ -1,7 +1,9 @@
-import { TxHistoryState } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { PollarLanguage, TxHistoryState } from '@pollar/core';
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, Linking } from 'react-native';
 import { ModalStatusBanner, PollarModalFooter, PollarOverlay } from '../commons';
+import { TX_HISTORY_COPY } from './tx-history-copy';
 
 export interface TxHistoryModalTemplateProps {
   theme: string;
@@ -9,16 +11,26 @@ export interface TxHistoryModalTemplateProps {
   txHistory: TxHistoryState;
   onClose: () => void;
   onRefresh: () => void;
+  /** Language of the modal. Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
 
-const STATUS_MESSAGES: Record<TxHistoryState['step'], string> = {
-  idle: '',
-  loading: 'Loading history…',
-  loaded: '',
-  error: 'Failed to load history',
-};
-
-export function TxHistoryModalTemplate({ theme, accentColor, txHistory, onClose, onRefresh }: TxHistoryModalTemplateProps) {
+export function TxHistoryModalTemplate({
+  theme,
+  accentColor,
+  txHistory,
+  onClose,
+  onRefresh,
+  language: languageProp,
+}: TxHistoryModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = TX_HISTORY_COPY[language];
+  const statusMessages: Record<TxHistoryState['step'], string> = {
+    idle: '',
+    loading: copy.loadingHistory,
+    loaded: '',
+    error: copy.loadFailed,
+  };
   const isDark = theme === 'dark';
 
   const colors = {
@@ -40,7 +52,7 @@ export function TxHistoryModalTemplate({ theme, accentColor, txHistory, onClose,
     <PollarOverlay onCancel={onClose}>
       <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Transaction History</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{copy.title}</Text>
           <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh} disabled={isLoading}>
             <Text style={{ color: colors.muted }}>🔄</Text>
           </TouchableOpacity>
@@ -52,7 +64,7 @@ export function TxHistoryModalTemplate({ theme, accentColor, txHistory, onClose,
 
         {isLoaded && transactions.length === 0 && (
           <View style={styles.emptyBox}>
-            <Text style={{ color: colors.muted, textAlign: 'center' }}>No transactions found.</Text>
+            <Text style={{ color: colors.muted, textAlign: 'center' }}>{copy.emptyFound}</Text>
           </View>
         )}
 
@@ -67,7 +79,9 @@ export function TxHistoryModalTemplate({ theme, accentColor, txHistory, onClose,
                 onPress={() => Linking.openURL(`https://stellar.expert/explorer/${item.network}/tx/${item.hash}`)}
               >
                 <View style={styles.txRowLeft}>
-                  <Text style={[styles.txType, { color: colors.text }]}>{item.operation || 'Transaction'}</Text>
+                  <Text style={[styles.txType, { color: colors.text }]}>
+                    {item.operation ? (copy.operations[item.operation] ?? item.operation) : copy.transaction}
+                  </Text>
                   <Text style={{ color: colors.muted, fontSize: 12 }}>{new Date(item.createdAt).toLocaleDateString()}</Text>
                 </View>
                 <View style={styles.txRowRight}>
@@ -80,7 +94,11 @@ export function TxHistoryModalTemplate({ theme, accentColor, txHistory, onClose,
                       },
                     ]}
                   >
-                    {item.status === 'SUCCESS' ? 'Success' : item.status === 'PENDING' ? 'Pending' : 'Failed'}
+                    {item.status === 'SUCCESS'
+                      ? copy.status.SUCCESS
+                      : item.status === 'PENDING'
+                        ? copy.status.PENDING
+                        : copy.status.FAILED}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -95,7 +113,7 @@ export function TxHistoryModalTemplate({ theme, accentColor, txHistory, onClose,
         )}
 
         <ModalStatusBanner
-          message={STATUS_MESSAGES[txHistory.step] || ''}
+          message={statusMessages[txHistory.step] || ''}
           status={isError ? 'ERROR' : isLoading ? 'LOADING' : 'NONE'}
           onRetry={isError ? onRefresh : undefined}
         />

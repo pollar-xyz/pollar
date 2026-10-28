@@ -1,8 +1,10 @@
-import { TransactionState, WalletId, WalletType } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { PollarLanguage, TransactionState, WalletId, WalletType } from '@pollar/core';
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Linking, Image } from 'react-native';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR_MARK_ON_DARK, LOGO_POLLAR_MARK_ON_LIGHT } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter, PollarOverlay } from '../commons';
+import { TRANSACTION_COPY } from './transaction-copy';
 
 export interface TransactionModalTemplateProps {
   theme: string;
@@ -17,22 +19,9 @@ export interface TransactionModalTemplateProps {
   onToggleXdr: () => void;
   onCopyHash: () => void;
   onRetry?: () => void;
+  /** Language of the modal. Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
-
-const STATUS_MESSAGES: Record<TransactionState['step'], string> = {
-  idle: '',
-  building: 'Building transaction…',
-  built: 'Ready to sign and send',
-  signing: 'Signing transaction…',
-  signed: 'Signed — ready to submit',
-  submitting: 'Submitting transaction…',
-  submitted: 'Submitted — waiting for confirmation…',
-  'signing-submitting': 'Signing and submitting transaction…',
-  'building-signing-submitting': 'Processing transaction…',
-  awaiting_cosign: 'Waiting for your approval on this device…',
-  success: 'Transaction sent successfully',
-  error: 'Transaction failed',
-};
 
 const SENDING_STEPS = new Set<TransactionState['step']>(['signing', 'signed', 'submitting', 'signing-submitting', 'submitted']);
 
@@ -49,7 +38,10 @@ export function TransactionModalTemplate({
   onToggleXdr,
   onCopyHash,
   onRetry,
+  language: languageProp,
 }: TransactionModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = TRANSACTION_COPY[language];
   const isDark = theme === 'dark';
 
   const colors = {
@@ -76,7 +68,7 @@ export function TransactionModalTemplate({
     <PollarOverlay onCancel={onClose}>
       <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Transaction</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{copy.title}</Text>
         </View>
 
         <TouchableOpacity style={[styles.iconButton, styles.closeBtn, { borderColor: colors.border }]} onPress={onClose}>
@@ -86,7 +78,7 @@ export function TransactionModalTemplate({
         {showDetails && buildData && (
           <ScrollView style={styles.contentWrap}>
             <View style={styles.summaryBox}>
-              <Text style={[styles.summaryTitle, { color: colors.muted }]}>Details</Text>
+              <Text style={[styles.summaryTitle, { color: colors.muted }]}>{copy.details}</Text>
               {buildData.summary.lines.map((line, i) => (
                 <Text key={i} style={[styles.summaryLine, { color: colors.text }]}>
                   • {line}
@@ -96,18 +88,20 @@ export function TransactionModalTemplate({
 
             <View style={styles.metaBox}>
               <View style={styles.metaRow}>
-                <Text style={{ color: colors.muted }}>Network</Text>
+                <Text style={{ color: colors.muted }}>{copy.network}</Text>
                 <Text style={{ color: colors.text, fontWeight: '600' }}>{buildData.summary.network}</Text>
               </View>
               <View style={styles.metaRow}>
-                <Text style={{ color: colors.muted }}>Fee</Text>
+                <Text style={{ color: colors.muted }}>{copy.fee}</Text>
                 <Text style={{ color: colors.text, fontWeight: '600' }}>{buildData.summary.fee}</Text>
               </View>
             </View>
 
             <View style={styles.xdrBox}>
               <TouchableOpacity onPress={onToggleXdr} style={styles.xdrToggleBtn}>
-                <Text style={{ color: colors.muted }}>Raw transaction (XDR) {showXdr ? '▼' : '▶'}</Text>
+                <Text style={{ color: colors.muted }}>
+                  {copy.rawXdr} {showXdr ? '▼' : '▶'}
+                </Text>
               </TouchableOpacity>
               {showXdr && (
                 <View style={[styles.xdrContentContainer, { backgroundColor: colors.inputBg }]}>
@@ -120,14 +114,14 @@ export function TransactionModalTemplate({
 
         {isError && errorDetails && (
           <View style={[styles.errorBox, { backgroundColor: colors.errorBg }]}>
-            <Text style={{ color: colors.errorText, fontWeight: '600', marginBottom: 4 }}>Error details</Text>
+            <Text style={{ color: colors.errorText, fontWeight: '600', marginBottom: 4 }}>{copy.errorDetails}</Text>
             <Text style={{ color: colors.errorText, fontSize: 12 }}>{errorDetails}</Text>
           </View>
         )}
 
         {isBuilt && (
           <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: accentColor }]} onPress={onSignAndSend}>
-            <Text style={styles.primaryBtnText}>Sign & Send</Text>
+            <Text style={styles.primaryBtnText}>{copy.signAndSend}</Text>
           </TouchableOpacity>
         )}
 
@@ -152,16 +146,16 @@ export function TransactionModalTemplate({
             {isSigning && (
               <Text style={[styles.spinnerText, { color: colors.text }]}>
                 {walletType === WalletType.FREIGHTER
-                  ? 'Waiting for Freighter…'
+                  ? copy.waitingFreighter
                   : walletType === WalletType.ALBEDO
-                    ? 'Waiting for Albedo…'
-                    : 'Signing and sending…'}
+                    ? copy.waitingAlbedo
+                    : copy.signingAndSending}
               </Text>
             )}
 
             {isError && onRetry && buildData && (
               <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border }]} onPress={onRetry}>
-                <Text style={[styles.secondaryBtnText, { color: colors.muted }]}>Try again</Text>
+                <Text style={[styles.secondaryBtnText, { color: colors.muted }]}>{copy.tryAgain}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -169,20 +163,22 @@ export function TransactionModalTemplate({
 
         {isSuccess && hash && (
           <View style={styles.resultBox}>
-            <Text style={[styles.resultLabel, { color: colors.muted }]}>Transaction hash</Text>
+            <Text style={[styles.resultLabel, { color: colors.muted }]}>{copy.txHash}</Text>
             <Text style={[styles.resultHash, { color: colors.text }]} numberOfLines={1} ellipsizeMode="middle">
               {hash}
             </Text>
             <View style={styles.resultActions}>
               <TouchableOpacity style={[styles.resultBtn, { borderColor: colors.border }]} onPress={onCopyHash}>
-                <Text style={[styles.resultBtnText, { color: colors.text }]}>{copied ? '✅ Copied!' : '📋 Copy hash'}</Text>
+                <Text style={[styles.resultBtnText, { color: colors.text }]}>
+                  {copied ? `✅ ${copy.copied}` : `📋 ${copy.copyHash}`}
+                </Text>
               </TouchableOpacity>
               {explorerUrl && (
                 <TouchableOpacity
                   style={[styles.resultBtn, { borderColor: colors.border }]}
                   onPress={() => Linking.openURL(explorerUrl)}
                 >
-                  <Text style={[styles.resultBtnText, { color: colors.text }]}>🌐 View on Explorer</Text>
+                  <Text style={[styles.resultBtnText, { color: colors.text }]}>🌐 {copy.viewOnExplorer}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -191,12 +187,12 @@ export function TransactionModalTemplate({
 
         {isSuccess && (
           <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: accentColor }]} onPress={onClose}>
-            <Text style={styles.primaryBtnText}>Done</Text>
+            <Text style={styles.primaryBtnText}>{copy.done}</Text>
           </TouchableOpacity>
         )}
 
         <ModalStatusBanner
-          message={STATUS_MESSAGES[transaction.step] || ''}
+          message={copy.status[transaction.step] || ''}
           status={
             isError
               ? 'ERROR'

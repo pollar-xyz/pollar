@@ -11,6 +11,7 @@ import {
 } from '@pollar/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { modalChrome } from '../modal-theme';
 import { LoginModalStatus, LoginModalTemplate } from './LoginModalTemplate';
 import { PrivyLoginSubmodal } from './PrivyLoginSubmodal';
@@ -27,6 +28,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
   const [email, setEmail] = useState('');
   const { getClient, styles, appConfig: config, configStatus, retryConfig } = usePollar();
   const [authState, setAuthState] = useState<AuthState>(() => getClient().getAuthState());
+  const language = useModalLanguage();
   // Registered wallet adapters (built-ins + config) -> one login button each.
   // An adapter only shows when the app serves its chain: a Phantom login on an
   // app without Solana would leave the user with a wallet the app cannot use.
@@ -164,6 +166,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
           appName={modalTitle}
           onRetry={retryConfig}
           onCancel={handleClose}
+          language={language}
         />
       ) : interactiveAdapter ? (
         <PrivyLoginSubmodal
@@ -176,6 +179,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
           onBack={() => setInteractiveAdapter(null)}
           onCancel={handleClose}
           onAuthenticated={handleInteractiveAuthenticated}
+          language={language}
         />
       ) : (
         <LoginModalTemplate
@@ -208,6 +212,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
           onBack={handleBack}
           onCancel={handleClose}
           onRetry={handleRetry}
+          language={language}
         />
       )}
     </div>

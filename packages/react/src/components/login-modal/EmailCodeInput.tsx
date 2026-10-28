@@ -1,11 +1,15 @@
+import type { PollarLanguage } from '@pollar/core';
 import { useRef, useState } from 'react';
+import { LOGIN_COPY } from './login-copy';
 
 interface EmailCodeInputProps {
   email?: string;
   onSubmit: (code: string) => void;
+  language: PollarLanguage;
 }
 
-export function EmailCodeInput({ email, onSubmit }: EmailCodeInputProps) {
+export function EmailCodeInput({ email, onSubmit, language }: EmailCodeInputProps) {
+  const copy = LOGIN_COPY[language];
   const [digits, setDigits] = useState(['', '', '', '', '', '']);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -38,7 +42,9 @@ export function EmailCodeInput({ email, onSubmit }: EmailCodeInputProps) {
 
   return (
     <div className="pollar-code-section">
-      <p className="pollar-code-label">Enter the 6-digit code sent to {email ? <strong>{email}</strong> : 'your email'}</p>
+      <p className="pollar-code-label">
+        {copy.codeLabel} {email ? <strong>{email}</strong> : copy.yourEmail}
+      </p>
       <div className="pollar-code-inputs">
         {digits.map((digit, i) => (
           <input

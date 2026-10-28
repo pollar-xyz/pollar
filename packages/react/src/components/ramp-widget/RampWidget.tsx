@@ -1,6 +1,7 @@
 'use client';
 
 import type {
+  PollarLanguage,
   CosignCustody,
   PollarClient,
   RampDirection,
@@ -35,6 +36,7 @@ import { RequirementFormModal } from '../requirement-form-modal/RequirementFormM
 import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
 import { useModalLanguage } from '../../language';
+import { RAMP_COPY, type RampCopy } from './ramp-copy';
 
 interface RampWidgetProps {
   onClose: () => void;
@@ -46,21 +48,12 @@ interface RampWidgetProps {
 const PAYMENT_CHECK_EVERY_MS = 10_000;
 const PAYMENT_CHECK_WINDOW_MS = 2 * 60_000;
 
-/** Ramp failures a user can act on, by API code. */
-const RAMP_ERROR_MESSAGES: Record<string, string> = {
-  SDK_RAMPS_QUOTE_EXPIRED: 'This quote expired. Find a route again.',
-  SDK_RAMPS_QUOTE_NOT_FOUND: 'This quote is no longer available. Find a route again.',
-  SDK_RAMPS_ACTION_STALE: 'This step changed. It was refreshed; try again.',
-  SDK_RAMPS_TX_NOT_FOUND: 'This operation was not found.',
-  SDK_RAMPS_WALLET_NOT_READY: 'Approve the new wallet account on your device, then try again.',
-};
-
 /** The text for a failed ramp call: an app that cannot serve it, a known code, the server's reason, or the fallback. */
-function rampErrorMessage(error: unknown, fallback: string): string {
-  const unavailable = appUnavailableMessage(error);
+function rampErrorMessage(error: unknown, fallback: string, copy: RampCopy, language: PollarLanguage): string {
+  const unavailable = appUnavailableMessage(error, language);
   if (unavailable) return unavailable;
   if (isPollarApiError(error)) {
-    const known = RAMP_ERROR_MESSAGES[error.code];
+    const known = copy.errors[error.code];
     if (known) return known;
     const message = error.body.message;
     if (typeof message === 'string' && message && !/^[A-Z0-9_]+$/.test(message)) return message;
@@ -85,7 +78,7 @@ const DECIMAL = /^\d+(\.\d+)?$/;
  * registered its own signer for a chain keeps it, and the widget's are released
  * once the leg is signed.
  */
-async function signLegWithWallet(client: PollarClient, orderId: string, actionId: string): Promise<RampOrder> {
+async function signLegWithWallet(client: PollarClient, orderId: string, actionId: string, copy: RampCopy): Promise<RampOrder> {
   const lent: Array<() => void> = [];
   const lend = (chain: 'STELLAR' | 'SOLANA', encoding: string, handler: RampSigningHandler) => {
     try {
@@ -96,14 +89,13 @@ async function signLegWithWallet(client: PollarClient, orderId: string, actionId
   };
   lend('STELLAR', 'xdr', async (action) => {
     const wallet = client.getWallet();
-    if (!wallet) throw new Error('Connect the Stellar wallet this step was built for.');
+    if (!wallet) throw new Error(copy.connectStellarWallet);
     assertRampStellarSigner(action, wallet.address);
     const outcome = await client.signTx(action.payload.value);
-    if (client.getWallet()?.address !== wallet.address)
-      throw new Error('The connected wallet changed. Refresh before signing.');
+    if (client.getWallet()?.address !== wallet.address) throw new Error(copy.walletChanged);
     if (outcome.status === 'signed') return outcome.signedXdr;
     throw new Error(
-      outcome.status === 'error' ? (outcome.message ?? outcome.details ?? 'Signing was cancelled.') : 'Signing was cancelled.',
+      outcome.status === 'error' ? (outcome.message ?? outcome.details ?? copy.signingCancelled) : copy.signingCancelled,
     );
   });
   lend('SOLANA', 'solana-v0-json', async (action) => {
@@ -111,10 +103,9 @@ async function signLegWithWallet(client: PollarClient, orderId: string, actionId
     const payload = JSON.parse(action.payload.value) as { from?: string; unsignedTransaction?: string };
     const solanaWallet = () => client.getWallets().find((w) => w.chain === 'SOLANA' && w.custody === 'external');
     const wallet = solanaWallet();
-    if (!wallet || payload.from !== wallet.address || !payload.unsignedTransaction)
-      throw new Error('This step must be signed by the Solana wallet it was built for. Reconnect that wallet.');
+    if (!wallet || payload.from !== wallet.address || !payload.unsignedTransaction) throw new Error(copy.solanaWalletMismatch);
     const signed = await client.signSolanaTransaction(payload.unsignedTransaction);
-    if (solanaWallet()?.address !== wallet.address) throw new Error('The connected wallet changed. Refresh before signing.');
+    if (solanaWallet()?.address !== wallet.address) throw new Error(copy.walletChanged);
     return signed;
   });
   try {
@@ -140,6 +131,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
   } = usePollar();
   const client = getClient();
   const language = useModalLanguage(languageProp);
+  const copy = RAMP_COPY[language];
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<RampStep>('input');
@@ -214,7 +206,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
       setCountry((current) => (found.some((r) => r.fiat.country === current) ? current : first));
     } catch (error) {
       setRoutes([]);
-      setErrorMsg(rampErrorMessage(error, 'Could not load the ramp routes.'));
+      setErrorMsg(rampErrorMessage(error, copy.loadRoutesFailed, copy, language));
     } finally {
       setRoutesLoading(false);
     }
@@ -255,7 +247,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
         onError: () => setPollTrouble(true),
       })
       .catch((error: unknown) => {
-        if (!controller.signal.aborted) setErrorMsg(rampErrorMessage(error, 'This operation could not be read.'));
+        if (!controller.signal.aborted) setErrorMsg(rampErrorMessage(error, copy.readOrderFailed, copy, language));
       });
     return () => controller.abort();
   }, [client, step, orderId, pollKey]);
@@ -302,7 +294,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
   }, [approval, client, openCosignModal]);
 
   // The approval prompt stays up between two approvals of the order instead of closing and reopening.
-  const nextApproval = step === 'status' && order ? rampNextApproval(order) : null;
+  const nextApproval = step === 'status' && order ? rampNextApproval(order, language) : null;
   useEffect(() => {
     setCosignNextStep(nextApproval);
   }, [nextApproval, setCosignNextStep]);
@@ -313,7 +305,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
     if (!awaitingAccount || resolvedRequest?.id !== awaitingAccount.requestId) return;
     setAwaitingAccount(null);
     if (resolvedRequest.status !== 'APPROVED') {
-      setErrorMsg('The new account was not approved, so this route cannot start.');
+      setErrorMsg(copy.accountNotApproved);
       return;
     }
     void resumeRoute(awaitingAccount.routeKey);
@@ -330,7 +322,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
   async function handleFindRoute(): Promise<RampQuote[]> {
     if (!fiat || !asset) return [];
     if (!DECIMAL.test(amount.trim()) || Number(amount) <= 0) {
-      setErrorMsg('Enter an amount greater than zero.');
+      setErrorMsg(copy.amountInvalid);
       return [];
     }
     setStep('loading_quote');
@@ -354,7 +346,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
         setStep('select_route');
         return [];
       }
-      setErrorMsg(rampErrorMessage(error, 'Could not find a route. Please try again.'));
+      setErrorMsg(rampErrorMessage(error, copy.findRouteFailed, copy, language));
       setStep('error');
       return [];
     }
@@ -386,18 +378,18 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
     try {
       const outcome = await client.setTrustline(asset);
       if (outcome.status === 'error') {
-        setErrorMsg(rampTrustlineErrorText(outcome, asset.code));
+        setErrorMsg(rampTrustlineErrorText(outcome, asset.code, language));
         return;
       }
       if (outcome.status === 'cosign_pending') {
-        setErrorMsg(`Approve the ${asset.code} trustline, then refresh the routes.`);
+        setErrorMsg(copy.approveTrustline(asset.code));
         openCosignModal();
         return;
       }
       await client.refreshAssets().catch(() => {});
       await handleFindRoute();
     } catch (error) {
-      setErrorMsg(rampErrorMessage(error, `Could not add the ${asset.code} trustline. Please try again.`));
+      setErrorMsg(rampErrorMessage(error, copy.addTrustlineFailed(asset.code), copy, language));
     } finally {
       setTrustingAsset(null);
     }
@@ -415,7 +407,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
     try {
       const { recoveryRequired } = await client.runRampWalletStep(walletStep, custody);
       if (recoveryRequired) {
-        setErrorMsg('Add a way to recover your wallet, then find the route again.');
+        setErrorMsg(copy.addRecovery);
         openRecoveryModal();
         return;
       }
@@ -423,14 +415,14 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
     } catch (error) {
       const code = isPollarApiError(error) ? error.code : null;
       if (code === 'SDK_RAMPS_WALLET_NOT_READY') {
-        setErrorMsg('Approve the new account, then find the route again.');
+        setErrorMsg(copy.approveAccount);
         openCosignModal();
         return;
       }
       setErrorMsg(
         code === 'SDK_WALLET_PROVISIONING_DISABLED'
-          ? 'This app does not create wallets.'
-          : rampErrorMessage(error, 'Could not prepare the wallet. Please try again.'),
+          ? copy.noWalletCreation
+          : rampErrorMessage(error, copy.prepareWalletFailed, copy, language),
       );
     } finally {
       setWalletBusy(null);
@@ -441,7 +433,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
   async function resumeRoute(key: string) {
     const same = (await handleFindRoute()).find((q) => routeKey(q) === key);
     if (same) handleSelectQuote(same, true);
-    else setErrorMsg('That route is no longer available. Pick another one.');
+    else setErrorMsg(copy.routeGone);
   }
 
   /** `fresh`: the quote was just taken, so a lapse is reported instead of quoting again. */
@@ -482,7 +474,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
         const pending = await client.cosign.pending().catch(() => []);
         const request = pending.find((r) => r.intent === 'add_accounts');
         if (request) setAwaitingAccount({ routeKey: routeKey(quote), requestId: request.id });
-        else setErrorMsg(rampErrorMessage(error, 'Could not start the operation. Please try again.'));
+        else setErrorMsg(rampErrorMessage(error, copy.startOrderFailed, copy, language));
         openCosignModal();
         setStep('select_route');
         return;
@@ -492,7 +484,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
         void resumeRoute(routeKey(quote));
         return;
       }
-      setErrorMsg(rampErrorMessage(error, 'Could not start the operation. Please try again.'));
+      setErrorMsg(rampErrorMessage(error, copy.startOrderFailed, copy, language));
       // A refused detail is fixed on the form; an expired quote needs a new one.
       if (isPollarApiError(error) && error.code === 'VALIDATION_ERROR' && rampQuoteFields(quote).length) setStep('contact');
       else setStep('select_route');
@@ -508,9 +500,16 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
     setSigning(true);
     setErrorMsg(null);
     try {
-      setOrder(await signLegWithWallet(client, order.id, action.actionId));
+      setOrder(await signLegWithWallet(client, order.id, action.actionId, copy));
     } catch (error) {
-      setErrorMsg(rampErrorMessage(error, error instanceof Error && error.message ? error.message : 'Signing was cancelled.'));
+      setErrorMsg(
+        rampErrorMessage(
+          error,
+          error instanceof Error && error.message ? error.message : copy.signingCancelled,
+          copy,
+          language,
+        ),
+      );
       setOrder(await client.getRampOrder(order.id).catch(() => order));
     } finally {
       setSigning(false);
@@ -526,7 +525,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
       setOrder(found);
       setStep('status');
     } catch (error) {
-      setErrorMsg(rampErrorMessage(error, 'Could not resume the operation.'));
+      setErrorMsg(rampErrorMessage(error, copy.resumeOrderFailed, copy, language));
     } finally {
       setIsLoading(false);
     }
@@ -553,7 +552,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
   function handleStepSelect(target: string) {
     setErrorMsg(null);
     setAwaitingAccount(null);
-    setStep(target === 'Route' ? 'select_route' : 'input');
+    setStep(target === copy.steps.route ? 'select_route' : 'input');
   }
 
   /** The user says they paid: the payment is checked now, then often for a while. */
@@ -567,7 +566,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
       // A check that timed out still runs on the server: the checks every PAYMENT_CHECK_EVERY_MS carry on.
       if (isPollarNetworkError(error)) return;
       setPaymentCheckUntil(null);
-      const message = rampErrorMessage(error, 'Could not check the payment. Please try again.');
+      const message = rampErrorMessage(error, copy.checkPaymentFailed, copy, language);
       checkErrorRef.current = message;
       setErrorMsg(message);
     }
@@ -582,7 +581,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
       setOrder(await client.retryRampOrder(order.id));
       setPollKey((key) => key + 1);
     } catch (error) {
-      setErrorMsg(rampErrorMessage(error, 'Could not try again. Please try again.'));
+      setErrorMsg(rampErrorMessage(error, copy.retryOrderFailed, copy, language));
     } finally {
       setRetrying(false);
     }
@@ -611,7 +610,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
         if (direction === 'OFFRAMP') await refreshWalletBalance();
       }
     } catch (error) {
-      setErrorMsg(rampErrorMessage(error, 'Could not refresh.'));
+      setErrorMsg(rampErrorMessage(error, copy.refreshFailed, copy, language));
     } finally {
       setRefreshing(false);
     }
@@ -619,14 +618,14 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
 
   const flowSteps =
     fields.length || quotes.some((q) => rampQuoteFields(q).length)
-      ? ['Amount', 'Route', 'Details', 'Complete']
-      : ['Amount', 'Route', 'Complete'];
+      ? [copy.steps.amount, copy.steps.route, copy.steps.details, copy.steps.complete]
+      : [copy.steps.amount, copy.steps.route, copy.steps.complete];
   const stepLabel: Partial<Record<RampStep, string>> = {
-    input: 'Amount',
-    loading_quote: 'Amount',
-    select_route: 'Route',
-    contact: 'Details',
-    status: 'Complete',
+    input: copy.steps.amount,
+    loading_quote: copy.steps.amount,
+    select_route: copy.steps.route,
+    contact: copy.steps.details,
+    status: copy.steps.complete,
   };
   const label = stepLabel[step];
 
@@ -669,6 +668,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
         country={country}
         corridorId={verifying.corridorId}
         providerId={verifying.optionId}
+        language={languageProp}
         onClose={closeVerification}
         onApproved={done}
       />
@@ -707,7 +707,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
         refreshing={refreshing}
         signing={signing}
         errorMsg={errorMsg}
-        notice={awaitingAccount ? 'Approve the new account on your device. The order starts once it is approved.' : null}
+        notice={awaitingAccount ? copy.awaitingAccount : null}
         onDirectionChange={handleDirectionChange}
         onCountryChange={(next) => {
           setCountry(next);

@@ -1,9 +1,13 @@
 'use client';
 
-import { type CosignRequest, type CosignVerification, fromBaseUnits } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { type CosignRequest, type CosignVerification, fromBaseUnits, type PollarLanguage } from '@pollar/core';
 import { useState } from 'react';
 import { CopyButton, cropAddress, PollarModalFooter } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
+import { COSIGN_COPY } from './cosign-copy';
+
+type CosignCopy = (typeof COSIGN_COPY)[PollarLanguage];
 
 export interface CosignModalTemplateProps {
   theme: string;
@@ -28,29 +32,22 @@ export interface CosignModalTemplateProps {
   closesIn?: number | null;
   /** The approval coming next in the same flow, shown while the modal waits for it. */
   nextStep?: string | null;
+  /** Language of the modal's text; the device's when not given. */
+  language?: PollarLanguage | undefined;
   onSelect: (request: CosignRequest) => void;
   onApprove: (request: CosignRequest) => void;
   onReject: (request: CosignRequest) => void;
   onClose: () => void;
 }
 
-const OPERATION_LABELS: Record<string, string> = {
-  payment: 'Send',
-  path_payment_strict_send: 'Swap',
-  change_trust: 'Add asset',
-  create_account: 'Create account',
-  invoke_contract: 'Contract call',
-  manage_data: 'Manage data',
-};
-
-function labelOf(request: CosignRequest): string {
+function labelOf(request: CosignRequest, copy: CosignCopy): string {
   const op = request.operation ?? '';
-  return OPERATION_LABELS[op] ?? (op ? op.replace(/_/g, ' ') : 'Transaction');
+  return copy.operations[op] ?? (op ? op.replace(/_/g, ' ') : copy.transaction);
 }
 
-function expiresIn(request: CosignRequest): string {
+function expiresIn(request: CosignRequest, copy: CosignCopy): string {
   const ms = new Date(request.expiresAt).getTime() - Date.now();
-  if (!Number.isFinite(ms) || ms <= 0) return 'expired';
+  if (!Number.isFinite(ms) || ms <= 0) return copy.expired;
   const h = Math.floor(ms / 3_600_000);
   const m = Math.floor((ms % 3_600_000) / 60_000);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
@@ -67,7 +64,7 @@ function readableAmount(details: Record<string, unknown>): { amount: string; sym
   }
 }
 
-function detailRows(request: CosignRequest): Array<[string, string]> {
+function detailRows(request: CosignRequest, copy: CosignCopy): Array<[string, string]> {
   const details = (request.details ?? {}) as Record<string, unknown>;
   const rows: Array<[string, string]> = [];
   const push = (label: string, value: unknown) => {
@@ -77,11 +74,11 @@ function detailRows(request: CosignRequest): Array<[string, string]> {
       typeof value === 'string' && value.length > 24 && /^[GC][A-Z2-7]{55}$/.test(value) ? cropAddress(value) : String(value),
     ]);
   };
-  push('Destination', details.destination);
+  push(copy.rows.destination, details.destination);
   const readable = readableAmount(details);
-  push('Amount', readable ? `${readable.amount} ${readable.symbol}` : details.amount);
-  push('Asset', details.asset ?? details.assetCode ?? readable?.symbol);
-  push('Network', request.network);
+  push(copy.rows.amount, readable ? `${readable.amount} ${readable.symbol}` : details.amount);
+  push(copy.rows.asset, details.asset ?? details.assetCode ?? readable?.symbol);
+  push(copy.rows.network, request.network);
   return rows;
 }
 
@@ -116,11 +113,14 @@ export function CosignModalTemplate({
   explorerUrl,
   closesIn = null,
   nextStep = null,
+  language: languageProp,
   onSelect,
   onApprove,
   onReject,
   onClose,
 }: CosignModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = COSIGN_COPY[language];
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
   const verified = verification?.ok === true;
   const canVote = !!current && verified && !busy && !approveBlocked;
@@ -136,9 +136,9 @@ export function CosignModalTemplate({
       onClick={(e) => e.stopPropagation()}
     >
       <div className="pollar-modal-header">
-        <h2 className="pollar-modal-title">Confirm with your device</h2>
+        <h2 className="pollar-modal-title">{copy.title}</h2>
         <div className="pollar-modal-header-actions">
-          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close" title="Close">
+          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close} title={copy.close}>
             <CloseIcon />
           </button>
         </div>
@@ -161,16 +161,12 @@ export function CosignModalTemplate({
                 </svg>
               )}
               <p className="pollar-cosign-empty-title">
-                {lastResolved.status === 'APPROVED'
-                  ? 'Approved'
-                  : lastResolved.status === 'REJECTED'
-                    ? 'Rejected'
-                    : lastResolved.status.toLowerCase()}
+                {copy.status[lastResolved.status] ?? lastResolved.status.toLowerCase()}
               </p>
               <p className="pollar-cosign-muted">
                 {lastResolved.submit?.hash ? (
                   <>
-                    Sent. Transaction{' '}
+                    {copy.sentTransaction}{' '}
                     {explorerUrl ? (
                       <a className="pollar-cosign-tx-link" href={explorerUrl} target="_blank" rel="noopener noreferrer">
                         {cropAddress(lastResolved.submit.hash)}
@@ -180,27 +176,26 @@ export function CosignModalTemplate({
                     )}
                     <CopyButton
                       value={lastResolved.submit.hash}
-                      label="Copy transaction hash"
+                      label={copy.copyHash}
                       className="pollar-copy-btn-sm pollar-cosign-copy"
                     />
                   </>
                 ) : lastResolved.signedXdr ? (
-                  'Signed. The app will send it.'
+                  copy.signedAppSends
                 ) : (
-                  'Nothing was signed.'
+                  copy.nothingSigned
                 )}
               </p>
             </>
           ) : (
-            <p className="pollar-cosign-muted">Nothing waits for your approval.</p>
+            <p className="pollar-cosign-muted">{copy.nothingWaiting}</p>
           )}
           {nextStep && (
             <p className="pollar-cosign-next">
-              <span className="pollar-spinner pollar-spinner-sm" aria-hidden /> Next: {nextStep}. It appears here in a few
-              seconds.
+              <span className="pollar-spinner pollar-spinner-sm" aria-hidden /> {copy.next(nextStep)}
             </p>
           )}
-          {closesIn !== null && <p className="pollar-cosign-muted pollar-cosign-closing">Closing in {closesIn}s</p>}
+          {closesIn !== null && <p className="pollar-cosign-muted pollar-cosign-closing">{copy.closingIn(closesIn)}</p>}
         </div>
       )}
 
@@ -213,8 +208,8 @@ export function CosignModalTemplate({
                 className={`pollar-cosign-item${current?.id === r.id ? ' pollar-cosign-item-active' : ''}`}
                 onClick={() => onSelect(r)}
               >
-                <span>{labelOf(r)}</span>
-                <span className="pollar-cosign-muted">{expiresIn(r)}</span>
+                <span>{labelOf(r, copy)}</span>
+                <span className="pollar-cosign-muted">{expiresIn(r, copy)}</span>
               </button>
             </li>
           ))}
@@ -224,11 +219,11 @@ export function CosignModalTemplate({
       {current && (
         <div className="pollar-cosign-detail">
           <div className="pollar-cosign-detail-head">
-            <p className="pollar-cosign-detail-title">{labelOf(current)}</p>
+            <p className="pollar-cosign-detail-title">{labelOf(current, copy)}</p>
             {!verification && (
               <span className="pollar-cosign-chip">
                 <span className="pollar-spinner pollar-spinner-sm" aria-hidden />
-                Checking...
+                {copy.checking}
               </span>
             )}
             {verification?.ok && (
@@ -239,32 +234,32 @@ export function CosignModalTemplate({
                 onClick={() => setVerifiedOpenFor(verifiedOpen ? null : current.id)}
               >
                 <VerifiedIcon />
-                Verified
+                {copy.verified}
               </button>
             )}
           </div>
           {current.summary && <p className="pollar-cosign-muted">{current.summary}</p>}
           <dl className="pollar-cosign-rows">
-            {detailRows(current).map(([k, v]) => (
+            {detailRows(current, copy).map(([k, v]) => (
               <div key={k} className="pollar-cosign-row">
                 <dt>{k}</dt>
                 <dd>{v}</dd>
               </div>
             ))}
             <div className="pollar-cosign-row">
-              <dt>Expires in</dt>
-              <dd>{expiresIn(current)}</dd>
+              <dt>{copy.expiresIn}</dt>
+              <dd>{expiresIn(current, copy)}</dd>
             </div>
           </dl>
 
           {verification?.ok && verifiedOpen && (
-            <div className="pollar-cosign-verify pollar-cosign-verify-ok">
-              Checked against Turnkey: this is exactly what will be signed.
-            </div>
+            <div className="pollar-cosign-verify pollar-cosign-verify-ok">{copy.checkedAgainstTurnkey}</div>
           )}
           {/* A failed check stays spelled out: it is the only place the user learns why Approve is off. */}
           {verification && !verification.ok && (
-            <div className="pollar-cosign-verify pollar-cosign-verify-bad">Not verified: {verification.reason}</div>
+            <div className="pollar-cosign-verify pollar-cosign-verify-bad">
+              {copy.notVerified} {verification.reason}
+            </div>
           )}
 
           {error && <div className="pollar-cosign-error">{error}</div>}
@@ -276,7 +271,7 @@ export function CosignModalTemplate({
               disabled={!!busy}
               onClick={() => onReject(current)}
             >
-              {busy === 'rejecting' ? 'Rejecting...' : 'Reject'}
+              {busy === 'rejecting' ? copy.rejecting : copy.reject}
             </button>
             <button
               type="button"
@@ -284,7 +279,7 @@ export function CosignModalTemplate({
               disabled={!canVote}
               onClick={() => onApprove(current)}
             >
-              {busy === 'approving' ? 'Approving...' : 'Approve'}
+              {busy === 'approving' ? copy.approving : copy.approve}
             </button>
           </div>
         </div>

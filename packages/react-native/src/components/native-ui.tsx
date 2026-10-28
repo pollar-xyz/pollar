@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 import type { TextInputProps } from 'react-native';
 import { usePollar } from '../context';
+import { useModalLanguage } from '../language';
+import { FEATURE_COPY } from './feature-copy';
 
 export function useNativeColors() {
   const { styles } = usePollar();
@@ -124,9 +126,10 @@ export function useAction() {
   return { busy, error, result, run };
 }
 export function ActionState({ action }: { action: ReturnType<typeof useAction> }) {
+  const copy = FEATURE_COPY[useModalLanguage()];
   return (
     <View style={{ gap: 8 }}>
-      {action.busy && <ActivityIndicator accessibilityLabel="Request in progress" />}
+      {action.busy && <ActivityIndicator accessibilityLabel={copy.requestInProgress} />}
       {!!action.error && (
         <Text accessibilityRole="alert" style={{ color: '#d84a53' }}>
           {action.error}

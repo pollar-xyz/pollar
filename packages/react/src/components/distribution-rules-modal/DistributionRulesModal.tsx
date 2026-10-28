@@ -3,8 +3,10 @@
 import { DistributionRule, DistributionRulesState } from '@pollar/core';
 import { useCallback, useEffect, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import '../shared.css';
 import './DistributionRulesModal.css';
+import { DISTRIBUTION_RULES_COPY } from './distribution-rules-copy';
 import { DistributionRulesModalTemplate } from './DistributionRulesModalTemplate';
 import { modalChrome } from '../modal-theme';
 
@@ -15,6 +17,8 @@ interface DistributionRulesModalProps {
 export function DistributionRulesModal({ onClose }: DistributionRulesModalProps) {
   const { getClient, styles } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
+  const language = useModalLanguage();
+  const copy = DISTRIBUTION_RULES_COPY[language];
 
   const [state, setState] = useState<DistributionRulesState>({ step: 'idle' });
   const [claimingId, setClaimingId] = useState<string | null>(null);
@@ -27,10 +31,10 @@ export function DistributionRulesModal({ onClose }: DistributionRulesModalProps)
       const rules = await getClient().listDistributionRules();
       setState({ step: 'loaded', rules });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load distribution rules';
+      const message = err instanceof Error ? err.message : copy.loadFailed;
       setState({ step: 'error', message });
     }
-  }, [getClient]);
+  }, [getClient, copy]);
 
   useEffect(() => {
     void load();
@@ -53,13 +57,13 @@ export function DistributionRulesModal({ onClose }: DistributionRulesModalProps)
           return next;
         });
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Claim failed';
+        const message = err instanceof Error ? err.message : copy.claimFailed;
         setClaimErrors((prev) => ({ ...prev, [rule.id]: message }));
       } finally {
         setClaimingId(null);
       }
     },
-    [getClient],
+    [getClient, copy],
   );
 
   return (
@@ -72,6 +76,7 @@ export function DistributionRulesModal({ onClose }: DistributionRulesModalProps)
         claimingId={claimingId}
         claimErrors={claimErrors}
         claimedIds={claimedIds}
+        language={language}
         onRefresh={() => void load()}
         onClaim={handleClaim}
         onClose={onClose}

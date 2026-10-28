@@ -26,6 +26,7 @@ import {
   View,
 } from 'react-native';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { useWalletAvailable } from '../../useWalletAvailable';
 import { AmountField } from '../AmountField';
 import { PollarModalFooter } from '../commons';
@@ -33,6 +34,7 @@ import { KycModal } from '../kyc-modal/KycModal';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
 import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
 import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
+import { CARD_COPY, type CardCopy } from './card-copy';
 import { blockedStepMessage, cardStage, pendingFromRequirement, requiredCardStep, type PendingCardStep } from './card-kyc';
 
 export interface CardModalProps {
@@ -48,63 +50,14 @@ const TX_LIMIT = 10;
 const FUNDING_POLL_MS = 5_000;
 const FUNDING_INFLIGHT = new Set(['CREATED', 'BURNED', 'ATTESTED', 'MINTED']);
 
-/** What each funding state means to the user: a title, and for one in flight its step and what it waits on. */
-const FUNDING_COPY: Record<string, { title: string; step?: number; hint?: string }> = {
-  CREATED: {
-    title: 'Confirming your payment',
-    step: 1,
-    hint: 'Your USDC payment is being confirmed on Stellar. This takes a few seconds.',
-  },
-  BURNED: {
-    title: 'Sending it to the card network',
-    step: 2,
-    hint: 'Your USDC left Stellar. Circle is confirming the transfer, usually in about a minute.',
-  },
-  ATTESTED: {
-    title: 'Crossing to the card network',
-    step: 3,
-    hint: 'Transfer confirmed. Delivering the USDC to the card network.',
-  },
-  MINTED: {
-    title: 'Arrived, crediting your card',
-    step: 4,
-    hint: 'The USDC reached the card provider, which is adding it to your card. This can take a few minutes.',
-  },
-  CREDITED: { title: 'Credited to your card' },
-  FAILED: { title: 'Failed' },
-};
+/** The step of a funding in flight, out of FUNDING_STEPS. */
+const FUNDING_STEP: Record<string, number> = { CREATED: 1, BURNED: 2, ATTESTED: 3, MINTED: 4 };
 const FUNDING_STEPS = 4;
 
-const INCOME_RANGES: { value: CardIncomeRange; label: string }[] = [
-  { value: '0-1000', label: 'Up to 1,000 USD' },
-  { value: '1000-5000', label: '1,000 to 5,000 USD' },
-  { value: '5000-10000', label: '5,000 to 10,000 USD' },
-  { value: '10000+', label: 'More than 10,000 USD' },
-];
+const INCOME_RANGES: CardIncomeRange[] = ['0-1000', '1000-5000', '5000-10000', '10000+'];
 
-const TX_LABELS: Record<string, string> = {
-  deposit: 'Deposit',
-  transactionTransfer: 'Bank deposit',
-  spend: 'Purchase',
-  spend_adjustment: 'Adjustment',
-  fee: 'Fee',
-  fee_refund: 'Fee refund',
-  withdrawal: 'Withdrawal',
-  card_insurance: 'Card issuance',
-};
-
-const KYC_PENDING_COPY: Record<string, string> = {
-  PENDING: 'Your information is being reviewed.',
-  NEEDS_ACTION:
-    'Finish verifying your identity with the card provider: you will be asked for a photo of your document and a selfie.',
-  IN_REVIEW: 'Your verification is under manual review. This can take a while.',
-};
-
-const KYC_FINAL_COPY: Record<string, string> = {
-  DENIED: 'Your verification was denied.',
-  LOCKED: 'Your account is locked.',
-  CANCELED: 'Your verification was canceled.',
-};
+const KYC_PENDING = new Set(['PENDING', 'NEEDS_ACTION', 'IN_REVIEW']);
+const KYC_FINAL = new Set(['DENIED', 'LOCKED', 'CANCELED']);
 
 const emptyKyc: CardKycInput = {
   firstName: '',
@@ -139,18 +92,9 @@ function groupPan(pan: string): string {
 }
 
 /** The provider's own words when it rejected something; our code otherwise. */
-/** Errors whose cause the user can act on, said plainly instead of the provider's raw message. */
-const CARD_ERROR_COPY: Record<string, string> = {
-  SDK_CARDS_PROVIDER_ERROR: 'The card provider is not responding right now. Please try again in a few minutes.',
-  SDK_CARDS_IP_NOT_SUPPORTED:
-    'The card provider cannot accept your current connection (IPv6). Please try again from another network, for example Wi-Fi.',
-  SDK_CARDS_PROVIDER_USER_TAKEN:
-    'This email is already registered with the card provider through another app. Use a different email to get a card here.',
-};
-
-function errorText(e: unknown, fallback: string): string {
+function errorText(e: unknown, fallback: string, copy: CardCopy): string {
   if (isPollarApiError(e)) {
-    const known = CARD_ERROR_COPY[e.code];
+    const known = copy.errors[e.code];
     if (known) return known;
     const providerMessage = e.body.providerMessage;
     if (typeof providerMessage === 'string' && providerMessage) return providerMessage;
@@ -166,7 +110,17 @@ function errorText(e: unknown, fallback: string): string {
  * provider's hosted verification opened in the system browser.
  */
 /** A copy control on the card art: white like the art's text, "Copied" for a moment after a tap. */
-function CardCopy({ value, label, copy }: { value: string; label: string; copy: (text: string) => Promise<void> }) {
+function CardCopyButton({
+  value,
+  label,
+  copy,
+  text,
+}: {
+  value: string;
+  label: string;
+  copy: (text: string) => Promise<void>;
+  text: Pick<CardCopy, 'copy' | 'copied'>;
+}) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -183,13 +137,15 @@ function CardCopy({ value, label, copy }: { value: string; label: string; copy: 
         })
       }
     >
-      <Text style={styles.copyLabel}>{copied ? 'Copied' : 'Copy'}</Text>
+      <Text style={styles.copyLabel}>{copied ? text.copied : text.copy}</Text>
     </TouchableOpacity>
   );
 }
 
 export function CardModal({ onClose }: CardModalProps) {
   const { getClient, copyText, styles: pollarStyles } = usePollar();
+  const language = useModalLanguage();
+  const copy = CARD_COPY[language];
   const { theme = 'light', accentColor = '#005DB4' } = pollarStyles;
   const isDark = theme === 'dark';
   const colors = {
@@ -290,7 +246,7 @@ export function CardModal({ onClose }: CardModalProps) {
       } catch (e) {
         if (!mounted.current) return;
         setProviders((cur) => cur ?? []);
-        setError(errorText(e, 'Could not load your card'));
+        setError(errorText(e, copy.failed.load, copy));
       }
     })();
   }, [getClient, loadHolder, loadRequirements, loadCardData]);
@@ -311,7 +267,7 @@ export function CardModal({ onClose }: CardModalProps) {
       .catch(() => mounted.current && setOccupations([]));
   }, [stage, getClient]);
 
-  const kycPending = holder ? holder.kycStatus in KYC_PENDING_COPY : false;
+  const kycPending = holder ? KYC_PENDING.has(holder.kycStatus) : false;
   useEffect(() => {
     if (!kycPending) return;
     const id = setInterval(() => {
@@ -342,7 +298,7 @@ export function CardModal({ onClose }: CardModalProps) {
       if (!mounted.current) return;
       const step = requiredCardStep(e);
       if (step) openStep(step);
-      else setError(errorText(e, fallback));
+      else setError(errorText(e, fallback, copy));
     } finally {
       if (mounted.current) setBusy(null);
     }
@@ -352,7 +308,7 @@ export function CardModal({ onClose }: CardModalProps) {
     if (!provider) return;
     const [h, r] = await Promise.all([loadHolder(), loadRequirements(provider.id)]);
     if (h?.kycStatus === 'APPROVED') await loadCardData();
-    if (r?.next && !blockedStepMessage(r.next)) openStep(pendingFromRequirement(provider.id, r.next));
+    if (r?.next && !blockedStepMessage(r.next, copy.blocked)) openStep(pendingFromRequirement(provider.id, r.next));
   }
 
   const start = () =>
@@ -369,7 +325,7 @@ export function CardModal({ onClose }: CardModalProps) {
         const h = await getClient().createCardHolder();
         if (mounted.current) setHolder(h);
       },
-      'Could not start your card application',
+      copy.failed.start,
     );
 
   const sendKyc = () =>
@@ -381,7 +337,7 @@ export function CardModal({ onClose }: CardModalProps) {
         const h = await getClient().submitCardKyc({ termsAccepted: terms, kyc: { ...kyc, address } });
         if (mounted.current) setHolder(h);
       },
-      'Could not submit your information',
+      copy.failed.submit,
     );
 
   const issue = () =>
@@ -391,7 +347,7 @@ export function CardModal({ onClose }: CardModalProps) {
         await getClient().issueCard(nickname.trim() ? { nickname: nickname.trim() } : {});
         await loadCardData();
       },
-      'Could not issue your card',
+      copy.failed.issue,
     );
 
   const reveal = () =>
@@ -405,7 +361,7 @@ export function CardModal({ onClose }: CardModalProps) {
         if (revealTimer.current) clearTimeout(revealTimer.current);
         revealTimer.current = setTimeout(() => mounted.current && setSecrets(null), REVEAL_MS);
       },
-      'Could not show the card details',
+      copy.failed.reveal,
     );
 
   const openFund = () =>
@@ -417,7 +373,7 @@ export function CardModal({ onClose }: CardModalProps) {
         setFundings(list);
         setPanel('fund');
       },
-      'Could not load your fundings',
+      copy.failed.loadFundings,
     );
 
   const fund = () =>
@@ -427,13 +383,13 @@ export function CardModal({ onClose }: CardModalProps) {
         const outcome = await getClient().fundCard({ amount: fundAmount.trim() });
         if (!mounted.current) return;
         if (outcome.status === 'cancelled') {
-          setError('The payment was not signed.');
+          setError(copy.notSigned);
           return;
         }
         setFundings((cur) => [outcome.funding, ...(cur ?? []).filter((f) => f.id !== outcome.funding.id)]);
         setFundAmount('');
       },
-      'Could not fund the card',
+      copy.failed.fund,
     );
 
   const showManualAddress = () =>
@@ -446,7 +402,7 @@ export function CardModal({ onClose }: CardModalProps) {
         }
         if (mounted.current) setShowManual(true);
       },
-      'Could not load the deposit address',
+      copy.failed.loadDeposit,
     );
 
   const fundingsInflight = (fundings ?? []).some((f) => FUNDING_INFLIGHT.has(f.status));
@@ -474,7 +430,7 @@ export function CardModal({ onClose }: CardModalProps) {
   }, [panel, fundingsInflight, getClient, loadCardData]);
 
   function openUrl(url: string) {
-    Linking.openURL(url).catch(() => setError('Could not open the page. Please try again.'));
+    Linking.openURL(url).catch(() => setError(copy.failed.openPage));
   }
 
   const kycComplete =
@@ -546,11 +502,12 @@ export function CardModal({ onClose }: CardModalProps) {
     providers === null ||
     (providers.length > 0 && (holder === undefined || requirements === undefined)) ||
     (holder?.kycStatus === 'APPROVED' && cards === null && !error);
-  const blocked = requirements?.next ? blockedStepMessage(requirements.next) : null;
+  const blocked = requirements?.next ? blockedStepMessage(requirements.next, copy.blocked) : null;
   const stepsPending = !!requirements?.next;
-  const title = panel === 'fund' ? 'Add funds' : card ? (card.nickname ?? 'Your card') : 'Get a card';
+  const title = panel === 'fund' ? copy.title.addFunds : card ? (card.nickname ?? copy.title.yourCard) : copy.title.getCard;
   const inputStyle = [styles.input, { color: colors.text, borderColor: colors.border }];
   const noteStyle = { color: colors.muted, fontSize: 12, marginTop: 8 };
+  const incomeRanges = INCOME_RANGES.map((value) => ({ value, label: copy.incomeRanges[value] }));
 
   const input = (
     value: string,
@@ -627,12 +584,12 @@ export function CardModal({ onClose }: CardModalProps) {
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.header}>
             {panel === 'fund' && (
-              <TouchableOpacity onPress={() => setPanel('card')} accessibilityLabel="Back" style={styles.headerBtn}>
+              <TouchableOpacity onPress={() => setPanel('card')} accessibilityLabel={copy.back} style={styles.headerBtn}>
                 <Text style={{ color: colors.muted, fontSize: 16 }}>{'<'}</Text>
               </TouchableOpacity>
             )}
             <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
-            <TouchableOpacity onPress={onClose} accessibilityLabel="Close" style={styles.headerBtn}>
+            <TouchableOpacity onPress={onClose} accessibilityLabel={copy.close} style={styles.headerBtn}>
               <Text style={{ color: colors.muted, fontSize: 16 }}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -644,28 +601,21 @@ export function CardModal({ onClose }: CardModalProps) {
               </View>
             )}
 
-            {!loading && providers?.length === 0 && (
-              <Text style={{ color: colors.error }}>Cards are not available for this app.</Text>
-            )}
-            {!loading && provider && !provider.available && (
-              <Text style={{ color: colors.error }}>Cards are not available right now.</Text>
-            )}
+            {!loading && providers?.length === 0 && <Text style={{ color: colors.error }}>{copy.unavailableForApp}</Text>}
+            {!loading && provider && !provider.available && <Text style={{ color: colors.error }}>{copy.unavailableNow}</Text>}
 
             {/* Step 1: the platform's steps, then the provider sign-up */}
             {!loading && provider && provider.available && stage === 'steps' && (
               <View>
                 <Text style={{ color: colors.text, lineHeight: 20 }}>
-                  Get {provider.cardLabel ?? `a ${provider.name} card`} funded from your wallet. You will verify your identity
-                  first; it takes a few minutes.
+                  {copy.intro(provider.cardLabel ?? copy.defaultCardName(provider.name), true)}
                 </Text>
                 {requirements && requirements.total > 0 && (
-                  <Text style={noteStyle}>
-                    {requirements.completed} of {requirements.total} steps done
-                  </Text>
+                  <Text style={noteStyle}>{copy.stepsDone(requirements.completed, requirements.total)}</Text>
                 )}
                 {!!blocked && <Text style={{ color: colors.error, marginTop: 8 }}>{blocked}</Text>}
                 {primary(
-                  busy === 'start' ? 'Starting...' : stepsPending ? 'Continue' : 'Start',
+                  busy === 'start' ? copy.starting : stepsPending ? copy.continue : copy.start,
                   () => void start(),
                   busy !== null || !!blocked,
                 )}
@@ -675,72 +625,55 @@ export function CardModal({ onClose }: CardModalProps) {
             {/* Step 2: the provider's own KYC form, when no PROVIDER_REGISTRATION step sends it for the user */}
             {!loading && provider && stage === 'provider-form' && (
               <View>
-                <Text style={[styles.section, { color: colors.muted }]}>About you</Text>
-                {input(kyc.firstName, (v) => setKyc((k) => ({ ...k, firstName: v })), 'First name')}
-                {input(kyc.lastName, (v) => setKyc((k) => ({ ...k, lastName: v })), 'Last name')}
-                {input(kyc.birthDate, (v) => setKyc((k) => ({ ...k, birthDate: v })), 'Birth date', {
-                  placeholder: 'YYYY-MM-DD',
+                <Text style={[styles.section, { color: colors.muted }]}>{copy.aboutYou}</Text>
+                {input(kyc.firstName, (v) => setKyc((k) => ({ ...k, firstName: v })), copy.firstName)}
+                {input(kyc.lastName, (v) => setKyc((k) => ({ ...k, lastName: v })), copy.lastName)}
+                {input(kyc.birthDate, (v) => setKyc((k) => ({ ...k, birthDate: v })), copy.birthDate, {
+                  placeholder: copy.datePlaceholder,
                 })}
-                {input(kyc.nationalId, (v) => setKyc((k) => ({ ...k, nationalId: v })), 'ID number')}
-                {input(
-                  kyc.countryOfIssue,
-                  (v) => setKyc((k) => ({ ...k, countryOfIssue: v.toUpperCase() })),
-                  'ID country (2 letters)',
-                  {
-                    placeholder: 'AR',
-                    maxLength: 2,
-                  },
-                )}
+                {input(kyc.nationalId, (v) => setKyc((k) => ({ ...k, nationalId: v })), copy.nationalId)}
+                {input(kyc.countryOfIssue, (v) => setKyc((k) => ({ ...k, countryOfIssue: v.toUpperCase() })), copy.idCountry, {
+                  placeholder: 'AR',
+                  maxLength: 2,
+                })}
                 {choices(
-                  'Occupation',
+                  copy.occupation,
                   kyc.occupation,
                   occupations.map((o) => ({ value: o.code, label: o.label })),
                   (v) => setKyc((k) => ({ ...k, occupation: v })),
                 )}
-                {input(kyc.phoneCountryCode, (v) => setKyc((k) => ({ ...k, phoneCountryCode: v })), 'Phone country code', {
+                {input(kyc.phoneCountryCode, (v) => setKyc((k) => ({ ...k, phoneCountryCode: v })), copy.phoneCountryCode, {
                   placeholder: '54',
                   keyboardType: 'numeric',
                 })}
-                {input(kyc.phoneNumber, (v) => setKyc((k) => ({ ...k, phoneNumber: v })), 'Phone number', {
+                {input(kyc.phoneNumber, (v) => setKyc((k) => ({ ...k, phoneNumber: v })), copy.phoneNumber, {
                   placeholder: '91155551234',
                   keyboardType: 'numeric',
                 })}
-                {choices('Annual income', kyc.annualSalary, INCOME_RANGES, (v) => setKyc((k) => ({ ...k, annualSalary: v })))}
-                {choices('Expected monthly spend', kyc.expectedMonthlyVolume, INCOME_RANGES, (v) =>
+                {choices(copy.annualIncome, kyc.annualSalary, incomeRanges, (v) => setKyc((k) => ({ ...k, annualSalary: v })))}
+                {choices(copy.monthlySpend, kyc.expectedMonthlyVolume, incomeRanges, (v) =>
                   setKyc((k) => ({ ...k, expectedMonthlyVolume: v })),
                 )}
-                {input(
-                  kyc.accountPurpose,
-                  (v) => setKyc((k) => ({ ...k, accountPurpose: v })),
-                  'What will you use the card for?',
-                )}
+                {input(kyc.accountPurpose, (v) => setKyc((k) => ({ ...k, accountPurpose: v })), copy.accountPurpose)}
 
-                <Text style={[styles.section, { color: colors.muted }]}>Address</Text>
-                {input(
-                  kyc.address.line1,
-                  (v) => setKyc((k) => ({ ...k, address: { ...k.address, line1: v } })),
-                  'Street and number',
-                )}
+                <Text style={[styles.section, { color: colors.muted }]}>{copy.address}</Text>
+                {input(kyc.address.line1, (v) => setKyc((k) => ({ ...k, address: { ...k.address, line1: v } })), copy.line1)}
                 {input(
                   kyc.address.line2 ?? '',
                   (v) => setKyc((k) => ({ ...k, address: { ...k.address, line2: v } })),
-                  'Apartment, floor (optional)',
+                  copy.line2,
                 )}
-                {input(kyc.address.city, (v) => setKyc((k) => ({ ...k, address: { ...k.address, city: v } })), 'City')}
-                {input(
-                  kyc.address.region,
-                  (v) => setKyc((k) => ({ ...k, address: { ...k.address, region: v } })),
-                  'State or province',
-                )}
+                {input(kyc.address.city, (v) => setKyc((k) => ({ ...k, address: { ...k.address, city: v } })), copy.city)}
+                {input(kyc.address.region, (v) => setKyc((k) => ({ ...k, address: { ...k.address, region: v } })), copy.region)}
                 {input(
                   kyc.address.postalCode,
                   (v) => setKyc((k) => ({ ...k, address: { ...k.address, postalCode: v } })),
-                  'Postal code',
+                  copy.postalCode,
                 )}
                 {input(
                   kyc.address.countryCode,
                   (v) => setKyc((k) => ({ ...k, address: { ...k.address, countryCode: v.toUpperCase() } })),
-                  'Country (2 letters)',
+                  copy.country,
                   { placeholder: 'AR', maxLength: 2 },
                 )}
 
@@ -762,16 +695,19 @@ export function CardModal({ onClose }: CardModalProps) {
                     {terms && <Text style={styles.boxMark}>✓</Text>}
                   </View>
                   <Text style={{ color: colors.text, fontSize: 14, flex: 1 }}>
-                    I have read and accept the {provider.name} terms of service.
+                    {copy.termsPrefix}
+                    {copy.termsLink(provider.name)}.
                   </Text>
                 </TouchableOpacity>
                 {provider.termsUrl && (
                   <TouchableOpacity onPress={() => openUrl(provider.termsUrl!)}>
-                    <Text style={{ color: accentColor, textDecorationLine: 'underline', marginBottom: 8 }}>Read the terms</Text>
+                    <Text style={{ color: accentColor, textDecorationLine: 'underline', marginBottom: 8 }}>
+                      {copy.readTerms}
+                    </Text>
                   </TouchableOpacity>
                 )}
                 {primary(
-                  busy === 'kyc' ? 'Sending...' : 'Continue',
+                  busy === 'kyc' ? copy.sending : copy.continue,
                   () => void sendKyc(),
                   busy !== null || !terms || !kycComplete,
                 )}
@@ -779,19 +715,19 @@ export function CardModal({ onClose }: CardModalProps) {
             )}
 
             {/* Step 3: the provider's verification pending */}
-            {!loading && holder && holder.kycStatus in KYC_PENDING_COPY && (
+            {!loading && holder && KYC_PENDING.has(holder.kycStatus) && (
               <View>
-                <Text style={{ color: colors.text, lineHeight: 20 }}>{KYC_PENDING_COPY[holder.kycStatus]}</Text>
+                <Text style={{ color: colors.text, lineHeight: 20 }}>{copy.kycPending[holder.kycStatus]}</Text>
                 {!!holder.kycReason && <Text style={noteStyle}>{holder.kycReason}</Text>}
-                {holder.verificationLink && primary('Verify my identity', () => openUrl(holder.verificationLink!))}
-                {secondary('I am done', () => void loadHolder().catch(() => {}))}
-                <Text style={noteStyle}>This screen updates on its own once the verification comes back.</Text>
+                {holder.verificationLink && primary(copy.verifyIdentity, () => openUrl(holder.verificationLink!))}
+                {secondary(copy.done, () => void loadHolder().catch(() => {}))}
+                <Text style={noteStyle}>{copy.autoUpdate}</Text>
               </View>
             )}
 
-            {!loading && holder && holder.kycStatus in KYC_FINAL_COPY && (
+            {!loading && holder && KYC_FINAL.has(holder.kycStatus) && (
               <Text style={{ color: colors.error }}>
-                {KYC_FINAL_COPY[holder.kycStatus]}
+                {copy.kycFinal[holder.kycStatus]}
                 {holder.kycReason ? ` ${holder.kycReason}` : ''}
               </Text>
             )}
@@ -799,11 +735,9 @@ export function CardModal({ onClose }: CardModalProps) {
             {/* Step 4: approved, no card yet */}
             {!loading && provider && holder?.kycStatus === 'APPROVED' && cards !== null && !card && (
               <View>
-                <Text style={{ color: colors.text, lineHeight: 20 }}>
-                  Your identity is verified. Issue your virtual card to start.
-                </Text>
-                {input(nickname, setNickname, 'Card name (optional)', { placeholder: 'Everyday card', maxLength: 40 })}
-                {primary(busy === 'issue' ? 'Issuing...' : 'Issue my card', () => void issue(), busy !== null)}
+                <Text style={{ color: colors.text, lineHeight: 20 }}>{copy.verified}</Text>
+                {input(nickname, setNickname, copy.cardName, { placeholder: copy.cardNamePlaceholder, maxLength: 40 })}
+                {primary(busy === 'issue' ? copy.issuing : copy.issueCard, () => void issue(), busy !== null)}
               </View>
             )}
 
@@ -824,16 +758,18 @@ export function CardModal({ onClose }: CardModalProps) {
                     <Text style={styles.visualNumber}>
                       {secrets ? groupPan(secrets.pan) : `**** **** **** ${card.last4 ?? '****'}`}
                     </Text>
-                    {secrets && <CardCopy value={secrets.pan} label="Copy card number" copy={copyText} />}
+                    {secrets && <CardCopyButton value={secrets.pan} label={copy.copyCardNumber} copy={copyText} text={copy} />}
                   </View>
                   <View style={styles.visualRow}>
                     <View style={styles.copyRow}>
-                      <Text style={styles.visualSmall}>EXP {expiry ?? '--/--'}</Text>
-                      {expiry && <CardCopy value={expiry} label="Copy expiry date" copy={copyText} />}
+                      <Text style={styles.visualSmall}>
+                        {copy.expShort} {expiry ?? '--/--'}
+                      </Text>
+                      {expiry && <CardCopyButton value={expiry} label={copy.copyExpiry} copy={copyText} text={copy} />}
                     </View>
                     <View style={styles.copyRow}>
                       <Text style={styles.visualSmall}>CVC {secrets ? secrets.cvc : '***'}</Text>
-                      {secrets && <CardCopy value={secrets.cvc} label="Copy CVC" copy={copyText} />}
+                      {secrets && <CardCopyButton value={secrets.cvc} label={copy.copyCvc} copy={copyText} text={copy} />}
                     </View>
                     <Text style={styles.visualSmall}>{card.currency}</Text>
                   </View>
@@ -841,9 +777,9 @@ export function CardModal({ onClose }: CardModalProps) {
 
                 <View style={styles.balanceRow}>
                   {[
-                    ['Available', usd(balance?.spendingPowerCents)],
-                    ['Limit', usd(balance?.creditLimitCents)],
-                    ['To pay', usd(balance?.balanceDueCents)],
+                    [copy.available, usd(balance?.spendingPowerCents)],
+                    [copy.limit, usd(balance?.creditLimitCents)],
+                    [copy.toPay, usd(balance?.balanceDueCents)],
                   ].map(([label, value]) => (
                     <View key={label} style={[styles.balanceCell, { backgroundColor: colors.panel }]}>
                       <Text style={{ color: colors.muted, fontSize: 11 }}>{label}</Text>
@@ -854,19 +790,19 @@ export function CardModal({ onClose }: CardModalProps) {
 
                 {provider.supports.revealSecrets &&
                   (secrets
-                    ? secondary('Hide details', () => setSecrets(null))
-                    : secondary(busy === 'reveal' ? 'Loading...' : 'Show details', () => void reveal(), busy !== null))}
-                {primary('Add funds', () => void openFund(), busy !== null)}
-                {secrets && <Text style={noteStyle}>The details hide on their own in 30 seconds. Do not share them.</Text>}
+                    ? secondary(copy.hideDetails, () => setSecrets(null))
+                    : secondary(busy === 'reveal' ? copy.loading : copy.showDetails, () => void reveal(), busy !== null))}
+                {primary(copy.addFunds, () => void openFund(), busy !== null)}
+                {secrets && <Text style={noteStyle}>{copy.detailsHide}</Text>}
 
-                <Text style={[styles.section, { color: colors.muted }]}>Recent activity</Text>
-                {transactions === null && <Text style={noteStyle}>Loading...</Text>}
-                {transactions?.length === 0 && <Text style={noteStyle}>No movements yet.</Text>}
+                <Text style={[styles.section, { color: colors.muted }]}>{copy.recentActivity}</Text>
+                {transactions === null && <Text style={noteStyle}>{copy.loading}</Text>}
+                {transactions?.length === 0 && <Text style={noteStyle}>{copy.noMovements}</Text>}
                 {transactions?.map((tx) => (
                   <View key={tx.id} style={[styles.txRow, { borderTopColor: colors.border }]}>
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: colors.text, fontSize: 13 }}>
-                        {tx.merchantName ?? TX_LABELS[tx.type] ?? tx.type}
+                        {tx.merchantName ?? copy.txLabels[tx.type] ?? tx.type}
                       </Text>
                       <Text style={{ color: colors.muted, fontSize: 11 }}>{new Date(tx.occurredAt).toLocaleDateString()}</Text>
                     </View>
@@ -883,41 +819,42 @@ export function CardModal({ onClose }: CardModalProps) {
             {!loading && provider && card && panel === 'fund' && (
               <View>
                 <Text style={{ color: colors.text, lineHeight: 20 }}>
-                  Move {provider.fundingAssets.join(' or ') || 'USDC'} from your wallet to your card. It takes a few minutes to
-                  cross to the card network.
+                  {copy.fundIntro(provider.fundingAssets.join(` ${copy.or} `) || 'USDC')}
                 </Text>
                 <AmountField
                   theme={theme}
                   accentColor={accentColor}
-                  label="Amount"
+                  label={copy.amount}
                   value={fundAmount}
                   onChange={(v) => setFundAmount(v.replace(/[^0-9.]/g, ''))}
                   unit={fundingAsset}
                   available={fundAvailable}
                   placeholder="10"
+                  language={language}
                 />
                 {primary(
-                  busy === 'fund-send' ? 'Sending...' : 'Fund from my wallet',
+                  busy === 'fund-send' ? copy.sending : copy.fundFromWallet,
                   () => void fund(),
                   busy !== null || !(Number(fundAmount) >= 1),
                 )}
 
                 {fundings && fundings.length > 0 && (
                   <View>
-                    <Text style={[styles.section, { color: colors.muted }]}>Your fundings</Text>
+                    <Text style={[styles.section, { color: colors.muted }]}>{copy.yourFundings}</Text>
                     {fundings.map((f) => {
-                      const copy = FUNDING_COPY[f.status];
+                      const state = copy.funding[f.status];
+                      const step = FUNDING_STEP[f.status];
                       const inflight = FUNDING_INFLIGHT.has(f.status);
                       return (
                         <View key={f.id} style={[styles.txRow, { borderTopColor: colors.border }]}>
                           <View style={{ flex: 1 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                               {inflight && <ActivityIndicator size="small" color={accentColor} />}
-                              <Text style={{ color: colors.text, fontSize: 13 }}>{copy?.title ?? f.status}</Text>
+                              <Text style={{ color: colors.text, fontSize: 13 }}>{state?.title ?? f.status}</Text>
                             </View>
-                            {inflight && copy?.step && (
+                            {inflight && step && (
                               <Text style={{ color: colors.muted, fontSize: 11 }} accessibilityLiveRegion="polite">
-                                Step {copy.step} of {FUNDING_STEPS} · {copy.hint}
+                                {copy.stepOf(step, FUNDING_STEPS)} · {state?.hint}
                               </Text>
                             )}
                             <Text style={{ color: colors.muted, fontSize: 11 }}>
@@ -932,9 +869,7 @@ export function CardModal({ onClose }: CardModalProps) {
                       );
                     })}
                     {fundingsInflight && (
-                      <Text style={{ color: colors.muted, fontSize: 12, marginTop: 8 }}>
-                        You can close this window: the funding keeps going and your card is credited when it finishes.
-                      </Text>
+                      <Text style={{ color: colors.muted, fontSize: 12, marginTop: 8 }}>{copy.canClose}</Text>
                     )}
                   </View>
                 )}
@@ -942,7 +877,7 @@ export function CardModal({ onClose }: CardModalProps) {
                 {!showManual && (
                   <TouchableOpacity onPress={() => void showManualAddress()} disabled={busy !== null}>
                     <Text style={{ color: accentColor, textDecorationLine: 'underline', marginTop: 12 }}>
-                      Prefer to send from another wallet? Show the deposit address
+                      {copy.preferOtherWallet} {copy.showDeposit}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -950,24 +885,24 @@ export function CardModal({ onClose }: CardModalProps) {
                   deposit?.map((d) => (
                     <View key={d.network} style={[styles.depositBox, { backgroundColor: colors.panel }]}>
                       <Text style={{ color: colors.text, fontWeight: '600' }}>
-                        {d.network} (chain {d.chainId})
+                        {d.network} ({copy.chain(d.chainId)})
                       </Text>
                       <Text selectable style={{ color: colors.text, fontSize: 12, marginVertical: 6 }}>
                         {d.address}
                       </Text>
                       <Text style={{ color: colors.muted, fontSize: 12 }}>
-                        Send only {d.tokens.map((t) => (t.currency ?? 'token').toUpperCase()).join(' or ')} on {d.network};
-                        anything else can be lost.
+                        {copy.sendOnly(
+                          d.tokens.map((t) => (t.currency ?? 'token').toUpperCase()).join(` ${copy.or} `),
+                          d.network,
+                        )}
                       </Text>
                     </View>
                   ))}
-                {showManual && deposit?.length === 0 && (
-                  <Text style={{ color: colors.error }}>The provider returned no deposit address.</Text>
-                )}
+                {showManual && deposit?.length === 0 && <Text style={{ color: colors.error }}>{copy.noDeposit}</Text>}
                 {showManual && (
                   <TouchableOpacity onPress={() => setShowManual(false)}>
                     <Text style={{ color: accentColor, textDecorationLine: 'underline', marginTop: 12 }}>
-                      Hide the deposit address
+                      {copy.hideDeposit}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -980,7 +915,7 @@ export function CardModal({ onClose }: CardModalProps) {
               </Text>
             )}
           </ScrollView>
-          <PollarModalFooter />
+          <PollarModalFooter language={language} />
         </View>
       </View>
     </View>

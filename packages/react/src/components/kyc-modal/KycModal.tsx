@@ -9,6 +9,8 @@ import {
 } from '@pollar/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
+import { KYC_COPY } from './kyc-copy';
 import type { KycStep } from './KycModalTemplate';
 import { KycModalTemplate } from './KycModalTemplate';
 import { kycErrorMessage } from './kyc-messages';
@@ -29,6 +31,8 @@ interface KycModalProps {
   level?: 'basic' | 'intermediate' | 'enhanced';
   /** Called when KYC is successfully approved. */
   onApproved?: () => void;
+  /** Language of the modal, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
+  language?: string | undefined;
 }
 
 function newIdempotencyKey(): string {
@@ -45,8 +49,14 @@ export function KycModal({
   corridorId,
   cardProviderId,
   providerId,
+  language: languageProp,
 }: KycModalProps) {
   const { getClient, styles } = usePollar();
+  const language = useModalLanguage(languageProp);
+  const copy = KYC_COPY[language];
+  // Read by the provider list's error: a language that settles later must not reload the list.
+  const languageRef = useRef(language);
+  languageRef.current = language;
 
   const [step, setStep] = useState<KycStep>('select_provider');
   const [providers, setProviders] = useState<KycProvider[]>([]);
@@ -114,7 +124,7 @@ export function KycModal({
         return;
       }
       const { sessionId } = result;
-      if (sessionId === undefined) throw new Error('The KYC provider answered without a session.');
+      if (sessionId === undefined) throw new Error(copy.noSession);
       setSession({
         sessionId,
         ...(result.kycUrl !== undefined ? { kycUrl: result.kycUrl } : {}),
@@ -134,7 +144,7 @@ export function KycModal({
         return;
       }
       if (code === 'SDK_KYC_SESSION_EXPIRED') delete idempotencyKeys.current[provider.id];
-      setError(kycErrorMessage(e, 'start'));
+      setError(kycErrorMessage(e, 'start', language));
       setStep('select_provider');
     } finally {
       starting.current = false;
@@ -153,7 +163,7 @@ export function KycModal({
       })
       .catch((e: unknown) => {
         setProviders([]);
-        setError(kycErrorMessage(e, 'load'));
+        setError(kycErrorMessage(e, 'load', languageRef.current));
         return [] as KycProvider[];
       })
       .finally(() => setIsLoading(false));
@@ -169,10 +179,7 @@ export function KycModal({
       // country this list was filtered by must not hide it behind "no providers".
       if (target) void handleSelectProvider(target);
       else
-        void handleSelectProvider(
-          { id: providerId, name: 'Identity verification', flow: 'iframe', levels: [level] } as KycProvider,
-          false,
-        );
+        void handleSelectProvider({ id: providerId, name: copy.title, flow: 'iframe', levels: [level] } as KycProvider, false);
     });
     // handleSelectProvider reads the latest props on each call; listing it would reload providers every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,7 +198,7 @@ export function KycModal({
       });
       finishWith(read);
     } catch {
-      setError('We could not confirm your result yet. Check again shortly; this does not mean your verification was rejected.');
+      setError(copy.notConfirmed);
       setStep('verifying');
     }
   }
@@ -228,6 +235,7 @@ export function KycModal({
         onStartAgain={handleStartAgain}
         onRefresh={() => void loadProviders()}
         onClose={onClose}
+        language={language}
       />
     </div>
   );

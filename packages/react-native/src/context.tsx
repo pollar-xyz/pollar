@@ -29,6 +29,7 @@ import { TransactionModal } from './components/transaction-modal/TransactionModa
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 import { PollarUIProvider } from './components/layout';
+import { ModalLanguageContext, useProviderLanguage } from './language-context';
 
 export interface NativePlatformAdapters {
   copyText?: (text: string) => Promise<void>;
@@ -484,70 +485,73 @@ function ClientProvider({
     refreshCustodyMigration,
     confirmations,
   };
+  const modalLanguage = useProviderLanguage(client, value.styles?.language);
   return (
     <Context.Provider value={value}>
-      <PollarUIProvider theme={value.styles.theme === 'dark' ? 'dark' : 'light'}>
-        {children}
-        {modal && (
-          <ModalErrorBoundary onClose={close}>
-            {modal === 'authentication' ? (
-              <LoginModal onClose={close} />
-            ) : modal === 'kyc' ? (
-              <AppKycFlow onClose={close} {...kycOptions} />
-            ) : modal === 'ramp' ? (
-              <RampWidget onClose={close} />
-            ) : modal === 'cards' ? (
-              <CardModal key={wallet?.address ?? ''} onClose={close} />
-            ) : modal === 'transactions' ? (
-              <TransactionModal onClose={close} />
-            ) : modal === 'history' ? (
-              <TxHistoryModal onClose={close} />
-            ) : modal === 'wallet' ? (
-              <WalletBalanceModal onClose={close} />
-            ) : (
-              <FeatureModal feature={modal} onClose={close} />
-            )}
-          </ModalErrorBoundary>
-        )}
-        {cosignModalOpen && (
-          <ModalErrorBoundary onClose={() => setCosignModalOpen(false)}>
-            <CosignModal nextStep={cosignNextStep} onClose={() => setCosignModalOpen(false)} />
-          </ModalErrorBoundary>
-        )}
-        {custodyMigration?.required && !custodyMigrationLater && (
-          <ModalErrorBoundary onClose={refreshCustodyMigration}>
-            <CustodyMigrationModal
-              state={custodyMigration}
-              onMoved={() => {
-                refreshCustodyMigration();
-                refreshRecovery();
-                setRecoveryModalOpen(true);
-              }}
-              onLater={() => {
-                setCustodyMigrationLater(true);
-                refreshCustodyMigration();
-                refreshRecovery();
-              }}
-            />
-          </ModalErrorBoundary>
-        )}
-        {recoveryModalOpen && (
-          <ModalErrorBoundary onClose={() => setRecoveryModalOpen(false)}>
-            <RecoveryModal
-              onClose={() => {
-                setRecoveryModalOpen(false);
-                // A method added in the modal unlocks what waited on it (a held ramp order).
-                refreshRecovery();
-              }}
-            />
-          </ModalErrorBoundary>
-        )}
-        {firstConfirmation && (
-          <ModalErrorBoundary onClose={firstConfirmation.reject}>
-            <ConfirmModal key={firstConfirmation.id} confirmation={firstConfirmation} />
-          </ModalErrorBoundary>
-        )}
-      </PollarUIProvider>
+      <ModalLanguageContext.Provider value={modalLanguage}>
+        <PollarUIProvider theme={value.styles.theme === 'dark' ? 'dark' : 'light'}>
+          {children}
+          {modal && (
+            <ModalErrorBoundary onClose={close}>
+              {modal === 'authentication' ? (
+                <LoginModal onClose={close} />
+              ) : modal === 'kyc' ? (
+                <AppKycFlow onClose={close} {...kycOptions} />
+              ) : modal === 'ramp' ? (
+                <RampWidget onClose={close} />
+              ) : modal === 'cards' ? (
+                <CardModal key={wallet?.address ?? ''} onClose={close} />
+              ) : modal === 'transactions' ? (
+                <TransactionModal onClose={close} />
+              ) : modal === 'history' ? (
+                <TxHistoryModal onClose={close} />
+              ) : modal === 'wallet' ? (
+                <WalletBalanceModal onClose={close} />
+              ) : (
+                <FeatureModal feature={modal} onClose={close} />
+              )}
+            </ModalErrorBoundary>
+          )}
+          {cosignModalOpen && (
+            <ModalErrorBoundary onClose={() => setCosignModalOpen(false)}>
+              <CosignModal nextStep={cosignNextStep} onClose={() => setCosignModalOpen(false)} />
+            </ModalErrorBoundary>
+          )}
+          {custodyMigration?.required && !custodyMigrationLater && (
+            <ModalErrorBoundary onClose={refreshCustodyMigration}>
+              <CustodyMigrationModal
+                state={custodyMigration}
+                onMoved={() => {
+                  refreshCustodyMigration();
+                  refreshRecovery();
+                  setRecoveryModalOpen(true);
+                }}
+                onLater={() => {
+                  setCustodyMigrationLater(true);
+                  refreshCustodyMigration();
+                  refreshRecovery();
+                }}
+              />
+            </ModalErrorBoundary>
+          )}
+          {recoveryModalOpen && (
+            <ModalErrorBoundary onClose={() => setRecoveryModalOpen(false)}>
+              <RecoveryModal
+                onClose={() => {
+                  setRecoveryModalOpen(false);
+                  // A method added in the modal unlocks what waited on it (a held ramp order).
+                  refreshRecovery();
+                }}
+              />
+            </ModalErrorBoundary>
+          )}
+          {firstConfirmation && (
+            <ModalErrorBoundary onClose={firstConfirmation.reject}>
+              <ConfirmModal key={firstConfirmation.id} confirmation={firstConfirmation} />
+            </ModalErrorBoundary>
+          )}
+        </PollarUIProvider>
+      </ModalLanguageContext.Provider>
     </Context.Provider>
   );
 }

@@ -3,6 +3,10 @@
 import type { PendingConfirmation } from '@pollar/core';
 import { useEffect, useRef } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
+import { CONFIRM_COPY } from './confirm-copy';
+
+type Copy = (typeof CONFIRM_COPY)['en'];
 import { cropAddress, PollarModalFooter } from '../commons';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
 import '../shared.css';
@@ -12,21 +16,12 @@ interface ConfirmModalProps {
   confirmation: PendingConfirmation;
 }
 
-const OPERATION_LABELS: Record<string, string> = {
-  payment: 'Send',
-  path_payment_strict_send: 'Swap',
-  change_trust: 'Add asset',
-  create_account: 'Create account',
-  invoke_contract: 'Contract call',
-  manage_data: 'Manage data',
-};
-
-function labelOf(confirmation: PendingConfirmation): string {
+function labelOf(confirmation: PendingConfirmation, copy: Copy): string {
   const op = confirmation.operation ?? '';
-  return OPERATION_LABELS[op] ?? (op ? op.replace(/_/g, ' ') : 'Transaction');
+  return copy.operations[op] ?? (op ? op.replace(/_/g, ' ') : copy.transaction);
 }
 
-function detailRows(confirmation: PendingConfirmation): Array<[string, string]> {
+function detailRows(confirmation: PendingConfirmation, copy: Copy): Array<[string, string]> {
   const details = confirmation.details ?? {};
   const rows: Array<[string, string]> = [];
   const push = (label: string, value: unknown) => {
@@ -34,10 +29,10 @@ function detailRows(confirmation: PendingConfirmation): Array<[string, string]> 
     const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
     rows.push([label, /^[GC][A-Z2-7]{55}$/.test(text) ? cropAddress(text) : text]);
   };
-  push('Destination', details.destination);
-  push('Amount', details.amount);
-  push('Asset', details.asset ?? details.assetCode ?? details.mint);
-  push('Network', confirmation.network);
+  push(copy.rows.destination, details.destination);
+  push(copy.rows.amount, details.amount);
+  push(copy.rows.asset, details.asset ?? details.assetCode ?? details.mint);
+  push(copy.rows.network, confirmation.network);
   return rows;
 }
 
@@ -57,6 +52,7 @@ function CloseIcon() {
  */
 export function ConfirmModal({ confirmation }: ConfirmModalProps) {
   const { getClient, styles } = usePollar();
+  const copy = CONFIRM_COPY[useModalLanguage()];
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
@@ -79,19 +75,25 @@ export function ConfirmModal({ confirmation }: ConfirmModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="pollar-modal-header">
-          <h2 className="pollar-modal-title">Confirm transaction</h2>
+          <h2 className="pollar-modal-title">{copy.title}</h2>
           <div className="pollar-modal-header-actions">
-            <button type="button" className="pollar-modal-close" onClick={confirmation.reject} aria-label="Close" title="Close">
+            <button
+              type="button"
+              className="pollar-modal-close"
+              onClick={confirmation.reject}
+              aria-label={copy.close}
+              title={copy.close}
+            >
               <CloseIcon />
             </button>
           </div>
         </div>
 
         <div className="pollar-cosign-detail">
-          <p className="pollar-cosign-detail-title">{labelOf(confirmation)}</p>
-          <p className="pollar-cosign-muted">The app asks you to sign this transaction with your wallet.</p>
+          <p className="pollar-cosign-detail-title">{labelOf(confirmation, copy)}</p>
+          <p className="pollar-cosign-muted">{copy.intro}</p>
           <dl className="pollar-cosign-rows">
-            {detailRows(confirmation).map(([k, v]) => (
+            {detailRows(confirmation, copy).map(([k, v]) => (
               <div key={k} className="pollar-cosign-row">
                 <dt>{k}</dt>
                 <dd>{v}</dd>

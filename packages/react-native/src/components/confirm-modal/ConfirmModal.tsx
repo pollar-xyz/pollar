@@ -2,30 +2,26 @@ import type { PendingConfirmation } from '@pollar/core';
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
+import { CONFIRM_COPY } from './confirm-copy';
+
+type Copy = (typeof CONFIRM_COPY)['en'];
 import { PollarModalFooter, PollarOverlay } from '../commons';
 
 interface ConfirmModalProps {
   confirmation: PendingConfirmation;
 }
 
-const OPERATION_LABELS: Record<string, string> = {
-  payment: 'Send',
-  path_payment_strict_send: 'Swap',
-  change_trust: 'Add asset',
-  create_account: 'Create account',
-  invoke_contract: 'Contract call',
-};
-
-function labelOf(confirmation: PendingConfirmation): string {
+function labelOf(confirmation: PendingConfirmation, copy: Copy): string {
   const op = confirmation.operation ?? '';
-  return OPERATION_LABELS[op] ?? (op ? op.replace(/_/g, ' ') : 'Transaction');
+  return copy.operations[op] ?? (op ? op.replace(/_/g, ' ') : copy.transaction);
 }
 
 function crop(value: string): string {
   return value.length > 16 ? `${value.slice(0, 6)}...${value.slice(-6)}` : value;
 }
 
-function detailRows(confirmation: PendingConfirmation): Array<[string, string]> {
+function detailRows(confirmation: PendingConfirmation, copy: Copy): Array<[string, string]> {
   const details = confirmation.details ?? {};
   const rows: Array<[string, string]> = [];
   const push = (label: string, value: unknown) => {
@@ -33,10 +29,10 @@ function detailRows(confirmation: PendingConfirmation): Array<[string, string]> 
     const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
     rows.push([label, /^[GC][A-Z2-7]{55}$/.test(text) ? crop(text) : text]);
   };
-  push('Destination', details.destination);
-  push('Amount', details.amount);
-  push('Asset', details.asset ?? details.assetCode ?? details.mint);
-  push('Network', confirmation.network);
+  push(copy.rows.destination, details.destination);
+  push(copy.rows.amount, details.amount);
+  push(copy.rows.asset, details.asset ?? details.assetCode ?? details.mint);
+  push(copy.rows.network, confirmation.network);
   return rows;
 }
 
@@ -47,6 +43,7 @@ function detailRows(confirmation: PendingConfirmation): Array<[string, string]> 
  */
 export function ConfirmModal({ confirmation }: ConfirmModalProps) {
   const { getClient, styles } = usePollar();
+  const copy = CONFIRM_COPY[useModalLanguage()];
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const isDark = theme === 'dark';
   const colors = {
@@ -70,16 +67,16 @@ export function ConfirmModal({ confirmation }: ConfirmModalProps) {
     <PollarOverlay onCancel={confirmation.reject}>
       <View style={[localStyles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
         <View style={localStyles.header}>
-          <Text style={[localStyles.title, { color: colors.text }]}>Confirm transaction</Text>
+          <Text style={[localStyles.title, { color: colors.text }]}>{copy.title}</Text>
           <TouchableOpacity onPress={confirmation.reject} accessibilityLabel="Close">
             <Text style={{ color: colors.muted, fontSize: 18 }}>x</Text>
           </TouchableOpacity>
         </View>
 
         <View style={[localStyles.detail, { borderColor: colors.border }]}>
-          <Text style={[localStyles.detailTitle, { color: colors.text }]}>{labelOf(confirmation)}</Text>
-          <Text style={{ color: colors.muted }}>The app asks you to sign this transaction with your wallet.</Text>
-          {detailRows(confirmation).map(([k, v]) => (
+          <Text style={[localStyles.detailTitle, { color: colors.text }]}>{labelOf(confirmation, copy)}</Text>
+          <Text style={{ color: colors.muted }}>{copy.intro}</Text>
+          {detailRows(confirmation, copy).map(([k, v]) => (
             <View key={k} style={localStyles.row}>
               <Text style={{ color: colors.muted }}>{k}</Text>
               <Text style={{ color: colors.text, flexShrink: 1, textAlign: 'right' }}>{v}</Text>
@@ -88,13 +85,13 @@ export function ConfirmModal({ confirmation }: ConfirmModalProps) {
 
           <View style={localStyles.actions}>
             <TouchableOpacity onPress={confirmation.reject} style={[localStyles.btn, { borderColor: colors.border }]}>
-              <Text style={{ color: colors.text, fontWeight: '600' }}>Cancel</Text>
+              <Text style={{ color: colors.text, fontWeight: '600' }}>{copy.cancel}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={confirmation.confirm}
               style={[localStyles.btn, { backgroundColor: accentColor, borderColor: accentColor }]}
             >
-              <Text style={{ color: '#fff', fontWeight: '600' }}>Confirm</Text>
+              <Text style={{ color: '#fff', fontWeight: '600' }}>{copy.confirm}</Text>
             </TouchableOpacity>
           </View>
         </View>

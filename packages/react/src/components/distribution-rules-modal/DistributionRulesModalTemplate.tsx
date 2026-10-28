@@ -1,8 +1,12 @@
 'use client';
 
-import { DistributionRule, DistributionRulesState } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { DistributionRule, DistributionRulesState, type PollarLanguage } from '@pollar/core';
 import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
+import { DISTRIBUTION_RULES_COPY } from './distribution-rules-copy';
+
+type DistributionRulesCopy = (typeof DISTRIBUTION_RULES_COPY)[PollarLanguage];
 
 interface DistributionRulesModalTemplateProps {
   theme: string;
@@ -13,35 +17,19 @@ interface DistributionRulesModalTemplateProps {
   claimingId: string | null;
   claimErrors: Record<string, string>;
   claimedIds: Set<string>;
+  /** Language of the modal's text; the device's when not given. */
+  language?: PollarLanguage | undefined;
   onRefresh: () => void;
   onClaim: (rule: DistributionRule) => void;
   onClose: () => void;
 }
 
-const PERIOD_LABEL: Record<DistributionRule['period'], string> = {
-  DAY: 'every 24h',
-  DAY_CALENDAR: 'daily',
-  WEEK: 'every 7 days',
-  MONTH: 'every 30 days',
-  MONTH_CALENDAR: 'monthly',
-  LIFETIME: 'one-time',
-};
-
 // Reasons returned by sdk-api are the ErrorCode enum values from
 // @pollar/shared. Mapped to short user-facing strings; anything unknown
 // falls back to "Not available".
-const REASON_LABEL: Record<string, string> = {
-  DISTRIBUTION_RULE_DISABLED: 'Disabled',
-  DISTRIBUTION_RULE_NOT_STARTED: 'Not started yet',
-  DISTRIBUTION_RULE_EXPIRED: 'Expired',
-  DISTRIBUTION_RULE_EXHAUSTED: 'Fully claimed',
-  // Per-user, per-window claim limit (resets next period) - not permanent.
-  DISTRIBUTION_RATE_LIMIT_EXCEEDED: 'Claimed for this period',
-};
-
-function reasonLabel(reason: string | null): string {
-  if (!reason) return 'Not available';
-  return REASON_LABEL[reason] ?? 'Not available';
+function reasonLabel(reason: string | null, copy: DistributionRulesCopy): string {
+  if (!reason) return copy.notAvailable;
+  return copy.reasons[reason] ?? copy.notAvailable;
 }
 
 function formatAmount(amount: string): string {
@@ -49,14 +37,14 @@ function formatAmount(amount: string): string {
   return isNaN(n) ? amount : n.toLocaleString(undefined, { maximumFractionDigits: 7 });
 }
 
-function formatValidity(rule: DistributionRule): string | null {
+function formatValidity(rule: DistributionRule, copy: DistributionRulesCopy): string | null {
   const from = rule.validFrom ? new Date(rule.validFrom) : null;
   const until = rule.validUntil ? new Date(rule.validUntil) : null;
   if (!from && !until) return null;
   const fmt = (d: Date) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   if (from && until) return `${fmt(from)} → ${fmt(until)}`;
-  if (until) return `Until ${fmt(until)}`;
-  if (from) return `From ${fmt(from)}`;
+  if (until) return copy.until(fmt(until));
+  if (from) return copy.from(fmt(from));
   return null;
 }
 
@@ -65,15 +53,17 @@ function RuleCard({
   isClaiming,
   isClaimed,
   errorMessage,
+  copy,
   onClaim,
 }: {
   rule: DistributionRule;
   isClaiming: boolean;
   isClaimed: boolean;
   errorMessage?: string;
+  copy: DistributionRulesCopy;
   onClaim: () => void;
 }) {
-  const validity = formatValidity(rule);
+  const validity = formatValidity(rule, copy);
   const effectivelyClaimable = rule.claimable && !isClaimed;
 
   return (
@@ -85,28 +75,28 @@ function RuleCard({
         </span>
       </div>
       <div className="pollar-dist-item-meta">
-        <span>{PERIOD_LABEL[rule.period]}</span>
+        <span>{copy.period[rule.period]}</span>
         {validity && <span>· {validity}</span>}
       </div>
       <div className="pollar-dist-item-action">
         {isClaimed ? (
           <span className="pollar-dist-item-status" data-kind="claimed">
-            Claimed
+            {copy.claimed}
           </span>
         ) : effectivelyClaimable ? (
           <button type="button" className="pollar-btn-primary pollar-dist-claim-btn" onClick={onClaim} disabled={isClaiming}>
             {isClaiming ? (
               <>
                 <span className="pollar-spinner pollar-spinner-sm" />
-                Claiming…
+                {copy.claiming}
               </>
             ) : (
-              'Claim'
+              copy.claim
             )}
           </button>
         ) : (
           <span className="pollar-dist-item-status" data-kind="unavailable">
-            {reasonLabel(rule.reason)}
+            {reasonLabel(rule.reason, copy)}
           </span>
         )}
       </div>
@@ -123,10 +113,13 @@ export function DistributionRulesModalTemplate({
   claimingId,
   claimErrors,
   claimedIds,
+  language: languageProp,
   onRefresh,
   onClaim,
   onClose,
 }: DistributionRulesModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = DISTRIBUTION_RULES_COPY[language];
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
   const isLoading = state.step === 'loading';
@@ -140,15 +133,15 @@ export function DistributionRulesModalTemplate({
       onClick={(e) => e.stopPropagation()}
     >
       <div className="pollar-modal-header">
-        <h2 className="pollar-modal-title">Distribution Rules</h2>
+        <h2 className="pollar-modal-title">{copy.title}</h2>
         <div className="pollar-modal-header-actions">
           <button
             type="button"
             className="pollar-modal-close"
             onClick={onRefresh}
             disabled={isLoading}
-            aria-label="Refresh"
-            title="Refresh"
+            aria-label={copy.refresh}
+            title={copy.refresh}
           >
             <svg
               className={isLoading ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
@@ -167,7 +160,7 @@ export function DistributionRulesModalTemplate({
               />
             </svg>
           </button>
-          <button className="pollar-modal-close" onClick={onClose} aria-label="Close">
+          <button className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
               <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
@@ -179,13 +172,11 @@ export function DistributionRulesModalTemplate({
         {isLoading && (
           <div className="pollar-loading-block">
             <div className="pollar-spinner" />
-            <span>Loading…</span>
+            <span>{copy.loading}</span>
           </div>
         )}
         {state.step === 'error' && <div className="pollar-modal-error">{state.message}</div>}
-        {state.step === 'loaded' && rules.length === 0 && (
-          <div className="pollar-modal-empty">No distribution rules available.</div>
-        )}
+        {state.step === 'loaded' && rules.length === 0 && <div className="pollar-modal-empty">{copy.empty}</div>}
         {rules.map((rule) => (
           <RuleCard
             key={rule.id}
@@ -193,6 +184,7 @@ export function DistributionRulesModalTemplate({
             isClaiming={claimingId === rule.id}
             isClaimed={claimedIds.has(rule.id)}
             {...(claimErrors[rule.id] && { errorMessage: claimErrors[rule.id] })}
+            copy={copy}
             onClaim={() => onClaim(rule)}
           />
         ))}

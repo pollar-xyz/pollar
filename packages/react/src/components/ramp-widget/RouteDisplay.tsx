@@ -1,9 +1,16 @@
 'use client';
 
-import type { CosignCustody, RampQuote, RampQuoteRejection, RampQuoteRequirement, RampWalletStep } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import type {
+  CosignCustody,
+  PollarLanguage,
+  RampQuote,
+  RampQuoteRejection,
+  RampQuoteRequirement,
+  RampWalletStep,
+} from '@pollar/core';
 import { rampLegTitle, rampRequirementCopy, rampResolutionText, rampTrustlineAsset, rampWalletStep } from '@pollar/core';
-
-const CUSTODY_LABEL: Record<CosignCustody, string> = { COSIGNED: 'co-signed', SELF_CUSTODY: 'self-custody' };
+import { RAMP_COPY } from './ramp-copy';
 
 interface RouteDisplayProps {
   quote: RampQuote;
@@ -14,6 +21,8 @@ interface RouteDisplayProps {
   /** Another route is starting, so this one is not selectable meanwhile. */
   disabled?: boolean;
   onSelect: (quote: RampQuote) => void;
+  /** Defaults to the user's device; the widget passes the resolved one. */
+  language?: PollarLanguage;
 }
 
 const assetOf = (node: RampQuote['legs'][number]['to']) => (node.kind === 'fiat' ? node.currency : node.code);
@@ -26,7 +35,16 @@ function etaText(seconds: number | null): string | null {
   return `~${Math.round(seconds / 3600)} h`;
 }
 
-export function RouteDisplay({ quote, best = false, busy = false, disabled = false, onSelect }: RouteDisplayProps) {
+export function RouteDisplay({
+  quote,
+  best = false,
+  busy = false,
+  disabled = false,
+  onSelect,
+  language: languageProp,
+}: RouteDisplayProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = RAMP_COPY[language];
   const inert = busy || disabled;
   const select = () => {
     if (!inert) onSelect(quote);
@@ -54,8 +72,10 @@ export function RouteDisplay({ quote, best = false, busy = false, disabled = fal
         </span>
         <span className="pollar-ramp-route-meta">
           {busy
-            ? 'Starting…'
-            : [quote.legs.map((leg) => rampLegTitle(leg)).join(' · '), etaText(quote.etaSeconds)].filter(Boolean).join(' · ')}
+            ? copy.starting
+            : [quote.legs.map((leg) => rampLegTitle(leg, language)).join(' · '), etaText(quote.etaSeconds)]
+                .filter(Boolean)
+                .join(' · ')}
         </span>
       </div>
       <div className="pollar-ramp-route-right">
@@ -64,9 +84,9 @@ export function RouteDisplay({ quote, best = false, busy = false, disabled = fal
         ) : (
           <>
             <span className="pollar-ramp-route-fee">
-              {quote.legs.length === 1 ? '1 step' : `${quote.legs.length} steps`} · fees included
+              {copy.routeSteps(quote.legs.length)} · {copy.feesIncluded}
             </span>
-            {best && <span className="pollar-ramp-route-badge">Best rate</span>}
+            {best && <span className="pollar-ramp-route-badge">{copy.bestRate}</span>}
           </>
         )}
       </div>
@@ -87,6 +107,7 @@ export function RejectedRouteDisplay({
   onVerify,
   onTrust,
   onWalletStep,
+  language: languageProp,
 }: {
   rejection: RampQuoteRejection;
   /** A route is starting, a trustline or a wallet is being added, so nothing else opens meanwhile. */
@@ -107,21 +128,21 @@ export function RejectedRouteDisplay({
    * the custody to the user creates the wallet from the wallet menu instead.
    */
   onWalletStep?: ((step: RampWalletStep, custody?: CosignCustody) => void) | undefined;
+  /** Defaults to the user's device; the widget passes the resolved one. */
+  language?: PollarLanguage;
 }) {
+  const language = useInheritedLanguage(languageProp);
+  const text = RAMP_COPY[language];
   const requirement = rejection.requirement;
-  const copy = requirement ? rampRequirementCopy(requirement) : null;
+  const copy = requirement ? rampRequirementCopy(requirement, language) : null;
   const trustAsset = !requirement && onTrust ? rampTrustlineAsset(rejection) : null;
-  const step = !requirement ? rampWalletStep(rejection) : null;
+  const step = !requirement ? rampWalletStep(rejection, language) : null;
   const fromMenu = step?.action === 'create_wallet' && custodyChoice;
   const walletStep = onWalletStep && !fromMenu ? step : null;
   // Only a step that creates or moves a wallet picks its custody; adding recovery does not.
   const picks: Array<CosignCustody | undefined> =
     custodyChoice && step?.action !== 'set_up_recovery' ? ['COSIGNED', 'SELF_CUSTODY'] : [undefined];
-  const meta = copy
-    ? copy.message
-    : fromMenu
-      ? 'You need a wallet to receive this. Create it from the wallet menu, then find the route again.'
-      : rampResolutionText(rejection.failure);
+  const meta = copy ? copy.message : fromMenu ? text.needWallet : rampResolutionText(rejection.failure, language);
   const busy = trusting || (!!walletStep && walletBusy);
   return (
     <div
@@ -131,7 +152,9 @@ export function RejectedRouteDisplay({
       data-disabled={(!(copy?.action && onVerify) && !trustAsset && !walletStep) || (disabled && !busy) || undefined}
     >
       <div className="pollar-ramp-route-left">
-        <span className="pollar-ramp-route-provider">{rejection.legs.map((leg) => rampLegTitle(leg)).join(' · ')}</span>
+        <span className="pollar-ramp-route-provider">
+          {rejection.legs.map((leg) => rampLegTitle(leg, language)).join(' · ')}
+        </span>
         <span className="pollar-ramp-route-meta">{meta}</span>
       </div>
       {trustAsset && (
@@ -145,10 +168,10 @@ export function RejectedRouteDisplay({
           >
             {trusting ? (
               <>
-                <span className="pollar-spinner pollar-spinner-sm" /> Adding…
+                <span className="pollar-spinner pollar-spinner-sm" /> {text.adding}
               </>
             ) : (
-              `Add ${trustAsset.code} trustline`
+              text.addTrustline(trustAsset.code)
             )}
           </button>
         </div>
@@ -168,7 +191,7 @@ export function RejectedRouteDisplay({
                 disabled={disabled}
                 onClick={() => onWalletStep!(walletStep, custody)}
               >
-                {custody ? `${walletStep.label} (${CUSTODY_LABEL[custody]})` : walletStep.label}
+                {custody ? `${walletStep.label} (${text.custody[custody]})` : walletStep.label}
               </button>
             ))
           )}

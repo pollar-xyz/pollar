@@ -91,6 +91,7 @@ const { KycModal } = load('packages/react/src/components/kyc-modal/KycModal.tsx'
   '@pollar/core': core,
   // The provider memoizes getClient; a fresh function per render would reload the list forever.
   '../../context': { usePollar: () => pollarContext },
+  './context': { usePollar: () => pollarContext },
   './KycModalTemplate': {
     KycModalTemplate: (p) => {
       view = p;

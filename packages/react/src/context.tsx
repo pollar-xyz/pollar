@@ -61,6 +61,7 @@ import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 import { browserPasskeyCeremony, browserPasskeySigner, browserRecoveryPasskey } from './lib/passkey-ceremony';
 import type { PollarConfig, PollarStyles } from './types';
+import { ModalLanguageContext, useProviderLanguage } from './language-context';
 
 const DEFAULT_APP_CONFIG: PollarConfig = {
   application: { name: '', network: 'testnet', chains: [] },
@@ -925,135 +926,139 @@ export function PollarProvider({
     adapters,
   ]);
 
+  const modalLanguage = useProviderLanguage(pollarClient, contextValue.styles?.language);
+
   return (
     <PollarContext.Provider value={contextValue}>
-      {children}
-      {loginModalOpen && (
-        <ModalErrorBoundary onClose={() => setLoginModalOpen(false)}>
-          <LoginModal onClose={() => setLoginModalOpen(false)} />
-        </ModalErrorBoundary>
-      )}
-      {transactionModalOpen && (
-        <ModalErrorBoundary onClose={() => setTransactionModalOpen(false)}>
-          <TransactionModal onClose={() => setTransactionModalOpen(false)} />
-        </ModalErrorBoundary>
-      )}
-      {kycModalOpen && (
-        <ModalErrorBoundary onClose={() => setKycModalOpen(false)}>
-          {kycModalOptions.corridorId === undefined && kycModalOptions.providerId === undefined ? (
-            // The app's own KYC: its configured steps, in order.
-            <AppKycFlow
-              onClose={() => setKycModalOpen(false)}
-              {...(kycModalOptions.country !== undefined && { country: kycModalOptions.country })}
-              {...(kycModalOptions.level !== undefined && { level: kycModalOptions.level })}
-              {...(kycModalOptions.onApproved !== undefined && { onApproved: kycModalOptions.onApproved })}
+      <ModalLanguageContext.Provider value={modalLanguage}>
+        {children}
+        {loginModalOpen && (
+          <ModalErrorBoundary onClose={() => setLoginModalOpen(false)}>
+            <LoginModal onClose={() => setLoginModalOpen(false)} />
+          </ModalErrorBoundary>
+        )}
+        {transactionModalOpen && (
+          <ModalErrorBoundary onClose={() => setTransactionModalOpen(false)}>
+            <TransactionModal onClose={() => setTransactionModalOpen(false)} />
+          </ModalErrorBoundary>
+        )}
+        {kycModalOpen && (
+          <ModalErrorBoundary onClose={() => setKycModalOpen(false)}>
+            {kycModalOptions.corridorId === undefined && kycModalOptions.providerId === undefined ? (
+              // The app's own KYC: its configured steps, in order.
+              <AppKycFlow
+                onClose={() => setKycModalOpen(false)}
+                {...(kycModalOptions.country !== undefined && { country: kycModalOptions.country })}
+                {...(kycModalOptions.level !== undefined && { level: kycModalOptions.level })}
+                {...(kycModalOptions.onApproved !== undefined && { onApproved: kycModalOptions.onApproved })}
+              />
+            ) : (
+              <KycModal
+                onClose={() => setKycModalOpen(false)}
+                {...(kycModalOptions.country !== undefined && { country: kycModalOptions.country })}
+                {...(kycModalOptions.corridorId !== undefined && { corridorId: kycModalOptions.corridorId })}
+                {...(kycModalOptions.providerId !== undefined && { providerId: kycModalOptions.providerId })}
+                {...(kycModalOptions.level !== undefined && { level: kycModalOptions.level })}
+                {...(kycModalOptions.onApproved !== undefined && { onApproved: kycModalOptions.onApproved })}
+              />
+            )}
+          </ModalErrorBoundary>
+        )}
+        {rampModalOpen && (
+          <ModalErrorBoundary onClose={() => setRampModalOpen(false)}>
+            <RampWidget onClose={() => setRampModalOpen(false)} />
+          </ModalErrorBoundary>
+        )}
+        {txHistoryModalOpen && (
+          <ModalErrorBoundary onClose={() => setTxHistoryModalOpen(false)}>
+            <TxHistoryModal onClose={() => setTxHistoryModalOpen(false)} />
+          </ModalErrorBoundary>
+        )}
+        {walletBalanceModalOpen && (
+          <ModalErrorBoundary onClose={() => setWalletBalanceModalOpen(false)}>
+            <WalletBalanceModal onClose={() => setWalletBalanceModalOpen(false)} />
+          </ModalErrorBoundary>
+        )}
+        {enabledAssetsModalOpen && (
+          <ModalErrorBoundary onClose={() => setEnabledAssetsModalOpen(false)}>
+            <EnabledAssetsModal onClose={() => setEnabledAssetsModalOpen(false)} />
+          </ModalErrorBoundary>
+        )}
+        {sendModalOpen && (
+          <ModalErrorBoundary key={sendModalKey} onClose={() => setSendModalOpen(false)}>
+            <SendModal onClose={() => setSendModalOpen(false)} />
+          </ModalErrorBoundary>
+        )}
+        {swapModalOpen && (
+          <ModalErrorBoundary key={swapModalKey} onClose={() => setSwapModalOpen(false)}>
+            <SwapModal onClose={() => setSwapModalOpen(false)} />
+          </ModalErrorBoundary>
+        )}
+        {earnModalOpen && (
+          <ModalErrorBoundary key={earnModalKey} onClose={() => setEarnModalOpen(false)}>
+            <EarnModal onClose={() => setEarnModalOpen(false)} />
+          </ModalErrorBoundary>
+        )}
+        {cardModalOpen && (
+          // Keyed by the wallet too: a different user, or signing in with it open, starts it from scratch.
+          <ModalErrorBoundary key={`${cardModalKey}:${walletAddress}`} onClose={() => setCardModalOpen(false)}>
+            <CardModal onClose={() => setCardModalOpen(false)} />
+          </ModalErrorBoundary>
+        )}
+        {receiveModalOpen && (
+          <ModalErrorBoundary onClose={() => setReceiveModalOpen(false)}>
+            <ReceiveModal onClose={() => setReceiveModalOpen(false)} />
+          </ModalErrorBoundary>
+        )}
+        {sessionsModalOpen && (
+          <ModalErrorBoundary onClose={() => setSessionsModalOpen(false)}>
+            <SessionsModal onClose={() => setSessionsModalOpen(false)} />
+          </ModalErrorBoundary>
+        )}
+        {cosignModalOpen && (
+          <ModalErrorBoundary onClose={() => setCosignModalOpen(false)}>
+            <CosignModal nextStep={cosignNextStep} onClose={() => setCosignModalOpen(false)} />
+          </ModalErrorBoundary>
+        )}
+        {custodyMigration?.required && !custodyMigrationLater && (
+          <ModalErrorBoundary onClose={refreshCustodyMigration}>
+            <CustodyMigrationModal
+              state={custodyMigration}
+              onMoved={() => {
+                refreshCustodyMigration();
+                refreshRecovery();
+                setRecoveryModalOpen(true);
+              }}
+              onLater={() => {
+                setCustodyMigrationLater(true);
+                refreshCustodyMigration();
+                refreshRecovery();
+              }}
             />
-          ) : (
-            <KycModal
-              onClose={() => setKycModalOpen(false)}
-              {...(kycModalOptions.country !== undefined && { country: kycModalOptions.country })}
-              {...(kycModalOptions.corridorId !== undefined && { corridorId: kycModalOptions.corridorId })}
-              {...(kycModalOptions.providerId !== undefined && { providerId: kycModalOptions.providerId })}
-              {...(kycModalOptions.level !== undefined && { level: kycModalOptions.level })}
-              {...(kycModalOptions.onApproved !== undefined && { onApproved: kycModalOptions.onApproved })}
+          </ModalErrorBoundary>
+        )}
+        {recoveryModalOpen && (
+          <ModalErrorBoundary onClose={() => setRecoveryModalOpen(false)}>
+            <RecoveryModal
+              onClose={() => {
+                setRecoveryModalOpen(false);
+                // A method added in the modal unlocks what waited on it (a held ramp order).
+                refreshRecovery();
+              }}
             />
-          )}
-        </ModalErrorBoundary>
-      )}
-      {rampModalOpen && (
-        <ModalErrorBoundary onClose={() => setRampModalOpen(false)}>
-          <RampWidget onClose={() => setRampModalOpen(false)} />
-        </ModalErrorBoundary>
-      )}
-      {txHistoryModalOpen && (
-        <ModalErrorBoundary onClose={() => setTxHistoryModalOpen(false)}>
-          <TxHistoryModal onClose={() => setTxHistoryModalOpen(false)} />
-        </ModalErrorBoundary>
-      )}
-      {walletBalanceModalOpen && (
-        <ModalErrorBoundary onClose={() => setWalletBalanceModalOpen(false)}>
-          <WalletBalanceModal onClose={() => setWalletBalanceModalOpen(false)} />
-        </ModalErrorBoundary>
-      )}
-      {enabledAssetsModalOpen && (
-        <ModalErrorBoundary onClose={() => setEnabledAssetsModalOpen(false)}>
-          <EnabledAssetsModal onClose={() => setEnabledAssetsModalOpen(false)} />
-        </ModalErrorBoundary>
-      )}
-      {sendModalOpen && (
-        <ModalErrorBoundary key={sendModalKey} onClose={() => setSendModalOpen(false)}>
-          <SendModal onClose={() => setSendModalOpen(false)} />
-        </ModalErrorBoundary>
-      )}
-      {swapModalOpen && (
-        <ModalErrorBoundary key={swapModalKey} onClose={() => setSwapModalOpen(false)}>
-          <SwapModal onClose={() => setSwapModalOpen(false)} />
-        </ModalErrorBoundary>
-      )}
-      {earnModalOpen && (
-        <ModalErrorBoundary key={earnModalKey} onClose={() => setEarnModalOpen(false)}>
-          <EarnModal onClose={() => setEarnModalOpen(false)} />
-        </ModalErrorBoundary>
-      )}
-      {cardModalOpen && (
-        // Keyed by the wallet too: a different user, or signing in with it open, starts it from scratch.
-        <ModalErrorBoundary key={`${cardModalKey}:${walletAddress}`} onClose={() => setCardModalOpen(false)}>
-          <CardModal onClose={() => setCardModalOpen(false)} />
-        </ModalErrorBoundary>
-      )}
-      {receiveModalOpen && (
-        <ModalErrorBoundary onClose={() => setReceiveModalOpen(false)}>
-          <ReceiveModal onClose={() => setReceiveModalOpen(false)} />
-        </ModalErrorBoundary>
-      )}
-      {sessionsModalOpen && (
-        <ModalErrorBoundary onClose={() => setSessionsModalOpen(false)}>
-          <SessionsModal onClose={() => setSessionsModalOpen(false)} />
-        </ModalErrorBoundary>
-      )}
-      {cosignModalOpen && (
-        <ModalErrorBoundary onClose={() => setCosignModalOpen(false)}>
-          <CosignModal nextStep={cosignNextStep} onClose={() => setCosignModalOpen(false)} />
-        </ModalErrorBoundary>
-      )}
-      {custodyMigration?.required && !custodyMigrationLater && (
-        <ModalErrorBoundary onClose={refreshCustodyMigration}>
-          <CustodyMigrationModal
-            state={custodyMigration}
-            onMoved={() => {
-              refreshCustodyMigration();
-              refreshRecovery();
-              setRecoveryModalOpen(true);
-            }}
-            onLater={() => {
-              setCustodyMigrationLater(true);
-              refreshCustodyMigration();
-              refreshRecovery();
-            }}
-          />
-        </ModalErrorBoundary>
-      )}
-      {recoveryModalOpen && (
-        <ModalErrorBoundary onClose={() => setRecoveryModalOpen(false)}>
-          <RecoveryModal
-            onClose={() => {
-              setRecoveryModalOpen(false);
-              // A method added in the modal unlocks what waited on it (a held ramp order).
-              refreshRecovery();
-            }}
-          />
-        </ModalErrorBoundary>
-      )}
-      {firstConfirmation && (
-        <ModalErrorBoundary onClose={firstConfirmation.reject}>
-          <ConfirmModal key={firstConfirmation.id} confirmation={firstConfirmation} />
-        </ModalErrorBoundary>
-      )}
-      {distributionRulesModalOpen && (
-        <ModalErrorBoundary onClose={() => setDistributionRulesModalOpen(false)}>
-          <DistributionRulesModal onClose={() => setDistributionRulesModalOpen(false)} />
-        </ModalErrorBoundary>
-      )}
+          </ModalErrorBoundary>
+        )}
+        {firstConfirmation && (
+          <ModalErrorBoundary onClose={firstConfirmation.reject}>
+            <ConfirmModal key={firstConfirmation.id} confirmation={firstConfirmation} />
+          </ModalErrorBoundary>
+        )}
+        {distributionRulesModalOpen && (
+          <ModalErrorBoundary onClose={() => setDistributionRulesModalOpen(false)}>
+            <DistributionRulesModal onClose={() => setDistributionRulesModalOpen(false)} />
+          </ModalErrorBoundary>
+        )}
+      </ModalLanguageContext.Provider>
     </PollarContext.Provider>
   );
 }

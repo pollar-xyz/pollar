@@ -3,6 +3,7 @@
 import { WalletChain } from '@pollar/core';
 import { useCallback, useEffect, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { useChains } from '../../useChains';
 import { addressForChain } from '../ChainSelect';
 import '../shared.css';
@@ -19,6 +20,7 @@ interface TxHistoryModalProps {
 export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
   const { getClient, styles, txHistory, wallets } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
+  const language = useModalLanguage();
   const [offset, setOffset] = useState(0);
 
   const { chains } = useChains();
@@ -68,6 +70,7 @@ export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
         onPrev={() => paged(Math.max(0, offset - PAGE_SIZE))}
         onNext={() => paged(offset + PAGE_SIZE)}
         onClose={onClose}
+        language={language}
       />
     </div>
   );

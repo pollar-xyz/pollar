@@ -1,7 +1,9 @@
-import type { CosignCustody, CustodyMigrationState } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { type CosignCustody, type CustodyMigrationState, type PollarLanguage } from '@pollar/core';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { PollarModalFooter } from '../commons';
+import { CUSTODY_MIGRATION_COPY } from './custody-migration-copy';
 
 export interface CustodyMigrationModalTemplateProps {
   theme: string;
@@ -15,13 +17,12 @@ export interface CustodyMigrationModalTemplateProps {
   /** Only offered while a wallet is blocked: the move waits for what is pending. */
   onLater: () => void;
   onLogout: () => void;
+  /** Language of the modal's text. Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
 
 const CHAIN_NAME: Record<string, string> = { STELLAR: 'Stellar', SOLANA: 'Solana', POLYGON: 'Polygon' };
 const short = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
-
-const SELF_CUSTODY_RISKS =
-  'In a self-custody wallet only your device can sign. If you lose this device and every recovery method, nobody can recover the wallet or its funds, not the app and not Pollar. Nobody can undo or freeze a transaction you sign.';
 
 /**
  * The move of the wallets Pollar custodies to ones the user's device signs for.
@@ -31,6 +32,7 @@ const SELF_CUSTODY_RISKS =
  */
 export function CustodyMigrationModalTemplate(p: CustodyMigrationModalTemplateProps) {
   const isDark = p.theme === 'dark';
+  const copy = CUSTODY_MIGRATION_COPY[useInheritedLanguage(p.language)];
   const colors = {
     bg: isDark ? '#1a1a1a' : '#ffffff',
     border: isDark ? '#374151' : '#e5e7eb',
@@ -62,44 +64,36 @@ export function CustodyMigrationModalTemplate(p: CustodyMigrationModalTemplatePr
 
   return (
     <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
-      <Text style={[styles.title, { color: colors.text }]}>Move your wallets to this device</Text>
+      <Text style={[styles.title, { color: colors.text }]}>{copy.title}</Text>
       <ScrollView style={{ maxHeight: 520 }} contentContainerStyle={styles.body}>
-        <Text style={{ color: colors.muted }}>
-          Until now Pollar held the keys of your wallets. This app now keeps wallets on its users&apos; devices, so they move
-          here, with everything they hold.
-        </Text>
-        <Text style={[styles.section, { color: colors.text }]}>What moves</Text>
+        <Text style={{ color: colors.muted }}>{copy.intro}</Text>
+        <Text style={[styles.section, { color: colors.text }]}>{copy.whatMoves}</Text>
         {moving.map((w) => (
           <View key={w.chain} style={styles.item}>
             <Text style={{ color: colors.text, flexShrink: 1 }}>
               {CHAIN_NAME[w.chain] ?? w.chain} · {short(w.address)}
             </Text>
-            <Text style={{ color: colors.muted }}>{w.addressChanges ? 'New address' : 'Same address'}</Text>
+            <Text style={{ color: colors.muted }}>{w.addressChanges ? copy.newAddress : copy.sameAddress}</Text>
           </View>
         ))}
         {changing.length > 0 && (
           <View accessibilityRole="alert" style={[styles.banner, { backgroundColor: colors.warnBg }]}>
             <Text style={{ color: colors.warnText }}>
-              Your {changing.map((w) => CHAIN_NAME[w.chain] ?? w.chain).join(' and ')} address changes: every token and the
-              balance go to a new address on this device. Stop sharing the old one; anything sent there later needs help from
-              support to recover.
+              {copy.addressChanges(changing.map((w) => CHAIN_NAME[w.chain] ?? w.chain).join(copy.and))}
             </Text>
           </View>
         )}
         {p.state.choice && (
           <>
-            <Text style={[styles.section, { color: colors.text }]}>Choose how your wallet signs</Text>
-            {option(
-              'COSIGNED',
-              'Co-signed: you and the app approve every signature together, and the wallet can be recovered with help.',
-            )}
-            {option('SELF_CUSTODY', 'Self-custody: only your device signs. Nobody else can move or recover your funds.')}
+            <Text style={[styles.section, { color: colors.text }]}>{copy.chooseSigning}</Text>
+            {option('COSIGNED', copy.cosignedOption)}
+            {option('SELF_CUSTODY', copy.selfCustodyOption)}
           </>
         )}
         {custody === 'SELF_CUSTODY' && (
           <>
             <View accessibilityRole="alert" style={[styles.banner, { backgroundColor: colors.warnBg }]}>
-              <Text style={{ color: colors.warnText }}>{SELF_CUSTODY_RISKS}</Text>
+              <Text style={{ color: colors.warnText }}>{copy.selfCustodyRisks}</Text>
             </View>
             <TouchableOpacity
               accessibilityRole="checkbox"
@@ -114,51 +108,45 @@ export function CustodyMigrationModalTemplate(p: CustodyMigrationModalTemplatePr
                   risksAccepted ? { backgroundColor: p.accentColor, borderColor: p.accentColor } : null,
                 ]}
               />
-              <Text style={{ color: colors.text, flexShrink: 1 }}>I understand and accept these risks</Text>
+              <Text style={{ color: colors.text, flexShrink: 1 }}>{copy.acceptRisks}</Text>
             </TouchableOpacity>
           </>
         )}
-        {failed && !p.error ? (
-          <Text style={{ color: colors.errorText }}>
-            The last attempt did not finish. What did not move is still where it was; try again.
-          </Text>
-        ) : null}
+        {failed && !p.error ? <Text style={{ color: colors.errorText }}>{copy.lastAttemptFailed}</Text> : null}
         {p.blockedReasons ? (
           <View accessibilityRole="alert" style={[styles.banner, { backgroundColor: colors.warnBg }]}>
-            <Text style={{ color: colors.warnText }}>
-              A wallet cannot move while something still uses it: {p.blockedReasons.join(', ')}. Let it finish and try again.
-            </Text>
+            <Text style={{ color: colors.warnText }}>{copy.blocked(p.blockedReasons.join(', '))}</Text>
           </View>
         ) : null}
         <TouchableOpacity
           accessibilityRole="button"
-          accessibilityLabel="Move my wallets"
+          accessibilityLabel={copy.move}
           accessibilityState={{ disabled: !canMove }}
           disabled={!canMove}
           onPress={() => custody && p.onMove(p.state.choice ? custody : undefined)}
           style={[styles.btn, { backgroundColor: p.accentColor, borderColor: p.accentColor, opacity: canMove ? 1 : 0.55 }]}
         >
-          <Text style={{ color: '#fff', fontWeight: '600' }}>{p.busy ? 'Moving your wallets...' : 'Move my wallets'}</Text>
+          <Text style={{ color: '#fff', fontWeight: '600' }}>{p.busy ? copy.moving : copy.move}</Text>
         </TouchableOpacity>
         {p.blockedReasons ? (
           <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel="Continue for now"
+            accessibilityLabel={copy.later}
             disabled={p.busy}
             onPress={p.onLater}
             style={[styles.btn, { borderColor: colors.border }]}
           >
-            <Text style={{ color: colors.text, fontWeight: '600' }}>Continue for now</Text>
+            <Text style={{ color: colors.text, fontWeight: '600' }}>{copy.later}</Text>
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity
           accessibilityRole="button"
-          accessibilityLabel="Log out"
+          accessibilityLabel={copy.logout}
           disabled={p.busy}
           onPress={p.onLogout}
           style={[styles.btn, { borderColor: colors.border }]}
         >
-          <Text style={{ color: colors.text, fontWeight: '600' }}>Log out</Text>
+          <Text style={{ color: colors.text, fontWeight: '600' }}>{copy.logout}</Text>
         </TouchableOpacity>
         {p.error ? (
           <Text accessibilityRole="alert" style={{ color: colors.errorText }}>

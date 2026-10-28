@@ -1,7 +1,9 @@
-import type { CosignDevicesContent, RecoveryState } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { type CosignDevicesContent, type PollarLanguage, type RecoveryState } from '@pollar/core';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { PollarModalFooter } from '../commons';
+import { RECOVERY_COPY } from './recovery-copy';
 
 export type RecoveryView = 'overview' | 'email' | 'export' | 'recover-email';
 
@@ -41,7 +43,11 @@ export interface RecoveryModalTemplateProps {
   onRecoverWithCode: (code: string) => void;
   onExport: () => void;
   onClose: () => void;
+  /** Language of the modal's text. Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
+
+type Copy = (typeof RECOVERY_COPY)['en'];
 
 type Colors = ReturnType<typeof palette>;
 
@@ -63,6 +69,7 @@ function palette(isDark: boolean) {
 const shortKey = (key: string) => `${key.slice(0, 6)}...${key.slice(-4)}`;
 
 function Button(props: {
+  copy: Copy;
   colors: Colors;
   accentColor: string;
   busy: string | null;
@@ -93,7 +100,7 @@ function Button(props: {
           color: kind === 'primary' ? '#fff' : kind === 'danger' ? props.colors.errorText : props.colors.text,
         }}
       >
-        {props.busy === props.id ? 'Working...' : props.label}
+        {props.busy === props.id ? props.copy.working : props.label}
       </Text>
     </TouchableOpacity>
   );
@@ -111,6 +118,7 @@ function Banner({ colors, tone, children }: { colors: Colors; tone: 'warn' | 'ok
 }
 
 function CodeForm(props: {
+  copy: Copy;
   colors: Colors;
   accentColor: string;
   busy: string | null;
@@ -125,14 +133,15 @@ function CodeForm(props: {
         style={[styles.input, { borderColor: props.colors.border, color: props.colors.text }]}
         value={code}
         onChangeText={setCode}
-        placeholder="Code from the email"
+        placeholder={props.copy.codePlaceholder}
         placeholderTextColor={props.colors.muted}
         autoComplete="one-time-code"
         textContentType="oneTimeCode"
         keyboardType="number-pad"
-        accessibilityLabel="Code from the email"
+        accessibilityLabel={props.copy.codePlaceholder}
       />
       <Button
+        copy={props.copy}
         colors={props.colors}
         accentColor={props.accentColor}
         busy={props.busy}
@@ -148,6 +157,7 @@ function CodeForm(props: {
 
 export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
   const colors = palette(p.theme === 'dark');
+  const copy = RECOVERY_COPY[useInheritedLanguage(p.language)];
   const [exportAccepted, setExportAccepted] = useState(false);
   const [risksAccepted, setRisksAccepted] = useState(false);
   const state = p.state;
@@ -157,64 +167,54 @@ export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
   const risksPending = locked && p.selfCustodyRisks && !risksAccepted;
   const lastMethod =
     !!state && state.passkeys.length + (state.email.verified ? 1 : 0) + (state.devices.length >= 2 ? 1 : 0) <= 1;
-  const btn = { colors, accentColor: p.accentColor, busy: p.busy };
+  const btn = { copy, colors, accentColor: p.accentColor, busy: p.busy };
   const muted = (text: string) => <Text style={{ color: colors.muted }}>{text}</Text>;
   const heading = (text: string) => <Text style={[styles.sectionTitle, { color: colors.text }]}>{text}</Text>;
-  const back = <Button {...btn} id="back" label="Back" onPress={() => p.onView('overview')} />;
+  const back = <Button {...btn} id="back" label={copy.back} onPress={() => p.onView('overview')} />;
 
   let body: React.ReactNode;
   if (!state) {
-    body = muted("Loading your wallet's recovery methods...");
+    body = muted(copy.loading);
   } else if (!state.required) {
-    body = muted("This wallet doesn't need recovery methods: it isn't secured by your device.");
+    body = muted(copy.notRequired);
   } else if (!p.thisDeviceEnrolled && p.view !== 'recover-email') {
     // A device the user signed in on, but whose key is not one of the wallet's credentials.
     body = (
       <>
         <Banner colors={colors} tone="warn">
-          This device isn&apos;t part of your wallet yet. Get back in with one of your recovery methods, or ask a device that
-          already has the wallet to add this one.
+          {copy.notEnrolled}
         </Banner>
         {state.passkeys.length > 0 && p.passkeyAvailable && (
-          <Button {...btn} id="recover-passkey" label="Use a passkey" kind="primary" onPress={p.onRecoverWithPasskey} />
+          <Button {...btn} id="recover-passkey" label={copy.usePasskey} kind="primary" onPress={p.onRecoverWithPasskey} />
         )}
         {state.email.verified && (
           <Button
             {...btn}
             id="recover-send"
-            label={`Email a code to ${state.email.address ?? 'your email'}`}
+            label={copy.emailCodeTo(state.email.address ?? copy.yourEmail)}
             onPress={() => p.onView('recover-email')}
           />
         )}
-        <Button {...btn} id="enroll" label="Ask another device to add this one" onPress={p.onRequestEnrollment} />
+        <Button {...btn} id="enroll" label={copy.askAnotherDevice} onPress={p.onRequestEnrollment} />
       </>
     );
   } else if (risksPending && p.view === 'overview') {
     body = (
       <>
         <Banner colors={colors} tone="warn">
-          This is a self-custody wallet: only your device can sign. If you lose this device and every recovery method, nobody
-          can recover the wallet or its funds, not the app and not Pollar. Nobody can undo or freeze a transaction you sign.
+          {copy.selfCustodyWarning}
         </Banner>
-        <Button
-          {...btn}
-          id="accept-risks"
-          label="I understand and accept these risks"
-          kind="primary"
-          onPress={() => setRisksAccepted(true)}
-        />
+        <Button {...btn} id="accept-risks" label={copy.acceptRisks} kind="primary" onPress={() => setRisksAccepted(true)} />
       </>
     );
   } else if (p.view === 'recover-email') {
     body = (
       <>
-        {muted(
-          `We'll email a code to ${state.email.address ?? 'your email'}. The code goes straight to the wallet provider, encrypted on this device.`,
-        )}
+        {muted(copy.recoverEmailIntro(state.email.address ?? copy.yourEmail))}
         {!p.codeSent ? (
-          <Button {...btn} id="recover-send" label="Send code" kind="primary" onPress={p.onSendRecoveryCode} />
+          <Button {...btn} id="recover-send" label={copy.sendCode} kind="primary" onPress={p.onSendRecoveryCode} />
         ) : (
-          <CodeForm {...btn} id="recover-code" label="Recover" onSubmit={p.onRecoverWithCode} />
+          <CodeForm {...btn} id="recover-code" label={copy.recover} onSubmit={p.onRecoverWithCode} />
         )}
         {back}
       </>
@@ -222,33 +222,31 @@ export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
   } else if (p.view === 'email') {
     body = (
       <>
-        {muted(
-          'Confirm an email you control. If you lose this device, a code sent there lets you add a new one. Anyone who controls this inbox could do the same, so use one that is well protected.',
-        )}
+        {muted(copy.emailIntro)}
         {!p.codeSent ? (
           <View style={styles.row}>
             <TextInput
               style={[styles.input, { borderColor: colors.border, color: colors.text }]}
               value={p.emailDraft}
               onChangeText={p.onEmailDraft}
-              placeholder="you@example.com"
+              placeholder={copy.emailPlaceholder}
               placeholderTextColor={colors.muted}
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
-              accessibilityLabel="Email"
+              accessibilityLabel={copy.email}
             />
             <Button
               {...btn}
               id="email-send"
-              label="Send code"
+              label={copy.sendCode}
               kind="primary"
               onPress={p.onSendEmailCode}
               disabled={!p.emailDraft.trim()}
             />
           </View>
         ) : (
-          <CodeForm {...btn} id="email-confirm" label="Confirm" onSubmit={p.onConfirmEmail} />
+          <CodeForm {...btn} id="email-confirm" label={copy.confirm} onSubmit={p.onConfirmEmail} />
         )}
         {back}
       </>
@@ -257,18 +255,16 @@ export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
     body = p.phrase ? (
       <>
         <Banner colors={colors} tone="warn">
-          Anyone with these words controls every account in this wallet. Write them down offline and never share them.
+          {copy.phraseWarning}
         </Banner>
         <Text selectable style={[styles.phrase, { borderColor: colors.border, color: colors.text }]}>
           {p.phrase}
         </Text>
-        <Button {...btn} id="hide" label="Hide" kind="primary" onPress={() => p.onView('overview')} />
+        <Button {...btn} id="hide" label={copy.hide} kind="primary" onPress={() => p.onView('overview')} />
       </>
     ) : (
       <>
-        {muted(
-          'Your recovery phrase lets you take this wallet to another app. It is decrypted only on this device; the app and Pollar never see it.',
-        )}
+        {muted(copy.exportIntro)}
         <TouchableOpacity
           accessibilityRole="checkbox"
           accessibilityState={{ checked: exportAccepted }}
@@ -282,18 +278,9 @@ export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
               exportAccepted ? { backgroundColor: p.accentColor, borderColor: p.accentColor } : null,
             ]}
           />
-          <Text style={{ color: colors.text, flexShrink: 1 }}>
-            I understand that whoever sees the phrase controls the wallet
-          </Text>
+          <Text style={{ color: colors.text, flexShrink: 1 }}>{copy.exportAccept}</Text>
         </TouchableOpacity>
-        <Button
-          {...btn}
-          id="export"
-          label="Show recovery phrase"
-          kind="danger"
-          onPress={p.onExport}
-          disabled={!exportAccepted}
-        />
+        <Button {...btn} id="export" label={copy.showPhrase} kind="danger" onPress={p.onExport} disabled={!exportAccepted} />
         {back}
       </>
     );
@@ -303,26 +290,24 @@ export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
       <>
         {locked ? (
           <Banner colors={colors} tone="warn">
-            Your wallet is locked until you add a way to recover it. Without one, losing this device means losing the funds, and
-            nobody can get them back, not the app and not Pollar. Add {p.passkeyAvailable ? 'a passkey, ' : ''}a second device
-            or your email.
+            {copy.locked(p.passkeyAvailable)}
           </Banner>
         ) : (
           <Banner colors={colors} tone="ok">
-            Your wallet can be recovered if you lose this device.
+            {copy.recoverable}
           </Banner>
         )}
 
         <View style={[styles.section, { borderColor: colors.border }]}>
-          {heading('Passkeys')}
-          {state.passkeys.length === 0 && muted('No passkey yet.')}
+          {heading(copy.passkeys)}
+          {state.passkeys.length === 0 && muted(copy.noPasskey)}
           {state.passkeys.map((pk) => (
             <View key={pk.authenticatorId} style={styles.item}>
               <Text style={{ color: colors.text, flexShrink: 1 }}>{pk.name}</Text>
               <Button
                 {...btn}
                 id={`passkey:${pk.authenticatorId}`}
-                label="Remove"
+                label={copy.remove}
                 kind="danger"
                 onPress={() => p.onRemovePasskey(pk.authenticatorId)}
                 disabled={lastMethod}
@@ -330,57 +315,53 @@ export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
             </View>
           ))}
           {p.passkeyAvailable ? (
-            <Button {...btn} id="passkey" label="Add a passkey" onPress={p.onAddPasskey} />
+            <Button {...btn} id="passkey" label={copy.addPasskey} onPress={p.onAddPasskey} />
           ) : (
-            muted("Passkeys aren't available in this app.")
+            muted(copy.passkeysUnavailableApp)
           )}
         </View>
 
         <View style={[styles.section, { borderColor: colors.border }]}>
-          {heading('Email')}
+          {heading(copy.email)}
           {state.email.verified ? (
             <View style={styles.item}>
               <Text style={{ color: colors.text, flexShrink: 1 }}>{state.email.address}</Text>
-              <Text style={{ color: colors.okText }}>Confirmed</Text>
+              <Text style={{ color: colors.okText }}>{copy.confirmed}</Text>
             </View>
           ) : (
-            <Button {...btn} id="email" label="Confirm an email" onPress={() => p.onView('email')} />
+            <Button {...btn} id="email" label={copy.confirmEmail} onPress={() => p.onView('email')} />
           )}
         </View>
 
         <View style={[styles.section, { borderColor: colors.border }]}>
-          {heading('Devices')}
+          {heading(copy.devices)}
           {(p.devices?.devices ?? []).map((d) => (
             <View key={d.id} style={styles.item}>
               <Text style={{ color: colors.text, flexShrink: 1 }}>{d.label ?? shortKey(d.publicKey)}</Text>
-              {d.publicKey.toLowerCase() === p.thisDeviceKey && <Text style={{ color: colors.muted }}>This device</Text>}
+              {d.publicKey.toLowerCase() === p.thisDeviceKey && <Text style={{ color: colors.muted }}>{copy.thisDevice}</Text>}
             </View>
           ))}
           {enrollments.map((e) => (
             <View key={e.id} style={[styles.pending, { borderColor: p.accentColor }]}>
-              <Text style={{ color: colors.text }}>
-                {e.label ?? 'A device'} wants to join ({shortKey(e.publicKey)})
-              </Text>
+              <Text style={{ color: colors.text }}>{copy.wantsToJoin(e.label ?? copy.aDevice, shortKey(e.publicKey))}</Text>
               <View style={styles.row}>
                 <Button
                   {...btn}
                   id={`approve:${e.id}`}
-                  label="Approve"
+                  label={copy.approve}
                   kind="primary"
                   onPress={() => p.onApproveDevice(e.id)}
                 />
-                <Button {...btn} id={`reject:${e.id}`} label="Reject" onPress={() => p.onRejectDevice(e.id)} />
+                <Button {...btn} id={`reject:${e.id}`} label={copy.reject} onPress={() => p.onRejectDevice(e.id)} />
               </View>
             </View>
           ))}
-          {muted(
-            'To add another device, sign in there and choose "Ask another device to add this one"; it shows up here to approve. Only approve a device you are holding.',
-          )}
+          {muted(copy.addDeviceHelp)}
         </View>
 
         <View style={[styles.section, { borderColor: colors.border }]}>
-          {heading('Recovery phrase')}
-          <Button {...btn} id="export-open" label="Export recovery phrase" onPress={() => p.onView('export')} />
+          {heading(copy.recoveryPhrase)}
+          <Button {...btn} id="export-open" label={copy.exportPhrase} onPress={() => p.onView('export')} />
         </View>
       </>
     );
@@ -389,8 +370,8 @@ export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
   return (
     <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>Wallet recovery</Text>
-        <TouchableOpacity onPress={p.onClose} accessibilityRole="button" accessibilityLabel="Close">
+        <Text style={[styles.title, { color: colors.text }]}>{copy.title}</Text>
+        <TouchableOpacity onPress={p.onClose} accessibilityRole="button" accessibilityLabel={copy.close}>
           <Text style={{ color: colors.muted, fontSize: 18 }}>x</Text>
         </TouchableOpacity>
       </View>

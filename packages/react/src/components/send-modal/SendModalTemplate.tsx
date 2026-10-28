@@ -1,12 +1,16 @@
 'use client';
 
-import { TransactionState, WalletBalanceRecord, WalletChain, WalletId } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { PollarLanguage, TransactionState, WalletBalanceRecord, WalletChain, WalletId } from '@pollar/core';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { AmountField } from '../AmountField';
 import { ChainSelect } from '../ChainSelect';
 import { PollarModalFooter, RefreshIcon } from '../commons';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
+import { SEND_COPY } from './send-copy';
+
+type SendCopy = (typeof SEND_COPY)['en'];
 
 // A null balance means the chain could not be read; it shows as a dash rather
 // than as 0, so an unreadable wallet never looks empty.
@@ -20,16 +24,16 @@ function assetKey(record: WalletBalanceRecord): string {
   return `${record.code}:${record.issuer ?? 'native'}`;
 }
 
-function chainLabel(chain: WalletChain | null): string {
+function chainLabel(chain: WalletChain | null, copy: SendCopy): string {
   if (chain === 'STELLAR') return 'Stellar';
   if (chain === 'SOLANA') return 'Solana';
   if (chain === 'POLYGON') return 'Polygon';
-  return 'network';
+  return copy.anyNetwork;
 }
 
 // Solana addresses are base58 with no fixed prefix, so they get a label instead.
-function destinationPlaceholder(chain: WalletChain | null): string {
-  if (chain === 'SOLANA') return 'Solana address';
+function destinationPlaceholder(chain: WalletChain | null, copy: SendCopy): string {
+  if (chain === 'SOLANA') return copy.solanaAddress;
   if (chain === 'POLYGON') return '0x…';
   return 'G…';
 }
@@ -47,9 +51,16 @@ interface SendAssetSelectorProps {
   selectedAsset: WalletBalanceRecord | null;
   loading: boolean;
   onSelectAsset: (asset: WalletBalanceRecord) => void;
+  copy: SendCopy;
 }
 
-function SendAssetSelector({ assets, selectedAsset, loading, onSelectAsset }: SendAssetSelectorProps) {
+function availableLabel(asset: WalletBalanceRecord, copy: SendCopy): string {
+  return asset.available === null
+    ? copy.balanceUnavailable
+    : copy.available.replace('{amount}', formatBalance(asset.available));
+}
+
+function SendAssetSelector({ assets, selectedAsset, loading, onSelectAsset, copy }: SendAssetSelectorProps) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -72,10 +83,10 @@ function SendAssetSelector({ assets, selectedAsset, loading, onSelectAsset }: Se
   if (loading) {
     return (
       <div className="pollar-send-field">
-        <span className="pollar-send-label">Asset</span>
-        <div className="pollar-send-asset-selector pollar-send-asset-selector-loading" aria-label="Loading assets">
+        <span className="pollar-send-label">{copy.asset}</span>
+        <div className="pollar-send-asset-selector pollar-send-asset-selector-loading" aria-label={copy.loadingAssets}>
           <span className="pollar-spinner pollar-spinner-sm" />
-          <span>Loading assets…</span>
+          <span>{copy.loadingAssets}</span>
         </div>
       </div>
     );
@@ -84,7 +95,7 @@ function SendAssetSelector({ assets, selectedAsset, loading, onSelectAsset }: Se
   return (
     <div className="pollar-send-field">
       <label className="pollar-send-label" id="pollar-send-asset-label">
-        Asset
+        {copy.asset}
       </label>
       <div className="pollar-send-asset-picker">
         <button
@@ -103,16 +114,12 @@ function SendAssetSelector({ assets, selectedAsset, loading, onSelectAsset }: Se
               <AssetIcon code={selectedAsset.code} />
               <span className="pollar-send-asset-copy">
                 <strong>{selectedAsset.code}</strong>
-                <small>
-                  {selectedAsset.available === null
-                    ? 'Balance unavailable'
-                    : `${formatBalance(selectedAsset.available)} available`}
-                </small>
+                <small>{availableLabel(selectedAsset, copy)}</small>
               </span>
             </>
           ) : (
             <span className="pollar-send-asset-copy">
-              <strong>No assets available</strong>
+              <strong>{copy.noAssets}</strong>
             </span>
           )}
           <svg className="pollar-send-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -121,7 +128,7 @@ function SendAssetSelector({ assets, selectedAsset, loading, onSelectAsset }: Se
         </button>
 
         {open && assets.length > 0 && (
-          <div className="pollar-send-asset-menu" role="listbox" aria-label="Assets">
+          <div className="pollar-send-asset-menu" role="listbox" aria-label={copy.assets}>
             {assets.map((asset) => {
               const key = assetKey(asset);
               const selected = selectedAsset ? key === assetKey(selectedAsset) : false;
@@ -141,9 +148,7 @@ function SendAssetSelector({ assets, selectedAsset, loading, onSelectAsset }: Se
                   <AssetIcon code={asset.code} />
                   <span className="pollar-send-asset-copy">
                     <strong>{asset.code}</strong>
-                    <small>
-                      {asset.available === null ? 'Balance unavailable' : `${formatBalance(asset.available)} available`}
-                    </small>
+                    <small>{availableLabel(asset, copy)}</small>
                   </span>
                 </button>
               );
@@ -234,6 +239,8 @@ export interface SendModalTemplateProps {
   onCopyHash: () => void;
   onRetry: () => void;
   onDone: () => void;
+  /** Language of the modal. Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
 
 export function SendModalTemplate({
@@ -281,8 +288,11 @@ export function SendModalTemplate({
   onCopyHash,
   onRetry,
   onDone,
+  language: languageProp,
 }: SendModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
+  const copy = SEND_COPY[language];
 
   const parsedAmount = amount ? Number(amount) : 0;
   const availableAmount =
@@ -298,7 +308,7 @@ export function SendModalTemplate({
     !isLoadingBalance &&
     !isCheckingDestination;
 
-  const title = step === 'form' ? 'Send' : step === 'create-account' ? 'Create account?' : txTitle;
+  const title = step === 'form' ? copy.title : step === 'create-account' ? copy.createAccountTitle : txTitle;
   // Only XLM can create an account; any other asset needs the account to exist first.
   const createsWithNative = selectedAsset?.type === 'native';
   const meetsMinimum = Number.isFinite(parsedAmount) && parsedAmount >= minStartingBalance;
@@ -314,7 +324,7 @@ export function SendModalTemplate({
       <div className="pollar-modal-header">
         <div className="pollar-send-header-left">
           {showBack && (
-            <button type="button" className="pollar-modal-close" onClick={onBack} aria-label="Back">
+            <button type="button" className="pollar-modal-close" onClick={onBack} aria-label={copy.back}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                 <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -323,7 +333,7 @@ export function SendModalTemplate({
           <div className="pollar-send-title-copy">
             <h2 className="pollar-modal-title">{title}</h2>
             {step === 'form' && (
-              <p className="pollar-send-subtitle">Transfer assets to another {chainLabel(selectedChain)} wallet</p>
+              <p className="pollar-send-subtitle">{copy.subtitle.replace('{chain}', chainLabel(selectedChain, copy))}</p>
             )}
           </div>
         </div>
@@ -335,13 +345,13 @@ export function SendModalTemplate({
                 className="pollar-modal-close"
                 onClick={onRefresh}
                 disabled={isLoadingBalance}
-                aria-label="Refresh"
-                title="Refresh balances"
+                aria-label={copy.refresh}
+                title={copy.refreshBalances}
               >
                 <RefreshIcon spinning={isLoadingBalance} />
               </button>
             )}
-            <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
+            <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                 <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
@@ -355,10 +365,16 @@ export function SendModalTemplate({
         <>
           {/* Network selector - drives the asset list below */}
           {chains && onSelectChain && (
-            <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoadingBalance} />
+            <ChainSelect
+              label={copy.network}
+              value={selectedChain}
+              options={chains}
+              onChange={onSelectChain}
+              disabled={isLoadingBalance}
+            />
           )}
 
-          {!canSendOnChain && <div className="pollar-modal-empty">Sending is not available on this network yet.</div>}
+          {!canSendOnChain && <div className="pollar-modal-empty">{copy.sendingUnavailable}</div>}
           {canSendOnChain && notReadyReason && <div className="pollar-modal-empty">{notReadyReason}</div>}
 
           {/* Asset selector */}
@@ -367,12 +383,13 @@ export function SendModalTemplate({
             selectedAsset={selectedAsset}
             loading={isLoadingBalance}
             onSelectAsset={onSelectAsset}
+            copy={copy}
           />
 
           {/* Amount */}
           <AmountField
             id="pollar-send-amount"
-            label="Amount"
+            label={copy.amount}
             value={amount}
             onChange={onAmountChange}
             unit={selectedAsset?.code}
@@ -382,18 +399,18 @@ export function SendModalTemplate({
 
           {/* Destination */}
           <div className="pollar-send-field">
-            <label className="pollar-send-label">Destination wallet</label>
+            <label className="pollar-send-label">{copy.destination}</label>
             <div className="pollar-send-input-shell">
               <input
                 className="pollar-input pollar-send-destination-input"
                 type="text"
-                placeholder={destinationPlaceholder(selectedChain)}
+                placeholder={destinationPlaceholder(selectedChain, copy)}
                 value={destination}
                 onChange={(e) => onDestinationChange(e.target.value)}
-                aria-label="Destination wallet"
+                aria-label={copy.destination}
               />
               <button type="button" className="pollar-send-inline-action" onClick={onPaste}>
-                Paste
+                {copy.paste}
               </button>
             </div>
           </div>
@@ -401,18 +418,18 @@ export function SendModalTemplate({
           {selectedChain === 'STELLAR' && onMemoChange && (
             <div className="pollar-send-field">
               <label className="pollar-send-label" htmlFor="pollar-send-memo">
-                Memo <span className="pollar-send-label-optional">(optional)</span>
+                {copy.memo} <span className="pollar-send-label-optional">{copy.optional}</span>
               </label>
               <div className="pollar-send-memo-row">
                 <select
                   className="pollar-input pollar-send-memo-type"
                   value={memoType}
                   onChange={(e) => onMemoTypeChange?.(e.target.value as SendMemoType)}
-                  aria-label="Memo type"
+                  aria-label={copy.memoType}
                 >
-                  <option value="text">Text</option>
-                  <option value="id">ID</option>
-                  <option value="hash">Hash</option>
+                  <option value="text">{copy.memoTypes.text}</option>
+                  <option value="id">{copy.memoTypes.id}</option>
+                  <option value="hash">{copy.memoTypes.hash}</option>
                 </select>
                 <input
                   id="pollar-send-memo"
@@ -420,7 +437,7 @@ export function SendModalTemplate({
                   type="text"
                   inputMode={memoType === 'id' ? 'numeric' : 'text'}
                   placeholder={
-                    memoType === 'id' ? '123456789' : memoType === 'hash' ? '64 hex characters' : 'Up to 28 characters'
+                    memoType === 'id' ? '123456789' : memoType === 'hash' ? copy.memoHashPlaceholder : copy.memoTextPlaceholder
                   }
                   value={memo}
                   onChange={(e) => onMemoChange(e.target.value)}
@@ -433,7 +450,7 @@ export function SendModalTemplate({
 
           <div className="pollar-modal-actions">
             <button className="pollar-btn-primary" onClick={onSubmit} disabled={!canSubmit}>
-              {isCheckingDestination ? 'Checking destination…' : 'Continue'}
+              {isCheckingDestination ? copy.checkingDestination : copy.continue}
             </button>
           </div>
         </>
@@ -443,36 +460,34 @@ export function SendModalTemplate({
       {step === 'create-account' && (
         <>
           <div className="pollar-send-notice">
-            <p className="pollar-send-notice-title">This account doesn't exist yet</p>
+            <p className="pollar-send-notice-title">{copy.accountMissingTitle}</p>
             <p className="pollar-send-notice-address">{destination.trim()}</p>
             {createsWithNative ? (
               <p>
-                A Stellar account has to be created and funded before it can receive payments. Instead of a payment, this will{' '}
-                <strong>create the account</strong> with {amount} XLM as its starting balance.
+                {copy.createNativeBefore} <strong>{copy.createNativeStrong}</strong>{' '}
+                {copy.createNativeAfter.replace('{amount}', amount)}
               </p>
             ) : (
               <p>
-                It can't receive {selectedAsset?.code ?? 'this asset'} yet: it has to be created and funded with XLM first, and
-                then add a trustline for {selectedAsset?.code ?? 'the asset'}.
+                {copy.createNonNative
+                  .replace('{asset}', selectedAsset?.code ?? copy.thisAsset)
+                  .replace('{trustAsset}', selectedAsset?.code ?? copy.theAsset)}
               </p>
             )}
             {createsWithNative && !meetsMinimum && (
-              <p className="pollar-send-notice-warning">
-                A new account needs a starting balance of at least {minStartingBalance} XLM. Go back and raise the amount to
-                create it.
-              </p>
+              <p className="pollar-send-notice-warning">{copy.minimumWarning.replace('{min}', String(minStartingBalance))}</p>
             )}
-            <p>Or wait until another wallet funds it, and send afterwards.</p>
+            <p>{copy.orWait}</p>
           </div>
 
           <div className="pollar-send-account-actions">
             {createsWithNative && onCreateAccount && (
               <button className="pollar-btn-primary" onClick={onCreateAccount} disabled={!meetsMinimum}>
-                Create account with {amount} XLM
+                {copy.createWith.replace('{amount}', amount)}
               </button>
             )}
             <button className="pollar-btn-secondary" onClick={onBack}>
-              I'll wait until it's funded
+              {copy.wait}
             </button>
           </div>
         </>
@@ -491,6 +506,7 @@ export function SendModalTemplate({
           onCopyHash={onCopyHash}
           onRetry={onRetry}
           onDone={onDone}
+          language={language}
         />
       )}
 

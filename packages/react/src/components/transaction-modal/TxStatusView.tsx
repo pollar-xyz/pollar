@@ -1,23 +1,10 @@
 'use client';
 
-import { TransactionState, transactionErrorMessage, WalletId, WalletType } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { PollarLanguage, TransactionState, transactionErrorMessage, WalletId, WalletType } from '@pollar/core';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR_MARK_ON_DARK, LOGO_POLLAR_MARK_ON_LIGHT } from '../../constants';
 import { ModalStatusBanner } from '../commons';
-
-const STATUS_MESSAGES: Record<TransactionState['step'], string> = {
-  idle: '',
-  building: 'Building transaction…',
-  built: 'Ready to sign and send',
-  signing: 'Signing transaction…',
-  signed: 'Signed — ready to submit',
-  submitting: 'Submitting transaction…',
-  submitted: 'Submitted — waiting for confirmation…',
-  'signing-submitting': 'Signing and submitting transaction…',
-  awaiting_cosign: 'Waiting for your approval on this device…',
-  'building-signing-submitting': 'Processing transaction…',
-  success: 'Transaction sent successfully',
-  error: 'Transaction failed',
-};
+import { TRANSACTION_COPY } from './transaction-copy';
 
 /** Step values that represent in-flight work (spinner / non-cancellable UI). */
 const IN_FLIGHT_STEPS = new Set<TransactionState['step']>([
@@ -51,6 +38,8 @@ export interface TxStatusViewProps {
   onCopyHash: () => void;
   onRetry?: (() => void) | undefined;
   onDone: () => void;
+  /** Language of the status text. Defaults to the user's device; the modals pass the resolved one. */
+  language?: PollarLanguage | undefined;
 }
 
 export function TxStatusView({
@@ -64,10 +53,14 @@ export function TxStatusView({
   onCopyHash,
   onRetry,
   onDone,
+  language: languageProp,
 }: TxStatusViewProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = TRANSACTION_COPY[language];
   const buildData = 'buildData' in transaction ? transaction.buildData : null;
   const hash = transaction.step === 'success' ? transaction.hash : null;
-  const errorDetails = transaction.step === 'error' ? transactionErrorMessage(transaction.code, transaction.details) : null;
+  const errorDetails =
+    transaction.step === 'error' ? transactionErrorMessage(transaction.code, transaction.details, language) : null;
 
   const isBuilt = transaction.step === 'built';
   const isInFlight = IN_FLIGHT_STEPS.has(transaction.step);
@@ -81,7 +74,7 @@ export function TxStatusView({
   const walletAlt = walletType === WalletType.FREIGHTER ? 'Freighter' : walletType === WalletType.ALBEDO ? 'Albedo' : 'Pollar';
   const statusBanner = (
     <ModalStatusBanner
-      message={STATUS_MESSAGES[transaction.step]}
+      message={copy.status[transaction.step]}
       status={isError ? 'ERROR' : isInFlight ? 'LOADING' : isSuccess ? 'SUCCESS' : 'NONE'}
     />
   );
@@ -92,7 +85,7 @@ export function TxStatusView({
       {showDetails && buildData && (
         <>
           <div className="pollar-tx-summary">
-            <p className="pollar-tx-summary-title">Details</p>
+            <p className="pollar-tx-summary-title">{copy.details}</p>
             <ul className="pollar-tx-summary-lines">
               {buildData.summary.lines.map((line, i) => (
                 <li key={i} className="pollar-tx-summary-line">
@@ -103,11 +96,11 @@ export function TxStatusView({
           </div>
           <div className="pollar-tx-meta">
             <div className="pollar-tx-meta-item">
-              <span className="pollar-tx-meta-label">Network</span>
+              <span className="pollar-tx-meta-label">{copy.network}</span>
               <span className="pollar-tx-meta-value">{buildData.summary.network}</span>
             </div>
             <div className="pollar-tx-meta-item">
-              <span className="pollar-tx-meta-label">Fee</span>
+              <span className="pollar-tx-meta-label">{copy.fee}</span>
               <span className="pollar-tx-meta-value">{buildData.summary.fee}</span>
             </div>
           </div>
@@ -123,7 +116,7 @@ export function TxStatusView({
               >
                 <path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              Raw transaction (XDR)
+              {copy.rawXdr}
             </button>
             {showXdr && <pre className="pollar-tx-xdr-content">{buildData.unsignedXdr}</pre>}
           </div>
@@ -132,14 +125,14 @@ export function TxStatusView({
 
       {isError && errorDetails && (
         <div className="pollar-tx-error-details">
-          <p className="pollar-tx-error-details-label">Error details</p>
+          <p className="pollar-tx-error-details-label">{copy.errorDetails}</p>
           <pre className="pollar-tx-error-details-content">{errorDetails}</pre>
         </div>
       )}
 
       {isBuilt && (
         <button className="pollar-btn-primary pollar-tx-sign-btn" onClick={onSignAndSend}>
-          Sign &amp; Send
+          {copy.signAndSend}
         </button>
       )}
 
@@ -186,16 +179,16 @@ export function TxStatusView({
           {isInFlight && (
             <p className="pollar-tx-spinner-label">
               {walletType === WalletType.FREIGHTER
-                ? 'Waiting for Freighter…'
+                ? copy.waitingFreighter
                 : walletType === WalletType.ALBEDO
-                  ? 'Waiting for Albedo…'
-                  : 'Signing and sending…'}
+                  ? copy.waitingAlbedo
+                  : copy.signingAndSending}
             </p>
           )}
 
           {isError && onRetry && 'buildData' in transaction && transaction.buildData && (
             <button className="pollar-btn-secondary pollar-tx-retry-btn" onClick={onRetry}>
-              Try again
+              {copy.tryAgain}
             </button>
           )}
         </div>
@@ -203,7 +196,7 @@ export function TxStatusView({
 
       {isSuccess && hash && (
         <div className="pollar-tx-result">
-          <span className="pollar-tx-result-label">Transaction hash</span>
+          <span className="pollar-tx-result-label">{copy.txHash}</span>
           <span className="pollar-tx-result-hash">{hash}</span>
           <div className="pollar-tx-result-actions">
             <button className="pollar-tx-result-btn" onClick={onCopyHash}>
@@ -219,7 +212,7 @@ export function TxStatusView({
                       strokeLinejoin="round"
                     />
                   </svg>
-                  Copied!
+                  {copy.copied}
                 </>
               ) : (
                 <>
@@ -232,7 +225,7 @@ export function TxStatusView({
                       strokeLinecap="round"
                     />
                   </svg>
-                  Copy hash
+                  {copy.copyHash}
                 </>
               )}
             </button>
@@ -253,7 +246,7 @@ export function TxStatusView({
                     strokeLinejoin="round"
                   />
                 </svg>
-                View on Explorer
+                {copy.viewOnExplorer}
               </a>
             )}
           </div>
@@ -262,7 +255,7 @@ export function TxStatusView({
 
       {isSuccess && (
         <button className="pollar-btn-primary pollar-tx-sign-btn" onClick={onDone}>
-          Done
+          {copy.done}
         </button>
       )}
 

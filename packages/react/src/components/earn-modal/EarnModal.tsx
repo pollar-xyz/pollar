@@ -3,6 +3,7 @@
 import { EarnOpportunity, EarnPosition, EarnProviderId } from '@pollar/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { useWalletAvailable } from '../../useWalletAvailable';
 import { AmountField } from '../AmountField';
 import { PollarModalFooter } from '../commons';
@@ -13,6 +14,7 @@ import '../transaction-modal/TransactionModal.css';
 import '../send-modal/SendModal.css';
 import '../swap-modal/SwapModal.css';
 import './EarnModal.css';
+import { EARN_COPY } from './earn-copy';
 
 interface EarnModalProps {
   onClose: () => void;
@@ -57,6 +59,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
     styles,
   } = usePollar();
 
+  const copy = EARN_COPY[useModalLanguage()];
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;
   const smartUnsupported = wallet?.custody === 'smart';
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
@@ -155,7 +158,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
   const earnUnavailable = providers !== null && providers.length === 0;
   const withdrawUnit = position?.withdrawUnit ?? 'asset';
   const assetCode = selectedOpportunity?.asset.code ?? '';
-  const amountUnitLabel = tab === 'deposit' ? assetCode : withdrawUnit === 'shares' ? 'shares' : assetCode;
+  const amountUnitLabel = tab === 'deposit' ? assetCode : withdrawUnit === 'shares' ? copy.shares : assetCode;
 
   const walletAvailable = useWalletAvailable(
     selectedOpportunity ? { chain: 'STELLAR', code: assetCode, issuer: selectedOpportunity.asset.issuer } : null,
@@ -195,15 +198,15 @@ export function EarnModal({ onClose }: EarnModalProps) {
 
   const txTitle = isInProgress
     ? tab === 'deposit'
-      ? 'Depositing…'
-      : 'Withdrawing…'
+      ? copy.depositing
+      : copy.withdrawing
     : transaction.step === 'success'
-      ? 'Done!'
+      ? copy.done
       : transaction.step === 'error'
         ? tab === 'deposit'
-          ? 'Deposit failed'
-          : 'Withdraw failed'
-        : 'Confirm';
+          ? copy.depositFailed
+          : copy.withdrawFailed
+        : copy.confirm;
 
   // Over-spend guard: deposit can't exceed the wallet's available balance;
   // withdraw can't exceed the position. Skipped while the relevant figure is
@@ -230,24 +233,24 @@ export function EarnModal({ onClose }: EarnModalProps) {
   async function handleSubmit() {
     setFormError('');
     if (smartUnsupported) {
-      setFormError('Earn is not yet supported for smart (passkey) wallets');
+      setFormError(copy.smartNotSupported);
       return;
     }
     if (!provider || !opportunityId) {
-      setFormError('Select a vault or pool');
+      setFormError(copy.selectOpportunity);
       return;
     }
     const parsed = parseFloat(amount);
     if (!amount || isNaN(parsed) || parsed <= 0) {
-      setFormError('Enter a valid amount');
+      setFormError(copy.invalidAmount);
       return;
     }
     if (tab === 'deposit' && walletAvailable != null && parsed > parseFloat(walletAvailable)) {
-      setFormError('Amount exceeds your wallet balance');
+      setFormError(copy.exceedsWallet);
       return;
     }
     if (tab === 'withdraw' && position && parsed > parseFloat(position.withdrawable)) {
-      setFormError('Amount exceeds your position');
+      setFormError(copy.exceedsPosition);
       return;
     }
     setStep('tx');
@@ -258,7 +261,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
       // Sponsorship is derived automatically from the app config now - no flag.
       const tl = await setTrustline({ code: assetCode, issuer: selectedOpportunity.asset.issuer });
       if (tl.status === 'error') {
-        setFormError(`Trustline for ${assetCode} failed: ${tl.details ?? 'unknown error'}`);
+        setFormError(copy.trustlineFailed(assetCode, tl.details ?? copy.unknownError));
         setStep('form');
         return;
       }
@@ -319,7 +322,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
     }
   }
 
-  const title = step === 'form' ? 'Earn' : txTitle;
+  const title = step === 'form' ? copy.title : txTitle;
 
   return (
     <div className="pollar-overlay" style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
@@ -332,7 +335,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
         <div className="pollar-modal-header">
           <div className="pollar-send-header-left">
             {showBack && (
-              <button type="button" className="pollar-modal-close" onClick={handleBack} aria-label="Back">
+              <button type="button" className="pollar-modal-close" onClick={handleBack} aria-label={copy.back}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                   <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -347,7 +350,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
                 className="pollar-modal-close"
                 onClick={() => void handleRefresh()}
                 disabled={refreshing || providersLoading}
-                aria-label="Refresh"
+                aria-label={copy.refresh}
               >
                 <svg
                   className={refreshing ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
@@ -368,7 +371,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
               </button>
             )}
             {!isInProgress && (
-              <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
+              <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                   <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
@@ -377,13 +380,11 @@ export function EarnModal({ onClose }: EarnModalProps) {
           </div>
         </div>
 
-        {step === 'form' && earnUnavailable && <div className="pollar-modal-error">Earn is not available for this app.</div>}
+        {step === 'form' && earnUnavailable && <div className="pollar-modal-error">{copy.unavailable}</div>}
 
         {step === 'form' && !earnUnavailable && (
           <>
-            {smartUnsupported && (
-              <div className="pollar-modal-error">Earn is not yet available for smart (passkey) wallets.</div>
-            )}
+            {smartUnsupported && <div className="pollar-modal-error">{copy.smartUnavailable}</div>}
 
             {/* Deposit / Withdraw tabs */}
             <div className="pollar-tabs">
@@ -396,7 +397,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
                   setFormError('');
                 }}
               >
-                Deposit
+                {copy.deposit}
               </button>
               <button
                 type="button"
@@ -407,14 +408,14 @@ export function EarnModal({ onClose }: EarnModalProps) {
                   setFormError('');
                 }}
               >
-                Withdraw
+                {copy.withdraw}
               </button>
             </div>
 
             {/* Provider */}
             {providers && providers.length > 1 && (
               <div className="pollar-send-field">
-                <label className="pollar-send-label">Provider</label>
+                <label className="pollar-send-label">{copy.provider}</label>
                 <select
                   className="pollar-input pollar-send-select"
                   value={provider ?? ''}
@@ -431,11 +432,11 @@ export function EarnModal({ onClose }: EarnModalProps) {
 
             {/* Opportunity */}
             <div className="pollar-send-field">
-              <label className="pollar-send-label">{provider === 'defindex' ? 'Vault' : 'Pool'}</label>
+              <label className="pollar-send-label">{provider === 'defindex' ? copy.vault : copy.pool}</label>
               {loadingOpps || providersLoading ? (
                 <div className="pollar-input pollar-select-loading">
                   <span className="pollar-spinner pollar-spinner-sm" />
-                  <span>Loading options…</span>
+                  <span>{copy.loadingOptions}</span>
                 </div>
               ) : (
                 <select
@@ -445,7 +446,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
                   onChange={(e) => setOpportunityId(e.target.value)}
                 >
                   {opportunities.length === 0 ? (
-                    <option value="">None available</option>
+                    <option value="">{copy.noneAvailable}</option>
                   ) : (
                     opportunities.map((o) => (
                       <option key={o.id} value={o.id}>
@@ -462,14 +463,14 @@ export function EarnModal({ onClose }: EarnModalProps) {
               <div className="pollar-swap-quote">
                 {tab === 'deposit' && (
                   <div className="pollar-swap-quote-row">
-                    <span className="pollar-send-hint">In your wallet</span>
+                    <span className="pollar-send-hint">{copy.inYourWallet}</span>
                     <span>
                       {walletAvailable != null ? formatAmount(walletAvailable) : '…'} {assetCode}
                     </span>
                   </div>
                 )}
                 <div className="pollar-swap-quote-row">
-                  <span className="pollar-send-hint">Your position</span>
+                  <span className="pollar-send-hint">{copy.yourPosition}</span>
                   <span>
                     {position ? formatAmount(position.balance) : '…'} {assetCode}
                   </span>
@@ -484,7 +485,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
             {/* Amount */}
             <AmountField
               id="pollar-earn-amount"
-              label={tab === 'deposit' ? 'Amount' : 'Withdraw amount'}
+              label={tab === 'deposit' ? copy.amount : copy.withdrawAmount}
               value={amount}
               onChange={setAmount}
               unit={amountUnitLabel}
@@ -494,15 +495,12 @@ export function EarnModal({ onClose }: EarnModalProps) {
             {formError && <div className="pollar-modal-error">{formError}</div>}
 
             {depositNeedsTrustline && selectedOpportunity && (
-              <div className="pollar-swap-trustline-notice">
-                To deposit {assetCode} your wallet needs a trustline. This will create it first (~0.5 XLM reserve, refundable if
-                you later remove it), then deposit — two signatures.
-              </div>
+              <div className="pollar-swap-trustline-notice">{copy.trustlineNotice(assetCode)}</div>
             )}
 
             <div className="pollar-modal-actions">
               <button className="pollar-btn-primary" onClick={() => void handleSubmit()} disabled={!canSubmit}>
-                {tab === 'deposit' ? (depositNeedsTrustline ? 'Enable trustline & deposit' : 'Deposit') : 'Withdraw'}
+                {tab === 'deposit' ? (depositNeedsTrustline ? copy.trustlineAndDeposit : copy.deposit) : copy.withdraw}
               </button>
             </div>
           </>

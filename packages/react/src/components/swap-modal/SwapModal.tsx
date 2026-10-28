@@ -3,10 +3,12 @@
 import { SolanaSwapQuote, SolanaSwapVenue, SwapProvider, SwapQuote, SwapQuoteParams, SwapToken, SwapVenue } from '@pollar/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import '../shared.css';
 import '../transaction-modal/TransactionModal.css';
 import '../send-modal/SendModal.css';
 import './SwapModal.css';
+import { SWAP_COPY } from './swap-copy';
 import { SwapAssetOption, SwapChain, SwapModalTemplate, SwapQuoteView } from './SwapModalTemplate';
 import { modalChrome } from '../modal-theme';
 
@@ -71,6 +73,8 @@ export function SwapModal({ onClose }: SwapModalProps) {
     styles,
   } = usePollar();
 
+  const language = useModalLanguage();
+  const copy = SWAP_COPY[language];
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;
   const [chain, setChain] = useState<SwapChain>('STELLAR');
   // A smart (C-address) wallet is a Stellar account: it says nothing about Solana.
@@ -275,8 +279,8 @@ export function SwapModal({ onClose }: SwapModalProps) {
   function addCustomToken(code: string, issuer: string): string | null {
     const c = code.trim().toUpperCase();
     const i = issuer.trim();
-    if (c.length < 1 || c.length > 12) return 'Code must be 1-12 characters';
-    if (i.length !== 56 || !i.startsWith('G')) return 'Issuer must be a Stellar address (G..., 56 chars)';
+    if (c.length < 1 || c.length > 12) return copy.codeLength;
+    if (i.length !== 56 || !i.startsWith('G')) return copy.issuerFormat;
     const opt: SwapAssetOption = { ref: catalogRef(c, i), code: c, issuer: i, enabledInApp: false };
     setCustomTokens((prev) => (prev.some((o) => optKey(o) === optKey(opt)) ? prev : [...prev, opt]));
     setSelectedBuy(opt);
@@ -360,7 +364,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
       try {
         if (chain === 'SOLANA') {
           const units = selectedSell.decimals !== undefined ? toBaseUnits(amount, selectedSell.decimals) : null;
-          if (!units || !selectedSell.issuer || !selectedBuy.issuer) throw new Error('Enter a valid amount');
+          if (!units || !selectedSell.issuer || !selectedBuy.issuer) throw new Error(copy.invalidAmount);
           const qs = await getSolanaSwapQuote({
             inputMint: selectedSell.issuer,
             outputMint: selectedBuy.issuer,
@@ -370,7 +374,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
           });
           if (!cancelled) setSolanaQuotes(qs);
         } else {
-          if (!selectedSell.ref || !selectedBuy.ref) throw new Error('Select both assets');
+          if (!selectedSell.ref || !selectedBuy.ref) throw new Error(copy.selectBoth);
           const qs = await getSwapQuote({
             sellAsset: selectedSell.ref,
             buyAsset: selectedBuy.ref,
@@ -384,7 +388,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
         if (!cancelled) {
           setQuotes([]);
           setSolanaQuotes([]);
-          setQuoteError(e instanceof Error ? e.message : 'Failed to fetch quote');
+          setQuoteError(e instanceof Error ? e.message : copy.quoteFailed);
         }
       } finally {
         if (!cancelled) setQuoteLoading(false);
@@ -405,6 +409,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
     provider,
     getSwapQuote,
     getSolanaSwapQuote,
+    copy,
   ]);
 
   const hash = transaction.step === 'success' ? transaction.hash : null;
@@ -434,35 +439,35 @@ export function SwapModal({ onClose }: SwapModalProps) {
   const showBack = step === 'tx' && (transaction.step === 'error' || transaction.step === 'success') && !isInProgress;
 
   const txTitle = isInProgress
-    ? 'Swapping…'
+    ? copy.swapping
     : transaction.step === 'success'
-      ? 'Swapped!'
+      ? copy.swapped
       : transaction.step === 'error'
-        ? 'Swap failed'
-        : 'Confirm Swap';
+        ? copy.swapFailed
+        : copy.confirmSwap;
 
   async function handleSwap() {
     setFormError('');
     if (smartUnsupported) {
-      setFormError('Swaps are not yet supported for smart (passkey) wallets');
+      setFormError(copy.smartNotSupported);
       return;
     }
     if (!selectedSell || !selectedBuy) {
-      setFormError('Select both assets');
+      setFormError(copy.selectBoth);
       return;
     }
     const parsed = parseFloat(amount);
     if (!amount || isNaN(parsed) || parsed <= 0) {
-      setFormError('Enter a valid amount');
+      setFormError(copy.invalidAmount);
       return;
     }
     if (selectedSell.available !== undefined && parsed > parseFloat(selectedSell.available)) {
-      setFormError('Insufficient balance');
+      setFormError(copy.insufficientBalance);
       return;
     }
     if (chain === 'SOLANA') {
       if (!solanaQuote) {
-        setFormError('No route available for this pair');
+        setFormError(copy.noRouteForPair);
         return;
       }
       setStep('tx');
@@ -470,7 +475,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
       return;
     }
     if (!quote) {
-      setFormError('No route available for this pair');
+      setFormError(copy.noRouteForPair);
       return;
     }
     setStep('tx');
@@ -548,6 +553,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
         walletType={walletType}
         showBack={showBack}
         isInProgress={isInProgress}
+        language={language}
         onClose={onClose}
         onBack={handleBack}
         onRefresh={handleRefresh}

@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet, TouchableWithoutFeedback } from 'react-native';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { TxHistoryModalTemplate } from './TxHistoryModalUI';
 
 export interface TxHistoryModalProps {
@@ -10,6 +11,7 @@ export interface TxHistoryModalProps {
 export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
   const { styles, txHistory, getClient } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const language = useModalLanguage();
 
   useEffect(() => {
     getClient().fetchTxHistory();
@@ -26,6 +28,7 @@ export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
               txHistory={txHistory}
               onClose={onClose}
               onRefresh={() => getClient().fetchTxHistory()}
+              language={language}
             />
           </View>
         </TouchableWithoutFeedback>
