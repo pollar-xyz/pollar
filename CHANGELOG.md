@@ -4,8 +4,9 @@
 
 > `@pollar/core`, `@pollar/react` and `@pollar/react-native`. Additive on top of
 > 0.12.0: Soroban auth entries signed by the Pollar wallet for x402 and other
-> sponsored-fee flows, co-signed wallets signing those entries, hash memos, and
-> fixes. Nothing an app already calls changes. The Stellar Wallets Kit and
+> sponsored-fee flows, co-signed wallets signing those entries, hash memos,
+> every modal in English, Spanish and Portuguese, conditional KYC form fields,
+> and fixes. Nothing an app already calls changes. The Stellar Wallets Kit and
 > Solana Wallet Standard adapters stay at `0.12.0`; their `^0.12.0` core range
 > accepts 0.12.1.
 
@@ -45,6 +46,40 @@
   `Date` of the moment it was stored; learning from it pinned every proof's
   `iat` to that moment, and each later request failed with
   `SDK_AUTH_DPOP_INVALID` until the page was reloaded.
+- **Every modal in English, Spanish and Portuguese.** The language is, in
+  order: the one the app pins in the dashboard (Branding > Language, returned
+  as `styles.language` by `/applications/config`), the `language` prop of
+  `<RampWidget>`, `<KycModal>`, `<RequirementFormModal>`, `<RegistryCheckModal>`
+  and `<ProviderRegistrationModal>` (every exported template takes one too), the
+  client's `locale` (`new PollarClient({ apiKey, locale: 'pt-BR' })`,
+  any BCP 47 tag), then the browser or device language; English when none is
+  one the modals have. The provider resolves it once and every modal, shared
+  block (footer, copy button, amount field, pickers) and exported template
+  under it follows it; a template rendered outside a provider uses the device
+  language. React Native's `FeaturePanel`, `FeatureExample`, `AppShell` and
+  `AccountOnboarding` are translated too, and `AppShell`'s language toggle
+  cycles through the three.
+- `@pollar/core` exports `resolveLanguage`, `languageFromTag`, `localizedText`
+  and the `PollarLanguage` type, and `client.getLocale()`. The functions that
+  write user-facing text take a trailing optional language (`'en'` by default,
+  so their output is unchanged without it): `transactionErrorMessage`,
+  `cosignRefusalMessage`, `appUnavailableMessage`, `resolveAuthError`, every
+  ramp text (`rampLegTitle`, `rampStepTitle`, `rampStepStatusText`,
+  `rampNextApproval`, `rampFieldError`, `rampResolutionText`,
+  `rampOrderResolutionText`, `rampRequirementCopy`, `rampTrustlineErrorText`,
+  `rampNoRouteText`, `describeRampAction`, `rampWalletStep`, `rampLegNote`), and
+  `rampRailLabel` takes `pt`. `authErrorMessage(code, language)` gives the text
+  of a backend auth error code.
+- **KYC forms in Portuguese, with conditional fields.** A form field's label,
+  help and option labels may carry `pt`; without it the form shows the Spanish
+  one, then the English one. A field with `showIf: { key, in }` is asked only
+  while the earlier select, multiselect or checkbox it names answers one of those
+  values (`'true'` or `'false'` for a checkbox): `<RequirementFormModal>` shows
+  and hides it as the user answers, and neither checks nor sends it while
+  hidden.
+- **The card modal copies the card details.** Next to the card number and the
+  CVC while the details are shown, and next to the expiry date always; the
+  number is copied without spaces and the expiry as `MM/YY`.
 - `@pollar/react` and `@pollar/react-native` require `@pollar/core@^0.12.1`.
 
 ## `@pollar/migrate` 0.12.0

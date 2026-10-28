@@ -8,6 +8,16 @@ calls. Upgrade `@pollar/core`, `@pollar/react` and `@pollar/react-native` togeth
 `@pollar/react-native@0.12.1` require `@pollar/core@^0.12.1`. The adapters stay
 at `0.12.0`.
 
+The modals now follow the language set in the dashboard (Branding > Language)
+or the browser's. To keep them in the language of your app, pass it as
+`locale` when you create the client (`new PollarClient({ apiKey, locale })`); a
+language pinned in the dashboard wins over it.
+
+React Native's `AppShell` and `AccountOnboarding` take `'pt'` in
+`settings.language`, and `AppShell`'s `label(key, language)` receives it: a
+`label` typed as `(key, language: 'en' | 'es') => string` no longer type-checks.
+Type the parameter as `PollarLanguage` (from `@pollar/core`).
+
 ## 0.11.5 -> 0.12.0
 
 Use `@pollar/core`, `@pollar/react` and `@pollar/react-native` at matching
