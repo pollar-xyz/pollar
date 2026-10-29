@@ -162,6 +162,7 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         closesIn={closesIn}
         nextStep={awaitingNext ? nextStep : null}
         language={language}
+        network={network}
         explorerUrl={lastResolved?.submit?.hash ? explorerTxUrl(lastResolved.network, lastResolved.submit.hash, network) : null}
         onSelect={(r) => setSelectedId(r.id)}
         onApprove={(r) => void run('approving', r, approve)}

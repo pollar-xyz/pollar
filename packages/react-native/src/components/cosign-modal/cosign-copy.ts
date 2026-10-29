@@ -28,7 +28,6 @@ export const COSIGN_COPY: Record<
     approving: string;
     genericError: string;
     transaction: string;
-    rows: Record<'destination' | 'amount' | 'asset' | 'network', string>;
     operations: Record<string, string>;
   }
 > = {
@@ -58,7 +57,6 @@ export const COSIGN_COPY: Record<
     approving: 'Approving...',
     genericError: 'Something went wrong. Please try again.',
     transaction: 'Transaction',
-    rows: { destination: 'Destination', amount: 'Amount', asset: 'Asset', network: 'Network' },
     operations: {
       payment: 'Send',
       path_payment_strict_send: 'Swap',
@@ -67,6 +65,9 @@ export const COSIGN_COPY: Record<
       invoke_contract: 'Contract call',
       soroban_auth: 'Authorize a contract call',
       manage_data: 'Manage data',
+      transfer: 'Send',
+      ramp_payment: 'Ramp payment',
+      cctp_burn: 'Move USDC',
     },
   },
   es: {
@@ -95,7 +96,6 @@ export const COSIGN_COPY: Record<
     approving: 'Aprobando...',
     genericError: 'Algo salió mal. Intenta de nuevo.',
     transaction: 'Transacción',
-    rows: { destination: 'Destino', amount: 'Monto', asset: 'Activo', network: 'Red' },
     operations: {
       payment: 'Enviar',
       path_payment_strict_send: 'Intercambiar',
@@ -104,6 +104,9 @@ export const COSIGN_COPY: Record<
       invoke_contract: 'Llamada a contrato',
       soroban_auth: 'Autorizar una llamada a contrato',
       manage_data: 'Gestionar datos',
+      transfer: 'Enviar',
+      ramp_payment: 'Pago de rampa',
+      cctp_burn: 'Mover USDC',
     },
   },
   pt: {
@@ -132,7 +135,6 @@ export const COSIGN_COPY: Record<
     approving: 'Aprovando...',
     genericError: 'Algo deu errado. Tente novamente.',
     transaction: 'Transação',
-    rows: { destination: 'Destino', amount: 'Valor', asset: 'Ativo', network: 'Rede' },
     operations: {
       payment: 'Enviar',
       path_payment_strict_send: 'Trocar',
@@ -141,6 +143,9 @@ export const COSIGN_COPY: Record<
       invoke_contract: 'Chamada de contrato',
       soroban_auth: 'Autorizar uma chamada de contrato',
       manage_data: 'Gerenciar dados',
+      transfer: 'Enviar',
+      ramp_payment: 'Pagamento de rampa',
+      cctp_burn: 'Mover USDC',
     },
   },
 };

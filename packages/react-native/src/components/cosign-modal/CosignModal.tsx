@@ -25,7 +25,7 @@ interface CosignModalProps {
  * against Turnkey before enabling Approve.
  */
 export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
-  const { getClient, styles, cosign, copyText } = usePollar();
+  const { getClient, styles, cosign, copyText, network } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const { pending, lastResolved } = cosign;
   const language = useModalLanguage();
@@ -173,6 +173,8 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         closesIn={closesIn}
         nextStep={awaitingNext ? nextStep : null}
         language={language}
+        network={network}
+        copyText={copyText}
         copied={copied}
         onCopyHash={copyHash}
         onSelect={(r) => setSelectedId(r.id)}

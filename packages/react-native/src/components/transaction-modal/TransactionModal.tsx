@@ -9,7 +9,7 @@ interface TransactionModalProps {
 }
 
 export function TransactionModal({ onClose }: TransactionModalProps) {
-  const { getClient, styles, transaction, network, walletType } = usePollar();
+  const { getClient, styles, transaction, network, walletType, copyText } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const language = useModalLanguage();
 
@@ -64,6 +64,7 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
               onSignAndSend={handleSignAndSend}
               onToggleXdr={() => setShowXdr((v) => !v)}
               onCopyHash={handleCopyHash}
+              copyText={copyText}
               onRetry={handleRetry}
               language={language}
             />

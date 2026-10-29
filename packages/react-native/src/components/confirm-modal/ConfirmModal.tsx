@@ -7,6 +7,9 @@ import { CONFIRM_COPY } from './confirm-copy';
 
 type Copy = (typeof CONFIRM_COPY)['en'];
 import { PollarModalFooter, PollarOverlay } from '../commons';
+import { TxReview } from '../tx-review/TxReview';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
+import { reviewFromBuild, reviewFromRequest } from '../tx-review/tx-review-model';
 
 interface ConfirmModalProps {
   confirmation: PendingConfirmation;
@@ -17,33 +20,30 @@ function labelOf(confirmation: PendingConfirmation, copy: Copy): string {
   return copy.operations[op] ?? (op ? op.replace(/_/g, ' ') : copy.transaction);
 }
 
-function crop(value: string): string {
-  return value.length > 16 ? `${value.slice(0, 6)}...${value.slice(-6)}` : value;
-}
-
-function detailRows(confirmation: PendingConfirmation, copy: Copy): Array<[string, string]> {
-  const details = confirmation.details ?? {};
-  const rows: Array<[string, string]> = [];
-  const push = (label: string, value: unknown) => {
-    if (value === undefined || value === null || value === '') return;
-    const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
-    rows.push([label, /^[GC][A-Z2-7]{55}$/.test(text) ? crop(text) : text]);
-  };
-  push(copy.rows.destination, details.destination);
-  push(copy.rows.amount, details.amount);
-  push(copy.rows.asset, details.asset ?? details.assetCode ?? details.mint);
-  push(copy.rows.network, confirmation.network);
-  return rows;
-}
-
 /**
  * The prompt a signing call waits on under `confirmation: 'prompt'`, the same
  * for every custody: the wallet signs only after the user confirms here.
  * Dismissing it declines.
  */
 export function ConfirmModal({ confirmation }: ConfirmModalProps) {
-  const { getClient, styles } = usePollar();
-  const copy = CONFIRM_COPY[useModalLanguage()];
+  const { getClient, styles, network, copyText } = usePollar();
+  const language = useModalLanguage();
+  const copy = CONFIRM_COPY[language];
+  const reviewCopy = TX_REVIEW_COPY[language];
+  const raw = confirmation.unsignedXdr ?? confirmation.authEntryXdr;
+  const review = confirmation.buildData
+    ? reviewFromBuild(confirmation.buildData, reviewCopy, labelOf(confirmation, copy))
+    : reviewFromRequest(
+        {
+          chain: confirmation.network,
+          network,
+          operation: confirmation.operation,
+          details: confirmation.details,
+          raw,
+          fallbackTitle: labelOf(confirmation, copy),
+        },
+        reviewCopy,
+      );
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const isDark = theme === 'dark';
   const colors = {
@@ -68,20 +68,15 @@ export function ConfirmModal({ confirmation }: ConfirmModalProps) {
       <View style={[localStyles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
         <View style={localStyles.header}>
           <Text style={[localStyles.title, { color: colors.text }]}>{copy.title}</Text>
-          <TouchableOpacity onPress={confirmation.reject} accessibilityLabel="Close">
+          <TouchableOpacity onPress={confirmation.reject} accessibilityLabel={copy.close}>
             <Text style={{ color: colors.muted, fontSize: 18 }}>x</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={[localStyles.detail, { borderColor: colors.border }]}>
-          <Text style={[localStyles.detailTitle, { color: colors.text }]}>{labelOf(confirmation, copy)}</Text>
+        <View style={localStyles.detail}>
+          <Text style={[localStyles.detailTitle, { color: colors.text }]}>{review.title}</Text>
           <Text style={{ color: colors.muted }}>{copy.intro}</Text>
-          {detailRows(confirmation, copy).map(([k, v]) => (
-            <View key={k} style={localStyles.row}>
-              <Text style={{ color: colors.muted }}>{k}</Text>
-              <Text style={{ color: colors.text, flexShrink: 1, textAlign: 'right' }}>{v}</Text>
-            </View>
-          ))}
+          <TxReview data={review} theme={theme} accentColor={accentColor} copyText={copyText} language={language} />
 
           <View style={localStyles.actions}>
             <TouchableOpacity onPress={confirmation.reject} style={[localStyles.btn, { borderColor: colors.border }]}>
@@ -105,9 +100,8 @@ const localStyles = StyleSheet.create({
   card: { width: '100%', maxWidth: 420, borderRadius: 16, borderWidth: 1, padding: 16 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   title: { fontSize: 17, fontWeight: '600' },
-  detail: { borderWidth: 1, borderRadius: 12, padding: 14, gap: 8 },
+  detail: { gap: 8 },
   detailTitle: { fontSize: 16, fontWeight: '600' },
-  row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 4 },
   btn: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 10, borderWidth: 1 },
 });

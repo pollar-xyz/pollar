@@ -1,8 +1,11 @@
 import { useInheritedLanguage } from '../../language-context';
-import { type CosignRequest, type CosignVerification, fromBaseUnits, type PollarLanguage } from '@pollar/core';
+import { type CosignRequest, type CosignVerification, type PollarLanguage, type StellarNetwork } from '@pollar/core';
 import React, { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { PollarModalFooter } from '../commons';
+import { TxReview } from '../tx-review/TxReview';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
+import { reviewFromRequest } from '../tx-review/tx-review-model';
 import { COSIGN_COPY } from './cosign-copy';
 
 type CosignCopy = (typeof COSIGN_COPY)[PollarLanguage];
@@ -24,6 +27,10 @@ export interface CosignModalTemplateProps {
   copied?: boolean;
   /** Language of the modal's text; the device's when not given. */
   language?: PollarLanguage | undefined;
+  /** The app's network, shown next to the chain in the details. */
+  network?: StellarNetwork | undefined;
+  /** Puts a value on the clipboard, for the copy buttons in the details. */
+  copyText?: ((text: string) => Promise<void>) | undefined;
   onCopyHash: (hash: string) => void;
   onSelect: (request: CosignRequest) => void;
   onApprove: (request: CosignRequest) => void;
@@ -48,34 +55,6 @@ function expiresIn(request: CosignRequest, copy: CosignCopy): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-/** A base-unit amount with the `decimals` and `symbol` written next to it, as the user reads it; null when either is missing. */
-function readableAmount(details: Record<string, unknown>): { amount: string; symbol: string } | null {
-  const { amount, decimals, symbol } = details;
-  if (typeof amount !== 'string' || typeof decimals !== 'number' || typeof symbol !== 'string') return null;
-  try {
-    return { amount: fromBaseUnits(amount, decimals), symbol };
-  } catch {
-    return null;
-  }
-}
-
-function detailRows(request: CosignRequest, copy: CosignCopy): Array<[string, string]> {
-  const details = (request.details ?? {}) as Record<string, unknown>;
-  const rows: Array<[string, string]> = [];
-  const push = (label: string, value: unknown) => {
-    if (value === undefined || value === null || value === '') return;
-    const text = String(value);
-    rows.push([label, /^[GC][A-Z2-7]{55}$/.test(text) ? crop(text) : text]);
-  };
-  push(copy.rows.destination, details.destination);
-  const readable = readableAmount(details);
-  push(copy.rows.amount, readable ? `${readable.amount} ${readable.symbol}` : details.amount);
-  push(copy.rows.asset, details.asset ?? details.assetCode ?? readable?.symbol);
-  push(copy.rows.network, request.network);
-  rows.push([copy.expiresIn, expiresIn(request, copy)]);
-  return rows;
-}
-
 export function CosignModalTemplate({
   theme,
   accentColor,
@@ -89,6 +68,8 @@ export function CosignModalTemplate({
   nextStep = null,
   copied = false,
   language: languageProp,
+  network,
+  copyText,
   onCopyHash,
   onSelect,
   onApprove,
@@ -111,6 +92,22 @@ export function CosignModalTemplate({
   // Keyed by request id, so the explanation folds back when another request is shown.
   const [verifiedOpenFor, setVerifiedOpenFor] = useState<string | null>(null);
   const verifiedOpen = !!current && verifiedOpenFor === current.id;
+  const reviewOf = (request: CosignRequest) =>
+    reviewFromRequest(
+      {
+        chain: request.network,
+        network,
+        operation: request.operation,
+        summary: request.summary,
+        details: request.details,
+        signWith: request.account ?? request.signWith,
+        raw: request.unsignedPayload,
+        fallbackTitle: labelOf(request, copy),
+        extraRows: [{ label: copy.expiresIn, value: expiresIn(request, copy) }],
+      },
+      TX_REVIEW_COPY[language],
+    );
+  const review = current ? reviewOf(current) : null;
 
   return (
     <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
@@ -157,15 +154,15 @@ export function CosignModalTemplate({
               onPress={() => onSelect(r)}
               style={[styles.item, { borderColor: current?.id === r.id ? accentColor : colors.border }]}
             >
-              <Text style={{ color: colors.text }}>{labelOf(r, copy)}</Text>
+              <Text style={{ color: colors.text, flexShrink: 1 }}>{reviewOf(r).title}</Text>
               <Text style={{ color: colors.muted }}>{expiresIn(r, copy)}</Text>
             </TouchableOpacity>
           ))}
 
-        {current && (
-          <View style={[styles.detail, { borderColor: colors.border }]}>
+        {current && review && (
+          <View style={[styles.detail, pending.length > 1 && [styles.detailGrouped, { borderColor: colors.border }]]}>
             <View style={styles.detailHead}>
-              <Text style={[styles.detailTitle, { color: colors.text, flexShrink: 1 }]}>{labelOf(current, copy)}</Text>
+              <Text style={[styles.detailTitle, { color: colors.text, flexShrink: 1 }]}>{review.title}</Text>
               {!verification && (
                 <View style={[styles.chip, { borderColor: colors.border }]}>
                   <ActivityIndicator size="small" color={accentColor} />
@@ -186,13 +183,14 @@ export function CosignModalTemplate({
                 </TouchableOpacity>
               )}
             </View>
-            {current.summary ? <Text style={{ color: colors.muted }}>{current.summary}</Text> : null}
-            {detailRows(current, copy).map(([k, v]) => (
-              <View key={k} style={styles.row}>
-                <Text style={{ color: colors.muted }}>{k}</Text>
-                <Text style={{ color: colors.text, flexShrink: 1, textAlign: 'right' }}>{v}</Text>
-              </View>
-            ))}
+            <TxReview
+              key={current.id}
+              data={review}
+              theme={theme}
+              accentColor={accentColor}
+              copyText={copyText}
+              language={language}
+            />
 
             {verification?.ok && verifiedOpen && (
               <View style={[styles.verify, { borderColor: colors.okText }]}>
@@ -254,7 +252,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 6,
   },
-  detail: { borderWidth: 1, borderRadius: 12, padding: 14, gap: 8 },
+  detail: { gap: 8 },
+  detailGrouped: { borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 6 },
   detailHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   detailTitle: { fontSize: 16, fontWeight: '600' },
   chip: {
@@ -276,7 +275,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1.5,
     transform: [{ rotate: '45deg' }],
   },
-  row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   verify: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, padding: 10 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 4 },
   btn: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 10, borderWidth: 1 },

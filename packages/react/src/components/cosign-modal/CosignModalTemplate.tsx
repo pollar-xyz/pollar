@@ -1,10 +1,13 @@
 'use client';
 
 import { useInheritedLanguage } from '../../language-context';
-import { type CosignRequest, type CosignVerification, fromBaseUnits, type PollarLanguage } from '@pollar/core';
+import { type CosignRequest, type CosignVerification, type PollarLanguage, type StellarNetwork } from '@pollar/core';
 import { useState } from 'react';
 import { CopyButton, cropAddress, PollarModalFooter } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
+import { TxReview } from '../tx-review/TxReview';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
+import { reviewFromRequest } from '../tx-review/tx-review-model';
 import { COSIGN_COPY } from './cosign-copy';
 
 type CosignCopy = (typeof COSIGN_COPY)[PollarLanguage];
@@ -34,6 +37,8 @@ export interface CosignModalTemplateProps {
   nextStep?: string | null;
   /** Language of the modal's text; the device's when not given. */
   language?: PollarLanguage | undefined;
+  /** The app's network, shown next to the chain in the details. */
+  network?: StellarNetwork | undefined;
   onSelect: (request: CosignRequest) => void;
   onApprove: (request: CosignRequest) => void;
   onReject: (request: CosignRequest) => void;
@@ -51,35 +56,6 @@ function expiresIn(request: CosignRequest, copy: CosignCopy): string {
   const h = Math.floor(ms / 3_600_000);
   const m = Math.floor((ms % 3_600_000) / 60_000);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
-
-/** A base-unit amount with the `decimals` and `symbol` written next to it, as the user reads it; null when either is missing. */
-function readableAmount(details: Record<string, unknown>): { amount: string; symbol: string } | null {
-  const { amount, decimals, symbol } = details;
-  if (typeof amount !== 'string' || typeof decimals !== 'number' || typeof symbol !== 'string') return null;
-  try {
-    return { amount: fromBaseUnits(amount, decimals), symbol };
-  } catch {
-    return null;
-  }
-}
-
-function detailRows(request: CosignRequest, copy: CosignCopy): Array<[string, string]> {
-  const details = (request.details ?? {}) as Record<string, unknown>;
-  const rows: Array<[string, string]> = [];
-  const push = (label: string, value: unknown) => {
-    if (value === undefined || value === null || value === '') return;
-    rows.push([
-      label,
-      typeof value === 'string' && value.length > 24 && /^[GC][A-Z2-7]{55}$/.test(value) ? cropAddress(value) : String(value),
-    ]);
-  };
-  push(copy.rows.destination, details.destination);
-  const readable = readableAmount(details);
-  push(copy.rows.amount, readable ? `${readable.amount} ${readable.symbol}` : details.amount);
-  push(copy.rows.asset, details.asset ?? details.assetCode ?? readable?.symbol);
-  push(copy.rows.network, request.network);
-  return rows;
 }
 
 function CloseIcon() {
@@ -114,6 +90,7 @@ export function CosignModalTemplate({
   closesIn = null,
   nextStep = null,
   language: languageProp,
+  network,
   onSelect,
   onApprove,
   onReject,
@@ -127,6 +104,22 @@ export function CosignModalTemplate({
   // Keyed by request id, so the explanation folds back when another request is shown.
   const [verifiedOpenFor, setVerifiedOpenFor] = useState<string | null>(null);
   const verifiedOpen = !!current && verifiedOpenFor === current.id;
+  const reviewOf = (request: CosignRequest) =>
+    reviewFromRequest(
+      {
+        chain: request.network,
+        network,
+        operation: request.operation,
+        summary: request.summary,
+        details: request.details,
+        signWith: request.account ?? request.signWith,
+        raw: request.unsignedPayload,
+        fallbackTitle: labelOf(request, copy),
+        extraRows: [{ label: copy.expiresIn, value: expiresIn(request, copy) }],
+      },
+      TX_REVIEW_COPY[language],
+    );
+  const review = current ? reviewOf(current) : null;
 
   return (
     <div
@@ -208,7 +201,7 @@ export function CosignModalTemplate({
                 className={`pollar-cosign-item${current?.id === r.id ? ' pollar-cosign-item-active' : ''}`}
                 onClick={() => onSelect(r)}
               >
-                <span>{labelOf(r, copy)}</span>
+                <span>{reviewOf(r).title}</span>
                 <span className="pollar-cosign-muted">{expiresIn(r, copy)}</span>
               </button>
             </li>
@@ -216,10 +209,10 @@ export function CosignModalTemplate({
         </ul>
       )}
 
-      {current && (
-        <div className="pollar-cosign-detail">
+      {current && review && (
+        <div className={`pollar-cosign-detail${pending.length > 1 ? ' pollar-cosign-detail-grouped' : ''}`}>
           <div className="pollar-cosign-detail-head">
-            <p className="pollar-cosign-detail-title">{labelOf(current, copy)}</p>
+            <p className="pollar-cosign-detail-title">{review.title}</p>
             {!verification && (
               <span className="pollar-cosign-chip">
                 <span className="pollar-spinner pollar-spinner-sm" aria-hidden />
@@ -238,19 +231,7 @@ export function CosignModalTemplate({
               </button>
             )}
           </div>
-          {current.summary && <p className="pollar-cosign-muted">{current.summary}</p>}
-          <dl className="pollar-cosign-rows">
-            {detailRows(current, copy).map(([k, v]) => (
-              <div key={k} className="pollar-cosign-row">
-                <dt>{k}</dt>
-                <dd>{v}</dd>
-              </div>
-            ))}
-            <div className="pollar-cosign-row">
-              <dt>{copy.expiresIn}</dt>
-              <dd>{expiresIn(current, copy)}</dd>
-            </div>
-          </dl>
+          <TxReview key={current.id} data={review} language={language} />
 
           {verification?.ok && verifiedOpen && (
             <div className="pollar-cosign-verify pollar-cosign-verify-ok">{copy.checkedAgainstTurnkey}</div>

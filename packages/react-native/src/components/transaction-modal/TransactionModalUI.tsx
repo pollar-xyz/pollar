@@ -1,42 +1,57 @@
 import { useInheritedLanguage } from '../../language-context';
 import { PollarLanguage, TransactionState, WalletId, WalletType } from '@pollar/core';
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Linking, Image } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image } from 'react-native';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR_MARK_ON_DARK, LOGO_POLLAR_MARK_ON_LIGHT } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter, PollarOverlay } from '../commons';
+import { TxReview } from '../tx-review/TxReview';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
+import { reviewFromBuild, type TxReviewData } from '../tx-review/tx-review-model';
 import { TRANSACTION_COPY } from './transaction-copy';
 
 export interface TransactionModalTemplateProps {
   theme: string;
   accentColor: string;
   transaction: TransactionState;
+  /** Whether the details (addresses, network, fee, raw transaction, hash) are unfolded. */
   showXdr: boolean;
+  /** Unused: the hash copies from the details. */
   copied: boolean;
   explorerUrl: string | null;
   walletType?: WalletId | null;
   onClose: () => void;
   onSignAndSend: () => void;
+  /** Folds and unfolds the details. */
   onToggleXdr: () => void;
+  /** Unused: the hash copies from the details. */
   onCopyHash: () => void;
+  /** Puts a value on the clipboard, for the copy buttons in the details. */
+  copyText?: ((text: string) => Promise<void>) | undefined;
   onRetry?: () => void;
   /** Language of the modal. Defaults to the user's device; the modal passes the resolved one. */
   language?: PollarLanguage | undefined;
 }
 
-const SENDING_STEPS = new Set<TransactionState['step']>(['signing', 'signed', 'submitting', 'signing-submitting', 'submitted']);
+const SENDING_STEPS = new Set<TransactionState['step']>([
+  'signing',
+  'signed',
+  'submitting',
+  'signing-submitting',
+  'submitted',
+  'awaiting_cosign',
+]);
 
 export function TransactionModalTemplate({
   theme,
   accentColor,
   transaction,
   showXdr,
-  copied,
   explorerUrl,
   walletType,
   onClose,
   onSignAndSend,
   onToggleXdr,
-  onCopyHash,
+  copyText,
   onRetry,
   language: languageProp,
 }: TransactionModalTemplateProps) {
@@ -49,7 +64,6 @@ export function TransactionModalTemplate({
     border: isDark ? '#374151' : '#e5e7eb',
     text: isDark ? '#ffffff' : '#111827',
     muted: isDark ? '#9ca3af' : '#6b7280',
-    inputBg: isDark ? '#374151' : '#f9fafb',
     errorBg: isDark ? '#2a1515' : '#fef2f2',
     errorText: isDark ? '#f87171' : '#dc2626',
   };
@@ -62,7 +76,28 @@ export function TransactionModalTemplate({
   const isSigning = SENDING_STEPS.has(transaction.step);
   const isSuccess = transaction.step === 'success';
   const isError = transaction.step === 'error';
-  const showDetails = buildData !== null && (isBuilt || isSigning || isSuccess);
+  const showDetails = isBuilt || isSigning || isSuccess;
+  const hashInfo = hash ? { value: hash, explorerUrl } : undefined;
+  // A compound flow can finish without the build it ran: the hash still has a place in the details.
+  const review: TxReviewData | null = buildData
+    ? reviewFromBuild(buildData, TX_REVIEW_COPY[language], copy.title, hashInfo)
+    : hashInfo
+      ? { title: copy.title, kind: 'other', rows: [], hash: hashInfo }
+      : null;
+  const reviewBlock = showDetails && review && (
+    <ScrollView style={styles.contentWrap} nestedScrollEnabled>
+      {buildData && <Text style={[styles.reviewTitle, { color: colors.text }]}>{review.title}</Text>}
+      <TxReview
+        data={review}
+        theme={theme}
+        accentColor={accentColor}
+        open={showXdr}
+        onToggle={onToggleXdr}
+        copyText={copyText}
+        language={language}
+      />
+    </ScrollView>
+  );
 
   return (
     <PollarOverlay onCancel={onClose}>
@@ -75,42 +110,7 @@ export function TransactionModalTemplate({
           <Text style={{ color: colors.muted, fontSize: 16 }}>✕</Text>
         </TouchableOpacity>
 
-        {showDetails && buildData && (
-          <ScrollView style={styles.contentWrap}>
-            <View style={styles.summaryBox}>
-              <Text style={[styles.summaryTitle, { color: colors.muted }]}>{copy.details}</Text>
-              {buildData.summary.lines.map((line, i) => (
-                <Text key={i} style={[styles.summaryLine, { color: colors.text }]}>
-                  • {line}
-                </Text>
-              ))}
-            </View>
-
-            <View style={styles.metaBox}>
-              <View style={styles.metaRow}>
-                <Text style={{ color: colors.muted }}>{copy.network}</Text>
-                <Text style={{ color: colors.text, fontWeight: '600' }}>{buildData.summary.network}</Text>
-              </View>
-              <View style={styles.metaRow}>
-                <Text style={{ color: colors.muted }}>{copy.fee}</Text>
-                <Text style={{ color: colors.text, fontWeight: '600' }}>{buildData.summary.fee}</Text>
-              </View>
-            </View>
-
-            <View style={styles.xdrBox}>
-              <TouchableOpacity onPress={onToggleXdr} style={styles.xdrToggleBtn}>
-                <Text style={{ color: colors.muted }}>
-                  {copy.rawXdr} {showXdr ? '▼' : '▶'}
-                </Text>
-              </TouchableOpacity>
-              {showXdr && (
-                <View style={[styles.xdrContentContainer, { backgroundColor: colors.inputBg }]}>
-                  <Text style={{ color: colors.text, fontSize: 12 }}>{buildData.unsignedXdr}</Text>
-                </View>
-              )}
-            </View>
-          </ScrollView>
-        )}
+        {!isSuccess && reviewBlock}
 
         {isError && errorDetails && (
           <View style={[styles.errorBox, { backgroundColor: colors.errorBg }]}>
@@ -143,7 +143,7 @@ export function TransactionModalTemplate({
               />
             </View>
 
-            {isSigning && (
+            {isSigning && transaction.step !== 'awaiting_cosign' && (
               <Text style={[styles.spinnerText, { color: colors.text }]}>
                 {walletType === WalletType.FREIGHTER
                   ? copy.waitingFreighter
@@ -161,36 +161,6 @@ export function TransactionModalTemplate({
           </View>
         )}
 
-        {isSuccess && hash && (
-          <View style={styles.resultBox}>
-            <Text style={[styles.resultLabel, { color: colors.muted }]}>{copy.txHash}</Text>
-            <Text style={[styles.resultHash, { color: colors.text }]} numberOfLines={1} ellipsizeMode="middle">
-              {hash}
-            </Text>
-            <View style={styles.resultActions}>
-              <TouchableOpacity style={[styles.resultBtn, { borderColor: colors.border }]} onPress={onCopyHash}>
-                <Text style={[styles.resultBtnText, { color: colors.text }]}>
-                  {copied ? `✅ ${copy.copied}` : `📋 ${copy.copyHash}`}
-                </Text>
-              </TouchableOpacity>
-              {explorerUrl && (
-                <TouchableOpacity
-                  style={[styles.resultBtn, { borderColor: colors.border }]}
-                  onPress={() => Linking.openURL(explorerUrl)}
-                >
-                  <Text style={[styles.resultBtnText, { color: colors.text }]}>🌐 {copy.viewOnExplorer}</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        )}
-
-        {isSuccess && (
-          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: accentColor }]} onPress={onClose}>
-            <Text style={styles.primaryBtnText}>{copy.done}</Text>
-          </TouchableOpacity>
-        )}
-
         <ModalStatusBanner
           message={copy.status[transaction.step] || ''}
           status={
@@ -203,6 +173,14 @@ export function TransactionModalTemplate({
                   : 'NONE'
           }
         />
+
+        {isSuccess && reviewBlock}
+
+        {isSuccess && (
+          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: accentColor }]} onPress={onClose}>
+            <Text style={styles.primaryBtnText}>{copy.done}</Text>
+          </TouchableOpacity>
+        )}
 
         <PollarModalFooter />
       </View>
@@ -245,40 +223,15 @@ const styles = StyleSheet.create({
     right: 16,
   },
   contentWrap: {
-    maxHeight: 200,
+    maxHeight: 360,
     marginBottom: 16,
   },
-  summaryBox: {
+  reviewTitle: {
+    fontSize: 16,
+    fontWeight: '600',
     marginBottom: 12,
   },
-  summaryTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  summaryLine: {
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  metaBox: {
-    marginVertical: 12,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  xdrBox: {
-    marginTop: 10,
-  },
-  xdrToggleBtn: {
-    paddingVertical: 8,
-  },
-  xdrContentContainer: {
-    padding: 10,
-    borderRadius: 6,
-    marginTop: 8,
-  },
+
   errorBox: {
     padding: 12,
     borderRadius: 8,
@@ -330,35 +283,5 @@ const styles = StyleSheet.create({
   },
   spinnerText: {
     fontSize: 16,
-  },
-  resultBox: {
-    alignItems: 'center',
-    marginTop: 12,
-    marginBottom: 16,
-  },
-  resultLabel: {
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  resultHash: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  resultActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  resultBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderRadius: 6,
-  },
-  resultBtnText: {
-    fontSize: 12,
-    fontWeight: '500',
   },
 });

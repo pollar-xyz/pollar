@@ -9,7 +9,6 @@ export const CONFIRM_COPY: Record<
     confirm: string;
     close: string;
     transaction: string;
-    rows: Record<'destination' | 'amount' | 'asset' | 'network', string>;
     operations: Record<string, string>;
   }
 > = {
@@ -20,7 +19,6 @@ export const CONFIRM_COPY: Record<
     confirm: 'Confirm',
     close: 'Close',
     transaction: 'Transaction',
-    rows: { destination: 'Destination', amount: 'Amount', asset: 'Asset', network: 'Network' },
     operations: {
       payment: 'Send',
       path_payment_strict_send: 'Swap',
@@ -38,7 +36,6 @@ export const CONFIRM_COPY: Record<
     confirm: 'Confirmar',
     close: 'Cerrar',
     transaction: 'Transacción',
-    rows: { destination: 'Destino', amount: 'Monto', asset: 'Activo', network: 'Red' },
     operations: {
       payment: 'Enviar',
       path_payment_strict_send: 'Intercambiar',
@@ -56,7 +53,6 @@ export const CONFIRM_COPY: Record<
     confirm: 'Confirmar',
     close: 'Fechar',
     transaction: 'Transação',
-    rows: { destination: 'Destino', amount: 'Valor', asset: 'Ativo', network: 'Rede' },
     operations: {
       payment: 'Enviar',
       path_payment_strict_send: 'Trocar',

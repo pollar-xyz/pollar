@@ -38,10 +38,15 @@ const reactNative = {
   ScrollView: passthrough,
   Text: passthrough,
   TouchableOpacity: (props) => React.createElement('button', { disabled: props.disabled }, props.children),
+  Pressable: (props) => React.createElement('button', { disabled: props.disabled }, props.children),
+  Image: () => null,
   ActivityIndicator: () => null,
   Modal: passthrough,
+  Linking: { openURL: () => Promise.resolve() },
+  Platform: { OS: 'ios', select: (options) => options.ios ?? options.default },
   StyleSheet: { create: (s) => s, absoluteFillObject: {}, hairlineWidth: 1 },
 };
+const reactNativeSvg = { __esModule: true, default: passthrough, Circle: () => null, Path: () => null, Rect: () => null };
 
 function loader(mocks) {
   return function load(file) {
@@ -160,6 +165,7 @@ async function mount(element) {
     const context = { getClient, styles: {}, cosign: client.getCosignState() };
     const load = loader({
       'react-native': reactNative,
+      'react-native-svg': reactNativeSvg,
       '../../context': { usePollar: () => context },
       './context': { usePollar: () => context },
       '../commons': { PollarOverlay: passthrough, PollarModalFooter: () => null },
@@ -224,6 +230,8 @@ async function mount(element) {
         const context = { getClient: () => client, styles: {}, cosign: client.getCosignState() };
         ({ CosignModal } = loader({
           'react-native': reactNative,
+          'react-native-svg': reactNativeSvg,
+          'react-native-svg': reactNativeSvg,
           '../../context': { usePollar: () => context },
           './context': { usePollar: () => context },
           '../commons': { PollarOverlay: passthrough, PollarModalFooter: () => null },

@@ -4,6 +4,9 @@ import { useInheritedLanguage } from '../../language-context';
 import { PollarLanguage, TransactionState, transactionErrorMessage, WalletId, WalletType } from '@pollar/core';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR_MARK_ON_DARK, LOGO_POLLAR_MARK_ON_LIGHT } from '../../constants';
 import { ModalStatusBanner } from '../commons';
+import { TxReview } from '../tx-review/TxReview';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
+import { reviewFromBuild, type TxReviewData } from '../tx-review/tx-review-model';
 import { TRANSACTION_COPY } from './transaction-copy';
 
 /** Step values that represent in-flight work (spinner / non-cancellable UI). */
@@ -14,6 +17,7 @@ const IN_FLIGHT_STEPS = new Set<TransactionState['step']>([
   'submitted',
   'signing-submitting',
   'building-signing-submitting',
+  'awaiting_cosign',
 ]);
 
 /** Step values that should show the transaction details panel. */
@@ -24,17 +28,22 @@ const SHOW_DETAILS_STEPS = new Set<TransactionState['step']>([
   'submitting',
   'submitted',
   'signing-submitting',
+  'awaiting_cosign',
   'success',
 ]);
 
 export interface TxStatusViewProps {
   transaction: TransactionState;
+  /** Whether the details (addresses, network, fee, raw transaction, hash) are unfolded. */
   showXdr: boolean;
+  /** Unused: the hash copies from the details. */
   copied: boolean;
   explorerUrl: string | null;
   walletType?: WalletId | null | undefined;
   onSignAndSend: () => void;
+  /** Folds and unfolds the details. */
   onToggleXdr: () => void;
+  /** Unused: the hash copies from the details. */
   onCopyHash: () => void;
   onRetry?: (() => void) | undefined;
   onDone: () => void;
@@ -45,12 +54,10 @@ export interface TxStatusViewProps {
 export function TxStatusView({
   transaction,
   showXdr,
-  copied,
   explorerUrl,
   walletType,
   onSignAndSend,
   onToggleXdr,
-  onCopyHash,
   onRetry,
   onDone,
   language: languageProp,
@@ -66,7 +73,15 @@ export function TxStatusView({
   const isInFlight = IN_FLIGHT_STEPS.has(transaction.step);
   const isSuccess = transaction.step === 'success';
   const isError = transaction.step === 'error';
-  const showDetails = buildData !== null && SHOW_DETAILS_STEPS.has(transaction.step);
+  const showDetails = SHOW_DETAILS_STEPS.has(transaction.step);
+  const reviewCopy = TX_REVIEW_COPY[language];
+  const hashInfo = hash ? { value: hash, explorerUrl } : undefined;
+  // A compound flow can finish without the build it ran: the hash still has a place in the details.
+  const review: TxReviewData | null = buildData
+    ? reviewFromBuild(buildData, reviewCopy, copy.title, hashInfo)
+    : hashInfo
+      ? { title: copy.title, kind: 'other', rows: [], hash: hashInfo }
+      : null;
 
   const walletImg =
     walletType === WalletType.FREIGHTER ? LOGO_FREIGHTER : walletType === WalletType.ALBEDO ? LOGO_ALBEDO : null;
@@ -79,49 +94,16 @@ export function TxStatusView({
     />
   );
   const showSpinner = isInFlight || isSuccess || isError;
+  const reviewBlock = showDetails && review && (
+    <div className="pollar-tx-review">
+      {buildData && <p className="pollar-tx-review-title">{review.title}</p>}
+      <TxReview data={review} open={showXdr} onToggle={onToggleXdr} language={language} />
+    </div>
+  );
 
   return (
     <>
-      {showDetails && buildData && (
-        <>
-          <div className="pollar-tx-summary">
-            <p className="pollar-tx-summary-title">{copy.details}</p>
-            <ul className="pollar-tx-summary-lines">
-              {buildData.summary.lines.map((line, i) => (
-                <li key={i} className="pollar-tx-summary-line">
-                  {line}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="pollar-tx-meta">
-            <div className="pollar-tx-meta-item">
-              <span className="pollar-tx-meta-label">{copy.network}</span>
-              <span className="pollar-tx-meta-value">{buildData.summary.network}</span>
-            </div>
-            <div className="pollar-tx-meta-item">
-              <span className="pollar-tx-meta-label">{copy.fee}</span>
-              <span className="pollar-tx-meta-value">{buildData.summary.fee}</span>
-            </div>
-          </div>
-          <div className="pollar-tx-xdr">
-            <button className="pollar-tx-xdr-toggle" onClick={onToggleXdr}>
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 12 12"
-                fill="none"
-                aria-hidden
-                style={{ transform: showXdr ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 150ms' }}
-              >
-                <path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              {copy.rawXdr}
-            </button>
-            {showXdr && <pre className="pollar-tx-xdr-content">{buildData.unsignedXdr}</pre>}
-          </div>
-        </>
-      )}
+      {!isSuccess && reviewBlock}
 
       {isError && errorDetails && (
         <div className="pollar-tx-error-details">
@@ -176,7 +158,7 @@ export function TxStatusView({
 
           {statusBanner}
 
-          {isInFlight && (
+          {isInFlight && transaction.step !== 'awaiting_cosign' && (
             <p className="pollar-tx-spinner-label">
               {walletType === WalletType.FREIGHTER
                 ? copy.waitingFreighter
@@ -194,64 +176,7 @@ export function TxStatusView({
         </div>
       )}
 
-      {isSuccess && hash && (
-        <div className="pollar-tx-result">
-          <span className="pollar-tx-result-label">{copy.txHash}</span>
-          <span className="pollar-tx-result-hash">{hash}</span>
-          <div className="pollar-tx-result-actions">
-            <button className="pollar-tx-result-btn" onClick={onCopyHash}>
-              {copied ? (
-                <>
-                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
-                    <circle cx="7" cy="7" r="7" fill="currentColor" />
-                    <path
-                      d="M3.5 7l2.5 2.5 4.5-5"
-                      stroke="white"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  {copy.copied}
-                </>
-              ) : (
-                <>
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
-                    <rect x="4" y="4" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-                    <path
-                      d="M3 9H2a1 1 0 01-1-1V2a1 1 0 011-1h6a1 1 0 011 1v1"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  {copy.copyHash}
-                </>
-              )}
-            </button>
-            {explorerUrl && (
-              <a className="pollar-tx-result-btn" href={explorerUrl} target="_blank" rel="noopener noreferrer">
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
-                  <path
-                    d="M5 2H2a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V8"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M8 1h4m0 0v4m0-4L6 7"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                {copy.viewOnExplorer}
-              </a>
-            )}
-          </div>
-        </div>
-      )}
+      {isSuccess && reviewBlock}
 
       {isSuccess && (
         <button className="pollar-btn-primary pollar-tx-sign-btn" onClick={onDone}>

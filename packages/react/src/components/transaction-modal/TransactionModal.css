@@ -66,125 +66,19 @@
   width: 100%;
 }
 
-/* ---- Summary card ---- */
-.pollar-tx-summary {
-  background: var(--pollar-input-bg);
-  border: 1px solid var(--pollar-border);
-  border-radius: var(--pollar-card-border-radius, 10px);
-  padding: 1rem 1.25rem;
-  margin-bottom: 1rem;
-}
-
-.pollar-tx-summary-title {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--pollar-muted);
-  margin: 0 0 0.625rem;
-}
-
-.pollar-tx-summary-lines {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+/* ---- Review ---- */
+.pollar-tx-review {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
-  overflow-x: auto;
-}
-
-.pollar-tx-summary-line {
-  font-size: 0.875rem;
-  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  white-space: nowrap;
-  color: var(--pollar-text);
-}
-
-/* ---- Meta row (network / fee) ---- */
-.pollar-tx-meta {
-  display: flex;
   gap: 0.75rem;
   margin-bottom: 1.25rem;
 }
 
-.pollar-tx-meta-item {
-  flex: 1;
-  background: var(--pollar-input-bg);
-  border: 1px solid var(--pollar-border);
-  border-radius: var(--pollar-card-border-radius, 10px);
-  padding: 0.625rem 0.875rem;
-}
-
-.pollar-tx-meta-label {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--pollar-muted);
-  display: block;
-  margin-bottom: 0.125rem;
-}
-
-.pollar-tx-meta-value {
-  font-size: 0.875rem;
+.pollar-tx-review-title {
+  margin: 0;
+  font-size: 1.05rem;
   font-weight: 600;
   color: var(--pollar-text);
-}
-
-/* ---- Result (success hash) ---- */
-.pollar-tx-result {
-  background: var(--pollar-input-bg);
-  border: 1px solid var(--pollar-border);
-  border-radius: var(--pollar-card-border-radius, 10px);
-  padding: 0.75rem 1rem;
-  margin-bottom: 1rem;
-  word-break: break-all;
-}
-
-.pollar-tx-result-label {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--pollar-muted);
-  display: block;
-  margin-bottom: 0.25rem;
-}
-
-.pollar-tx-result-hash {
-  font-size: 0.8125rem;
-  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  color: var(--pollar-text);
-}
-
-.pollar-tx-result-actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.625rem;
-}
-
-.pollar-tx-result-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.375rem 0.75rem;
-  border-radius: var(--pollar-buttons-border-radius, 6px);
-  border: 1px solid var(--pollar-border);
-  background: none;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--pollar-muted);
-  cursor: pointer;
-  text-decoration: none;
-  transition:
-    color 150ms,
-    background 150ms;
-}
-
-.pollar-tx-result-btn:hover {
-  color: var(--pollar-text);
-  background: var(--pollar-input-bg);
 }
 
 /* ---- Sign button (extends .pollar-btn-primary) ---- */
@@ -210,45 +104,6 @@
 
 .pollar-tx-status[data-kind='SUCCESS'] {
   color: var(--pollar-success-text, #16a34a);
-}
-
-/* ---- XDR toggle ---- */
-.pollar-tx-xdr {
-  margin-bottom: 1rem;
-}
-
-.pollar-tx-xdr-toggle {
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--pollar-muted);
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  transition: color 150ms;
-}
-
-.pollar-tx-xdr-toggle:hover {
-  color: var(--pollar-text);
-}
-
-.pollar-tx-xdr-content {
-  margin: 0.5rem 0 0;
-  padding: 0.75rem;
-  background: var(--pollar-input-bg);
-  border: 1px solid var(--pollar-border);
-  border-radius: var(--pollar-card-border-radius, 10px);
-  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.6875rem;
-  color: var(--pollar-text);
-  overflow-x: auto;
-  white-space: pre;
-  word-break: normal;
-  max-height: 120px;
-  overflow-y: auto;
 }
 
 /* ---- Error details ---- */
