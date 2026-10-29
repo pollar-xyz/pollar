@@ -6,7 +6,7 @@ The API reference lives with each package, next to the code it documents:
 - [`@pollar/react`](../packages/react/README.md) - `PollarProvider`, `usePollar()`, components and templates
 - [`@pollar/react-native`](../packages/react-native/README.md) - `PollarProvider`, `usePollar()` and modals for React Native
 - [`@pollar/privy-adapter`](../packages/privy-adapter/README.md)
-- [`@pollar/privy-server-adapter`](../packages/privy-server-adapter/README.md)
+- [`@pollar/privy-server-adapter`](../packages/privy-server-adapter/README.md) (discontinued)
 - [`@pollar/accesly-adapter`](../packages/accesly-adapter/README.md)
 - [`@pollar/stellar-wallets-kit-adapter`](../packages/stellar-wallets-kit-adapter/README.md)
 - [`@pollar/solana-wallet-standard-adapter`](../packages/solana-wallet-standard-adapter/README.md)

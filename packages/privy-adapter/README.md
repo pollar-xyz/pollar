@@ -9,9 +9,6 @@ standard SEP-10 login + transaction flow.
 You configure it once with a slim, `PrivyClientConfig`-shaped object; you do **not**
 wire up Privy's hooks yourself.
 
-> Server-side signing (through your Privy app secret on your backend) is a
-> different package: [`@pollar/privy-server-adapter`](https://github.com/pollar-xyz/pollar/tree/main/packages/privy-server-adapter).
-
 ## Supported platforms
 
 | Host                          | Status        | Signing engine         |
@@ -26,7 +23,6 @@ Your code is the same on both - `createPrivyAdapter` + `PrivyAdapterProvider`.
 
 There is no Privy SDK for Angular or Vue, so the adapter can't run there. If you use
 it in a non-React host it throws a clear `PrivyAdapterUnsupportedError` on first use.
-For those frameworks, sign server-side with `@pollar/privy-server-adapter` instead.
 
 `@pollar/core` (`^0.11.2 || ^0.12.0-rc.1`), `@stellar/stellar-sdk` (`^15.1.0`) and
 `react` (`^18 || ^19`) are required peers. `react-dom`, `@privy-io/react-auth`,

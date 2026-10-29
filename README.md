@@ -241,7 +241,6 @@ you do not wire up Privy's hooks yourself.
   `@privy-io/expo` on RN); a non-React host fails fast with `PrivyAdapterUnsupportedError`
 - Auto-sync host login (`onProviderAuthChange`) that recovers web OAuth redirects and persisted Privy sessions;
   optional `cleanupOAuthRedirect` and `debug` logging
-- For server-side signing instead, use `@pollar/privy-server-adapter` below
 
 ```bash
 npm install @pollar/privy-adapter @pollar/core @stellar/stellar-sdk @privy-io/react-auth react react-dom
@@ -251,7 +250,7 @@ npm install @pollar/privy-adapter @pollar/core @stellar/stellar-sdk @privy-io/re
 
 ### [`@pollar/privy-server-adapter`](./packages/privy-server-adapter)
 
-**Version:** `0.10.0-rc.10` (published on npm as `latest`) &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-server-adapter)
+**Discontinued:** no further releases or changes. Last version `0.10.0-rc.10` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-server-adapter)
 
 Server-side Privy adapter. A stateless HTTP proxy that lets Pollar sign Stellar or Solana transactions through your **Privy**
 server-wallet account without your `PRIVY_APP_SECRET` ever leaving your infrastructure. You run it in your own backend
@@ -367,7 +366,7 @@ npx @pollar/migrate --fix      # apply the mechanical changes
     react/                           # @pollar/react - React bindings and UI components
     react-native/                    # @pollar/react-native - React Native bindings and native modals
     privy-adapter/                   # @pollar/privy-adapter - client-side Privy wallet adapter (web + RN)
-    privy-server-adapter/            # @pollar/privy-server-adapter - server-side Privy signing proxy
+    privy-server-adapter/            # @pollar/privy-server-adapter - server-side Privy signing proxy (discontinued)
     accesly-adapter/                 # @pollar/accesly-adapter - client-side Accesly smart-wallet adapter
     stellar-wallets-kit-adapter/     # @pollar/stellar-wallets-kit-adapter - Stellar Wallets Kit bridge
     solana-wallet-standard-adapter/  # @pollar/solana-wallet-standard-adapter - Solana Wallet Standard bridge
