@@ -108,6 +108,7 @@ export interface RampCopy {
   providerReviewing: string;
   serverTrouble: string;
   startAnother: string;
+  newQuote: string;
   keepsGoing: string;
   somethingWrong: string;
   routeSteps: (count: number) => string;
@@ -237,6 +238,7 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     providerReviewing: 'The provider is reviewing your details. This updates on its own.',
     serverTrouble: 'Having trouble reaching the server. Retrying…',
     startAnother: 'Start another operation',
+    newQuote: 'Get a new quote',
     keepsGoing: 'This one keeps going; you can resume it later.',
     somethingWrong: 'Something went wrong.',
     routeSteps: (count) => (count === 1 ? '1 step' : `${count} steps`),
@@ -364,6 +366,7 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     providerReviewing: 'El proveedor está revisando tus datos. Esto se actualiza solo.',
     serverTrouble: 'Hay problemas para conectar con el servidor. Reintentando…',
     startAnother: 'Iniciar otra operación',
+    newQuote: 'Pedir nueva cotización',
     keepsGoing: 'Esta sigue en curso; puedes retomarla más tarde.',
     somethingWrong: 'Algo salió mal.',
     routeSteps: (count) => (count === 1 ? '1 paso' : `${count} pasos`),
@@ -494,6 +497,7 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     providerReviewing: 'O provedor está analisando seus dados. Isto se atualiza sozinho.',
     serverTrouble: 'Problemas para conectar ao servidor. Tentando de novo…',
     startAnother: 'Iniciar outra operação',
+    newQuote: 'Pedir nova cotação',
     keepsGoing: 'Esta continua em andamento; você pode retomá-la depois.',
     somethingWrong: 'Algo deu errado.',
     routeSteps: (count) => (count === 1 ? '1 etapa' : `${count} etapas`),

@@ -189,6 +189,8 @@ interface RampWidgetTemplateProps {
   retrying?: boolean;
   /** Runs the user's held order again; absent, a held order only says what happened. */
   onRetryOrder?: (() => void) | undefined;
+  /** Quotes the same amount again when the price changed before anything moved; absent, only a new operation is offered. */
+  onRequote?: (() => void) | undefined;
   /** Opens the wallet's recovery setup, for an order held until the wallet has a way to be recovered. */
   onSetUpRecovery?: (() => void) | undefined;
   /** Whether the wallet still has no way to be recovered; null while its state is unread. */
@@ -276,6 +278,7 @@ export function RampWidgetTemplate({
   noChains = false,
   retrying = false,
   onRetryOrder,
+  onRequote,
   onSetUpRecovery,
   recoveryMissing = null,
   checkingPayment = false,
@@ -310,6 +313,8 @@ export function RampWidgetTemplate({
   const receive = order ? rampOrderReceive(order) : null;
   // A held order that waits on the wallet's recovery: retrying before it exists fails the same way.
   const waitsOnRecovery = order?.failure?.resolutionAction === 'set_up_recovery';
+  // The price changed before anything moved: the same order would be refused again, so the amount is quoted anew.
+  const asksNewQuote = order?.failure?.resolutionAction === 'accept_new_quote';
   const payBy = view?.action?.kind === 'FIAT_PAYMENT' && view.expiresAt ? Date.parse(view.expiresAt) : null;
   useRenderAt(view?.canSign && view.expiresAt ? Date.parse(view.expiresAt) : null);
   // Once the order exists, going back means a new order, which "New order" already starts.
@@ -734,7 +739,12 @@ export function RampWidgetTemplate({
               {stopped && !settled && waitsOnRecovery && recoveryMissing === true && (
                 <p className="pollar-ramp-payment-note">{copy.recoveryNote}</p>
               )}
-              {stopped && !settled && order.failure.resolutionOwner === 'END_USER' && onRetryOrder && (
+              {stopped && !settled && asksNewQuote && onRequote && (
+                <button type="button" className="pollar-btn-primary" onClick={onRequote}>
+                  {copy.newQuote}
+                </button>
+              )}
+              {stopped && !settled && order.failure.resolutionOwner === 'END_USER' && !asksNewQuote && onRetryOrder && (
                 <button
                   type="button"
                   className="pollar-btn-primary"

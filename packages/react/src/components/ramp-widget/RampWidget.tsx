@@ -587,6 +587,12 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
     }
   }
 
+  /** The price changed before anything moved: the same amount is quoted again and the routes shown. */
+  async function handleRequote() {
+    setOrder(null);
+    await handleFindRoute();
+  }
+
   // An order held until the wallet has a way to be recovered tries again once it has one.
   const heldForRecovery = step === 'status' && order?.failure?.resolutionAction === 'set_up_recovery';
   const wasRecoveryLocked = useRef(recoveryLocked);
@@ -740,6 +746,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
         onApprove={openCosignModal}
         retrying={retrying}
         onRetryOrder={() => void handleRetryOrder()}
+        onRequote={() => void handleRequote()}
         onSetUpRecovery={openRecoveryModal}
         recoveryMissing={recovery === null ? null : recoveryLocked}
         pollTrouble={pollTrouble}
