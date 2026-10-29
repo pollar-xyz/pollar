@@ -36,7 +36,7 @@ await adapter.start();
 
 `getCredentials` is async, so any secret manager works.
 
-The secret must be stored as JSON `{"appId": "...", "appSecret": "..."}` — the example below calls `JSON.parse` directly on `SecretString`.
+The secret must be stored as JSON `{"appId": "...", "appSecret": "..."}` - the example below calls `JSON.parse` directly on `SecretString`.
 
 ```ts
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
@@ -56,7 +56,7 @@ const adapter = createPollarPrivyAdapter({
 await adapter.start();
 ```
 
-The credentials are cached for 5 minutes by default. If `getCredentials` returns a different `appId`/`appSecret` after the cache expires, the underlying Privy client is rebuilt automatically — so you can rotate `APP_SECRET` without redeploying.
+The credentials are cached for 5 minutes by default. If `getCredentials` returns a different `appId`/`appSecret` after the cache expires, the underlying Privy client is rebuilt automatically - so you can rotate `APP_SECRET` without redeploying.
 
 ## Graceful shutdown
 
@@ -79,7 +79,7 @@ process.on('SIGINT', shutdown);
 
 ```ts
 interface PollarPrivyAdapterConfig {
-  // ── Required ───────────────────────────────────────────────────────────
+  // -- Required --
 
   // Async credential resolver. Called on first request and when the cache expires.
   getCredentials: () => Promise<{ appId: string; appSecret: string }>;
@@ -91,32 +91,31 @@ interface PollarPrivyAdapterConfig {
   // Stellar network used to compute transaction hashes.
   network: 'mainnet' | 'testnet';
 
-  // ── Optional (with defaults) ──────────────────────────────────────────
+  // -- Optional (with defaults) --
 
   port?: number; // 3001
   cacheTtlMs?: number; // 5 * 60 * 1000
   requestTimeoutMs?: number; // 10_000
   maxBodyBytes?: number; // 64 * 1024
 
-  // ── Operation allowlist (optional) ────────────────────────────────────
+  // -- Operation allowlist (optional) --
 
   // Restricts which Stellar operations the adapter will sign. Because signing
   // goes through Privy `rawSign` (only the transaction *hash* reaches Privy),
   // the adapter is the only place per-operation policy can be enforced.
 
   // Explicit allowlist of stellar-sdk operation type names. `undefined` (the
-  // default) means no restriction — the legacy behavior, any non-fee-bump tx
-  // is signed. A transaction containing any operation outside the list is
+  // default) means no restriction: any non-fee-bump tx is signed. A transaction containing any operation outside the list is
   // rejected with `TX_OPERATION_NOT_ALLOWED` (403).
   allowedOperations?: string[]; // undefined
 
   // Shortcut for trustline-only adapters. When `true`, the trustline preset
-  // — `['changeTrust', 'beginSponsoringFutureReserves',
-  // 'endSponsoringFutureReserves']` — is added to the allowlist AND the
+  // - `['changeTrust', 'beginSponsoringFutureReserves',
+  // 'endSponsoringFutureReserves']` - is added to the allowlist AND the
   // transaction is additionally required to contain at least one `changeTrust`.
   restrictToTrustlines?: boolean; // false
 
-  // ── Observability hooks ───────────────────────────────────────────────
+  // -- Observability hooks --
 
   onWalletCreated?: (userId: string, address: string) => void;
   onTransactionSigned?: (walletAddress: string) => void;
@@ -126,7 +125,7 @@ interface PollarPrivyAdapterConfig {
 
 ### Restricting signable operations
 
-By default the adapter signs any non-fee-bump transaction. To lock it down to trustline management — the common case for a Pollar deployment — use `restrictToTrustlines`:
+By default the adapter signs any non-fee-bump transaction. To lock it down to trustline management - the common case for a Pollar deployment - use `restrictToTrustlines`:
 
 ```ts
 const adapter = createPollarPrivyAdapter({
@@ -135,7 +134,7 @@ const adapter = createPollarPrivyAdapter({
 });
 ```
 
-This allows `changeTrust` and the optional reserve-sponsorship sandwich (`beginSponsoringFutureReserves` / `endSponsoringFutureReserves`), and additionally **requires** at least one `changeTrust`. Anything else — a `payment`, a `manageData`, a `changeTrust` mixed with a `payment` — is rejected with `TX_OPERATION_NOT_ALLOWED` (403) before any Privy round-trip.
+This allows `changeTrust` and the optional reserve-sponsorship sandwich (`beginSponsoringFutureReserves` / `endSponsoringFutureReserves`), and additionally **requires** at least one `changeTrust`. Anything else - a `payment`, a `manageData`, a `changeTrust` mixed with a `payment` - is rejected with `TX_OPERATION_NOT_ALLOWED` (403) before any Privy round-trip.
 
 For a custom set, use `allowedOperations` with stellar-sdk operation type names:
 
@@ -143,7 +142,7 @@ For a custom set, use `allowedOperations` with stellar-sdk operation type names:
 allowedOperations: ['changeTrust', 'payment'];
 ```
 
-**Precedence.** If both are set, the effective allowlist is the **union** of `allowedOperations` and the trustline preset, and the `restrictToTrustlines` "at least one `changeTrust`" requirement still applies. If neither is set, there is no restriction (legacy behavior).
+**Precedence.** If both are set, the effective allowlist is the **union** of `allowedOperations` and the trustline preset, and the `restrictToTrustlines` "at least one `changeTrust`" requirement still applies. If neither is set, there is no restriction.
 
 ## Endpoints
 
@@ -165,11 +164,11 @@ Responses share the Pollar envelope:
 
 | Method | Path                         | Body                               | Success code                   | HTTP |
 | ------ | ---------------------------- | ---------------------------------- | ------------------------------ | ---- |
-| GET    | `/health`                    | —                                  | `PRIVY_ADAPTER_HEALTH_OK`      | 200  |
+| GET    | `/health`                    | -                                  | `PRIVY_ADAPTER_HEALTH_OK`      | 200  |
 | POST   | `/wallets/create`            | `{ userId }`                       | `PRIVY_ADAPTER_WALLET_CREATED` | 201  |
 | POST   | `/wallets/create` (existing) | `{ userId }`                       | `PRIVY_ADAPTER_WALLET_EXISTS`  | 200  |
 | POST   | `/wallets/sign`              | `{ userId, walletAddress, txXdr }` | `PRIVY_ADAPTER_TX_SIGNED`      | 200  |
-| GET    | `/wallets/:userId/address`   | —                                  | `PRIVY_ADAPTER_WALLET_ADDRESS` | 200  |
+| GET    | `/wallets/:userId/address`   | -                                  | `PRIVY_ADAPTER_WALLET_ADDRESS` | 200  |
 
 `/wallets/create` is idempotent: if the user already has a Stellar wallet, the existing address is returned with code `PRIVY_ADAPTER_WALLET_EXISTS`.
 
@@ -179,9 +178,9 @@ Responses share the Pollar envelope:
 
 | Code                       | HTTP | When                                                                                                                                                  |
 | -------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `FORBIDDEN`                | 401  | Missing or wrong Bearer token; response carries `WWW-Authenticate: Bearer …`                                                                          |
+| `FORBIDDEN`                | 401  | Missing or wrong Bearer token; response carries `WWW-Authenticate: Bearer realm="pollar-privy-adapter"`                                               |
 | `VALIDATION_ERROR`         | 400  | Body schema mismatch or invalid JSON                                                                                                                  |
-| `VALIDATION_ERROR`         | 413  | Body exceeded `maxBodyBytes` — response carries `reason: "body too large"`                                                                            |
+| `VALIDATION_ERROR`         | 413  | Body exceeded `maxBodyBytes` - response carries `reason: "body too large"`                                                                            |
 | `WALLET_NOT_FOUND`         | 404  | User has no Stellar wallet                                                                                                                            |
 | `WALLET_CREATION_FAILED`   | 502  | Privy upstream error during create                                                                                                                    |
 | `WALLET_LOOKUP_FAILED`     | 502  | Privy upstream error during wallet lookup                                                                                                             |
@@ -194,7 +193,7 @@ Responses share the Pollar envelope:
 
 - The adapter is the sole holder of `PRIVY_APP_SECRET` in the request path. Pollar only ever sees the Bearer token you issue it.
 - Bearer comparison uses `crypto.timingSafeEqual` (constant time).
-- The adapter holds no persistent state. An in-memory LRU caches `walletAddress → walletId` (10 min TTL, max 1000 entries) to avoid extra Privy round-trips on hot paths; nothing else is retained.
+- The adapter holds no persistent state. An in-memory LRU caches `walletAddress -> walletId` (10 min TTL, max 1000 entries) to avoid extra Privy round-trips on hot paths; nothing else is retained.
 - Logs are off by default. Pipe `onError` to your own logger.
 
 ## License

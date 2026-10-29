@@ -1,16 +1,16 @@
 # @pollar/accesly-adapter
 
 [Accesly](https://github.com/Accesly/SDKAccesly) Smart Account adapter for
-[`@pollar/core`](../core). Lets a user sign Stellar transactions with their
+[`@pollar/core`](https://github.com/pollar-xyz/pollar/tree/main/packages/core). Lets a user sign Stellar transactions with their
 **Accesly Smart Account** (a C-address Soroban contract secured by passkey +
 Shamir-MPC), client-side.
 
 ## Smart, but client-signed
 
 Accesly is a self-custodial **smart wallet**: Accesly deploys and manages the
-C-address contract, and the user signs via Accesly's SDK (passkey unlock →
+C-address contract, and the user signs via Accesly's SDK (passkey unlock ->
 Shamir-reconstructed ed25519 seed). So the adapter reports `custody: 'smart'`, but
-signing/submitting happens **client-side + RPC** — Pollar never holds the key and
+signing/submitting happens **client-side + RPC** - Pollar never holds the key and
 does **not** deploy/sponsor/submit through wallet-service (that path is only for
 Pollar's _own_ smart wallets).
 
@@ -38,7 +38,7 @@ import { PollarClient } from '@pollar/core';
 import { PollarProvider } from '@pollar/react';
 
 // A hook: `useAccesly()` makes this a hook, so it must be called from a
-// component or another hook — never at module scope.
+// component or another hook - never at module scope.
 function useAcceslyAdapter(acceslyAddress: string, username: string) {
   const { wallet, tx } = useAccesly();
 
@@ -53,17 +53,17 @@ function useAcceslyAdapter(acceslyAddress: string, username: string) {
 }
 
 function App() {
-  const accesly = useAcceslyAdapter('C…', 'alice');
-  // Build the client once — `<PollarProvider>` locks it at first render.
+  const accesly = useAcceslyAdapter('C...', 'alice');
+  // Build the client once - `<PollarProvider>` locks it at first render.
   const [client] = useState(
     () =>
       new PollarClient({
-        apiKey: '…',
+        apiKey: '...',
         walletAdapters: [accesly], // shows an "Accesly" button; login({ provider: 'accesly' })
       }),
   );
 
-  return <PollarProvider client={client}>{/* … */}</PollarProvider>;
+  return <PollarProvider client={client}>{/* ... */}</PollarProvider>;
 }
 ```
 
@@ -77,10 +77,18 @@ function App() {
 | `signXdr` | `(xdr) => Promise<string>` | signs a full XDR via Accesly; returns the signed XDR |
 | `meta?`   | `{ label; iconUrl? }`      | login button; defaults to `{ label: 'Accesly' }`     |
 
-## ⚠️ Pending confirmation
+The adapter's `type` is `'accesly'`. `signTransaction` hands the full XDR to
+`signXdr`; `signAuthEntry` throws, because Accesly signs the whole transaction
+envelope and exposes no standalone Soroban auth-entry signing.
+
+## Pending confirmation
 
 This adapter assumes Accesly's `signRawXdr` signs an **arbitrary** Pollar-built
 XDR for the account. If Accesly only signs txs built by its own SDK (`send`,
 `swap`), Pollar's generic `buildTx` flow won't apply and Accesly would need to
 own the transaction flow instead. End-to-end **login** also requires Pollar's
 SEP-10 backend to accept contract-account (C-address) authentication.
+
+## License
+
+Apache-2.0. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).

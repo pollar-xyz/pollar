@@ -86,6 +86,11 @@
   and asset when nothing was rejected, instead of asking for another amount.
   The React and React Native ramp widgets label the dead-end button "Change
   amount" when a route asks for another amount.
+- **A failed order whose price changed offers a new quote.** When an order
+  fails with `accept_new_quote` (the provider's price moved before anything was
+  sent), the React and React Native ramp widgets show "Get a new quote", which
+  quotes the same amount again and shows the routes, instead of "Try again",
+  which would resend the stale order.
 - A route dropped for a missing trustline names the asset it delivers ("Your
   Stellar wallet must trust ARS to receive it."), instead of always saying
   USDC.
