@@ -122,6 +122,7 @@ import {
   CardBalance,
   CardDepositAddress,
   CardFunding,
+  CardFundingChain,
   CardFundingOutcome,
   CardHolder,
   CardInfo,
@@ -5190,15 +5191,36 @@ export class PollarClient {
   }
 
   /**
-   * Move USDC from the user's Stellar wallet to the card's collateral. A
-   * custodial wallet pays at once; an external wallet is asked to sign the
-   * payment here, and `cancelled` means it declined. The returned funding then
-   * advances on its own; follow it with {@link getCardFunding}.
+   * Move USDC from the user's wallet on `chain` (Stellar by default) to the
+   * card's collateral. A custodial wallet pays at once; an external Stellar
+   * wallet is asked to sign the payment here; a co-signed wallet approves the
+   * request on this device. `cancelled` means the user declined. The returned
+   * funding then advances on its own; follow it with {@link getCardFunding}.
    */
-  async fundCard(params: CardProviderParams & { amount: string }): Promise<CardFundingOutcome> {
+  async fundCard(params: CardProviderParams & { amount: string; chain?: CardFundingChain }): Promise<CardFundingOutcome> {
     const started = await createCardFunding(this._api, params);
-    if (!started.pendingSignature) return { status: 'ok', funding: started.funding };
-    const signed = await this.signTx(started.pendingSignature.unsignedXdr);
+    const pending = started.pendingSignature;
+    if (!pending) return { status: 'ok', funding: started.funding };
+
+    if (pending.kind === 'cosign') {
+      const { request } = pending;
+      // As `_cosignPendingOf` does for every other 202: marked before it reaches
+      // the store, so the prompt never opens on a vote this call is about to cast.
+      if (!this._cosignManual) this._autoHandling.add(request.id);
+      this._noteCosignRequest(request);
+      const settled = await this._settleCosign(request, { intent: 'sign_and_send', phase: 'signing-submitting' });
+      if (settled.status === 'cosign_pending') {
+        return { status: 'cosign_pending', funding: started.funding, request: settled.request };
+      }
+      if (settled.status === 'error') {
+        if (settled.code === 'SDK_COSIGN_REJECTED') return { status: 'cancelled', funding: started.funding };
+        throw new Error(settled.message ?? settled.details ?? settled.code ?? 'Failed to send the funding payment');
+      }
+      // The payment is out; the server moves the funding from here.
+      return { status: 'ok', funding: (await getCardFunding(this._api, started.funding.id)).funding };
+    }
+
+    const signed = await this.signTx(pending.unsignedXdr);
     if (signed.status !== 'signed') return { status: 'cancelled', funding: started.funding };
     const { funding } = await submitCardFundingSignature(this._api, started.funding.id, { signedXdr: signed.signedXdr });
     return { status: 'ok', funding };

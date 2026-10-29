@@ -6,7 +6,8 @@
 > 0.12.0: Soroban auth entries signed by the Pollar wallet for x402 and other
 > sponsored-fee flows, co-signed wallets signing those entries, hash memos,
 > swaps on Solana, every modal in English, Spanish and Portuguese, conditional
-> KYC form fields, ramp texts that name a route's limit, and fixes. One call
+> KYC form fields, ramp texts that name a route's limit, card funding from
+> Solana and from co-signed wallets, and fixes. One call
 > an app may already make changes: `signAuthEntry` now passes the signature
 > confirmation (below). The Stellar Wallets Kit and
 > Solana Wallet Standard adapters stay at `0.12.0`; their `^0.12.0` core range
@@ -127,6 +128,18 @@
 - **The card modal copies the card details.** Next to the card number and the
   CVC while the details are shown, and next to the expiry date always; the
   number is copied without spaces and the expiry as `MM/YY`.
+- **Fund the card from Solana.** `fundCard({ amount, chain: 'SOLANA' })` sends
+  the USDC from the user's Solana wallet straight to the provider's Solana
+  address, with no bridge; without `chain` it stays Stellar. A Solana funding
+  goes `CREATED`, `SENT`, `CREDITED` (`CardFunding.chain`, `sourceTxHash`, new
+  status `SENT`). `<CardModal>` offers a network picker when the user holds a
+  wallet on both chains, reads the balance on the one picked, and shows each
+  funding's own steps.
+- **A co-signed wallet funds the card.** `fundCard` on a Turnkey wallet, on
+  either chain, follows sdk-api's 202: the device votes on the payment and the
+  call returns the funding as the server reads it after the send
+  (`cosign_pending` under `cosignManual`, `cancelled` when the user rejects it).
+  Requires sdk-api with the v3 funding routes.
 - The email code input takes a one-time code the browser or keyboard
   autofills, and spreads it across the six boxes; a paste, or a code typed next
   to a digit already there, fills them the same way

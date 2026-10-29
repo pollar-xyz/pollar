@@ -22,6 +22,7 @@ export const TARGET_EXPORTS: Record<string, readonly string[]> = {
     'CardBalance',
     'CardDepositAddress',
     'CardFunding',
+    'CardFundingChain',
     'CardFundingOutcome',
     'CardFundingStatus',
     'CardHolder',

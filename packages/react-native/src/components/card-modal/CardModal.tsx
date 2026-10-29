@@ -3,6 +3,7 @@ import {
   type CardBalance,
   type CardDepositAddress,
   type CardFunding,
+  type CardFundingChain,
   type CardHolder,
   type CardIncomeRange,
   type CardInfo,
@@ -29,6 +30,7 @@ import { usePollar } from '../../context';
 import { useModalLanguage } from '../../language';
 import { useWalletAvailable } from '../../useWalletAvailable';
 import { AmountField } from '../AmountField';
+import { COMMONS_COPY } from '../commons-copy';
 import { PollarModalFooter } from '../commons';
 import { KycModal } from '../kyc-modal/KycModal';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
@@ -48,11 +50,19 @@ const REVEAL_MS = 30_000;
 const TX_LIMIT = 10;
 /** How often fundings in flight are re-read while the funding panel is open. */
 const FUNDING_POLL_MS = 5_000;
-const FUNDING_INFLIGHT = new Set(['CREATED', 'BURNED', 'ATTESTED', 'MINTED']);
+const FUNDING_INFLIGHT = new Set(['CREATED', 'SENT', 'BURNED', 'ATTESTED', 'MINTED']);
 
-/** The step of a funding in flight, out of FUNDING_STEPS. */
-const FUNDING_STEP: Record<string, number> = { CREATED: 1, BURNED: 2, ATTESTED: 3, MINTED: 4 };
-const FUNDING_STEPS = 4;
+/** The states a funding in flight goes through, by the chain it is paid from: the step is the position. */
+const FUNDING_STEPS: Record<CardFundingChain, string[]> = {
+  STELLAR: ['CREATED', 'BURNED', 'ATTESTED', 'MINTED'],
+  SOLANA: ['CREATED', 'SENT'],
+};
+/** The chains a card can be funded from, with their names. */
+const FUNDING_CHAINS: { value: CardFundingChain; label: string }[] = [
+  { value: 'STELLAR', label: 'Stellar' },
+  { value: 'SOLANA', label: 'Solana' },
+];
+const isFundingChain = (chain: string): chain is CardFundingChain => FUNDING_CHAINS.some((c) => c.value === chain);
 
 const INCOME_RANGES: CardIncomeRange[] = ['0-1000', '1000-5000', '5000-10000', '10000+'];
 
@@ -143,7 +153,7 @@ function CardCopyButton({
 }
 
 export function CardModal({ onClose }: CardModalProps) {
-  const { getClient, copyText, styles: pollarStyles } = usePollar();
+  const { getClient, copyText, styles: pollarStyles, wallets, appConfig } = usePollar();
   const language = useModalLanguage();
   const copy = CARD_COPY[language];
   const { theme = 'light', accentColor = '#005DB4' } = pollarStyles;
@@ -192,8 +202,14 @@ export function CardModal({ onClose }: CardModalProps) {
 
   const provider = providers?.[0] ?? null;
   const fundingAsset = provider?.fundingAssets[0] ?? 'USDC';
-  // Funding signs a Stellar payment from the wallet, so its balance is the Stellar one.
-  const fundAvailable = useWalletAvailable(panel === 'fund' ? { chain: 'STELLAR', code: fundingAsset } : null);
+  // The chains the user holds a wallet on that a card can be funded from, in the app's order.
+  const appChains = (appConfig?.application?.chains ?? []) as string[];
+  const fundChains = FUNDING_CHAINS.filter(
+    (c) => wallets.some((w) => (w.chain ?? 'STELLAR') === c.value) && (appChains.length === 0 || appChains.includes(c.value)),
+  ).sort((a, b) => appChains.indexOf(a.value) - appChains.indexOf(b.value));
+  const [fundChain, setFundChain] = useState<CardFundingChain | null>(null);
+  const selectedFundChain = fundChain ?? fundChains[0]?.value ?? 'STELLAR';
+  const fundAvailable = useWalletAvailable(panel === 'fund' ? { chain: selectedFundChain, code: fundingAsset } : null);
   const card = cards?.[0] ?? null;
   const expiry = card?.expMonth && card.expYear ? `${card.expMonth}/${card.expYear.slice(-2)}` : null;
 
@@ -380,7 +396,7 @@ export function CardModal({ onClose }: CardModalProps) {
     run(
       'fund-send',
       async () => {
-        const outcome = await getClient().fundCard({ amount: fundAmount.trim() });
+        const outcome = await getClient().fundCard({ amount: fundAmount.trim(), chain: selectedFundChain });
         if (!mounted.current) return;
         if (outcome.status === 'cancelled') {
           setError(copy.notSigned);
@@ -821,6 +837,8 @@ export function CardModal({ onClose }: CardModalProps) {
                 <Text style={{ color: colors.text, lineHeight: 20 }}>
                   {copy.fundIntro(provider.fundingAssets.join(` ${copy.or} `) || 'USDC')}
                 </Text>
+                {fundChains.length > 1 &&
+                  choices(COMMONS_COPY[language].network, selectedFundChain, fundChains, (chain) => setFundChain(chain))}
                 <AmountField
                   theme={theme}
                   accentColor={accentColor}
@@ -842,8 +860,9 @@ export function CardModal({ onClose }: CardModalProps) {
                   <View>
                     <Text style={[styles.section, { color: colors.muted }]}>{copy.yourFundings}</Text>
                     {fundings.map((f) => {
-                      const state = copy.funding[f.status];
-                      const step = FUNDING_STEP[f.status];
+                      const state = (f.chain === 'SOLANA' ? copy.fundingSolana[f.status] : undefined) ?? copy.funding[f.status];
+                      const steps = FUNDING_STEPS[isFundingChain(f.chain) ? f.chain : 'STELLAR'];
+                      const step = steps.indexOf(f.status) + 1;
                       const inflight = FUNDING_INFLIGHT.has(f.status);
                       return (
                         <View key={f.id} style={[styles.txRow, { borderTopColor: colors.border }]}>
@@ -852,9 +871,9 @@ export function CardModal({ onClose }: CardModalProps) {
                               {inflight && <ActivityIndicator size="small" color={accentColor} />}
                               <Text style={{ color: colors.text, fontSize: 13 }}>{state?.title ?? f.status}</Text>
                             </View>
-                            {inflight && step && (
+                            {inflight && step > 0 && (
                               <Text style={{ color: colors.muted, fontSize: 11 }} accessibilityLiveRegion="polite">
-                                {copy.stepOf(step, FUNDING_STEPS)} · {state?.hint}
+                                {copy.stepOf(step, steps.length)} · {state?.hint}
                               </Text>
                             )}
                             <Text style={{ color: colors.muted, fontSize: 11 }}>

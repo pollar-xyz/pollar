@@ -3,6 +3,7 @@ import type {
   CardBalance,
   CardDepositAddress,
   CardFunding,
+  CardFundingChain,
   CardHolder,
   CardInfo,
   CardKycInput,
@@ -12,6 +13,7 @@ import type {
   CardProviderRegistrationSubmitted,
   CardRequirements,
   CardTransactionsPage,
+  CosignRequest,
 } from '../../types';
 import { PollarApiError } from '../../types';
 import { isRecord, stringField } from '../error-fields';
@@ -145,11 +147,17 @@ export async function getCardSecrets(
   );
 }
 
+/**
+ * What the user still signs after POST /cards/funding: an external Stellar
+ * wallet signs `unsignedXdr`; a co-signed wallet (answered 202) approves `request`.
+ */
+export type CardFundingPendingSignature = { kind: 'xdr'; unsignedXdr: string } | { kind: 'cosign'; request: CosignRequest };
+
 /** POST /cards/funding */
 export async function createCardFunding(
   api: PollarApiClient,
-  body: { cardProviderId?: string; amount: string },
-): Promise<{ funding: CardFunding; pendingSignature?: { unsignedXdr: string } }> {
+  body: { cardProviderId?: string; amount: string; chain?: CardFundingChain },
+): Promise<{ funding: CardFunding; pendingSignature?: CardFundingPendingSignature }> {
   return content(await api.POST('/cards/funding', { body }), 'Failed to start card funding');
 }
 

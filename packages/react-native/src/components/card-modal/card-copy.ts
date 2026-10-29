@@ -3,6 +3,8 @@ import type { CardIncomeRange, PollarLanguage } from '@pollar/core';
 export interface CardCopy {
   /** What each funding state means to the user: a title, and for one in flight what it waits on. */
   funding: Record<string, { title: string; hint?: string }>;
+  /** A Solana funding's own steps: CREATED, then SENT; the rest come from `funding`. */
+  fundingSolana: Record<string, { title: string; hint?: string }>;
   incomeRanges: Record<CardIncomeRange, string>;
   txLabels: Record<string, string>;
   kycPending: Record<string, string>;
@@ -123,6 +125,16 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
       },
       CREDITED: { title: 'Credited to your card' },
       FAILED: { title: 'Failed' },
+    },
+    fundingSolana: {
+      CREATED: {
+        title: 'Confirming your payment',
+        hint: 'Your USDC payment is being confirmed on Solana. This takes a few seconds.',
+      },
+      SENT: {
+        title: 'Arrived, crediting your card',
+        hint: 'The USDC reached the card provider, which is adding it to your card. This can take a few minutes.',
+      },
     },
     incomeRanges: {
       '0-1000': 'Up to 1,000 USD',
@@ -276,6 +288,16 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
       CREDITED: { title: 'Acreditado en tu tarjeta' },
       FAILED: { title: 'Falló' },
     },
+    fundingSolana: {
+      CREATED: {
+        title: 'Confirmando tu pago',
+        hint: 'Tu pago en USDC se está confirmando en Solana. Esto toma unos segundos.',
+      },
+      SENT: {
+        title: 'Llegó, acreditando tu tarjeta',
+        hint: 'Los USDC llegaron al proveedor de la tarjeta, que los está sumando a tu tarjeta. Esto puede tardar unos minutos.',
+      },
+    },
     incomeRanges: {
       '0-1000': 'Hasta 1,000 USD',
       '1000-5000': 'De 1,000 a 5,000 USD',
@@ -427,6 +449,16 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
       },
       CREDITED: { title: 'Creditado no seu cartão' },
       FAILED: { title: 'Falhou' },
+    },
+    fundingSolana: {
+      CREATED: {
+        title: 'Confirmando seu pagamento',
+        hint: 'Seu pagamento em USDC está sendo confirmado na Solana. Isso leva alguns segundos.',
+      },
+      SENT: {
+        title: 'Chegou, creditando seu cartão',
+        hint: 'Os USDC chegaram ao provedor do cartão, que está adicionando ao seu cartão. Isso pode levar alguns minutos.',
+      },
     },
     incomeRanges: {
       '0-1000': 'Até 1.000 USD',

@@ -1550,20 +1550,29 @@ export interface CardSecrets {
 /** Optional on every cards call: which provider, when the app enabled more than one. */
 export type CardProviderParams = { cardProviderId?: string };
 
-export type CardFundingStatus = 'CREATED' | 'BURNED' | 'ATTESTED' | 'MINTED' | 'CREDITED' | 'FAILED';
+export type CardFundingStatus = 'CREATED' | 'SENT' | 'BURNED' | 'ATTESTED' | 'MINTED' | 'CREDITED' | 'FAILED';
+
+/** The chain the user's wallet pays a card funding from. */
+export type CardFundingChain = 'STELLAR' | 'SOLANA';
 
 /**
- * One transfer from the user's Stellar wallet to the card's collateral. It moves
- * on its own once paid: CREATED (waiting for the payment) -> BURNED -> ATTESTED
- * -> MINTED -> CREDITED (the provider booked the deposit). FAILED carries `error`.
+ * One transfer from the user's wallet to the card's collateral. It moves on its
+ * own once paid. From Stellar: CREATED (waiting for the payment) -> BURNED ->
+ * ATTESTED -> MINTED -> CREDITED (the provider booked the deposit). From Solana,
+ * straight to the provider's address: CREATED -> SENT -> CREDITED. FAILED
+ * carries `error`.
  */
 export interface CardFunding {
   id: string;
   status: CardFundingStatus;
   amount: string;
   asset: string;
+  /** The chain the user's wallet pays from. */
+  chain: CardFundingChain | 'POLYGON';
   depositAddress: string;
   chainId: number;
+  /** SOLANA: the user's transfer signature. */
+  sourceTxHash: string | null;
   stellarTxHash: string | null;
   burnTxHash: string | null;
   polygonMintTxHash: string | null;
@@ -1610,8 +1619,16 @@ export interface CardProviderRegistration {
 
 export type CardProviderRegistrationSubmitted = Pick<CardProviderRegistration, 'cardProviderId' | 'status'>;
 
-/** Outcome of {@link PollarClient.fundCard}: `cancelled` when the external wallet declined to sign. */
-export type CardFundingOutcome = { status: 'ok'; funding: CardFunding } | { status: 'cancelled'; funding: CardFunding };
+/**
+ * Outcome of {@link PollarClient.fundCard}: `cancelled` when the user declined
+ * to sign (an external wallet, or a co-signed wallet's request rejected), and
+ * `cosign_pending` when a co-signed wallet's request waits for the app to vote it
+ * (`cosign: 'manual'`); the funding goes on by itself once it is approved.
+ */
+export type CardFundingOutcome =
+  | { status: 'ok'; funding: CardFunding }
+  | { status: 'cancelled'; funding: CardFunding }
+  | { status: 'cosign_pending'; funding: CardFunding; request: CosignRequest };
 
 // --- Earn types (yield vaults / lending) ---------------------------------------
 

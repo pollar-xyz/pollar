@@ -5,6 +5,7 @@ import {
   type CardBalance,
   type CardDepositAddress,
   type CardFunding,
+  type CardFundingChain,
   type CardHolder,
   type CardIncomeRange,
   type CardInfo,
@@ -19,8 +20,10 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { useModalLanguage } from '../../language';
+import { useChains } from '../../useChains';
 import { useWalletAvailable } from '../../useWalletAvailable';
 import { AmountField } from '../AmountField';
+import { ChainSelect } from '../ChainSelect';
 import { CopyButton, PollarModalFooter } from '../commons';
 import { KycModal } from '../kyc-modal/KycModal';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
@@ -44,11 +47,16 @@ const REVEAL_MS = 30_000;
 const TX_LIMIT = 10;
 /** How often fundings in flight are re-read while the funding panel is open. */
 const FUNDING_POLL_MS = 5_000;
-const FUNDING_INFLIGHT = new Set(['CREATED', 'BURNED', 'ATTESTED', 'MINTED']);
+const FUNDING_INFLIGHT = new Set(['CREATED', 'SENT', 'BURNED', 'ATTESTED', 'MINTED']);
 
-/** The step of a funding in flight, out of FUNDING_STEPS. */
-const FUNDING_STEP: Record<string, number> = { CREATED: 1, BURNED: 2, ATTESTED: 3, MINTED: 4 };
-const FUNDING_STEPS = 4;
+/** The states a funding in flight goes through, by the chain it is paid from: the step is the position. */
+const FUNDING_STEPS: Record<CardFundingChain, string[]> = {
+  STELLAR: ['CREATED', 'BURNED', 'ATTESTED', 'MINTED'],
+  SOLANA: ['CREATED', 'SENT'],
+};
+/** The chains a card can be funded from. */
+const FUNDING_CHAINS: readonly CardFundingChain[] = ['STELLAR', 'SOLANA'];
+const isFundingChain = (chain: string): chain is CardFundingChain => (FUNDING_CHAINS as readonly string[]).includes(chain);
 
 const INCOME_RANGES: CardIncomeRange[] = ['0-1000', '1000-5000', '5000-10000', '10000+'];
 
@@ -124,6 +132,7 @@ export function CardModal({ onClose }: CardModalProps) {
   const [deposit, setDeposit] = useState<CardDepositAddress[] | null>(null);
   const [fundings, setFundings] = useState<CardFunding[] | null>(null);
   const [fundAmount, setFundAmount] = useState('');
+  const [fundChain, setFundChain] = useState<CardFundingChain | null>(null);
   const [showManual, setShowManual] = useState(false);
   const [occupations, setOccupations] = useState<CardOccupation[]>([]);
   const [kyc, setKyc] = useState<CardKycInput>(emptyKyc);
@@ -137,8 +146,10 @@ export function CardModal({ onClose }: CardModalProps) {
 
   const provider = providers?.[0] ?? null;
   const fundingAsset = provider?.fundingAssets[0] ?? 'USDC';
-  // Funding signs a Stellar payment from the wallet, so its balance is the Stellar one.
-  const fundAvailable = useWalletAvailable(panel === 'fund' ? { chain: 'STELLAR', code: fundingAsset } : null);
+  // The chains the user holds a wallet on that a card can be funded from, in the app's order.
+  const fundChains = useChains().chains.filter(isFundingChain);
+  const selectedFundChain = fundChain ?? fundChains[0] ?? 'STELLAR';
+  const fundAvailable = useWalletAvailable(panel === 'fund' ? { chain: selectedFundChain, code: fundingAsset } : null);
   const card = cards?.[0] ?? null;
   const expiry = card?.expMonth && card.expYear ? `${card.expMonth}/${card.expYear.slice(-2)}` : null;
 
@@ -345,7 +356,7 @@ export function CardModal({ onClose }: CardModalProps) {
     run(
       'fund-send',
       async () => {
-        const outcome = await getClient().fundCard({ amount: fundAmount.trim() });
+        const outcome = await getClient().fundCard({ amount: fundAmount.trim(), chain: selectedFundChain });
         if (outcome.status === 'cancelled') {
           setError(copy.notSigned);
           return;
@@ -836,6 +847,13 @@ export function CardModal({ onClose }: CardModalProps) {
         {!loading && provider && card && panel === 'fund' && (
           <>
             <p>{copy.fundIntro(provider.fundingAssets.join(` ${copy.or} `) || 'USDC')}</p>
+            <ChainSelect
+              value={selectedFundChain}
+              options={fundChains}
+              onChange={(chain) => setFundChain(chain as CardFundingChain)}
+              disabled={busy !== null}
+              language={language}
+            />
             <AmountField
               id="pollar-card-fund-amount"
               label={copy.amount}
@@ -861,8 +879,9 @@ export function CardModal({ onClose }: CardModalProps) {
               <>
                 <p className="pollar-card-section-title">{copy.yourFundings}</p>
                 {fundings.map((f) => {
-                  const state = copy.funding[f.status];
-                  const step = FUNDING_STEP[f.status];
+                  const state = (f.chain === 'SOLANA' ? copy.fundingSolana[f.status] : undefined) ?? copy.funding[f.status];
+                  const steps = FUNDING_STEPS[isFundingChain(f.chain) ? f.chain : 'STELLAR'];
+                  const step = steps.indexOf(f.status) + 1;
                   const inflight = FUNDING_INFLIGHT.has(f.status);
                   return (
                     <div key={f.id} className="pollar-card-tx" aria-busy={inflight}>
@@ -871,9 +890,9 @@ export function CardModal({ onClose }: CardModalProps) {
                           {inflight && <span className="pollar-spinner pollar-spinner-sm" aria-hidden />}
                           {state?.title ?? f.status}
                         </span>
-                        {inflight && step && (
+                        {inflight && step > 0 && (
                           <span className="pollar-card-tx-meta" role="status">
-                            {copy.stepOf(step, FUNDING_STEPS)} · {state?.hint}
+                            {copy.stepOf(step, steps.length)} · {state?.hint}
                           </span>
                         )}
                         <span className="pollar-card-tx-meta">
