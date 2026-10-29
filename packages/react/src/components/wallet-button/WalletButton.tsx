@@ -37,7 +37,7 @@ export function WalletButton() {
   const copy = WALLET_BUTTON_COPY[language];
   // The address shown (and copied) is the one on the app's FIRST configured
   // chain, not `wallet.address` - that field is the Stellar wallet by definition
-  // in core, so this button used to say "Stellar" to an app whose users live on
+  // in core, so showing it would say "Stellar" to an app whose users live on
   // Polygon. Falls back to it while `/config` loads and for a legacy session that
   // enumerates no wallets.
   const { primaryChain, primaryAddress } = useChains();

@@ -2647,7 +2647,7 @@ export class PollarClient {
 
     // Embedded: one server call. The server sponsors when the app config allows
     // and self-pays otherwise, submitting either way and returning the refreshed
-    // asset list - the client no longer decides the route.
+    // asset list - the route is the server's decision, not the client's.
     if (!this._walletAdapter && walletType === 'internal') {
       const answer = await this._confirm({
         kind: 'build_sign_submit',

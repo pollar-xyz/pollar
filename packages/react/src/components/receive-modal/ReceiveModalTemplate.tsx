@@ -37,7 +37,7 @@ export interface ReceiveModalTemplateProps {
    *
    * The address itself is valid either way - what is missing is the account
    * behind it, so a payment sent now is rejected by the network. Optional, so a
-   * custom template written before this existed keeps compiling.
+   * custom template that does not read it keeps compiling.
    */
   notReadyReason?: string | null;
   /**

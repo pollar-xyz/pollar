@@ -32,7 +32,7 @@ export interface WalletButtonTemplateProps {
    * Why the wallet cannot act on-chain yet (its account is being created, or
    * that failed), or null when it can. Shown as a banner in the dropdown, since
    * the address itself is valid and worth copying either way. Optional, so a
-   * custom template written before this existed keeps compiling.
+   * custom template that does not read it keeps compiling.
    */
   notReadyReason?: string | null;
   /**
@@ -47,7 +47,7 @@ export interface WalletButtonTemplateProps {
    * Signed in with no wallet yet (an app that creates wallets on demand, or
    * none). The button then shows the account menu instead of Login, with Create
    * wallet only when `onCreateWallet` is set. Optional, so a custom template
-   * written before this existed keeps compiling.
+   * that does not read it keeps compiling.
    */
   signedIn?: boolean;
   creatingWallet?: boolean;

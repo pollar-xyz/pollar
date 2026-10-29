@@ -183,7 +183,7 @@ export interface SendModalTemplateProps {
    * picker renders only with two or more, so a single-chain app shows none.
    */
   chains?: WalletChain[];
-  /** @deprecated Kept for compatibility; the sender address is no longer shown. */
+  /** @deprecated The sender address is not shown; kept so existing templates compile. */
   walletAddress?: string;
   /** Can a payment be built on {@link selectedChain}? Stellar and Solana only. */
   canSendOnChain: boolean;
@@ -194,8 +194,8 @@ export interface SendModalTemplateProps {
    * Separate from {@link canSendOnChain}: that one is about the NETWORK not
    * having a transfer path, this one about the user's own account. Collapsing
    * them would tell someone waiting on a brand-new wallet that Stellar does not
-   * support sending. Optional, so a custom template written before this existed
-   * keeps compiling.
+   * support sending. Optional, so a custom template that does not read it keeps
+   * compiling.
    */
   notReadyReason?: string | null;
   onSelectChain?: (chain: WalletChain) => void;
@@ -226,8 +226,8 @@ export interface SendModalTemplateProps {
   onDestinationChange: (value: string) => void;
   /**
    * Optional Stellar memo. The field renders only on Stellar and only when
-   * {@link onMemoChange} is passed, so a custom template written before it
-   * existed keeps compiling.
+   * {@link onMemoChange} is passed, so a custom template without a memo field
+   * keeps compiling.
    */
   memo?: string;
   memoType?: SendMemoType;
