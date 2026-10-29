@@ -149,9 +149,14 @@ export async function getCardSecrets(
 
 /**
  * What the user still signs after POST /cards/funding: an external Stellar
- * wallet signs `unsignedXdr`; a co-signed wallet (answered 202) approves `request`.
+ * wallet signs `unsignedXdr`; a co-signed wallet (answered 202) approves `request`;
+ * an external Solana wallet signs `unsignedTransaction` and sends it to
+ * /tx/submit with `idempotencyKey`.
  */
-export type CardFundingPendingSignature = { kind: 'xdr'; unsignedXdr: string } | { kind: 'cosign'; request: CosignRequest };
+export type CardFundingPendingSignature =
+  | { kind: 'xdr'; unsignedXdr: string }
+  | { kind: 'cosign'; request: CosignRequest }
+  | { kind: 'solana'; unsignedTransaction: string; idempotencyKey: string; lastValidBlockHeight: number };
 
 /** POST /cards/funding */
 export async function createCardFunding(

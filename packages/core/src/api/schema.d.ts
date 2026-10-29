@@ -893,7 +893,7 @@ export interface paths {
         put?: never;
         /**
          * Fund the card from the wallet
-         * @description Moves USDC from the user's wallet on `chain` to the card collateral. STELLAR (default): to the provider's Polygon address through CCTP. SOLANA: straight to the provider's Solana address; the fee follows the app's sponsorship rules. Pollar's custodial wallet is paid at once (201). An external Stellar wallet receives `pendingSignature` `xdr` to sign and send to /funding/{fundingId}/signature (201). A co-signed wallet, on either chain, receives `pendingSignature` `cosign`, the request its device approves (202); the funding moves on once it is approved.
+         * @description Moves USDC from the user's wallet on `chain` to the card collateral. STELLAR (default): to the provider's Polygon address through CCTP. SOLANA: straight to the provider's Solana address; the fee follows the app's sponsorship rules. Pollar's custodial wallet is paid at once (201). An external Stellar wallet receives `pendingSignature` `xdr` to sign and send to /funding/{fundingId}/signature (201). An external Solana wallet receives `pendingSignature` `solana`: sign `unsignedTransaction` and send it to /tx/submit with its `idempotencyKey` before `lastValidBlockHeight` (201). A co-signed wallet, on either chain, receives `pendingSignature` `cosign`, the request its device approves (202); the funding moves on once it is approved.
          */
         post: operations["postCardsFunding"];
         delete?: never;
@@ -8045,6 +8045,12 @@ export interface operations {
                                     createdAt: string;
                                     resolvedAt: string | null;
                                 };
+                            } | {
+                                /** @constant */
+                                kind: "solana";
+                                unsignedTransaction: string;
+                                idempotencyKey: string;
+                                lastValidBlockHeight: number;
                             };
                         };
                     };
@@ -8127,6 +8133,12 @@ export interface operations {
                                     createdAt: string;
                                     resolvedAt: string | null;
                                 };
+                            } | {
+                                /** @constant */
+                                kind: "solana";
+                                unsignedTransaction: string;
+                                idempotencyKey: string;
+                                lastValidBlockHeight: number;
                             };
                         };
                     };

@@ -130,7 +130,10 @@
   number is copied without spaces and the expiry as `MM/YY`.
 - **Fund the card from Solana.** `fundCard({ amount, chain: 'SOLANA' })` sends
   the USDC from the user's Solana wallet straight to the provider's Solana
-  address, with no bridge; without `chain` it stays Stellar. A Solana funding
+  address, with no bridge; without `chain` it stays Stellar. A custodial wallet
+  pays on the server; an external one (Phantom, Solflare) signs the transfer
+  the backend built and `fundCard` submits it (`cancelled` when the wallet
+  declines). A Solana funding
   goes `CREATED`, `SENT`, `CREDITED` (`CardFunding.chain`, `sourceTxHash`, new
   status `SENT`). `<CardModal>` offers a network picker when the user holds a
   wallet on both chains, reads the balance on the one picked, and shows each

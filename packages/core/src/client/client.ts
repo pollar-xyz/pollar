@@ -5192,10 +5192,11 @@ export class PollarClient {
 
   /**
    * Move USDC from the user's wallet on `chain` (Stellar by default) to the
-   * card's collateral. A custodial wallet pays at once; an external Stellar
-   * wallet is asked to sign the payment here; a co-signed wallet approves the
-   * request on this device. `cancelled` means the user declined. The returned
-   * funding then advances on its own; follow it with {@link getCardFunding}.
+   * card's collateral. A custodial wallet pays at once; an external wallet,
+   * Stellar or Solana, is asked to sign the payment here; a co-signed wallet
+   * approves the request on this device. `cancelled` means the user declined.
+   * The returned funding then advances on its own; follow it with
+   * {@link getCardFunding}.
    */
   async fundCard(params: CardProviderParams & { amount: string; chain?: CardFundingChain }): Promise<CardFundingOutcome> {
     const started = await createCardFunding(this._api, params);
@@ -5217,6 +5218,32 @@ export class PollarClient {
         throw new Error(settled.message ?? settled.details ?? settled.code ?? 'Failed to send the funding payment');
       }
       // The payment is out; the server moves the funding from here.
+      return { status: 'ok', funding: (await getCardFunding(this._api, started.funding.id)).funding };
+    }
+
+    if (pending.kind === 'solana') {
+      // The transfer the backend built for the funding, signed in the connected
+      // wallet right away (its blockhash lasts about a minute) and broadcast
+      // like any Solana send; the server reads the signature off that send.
+      const noSigner = this._externalSignerMissing();
+      if (noSigner) throw new Error(noSigner.details);
+      const adapter = this._walletAdapter;
+      if (!adapter?.signSolanaTransaction) {
+        throw new Error(`Wallet "${adapter?.type}" cannot sign a Solana transaction.`);
+      }
+      const sent = await this._signAndSubmitSolana(
+        adapter.signSolanaTransaction.bind(adapter),
+        pending.unsignedTransaction,
+        pending.idempotencyKey,
+      );
+      if (sent.status === 'error') {
+        // Nothing went out when the wallet did not sign: the user declined.
+        const state = this.getTransactionState();
+        if (!sent.hash && state?.step === 'error' && state.phase === 'signing') {
+          return { status: 'cancelled', funding: started.funding };
+        }
+        throw new Error(sent.message ?? sent.details ?? sent.code ?? 'Failed to send the funding payment');
+      }
       return { status: 'ok', funding: (await getCardFunding(this._api, started.funding.id)).funding };
     }
 
