@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { applyEmailCodeInput, applyEmailCodePaste, EMAIL_CODE_LENGTH, type EmailCodeUpdate } from './email-code';
 
 interface EmailCodeInputProps {
@@ -9,6 +9,30 @@ interface EmailCodeInputProps {
 export function EmailCodeInput({ email, onSubmit }: EmailCodeInputProps) {
   const [digits, setDigits] = useState<string[]>(() => Array.from({ length: EMAIL_CODE_LENGTH }, () => ''));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  // Each box's selection just before its last input, to tell a replaced digit from one typed
+  // beside it. Read in a native beforeinput listener: React has no synthetic event that fires
+  // before the value changes.
+  const selections = useRef<({ start: number; end: number } | null)[]>([]);
+
+  useEffect(() => {
+    const listeners = inputRefs.current.map((el, index) => {
+      if (!el) return null;
+      const remember = () => {
+        selections.current[index] = { start: el.selectionStart ?? 0, end: el.selectionEnd ?? 0 };
+      };
+      el.addEventListener('beforeinput', remember);
+      return () => el.removeEventListener('beforeinput', remember);
+    });
+    return () => listeners.forEach((remove) => remove?.());
+  }, []);
+
+  function handleChange(index: number, el: HTMLInputElement) {
+    const previous = digits[index] ?? '';
+    const selection = selections.current[index];
+    selections.current[index] = null;
+    const replaced = previous && selection ? selection.start === 0 && selection.end >= previous.length : undefined;
+    apply(applyEmailCodeInput(digits, index, el.value, el.selectionStart, replaced));
+  }
 
   function apply({ digits: next, focus }: EmailCodeUpdate) {
     setDigits(next);
@@ -45,7 +69,7 @@ export function EmailCodeInput({ email, onSubmit }: EmailCodeInputProps) {
             aria-label={`Digit ${i + 1} of ${EMAIL_CODE_LENGTH}`}
             value={digit}
             className="pollar-code-input"
-            onChange={(e) => apply(applyEmailCodeInput(digits, i, e.target.value, e.target.selectionStart))}
+            onChange={(e) => handleChange(i, e.target)}
             onKeyDown={(e) => handleKeyDown(i, e)}
             onPaste={handlePaste}
           />
