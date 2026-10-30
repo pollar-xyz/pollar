@@ -148,6 +148,14 @@
   call returns the funding as the server reads it after the send
   (`cosign_pending` under `cosignManual`, `cancelled` when the user rejects it).
   Requires sdk-api with the v3 funding routes.
+- **A funding is not paid twice.** `fundCard` takes an `idempotencyKey`, one
+  per funding the user means to make: a retry with the same key (a double
+  click, a response that never arrived) returns the funding the key already
+  started, as it stands, instead of paying again; a new funding needs a new
+  key, and a funding that failed stays failed under its key. `<CardModal>`, web
+  and React Native, keeps one key per attempt and drops it once the server
+  answers. Requires an sdk-api that accepts `idempotencyKey` on
+  `POST /v3/cards/funding`.
 - The email code input takes a one-time code the browser or keyboard
   autofills, and spreads it across the six boxes; a paste, or a code typed next
   to a digit already there, fills them the same way
