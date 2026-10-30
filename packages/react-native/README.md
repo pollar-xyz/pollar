@@ -213,6 +213,9 @@ the same ids through `walletAdapters` in the client config.
   `<CosignModal>`, `<RecoveryModal>`, `<CustodyMigrationModal>`, `<SendModal>`, `<ReceiveModal>`, `<SwapModal>`,
   `<EarnModal>`, `<SessionsModal>`, `<EnabledAssetsModal>`, `<DistributionRulesModal>`: the modals, for when you want
   to mount one yourself.
+- `<CosignModal>`, the confirmation prompt and the transaction status views share one review: the asset and chain
+  logos with the sender and recipient, a fee badge when who pays is known, and "Show details" with the addresses,
+  network, fee, raw transaction and hash.
 - `<RequirementFormModal>`, `<RegistryCheckModal>`, `<ProviderRegistrationModal>`: the requirement steps a ramp route
   can ask for (see below).
 - `<CardModal>`: cards from the app's card providers - the provider's steps, sign-up, issuing, the card with its

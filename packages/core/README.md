@@ -890,7 +890,12 @@ client.issueCard(params?): Promise<CardInfo>;
 client.getCards(params?): Promise<CardInfo[]>; // never includes card numbers
 client.getCardBalance(params?): Promise<CardBalance | null>;
 client.getCardTransactions(params?): Promise<CardTransactionsPage>;
-client.fundCard(params: { amount: string; chain?: 'STELLAR' | 'SOLANA'; cardProviderId? }): Promise<CardFundingOutcome>;
+client.fundCard(params: {
+  amount: string;
+  chain?: 'STELLAR' | 'SOLANA';
+  idempotencyKey?: string;
+  cardProviderId?;
+}): Promise<CardFundingOutcome>;
 client.getCardFunding(fundingId: string): Promise<CardFunding>;
 client.listCardFundings(params?): Promise<CardFunding[]>;
 client.revealCardSecrets(cardId: string, params?): Promise<CardSecrets>;
@@ -902,6 +907,9 @@ client.revealCardSecrets(cardId: string, params?): Promise<CardSecrets>;
   user declined) or `cosign_pending`, each with the `funding`. On Solana the USDC goes straight to the provider's Solana
   address, with no bridge, and the funding goes `CREATED`, `SENT`, `CREDITED`. Co-signed funding requires sdk-api with
   the v3 funding routes.
+- `idempotencyKey` names one funding the user means to make. A retry with the same key (a double click, a response
+  that never arrived) returns the funding the key already started instead of paying again; a new funding needs a new
+  key.
 - `revealCardSecrets()` decrypts the card number and CVC on the device with a one-shot key the server never sees, on
   WebCrypto or in plain JavaScript on React Native. Show them and drop them: never store or log the result.
 
@@ -997,6 +1005,9 @@ Stellar, Solana and Polygon request on the device before voting. By default the 
   `client.cosign.migrateWallets(custody?)` moves the wallets Pollar still holds to Turnkey.
 - `client.cosign.recovery` adds and uses recovery methods (passkeys, email code, device enrollment, phrase export).
 - `getCosignState()` / `onCosignStateChange()` report the co-sign state.
+- `request.appPaysFee` is `true` when the fee payer of the payload is not the user, so a prompt can say the app covers
+  the fee before the vote. Once a transaction is signed or submitted, `TransactionState` carries `sponsored` from the
+  platform's answer.
 
 Every signature, whatever the wallet's custody, first passes the confirmation policy: `'prompt'` waits for the user,
 `{ window: { seconds, maxUsd } }` lets the signatures after a confirmed one sign without asking up to a USD cap, and

@@ -7,7 +7,8 @@
 > sponsored-fee flows, co-signed wallets signing those entries, hash memos,
 > swaps on Solana, every modal in English, Spanish and Portuguese, conditional
 > KYC form fields, ramp texts that name a route's limit, card funding from
-> Solana and from co-signed wallets, and fixes. One call
+> Solana and from co-signed wallets, a transaction review with a fee badge in
+> every approval and status screen, and fixes. One call
 > an app may already make changes: `signAuthEntry` now passes the signature
 > confirmation (below). The Stellar Wallets Kit and
 > Solana Wallet Standard adapters stay at `0.12.0`; their `^0.12.0` core range
@@ -156,6 +157,24 @@
   and React Native, keeps one key per attempt and drops it once the server
   answers. Requires an sdk-api that accepts `idempotencyKey` on
   `POST /v3/cards/funding`.
+- **Approvals and transaction screens show what moves.** `<ConfirmModal>`,
+  `<CosignModal>` and every transaction status view (send, swap, earn, the
+  transaction modal), web and React Native, share one review: the asset and
+  chain logos, an arrow, and the user's wallet or the recipient; a fee badge
+  when who pays the fee is known; and "Show details", which unfolds the
+  addresses, network, fee, raw transaction and hash. Ramp steps draw the
+  `details.flow` sdk-api sends with the co-sign request. Chain logos load from
+  `pollar.xyz/chains` and asset logos from `pollar.xyz/tokens`; any other
+  asset shows its initial.
+- `TransactionState` carries `sponsored` on `signed`, `submitting`,
+  `submitted` and `success` once the sign or submit answer reports it (a
+  co-sign request's submit too), and keeps it for the later steps of the same
+  transaction; absent when the platform does not say. The review shows the fee
+  badge from it after the signature, and a co-sign outcome shows who paid.
+- `CosignRequest.appPaysFee` (a required boolean) is `true` when the fee payer
+  of the payload is not the user (the Stellar source or fee-bump source, the
+  first Solana key). `<CosignModal>` then shows "Fee covered by the app" before
+  the vote; any other request shows the badge only after the signature.
 - The email code input takes a one-time code the browser or keyboard
   autofills, and spreads it across the six boxes; a paste, or a code typed next
   to a digit already there, fills them the same way

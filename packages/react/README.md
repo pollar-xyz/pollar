@@ -6,7 +6,9 @@ Stellar and Solana applications.
 > **0.12.1** (requires `@pollar/core@^0.12.1`). Every modal and exported template speaks English, Spanish and
 > Portuguese (see [Language](#language)). `<SwapModal>` swaps on Solana too, with a Network selector when the app has
 > venues on both chains. `<SendModal>` offers a Hash memo next to Text and ID. `<ConfirmModal>` shows a Soroban token
-> transfer (`kind: 'sign_auth_entry'`) with its destination, amount and asset. `<RequirementFormModal>` asks a field
+> transfer (`kind: 'sign_auth_entry'`) with its destination, amount and asset. `<ConfirmModal>`, `<CosignModal>` and
+> every transaction status view share one review: what moves, a fee badge when who pays is known, and "Show details"
+> with the addresses, network, fee, raw transaction and hash. `<RequirementFormModal>` asks a field
 > with `showIf` only while the answer it depends on matches. `<CardModal>` copies the number, expiry date and CVC,
 > offers a network picker when the user holds a wallet on Stellar and Solana, and funds the card from a co-signed
 > wallet too. The email code input takes an autofilled one-time code. The ramp widget says a route's minimum or
@@ -407,7 +409,9 @@ you want to swap the chrome but keep the data wiring from `usePollar()`. (`<Earn
 | `<CustodyMigrationModal>`  | `<CustodyMigrationModalTemplate>`  |
 
 `<TxStatusView>` is the shared status component (build -> sign -> success/error) reused by `TransactionModal` and
-`SendModal`; it's exported on its own for consumers that want to embed the lifecycle elsewhere.
+`SendModal`; it's exported on its own for consumers that want to embed the lifecycle elsewhere. It shows the same
+review as `<ConfirmModal>` and `<CosignModal>`: the asset and chain logos with the sender and recipient, the fee badge
+once the platform reports who paid, and "Show details".
 
 > `onWalletConnect` is **optional** on `<LoginModalTemplate>` (defaults to a no-op).
 

@@ -26,8 +26,8 @@ Pollar runs on Solana end to end for wallets and payments:
 > SEP-43 signer for x402's `ExactStellarScheme`), co-signed wallets sign those entries, and Stellar sends take hash
 > memos. It adds **swaps on Solana** (Jupiter and Titan: `getSolanaSwapConfig`, `getSolanaSwapQuote`, `swapSolana`,
 > and a Network selector in the web `<SwapModal>`), every modal in **English, Spanish and Portuguese**, conditional
-> KYC form fields, ramp texts that name a route's minimum or maximum, and card funding from Solana and from co-signed
-> wallets. One existing call changes behavior: `signAuthEntry` asks for the signature confirmation like every other
+> KYC form fields, ramp texts that name a route's minimum or maximum, card funding from Solana and from co-signed
+> wallets, and a transaction review with a fee badge in every approval and status screen. One existing call changes behavior: `signAuthEntry` asks for the signature confirmation like every other
 > signature; see [UPGRADE.md](./UPGRADE.md). The Stellar Wallets Kit and Solana Wallet Standard adapters stay at
 > `0.12.0`; their `^0.12.0` core range accepts 0.12.1.
 >
@@ -443,10 +443,10 @@ store; run `yalc add @pollar/core @pollar/react` (or the packages the app uses) 
 ### Release a candidate
 
 ```bash
-npm run release:rc -- 0.12.1-rc.3
+npm run release:rc -- 0.12.1-rc.6
 ```
 
-Tags the current commit as `v0.12.1-rc.3` and pushes the tag, which runs
+Tags the current commit as `v0.12.1-rc.6` and pushes the tag, which runs
 `.github/workflows/release-rc.yml` (build, unit + smoke tests, publish `@pollar/core`, `@pollar/react`,
 `@pollar/react-native`, `@pollar/stellar-wallets-kit-adapter` and `@pollar/solana-wallet-standard-adapter` to npm on
 the `next` dist-tag) and `.github/workflows/e2e-rc.yml`. Nothing is published from your machine.

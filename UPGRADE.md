@@ -26,6 +26,15 @@ React Native's `AppShell` and `AccountOnboarding` take `'pt'` in
 `label` typed as `(key, language: 'en' | 'es') => string` no longer type-checks.
 Type the parameter as `PollarLanguage` (from `@pollar/core`).
 
+`CosignRequest` has a required `appPaysFee: boolean`. A test mock or fixture
+that builds a `CosignRequest` literal sets it (`false` keeps the fee badge for
+after the signature).
+
+An app that calls `fundCard` itself passes an `idempotencyKey`, one per funding
+the user means to make, and sends the same key when it retries that funding;
+without it a retry after a lost response can pay twice. `<CardModal>` already
+does this.
+
 ## 0.11.5 -> 0.12.0
 
 Use `@pollar/core`, `@pollar/react` and `@pollar/react-native` at matching
