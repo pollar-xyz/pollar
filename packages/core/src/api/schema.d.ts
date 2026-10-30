@@ -893,7 +893,7 @@ export interface paths {
         put?: never;
         /**
          * Fund the card from the wallet
-         * @description Moves USDC from the user's wallet on `chain` to the card collateral. STELLAR (default): to the provider's Polygon address through CCTP. SOLANA: straight to the provider's Solana address; the fee follows the app's sponsorship rules. Pollar's custodial wallet is paid at once (201). An external Stellar wallet receives `pendingSignature` `xdr` to sign and send to /funding/{fundingId}/signature (201). An external Solana wallet receives `pendingSignature` `solana`: sign `unsignedTransaction` and send it to /tx/submit with its `idempotencyKey` before `lastValidBlockHeight` (201). A co-signed wallet, on either chain, receives `pendingSignature` `cosign`, the request its device approves (202); the funding moves on once it is approved.
+         * @description Moves USDC from the user's wallet on `chain` to the card collateral. STELLAR (default): to the provider's Polygon address through CCTP. SOLANA: straight to the provider's Solana address; the fee follows the app's sponsorship rules. Pollar's custodial wallet is paid at once (201). An external Stellar wallet receives `pendingSignature` `xdr` to sign and send to /funding/{fundingId}/signature (201). An external Solana wallet receives `pendingSignature` `solana`: sign `unsignedTransaction` and send it to /tx/submit with its `idempotencyKey` before `lastValidBlockHeight` (201). A co-signed wallet, on either chain, receives `pendingSignature` `cosign`, the request its device approves (202); the funding moves on once it is approved. With `idempotencyKey`, a retry returns the funding that key started, as it stands and without `pendingSignature` (200), and pays nothing; a failed funding stays failed, so a new attempt needs a new key.
          */
         post: operations["postCardsFunding"];
         delete?: never;
@@ -7977,10 +7977,46 @@ export interface operations {
                     amount: string;
                     /** @enum {string} */
                     chain?: "STELLAR" | "SOLANA";
+                    idempotencyKey?: string;
                 };
             };
         };
         responses: {
+            /** @description Retry of an idempotency key: the funding it already started */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_CARDS_FUNDING_STATUS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            funding: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "CREATED" | "SENT" | "BURNED" | "ATTESTED" | "MINTED" | "CREDITED" | "FAILED";
+                                amount: string;
+                                asset: string;
+                                depositAddress: string;
+                                chainId: number;
+                                stellarTxHash: string | null;
+                                burnTxHash: string | null;
+                                polygonMintTxHash: string | null;
+                                providerTxId: string | null;
+                                error: string | null;
+                                createdAt: string;
+                                updatedAt: string;
+                                /** @enum {string} */
+                                chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                sourceTxHash: string | null;
+                            };
+                        };
+                    };
+                };
+            };
             /** @description Created */
             201: {
                 headers: {

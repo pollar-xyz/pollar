@@ -161,7 +161,7 @@ export type CardFundingPendingSignature =
 /** POST /cards/funding */
 export async function createCardFunding(
   api: PollarApiClient,
-  body: { cardProviderId?: string; amount: string; chain?: CardFundingChain },
+  body: { cardProviderId?: string; amount: string; chain?: CardFundingChain; idempotencyKey?: string },
 ): Promise<{ funding: CardFunding; pendingSignature?: CardFundingPendingSignature }> {
   return content(await api.POST('/cards/funding', { body }), 'Failed to start card funding');
 }

@@ -52,6 +52,11 @@ const TX_LIMIT = 10;
 const FUNDING_POLL_MS = 5_000;
 const FUNDING_INFLIGHT = new Set(['CREATED', 'SENT', 'BURNED', 'ATTESTED', 'MINTED']);
 
+/** Only unique among the user's fundings, which is all the server compares it against; not a secret. */
+function newFundingKey(): string {
+  return `fund-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /** The states a funding in flight goes through, by the chain it is paid from: the step is the position. */
 const FUNDING_STEPS: Record<CardFundingChain, string[]> = {
   STELLAR: ['CREATED', 'BURNED', 'ATTESTED', 'MINTED'],
@@ -179,6 +184,9 @@ export function CardModal({ onClose }: CardModalProps) {
   const [deposit, setDeposit] = useState<CardDepositAddress[] | null>(null);
   const [fundings, setFundings] = useState<CardFunding[] | null>(null);
   const [fundAmount, setFundAmount] = useState('');
+  // One key per funding the user means to make: a double click or a retry after
+  // a lost response gets that funding back instead of paying twice.
+  const fundKey = useRef<string | null>(null);
   const [showManual, setShowManual] = useState(false);
   const [occupations, setOccupations] = useState<CardOccupation[]>([]);
   const [kyc, setKyc] = useState<CardKycInput>(emptyKyc);
@@ -396,7 +404,20 @@ export function CardModal({ onClose }: CardModalProps) {
     run(
       'fund-send',
       async () => {
-        const outcome = await getClient().fundCard({ amount: fundAmount.trim(), chain: selectedFundChain });
+        fundKey.current ??= newFundingKey();
+        let outcome;
+        try {
+          outcome = await getClient().fundCard({
+            amount: fundAmount.trim(),
+            chain: selectedFundChain,
+            idempotencyKey: fundKey.current,
+          });
+        } catch (e) {
+          // The server answered, so the next attempt is a new funding; without an answer it keeps the key.
+          if (isPollarApiError(e)) fundKey.current = null;
+          throw e;
+        }
+        fundKey.current = null;
         if (!mounted.current) return;
         if (outcome.status === 'cancelled') {
           setError(copy.notSigned);

@@ -5235,8 +5235,15 @@ export class PollarClient {
    * approves the request on this device. `cancelled` means the user declined.
    * The returned funding then advances on its own; follow it with
    * {@link getCardFunding}.
+   *
+   * `idempotencyKey` names one funding the user means to make. Send the same key
+   * when retrying it (a double click, a response that never arrived) and the
+   * server returns the funding it already started instead of paying again;
+   * a new funding needs a new key.
    */
-  async fundCard(params: CardProviderParams & { amount: string; chain?: CardFundingChain }): Promise<CardFundingOutcome> {
+  async fundCard(
+    params: CardProviderParams & { amount: string; chain?: CardFundingChain; idempotencyKey?: string },
+  ): Promise<CardFundingOutcome> {
     const started = await createCardFunding(this._api, params);
     const pending = started.pendingSignature;
     if (!pending) return { status: 'ok', funding: started.funding };
