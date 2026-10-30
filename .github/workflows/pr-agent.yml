@@ -13,7 +13,7 @@ on:
 jobs:
   pr_agent:
     if: ${{ github.event.sender.type != 'Bot' }}
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     permissions:
       contents: write

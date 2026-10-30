@@ -16,7 +16,7 @@ concurrency:
 jobs:
   ci:
     name: format + lint + build + smoke
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
