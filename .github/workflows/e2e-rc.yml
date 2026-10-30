@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 30
     env:
       GH_TOKEN: ${{ secrets.E2E_DISPATCH_TOKEN }}
