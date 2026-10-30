@@ -1627,7 +1627,7 @@ export type CardProviderRegistrationSubmitted = Pick<CardProviderRegistration, '
  * Outcome of {@link PollarClient.fundCard}: `cancelled` when the user declined
  * to sign (an external wallet, or a co-signed wallet's request rejected), and
  * `cosign_pending` when a co-signed wallet's request waits for the app to vote it
- * (`cosign: 'manual'`); the funding goes on by itself once it is approved.
+ * (`cosignManual: true`); the funding goes on by itself once it is approved.
  */
 export type CardFundingOutcome =
   | { status: 'ok'; funding: CardFunding }
