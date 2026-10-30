@@ -10,7 +10,16 @@ import './CosignModal.css';
 import { CosignModalTemplate } from './CosignModalTemplate';
 import { modalChrome } from '../modal-theme';
 
+/** How long an outcome that needs nothing from the user stays up before the modal closes. */
+const CLOSE_AFTER_SECONDS = 3;
+/** A sent transaction stays up longer, so its hash can be read, copied or opened. */
+const CLOSE_AFTER_SENT_SECONDS = 5;
+/** How often the prompt looks for the next request while a flow says one is coming. */
+const NEXT_REQUEST_EVERY_MS = 2_000;
+
 interface CosignModalProps {
+  /** The approval a flow asks for next (`setCosignNextStep`); the prompt waits for it instead of closing. */
+  nextStep?: string | null;
   onClose: () => void;
 }
 
@@ -19,10 +28,10 @@ interface CosignModalProps {
  * against Turnkey before enabling Approve, so the user only ever confirms a
  * transaction the device checked itself.
  */
-export function CosignModal({ onClose }: CosignModalProps) {
+export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
   const { getClient, styles, network } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
-  const { pending, lastResolved, approve, reject, verify, inspectQuorum } = useCosign();
+  const { pending, lastResolved, loaded, refresh, approve, reject, verify, inspectQuorum } = useCosign();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [verification, setVerification] = useState<CosignVerification | null>(null);
@@ -84,6 +93,39 @@ export function CosignModal({ onClose }: CosignModalProps) {
     });
   }, [getClient]);
 
+  // Nothing left to vote on and nothing to read (no transaction, no signature), or a sent transaction:
+  // count down and close. A signed XDR the app still has to send stays up until closed.
+  const silent =
+    pending.length === 0 &&
+    (lastResolved ? lastResolved.status === 'APPROVED' && !lastResolved.submit?.hash && !lastResolved.signedXdr : loaded);
+  const sent = pending.length === 0 && lastResolved?.status === 'APPROVED' && !!lastResolved.submit?.hash;
+  // A flow with another approval coming keeps the prompt up and shows that request when it arrives.
+  const awaitingNext = sent && !!nextStep;
+  const closeAfter = awaitingNext ? null : sent ? CLOSE_AFTER_SENT_SECONDS : silent ? CLOSE_AFTER_SECONDS : null;
+  useEffect(() => {
+    if (!awaitingNext) return;
+    const timer = setInterval(() => void refresh().catch(() => undefined), NEXT_REQUEST_EVERY_MS);
+    return () => clearInterval(timer);
+  }, [awaitingNext, refresh]);
+  const [closesIn, setClosesIn] = useState<number | null>(null);
+  useEffect(() => {
+    if (closeAfter === null) {
+      setClosesIn(null);
+      return;
+    }
+    let left = closeAfter;
+    setClosesIn(left);
+    const timer = setInterval(() => {
+      left -= 1;
+      if (left > 0) setClosesIn(left);
+      else {
+        clearInterval(timer);
+        onCloseRef.current();
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [closeAfter, lastResolved?.id]);
+
   const run = useCallback(
     async (kind: 'approving' | 'rejecting', request: CosignRequest, action: (r: CosignRequest) => Promise<CosignRequest>) => {
       setBusy(kind);
@@ -113,6 +155,8 @@ export function CosignModal({ onClose }: CosignModalProps) {
         error={error}
         approveBlocked={!!current && approveFailedFor === current.id}
         {...(lastResolved ? { lastResolved } : {})}
+        closesIn={closesIn}
+        nextStep={awaitingNext ? nextStep : null}
         explorerUrl={lastResolved?.submit?.hash ? explorerTxUrl(lastResolved.network, lastResolved.submit.hash, network) : null}
         onSelect={(r) => setSelectedId(r.id)}
         onApprove={(r) => void run('approving', r, approve)}

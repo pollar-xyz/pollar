@@ -38,6 +38,13 @@ export interface ReceiveModalTemplateProps {
    * custom template written before this existed keeps compiling.
    */
   notReadyReason?: string | null;
+  /**
+   * The wallet has no way to be recovered without this device yet. The address
+   * stays hidden until the user adds one, so nobody is handed an address whose
+   * funds a lost phone would take with it. Optional for custom templates.
+   */
+  recoveryLocked?: boolean;
+  onSetupRecovery?: () => void;
   onCopy: () => void;
   onClose: () => void;
 }
@@ -52,6 +59,8 @@ export function ReceiveModalTemplate({
   onSelectChain,
   copied,
   notReadyReason,
+  recoveryLocked,
+  onSetupRecovery,
   onCopy,
   onClose,
 }: ReceiveModalTemplateProps) {
@@ -82,7 +91,19 @@ export function ReceiveModalTemplate({
       {chains && onSelectChain && <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} />}
 
       {/* QR code */}
-      {walletAddress ? (
+      {recoveryLocked ? (
+        <div className="pollar-receive-locked" role="alert">
+          <p>
+            Set up a way to recover this wallet before receiving funds. Without one, losing this device means losing whatever
+            you receive, and nobody can get it back.
+          </p>
+          {onSetupRecovery && (
+            <button type="button" className="pollar-receive-copy-btn" onClick={onSetupRecovery}>
+              Set up recovery
+            </button>
+          )}
+        </div>
+      ) : walletAddress ? (
         <>
           <div className="pollar-receive-qr">
             <div className="pollar-receive-network-badge">

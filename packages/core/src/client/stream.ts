@@ -1,6 +1,7 @@
 import { PollarApiClient } from '../api/client';
 import { abortError, throwIfAborted } from '../lib/abort';
 import type { PollarLogger } from '../lib/logger';
+import { stringField } from '../api/error-fields';
 
 /** Terminal session-status conditions, surfaced identically by the SSE stream
  *  (as `error` events) and the poll endpoint (as 404 / 410). When either occurs
@@ -26,7 +27,7 @@ export class SessionStatusError extends Error {
 /** Returns the terminal code if `parsed` is an SSE `error` event payload
  *  (`{ error: '...' }`), otherwise null. */
 function terminalStatusCode(parsed: unknown): SessionStatusErrorCode | null {
-  const err = (parsed as { error?: unknown } | null)?.error;
+  const err = stringField(parsed, 'error');
   if (err === 'INVALID_CLIENT_SESSION_ID' || err === 'EXPIRED_CLIENT_ID') return err;
   return null;
 }

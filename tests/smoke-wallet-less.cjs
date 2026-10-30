@@ -52,11 +52,13 @@ const ADDRESS = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
   );
 
   const calls = [];
+  const provisionBodies = [];
   let provisionResponse = { status: 201, body: null };
   globalThis.fetch = async (req) => {
     const url = new URL(req.url);
     calls.push(url.pathname);
     if (url.pathname.endsWith('/wallet/provision')) {
+      provisionBodies.push(JSON.parse(await req.text()));
       return new Response(JSON.stringify(provisionResponse.body), { status: provisionResponse.status });
     }
     return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
@@ -107,6 +109,11 @@ const ADDRESS = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
   const persisted = JSON.parse(await storage.get(sessionKey));
   check('the stored session carries it', persisted.wallet.address === ADDRESS, persisted.wallet);
   unsubscribe();
+  check('createWallet() without a choice names no custody', provisionBodies[0]?.custody === undefined, provisionBodies[0]);
+
+  console.log('\n── 3b. createWallet({ custody }) names the custody the user chose ──');
+  await client.createWallet({ custody: 'SELF_CUSTODY' });
+  check('the provision body carries custody: SELF_CUSTODY', provisionBodies[1]?.custody === 'SELF_CUSTODY', provisionBodies[1]);
 
   console.log('\n── 4. createWallet() surfaces the backend refusal ─────────────');
   provisionResponse = {

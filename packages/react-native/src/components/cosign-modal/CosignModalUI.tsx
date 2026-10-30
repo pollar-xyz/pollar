@@ -1,5 +1,5 @@
-import type { CosignRequest, CosignVerification } from '@pollar/core';
-import React from 'react';
+import { type CosignRequest, type CosignVerification, fromBaseUnits } from '@pollar/core';
+import React, { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { PollarModalFooter } from '../commons';
 
@@ -12,6 +12,13 @@ export interface CosignModalTemplateProps {
   busy: 'approving' | 'rejecting' | null;
   error: string | null;
   lastResolved?: CosignRequest;
+  /** Seconds until the modal closes on its own, while what it shows needs nothing from the user. */
+  closesIn?: number | null;
+  /** The approval coming next in the same flow, shown while the modal waits for it. */
+  nextStep?: string | null;
+  /** The transaction hash was just copied. */
+  copied?: boolean;
+  onCopyHash: (hash: string) => void;
   onSelect: (request: CosignRequest) => void;
   onApprove: (request: CosignRequest) => void;
   onReject: (request: CosignRequest) => void;
@@ -43,6 +50,17 @@ function expiresIn(request: CosignRequest): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+/** A base-unit amount with the `decimals` and `symbol` written next to it, as the user reads it; null when either is missing. */
+function readableAmount(details: Record<string, unknown>): { amount: string; symbol: string } | null {
+  const { amount, decimals, symbol } = details;
+  if (typeof amount !== 'string' || typeof decimals !== 'number' || typeof symbol !== 'string') return null;
+  try {
+    return { amount: fromBaseUnits(amount, decimals), symbol };
+  } catch {
+    return null;
+  }
+}
+
 function detailRows(request: CosignRequest): Array<[string, string]> {
   const details = (request.details ?? {}) as Record<string, unknown>;
   const rows: Array<[string, string]> = [];
@@ -52,8 +70,9 @@ function detailRows(request: CosignRequest): Array<[string, string]> {
     rows.push([label, /^[GC][A-Z2-7]{55}$/.test(text) ? crop(text) : text]);
   };
   push('Destination', details.destination);
-  push('Amount', details.amount);
-  push('Asset', details.asset ?? details.assetCode);
+  const readable = readableAmount(details);
+  push('Amount', readable ? `${readable.amount} ${readable.symbol}` : details.amount);
+  push('Asset', details.asset ?? details.assetCode ?? readable?.symbol);
   push('Network', request.network);
   rows.push(['Expires in', expiresIn(request)]);
   return rows;
@@ -68,6 +87,10 @@ export function CosignModalTemplate({
   busy,
   error,
   lastResolved,
+  closesIn = null,
+  nextStep = null,
+  copied = false,
+  onCopyHash,
   onSelect,
   onApprove,
   onReject,
@@ -84,6 +107,9 @@ export function CosignModalTemplate({
     okText: isDark ? '#4ade80' : '#15803d',
   };
   const canVote = !!current && verification?.ok === true && !busy;
+  // Keyed by request id, so the explanation folds back when another request is shown.
+  const [verifiedOpenFor, setVerifiedOpenFor] = useState<string | null>(null);
+  const verifiedOpen = !!current && verifiedOpenFor === current.id;
 
   return (
     <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
@@ -105,8 +131,23 @@ export function CosignModalTemplate({
                 : 'Nothing waits for your approval.'}
             </Text>
             {lastResolved?.submit?.hash && (
-              <Text style={{ color: colors.muted }}>Sent. Transaction {crop(lastResolved.submit.hash)}</Text>
+              <View style={styles.hashRow}>
+                <Text style={{ color: colors.muted }}>Sent. Transaction {crop(lastResolved.submit.hash)}</Text>
+                <TouchableOpacity
+                  onPress={() => onCopyHash(lastResolved.submit!.hash)}
+                  accessibilityLabel={copied ? 'Copied' : 'Copy transaction hash'}
+                >
+                  <Text style={{ color: accentColor, fontWeight: '600' }}>{copied ? 'Copied' : 'Copy'}</Text>
+                </TouchableOpacity>
+              </View>
             )}
+            {nextStep && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <ActivityIndicator size="small" color={accentColor} />
+                <Text style={{ color: colors.text, fontSize: 13 }}>Next: {nextStep}. It appears here in a few seconds.</Text>
+              </View>
+            )}
+            {closesIn !== null && <Text style={{ color: colors.muted, fontSize: 12 }}>Closing in {closesIn}s</Text>}
           </View>
         )}
 
@@ -124,7 +165,28 @@ export function CosignModalTemplate({
 
         {current && (
           <View style={[styles.detail, { borderColor: colors.border }]}>
-            <Text style={[styles.detailTitle, { color: colors.text }]}>{labelOf(current)}</Text>
+            <View style={styles.detailHead}>
+              <Text style={[styles.detailTitle, { color: colors.text, flexShrink: 1 }]}>{labelOf(current)}</Text>
+              {!verification && (
+                <View style={[styles.chip, { borderColor: colors.border }]}>
+                  <ActivityIndicator size="small" color={accentColor} />
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>Checking...</Text>
+                </View>
+              )}
+              {verification?.ok && (
+                <TouchableOpacity
+                  onPress={() => setVerifiedOpenFor(verifiedOpen ? null : current.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: verifiedOpen }}
+                  style={[styles.chip, { borderColor: colors.okText }]}
+                >
+                  <View style={[styles.okDot, { backgroundColor: colors.okText }]}>
+                    <View style={styles.okMark} />
+                  </View>
+                  <Text style={{ color: colors.okText, fontSize: 12, fontWeight: '600' }}>Verified</Text>
+                </TouchableOpacity>
+              )}
+            </View>
             {current.summary ? <Text style={{ color: colors.muted }}>{current.summary}</Text> : null}
             {detailRows(current).map(([k, v]) => (
               <View key={k} style={styles.row}>
@@ -133,21 +195,19 @@ export function CosignModalTemplate({
               </View>
             ))}
 
-            <View style={[styles.verify, { borderColor: colors.border }]}>
-              {!verification && <ActivityIndicator size="small" color={accentColor} />}
-              <Text
-                style={{
-                  color: verification ? (verification.ok ? colors.okText : colors.errorText) : colors.muted,
-                  flexShrink: 1,
-                }}
-              >
-                {!verification
-                  ? 'Checking the transaction against Turnkey...'
-                  : verification.ok
-                    ? 'Verified: this is exactly what will be signed.'
-                    : `Not verified: ${verification.reason}`}
-              </Text>
-            </View>
+            {verification?.ok && verifiedOpen && (
+              <View style={[styles.verify, { borderColor: colors.okText }]}>
+                <Text style={{ color: colors.okText, flexShrink: 1 }}>
+                  Checked against Turnkey: this is exactly what will be signed.
+                </Text>
+              </View>
+            )}
+            {/* A failed check stays spelled out: it is the only place the user learns why Approve is off. */}
+            {verification && !verification.ok && (
+              <View style={[styles.verify, { backgroundColor: colors.errorBg, borderColor: colors.errorText }]}>
+                <Text style={{ color: colors.errorText, flexShrink: 1 }}>Not verified: {verification.reason}</Text>
+              </View>
+            )}
 
             {error ? (
               <View style={[styles.verify, { backgroundColor: colors.errorBg, borderColor: colors.errorText }]}>
@@ -186,6 +246,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   title: { fontSize: 17, fontWeight: '600' },
   empty: { paddingVertical: 24, alignItems: 'center', gap: 6 },
+  hashRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   item: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -195,7 +256,27 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   detail: { borderWidth: 1, borderRadius: 12, padding: 14, gap: 8 },
+  detailHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   detailTitle: { fontSize: 16, fontWeight: '600' },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 9,
+    borderWidth: 1,
+    borderRadius: 999,
+  },
+  okDot: { width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  okMark: {
+    width: 4,
+    height: 7,
+    marginTop: -2,
+    borderColor: '#fff',
+    borderRightWidth: 1.5,
+    borderBottomWidth: 1.5,
+    transform: [{ rotate: '45deg' }],
+  },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   verify: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, padding: 10 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 4 },

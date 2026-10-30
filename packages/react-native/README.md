@@ -10,9 +10,10 @@ authentication and transactions in Stellar mobile applications. Built on top of
 npm install @pollar/react-native @pollar/core
 ```
 
-**Peer dependencies:** `@pollar/core ^0.11.5`, `react >= 18`, `react-native >= 0.72`. 0.11.5 adds the co-signed wallet
-prompt (`<CosignModal>`, `cosign` and `openCosignModal` on `usePollar()`) and `<ConfirmModal>` for
-`confirmation: 'prompt'`.
+**Peer dependencies:** `@pollar/core ^0.12.0`, `react >= 18`, `react-native >= 0.72`. 0.12.0 puts `<RampWidget>` on
+the v3 ramps API (the saved ramp in `usePollar()` is `{ direction, order }`), adds `<RecoveryModal>`,
+`<CustodyMigrationModal>` and the custody choice after sign-in, and changes how the provider initializes and restarts;
+see [UPGRADE.md](../../UPGRADE.md).
 
 Add the runtime polyfills and one storage backend:
 
@@ -71,7 +72,7 @@ export default function App() {
 }
 ```
 
-`config` is read once, on mount. To switch API keys, remount the provider (for example with `key={apiKey}`).
+`config` is compared key by key on every render. A changed value (another API key, a new storage or adapter object) cancels any login, destroys the client and mounts the children again with a new one; equal inline scalars do not. Keep object values stable (module scope or `useMemo`) so a re-render does not restart the client.
 
 ### 3. OAuth (Google, GitHub)
 
@@ -109,11 +110,11 @@ const visibilityProvider = await createAppStateVisibilityProvider();
 Creates the `PollarClient`, exposes it through `usePollar()` and mounts the login, transaction, KYC, ramp, transaction
 history and wallet balance modals. You do not render the modals yourself.
 
-| Prop       | Type                 | Required | Description                                                            |
-| ---------- | -------------------- | -------- | ---------------------------------------------------------------------- |
-| `config`   | `PollarClientConfig` | Yes      | Passed to `new PollarClient(config)`. Read once on mount.              |
-| `styles`   | `PollarStyles`       | No       | Merged over the styles configured in the dashboard.                    |
-| `adapters` | `PollarAdapters`     | No       | Custom transaction builders, used with `createPollarAdapterHook(key)`. |
+| Prop       | Type                 | Required | Description                                                                |
+| ---------- | -------------------- | -------- | -------------------------------------------------------------------------- |
+| `config`   | `PollarClientConfig` | Yes      | Passed to `new PollarClient(config)`. A changed value replaces the client. |
+| `styles`   | `PollarStyles`       | No       | Merged over the styles configured in the dashboard.                        |
+| `adapters` | `PollarAdapters`     | No       | Custom transaction builders, used with `createPollarAdapterHook(key)`.     |
 
 ## `usePollar()`
 
@@ -192,8 +193,8 @@ methods come from the dashboard and can be overridden with the `styles` prop.
 
 ## Requirement step modals
 
-`<RampWidget>` lists a route whose corridor has a pending requirement step as locked and opens that step itself. The
-same modals are exported for apps that build their own route list from the quote's `requirementsRequired`:
+The app's own requirement steps (`client.getAppRequirements()`) open these modals; they are exported for apps that
+drive the steps themselves:
 
 | Component                     | Step                     | Props                                                |
 | ----------------------------- | ------------------------ | ---------------------------------------------------- |
@@ -235,12 +236,11 @@ and native panels for payments, assets, history, sessions, swaps, earn and distr
 accepts optional `appConfig`, `platform` (storage, visibility, auth URL and clipboard adapters), and `privyAdapter`.
 Mount an interactive adapter's native provider above `PollarProvider`.
 
-`RampWidget` and `RampPanel` discover registered routes through `client.getRampRoutes()` and render saved
-exact terms, verification groups, fields, payment instructions, waiting states and verified receipts.
-Signing uses a handler registered for the action's chain and encoding. Financial continuation requires a
-user press; polling and restoring a saved transaction never initiate signing. The backend owns submission.
-Legacy routes retain their KYC, form, registry-check and provider-registration flows.
+`RampWidget` and `RampPanel` run the v3 ramps API: they list the routes (`client.getRampRoutes(direction)`), quote
+them leg by leg, ask for the fields a quote needs, create the order and follow it at the pace the server suggests.
+The order's pending action is shown as it comes: a payment QR or bank details, Authorize for a signature, the
+co-sign approval or a verification link. Signing uses a handler registered for the action's chain and encoding (a Stellar or Solana leg falls back to the
+connected wallet) and only runs on a user press; polling never signs. The widget keeps the order in `usePollar().ramp` while it is closed.
 
-For an inline saved workflow, use `RampWorkflow` with `client`, `snapshot` and `onChange`.
 Native panels require `react-native-safe-area-context` and `react-native-svg`; QR rendering uses
 `react-native-qrcode-svg`. Run `npm test --workspace=@pollar/react-native` for native behavior tests.

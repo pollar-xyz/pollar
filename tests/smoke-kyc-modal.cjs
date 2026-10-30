@@ -57,7 +57,22 @@ assert.doesNotMatch(
   render({ step: 'verifying', selectedProvider: { ...props.selectedProvider, flow: 'redirect' } }),
   /<iframe/,
 );
-console.log('KYC modal: embed, redirect, pending, review, expired, approved and retryable errors passed');
+// A session being opened: a spinner on its option, every option and the refresh disabled;
+// an option named for the user opens without the list.
+const opening = render({ step: 'select_provider', providers: [props.selectedProvider], startingProviderId: 'didit-test' });
+assert.match(opening, /Opening…/);
+assert.match(opening, /pollar-spinner-sm/);
+assert.match(opening, /<button[^>]*class="pollar-kyc-provider-btn"[^>]*disabled=""/);
+assert.match(opening, /aria-label="Refresh"[^>]*disabled=""|disabled=""[^>]*aria-label="Refresh"/);
+const direct = render({
+  step: 'select_provider',
+  providers: [props.selectedProvider],
+  startingProviderId: 'didit-test',
+  directOpen: true,
+});
+assert.match(direct, /Opening Didit…/);
+assert.doesNotMatch(direct, /pollar-kyc-provider-btn/);
+console.log('KYC modal: embed, redirect, pending, review, expired, approved, opening and retryable errors passed');
 
 // Exercise the real modal's hooks against a mocked client; stub only the presentation.
 const { JSDOM } = require('jsdom');
@@ -220,7 +235,31 @@ async function mount(extra, mockClient) {
   assert.match(view.error, /does not mean your verification was rejected/);
   await unmount();
 
-  console.log('KYC modal: gate option opens directly, codes surface, keys reuse/rotate, review and expiry settle');
+  // A list that reloads while the session opens (StrictMode's second load, a refresh) keeps the spinner.
+  let release;
+  unmount = await mount(
+    { providerId: 'option-a', corridorId: 'corridor-a' },
+    {
+      getKycProviders: async () => ({ providers: [option] }),
+      resolveKyc: () =>
+        new Promise((resolve) => {
+          release = () => resolve({ alreadyApproved: false, sessionId: 's', kycUrl: 'https://kyc.example' });
+        }),
+    },
+  );
+  assert.equal(view.startingProviderId, 'option-a');
+  assert.equal(view.directOpen, true);
+  await React.act(async () => view.onRefresh());
+  assert.equal(view.isLoading, false);
+  assert.equal(view.startingProviderId, 'option-a', 'the reload does not clear the open in flight');
+  await React.act(async () => release());
+  assert.equal(view.startingProviderId, null);
+  assert.equal(view.step, 'verifying');
+  await unmount();
+
+  console.log(
+    'KYC modal: gate option opens directly, codes surface, keys reuse/rotate, review and expiry settle, a reload keeps the open',
+  );
   dom.window.close();
 })().catch((error) => {
   console.error(error);

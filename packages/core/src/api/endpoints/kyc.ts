@@ -1,11 +1,12 @@
 import type { KycLevel, KycProvider, KycStartBody, KycStartResponse, KycStatus, KycStatusContent } from '../../types';
 import { isPollarApiError, PollarApiError } from '../../types';
 import type { PollarApiClient } from '../client';
+import { isRecord, stringField } from '../error-fields';
 
 /** Wrap an error body into a {@link PollarApiError}, keeping the code the UI branches on. */
 function kycApiError(error: unknown, fallback: string): PollarApiError {
-  const body = (typeof error === 'object' && error !== null ? error : {}) as Record<string, unknown>;
-  const code = typeof body.code === 'string' ? body.code : typeof body.error === 'string' ? body.error : fallback;
+  const body = isRecord(error) ? error : {};
+  const code = stringField(body, 'code') ?? stringField(body, 'error') ?? fallback;
   return new PollarApiError(code, body);
 }
 

@@ -1,10 +1,11 @@
 'use client';
 
-import { isPollarApiError } from '@pollar/core';
+import { type CosignCustody, isPollarApiError } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { walletNotReadyReason } from '../../lib/wallet-provisioning';
 import { useChains } from '../../useChains';
+import { modalChrome } from '../modal-theme';
 import { WalletButtonTemplate } from './WalletButtonTemplate';
 import './WalletButton.css';
 
@@ -26,6 +27,9 @@ export function WalletButton() {
     isAuthenticated,
     createWallet,
     appConfig,
+    recovery,
+    recoveryLocked,
+    openRecoveryModal,
   } = usePollar();
   // The address shown (and copied) is the one on the app's FIRST configured
   // chain, not `wallet.address` - that field is the Stellar wallet by definition
@@ -60,11 +64,7 @@ export function WalletButton() {
   // its user's separate Stellar wallet.
   const notReadyReason = walletNotReadyReason(wallet, primaryChain);
 
-  const { theme = 'light', accentColor = '#005DB4' } = styles;
-  const isDark = theme === 'dark';
-  const dropdownBg = isDark ? '#18181b' : '#fff';
-  const dropdownBorder = isDark ? '#3f3f46' : '#e4e4e7';
-  const itemColor = isDark ? '#fafafa' : '#18181b';
+  const { theme, accentColor, styleOverrides } = modalChrome(styles);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -116,12 +116,12 @@ export function WalletButton() {
     }
   }
 
-  async function handleCreateWallet() {
+  async function handleCreateWallet(custody?: CosignCustody) {
     if (creatingWallet) return;
     setCreatingWallet(true);
     setCreateWalletError(null);
     try {
-      await createWallet();
+      await createWallet(custody ? { custody } : undefined);
       setOpen(false);
     } catch (err) {
       setCreateWalletError(
@@ -159,6 +159,11 @@ export function WalletButton() {
     openSessionsModal();
   }
 
+  function handleRecovery() {
+    setOpen(false);
+    openRecoveryModal();
+  }
+
   function handleKyc() {
     setOpen(false);
     openKycModal();
@@ -177,18 +182,18 @@ export function WalletButton() {
   return (
     <WalletButtonTemplate
       walletAddress={walletAddress ?? null}
+      theme={theme}
       accentColor={accentColor}
+      styleOverrides={styleOverrides}
       open={open}
       copied={copied}
-      dropdownBg={dropdownBg}
-      dropdownBorder={dropdownBorder}
-      itemColor={itemColor}
       wrapperRef={wrapperRef}
       isInProgress={isInProgress}
       showCreateAccount={canCreateAccount}
       signedIn={isAuthenticated}
       creatingWallet={creatingWallet}
       createWalletError={createWalletError}
+      custodyChoice={appConfig.application?.walletCustodyMode === 'USER_CHOICE'}
       {...(appConfig.application?.walletProvisioning === 'NONE' ? {} : { onCreateWallet: handleCreateWallet })}
       notReadyReason={notReadyReason}
       creatingAccount={creating}
@@ -200,6 +205,9 @@ export function WalletButton() {
       onSend={handleSend}
       onReceive={handleReceive}
       onSessions={handleSessions}
+      recoveryLocked={recoveryLocked}
+      // Only a Turnkey wallet has recovery methods to manage.
+      {...(recovery?.required ? { onRecovery: handleRecovery } : {})}
       onKyc={handleKyc}
       onRamp={handleRamp}
       onDistributionRules={handleDistributionRules}

@@ -1,4 +1,6 @@
 import { AUTH_ERROR_CODES, type AuthErrorCode } from '../../types';
+import { stringField } from '../../api/error-fields';
+import { APP_UNAVAILABLE_MESSAGE } from '../../lib/tx-error-messages';
 
 /**
  * Maps a backend error `code` (the `ErrorCode` enum returned by sdk-api /
@@ -32,6 +34,19 @@ const CATALOG: Record<string, ResolvedAuthError> = {
   PASSKEY_DEPLOY_FAILED: {
     message: "We couldn't finish creating your wallet. Please try again in a moment.",
     errorCode: AUTH_ERROR_CODES.PASSKEY_FAILED,
+  },
+
+  // -- The app's Pollar credits --------------------------------------------------
+  // The app ran out of credits for what this action costs Pollar (HTTP 402). The
+  // end user can do nothing about it: only the app can top up.
+  SDK_CREDITS_INSUFFICIENT: {
+    message: APP_UNAVAILABLE_MESSAGE,
+    errorCode: AUTH_ERROR_CODES.AUTH_FAILED,
+  },
+  // The app has an overdue Pollar bill (HTTP 402); the same for the end user.
+  SDK_BILLING_OVERDUE: {
+    message: APP_UNAVAILABLE_MESSAGE,
+    errorCode: AUTH_ERROR_CODES.AUTH_FAILED,
   },
 
   // -- Passkey ceremony --------------------------------------------------------
@@ -107,5 +122,5 @@ export function resolveAuthError(code: string | undefined, fallbackMessage: stri
  * 200 `data` body with `success: false`.
  */
 export function extractErrorCode(error: unknown, data: unknown): string | undefined {
-  return (error as { code?: string } | undefined)?.code ?? (data as { code?: string } | undefined)?.code ?? undefined;
+  return stringField(error, 'code') ?? stringField(data, 'code');
 }

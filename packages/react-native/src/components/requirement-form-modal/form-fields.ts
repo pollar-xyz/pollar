@@ -121,10 +121,14 @@ export function fieldErrorMessage(code: string, language: FormLanguage): string 
 /** The per-field errors of a KYC_FORM_INVALID_ANSWERS error, by key; null when it names none. */
 export function fieldErrorsOf(error: unknown): Record<string, string> | null {
   if (!error || typeof error !== 'object') return null;
-  const { code, body } = error as { code?: unknown; body?: { errors?: unknown } };
-  if (code !== 'KYC_FORM_INVALID_ANSWERS' || !Array.isArray(body?.errors)) return null;
+  if (!('code' in error) || error.code !== 'KYC_FORM_INVALID_ANSWERS') return null;
+  const body = 'body' in error ? error.body : undefined;
+  const list = typeof body === 'object' && body !== null && 'errors' in body ? body.errors : undefined;
+  if (!Array.isArray(list)) return null;
+  const items: unknown[] = list;
   const errors: Record<string, string> = {};
-  for (const item of body.errors as { key?: unknown; code?: unknown }[]) {
+  for (const item of items) {
+    if (typeof item !== 'object' || item === null || !('key' in item) || !('code' in item)) continue;
     if (typeof item.key === 'string' && typeof item.code === 'string') errors[item.key] = item.code;
   }
   return Object.keys(errors).length ? errors : null;

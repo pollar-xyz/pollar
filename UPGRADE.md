@@ -2,11 +2,105 @@
 
 ## 0.11.5 -> 0.12.0
 
-Use `@pollar/core`, `@pollar/react` and `@pollar/react-native` at matching versions.
-The candidate is `0.12.0-rc.1`; install prerelease versions explicitly. Upgrade
-client adapter packages to their matching 0.12 candidates when using this core
-version. Their peer ranges accept both 0.11.x and 0.12; older adapter releases
-with a core peer range of only `^0.11.2` cannot be used with core 0.12.
+Use `@pollar/core`, `@pollar/react` and `@pollar/react-native` at matching
+versions: `@pollar/react@0.12.0` and `@pollar/react-native@0.12.0` require
+`@pollar/core@^0.12.0`. A caret range on 0.11.x (`^0.11.5`) does not reach
+0.12, so change it by hand.
+
+Upgrade `@pollar/stellar-wallets-kit-adapter` and
+`@pollar/solana-wallet-standard-adapter` to `0.12.0` too: their core range is
+`^0.11.2 || ^0.12.0`, while the releases before it (`^0.11.2`) refuse core 0.12.
+`@pollar/privy-adapter` and `@pollar/accesly-adapter` have no 0.12 release;
+their published ranges do not accept core 0.12.
+
+### API v3
+
+Every request goes to `/v3` of sdk-api. `baseUrl` stays an origin
+(`https://sdk.api.pollar.xyz`); the SDK appends the version, so a `baseUrl`
+that carried `/v2` must drop it. `/v3` serves the endpoints 0.11.x used on
+`/v2` with the same handlers, ramps excepted: Pollar v3 redefines the ramps
+API, and the ramps entries of this release describe what changed there. A
+custom `fetch`, a proxy allow-list or a test mock that matched `/v2/...` paths
+must match `/v3/...`.
+
+`@pollar/core` 0.11.x keeps calling `/v1` and `/v2`. sdk-api v1 retires on
+2026-11-30 (planned brownouts before that date answer `410`); v2 stays frozen.
+A client that receives the `Deprecation` header logs one warning naming the
+`Sunset` date and the migration guide, whatever the version it is on.
+
+### Ramps on API v3
+
+The ramp methods of 0.11.x called endpoints `/v3` does not serve, and they are
+gone: `getRampsQuote`, `getRampCountries`, `createOnRamp`, `createOffRamp`,
+`completeWithdraw`, `submitRampSignature`, `getRampTransaction`,
+`retryRampTransaction`, `pollRampTransaction`, `continueRamp`,
+`continueRampTransaction`, `signRampAction`, `getRampLiquidity`,
+`getRampKycStatus` and `decodePixQr`, with their `Ramps*` types,
+`describeRampAction(snapshot)`, `mergeRampSnapshot`, `mergeRampCountries` and
+the `RampWorkflow*` types. A ramp is now an order of one or more legs (the
+provider, a swap, a bridge) that Pollar runs server-side:
+
+| 0.11.x                                       | 0.12.0                                                                               |
+| -------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `getRampRoutes()`                            | `getRampRoutes(direction)`: fiat and asset pairs, with the legs of each              |
+| `getRampCountries()`                         | `rampCountries(routes)`                                                              |
+| `getRampsQuote(query)`                       | `quoteRamp({ direction, fiat, asset, amount: { value, denomination } })`, best first |
+| quote `requiredFields`                       | `rampQuoteFields(quote)`; send the answers as `payee`                                |
+| `createOnRamp` / `createOffRamp`             | `createRampOrder({ quoteId, payee })`                                                |
+| `getRampTransaction` / `pollRampTransaction` | `getRampOrder(id)` / `pollRampOrder(id, { onUpdate, signal })`                       |
+| `nextAction`                                 | `order.pendingAction`: `FIAT_PAYMENT`, `SIGNATURE`, `COSIGN_APPROVAL`, `KYC`         |
+| `signRampAction(txId, snapshot)`             | `signRampLeg(orderId, actionId)`                                                     |
+| saved transactions in session storage        | `listRampOrders({ open: 'true' })`                                                   |
+
+- A payee the provider would refuse answers `400 VALIDATION_ERROR` with the
+  reason in `body.message`, before anything moves.
+- A `FIAT_PAYMENT` QR carries its code already rendered in
+  `instructions.scannable`, as `depositInstructions.scannable` did.
+- A co-signed step is a `COSIGN_APPROVAL`: the user votes on it like any other
+  co-sign request (`<CosignModal>`).
+- A failure carries `resolutionAction`; `rampResolutionText(failure)` says what
+  the user can do. `rampLegTitle(leg)` and `rampLegStatus(leg)` describe each
+  leg for a progress list.
+- Provider registration, Pix decoding, liquidity and provider KYC status are no
+  longer ramp calls: what a provider needs from the user reaches the order as
+  its `pendingAction`.
+
+The widgets (`<RampWidget>` in React and React Native) are rebuilt on these
+calls. `RampWidgetTemplate` takes the order and the quotes instead of the
+0.11.x transaction fields, `RouteDisplay` renders a v3 quote,
+`RejectedRouteDisplay` shows a route that was dropped, and `RampWorkflow` is
+removed. In React Native the saved ramp in `usePollar()` is
+`{ direction, order }`.
+
+### Ramp adapter contract version 2
+
+A server adapter built with `@pollar/core/ramps` keeps working as is: every
+field version 2 adds is optional, and a registration without `contractVersion`
+is treated as version 1. Declare `contractVersion: 2` in
+`defineRampAdapterRegistration` to opt in, then:
+
+- Read `user.actor` to tell a session user (`SDK_USER`) from a user the
+  application's backend manages (`APP_USER`); `user.sdkUserId` stays set for both.
+- Read `user.wallet.signingMode` (`COSIGNED`, `SELF_CUSTODY`, `EXTERNAL`,
+  `APP_CUSTODY`) instead of inferring it from `custody`.
+- Return `prebuiltPayload` in a `RampAdapterPayment` when the provider builds
+  the transaction itself; Pollar validates it, has it signed and asks for a
+  fresh one if it expires first.
+- Call `dependencies.recorder.record(...)` around each provider call; Pollar
+  stores it as an attempt of the leg. Put personal data only in `sensitive`.
+- Throw `RampAdapterError` with `{ providerCode, detail }` so the operator sees
+  the provider's own code.
+- Break `terms.feeAmount` down in `offer.fees` and declare `validity` on the
+  adapter.
+- Keep `configurationId` to the account the provider is configured under, and
+  put what rotates (a credential hash, a corridor snapshot) in
+  `configurationRevision`. Pollar saves `configurationId` with every
+  transaction and compares it on each later call; a value that changes on
+  rotation strands the transactions in flight.
+
+`capabilities().routes` of a version 2 adapter are the provider's native rails:
+the asset and chain the provider itself delivers or takes, not what the end user
+receives. Pollar's planner adds the swap and bridge legs.
 
 ### Native provider and context
 
@@ -46,25 +140,49 @@ backend enum migration and an updated SDK contract. Provider, asset and payload
 encoding registration stays extensible within these three chains. Exact amount
 strings retain their precision and formatting.
 
-### Ramp templates and signing
+### Ramp rails
 
-`RampWidgetTemplateProps.bankType` (and native template-derived props) accepts a
-`string` instead of the previous fixed bank-type union. Backend routes can add
-bank types. Custom templates should handle unknown strings and retain known-type
-formatting where applicable; exhaustive switches need a fallback.
+`RampAdapterRail` and the v3 `fiat.rail` are the enum `SPEI`, `PIX`, `PSE`,
+`ACH`, `BREB`, `QR`, `BANK_TRANSFER`, `CASH`, `CARD`, `HOSTED`. `BANK_TRANSFER`
+is a domestic transfer to an account number, `CASH` a payment at a cash point,
+`CARD` a card, and `HOSTED` a route whose method the user picks inside the
+provider's own flow: Pollar does not know it in advance, so there are no
+payment details to show before the provider's page opens.
+
+A `switch` or `Record` over `RampAdapterRail` or `RampFiat['rail']` that is
+exhaustive stops compiling until it handles the four new values. Code that
+shows a rail can use `rampRailLabel(rail, { language: 'es', provider })`, which
+keeps the named schemes as they are, labels the generic ones, and returns any
+rail it does not know unchanged.
+
+### Ramp signing
 
 Every chain/encoding pair, including `STELLAR`/`xdr`, requires an explicitly
 registered signer through `registerRampSigningHandler(chain, encoding, handler)`.
 Remove it with the returned cleanup function. Core has no built-in ramp signer
-and does not decode chain-specific payloads or include an XDR library. An
-unregistered pair fails before signing or continuing the transaction.
+and includes no XDR library. An unregistered pair fails before signing.
 
 The registered integration must validate the requested payload against the
 authorized wallet account, chain and network before signing, reject cancellation,
-and return the signed payload without broadcasting. Call `signRampAction` only
-from an explicit user action; it refreshes the saved action and delegates to that
-handler. Restoring or polling a workflow does not sign. Existing legacy ramp
-signature methods remain available.
+and return the signed payload without broadcasting. Call `signRampLeg` only
+from an explicit user action; it reads the order again, signs only the action
+the user saw and delegates to that handler. Polling an order does not sign.
+
+`<RampWidget>` (React and React Native) signs a leg with the user's connected
+wallet when the app registered no signer for it, and checks it first:
+
+- A Stellar XDR is read with `assertRampStellarSigner(action, address)`: every
+  operation of a payment or contract call must run as the connected account
+  (inside the app's fee bump too); a SEP-10 login must be the anchor's challenge
+  with its first data entry from that account. The wallet is asked only then,
+  through `signTx`.
+- A Solana transfer (`solana-v0-json`) must be built from the connected external
+  Solana wallet, and is signed through the new `signSolanaTransaction(base64)`.
+- If the connected wallet changes while it signs, the signature is not sent.
+
+The widget lends these signers to core only while the user authorizes. An app
+signer registered before Authorize is used instead; an app that registers its
+own Stellar signer can call `assertRampStellarSigner` in it.
 
 For example, with your application's existing chain-specific wallet integration:
 
@@ -75,9 +193,95 @@ const removeSigner = client.registerRampSigningHandler('STELLAR', 'xdr', async (
 });
 ```
 
-UI workflow helpers exported from core are `describeRampAction`,
-`mergeRampSnapshot` and `mergeRampCountries`, with `RampSnapshot` and
-`RampSigningHandler` types; registry and URL internals are private.
+UI helpers exported from core are `describeRampAction(order)`,
+`rampCountries`, `rampQuoteFields`, `rampLegTitle`, `rampLegStatus`,
+`rampRailLabel`, `rampResolutionText` and `rampNoRouteText(rejected)` (the fix
+every rejected route shares, else a change of amount), `rampRequirementCopy`
+and `rampTrustlineAsset` for a route the user can unblock, with
+`isRampOrderSettled(order)`, the `RampSigningHandler` type, and
+`assertRampStellarSigner` for a Stellar signer; registry and URL internals are
+private.
+
+### Co-sign approval groups removed
+
+Every co-signed transaction now asks the user for itself, ramp steps included;
+a ramp no longer groups its steps under one approval, and the device no longer
+votes a later step on a stored consent. Wallet setup (account creation,
+trustlines, a new chain) asks the user too: `<CosignModal>` opens for it, and a
+headless app approves it through `client.cosign.approve(request)` from a user
+action.
+
+`cosignGroupOf`, `cosignStepKeyOf`, `stepInGroup` and the `CosignGroup` type are
+no longer exported, and the cosign modal no longer lists a group's steps.
+A request's `stepKey` stays on the request itself. A device that stored group
+consents under 0.11.5 drops them on its first start with this version.
+
+### Co-signed activity proposed by the device
+
+sdk-api no longer opens the Turnkey activity of a co-signed request: the device
+reads the unsigned payload, builds the Turnkey request from the values it
+checked and proposes it, and Pollar's approver votes second. The hosted sdk-api
+serves this relay. An app that uses the built-in
+`<CosignModal>` or `client.cosign.approve(request)` changes nothing. Code that
+drives the verification itself:
+
+- `client.cosign.verify(request)` returns `proposal` (the Turnkey request the
+  device will relay) instead of `turnkeyPayload`.
+- `client.cosign.approve(request)` has no `verify` option: it always verifies.
+- `readActivityIntent()` and `readActivityPayload()` are removed; read what the
+  user approves from the verification result.
+- `client.cosign.reject(request)` closes the request on the server.
+
+### Recovery and custody migration in the provider
+
+No code change is needed, but the provider shows two new screens when the
+server asks for them. When sdk-api reports that the user's custodial wallets
+must move to Turnkey, `<CustodyMigrationModal>` opens after login, before
+anything else, and the user can leave it for later. When the wallet requires a
+recovery method and has none, `recoveryLocked` is true: the wallet menu shows
+the lock with a way to fix it and the receive modal hides the address until
+`<RecoveryModal>` adds one. A headless app reads the same state from
+`client.cosign.custodyMigration()` and `client.cosign.recovery.status()`.
+
+### Branding and the wallet button template
+
+In `@pollar/react`, the dashboard's Branding no longer outranks the host page:
+a rule the app writes on a Pollar root for a public `--pollar-*` variable wins
+over the dashboard, which wins over the theme defaults. An app that relied on
+the dashboard overriding its own CSS removes that CSS. `html.dark` switches to
+the dark defaults only while Branding leaves the palette unpinned.
+`--pollar-font-family` and `--pollar-font-family-mono` set the fonts; without
+them the components use the page's font instead of Geist.
+
+A custom wallet button template (`WalletButtonTemplateProps`) receives `theme`,
+`accentColor` and `styleOverrides` instead of `dropdownBg`, `dropdownBorder` and
+`itemColor`. Pass them to `buildModalCssVars` for the same colors the built-in
+template uses.
+
+### Signature confirmation
+
+The default is now `'prompt'`: every signing call waits for the user, whatever
+the wallet's custody, unless the app's dashboard says otherwise. A headless
+app with nothing subscribed to `client.onConfirmationRequest()` gets
+`SDK_CONFIRMATION_UNAVAILABLE` on every signature: subscribe, or mount the
+provider, which renders `<ConfirmModal>`.
+
+The dashboard (Wallet settings → Signature confirmation) sets the app's
+policy: always ask, ask once and then sign for a window (5 minutes and 50 USD
+by default), or never ask. With `confirmation` unset the SDK follows it. Set,
+the stricter of the two applies: `'auto'` in code no longer skips the prompt
+unless the dashboard says `AUTO` too.
+
+```ts
+confirmation: 'prompt' | 'auto' | { window: { seconds: 300, maxUsd: 50 } };
+```
+
+Inside a window, a signature signs without asking while the USD total of the
+window stays within `maxUsd`. Only a payment the SDK builds itself
+(`sendPayment`, `buildAndSignAndSubmitTx('payment', ...)`) has a value it can
+read; any other signature (a raw `signTx`, a swap, a contract call) always asks,
+and so does an asset with no price. A ramp leg always asks, whatever the
+policy. The window closes on logout.
 
 ## 0.11.4 -> 0.11.5
 

@@ -2,12 +2,14 @@ import { PollarClient } from '@pollar/core';
 import type {
   AuthState,
   CosignState,
+  CustodyMigrationState,
   PendingConfirmation,
   PollarAdapters,
   PollarClientConfig,
   InteractiveAuthAdapter,
-  RampsOnrampResponse,
-  RampsTransactionResponse,
+  RampDirection,
+  RampOrder,
+  RecoveryState,
 } from '@pollar/core';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Text } from 'react-native';
@@ -19,7 +21,9 @@ import { AppKycFlow } from './components/kyc-modal/AppKycFlow';
 import { CardModal } from './components/card-modal/CardModal';
 import { ConfirmModal } from './components/confirm-modal/ConfirmModal';
 import { CosignModal } from './components/cosign-modal/CosignModal';
+import { CustodyMigrationModal } from './components/custody-migration-modal/CustodyMigrationModal';
 import { LoginModal } from './components/login-modal/LoginModal';
+import { RecoveryModal } from './components/recovery-modal/RecoveryModal';
 import { RampWidget } from './components/ramp-widget/RampWidget';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
@@ -64,15 +68,12 @@ const methods = [
   'getEarnPosition',
   'earnDeposit',
   'earnWithdraw',
-  'getRampsQuote',
-  'getRampCountries',
-  'createOnRamp',
-  'createOffRamp',
-  'getRampTransaction',
-  'getRampKycStatus',
-  'getRampLiquidity',
-  'submitRampSignature',
-  'completeWithdraw',
+  'getRampRoutes',
+  'quoteRamp',
+  'createRampOrder',
+  'getRampOrder',
+  'listRampOrders',
+  'signRampLeg',
   'listDistributionRules',
   'claimDistributionRule',
   'fetchSessions',
@@ -80,7 +81,8 @@ const methods = [
   'fetchTxHistory',
 ] as const;
 type Methods = Pick<PollarClient, (typeof methods)[number]>;
-export type NativeRampState = { direction: 'onramp' | 'offramp'; transaction: RampsOnrampResponse | RampsTransactionResponse };
+/** The ramp order the widget is following, kept while it is closed. */
+export type NativeRampState = { direction: RampDirection; order: RampOrder };
 type ModalMethods =
   | 'openLoginModal'
   | 'openTxModal'
@@ -139,6 +141,30 @@ export type PollarContextValue = Methods &
     cosign: CosignState;
     /** Open the approval prompt of a co-signed wallet. Opens by itself when a request arrives. */
     openCosignModal: () => void;
+    /**
+     * The approval a flow will ask for next (a ramp's swap after its approve),
+     * or null. While one is coming, the approval prompt stays open after a sent
+     * transaction and shows the next request when it arrives, instead of closing.
+     */
+    setCosignNextStep: (next: string | null) => void;
+    /**
+     * The recovery state of the user's Turnkey wallet: null until read, or for a
+     * session without one. `recoveryLocked` is true while the wallet has no way
+     * to be recovered without this device: it signs nothing but its own setup.
+     */
+    recovery: RecoveryState | null;
+    recoveryLocked: boolean;
+    /** Read the recovery state again (after a method changed elsewhere). */
+    refreshRecovery: () => void;
+    /** Open the recovery methods modal: passkeys, email, devices, export. */
+    openRecoveryModal: () => void;
+    /**
+     * Whether the user's wallet, one Pollar custodies, has to move to this
+     * device because the app keeps its wallets in Turnkey. While `required`, the
+     * provider shows the move and nothing else; null until read.
+     */
+    custodyMigration: CustodyMigrationState | null;
+    refreshCustodyMigration: () => void;
     /** Signing calls waiting for the user under `confirmation: 'prompt'`; the provider shows the first one. */
     confirmations: PendingConfirmation[];
   };
@@ -225,6 +251,8 @@ function ClientProvider({
   }>({});
   const [ramp, setRamp] = useState<NativeRampState | null>(null);
   const [cosignModalOpen, setCosignModalOpen] = useState(false);
+  const [cosignNextStep, setCosignNextStep] = useState<string | null>(null);
+  const [recoveryModalOpen, setRecoveryModalOpen] = useState(false);
   const [remote, setRemote] = useState<PollarConfig>(appConfig ?? emptyConfig);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(appConfig ? 'ready' : 'loading');
   const [retry, setRetry] = useState(0);
@@ -279,6 +307,7 @@ function ClientProvider({
       setRamp(null);
       setModal(null);
       setCosignModalOpen(false);
+      setRecoveryModalOpen(false);
     }
     previousAuthStep.current = auth.step;
   }, [auth.step]);
@@ -290,6 +319,57 @@ function ClientProvider({
     if (cosign.pending.length > cosignPendingCount.current) setCosignModalOpen(true);
     cosignPendingCount.current = cosign.pending.length;
   }, [cosign.pending.length]);
+  // The recovery state of a Turnkey wallet, read once signed in and again when
+  // the wallet changes, so a locked wallet says so before the user tries to
+  // send. A user without a Turnkey wallet reads `required: false`.
+  const [recovery, setRecovery] = useState<RecoveryState | null>(null);
+  const [recoveryTick, setRecoveryTick] = useState(0);
+  const refreshRecovery = useCallback(() => setRecoveryTick((t) => t + 1), []);
+  const signedIn = auth.step === 'authenticated';
+  const recoveryWallet = client.getWallet()?.address ?? '';
+  useEffect(() => {
+    if (!signedIn) {
+      setRecovery(null);
+      return;
+    }
+    let cancelled = false;
+    client.cosign.recovery
+      .status()
+      .then((next) => {
+        if (!cancelled) setRecovery(next);
+      })
+      .catch(() => {
+        if (!cancelled) setRecovery(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, signedIn, recoveryWallet, recoveryTick]);
+  const recoveryLocked = !!recovery && recovery.required && !recovery.configured;
+  const [custodyMigration, setCustodyMigration] = useState<CustodyMigrationState | null>(null);
+  const [custodyMigrationTick, setCustodyMigrationTick] = useState(0);
+  const refreshCustodyMigration = useCallback(() => setCustodyMigrationTick((t) => t + 1), []);
+  // A wallet blocked by something pending lets the user carry on; the move is asked again next session.
+  const [custodyMigrationLater, setCustodyMigrationLater] = useState(false);
+  useEffect(() => {
+    if (!signedIn) {
+      setCustodyMigration(null);
+      setCustodyMigrationLater(false);
+      return;
+    }
+    let cancelled = false;
+    client.cosign
+      .custodyMigration()
+      .then((next) => {
+        if (!cancelled) setCustodyMigration(next);
+      })
+      .catch(() => {
+        if (!cancelled) setCustodyMigration(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, signedIn, recoveryWallet, custodyMigrationTick]);
   const confirmations = client.getPendingConfirmations();
   const firstConfirmation = confirmations[0] ?? null;
   const wallet = client.getWallet();
@@ -392,6 +472,13 @@ function ClientProvider({
     openDistributionRulesModal: () => open('distribution'),
     cosign,
     openCosignModal: () => setCosignModalOpen(true),
+    setCosignNextStep,
+    recovery,
+    recoveryLocked,
+    refreshRecovery,
+    openRecoveryModal: () => setRecoveryModalOpen(true),
+    custodyMigration,
+    refreshCustodyMigration,
     confirmations,
   };
   return (
@@ -421,7 +508,35 @@ function ClientProvider({
         )}
         {cosignModalOpen && (
           <ModalErrorBoundary onClose={() => setCosignModalOpen(false)}>
-            <CosignModal onClose={() => setCosignModalOpen(false)} />
+            <CosignModal nextStep={cosignNextStep} onClose={() => setCosignModalOpen(false)} />
+          </ModalErrorBoundary>
+        )}
+        {custodyMigration?.required && !custodyMigrationLater && (
+          <ModalErrorBoundary onClose={refreshCustodyMigration}>
+            <CustodyMigrationModal
+              state={custodyMigration}
+              onMoved={() => {
+                refreshCustodyMigration();
+                refreshRecovery();
+                setRecoveryModalOpen(true);
+              }}
+              onLater={() => {
+                setCustodyMigrationLater(true);
+                refreshCustodyMigration();
+                refreshRecovery();
+              }}
+            />
+          </ModalErrorBoundary>
+        )}
+        {recoveryModalOpen && (
+          <ModalErrorBoundary onClose={() => setRecoveryModalOpen(false)}>
+            <RecoveryModal
+              onClose={() => {
+                setRecoveryModalOpen(false);
+                // A method added in the modal unlocks what waited on it (a held ramp order).
+                refreshRecovery();
+              }}
+            />
           </ModalErrorBoundary>
         )}
         {firstConfirmation && (

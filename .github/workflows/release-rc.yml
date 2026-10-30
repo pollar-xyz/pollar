@@ -1,0 +1,88 @@
+name: Release candidate
+
+on:
+  push:
+    tags: ['v*-rc*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: RC version to publish (for example, 0.12.0-rc.2)
+        required: true
+        type: string
+
+concurrency:
+  group: release-rc
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PACKAGES: core react react-native stellar-wallets-kit-adapter solana-wallet-standard-adapter
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+
+      - name: Check the version
+        run: |
+          VERSION="${{ inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]] || { echo "::error::$VERSION is not X.Y.Z-rc.N"; exit 1; }
+          # The source has to be on that release line, or it publishes the wrong code.
+          base="$(node -p 'require("./packages/core/package.json").version.split("-")[0]')"
+          [ "${VERSION%-rc.*}" = "$base" ] || { echo "::error::$GITHUB_REF_NAME points at code for $base"; exit 1; }
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Set the version
+        run: |
+          # An rc never satisfies a range on its own stable (0.12.0-rc.5 is outside ^0.12.0), so the
+          # internal @pollar/core ranges have to name the rc, or npm goes to the registry for a
+          # stable that is not published yet. Peer ranges keep their stable lines and gain the rc.
+          for pkg in $PACKAGES; do
+            node -e '
+              const fs = require("fs");
+              const [file, version] = process.argv.slice(1);
+              const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
+              const range = `^${version}`;
+              for (const field of ["dependencies", "devDependencies"]) {
+                if (pkg[field]?.["@pollar/core"]) pkg[field]["@pollar/core"] = range;
+              }
+              const peer = pkg.peerDependencies?.["@pollar/core"];
+              if (peer) pkg.peerDependencies["@pollar/core"] = `${peer} || ${range}`;
+              fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + "\n");
+            ' "packages/$pkg/package.json" "$VERSION"
+          done
+          npm version "$VERSION" --no-git-tag-version --allow-same-version $(printf -- '-w packages/%s ' $PACKAGES)
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Smoke tests
+        run: npm run test:smoke
+
+      - name: Publish
+        run: |
+          for pkg in $PACKAGES; do
+            package="$(node -p "require('./packages/$pkg/package.json').name")"
+            if npm view "$package@$VERSION" version --silent 2>/dev/null | grep -qx "$VERSION"; then
+              echo "$package@$VERSION is already on npm; skipping"
+              continue
+            fi
+            (cd "packages/$pkg" && npm publish --access public --tag next) || exit 1
+          done
+          echo "Published $VERSION with dist-tag next" >> "$GITHUB_STEP_SUMMARY"

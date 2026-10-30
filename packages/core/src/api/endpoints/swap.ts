@@ -1,5 +1,6 @@
 import type { SwapConfigContent, SwapQuoteBody, SwapQuoteContent, SwapTokensContent } from '../../types';
 import type { PollarApiClient } from '../client';
+import { apiErrorFields } from '../error-fields';
 
 /**
  * GET /swap/config
@@ -9,11 +10,7 @@ import type { PollarApiClient } from '../client';
 export async function getSwapConfig(api: PollarApiClient): Promise<SwapConfigContent> {
   const { data, error } = await api.GET('/swap/config');
   if (!data?.content || error) {
-    throw new Error(
-      (error as { code?: string; error?: string } | undefined)?.code ??
-        (error as { code?: string; error?: string } | undefined)?.error ??
-        'Failed to load swap config',
-    );
+    throw new Error(apiErrorFields(error).code ?? apiErrorFields(error).error ?? 'Failed to load swap config');
   }
   return data.content;
 }
@@ -26,11 +23,7 @@ export async function getSwapConfig(api: PollarApiClient): Promise<SwapConfigCon
 export async function getSwapTokens(api: PollarApiClient): Promise<SwapTokensContent> {
   const { data, error } = await api.GET('/swap/tokens');
   if (!data?.content || error) {
-    throw new Error(
-      (error as { code?: string; error?: string } | undefined)?.code ??
-        (error as { code?: string; error?: string } | undefined)?.error ??
-        'Failed to load swap tokens',
-    );
+    throw new Error(apiErrorFields(error).code ?? apiErrorFields(error).error ?? 'Failed to load swap tokens');
   }
   return data.content;
 }
@@ -45,11 +38,7 @@ export async function getSwapTokens(api: PollarApiClient): Promise<SwapTokensCon
 export async function quoteSwap(api: PollarApiClient, body: SwapQuoteBody): Promise<SwapQuoteContent> {
   const { data, error } = await api.POST('/swap/quote', { body });
   if (!data?.content || error) {
-    throw new Error(
-      (error as { code?: string; error?: string } | undefined)?.code ??
-        (error as { code?: string; error?: string } | undefined)?.error ??
-        'Failed to quote swap',
-    );
+    throw new Error(apiErrorFields(error).code ?? apiErrorFields(error).error ?? 'Failed to quote swap');
   }
   return data.content;
 }

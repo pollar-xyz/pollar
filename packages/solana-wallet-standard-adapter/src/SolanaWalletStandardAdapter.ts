@@ -31,6 +31,32 @@ function isSolanaChain(chain: string): boolean {
   return chain.startsWith('solana:');
 }
 
+function solanaAccountOf(accounts: readonly WalletAccount[]): WalletAccount | null {
+  return accounts.find((a) => a.chains.some(isSolanaChain)) ?? accounts[0] ?? null;
+}
+
+/**
+ * The SIWS message text (the format `solana:signIn` wallets render), for wallets
+ * that can only `signMessage`. The server checks the signature, the nonce and the
+ * address in it.
+ */
+function signInMessageText(input: SolanaSignInInput, address: string): string {
+  let text = `${input.domain ?? ''} wants you to sign in with your Solana account:\n${address}`;
+  if (input.statement) text += `\n\n${input.statement}`;
+  const fields: string[] = [];
+  if (input.uri) fields.push(`URI: ${input.uri}`);
+  if (input.version) fields.push(`Version: ${input.version}`);
+  if (input.chainId) fields.push(`Chain ID: ${input.chainId}`);
+  if (input.nonce) fields.push(`Nonce: ${input.nonce}`);
+  if (input.issuedAt) fields.push(`Issued At: ${input.issuedAt}`);
+  if (input.expirationTime) fields.push(`Expiration Time: ${input.expirationTime}`);
+  if (input.notBefore) fields.push(`Not Before: ${input.notBefore}`);
+  if (input.requestId) fields.push(`Request ID: ${input.requestId}`);
+  if (input.resources?.length) fields.push(['Resources:', ...input.resources.map((r) => `- ${r}`)].join('\n'));
+  if (fields.length) text += `\n\n${fields.join('\n')}`;
+  return text;
+}
+
 /**
  * Wraps a Wallet Standard Solana wallet (Phantom, Solflare, Backpack, ...) so it can
  * back a Pollar external-wallet login. The Wallet Standard is the headless
@@ -69,7 +95,7 @@ export class SolanaWalletStandardAdapter implements WalletAdapter {
     const feature = this._wallet.features[StandardConnect] as StandardConnectFeature[typeof StandardConnect] | undefined;
     if (!feature) throw new Error(`[SolanaWalletStandardAdapter] "${this.type}" does not support standard:connect`);
     const { accounts } = await feature.connect();
-    const account = accounts.find((a) => a.chains.some(isSolanaChain)) ?? accounts[0];
+    const account = solanaAccountOf(accounts);
     if (!account) throw new Error(`[SolanaWalletStandardAdapter] "${this.type}" returned no account on connect`);
     this._account = account;
     return { address: account.address };
@@ -90,7 +116,7 @@ export class SolanaWalletStandardAdapter implements WalletAdapter {
     if (this._account) return this._account.address;
     // A wallet reconnected across a reload exposes its accounts without a fresh
     // connect(); adopt the first Solana one so getPublicKey works after resume.
-    this._account = this._wallet.accounts.find((a) => a.chains.some(isSolanaChain)) ?? null;
+    this._account = solanaAccountOf(this._wallet.accounts);
     return this._account?.address ?? null;
   }
 
@@ -102,11 +128,12 @@ export class SolanaWalletStandardAdapter implements WalletAdapter {
   /**
    * SIWS: sign the server-issued Sign In With Solana input. This is the Solana
    * analogue of the Stellar SEP-10 challenge, but the wallet signs a structured
-   * MESSAGE (domain, statement, nonce, ...) rather than a transaction.
+   * MESSAGE (domain, statement, nonce, ...) rather than a transaction. A wallet
+   * without `solana:signIn` signs the same message text through `signMessage`.
    */
   async signIn(input: SolanaSignInInput): Promise<SolanaSignInOutput> {
     const feature = this._wallet.features[SolanaSignIn] as SolanaSignInFeature[typeof SolanaSignIn] | undefined;
-    if (!feature) throw new Error(`[SolanaWalletStandardAdapter] "${this.type}" does not support solana:signIn (SIWS)`);
+    if (!feature) return this._signInWithMessage(input);
     const [output] = await feature.signIn(input);
     if (!output) throw new Error(`[SolanaWalletStandardAdapter] "${this.type}" returned no SIWS output`);
     this._account = output.account;
@@ -121,9 +148,20 @@ export class SolanaWalletStandardAdapter implements WalletAdapter {
     };
   }
 
+  private async _signInWithMessage(input: SolanaSignInInput): Promise<SolanaSignInOutput> {
+    const account = await this._resolveAccount();
+    const message = new TextEncoder().encode(signInMessageText(input, account.address));
+    const { signature, signedMessage } = await this.signMessage(message);
+    return {
+      account: { address: account.address, publicKey: Uint8Array.from(account.publicKey) },
+      signedMessage,
+      signature,
+    };
+  }
+
   /** Raw message signing - the SIWS fallback for wallets without `solana:signIn`. */
   async signMessage(message: Uint8Array): Promise<SolanaSignMessageResponse> {
-    const account = this._requireAccount();
+    const account = await this._resolveAccount();
     const feature = this._wallet.features[SolanaSignMessage] as SolanaSignMessageFeature[typeof SolanaSignMessage] | undefined;
     if (!feature) throw new Error(`[SolanaWalletStandardAdapter] "${this.type}" does not support solana:signMessage`);
     const [output] = await feature.signMessage({ account, message });
@@ -137,7 +175,7 @@ export class SolanaWalletStandardAdapter implements WalletAdapter {
    * the app GAS wallet and the user signs their part here.
    */
   async signSolanaTransaction(transaction: Uint8Array, chain?: string): Promise<Uint8Array> {
-    const account = this._requireAccount();
+    const account = await this._resolveAccount();
     const feature = this._wallet.features[SolanaSignTransaction] as
       | SolanaSignTransactionFeature[typeof SolanaSignTransaction]
       | undefined;
@@ -148,9 +186,21 @@ export class SolanaWalletStandardAdapter implements WalletAdapter {
     return Uint8Array.from(output.signedTransaction);
   }
 
-  private _requireAccount(): WalletAccount {
+  /**
+   * The connected account. A session restored after a reload never ran
+   * connect() on this instance, but the wallet still has the app authorized: its
+   * `accounts`, or a silent connect, give the account back without a prompt.
+   */
+  private async _resolveAccount(): Promise<WalletAccount> {
+    if (this._account) return this._account;
+    this._account = solanaAccountOf(this._wallet.accounts);
     if (!this._account) {
-      throw new Error(`[SolanaWalletStandardAdapter] "${this.type}" is not connected — call connect() first`);
+      const feature = this._wallet.features[StandardConnect] as StandardConnectFeature[typeof StandardConnect] | undefined;
+      const { accounts } = (await feature?.connect({ silent: true })) ?? { accounts: [] };
+      this._account = solanaAccountOf(accounts);
+    }
+    if (!this._account) {
+      throw new Error(`[SolanaWalletStandardAdapter] "${this.type}" is not connected - reconnect the wallet`);
     }
     return this._account;
   }

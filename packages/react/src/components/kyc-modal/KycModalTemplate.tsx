@@ -22,7 +22,12 @@ interface KycModalTemplateProps {
   reviewReason?: string | null;
   /** The vendor approved and Pollar is still recording it (`kycStatus` stays `pending`). */
   processing?: boolean;
+  /** The provider list is loading. */
   isLoading: boolean;
+  /** The option whose session is opening: it shows a spinner and every option waits on it. */
+  startingProviderId?: string | null;
+  /** The option was named for the user (a ramp's step), so it opens without showing the list. */
+  directOpen?: boolean;
   error?: string | null;
   onSelectProvider: (provider: KycProvider) => void;
   onDoneVerifying: () => void;
@@ -44,6 +49,8 @@ export function KycModalTemplate({
   reviewReason,
   processing = false,
   isLoading,
+  startingProviderId = null,
+  directOpen = false,
   error,
   onSelectProvider,
   onDoneVerifying,
@@ -52,6 +59,7 @@ export function KycModalTemplate({
   onClose,
 }: KycModalTemplateProps) {
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
+  const busy = isLoading || startingProviderId !== null;
 
   return (
     <div
@@ -78,7 +86,7 @@ export function KycModalTemplate({
               type="button"
               className="pollar-modal-close"
               onClick={onRefresh}
-              disabled={isLoading}
+              disabled={busy}
               aria-label="Refresh"
               title="Refresh providers"
             >
@@ -115,7 +123,12 @@ export function KycModalTemplate({
       )}
 
       {step === 'select_provider' &&
-        (isLoading && providers.length === 0 ? (
+        (startingProviderId !== null && directOpen ? (
+          <div className="pollar-loading-block" aria-live="polite">
+            <div className="pollar-spinner" />
+            <span>Opening {selectedProvider?.name ?? 'verification'}…</span>
+          </div>
+        ) : isLoading && providers.length === 0 ? (
           <div className="pollar-loading-block">
             <div className="pollar-spinner" />
             <span>Loading providers…</span>
@@ -130,16 +143,22 @@ export function KycModalTemplate({
                 key={p.id}
                 type="button"
                 className="pollar-kyc-provider-btn"
-                disabled={isLoading}
+                disabled={busy}
+                aria-busy={startingProviderId === p.id}
                 onClick={() => onSelectProvider(p)}
               >
                 <span className="pollar-kyc-provider-name">{p.name}</span>
                 <span className="pollar-kyc-provider-flow">
-                  {isLoading && selectedProvider?.id === p.id
-                    ? 'Opening…'
-                    : p.flow === 'redirect'
-                      ? 'Continue in a new tab'
-                      : 'Continue here'}
+                  {startingProviderId === p.id ? (
+                    <>
+                      <span className="pollar-spinner pollar-spinner-sm" />
+                      Opening…
+                    </>
+                  ) : p.flow === 'redirect' ? (
+                    'Continue in a new tab'
+                  ) : (
+                    'Continue here'
+                  )}
                 </span>
               </button>
             ))}
@@ -239,7 +258,7 @@ export function KycModalTemplate({
           </p>
           <div className="pollar-modal-actions">
             {kycStatus === 'expired' && onStartAgain && (
-              <button type="button" className="pollar-btn-secondary" onClick={onStartAgain} disabled={isLoading}>
+              <button type="button" className="pollar-btn-secondary" onClick={onStartAgain} disabled={busy}>
                 Start again
               </button>
             )}

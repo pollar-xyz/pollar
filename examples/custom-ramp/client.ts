@@ -1,38 +1,29 @@
 // Application side: an existing authenticated PollarClient talks only to Pollar's backend.
-import type { PollarClient, RampRoute, RampsQuoteResponse } from '@pollar/core';
+import type { PollarClient, RampQuote, RampRoute } from '@pollar/core';
+import { rampQuoteFields } from '@pollar/core';
 
 export function discoverRamps(client: PollarClient) {
-  return client.getRampRoutes();
+  return client.getRampRoutes('ONRAMP');
 }
 
-export function quoteRamp(client: PollarClient, route: RampRoute, amountExact: string) {
-  return client.getRampsQuote({
-    routeId: route.routeId,
-    direction: route.direction,
-    country: route.country,
-    currency: route.fiatCurrency,
-    amount: Number(amountExact),
-    amountExact,
+export function quoteRamp(client: PollarClient, route: RampRoute, amountIn: string) {
+  return client.quoteRamp({
+    direction: 'ONRAMP',
+    fiat: { currency: route.fiat.currency, rail: route.fiat.rail, country: route.fiat.country },
+    asset: { code: route.asset.code, identifier: route.asset.identifier, chain: route.asset.chain },
+    amount: { value: amountIn, denomination: 'in' },
   });
 }
 
-/** Call after the user selects and accepts a backend-issued quote; do not invent quote IDs. */
-export function startDeposit(
-  client: PollarClient,
-  route: RampRoute,
-  quote: RampsQuoteResponse['quotes'][number],
-  fields: Record<string, string>,
-) {
-  return client.createOnRamp({
+/** Call after the user accepts a backend-issued quote; `payee` answers its `rampQuoteFields`. Do not invent quote IDs. */
+export function startDeposit(client: PollarClient, quote: RampQuote, payee: Record<string, string>) {
+  const asked = new Set(rampQuoteFields(quote).map((field) => field.key));
+  return client.createRampOrder({
     quoteId: quote.quoteId,
-    country: route.country,
-    currency: route.fiatCurrency,
-    amount: quote.fiatAmount,
-    ...(quote.terms ? { amountExact: quote.terms.fiatAmount } : {}),
-    fields,
+    payee: Object.fromEntries(Object.entries(payee).filter(([key]) => asked.has(key))),
   });
 }
 
-export function readSavedRamp(client: PollarClient, txId: string) {
-  return client.getRampTransaction(txId);
+export function readSavedRamp(client: PollarClient, orderId: string) {
+  return client.getRampOrder(orderId);
 }

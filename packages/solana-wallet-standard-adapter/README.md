@@ -21,6 +21,10 @@ Pollar runs on Solana end to end for wallets and payments:
   fees** and token accounts created for the recipient.
 - **Fiat on/off-ramps to Solana**: Bolivia (BOB, via Stereum + CCTP) and Brazil (BRL via Pix, PagFinance).
 
+> **0.12.0** accepts `@pollar/core@^0.11.2 || ^0.12.0`. A session restored after a
+> reload signs without reconnecting, and a wallet without `solana:signIn` logs in
+> through `signMessage`.
+>
 > **0.11.5** is the adapter's first release on npm, on the SDK's version line. It
 > requires `@pollar/core@^0.11.2`; no adapter changes since 0.11.2.
 >

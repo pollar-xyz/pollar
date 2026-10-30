@@ -1,5 +1,6 @@
 import { AUTH_ERROR_CODES, AuthProviderContext } from '../../types';
 import { logApiError } from './logging';
+import { stringField } from '../../api/error-fields';
 
 /**
  * Mint an auth session and move to the email-entry step. Returns the
@@ -80,8 +81,7 @@ export async function verifyAndAuthenticate(
   }
 
   // Extract error code from either the 4xx error body or the 200 body
-  const errCode =
-    (error as unknown as { error?: string } | undefined)?.error ?? (data as unknown as { code?: string } | undefined)?.code;
+  const errCode = stringField(error, 'error') ?? stringField(data, 'code');
 
   if (errCode === 'SDK_EMAIL_CODE_EXPIRED') {
     if (!error) logApiError(logger, 'POST /auth/email/verify-code', { body, data });

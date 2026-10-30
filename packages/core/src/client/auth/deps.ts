@@ -9,7 +9,7 @@ export type FlowDeps = {
   api: PollarApiClient;
   /** Level-gated logger from the owning `PollarClient`. */
   logger: PollarLogger;
-  /** API origin + version prefix (e.g. `https://sdk.api.pollar.xyz/v2`). Used to
+  /** API origin + version prefix (e.g. `https://sdk.api.pollar.xyz/v3`). Used to
    *  build the non-streaming status-poll URL on runtimes without fetch streaming. */
   basePath: string;
   /**

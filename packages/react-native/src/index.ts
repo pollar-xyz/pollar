@@ -87,7 +87,11 @@ export { KycStatus } from './components/kyc-modal/KycStatus';
 export { RampWidget } from './components/ramp-widget/RampWidget';
 export { CardModal } from './components/card-modal/CardModal';
 export { CosignModal } from './components/cosign-modal/CosignModal';
-export { RouteDisplay } from './components/ramp-widget/RouteDisplay';
+export { RecoveryModal } from './components/recovery-modal/RecoveryModal';
+export { CustodyMigrationModal } from './components/custody-migration-modal/CustodyMigrationModal';
+export { CustodyMigrationModalTemplate } from './components/custody-migration-modal/CustodyMigrationModalUI';
+export type { CustodyMigrationModalTemplateProps } from './components/custody-migration-modal/CustodyMigrationModalUI';
+export { RejectedRouteDisplay, RouteDisplay } from './components/ramp-widget/RouteDisplay';
 export { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 
 // Templates
@@ -99,11 +103,11 @@ export type { RampStep } from './components/ramp-widget/RampWidget';
 export { TransactionModalTemplate } from './components/transaction-modal/TransactionModalUI';
 export { CosignModalTemplate } from './components/cosign-modal/CosignModalUI';
 export type { CosignModalTemplateProps } from './components/cosign-modal/CosignModalUI';
+export { RecoveryModalTemplate } from './components/recovery-modal/RecoveryModalUI';
+export type { RecoveryModalTemplateProps, RecoveryView } from './components/recovery-modal/RecoveryModalUI';
 export type { TransactionModalTemplateProps } from './components/transaction-modal/TransactionModalUI';
 export { TxHistoryModalTemplate } from './components/tx-history-modal/TxHistoryModalUI';
 export { WalletBalanceModalTemplate } from './components/wallet-balance-modal/WalletBalanceModalUI';
 export type { WalletBalanceModalTemplateProps } from './components/wallet-balance-modal/WalletBalanceModalUI';
 export { WalletButtonTemplate } from './components/wallet-button/WalletButtonUI';
 export type { WalletButtonTemplateProps } from './components/wallet-button/WalletButtonUI';
-
-export { RampWorkflow } from './components/ramp-widget/RampWorkflow';

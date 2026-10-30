@@ -10,7 +10,12 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react';
-import { LOGO_POLLAR_WORDMARK_ON_DARK, LOGO_POLLAR_WORDMARK_ON_LIGHT } from '../constants';
+import {
+  LOGO_POLLAR_MARK_ON_DARK,
+  LOGO_POLLAR_MARK_ON_LIGHT,
+  LOGO_POLLAR_WORDMARK_ON_DARK,
+  LOGO_POLLAR_WORDMARK_ON_LIGHT,
+} from '../constants';
 
 declare const __POLLAR_VERSION__: string;
 
@@ -44,6 +49,17 @@ export class ModalErrorBoundary extends Component<{ children: ReactNode; onClose
     }
     return this.props.children;
   }
+}
+
+/** The app's logo, or the Pollar mark in the version for the card's surface. */
+export function ModalLogo({ logoUrl }: { logoUrl?: string | null | undefined }) {
+  if (logoUrl) return <img src={logoUrl} alt="Logo" className="pollar-logo" />;
+  return (
+    <>
+      <img src={LOGO_POLLAR_MARK_ON_LIGHT} alt="Pollar" className="pollar-logo pollar-logo-on-light" />
+      <img src={LOGO_POLLAR_MARK_ON_DARK} alt="Pollar" className="pollar-logo pollar-logo-on-dark" />
+    </>
+  );
 }
 
 export const PollarModalFooter = () => {

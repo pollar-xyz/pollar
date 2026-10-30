@@ -1,0 +1,162 @@
+.pollar-recovery-modal {
+  display: flex;
+  flex-direction: column;
+  width: 440px;
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100dvh - 2rem);
+  overflow: hidden;
+  padding-bottom: 0.75rem;
+}
+
+.pollar-recovery-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow-y: auto;
+  padding: 0 0.25rem 0.5rem;
+}
+
+.pollar-recovery-banner {
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--pollar-card-border-radius, 10px);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.pollar-recovery-banner-warn {
+  border: 1px solid var(--pollar-error-border, #fecaca);
+  background: var(--pollar-error-bg, #fef2f2);
+  color: var(--pollar-error-text, #b91c1c);
+}
+
+.pollar-recovery-banner-ok {
+  border: 1px solid color-mix(in srgb, var(--pollar-success-text, #16a34a) 35%, transparent);
+  background: color-mix(in srgb, var(--pollar-success-text, #16a34a) 8%, var(--pollar-bg));
+  color: var(--pollar-text);
+}
+
+.pollar-recovery-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--pollar-border);
+}
+
+.pollar-recovery-section h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--pollar-text);
+}
+
+.pollar-recovery-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--pollar-text);
+}
+
+.pollar-recovery-item-pending {
+  flex-wrap: wrap;
+}
+
+.pollar-recovery-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.pollar-recovery-tag {
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--pollar-accent) 12%, var(--pollar-bg));
+  color: var(--pollar-accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.pollar-recovery-muted {
+  margin: 0;
+  color: var(--pollar-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.pollar-recovery-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.pollar-recovery-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-input-border-radius, 8px);
+  background: var(--pollar-input-bg, transparent);
+  color: var(--pollar-text);
+  font-size: 0.85rem;
+}
+
+.pollar-recovery-btn {
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-buttons-border-radius, 8px);
+  background: var(--pollar-btn-secondary-bg, transparent);
+  color: var(--pollar-btn-secondary-fg, var(--pollar-text));
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pollar-recovery-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pollar-recovery-btn-primary {
+  border-color: var(--pollar-accent);
+  background: var(--pollar-accent);
+  color: var(--pollar-btn-primary-fg, #fff);
+}
+
+.pollar-recovery-btn-danger {
+  border-color: var(--pollar-error-border, #fecaca);
+  background: transparent;
+  color: var(--pollar-error-text, #b91c1c);
+}
+
+.pollar-recovery-check {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
+  color: var(--pollar-text);
+  font-size: 0.8rem;
+}
+
+.pollar-recovery-phrase {
+  margin: 0;
+  padding: 0.8rem;
+  border: 1px dashed var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius, 10px);
+  background: var(--pollar-input-bg, transparent);
+  color: var(--pollar-text);
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: all;
+}
+
+.pollar-recovery-notice {
+  margin: 0;
+  color: var(--pollar-success-text, #16a34a);
+  font-size: 0.8rem;
+}
+
+.pollar-recovery-error {
+  margin: 0;
+  color: var(--pollar-error-text, #b91c1c);
+  font-size: 0.8rem;
+}

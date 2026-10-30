@@ -9,21 +9,6 @@
   padding-bottom: 0.75rem;
 }
 
-/* The demo (and many host apps) expose the active theme through the existing
- * document-level `dark` class. Keep the modal variables in sync with that
- * mechanism as well as the provider's configured theme. */
-html.dark .pollar-sessions-modal {
-  --pollar-bg: #1a1a1a !important;
-  --pollar-border: #374151 !important;
-  --pollar-text: #ffffff !important;
-  --pollar-muted: #9ca3af !important;
-  --pollar-input-bg: #374151 !important;
-  --pollar-error-bg: #2a1515 !important;
-  --pollar-error-border: #7f1d1d !important;
-  --pollar-error-text: #f87171 !important;
-  --pollar-success-text: #4ade80 !important;
-}
-
 .pollar-sessions-list {
   display: flex;
   flex: 0 0 auto;
@@ -55,9 +40,9 @@ html.dark .pollar-sessions-modal {
   height: 70px;
   margin-bottom: 0.35rem;
   border-radius: 20px;
-  background: linear-gradient(123.69deg, #0560a9 0%, #053f70 66.67%);
-  color: #fff;
-  box-shadow: 0 10px 22px -6px #0560a973;
+  background: linear-gradient(123.69deg, var(--pollar-accent) 0%, color-mix(in srgb, var(--pollar-accent) 66%, #000) 66.67%);
+  color: var(--pollar-btn-primary-fg, #fff);
+  box-shadow: 0 10px 22px -6px color-mix(in srgb, var(--pollar-accent) 45%, transparent);
 }
 
 .pollar-sessions-current-check {
@@ -70,8 +55,8 @@ html.dark .pollar-sessions-modal {
   height: 23px;
   border: 3px solid var(--pollar-bg);
   border-radius: 50%;
-  background: #16a34a;
-  color: #fff;
+  background: var(--pollar-success-text);
+  color: var(--pollar-bg);
 }
 
 .pollar-sessions-current-label,
@@ -101,8 +86,8 @@ html.dark .pollar-sessions-modal {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #16a34a;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #16a34a 15%, transparent);
+  background: var(--pollar-success-text);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pollar-success-text) 15%, transparent);
 }
 
 .pollar-sessions-other-section {
@@ -178,7 +163,7 @@ html.dark .pollar-sessions-modal {
   height: 28px;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--pollar-buttons-border-radius, 8px);
   background: color-mix(in srgb, var(--pollar-accent) 7%, var(--pollar-bg));
   color: var(--pollar-muted);
   cursor: pointer;
@@ -227,9 +212,9 @@ html.dark .pollar-sessions-modal {
   gap: 0.5rem;
   padding: 0.7rem 1rem;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--pollar-buttons-border-radius, 999px);
   background: var(--pollar-error-text, #dc2626);
-  color: #fff;
+  color: var(--pollar-bg, #fff);
   font-size: 0.875rem;
   font-weight: 700;
   cursor: pointer;

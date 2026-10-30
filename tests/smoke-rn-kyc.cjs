@@ -1,5 +1,5 @@
-// React Native KYC + ramp gate: the real containers, with react-native mocked as
-// plain components so their buttons and inputs can be driven from Node.
+// React Native KYC: the real container, with react-native mocked as plain
+// components so its buttons and inputs can be driven from Node.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -19,7 +19,6 @@ const core = require('../packages/core/dist/index.js');
 
 let buttons = [];
 let inputs = [];
-let routes = [];
 const opened = [];
 let appStateListener = null;
 const passthrough = ({ children }) => React.createElement(React.Fragment, null, children);
@@ -63,14 +62,6 @@ function load(file) {
     if (id === '../../context' || id === '../context') return { usePollar: () => pollarContext };
     if (id === '../commons') return { PollarModalFooter: () => null, PollarOverlay: passthrough };
     if (id === './KycStatus') return { KycStatus: () => null };
-    if (id === './RouteDisplay') {
-      return {
-        RouteDisplay: (props) => {
-          routes.push(props);
-          return null;
-        },
-      };
-    }
     if (id === '../kyc-modal/KycModal') return load('packages/react-native/src/components/kyc-modal/KycModal.tsx');
     if (id.startsWith('.')) {
       // Containers (.tsx) and helpers (.ts) import each other without an extension.
@@ -102,14 +93,7 @@ async function render(element) {
   return async () => React.act(async () => root.unmount());
 }
 
-const { RampWidget } = load('packages/react-native/src/components/ramp-widget/RampWidget.tsx');
 const { KycModal } = load('packages/react-native/src/components/kyc-modal/KycModal.tsx');
-const gate = new core.PollarApiError('SDK_RAMPS_KYC_REQUIRED', {
-  code: 'SDK_RAMPS_KYC_REQUIRED',
-  rampProviderId: 'ramp-a',
-  kycProviderId: 'option-a',
-  corridorId: 'corridor-a',
-});
 const option = { id: 'option-a', name: 'Didit', flow: 'iframe', levels: ['basic'] };
 
 (async () => {
@@ -136,111 +120,7 @@ const option = { id: 'option-a', name: 'Didit', flow: 'iframe', levels: ['basic'
   assert.ok(has('Check again')); // manual review settles into the review result
   await unmount();
 
-  // Ramp: gate -> KYC on the named option -> approval -> fresh quotes -> user picks.
-  let quoteCalls = 0;
-  const starts = [];
-  client = {
-    getRampRoutes: async () => ({ routes: [] }),
-    getRampCountries: async () => ({ countries: [{ code: 'BO', currency: 'BOB' }] }),
-    getRampsQuote: async () => {
-      quoteCalls++;
-      return { quotes: [{ quoteId: quoteCalls === 1 ? 'first' : 'fresh', provider: 'Stereum' }] };
-    },
-    createOnRamp: async (body) => {
-      starts.push(body);
-      if (starts.length === 1) throw gate;
-      return { txId: 'tx', provider: 'Stereum', status: 'pending_user_transfer_start' };
-    },
-    getRampTransaction: async () => ({ status: 'pending_user_transfer_start' }),
-    getKycProviders: async () => ({ providers: [option] }),
-    resolveKyc: async () => ({ alreadyApproved: true }),
-  };
-  client.getRampRoutes = async () => ({ routes: [] });
-  routes = [];
-  unmount = await render(React.createElement(RampWidget, { onClose() {} }));
-  await React.act(async () => inputs[inputs.length - 1].onChangeText('10'));
-  routes = [];
-  await press('Find routes');
-  assert.equal(quoteCalls, 1);
-  const first = routes[routes.length - 1];
-  assert.equal(first.quote.quoteId, 'first');
-  routes = [];
-  await React.act(async () => first.onSelect(first.quote));
-  // The modal auto-opened the named option and it was already approved: back to fresh quotes.
-  assert.equal(quoteCalls, 2);
-  assert.equal(starts.length, 1); // approval never starts an order by itself
-  const fresh = routes[routes.length - 1];
-  assert.equal(fresh.quote.quoteId, 'fresh');
-  await React.act(async () => fresh.onSelect(fresh.quote));
-  assert.equal(starts.length, 2);
-  assert.equal(starts[1].quoteId, 'fresh');
-  assert.equal(starts[1].amount, 10);
-  await unmount();
-
-  // Quote-time gate: a route with a pending step arrives in `requirementsRequired`, not in `quotes`.
-  const locked = {
-    provider: 'Stereum',
-    rampProviderId: 'ramp-b',
-    corridorId: 'corridor-b',
-    position: 1,
-    completed: 0,
-    total: 1,
-    type: 'KYC',
-    optionId: 'option-b',
-    status: 'none',
-  };
-  quoteCalls = 0;
-  starts.length = 0;
-  const resolved = [];
-  client = {
-    getRampRoutes: async () => ({ routes: [] }),
-    getRampCountries: async () => ({ countries: [{ code: 'BO', currency: 'BOB' }] }),
-    getRampsQuote: async () => {
-      quoteCalls++;
-      return quoteCalls === 1
-        ? { quotes: [], requirementsRequired: [locked] }
-        : { quotes: [{ quoteId: 'unlocked', provider: 'Stereum' }] };
-    },
-    createOnRamp: async (body) => {
-      starts.push(body);
-      return { txId: 'tx', provider: 'Stereum', status: 'pending_user_transfer_start' };
-    },
-    getRampTransaction: async () => ({ status: 'pending_user_transfer_start' }),
-    getKycProviders: async (country, corridorId) => {
-      assert.equal(country, 'BO');
-      assert.equal(corridorId, 'corridor-b');
-      return { providers: [{ ...option, id: 'option-b' }] };
-    },
-    resolveKyc: async (providerId, _level, _country, corridorId) => {
-      resolved.push({ providerId, corridorId });
-      return { alreadyApproved: true };
-    },
-  };
-  client.getRampRoutes = async () => ({ routes: [] });
-  routes = [];
-  unmount = await render(React.createElement(RampWidget, { onClose() {} }));
-  await React.act(async () => inputs[inputs.length - 1].onChangeText('10'));
-  routes = [];
-  await press('Find routes');
-  assert.equal(quoteCalls, 1);
-  assert.equal(routes.length, 0);
-  assert.ok(has('Verify')); // the locked row, not the "no providers" error
-  assert.ok(!has('Try again'));
-  routes = [];
-  await press('Verify');
-  assert.deepEqual(resolved, [{ providerId: 'option-b', corridorId: 'corridor-b' }]);
-  assert.equal(quoteCalls, 2); // approval re-quotes the same input
-  assert.equal(starts.length, 0);
-  const unlocked = routes[routes.length - 1];
-  assert.equal(unlocked.quote.quoteId, 'unlocked');
-  await React.act(async () => unlocked.onSelect(unlocked.quote));
-  assert.equal(starts.length, 1);
-  assert.equal(starts[0].quoteId, 'unlocked');
-  assert.equal(starts[0].amount, 10);
-  await unmount();
-
-  console.log('React Native: hosted KYC opens in the browser and checks on return; ramp gate re-quotes after approval');
-  console.log('React Native: a route locked by KYC shows instead of "no providers"; Verify opens its option and re-quotes');
+  console.log('React Native: hosted KYC opens in the browser and checks on return');
   dom.window.close();
 })().catch((error) => {
   console.error(error);

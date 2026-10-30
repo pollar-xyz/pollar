@@ -1,4 +1,4 @@
-import type { PasskeyCeremony, PasskeySigner } from '@pollar/core';
+import type { PasskeyCeremony, PasskeySigner, RecoveryPasskeyCeremony } from '@pollar/core';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 
 // hex -> base64url, for passing the raw auth digest as the WebAuthn challenge.
@@ -86,4 +86,55 @@ export const browserPasskeySigner: PasskeySigner = async ({ credentialId, challe
     clientDataJSON: response.clientDataJSON,
     signature: response.signature,
   };
+};
+
+/**
+ * Browser passkey ceremonies for a Turnkey wallet's recovery: register a
+ * passkey as a way back in, and sign a Turnkey request with one to add a new
+ * device. rpId is the page's hostname, like the smart-wallet ceremony, so a
+ * passkey made on the app's domain recovers the wallet on that domain.
+ * `challenge` arrives base64url already: for `get()` it is what Turnkey checks
+ * (the hex SHA-256 of the request body).
+ */
+export const browserRecoveryPasskey: RecoveryPasskeyCeremony = {
+  async create({ challenge, userName }) {
+    const rpId = window.location.hostname;
+    const response = await startRegistration({
+      optionsJSON: {
+        challenge,
+        rp: { id: rpId, name: rpId },
+        user: { id: randomUserId(), name: userName, displayName: userName },
+        pubKeyCredParams: [
+          { type: 'public-key', alg: -7 },
+          { type: 'public-key', alg: -257 },
+        ],
+        authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
+        attestation: 'none',
+        timeout: 60_000,
+      },
+    });
+    return {
+      credentialId: response.id,
+      clientDataJson: response.response.clientDataJSON,
+      attestationObject: response.response.attestationObject,
+      transports: response.response.transports ?? [],
+    };
+  },
+  async get({ challenge, allowCredentials }) {
+    const rpId = window.location.hostname;
+    const response = await startAuthentication({
+      optionsJSON: {
+        challenge,
+        rpId,
+        allowCredentials: allowCredentials.map((id) => ({ id, type: 'public-key' as const })),
+        userVerification: 'preferred',
+      },
+    });
+    return {
+      credentialId: response.id,
+      authenticatorData: response.response.authenticatorData,
+      clientDataJson: response.response.clientDataJSON,
+      signature: response.response.signature,
+    };
+  },
 };

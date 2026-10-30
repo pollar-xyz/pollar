@@ -35,7 +35,7 @@ const DEFAULT_BASE_DELAY_MS = 300;
 /** `true` for a transport-level failure (timeout / dropped connection) - the
  *  only class of error worth retrying. An HTTP response, even a 5xx, is NOT an
  *  error here: openapi-fetch resolves it, so it never reaches this path. */
-function isRetryableTransportError(err: unknown): boolean {
+export function isRetryableTransportError(err: unknown): boolean {
   // A timeout we raised, an AbortError from the timeout signal, or fetch's
   // generic network failure (a `TypeError` like "Network request failed").
   if (err instanceof PollarNetworkError) return true;

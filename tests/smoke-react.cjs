@@ -459,6 +459,269 @@ async function unmount(handle) {
     globalThis.fetch = prevFetch;
   }
 
+  console.log('\n── 8. A USER_CHOICE app lets the user pick the custody ───────');
+  {
+    const { WalletButtonTemplate } = require(path.resolve(__dirname, '../packages/react/dist/index.js'));
+    const picks = [];
+    const noop = () => {};
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const props = {
+      walletAddress: '',
+      signedIn: true,
+      open: true,
+      custodyChoice: true,
+      onCreateWallet: (custody) => picks.push(custody ?? 'none'),
+      accentColor: '#000',
+      wrapperRef: { current: null },
+      onToggleOpen: noop,
+      onCreateAccount: noop,
+      onCopy: noop,
+      onWalletBalance: noop,
+      onTxHistory: noop,
+      onSend: noop,
+      onReceive: noop,
+      onSessions: noop,
+      onKyc: noop,
+      onRamp: noop,
+      onDistributionRules: noop,
+      onLogout: noop,
+      onLogin: noop,
+    };
+    await act(async () => root.render(React.createElement(WalletButtonTemplate, props)));
+    const buttonNamed = (text) => [...container.querySelectorAll('button')].find((b) => b.textContent.trim() === text);
+    check(
+      'both custodies are offered',
+      !!buttonNamed('Create co-signed wallet') && !!buttonNamed('Create self-custody wallet'),
+    );
+    await act(async () => buttonNamed('Create co-signed wallet').click());
+    check('co-signed is created at once with its custody', picks.join(',') === 'COSIGNED', picks);
+
+    await act(async () => buttonNamed('Create self-custody wallet').click());
+    check('self-custody first shows its risks', /nobody can recover the wallet/.test(container.textContent));
+    const create = buttonNamed('Create self-custody wallet');
+    check('it cannot be created before the risks are accepted', create.disabled === true);
+    await act(async () => container.querySelector('input[type=checkbox]').click());
+    check('accepting the risks enables it', buttonNamed('Create self-custody wallet').disabled === false);
+    await act(async () => buttonNamed('Create self-custody wallet').click());
+    check('self-custody is created with its custody', picks.join(',') === 'COSIGNED,SELF_CUSTODY', picks);
+
+    await act(async () => root.render(React.createElement(WalletButtonTemplate, { ...props, custodyChoice: false })));
+    await act(async () => buttonNamed('Create wallet').click());
+    check('an app that fixes the custody names none', picks[picks.length - 1] === 'none', picks);
+    await act(async () => root.unmount());
+    container.remove();
+  }
+
+  console.log('\n-- 9. The recovery modal says why a wallet is locked and guards the export --');
+  {
+    const { RecoveryModalTemplate, ReceiveModalTemplate } = require(path.resolve(__dirname, '../packages/react/dist/index.js'));
+    const noop = () => {};
+    const state = {
+      required: true,
+      configured: false,
+      subOrgId: 'sub-1',
+      endUserId: 'tk-user',
+      walletId: 'w-1',
+      authProxyConfigId: 'cfg',
+      email: { address: 'user@x.test', verified: false },
+      passkeys: [],
+      devices: [{ apiKeyId: 'k0', name: 'phone', publicKey: '02' + 'ab'.repeat(32), createdAt: '' }],
+    };
+    const devices = {
+      subOrgId: 'sub-1',
+      endUserId: 'tk-user',
+      custody: 'SELF_CUSTODY',
+      quorumState: 'VERIFIED',
+      devices: [
+        {
+          id: 'd0',
+          publicKey: '02' + 'ab'.repeat(32),
+          tkApiKeyId: 'k0',
+          label: 'phone',
+          enrolledVia: 'ONBOARDING',
+          lastSeenAt: null,
+          createdAt: '',
+        },
+      ],
+      enrollments: [{ id: 'e1', publicKey: '03' + 'cd'.repeat(32), label: 'Laptop', expiresAt: '' }],
+    };
+    const exported = [];
+    const base = {
+      theme: 'light',
+      accentColor: '#000',
+      state,
+      devices,
+      thisDeviceKey: '02' + 'ab'.repeat(32),
+      thisDeviceEnrolled: true,
+      passkeyAvailable: true,
+      view: 'overview',
+      busy: null,
+      error: null,
+      notice: null,
+      emailDraft: '',
+      codeSent: false,
+      phrase: null,
+      onView: noop,
+      onEmailDraft: noop,
+      onAddPasskey: noop,
+      onRemovePasskey: noop,
+      onSendEmailCode: noop,
+      onConfirmEmail: noop,
+      onApproveDevice: noop,
+      onRejectDevice: noop,
+      onRequestEnrollment: noop,
+      onRecoverWithPasskey: noop,
+      onSendRecoveryCode: noop,
+      onRecoverWithCode: noop,
+      onExport: () => exported.push(1),
+      onClose: noop,
+    };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const render = (props) => act(async () => root.render(React.createElement(RecoveryModalTemplate, { ...base, ...props })));
+    const text = () => container.textContent;
+    const buttonNamed = (name) => [...container.querySelectorAll('button')].find((b) => b.textContent.trim() === name);
+
+    await render({});
+    check(
+      'a locked wallet says it is locked and why',
+      /locked until you add a way to recover it/.test(text()) && /nobody can get them back/.test(text()),
+    );
+    check(
+      'a device asking to join can be approved or rejected',
+      !!buttonNamed('Approve') && !!buttonNamed('Reject') && /Laptop wants to join/.test(text()),
+    );
+
+    await render({ selfCustodyRisks: true });
+    check(
+      'a fixed self-custody app shows the risks before any setup',
+      /only your device can sign/.test(text()) && !buttonNamed('Approve') && !buttonNamed('Add a passkey'),
+    );
+    await act(async () => buttonNamed('I understand and accept these risks').click());
+    check('accepting the risks opens the recovery methods', !!buttonNamed('Add a passkey'));
+
+    await render({
+      thisDeviceEnrolled: false,
+      state: {
+        ...state,
+        passkeys: [{ authenticatorId: 'p', credentialId: 'c', name: 'pk', createdAt: '' }],
+        email: { address: 'user@x.test', verified: true },
+      },
+    });
+    check(
+      'a device outside the wallet is told so and offered every way back in',
+      /isn.t part of your wallet yet/.test(text()) &&
+        !!buttonNamed('Use a passkey') &&
+        !!buttonNamed('Ask another device to add this one') &&
+        /Email a code to user@x.test/.test(text()),
+    );
+
+    await render({ view: 'export' });
+    check('the export stays off until the risk is acknowledged', buttonNamed('Show recovery phrase').disabled === true);
+    await act(async () => container.querySelector('input[type=checkbox]').click());
+    check('acknowledging the risk enables it', buttonNamed('Show recovery phrase').disabled === false);
+    await act(async () => buttonNamed('Show recovery phrase').click());
+    check('the export runs once asked', exported.length === 1);
+    await render({ view: 'export', phrase: 'abandon abandon about' });
+    check(
+      'the phrase is shown with its warning',
+      /abandon abandon about/.test(text()) && /controls every account/.test(text()),
+    );
+
+    await act(async () =>
+      root.render(
+        React.createElement(ReceiveModalTemplate, {
+          theme: 'light',
+          accentColor: '#000',
+          walletAddress: 'GABC',
+          selectedChain: 'STELLAR',
+          copied: false,
+          recoveryLocked: true,
+          onSetupRecovery: noop,
+          onCopy: noop,
+          onClose: noop,
+        }),
+      ),
+    );
+    check(
+      'a locked wallet does not show its address to receive',
+      !text().includes('GABC') && /Set up a way to recover this wallet/.test(text()),
+    );
+    await act(async () => root.unmount());
+    container.remove();
+  }
+
+  console.log('\n-- 10. A custodial wallet moves to the device only on purpose --');
+  {
+    const { CustodyMigrationModalTemplate } = require(path.resolve(__dirname, '../packages/react/dist/index.js'));
+    const moved = [];
+    const base = {
+      theme: 'light',
+      accentColor: '#000',
+      state: {
+        required: true,
+        toCustody: null,
+        choice: true,
+        wallets: [
+          {
+            chain: 'STELLAR',
+            address: 'GABCDEFGH',
+            required: true,
+            status: 'NONE',
+            addressChanges: false,
+            newAddress: null,
+            error: null,
+          },
+          {
+            chain: 'SOLANA',
+            address: 'So1anaABCDEF',
+            required: true,
+            status: 'NONE',
+            addressChanges: true,
+            newAddress: null,
+            error: null,
+          },
+        ],
+      },
+      busy: false,
+      error: null,
+      blockedReasons: null,
+      onMove: (custody) => moved.push(custody ?? 'app'),
+      onLater: () => {},
+      onLogout: () => {},
+    };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const buttonNamed = (name) => [...container.querySelectorAll('button')].find((b) => b.textContent.trim() === name);
+    await act(async () => root.render(React.createElement(CustodyMigrationModalTemplate, base)));
+    check(
+      'a wallet whose address changes says so before it moves',
+      /Your Solana address changes/.test(container.textContent) && /Same address/.test(container.textContent),
+    );
+    check('with the choice left to the user, nothing moves before a pick', buttonNamed('Move my wallets').disabled === true);
+    await act(async () => container.querySelectorAll('input[type=radio]')[1].click());
+    check(
+      'self-custody waits for the risks to be accepted',
+      buttonNamed('Move my wallets').disabled === true && /only your device can sign/.test(container.textContent),
+    );
+    await act(async () => container.querySelector('input[type=checkbox]').click());
+    await act(async () => buttonNamed('Move my wallets').click());
+    check('the pick is what moves', moved[0] === 'SELF_CUSTODY');
+    await act(async () =>
+      root.render(React.createElement(CustodyMigrationModalTemplate, { ...base, blockedReasons: ['1 open ramp order(s)'] })),
+    );
+    check(
+      'a blocked wallet names what holds it back and lets the user carry on',
+      /1 open ramp order/.test(container.textContent) && !!buttonNamed('Continue for now'),
+    );
+    await act(async () => root.unmount());
+    container.remove();
+  }
+
   console.log(`\n${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
 })().catch((err) => {

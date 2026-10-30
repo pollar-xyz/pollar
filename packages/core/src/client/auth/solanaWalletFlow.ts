@@ -46,8 +46,8 @@ export async function loginWithSolanaAdapter(adapter: WalletAdapter, deps: FlowD
       return;
     }
 
-    // Phase 1 requires native SIWS (`solana:signIn`). A `signMessage`-only fallback
-    // (build the SIWS message text ourselves) is a planned follow-up.
+    // The adapter owns SIWS: the Wallet Standard one signs the same message text
+    // through `signMessage` for a wallet without `solana:signIn`.
     if (!adapter.signIn) {
       logApiError(logger, 'solana login', { error: `adapter "${type}" has no signIn (SIWS) capability` });
       setAuthState({

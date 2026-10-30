@@ -153,10 +153,11 @@ are not supported yet.
 ## Fiat ramps
 
 Moving money between local fiat rails and the wallet has its own file: [ramps.md](ramps.md). It
-covers quotes and the 15-minute `quoteId`, on-ramp deposit instructions, the two-step off-ramp,
-the three KYC shapes a result can carry, Pix QR payment, and the sign-and-resume loop for external
-wallets. The short version: every mutating call returns one `RampResult`, and the integration is a
-single function that branches on its optional fields in a fixed order.
+covers routes and quotes (each with its own `expiresAt`), the fields a quote asks for, orders of one or
+more legs (provider, swap, bridge), payment instructions, signing a leg with a registered signer,
+co-sign and KYC steps, and polling. The short version: `createRampOrder({ quoteId, payee })` returns an
+order, and the integration is a single function that branches on `order.pendingAction.kind`
+(`FIAT_PAYMENT`, `SIGNATURE`, `COSIGN_APPROVAL`, `KYC`).
 
 Identity verification outside a ramp run has its own methods on the client: `getKycProviders(country)`,
 `startKyc(body)`, `getKycStatus(providerId?)`, `pollKycDecision(providerId)`, `pollKycStatus(providerId)`,

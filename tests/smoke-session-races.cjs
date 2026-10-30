@@ -255,6 +255,20 @@ globalThis.fetch = async (req) => {
     const status = mock.txSubmitStatus ?? 'SUCCESS';
     return new Response(JSON.stringify({ success: true, content: { hash: 'HASH', status } }), { status: 200 });
   }
+  // The app's dashboard signs without asking: these checks are about the signing calls, not the prompt.
+  if (req.url.endsWith('/applications/config')) {
+    return new Response(
+      JSON.stringify({
+        success: true,
+        content: { application: { signConfirmation: { mode: 'AUTO', windowSeconds: 0, maxUsd: '0' } } },
+      }),
+      { status: 200 },
+    );
+  }
+  // v2 answers balance and assets per chain; an app on no chain answers an empty list.
+  if (req.url.includes('/wallet/balance') || req.url.includes('/wallet/assets')) {
+    return new Response(JSON.stringify({ success: true, content: { chains: [] } }), { status: 200 });
+  }
   // tx/history, logout, everything else.
   return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
 };

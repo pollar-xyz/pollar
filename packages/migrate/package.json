@@ -1,0 +1,46 @@
+{
+  "name": "@pollar/migrate",
+  "version": "0.12.0",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pollar-xyz/pollar.git",
+    "directory": "packages/migrate"
+  },
+  "description": "Upgrades an app on any @pollar release from 0.5 onwards to 0.12: reports every change the upgrade needs, file by file, and applies the mechanical ones.",
+  "bin": {
+    "pollar-migrate": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "NOTICE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "tsc --noEmit && eslint src",
+    "clean": "rm -rf dist"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "typescript": ">=5.0.0 <7.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^20.11.0",
+    "eslint": "^10.5.0",
+    "tsup": "^8.5.1",
+    "typescript-eslint": "^8.61.0"
+  }
+}

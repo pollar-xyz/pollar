@@ -3,6 +3,7 @@
 import {
   isPollarClient,
   BuildOutcome,
+  CosignCustody,
   EnabledAssetsState,
   isInteractiveAuthAdapter,
   NetworkState,
@@ -48,12 +49,14 @@ import { EarnModal } from './components/earn-modal/EarnModal';
 import { CardModal } from './components/card-modal/CardModal';
 import { SessionsModal } from './components/sessions-modal/SessionsModal';
 import { CosignModal } from './components/cosign-modal/CosignModal';
+import { CustodyMigrationModal } from './components/custody-migration-modal/CustodyMigrationModal';
+import { RecoveryModal } from './components/recovery-modal/RecoveryModal';
 import { ConfirmModal } from './components/confirm-modal/ConfirmModal';
-import type { CosignState, PendingConfirmation } from '@pollar/core';
+import type { CosignState, CustodyMigrationState, PendingConfirmation, RecoveryState } from '@pollar/core';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
-import { browserPasskeyCeremony, browserPasskeySigner } from './lib/passkey-ceremony';
+import { browserPasskeyCeremony, browserPasskeySigner, browserRecoveryPasskey } from './lib/passkey-ceremony';
 import type { PollarConfig, PollarStyles } from './types';
 
 const DEFAULT_APP_CONFIG: PollarConfig = {
@@ -114,8 +117,11 @@ interface PollarContextValue {
    * creates none.
    */
   hasWallet: boolean;
-  /** Create the signed-in user's wallet; see `PollarClient.createWallet`. */
-  createWallet: () => Promise<WalletInfo>;
+  /**
+   * Create the signed-in user's wallet; see `PollarClient.createWallet`. An app
+   * whose custody mode is USER_CHOICE needs `custody`: the user's pick.
+   */
+  createWallet: (options?: { custody?: CosignCustody }) => Promise<WalletInfo>;
   /**
    * `true` once the server has confirmed the session (login / refresh /
    * `/auth/session/resume`). `false` while a cold-start session is still
@@ -133,6 +139,30 @@ interface PollarContextValue {
   cosign: CosignState;
   /** Open the approval prompt of a co-signed wallet. Opens by itself when a request arrives. */
   openCosignModal: () => void;
+  /**
+   * The approval a flow will ask for next (a ramp's swap after its approve),
+   * or null. While one is coming, the approval prompt stays open after a sent
+   * transaction and shows the next request when it arrives, instead of closing.
+   */
+  setCosignNextStep: (next: string | null) => void;
+  /**
+   * The recovery state of the user's Turnkey wallet: null until read, or for a
+   * session without one. `recoveryLocked` is true while the wallet has no way
+   * to be recovered without this device: it signs nothing but its own setup.
+   */
+  recovery: RecoveryState | null;
+  recoveryLocked: boolean;
+  /** Read the recovery state again (after a method changed elsewhere). */
+  refreshRecovery: () => void;
+  /** Open the recovery methods modal: passkeys, email, devices, export. */
+  openRecoveryModal: () => void;
+  /**
+   * Whether the user's wallet, one Pollar custodies, has to move to this
+   * device because the app keeps its wallets in Turnkey. While `required`, the
+   * provider shows the move and nothing else; null until read.
+   */
+  custodyMigration: CustodyMigrationState | null;
+  refreshCustodyMigration: () => void;
   /** Signing calls waiting for the user under `confirmation: 'prompt'`; the provider shows the first one. */
   confirmations: PendingConfirmation[];
   appConfig: PollarConfig;
@@ -390,7 +420,11 @@ export function PollarProvider({
   // ceremony winning while an absent/undefined one still gets the default.
   const [pollarClient] = useState<PollarClient>(() => {
     if (isPollarClient(client)) {
-      client.setPasskeyDefaults({ passkey: browserPasskeyCeremony, passkeySign: browserPasskeySigner });
+      client.setPasskeyDefaults({
+        passkey: browserPasskeyCeremony,
+        passkeySign: browserPasskeySigner,
+        recoveryPasskey: browserRecoveryPasskey,
+      });
       return client;
     }
     // Reuse the instance a discarded render pass already built (see
@@ -402,6 +436,7 @@ export function PollarProvider({
       ...client,
       passkey: client.passkey ?? browserPasskeyCeremony,
       passkeySign: client.passkeySign ?? browserPasskeySigner,
+      recoveryPasskey: client.recoveryPasskey ?? browserRecoveryPasskey,
     });
     clientByConfig.set(client, built);
     return built;
@@ -633,6 +668,8 @@ export function PollarProvider({
   const [receiveModalOpen, setReceiveModalOpen] = useState(false);
   const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
   const [cosignModalOpen, setCosignModalOpen] = useState(false);
+  const [cosignNextStep, setCosignNextStep] = useState<string | null>(null);
+  const [recoveryModalOpen, setRecoveryModalOpen] = useState(false);
   // A signing call that came back pending needs the user's vote now; open the
   // prompt the moment a new request appears, never when one merely resolves.
   const cosignPendingCount = useRef(0);
@@ -663,6 +700,7 @@ export function PollarProvider({
         setReceiveModalOpen(false);
         setSessionsModalOpen(false);
         setCosignModalOpen(false);
+        setRecoveryModalOpen(false);
         setDistributionRulesModalOpen(false);
       }),
     [pollarClient],
@@ -682,6 +720,57 @@ export function PollarProvider({
   // demand is authenticated before they have an address.
   const hasSession = sessionState !== null;
   const getClient = useCallback(() => pollarClient, [pollarClient]);
+
+  // The recovery state of a Turnkey wallet, read once a session exists and
+  // again when the wallet changes, so a locked wallet says so before the user
+  // tries to send. A user without a Turnkey wallet reads `required: false`.
+  const [recovery, setRecovery] = useState<RecoveryState | null>(null);
+  const [recoveryTick, setRecoveryTick] = useState(0);
+  const refreshRecovery = useCallback(() => setRecoveryTick((t) => t + 1), []);
+  useEffect(() => {
+    if (!hasSession) {
+      setRecovery(null);
+      return;
+    }
+    let cancelled = false;
+    pollarClient.cosign.recovery
+      .status()
+      .then((next) => {
+        if (!cancelled) setRecovery(next);
+      })
+      .catch(() => {
+        if (!cancelled) setRecovery(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pollarClient, hasSession, walletAddress, recoveryTick]);
+  const recoveryLocked = !!recovery && recovery.required && !recovery.configured;
+
+  const [custodyMigration, setCustodyMigration] = useState<CustodyMigrationState | null>(null);
+  const [custodyMigrationTick, setCustodyMigrationTick] = useState(0);
+  const refreshCustodyMigration = useCallback(() => setCustodyMigrationTick((t) => t + 1), []);
+  // A wallet blocked by something pending lets the user carry on; the move is asked again next session.
+  const [custodyMigrationLater, setCustodyMigrationLater] = useState(false);
+  useEffect(() => {
+    if (!hasSession) {
+      setCustodyMigration(null);
+      setCustodyMigrationLater(false);
+      return;
+    }
+    let cancelled = false;
+    pollarClient.cosign
+      .custodyMigration()
+      .then((next) => {
+        if (!cancelled) setCustodyMigration(next);
+      })
+      .catch(() => {
+        if (!cancelled) setCustodyMigration(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pollarClient, hasSession, walletAddress, custodyMigrationTick]);
   // refreshBalance resolves the own wallet server-side from the session;
   // walletAddress stays in deps so the callback re-binds when the wallet changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- walletAddress is an intentional re-bind trigger, not read in the body
@@ -699,7 +788,7 @@ export function PollarProvider({
       wallets: pollarClient.getWallets(),
       isAuthenticated: hasSession,
       hasWallet: pollarClient.hasWallet(),
-      createWallet: () => pollarClient.createWallet(),
+      createWallet: (options?: { custody?: CosignCustody }) => pollarClient.createWallet(options),
       verified,
       // client
       getClient,
@@ -768,6 +857,13 @@ export function PollarProvider({
       // cosign
       cosign,
       openCosignModal: () => setCosignModalOpen(true),
+      setCosignNextStep,
+      recovery,
+      recoveryLocked,
+      refreshRecovery,
+      openRecoveryModal: () => setRecoveryModalOpen(true),
+      custodyMigration,
+      refreshCustodyMigration,
       confirmations,
       // distribution
       openDistributionRulesModal: () => setDistributionRulesModalOpen(true),
@@ -792,6 +888,11 @@ export function PollarProvider({
   }, [
     walletAddress,
     walletProvisioning,
+    recovery,
+    recoveryLocked,
+    refreshRecovery,
+    custodyMigration,
+    refreshCustodyMigration,
     hasSession,
     verified,
     pollarClient,
@@ -900,7 +1001,35 @@ export function PollarProvider({
       )}
       {cosignModalOpen && (
         <ModalErrorBoundary onClose={() => setCosignModalOpen(false)}>
-          <CosignModal onClose={() => setCosignModalOpen(false)} />
+          <CosignModal nextStep={cosignNextStep} onClose={() => setCosignModalOpen(false)} />
+        </ModalErrorBoundary>
+      )}
+      {custodyMigration?.required && !custodyMigrationLater && (
+        <ModalErrorBoundary onClose={refreshCustodyMigration}>
+          <CustodyMigrationModal
+            state={custodyMigration}
+            onMoved={() => {
+              refreshCustodyMigration();
+              refreshRecovery();
+              setRecoveryModalOpen(true);
+            }}
+            onLater={() => {
+              setCustodyMigrationLater(true);
+              refreshCustodyMigration();
+              refreshRecovery();
+            }}
+          />
+        </ModalErrorBoundary>
+      )}
+      {recoveryModalOpen && (
+        <ModalErrorBoundary onClose={() => setRecoveryModalOpen(false)}>
+          <RecoveryModal
+            onClose={() => {
+              setRecoveryModalOpen(false);
+              // A method added in the modal unlocks what waited on it (a held ramp order).
+              refreshRecovery();
+            }}
+          />
         </ModalErrorBoundary>
       )}
       {firstConfirmation && (

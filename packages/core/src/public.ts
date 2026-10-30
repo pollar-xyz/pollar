@@ -8,7 +8,7 @@ export * from './ramps/index';
 export { POLLAR_CORE_VERSION } from './version';
 export { createLogger } from './lib/logger';
 export { toBaseUnits, fromBaseUnits } from './lib/units';
-export { transactionErrorMessage } from './lib/tx-error-messages';
+export { appUnavailableMessage, cosignRefusalMessage, transactionErrorMessage } from './lib/tx-error-messages';
 export type { LogLevel, PollarLogger } from './lib/logger';
 
 // --- Storage ------------------------------------------------------------------
@@ -30,8 +30,6 @@ export { compressedPublicKeyHex, rawSignatureToDer, encodeStamp } from './cosign
 export { stellarTransactionHashHex } from './cosign/stellar-hash';
 export { recognizedSetupRequest, stellarAccountBytes } from './cosign/recognize';
 export type { SetupRecognition } from './cosign/recognize';
-export { cosignGroupOf, cosignStepKeyOf, stepInGroup } from './cosign/groups';
-export type { CosignGroup } from './cosign/groups';
 export type { BuildProofArgs } from './dpop';
 
 export { FreighterAdapter, AlbedoAdapter, WalletType, isInteractiveAuthAdapter } from './wallets';
@@ -54,7 +52,14 @@ export type {
   ProviderAuthState,
 } from './wallets';
 export type * from './types';
-export { AUTH_ERROR_CODES, PollarNetworkError, isPollarNetworkError, PollarApiError, isPollarApiError } from './types';
+export {
+  AUTH_ERROR_CODES,
+  PollarFlowError,
+  PollarNetworkError,
+  isPollarNetworkError,
+  PollarApiError,
+  isPollarApiError,
+} from './types';
 export { RampChain } from './types';
 export { WALLET_NOT_READY_CODE, isWalletNotReady, WALLET_REQUIRED_CODE, isWalletRequired } from './types';
 export { PollarApiClient } from './api/client';
@@ -77,21 +82,14 @@ export {
 
 // --- Ramps endpoints ----------------------------------------------------------
 export {
-  continueRamp,
-  continueRampTransaction,
   getRampRoutes,
-  getRampsQuote,
-  getRampCountries,
-  createOnRamp,
-  createOffRamp,
-  completeWithdraw,
-  submitRampSignature,
-  getRampTransaction,
-  retryRampTransaction,
-  pollRampTransaction,
-  getRampLiquidity,
-  getRampKycStatus,
-  decodePixQr,
+  quoteRamp,
+  createRampOrder,
+  getRampOrder,
+  listRampOrders,
+  submitRampLegSignature,
+  pollRampOrder,
+  isRampOrderSettled,
 } from './api/endpoints/ramps';
 
 // --- Distribution endpoints ---------------------------------------------------
@@ -103,8 +101,32 @@ export { quoteSwap, getSwapConfig, getSwapTokens } from './api/endpoints/swap';
 // --- Earn endpoints -----------------------------------------------------------
 export { getEarnProviders, getEarnOpportunities, getEarnPosition, buildEarnTx } from './api/endpoints/earn';
 
-export { describeRampAction, mergeRampSnapshot, mergeRampCountries } from './ramps/workflow';
-export type { RampSnapshot, RampSigningHandler } from './ramps/workflow';
+export {
+  describeRampAction,
+  rampCountries,
+  rampFieldError,
+  rampFieldValid,
+  rampLegNote,
+  rampLegStatus,
+  rampLegTimeLeft,
+  rampNextApproval,
+  rampStepStatusText,
+  rampStepTitle,
+  rampOrderReceive,
+  rampOrderResolutionText,
+  rampOrderStopped,
+  rampLegTitle,
+  rampNoRouteText,
+  rampQuoteFields,
+  rampRailLabel,
+  rampRequirementCopy,
+  rampResolutionText,
+  rampTrustlineAsset,
+  rampTrustlineErrorText,
+  rampWalletStep,
+} from './ramps/workflow';
+export type { RampSigningHandler, RampWalletStep } from './ramps/workflow';
+export { assertRampStellarSigner } from './ramps/stellar-signing';
 // --- Cards endpoints ----------------------------------------------------------
 export {
   getCardProviders,
@@ -130,11 +152,3 @@ export {
 export type { EncryptedCardSecrets } from './api/endpoints/cards';
 export { createCardSecretsSession, openCardSecrets } from './lib/card-secrets';
 export type { CardSecretsSession, CardSecretsEngine } from './lib/card-secrets';
-
-export type {
-  RampContinuation,
-  RampWorkflowAction,
-  RampWorkflowRoutes,
-  RampWorkflowTerms,
-  RampWorkflowView,
-} from './api/ramp-workflow';

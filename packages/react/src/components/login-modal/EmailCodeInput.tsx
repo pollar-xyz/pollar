@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { applyEmailCodeInput, applyEmailCodePaste, EMAIL_CODE_LENGTH, type EmailCodeUpdate } from './email-code';
 
 interface EmailCodeInputProps {
   email?: string;
@@ -6,19 +7,13 @@ interface EmailCodeInputProps {
 }
 
 export function EmailCodeInput({ email, onSubmit }: EmailCodeInputProps) {
-  const [digits, setDigits] = useState(['', '', '', '', '', '']);
+  const [digits, setDigits] = useState<string[]>(() => Array.from({ length: EMAIL_CODE_LENGTH }, () => ''));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  function submit(next: string[]) {
-    if (next.every(Boolean)) onSubmit(next.join(''));
-  }
-
-  function handleChange(index: number, value: string) {
-    const cleaned = value.replace(/\D/g, '').slice(-1);
-    const next = digits.map((d, i) => (i === index ? cleaned : d));
+  function apply({ digits: next, focus }: EmailCodeUpdate) {
     setDigits(next);
-    if (cleaned && index < 5) inputRefs.current[index + 1]?.focus();
-    submit(next);
+    inputRefs.current[focus]?.focus();
+    if (next.every(Boolean)) onSubmit(next.join(''));
   }
 
   function handleKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
@@ -29,11 +24,7 @@ export function EmailCodeInput({ email, onSubmit }: EmailCodeInputProps) {
 
   function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
     e.preventDefault();
-    const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-    const next = Array.from({ length: 6 }, (_, i) => text[i] ?? '');
-    setDigits(next);
-    inputRefs.current[Math.min(text.length - 1, 5)]?.focus();
-    submit(next);
+    apply(applyEmailCodePaste(e.clipboardData.getData('text')));
   }
 
   return (
@@ -48,10 +39,13 @@ export function EmailCodeInput({ email, onSubmit }: EmailCodeInputProps) {
             }}
             type="text"
             inputMode="numeric"
-            maxLength={2}
+            // No maxLength: OTP autofill writes the whole code into one box, and a
+            // maxLength would truncate it before onChange sees it.
+            autoComplete={i === 0 ? 'one-time-code' : 'off'}
+            aria-label={`Digit ${i + 1} of ${EMAIL_CODE_LENGTH}`}
             value={digit}
             className="pollar-code-input"
-            onChange={(e) => handleChange(i, e.target.value)}
+            onChange={(e) => apply(applyEmailCodeInput(digits, i, e.target.value, e.target.selectionStart))}
             onKeyDown={(e) => handleKeyDown(i, e)}
             onPaste={handlePaste}
           />

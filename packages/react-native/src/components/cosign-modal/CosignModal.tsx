@@ -1,10 +1,20 @@
 import type { CosignRequest, CosignVerification } from '@pollar/core';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert } from 'react-native';
 import { usePollar } from '../../context';
 import { PollarOverlay } from '../commons';
 import { CosignModalTemplate } from './CosignModalUI';
 
+/** How long an outcome that needs nothing from the user stays up before the modal closes. */
+const CLOSE_AFTER_SECONDS = 3;
+/** A sent transaction stays up longer, so its hash can be read or copied. */
+const CLOSE_AFTER_SENT_SECONDS = 5;
+/** How often the prompt looks for the next request while a flow says one is coming. */
+const NEXT_REQUEST_EVERY_MS = 2_000;
+
 interface CosignModalProps {
+  /** The approval a flow asks for next (`setCosignNextStep`); the prompt waits for it instead of closing. */
+  nextStep?: string | null;
   onClose: () => void;
 }
 
@@ -12,8 +22,8 @@ interface CosignModalProps {
  * The approval prompt of a Turnkey co-signed wallet. Verifies each request
  * against Turnkey before enabling Approve.
  */
-export function CosignModal({ onClose }: CosignModalProps) {
-  const { getClient, styles, cosign } = usePollar();
+export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
+  const { getClient, styles, cosign, copyText } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const { pending, lastResolved } = cosign;
 
@@ -24,11 +34,70 @@ export function CosignModal({ onClose }: CosignModalProps) {
 
   const current = pending.find((r) => r.id === selectedId) ?? pending[0] ?? null;
 
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     void getClient()
       .cosign.pending()
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setLoaded(true));
   }, [getClient]);
+
+  // Nothing left to vote on and nothing to read (no transaction, no signature), or a sent transaction:
+  // count down and close. A signed XDR the app still has to send stays up until closed.
+  const silent =
+    pending.length === 0 &&
+    (lastResolved ? lastResolved.status === 'APPROVED' && !lastResolved.submit?.hash && !lastResolved.signedXdr : loaded);
+  const sent = pending.length === 0 && lastResolved?.status === 'APPROVED' && !!lastResolved.submit?.hash;
+  // A flow with another approval coming keeps the prompt up and shows that request when it arrives.
+  const awaitingNext = sent && !!nextStep;
+  const closeAfter = awaitingNext ? null : sent ? CLOSE_AFTER_SENT_SECONDS : silent ? CLOSE_AFTER_SECONDS : null;
+  useEffect(() => {
+    if (!awaitingNext) return;
+    const timer = setInterval(
+      () =>
+        void getClient()
+          .cosign.pending()
+          .catch(() => undefined),
+      NEXT_REQUEST_EVERY_MS,
+    );
+    return () => clearInterval(timer);
+  }, [awaitingNext, getClient]);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const [closesIn, setClosesIn] = useState<number | null>(null);
+  useEffect(() => {
+    if (closeAfter === null) {
+      setClosesIn(null);
+      return;
+    }
+    let left = closeAfter;
+    setClosesIn(left);
+    const timer = setInterval(() => {
+      left -= 1;
+      if (left > 0) setClosesIn(left);
+      else {
+        clearInterval(timer);
+        onCloseRef.current();
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [closeAfter, lastResolved?.id]);
+
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(copiedTimer.current), []);
+  const copyHash = useCallback(
+    (hash: string) => {
+      copyText(hash)
+        .then(() => {
+          setCopied(true);
+          clearTimeout(copiedTimer.current);
+          copiedTimer.current = setTimeout(() => setCopied(false), 1500);
+        })
+        .catch((err: unknown) => Alert.alert('Copy failed', String(err)));
+    },
+    [copyText],
+  );
 
   // The quorum as this device read it from Turnkey, once per open; a bad
   // reading fails every verification so nothing is approved on it.
@@ -97,6 +166,10 @@ export function CosignModal({ onClose }: CosignModalProps) {
         busy={busy}
         error={error}
         {...(lastResolved ? { lastResolved } : {})}
+        closesIn={closesIn}
+        nextStep={awaitingNext ? nextStep : null}
+        copied={copied}
+        onCopyHash={copyHash}
         onSelect={(r) => setSelectedId(r.id)}
         onApprove={(r) => void run('approving', r)}
         onReject={(r) => void run('rejecting', r)}

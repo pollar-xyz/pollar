@@ -7,10 +7,11 @@ import type {
   EarnProvidersContent,
 } from '../../types';
 import type { PollarApiClient } from '../client';
+import { apiErrorFields } from '../error-fields';
 
 function errMessage(error: unknown, fallback: string): string {
-  const e = error as { code?: string; error?: string } | undefined;
-  return e?.code ?? e?.error ?? fallback;
+  const e = apiErrorFields(error);
+  return e.code ?? e.error ?? fallback;
 }
 
 /**

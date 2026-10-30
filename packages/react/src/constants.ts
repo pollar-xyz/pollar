@@ -1,4 +1,3 @@
-export const LOGO_POLLAR = 'https://pollar.xyz/assets/logo_pollar.png';
 export const LOGO_POLLAR_WORDMARK_ON_LIGHT = 'https://www.pollar.xyz/brandkit/pollar-logo-horizontal-on-light.png';
 export const LOGO_POLLAR_WORDMARK_ON_DARK = 'https://www.pollar.xyz/brandkit/pollar-logo-horizontal-on-dark.png';
 export const LOGO_POLLAR_MARK_ON_LIGHT = 'https://www.pollar.xyz/brandkit/pollar-mark-on-light.png';

@@ -37,7 +37,7 @@ export { RegistryCheckModal } from './components/registry-check-modal/RegistryCh
 export { ProviderRegistrationModal } from './components/provider-registration-modal/ProviderRegistrationModal';
 export { KycStatus } from './components/kyc-modal/KycStatus';
 export { RampWidget } from './components/ramp-widget/RampWidget';
-export { RouteDisplay } from './components/ramp-widget/RouteDisplay';
+export { RejectedRouteDisplay, RouteDisplay } from './components/ramp-widget/RouteDisplay';
 export { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 export { EnabledAssetsModal } from './components/enabled-assets-modal/EnabledAssetsModal';
 export { SendModal } from './components/send-modal/SendModal';
@@ -47,6 +47,7 @@ export { CardModal } from './components/card-modal/CardModal';
 export { ReceiveModal } from './components/receive-modal/ReceiveModal';
 export { SessionsModal } from './components/sessions-modal/SessionsModal';
 export { CosignModal } from './components/cosign-modal/CosignModal';
+export { RecoveryModal } from './components/recovery-modal/RecoveryModal';
 export { DistributionRulesModal } from './components/distribution-rules-modal/DistributionRulesModal';
 
 // --- Modal theming ------------------------------------------------------------
@@ -83,7 +84,11 @@ export type { ReceiveModalTemplateProps } from './components/receive-modal/Recei
 export { SessionsModalTemplate } from './components/sessions-modal/SessionsModalTemplate';
 export { CosignModalTemplate } from './components/cosign-modal/CosignModalTemplate';
 export type { CosignModalTemplateProps } from './components/cosign-modal/CosignModalTemplate';
+export { CustodyMigrationModal } from './components/custody-migration-modal/CustodyMigrationModal';
+export { CustodyMigrationModalTemplate } from './components/custody-migration-modal/CustodyMigrationModalTemplate';
+export type { CustodyMigrationModalTemplateProps } from './components/custody-migration-modal/CustodyMigrationModalTemplate';
+export { RecoveryModalTemplate } from './components/recovery-modal/RecoveryModalTemplate';
+export type { RecoveryModalTemplateProps, RecoveryView } from './components/recovery-modal/RecoveryModalTemplate';
+export { browserRecoveryPasskey } from './lib/passkey-ceremony';
 export type { SessionsModalTemplateProps, SessionsState } from './components/sessions-modal/SessionsModalTemplate';
 export { DistributionRulesModalTemplate } from './components/distribution-rules-modal/DistributionRulesModalTemplate';
-
-export { RampWorkflow } from './components/ramp-widget/RampWorkflow';

@@ -95,9 +95,16 @@ for send, receive, copy, balance, history, ramp, KYC, distribution rules, sessio
 
 The rest: `<SendModal>`, `<ReceiveModal>`, `<SwapModal>`, `<EarnModal>`, `<TxHistoryModal>`,
 `<WalletBalanceModal>`, `<EnabledAssetsModal>`, `<SessionsModal>`, `<DistributionRulesModal>`,
-`<KycModal>`, `<RampWidget>`, and the ramp requirement steps `<RequirementFormModal>`,
-`<RegistryCheckModal>` and `<ProviderRegistrationModal>` (`<RampWidget>` opens them itself; see
-[ramps.md](./ramps.md)). In a multichain app, Send, Receive and Wallet balance open on the first
+`<KycModal>`, `<RampWidget>`, and the requirement steps `<RequirementFormModal>`, `<RegistryCheckModal>`
+and `<ProviderRegistrationModal>`. `<RampWidget>` runs a ramp on the v3 API: it lists routes, quotes
+them (a route waiting on a verification step opens that step from its row and quotes again when it is
+done), asks for the quote's fields, creates the order, then
+shows its `pendingAction` (a payment QR or bank details, Authorize for a signature, Approve for a
+co-sign, a verification link) and follows it with `pollRampOrder`. It also lists pending orders to
+resume. To sign a leg it lends the connected wallet as the Stellar (`assertRampStellarSigner`, then
+`signTx`) or Solana (`signSolanaTransaction`) signer only while the user authorizes, only for a step
+built for that wallet, and only if the app registered no signer of its own; see
+[ramps.md](./ramps.md). In a multichain app, Send, Receive and Wallet balance open on the first
 configured chain and show a network picker; a single-chain app gets no picker.
 
 To keep the data wiring but replace the chrome, use the `Template` companion of any modal

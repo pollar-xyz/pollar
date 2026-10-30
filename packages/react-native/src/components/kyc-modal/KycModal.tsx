@@ -26,7 +26,12 @@ export interface KycModalTemplateProps {
   reviewReason?: string | null | undefined;
   /** The vendor approved and Pollar is still recording it (`kycStatus` stays `pending`). */
   processing?: boolean | undefined;
+  /** The provider list is loading. */
   isLoading: boolean;
+  /** The option whose session is opening: it shows a spinner and every option waits on it. */
+  startingProviderId?: string | null | undefined;
+  /** The option was named for the user (a ramp's step), so it opens without showing the list. */
+  directOpen?: boolean | undefined;
   error?: string | null | undefined;
   onSelectProvider: (provider: KycProvider) => void;
   onOpenVerification: () => void;
@@ -47,6 +52,8 @@ export function KycModalTemplate({
   reviewReason,
   processing = false,
   isLoading,
+  startingProviderId = null,
+  directOpen = false,
   error,
   onSelectProvider,
   onOpenVerification,
@@ -56,6 +63,7 @@ export function KycModalTemplate({
   onClose,
 }: KycModalTemplateProps) {
   const isDark = theme === 'dark';
+  const busy = isLoading || startingProviderId !== null;
   const colors = {
     bg: isDark ? '#1a1a1a' : '#ffffff',
     border: isDark ? '#374151' : '#e5e7eb',
@@ -112,7 +120,12 @@ export function KycModalTemplate({
 
       <View style={styles.body}>
         {step === 'select_provider' &&
-          (isLoading && providers.length === 0 ? (
+          (startingProviderId !== null && directOpen ? (
+            <View style={styles.loadingBox} accessibilityLiveRegion="polite">
+              <ActivityIndicator size="large" color={accentColor} />
+              <Text style={{ color: colors.muted, marginTop: 12 }}>Opening {selectedProvider?.name ?? 'verification'}…</Text>
+            </View>
+          ) : isLoading && providers.length === 0 ? (
             <View style={styles.loadingBox}>
               <ActivityIndicator size="large" color={accentColor} />
               <Text style={{ color: colors.muted, marginTop: 12 }}>Loading providers…</Text>
@@ -128,19 +141,25 @@ export function KycModalTemplate({
                 <TouchableOpacity
                   key={p.id}
                   style={[styles.providerBtn, { backgroundColor: colors.itemBg, borderColor: colors.border }]}
-                  disabled={isLoading}
+                  disabled={busy}
+                  accessibilityState={{ busy: startingProviderId === p.id, disabled: busy }}
                   onPress={() => onSelectProvider(p)}
                 >
                   <Text style={[styles.providerName, { color: colors.text }]}>{p.name}</Text>
-                  <Text style={{ color: colors.muted, fontSize: 13 }}>
-                    {isLoading && selectedProvider?.id === p.id ? 'Opening…' : 'Continue in the browser'}
-                  </Text>
+                  {startingProviderId === p.id ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <ActivityIndicator size="small" color={accentColor} />
+                      <Text style={{ color: colors.muted, fontSize: 13 }}>Opening…</Text>
+                    </View>
+                  ) : (
+                    <Text style={{ color: colors.muted, fontSize: 13 }}>Continue in the browser</Text>
+                  )}
                 </TouchableOpacity>
               ))}
               <TouchableOpacity
                 style={[styles.secondaryBtn, { borderColor: colors.border }]}
                 onPress={onRefresh}
-                disabled={isLoading}
+                disabled={busy}
               >
                 <Text style={{ color: colors.text, fontWeight: '600' }}>Refresh</Text>
               </TouchableOpacity>
@@ -182,7 +201,7 @@ export function KycModalTemplate({
               <TouchableOpacity
                 style={[styles.secondaryBtn, { borderColor: colors.border }]}
                 onPress={onStartAgain}
-                disabled={isLoading}
+                disabled={busy}
               >
                 <Text style={{ color: colors.text, fontWeight: '600' }}>Start again</Text>
               </TouchableOpacity>
@@ -249,6 +268,9 @@ export function KycModal({
   const [reviewReason, setReviewReason] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  // Apart from `isLoading`: a list that reloads mid-open must not clear the open's spinner.
+  const [startingProviderId, setStartingProviderId] = useState<string | null>(null);
+  const [directOpen, setDirectOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // One key per option for this modal: a retried start returns the vendor session
   // already opened instead of creating (and billing) another one.
@@ -297,7 +319,7 @@ export function KycModal({
     starting.current = true;
     setSelectedProvider(provider);
     setError(null);
-    setIsLoading(true);
+    setStartingProviderId(provider.id);
     const key = (idempotencyKeys.current[provider.id] ??= newIdempotencyKey());
     try {
       const result = await client.resolveKyc(
@@ -314,7 +336,13 @@ export function KycModal({
         return;
       }
       openedInBrowser.current = false;
-      setSession(result as KycStartResponse);
+      const { sessionId } = result;
+      if (sessionId === undefined) throw new Error('The KYC provider answered without a session.');
+      setSession({
+        sessionId,
+        ...(result.kycUrl !== undefined ? { kycUrl: result.kycUrl } : {}),
+        ...(result.fields !== undefined ? { fields: result.fields } : {}),
+      });
       setStep('verifying');
     } catch (e) {
       if (!mounted.current) return;
@@ -337,7 +365,7 @@ export function KycModal({
       setStep('select_provider');
     } finally {
       starting.current = false;
-      if (mounted.current) setIsLoading(false);
+      if (mounted.current) setStartingProviderId(null);
     }
   }
 
@@ -367,6 +395,7 @@ export function KycModal({
     void loadProviders().then((list) => {
       if (!providerId || autoOpened.current || !mounted.current) return;
       autoOpened.current = true;
+      setDirectOpen(true);
       const target = list.find((p) => p.id === providerId);
       // The option a gate or a step names was chosen by the backend for this user: the
       // country this list was filtered by must not hide it behind "no providers".
@@ -448,6 +477,8 @@ export function KycModal({
           reviewReason={reviewReason}
           processing={processing}
           isLoading={isLoading}
+          startingProviderId={startingProviderId}
+          directOpen={directOpen}
           error={error}
           onSelectProvider={handleSelectProvider}
           onOpenVerification={handleOpenVerification}
