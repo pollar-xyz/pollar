@@ -5,7 +5,7 @@ import { type CosignRequest, type CosignVerification, type PollarLanguage, type 
 import { useState } from 'react';
 import { CopyButton, cropAddress, PollarModalFooter } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
-import { TxReview } from '../tx-review/TxReview';
+import { TxFeeBadge, TxReview } from '../tx-review/TxReview';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
 import { reviewFromRequest } from '../tx-review/tx-review-model';
 import { COSIGN_COPY } from './cosign-copy';
@@ -179,6 +179,11 @@ export function CosignModalTemplate({
                   copy.nothingSigned
                 )}
               </p>
+              {lastResolved.submit?.sponsored !== undefined && (
+                <p className="pollar-cosign-fee">
+                  <TxFeeBadge sponsored={lastResolved.submit.sponsored} language={language} />
+                </p>
+              )}
             </>
           ) : (
             <p className="pollar-cosign-muted">{copy.nothingWaiting}</p>

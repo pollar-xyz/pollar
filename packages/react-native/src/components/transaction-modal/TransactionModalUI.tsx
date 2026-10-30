@@ -78,11 +78,12 @@ export function TransactionModalTemplate({
   const isError = transaction.step === 'error';
   const showDetails = isBuilt || isSigning || isSuccess;
   const hashInfo = hash ? { value: hash, explorerUrl } : undefined;
+  const sponsored = 'sponsored' in transaction ? transaction.sponsored : undefined;
   // A compound flow can finish without the build it ran: the hash still has a place in the details.
   const review: TxReviewData | null = buildData
-    ? reviewFromBuild(buildData, TX_REVIEW_COPY[language], copy.title, hashInfo)
+    ? reviewFromBuild(buildData, TX_REVIEW_COPY[language], copy.title, hashInfo, sponsored)
     : hashInfo
-      ? { title: copy.title, kind: 'other', rows: [], hash: hashInfo }
+      ? { title: copy.title, kind: 'other', rows: [], hash: hashInfo, ...(sponsored !== undefined && { fee: { sponsored } }) }
       : null;
   const reviewBlock = showDetails && review && (
     <ScrollView style={styles.contentWrap} nestedScrollEnabled>

@@ -700,6 +700,10 @@ export type TxBuildContent = Exclude<TxBuildResponse['content'], { chain: 'SOLAN
  *
  * On `error`, the `phase` discriminator tells the consumer *where* the
  * failure happened so modal UIs can offer "retry from this step" buttons.
+ *
+ * `sponsored` says whether the app paid the network fee. It appears once the
+ * platform reports it (the sign or the submit answer) and is carried to the
+ * later steps of the same transaction; absent when the platform did not say.
  */
 export type TransactionState =
   | { step: 'idle' }
@@ -707,17 +711,17 @@ export type TransactionState =
   | { step: 'building' }
   | { step: 'built'; buildData: TxBuildContent }
   | { step: 'signing'; buildData?: TxBuildContent }
-  | { step: 'signed'; buildData?: TxBuildContent; signedXdr: string; submissionToken?: string }
-  | { step: 'submitting'; buildData?: TxBuildContent; signedXdr?: string }
+  | { step: 'signed'; buildData?: TxBuildContent; signedXdr: string; submissionToken?: string; sponsored?: boolean }
+  | { step: 'submitting'; buildData?: TxBuildContent; signedXdr?: string; sponsored?: boolean }
   // --- Compound phases (embedded-only - backend swallows the boundaries) --
   | { step: 'signing-submitting'; buildData?: TxBuildContent }
   | { step: 'building-signing-submitting' }
   // --- Co-signed wallet: waiting for the user's device to vote --------------
   | { step: 'awaiting_cosign'; request: CosignRequest; buildData?: TxBuildContent }
   // --- Post-Horizon-ack, pre-ledger-confirm (shared) --------------------
-  | { step: 'submitted'; buildData?: TxBuildContent; hash: string }
+  | { step: 'submitted'; buildData?: TxBuildContent; hash: string; sponsored?: boolean }
   // --- Terminal success (shared) ----------------------------------------
-  | { step: 'success'; buildData?: TxBuildContent; hash: string }
+  | { step: 'success'; buildData?: TxBuildContent; hash: string; sponsored?: boolean }
   // --- Terminal failure with phase context ------------------------------
   | {
       step: 'error';

@@ -2565,6 +2565,7 @@ export interface operations {
                             status: "PENDING" | "SUCCESS" | "FAILED";
                             resultCode?: string;
                             message?: string;
+                            sponsored?: boolean;
                         };
                     };
                 };
@@ -2616,6 +2617,7 @@ export interface operations {
                                         status: "PENDING" | "SUCCESS" | "FAILED";
                                         resultCode?: string;
                                         message?: string;
+                                        sponsored?: boolean;
                                     };
                                     txRecordId?: string;
                                     failureReason?: string;
@@ -2775,6 +2777,7 @@ export interface operations {
                                         status: "PENDING" | "SUCCESS" | "FAILED";
                                         resultCode?: string;
                                         message?: string;
+                                        sponsored?: boolean;
                                     };
                                     txRecordId?: string;
                                     failureReason?: string;
@@ -2931,6 +2934,7 @@ export interface operations {
                                         status: "PENDING" | "SUCCESS" | "FAILED";
                                         resultCode?: string;
                                         message?: string;
+                                        sponsored?: boolean;
                                     };
                                     txRecordId?: string;
                                     failureReason?: string;
@@ -3067,6 +3071,7 @@ export interface operations {
                             status: "PENDING" | "SUCCESS" | "FAILED";
                             resultCode?: string;
                             message?: string;
+                            sponsored?: boolean;
                         };
                     };
                 };
@@ -3428,6 +3433,7 @@ export interface operations {
                                 fee: string;
                             };
                             estimatedFee: string;
+                            sponsored?: boolean;
                         } | {
                             hash: string;
                             /** @enum {string} */
@@ -3490,6 +3496,7 @@ export interface operations {
                                         status: "PENDING" | "SUCCESS" | "FAILED";
                                         resultCode?: string;
                                         message?: string;
+                                        sponsored?: boolean;
                                     };
                                     txRecordId?: string;
                                     failureReason?: string;
@@ -4261,6 +4268,7 @@ export interface operations {
                                         status: "PENDING" | "SUCCESS" | "FAILED";
                                         resultCode?: string;
                                         message?: string;
+                                        sponsored?: boolean;
                                     };
                                     txRecordId?: string;
                                     failureReason?: string;
@@ -8038,6 +8046,7 @@ export interface operations {
                                         status: "PENDING" | "SUCCESS" | "FAILED";
                                         resultCode?: string;
                                         message?: string;
+                                        sponsored?: boolean;
                                     };
                                     txRecordId?: string;
                                     failureReason?: string;
@@ -8126,6 +8135,7 @@ export interface operations {
                                         status: "PENDING" | "SUCCESS" | "FAILED";
                                         resultCode?: string;
                                         message?: string;
+                                        sponsored?: boolean;
                                     };
                                     txRecordId?: string;
                                     failureReason?: string;
@@ -10236,6 +10246,7 @@ export interface operations {
                                     status: "PENDING" | "SUCCESS" | "FAILED";
                                     resultCode?: string;
                                     message?: string;
+                                    sponsored?: boolean;
                                 };
                                 txRecordId?: string;
                                 failureReason?: string;
@@ -10321,6 +10332,7 @@ export interface operations {
                                     status: "PENDING" | "SUCCESS" | "FAILED";
                                     resultCode?: string;
                                     message?: string;
+                                    sponsored?: boolean;
                                 };
                                 txRecordId?: string;
                                 failureReason?: string;
@@ -10419,6 +10431,7 @@ export interface operations {
                                     status: "PENDING" | "SUCCESS" | "FAILED";
                                     resultCode?: string;
                                     message?: string;
+                                    sponsored?: boolean;
                                 };
                                 txRecordId?: string;
                                 failureReason?: string;
@@ -10517,6 +10530,7 @@ export interface operations {
                                     status: "PENDING" | "SUCCESS" | "FAILED";
                                     resultCode?: string;
                                     message?: string;
+                                    sponsored?: boolean;
                                 };
                                 txRecordId?: string;
                                 failureReason?: string;
@@ -10642,6 +10656,7 @@ export interface operations {
                                     status: "PENDING" | "SUCCESS" | "FAILED";
                                     resultCode?: string;
                                     message?: string;
+                                    sponsored?: boolean;
                                 };
                                 txRecordId?: string;
                                 failureReason?: string;
@@ -12229,6 +12244,7 @@ export interface operations {
                                         status: "PENDING" | "SUCCESS" | "FAILED";
                                         resultCode?: string;
                                         message?: string;
+                                        sponsored?: boolean;
                                     };
                                     txRecordId?: string;
                                     failureReason?: string;

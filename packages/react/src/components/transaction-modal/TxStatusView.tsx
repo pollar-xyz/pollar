@@ -76,11 +76,12 @@ export function TxStatusView({
   const showDetails = SHOW_DETAILS_STEPS.has(transaction.step);
   const reviewCopy = TX_REVIEW_COPY[language];
   const hashInfo = hash ? { value: hash, explorerUrl } : undefined;
+  const sponsored = 'sponsored' in transaction ? transaction.sponsored : undefined;
   // A compound flow can finish without the build it ran: the hash still has a place in the details.
   const review: TxReviewData | null = buildData
-    ? reviewFromBuild(buildData, reviewCopy, copy.title, hashInfo)
+    ? reviewFromBuild(buildData, reviewCopy, copy.title, hashInfo, sponsored)
     : hashInfo
-      ? { title: copy.title, kind: 'other', rows: [], hash: hashInfo }
+      ? { title: copy.title, kind: 'other', rows: [], hash: hashInfo, ...(sponsored !== undefined && { fee: { sponsored } }) }
       : null;
 
   const walletImg =

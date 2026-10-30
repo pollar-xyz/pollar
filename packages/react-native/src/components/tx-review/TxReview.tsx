@@ -212,6 +212,22 @@ function FeeBadge({ sponsored, copy, colors }: { sponsored: boolean; copy: TxRev
  * flow, with the network fee as one badge. Addresses, chains, fees and the
  * raw transaction live behind "Show details".
  */
+/** Who paid the network fee of a signed transaction, as one line with its icon. */
+export function TxFeeBadge({
+  sponsored,
+  theme,
+  accentColor,
+  language: languageProp,
+}: {
+  sponsored: boolean;
+  theme: string;
+  accentColor: string;
+  language?: PollarLanguage | undefined;
+}) {
+  const language = useInheritedLanguage(languageProp);
+  return <FeeBadge sponsored={sponsored} copy={TX_REVIEW_COPY[language]} colors={reviewColors(theme, accentColor)} />;
+}
+
 export function TxReview({
   data,
   theme,

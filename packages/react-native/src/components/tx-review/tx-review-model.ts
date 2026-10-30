@@ -28,8 +28,8 @@ export interface TxReviewData {
   kind: 'send' | 'bridge' | 'approve' | 'swap' | 'payment' | 'create_account' | 'other';
   from?: TxParty;
   to?: TxParty;
-  /** Unknown sponsorship shows no fee badge: the fee stays in the details only. */
-  fee?: { sponsored?: boolean; amount?: string };
+  /** Who paid the network fee, once the transaction is signed; absent before, and when the platform did not say. */
+  fee?: { sponsored: boolean };
   rows: TxDetailRow[];
   raw?: string;
   hash?: { value: string; explorerUrl: string | null };
@@ -200,14 +200,11 @@ export function reviewFromRequest(parts: SigningRequestParts, copy: TxReviewCopy
   const method = asString(details.method);
   if (method) rows.push({ label: copy.rows.method, value: method, mono: true });
 
-  const sponsored = typeof details.sponsored === 'boolean' ? details.sponsored : undefined;
-  if (sponsored) rows.push({ label: copy.rows.fee, value: copy.rows.feeCovered });
   rows.push(...(parts.extraRows ?? []));
 
   return {
     ...data,
     title: titleOf(data, parts.fallbackTitle, copy),
-    ...(sponsored !== undefined ? { fee: { sponsored } } : {}),
     rows,
     ...(parts.raw ? { raw: parts.raw } : {}),
     ...(parts.hash ? { hash: parts.hash } : {}),
@@ -246,6 +243,8 @@ export function reviewFromBuild(
   copy: TxReviewCopy,
   fallbackTitle: string,
   hash?: { value: string; explorerUrl: string | null },
+  /** Who paid the fee, from the sign or submit answer; undefined before signing. */
+  sponsored?: boolean,
 ): TxReviewData {
   const lines = new Map<string, string>();
   for (const line of build.summary.lines) {
@@ -287,7 +286,7 @@ export function reviewFromBuild(
       const isAddress = /^[GCM][A-Z2-7]{55,68}$/.test(value) || /^0x[0-9a-fA-F]{40}$/.test(value);
       return { label: buildLabel(label, copy), value, ...(isAddress ? { copyValue: value, mono: true } : {}) };
     }),
-    { label: copy.rows.fee, value: build.summary.fee },
+    { label: copy.rows.fee, value: sponsored ? copy.rows.feeCovered : build.summary.fee },
   ];
 
   return {
@@ -296,5 +295,6 @@ export function reviewFromBuild(
     rows,
     ...('unsignedXdr' in build && build.unsignedXdr ? { raw: build.unsignedXdr } : {}),
     ...(hash ? { hash } : {}),
+    ...(sponsored !== undefined ? { fee: { sponsored } } : {}),
   };
 }

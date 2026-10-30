@@ -136,6 +136,18 @@ function FeeBadge({ sponsored, copy }: { sponsored: boolean; copy: TxReviewCopy 
   );
 }
 
+/** Who paid the network fee of a signed transaction, as one line with its icon. */
+export function TxFeeBadge({
+  sponsored,
+  language: languageProp,
+}: {
+  sponsored: boolean;
+  language?: PollarLanguage | undefined;
+}) {
+  const language = useInheritedLanguage(languageProp);
+  return <FeeBadge sponsored={sponsored} copy={TX_REVIEW_COPY[language]} />;
+}
+
 /**
  * The transaction as a person reads it: who sends what to whom, drawn as a
  * flow, with the network fee as one badge. Addresses, chains, fees and the

@@ -3099,6 +3099,7 @@ export class PollarClient {
           step: 'signed',
           signedXdr,
           submissionToken: idempotencyKey,
+          sponsored,
           ...(buildData && { buildData }),
         });
         return { status: 'signed', signedXdr, submissionToken: idempotencyKey, sponsored };
@@ -3701,10 +3702,21 @@ export class PollarClient {
       return;
     }
     if (request.submit) {
+      const { sponsored } = request.submit;
       if (request.submit.status === 'SUCCESS') {
-        this._setTransactionState({ step: 'success', hash: request.submit.hash, ...(buildData && { buildData }) });
+        this._setTransactionState({
+          step: 'success',
+          hash: request.submit.hash,
+          ...(sponsored !== undefined && { sponsored }),
+          ...(buildData && { buildData }),
+        });
       } else if (request.submit.status === 'PENDING') {
-        this._setTransactionState({ step: 'submitted', hash: request.submit.hash, ...(buildData && { buildData }) });
+        this._setTransactionState({
+          step: 'submitted',
+          hash: request.submit.hash,
+          ...(sponsored !== undefined && { sponsored }),
+          ...(buildData && { buildData }),
+        });
       } else {
         this._setTransactionState({
           step: 'error',
@@ -3863,13 +3875,24 @@ export class PollarClient {
       });
       if (!error && data?.success && data.content) {
         const { hash, status: backendStatus } = data.content;
+        const sponsored = 'sponsored' in data.content ? data.content.sponsored : undefined;
         const resultCode = 'resultCode' in data.content ? data.content.resultCode : undefined;
         if (backendStatus === 'SUCCESS') {
-          this._setTransactionState({ step: 'success', hash, ...(buildData && { buildData }) });
+          this._setTransactionState({
+            step: 'success',
+            hash,
+            ...(sponsored !== undefined && { sponsored }),
+            ...(buildData && { buildData }),
+          });
           return { status: 'success', hash, ...outcomeExtra };
         }
         if (backendStatus === 'PENDING') {
-          this._setTransactionState({ step: 'submitted', hash, ...(buildData && { buildData }) });
+          this._setTransactionState({
+            step: 'submitted',
+            hash,
+            ...(sponsored !== undefined && { sponsored }),
+            ...(buildData && { buildData }),
+          });
           return this._awaitTxConfirmation(hash, 'submitting', buildData, outcomeExtra);
         }
         this._setTransactionState({
@@ -3991,13 +4014,24 @@ export class PollarClient {
       });
       if (!error && data?.success && data.content && 'hash' in data.content) {
         const { hash, status: backendStatus } = data.content;
+        const sponsored = 'sponsored' in data.content ? data.content.sponsored : undefined;
         const resultCode = 'resultCode' in data.content ? data.content.resultCode : undefined;
         if (backendStatus === 'SUCCESS') {
-          this._setTransactionState({ step: 'success', hash, ...(buildData && { buildData }) });
+          this._setTransactionState({
+            step: 'success',
+            hash,
+            ...(sponsored !== undefined && { sponsored }),
+            ...(buildData && { buildData }),
+          });
           return { status: 'success', hash, ...outcomeExtra };
         }
         if (backendStatus === 'PENDING') {
-          this._setTransactionState({ step: 'submitted', hash, ...(buildData && { buildData }) });
+          this._setTransactionState({
+            step: 'submitted',
+            hash,
+            ...(sponsored !== undefined && { sponsored }),
+            ...(buildData && { buildData }),
+          });
           return this._awaitTxConfirmation(hash, 'signing-submitting', buildData, outcomeExtra);
         }
         // backendStatus === 'FAILED'
@@ -4129,13 +4163,14 @@ export class PollarClient {
         // Stellar member carries `resultCode`. This call always sends a Stellar
         // body, but the type still has to be narrowed to say so.
         const { hash, status: backendStatus } = data.content;
+        const sponsored = 'sponsored' in data.content ? data.content.sponsored : undefined;
         const resultCode = 'resultCode' in data.content ? data.content.resultCode : undefined;
         if (backendStatus === 'SUCCESS') {
-          this._setTransactionState({ step: 'success', hash });
+          this._setTransactionState({ step: 'success', hash, ...(sponsored !== undefined && { sponsored }) });
           return { status: 'success', hash };
         }
         if (backendStatus === 'PENDING') {
-          this._setTransactionState({ step: 'submitted', hash });
+          this._setTransactionState({ step: 'submitted', hash, ...(sponsored !== undefined && { sponsored }) });
           return this._awaitTxConfirmation(hash, 'building-signing-submitting', undefined, {});
         }
         this._setTransactionState({
@@ -4242,12 +4277,13 @@ export class PollarClient {
 
       if (!error && data?.success && data.content && 'hash' in data.content) {
         const { hash, status: backendStatus } = data.content;
+        const sponsored = 'sponsored' in data.content ? data.content.sponsored : undefined;
         if (backendStatus === 'SUCCESS') {
-          this._setTransactionState({ step: 'success', hash });
+          this._setTransactionState({ step: 'success', hash, ...(sponsored !== undefined && { sponsored }) });
           return { status: 'success', hash };
         }
         if (backendStatus === 'PENDING') {
-          this._setTransactionState({ step: 'submitted', hash });
+          this._setTransactionState({ step: 'submitted', hash, ...(sponsored !== undefined && { sponsored }) });
           return this._awaitTxConfirmation(hash, 'building-signing-submitting', undefined, {});
         }
         this._setTransactionState({ step: 'error', phase: 'building-signing-submitting' });
@@ -4358,12 +4394,13 @@ export class PollarClient {
       });
       if (!error && data?.success && data.content && 'hash' in data.content) {
         const { hash, status: backendStatus } = data.content;
+        const sponsored = 'sponsored' in data.content ? data.content.sponsored : undefined;
         if (backendStatus === 'SUCCESS') {
-          this._setTransactionState({ step: 'success', hash });
+          this._setTransactionState({ step: 'success', hash, ...(sponsored !== undefined && { sponsored }) });
           return { status: 'success', hash };
         }
         if (backendStatus === 'PENDING') {
-          this._setTransactionState({ step: 'submitted', hash });
+          this._setTransactionState({ step: 'submitted', hash, ...(sponsored !== undefined && { sponsored }) });
           return this._awaitTxConfirmation(hash, 'submitting', undefined, {});
         }
         this._setTransactionState({ step: 'error', phase: 'submitting' });
@@ -4516,13 +4553,14 @@ export class PollarClient {
       });
       if (!error && data?.success && data.content) {
         const { hash, status: backendStatus } = data.content;
+        const sponsored = 'sponsored' in data.content ? data.content.sponsored : undefined;
         const resultCode = 'resultCode' in data.content ? data.content.resultCode : undefined;
         if (backendStatus === 'SUCCESS') {
-          this._setTransactionState({ step: 'success', hash, buildData });
+          this._setTransactionState({ step: 'success', hash, ...(sponsored !== undefined && { sponsored }), buildData });
           return { status: 'success', hash, ...outcomeExtra };
         }
         if (backendStatus === 'PENDING') {
-          this._setTransactionState({ step: 'submitted', hash, buildData });
+          this._setTransactionState({ step: 'submitted', hash, ...(sponsored !== undefined && { sponsored }), buildData });
           return this._awaitTxConfirmation(hash, 'submitting', buildData, outcomeExtra);
         }
         this._setTransactionState({
@@ -6036,9 +6074,27 @@ export class PollarClient {
     // Drop a write from a tx whose session was torn down (logout) or replaced
     // (new login) after it started - see `_txStartGen`.
     if (this._sessionGeneration !== this._txStartGen) return;
+    next = this._withSponsorship(next);
     this._transactionState = next;
     this._log.debug(`[PollarClient] transaction:${next.step}`);
     this._dispatchTransactionState(next);
+  }
+
+  /**
+   * Carries `sponsored` from the step before when `next` continues the same
+   * transaction: a signed or submitting one, or the confirmation of the hash
+   * that was submitted. A later step that does not say keeps what was learned.
+   */
+  private _withSponsorship(next: TransactionState): TransactionState {
+    const prev = this._transactionState;
+    if (!prev || !('sponsored' in prev) || prev.sponsored === undefined) return next;
+    if (next.step !== 'submitting' && next.step !== 'submitted' && next.step !== 'success') return next;
+    if (next.sponsored !== undefined) return next;
+    const sameTx =
+      prev.step === 'signed' ||
+      prev.step === 'submitting' ||
+      (prev.step === 'submitted' && next.step === 'success' && prev.hash === next.hash);
+    return sameTx ? { ...next, sponsored: prev.sponsored } : next;
   }
 
   /**

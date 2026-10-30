@@ -3,7 +3,7 @@ import { type CosignRequest, type CosignVerification, type PollarLanguage, type 
 import React, { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { PollarModalFooter } from '../commons';
-import { TxReview } from '../tx-review/TxReview';
+import { TxFeeBadge, TxReview } from '../tx-review/TxReview';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
 import { reviewFromRequest } from '../tx-review/tx-review-model';
 import { COSIGN_COPY } from './cosign-copy';
@@ -136,6 +136,14 @@ export function CosignModalTemplate({
                   <Text style={{ color: accentColor, fontWeight: '600' }}>{copied ? copy.copied : copy.copy}</Text>
                 </TouchableOpacity>
               </View>
+            )}
+            {lastResolved?.submit?.sponsored !== undefined && (
+              <TxFeeBadge
+                sponsored={lastResolved.submit.sponsored}
+                theme={theme}
+                accentColor={accentColor}
+                language={language}
+              />
             )}
             {nextStep && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
