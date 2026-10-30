@@ -52,7 +52,14 @@ export type {
   ProviderAuthState,
 } from './wallets';
 export type * from './types';
-export { AUTH_ERROR_CODES, PollarNetworkError, isPollarNetworkError, PollarApiError, isPollarApiError } from './types';
+export {
+  AUTH_ERROR_CODES,
+  PollarFlowError,
+  PollarNetworkError,
+  isPollarNetworkError,
+  PollarApiError,
+  isPollarApiError,
+} from './types';
 export { RampChain } from './types';
 export { WALLET_NOT_READY_CODE, isWalletNotReady, WALLET_REQUIRED_CODE, isWalletRequired } from './types';
 export { PollarApiClient } from './api/client';

@@ -75,9 +75,17 @@ export async function getRampOrder(api: PollarApiClient, id: string): Promise<Ra
  * POST /ramps/orders/{id}/check: for a user who says they paid, asks the provider
  * about the fiat payment now instead of at the next recheck (at most once every
  * 10 seconds per order), and answers the order after it.
+ *
+ * The server waits on the provider for up to 8s before answering, too close to the
+ * 10s default; this call gets a longer budget, like the vendor calls of a requirement.
  */
+const CHECK_TIMEOUT_MS = 30_000;
+
 export async function checkRampOrder(api: PollarApiClient, id: string): Promise<RampOrder> {
-  const { data, error } = await api.POST('/ramps/orders/{id}/check', { params: { path: { id } } });
+  const { data, error } = await api.POST('/ramps/orders/{id}/check', {
+    params: { path: { id } },
+    headers: { 'x-pollar-timeout-ms': String(CHECK_TIMEOUT_MS) },
+  });
   if (!data?.content || error) throw rampApiError(error, 'Failed to check the ramp order');
   return data.content;
 }

@@ -147,12 +147,7 @@ interface StellarWalletsKitAdapterOptions {
    */
   modules?: ModuleInterface[];
 
-  /**
-   * Picker-specific options: which kit wallets to include, label overrides, and
-   * the gateway group label. `wallets`, `labels`, and `groupLabel` are honored by
-   * `stellarWalletsKitAdapters()`; the remaining fields are consumed by the
-   * `/picker` subpath.
-   */
+  /** Which kit wallets to include, label overrides, and the gateway group label. */
   picker?: KitPickerOptions;
 
   /**
@@ -169,10 +164,6 @@ interface StellarWalletsKitAdapterOptions {
 interface KitPickerOptions {
   /** Subset of wallet ids to show. Defaults to every wallet the kit reports. */
   wallets?: string[];
-  /** Render order. Default `'as-given'` (the kit's own order). */
-  order?: 'as-given' | 'installed-first' | 'alphabetical';
-  /** Hide wallets whose `isAvailable` is false. Default `false`. */
-  showInstalledOnly?: boolean;
   /** Per-wallet label overrides. Key = wallet id. */
   labels?: Record<string, string>;
   /**
@@ -182,10 +173,6 @@ interface KitPickerOptions {
    * value (e.g. `'More wallets'`) to render the kit wallets as a separate gateway.
    */
   groupLabel?: string;
-  /** Visual layout. Default `'grid'`. */
-  layout?: 'grid' | 'list';
-  /** Theme passthrough - applied as CSS custom properties on the picker root. */
-  theme?: { accent?: string; mode?: 'light' | 'dark' };
 }
 ```
 

@@ -15,17 +15,13 @@ import { createLogger, type LogLevel, type PollarLogger, type WalletAdapter } fr
 import { StellarWalletsKitAdapter } from './StellarWalletsKitAdapter';
 
 /**
- * Options that shape `<KitWalletPicker>` (from the `/picker` subpath). Kept on
- * `StellarWalletsKitAdapterOptions` so `createStellarWalletsKitBundle()` can
- * receive everything (network + modules + UI) in one call.
+ * Which kit wallets become login options and how they are labeled. Kept on
+ * `StellarWalletsKitAdapterOptions` so the factory receives network, modules
+ * and these in one call.
  */
 export interface KitPickerOptions {
   /** Subset of wallet ids to show. Defaults to every wallet the kit reports. */
   wallets?: string[];
-  /** Render order. Default `'as-given'` (the kit's own order). */
-  order?: 'as-given' | 'installed-first' | 'alphabetical';
-  /** Hide wallets whose `isAvailable` is false. Default `false`. */
-  showInstalledOnly?: boolean;
   /** Per-wallet label overrides. Key = wallet id. */
   labels?: Record<string, string>;
   /**
@@ -36,10 +32,6 @@ export interface KitPickerOptions {
    * wallets as a *separate* gateway button from the built-in ones.
    */
   groupLabel?: string;
-  /** Visual layout. Default `'grid'`. */
-  layout?: 'grid' | 'list';
-  /** Theme passthrough - applied as CSS custom properties on the picker root. */
-  theme?: { accent?: string; mode?: 'light' | 'dark' };
 }
 
 export interface StellarWalletsKitAdapterOptions {
@@ -65,11 +57,7 @@ export interface StellarWalletsKitAdapterOptions {
    * ```
    */
   modules?: ModuleInterface[];
-  /**
-   * Picker-specific options. Only consumed by `<KitWalletPicker>` /
-   * `createStellarWalletsKitBundle` (the `/picker` subpath). The resolver
-   * itself ignores them.
-   */
+  /** Which kit wallets to include, label overrides and the gateway group label. */
   picker?: KitPickerOptions;
   /**
    * Minimum log severity. `silent` disables logging; otherwise `error` < `warn`
@@ -85,12 +73,12 @@ let initialised = false;
 let initNetwork: Networks | null = null;
 let _log: PollarLogger = console;
 
-/** The kit's configured logger (set at init). Used by the adapter + picker. */
+/** The kit's configured logger (set at init). Used by the adapter. */
 export function getKitLogger(): PollarLogger {
   return _log;
 }
 
-/** @internal - used by the `/picker` subpath. */
+/** @internal */
 export function buildDefaultModules(): ModuleInterface[] {
   return [
     new AlbedoModule(),
@@ -109,12 +97,12 @@ export function buildDefaultModules(): ModuleInterface[] {
 }
 
 /**
- * @internal - used by the `/picker` subpath.
+ * @internal
  *
- * Accepts `Partial<...>` because the picker may be mounted in a flow where
- * `stellarWalletsKitAdapters({ network })` has already initialised the kit elsewhere;
- * in that case the call no-ops and the missing `network` is fine. On the
- * first-time init path `network` is required and we throw if it's absent.
+ * Accepts `Partial<...>` because the kit may already be initialised by an
+ * earlier `stellarWalletsKitAdapters({ network })` call; in that case the call
+ * no-ops and the missing `network` is fine. On the first-time init path
+ * `network` is required and we throw if it's absent.
  */
 export function ensureInit(options: Partial<StellarWalletsKitAdapterOptions>): void {
   if (options.logLevel !== undefined || options.logger !== undefined) {

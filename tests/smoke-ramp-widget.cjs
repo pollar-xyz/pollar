@@ -210,6 +210,25 @@ async function mount(client, application = {}) {
 }
 
 (async () => {
+  // One user action quotes all returned routes once; selecting a result does
+  // not ask the backend for a second quote of the same route.
+  {
+    const { client, calls } = fixtureClient();
+    client.quoteRamp = async (body) => {
+      calls.push(['quoteRamp', body]);
+      return { quotes: [quote, { ...quote, quoteId: 'alternative', amountOut: '14.0' }], rejected: [] };
+    };
+    const ui = await mount(client);
+    await ui.type(ui.container.querySelector('#pollar-ramp-amount'), '100');
+    await ui.click(ui.button('Find best route'));
+    assert.equal(ui.container.querySelectorAll('.pollar-ramp-route-card').length, 2);
+    assert.equal(calls.filter(([name]) => name === 'quoteRamp').length, 1, 'one click sends one quote request');
+    await ui.click(ui.container.querySelector('.pollar-ramp-route-card'));
+    assert.equal(calls.filter(([name]) => name === 'quoteRamp').length, 1, 'selecting a returned route does not quote again');
+    await ui.unmount();
+    client.destroy();
+  }
+
   // --- Route, quote, details, order, payment, signature ---
   {
     const { client, calls } = fixtureClient();

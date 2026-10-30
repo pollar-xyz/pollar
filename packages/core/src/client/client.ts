@@ -2603,6 +2603,13 @@ export class PollarClient {
     // and self-pays otherwise, submitting either way and returning the refreshed
     // asset list - the client no longer decides the route.
     if (!this._walletAdapter && walletType === 'internal') {
+      const answer = await this._confirm({
+        kind: 'build_sign_submit',
+        network: 'STELLAR',
+        operation: 'change_trust',
+        details: changeTrustParams as Record<string, unknown>,
+      });
+      if (!answer.ok) return { status: 'error', code: answer.code, details: answer.details };
       try {
         const { data, error } = await this._api.POST('/wallet/assets/trustline', {
           body: { code: asset.code, issuer: asset.issuer, ...(limit !== undefined && { limit }) },
@@ -2639,9 +2646,13 @@ export class PollarClient {
       // Sponsor-signed when the app covers it, plain self-pay otherwise; sign + submit either.
       const xdr = data?.content?.sponsorSignedXdr ?? data?.content?.unsignedXdr;
       if (error || !data?.success || !xdr) return this._trustlineError(error);
-      const signed = await this._signTx(xdr, undefined, false);
+      const signed = await this._signTx(xdr, undefined, true);
       if (signed.status === 'error') {
-        return { status: 'error', ...(signed.details && { details: signed.details }) };
+        return {
+          status: 'error',
+          ...(signed.details && { details: signed.details }),
+          ...(signed.code && { code: signed.code }),
+        };
       }
       if (signed.status === 'cosign_pending') return { status: 'cosign_pending', request: signed.request };
       return this.submitTx(signed.signedXdr);
@@ -2688,9 +2699,13 @@ export class PollarClient {
         const details = apiErrorFields(error).details ?? apiErrorFields(error).code;
         return { status: 'error', ...(details && { details }) };
       }
-      const signed = await this._signTx(data.content.sponsorSignedXdr, undefined, false);
+      const signed = await this._signTx(data.content.sponsorSignedXdr, undefined, true);
       if (signed.status === 'error') {
-        return { status: 'error', ...(signed.details && { details: signed.details }) };
+        return {
+          status: 'error',
+          ...(signed.details && { details: signed.details }),
+          ...(signed.code && { code: signed.code }),
+        };
       }
       if (signed.status === 'cosign_pending') return { status: 'cosign_pending', request: signed.request };
       return this.submitTx(signed.signedXdr);
@@ -3281,8 +3296,13 @@ export class PollarClient {
       d?.code === 'SDK_COSIGN_PENDING' && d.content?.pendingSignature?.kind === 'cosign'
         ? d.content.pendingSignature.request
         : null;
-    if (request) this._noteCosignRequest(request);
-    return request ?? null;
+    if (!request) return null;
+    // Every caller hands the request straight to `_settleCosign`, which votes it
+    // unless the app votes itself: marked before it reaches the store, so the
+    // prompt never opens on a vote this client is about to cast.
+    if (!this._cosignManual) this._autoHandling.add(request.id);
+    this._noteCosignRequest(request);
+    return request;
   }
 
   /** Current pending co-sign requests, as last learned from the API. */
@@ -3516,6 +3536,20 @@ export class PollarClient {
       // learns of it from the server, not from the request.
       if (request.kind === 'ACCOUNT' && request.status === 'APPROVED' && !this._settledCosign.has(request.id)) {
         void this.refreshWalletState();
+      }
+      // A created account or an added trustline makes sdk-api open the request
+      // for the next asset the app enables, before this answer leaves it; read
+      // it now so the prompt shows it instead of waiting for the next login.
+      if (
+        request.status === 'APPROVED' &&
+        request.submit?.status === 'SUCCESS' &&
+        (request.intent === 'account_create' || request.operation === 'change_trust') &&
+        !this._settledCosign.has(request.id) &&
+        !this._cosignManual
+      ) {
+        void this.cosign.pending().catch((err) => {
+          this._log.warn('[PollarClient] could not read the next co-sign request', err);
+        });
       }
       this._settledCosign.add(request.id);
     }

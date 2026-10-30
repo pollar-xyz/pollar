@@ -50,7 +50,7 @@ provider, a swap, a bridge) that Pollar runs server-side:
 | `getRampTransaction` / `pollRampTransaction` | `getRampOrder(id)` / `pollRampOrder(id, { onUpdate, signal })`                       |
 | `nextAction`                                 | `order.pendingAction`: `FIAT_PAYMENT`, `SIGNATURE`, `COSIGN_APPROVAL`, `KYC`         |
 | `signRampAction(txId, snapshot)`             | `signRampLeg(orderId, actionId)`                                                     |
-| saved transactions in session storage        | `listRampOrders({ pending: 'true' })`                                                |
+| saved transactions in session storage        | `listRampOrders({ open: 'true' })`                                                   |
 
 - A payee the provider would refuse answers `400 VALIDATION_ERROR` with the
   reason in `body.message`, before anything moves.

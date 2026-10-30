@@ -246,6 +246,14 @@ test('no route: a verification the user cannot act on says it waits, never asks 
   assert.equal(rampNoRouteText([{ failure } as never]), verify);
 });
 
+test('no route the app must fix never sends the user to support with an order id that does not exist', () => {
+  for (const resolutionAction of ['fund_gas_wallet', 'enable_signing_mode']) {
+    const text = rampNoRouteText([{ failure: { resolutionAction } } as never]);
+    assert.match(text, /not available/);
+    assert.doesNotMatch(text, /support|order id/);
+  }
+});
+
 const usdtPolygon = { kind: 'asset' as const, code: 'USDT', identifier: '0xc213', chain: 'POLYGON' as const };
 const usdcOnPolygon = { kind: 'asset' as const, code: 'USDC', identifier: '0x3c49', chain: 'POLYGON' as const };
 const step = (kind: string, status: string, signs = true) => ({ kind, status, signs, hash: null });

@@ -297,7 +297,7 @@ npm install @pollar/privy-adapter @pollar/core @stellar/stellar-sdk @privy-io/re
 
 ### [`@pollar/privy-server-adapter`](./packages/privy-server-adapter)
 
-**Version:** `0.11.2` &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-server-adapter)
+**Version:** `0.10.0-rc.10` (published on npm as `latest`) &nbsp;|&nbsp; **Registry:** [npm](https://www.npmjs.com/package/@pollar/privy-server-adapter)
 
 Server-side Privy adapter. A stateless HTTP proxy that lets Pollar sign Stellar or Solana transactions through your **Privy**
 server-wallet account without your `PRIVY_APP_SECRET` ever leaving your infrastructure. You run it in your own backend
@@ -471,6 +471,23 @@ The script refuses to tag unless:
 
 The workflow can also be started by hand from the Actions tab (`workflow_dispatch` with a
 `version` input).
+
+### Tag a stable release
+
+Publish the stable packages first with their `*:publish` scripts, `core` before the packages that depend on it. Then:
+
+```bash
+npm run release:tag
+```
+
+Tags the current commit as `v<version>`, the version in `packages/core/package.json`, and pushes the tag. It publishes
+nothing and starts no workflow. The script refuses to tag unless:
+
+- the version is a stable `X.Y.Z`, with no `-rc`
+- `@pollar/core` at that version is already on npm
+- the working tree is clean
+- `HEAD` is already on a remote branch (push it first)
+- the tag does not exist locally or on `origin`
 
 ---
 

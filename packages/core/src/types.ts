@@ -272,7 +272,7 @@ export interface PollarClientConfig {
    * `FreighterAdapter` / `AlbedoAdapter` are auto-registered; entries here are
    * added on top and override a built-in by reusing its `type`. Import extra
    * adapters from their own packages (`@pollar/stellar-wallets-kit-adapter`,
-   * `@pollar/privy-adapter`, ...) so their deps stay out of `@pollar/core`'s bundle.
+   * `@pollar/solana-wallet-standard-adapter`, ...) so their deps stay out of `@pollar/core`'s bundle.
    */
   walletAdapters?: WalletAdapter[];
   /**
@@ -956,10 +956,10 @@ export class PollarNetworkError extends Error {
  * Thrown when the API answers with an error body, keeping everything the
  * server said about WHY instead of collapsing it to a bare code string.
  *
- * `code` is the stable machine-readable one (e.g. `SDK_RAMPS_AMOUNT_OUT_OF_RANGE`);
+ * `code` is the stable machine-readable one (e.g. `SDK_RAMPS_NO_ROUTE`);
  * `details` is the server's human reason when it sends one; `body` is the whole
- * payload, for the fields a specific error adds on top (an out-of-range amount
- * carries `limit` / `limitAmount` / `limitCurrency`, say).
+ * payload, for the fields a specific error adds on top (a ramp quote with no
+ * route carries `rejected`, say).
  */
 export class PollarApiError extends Error {
   readonly code: string;

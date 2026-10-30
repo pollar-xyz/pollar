@@ -268,6 +268,10 @@ const RESOLUTION: Record<string, string> = {
   add_trustline: 'Your Stellar wallet must trust USDC to receive it. Add the USDC trustline and try again.',
   sign_again: 'The signature expired. Sign the step again.',
   start_again: 'This transfer could not go through. Start a new one; nothing was charged.',
+  // The app's gas wallet is short, which the user cannot fix: no support call, no order id (none exists yet).
+  fund_gas_wallet: 'This route is not available right now. Try again later or choose another route.',
+  // The app does not allow the wallet's signing mode for ramps: again nothing the user can do.
+  enable_signing_mode: 'This route is not available for your wallet in this app. Choose another route.',
   wait_reconciliation: 'We are confirming where the funds are. You do not need to start again.',
   pollar_follows_up: 'We are looking into it. Your funds are safe; contact support with the order id if you need help.',
   contact_pollar: 'Something went wrong on our side. Contact support with the order id.',

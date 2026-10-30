@@ -16,6 +16,7 @@ import {
   appUnavailableMessage,
   assertRampStellarSigner,
   isPollarApiError,
+  isPollarNetworkError,
   rampCountries,
   rampNextApproval,
   rampQuoteFields,
@@ -170,6 +171,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
   const [pollKey, setPollKey] = useState(0);
   // Until when the payment the user says they made is checked at PAYMENT_CHECK_EVERY_MS.
   const [paymentCheckUntil, setPaymentCheckUntil] = useState<number | null>(null);
+  // The error a failed check showed, cleared once the order is past the payment.
+  const checkErrorRef = useRef<string | null>(null);
   // The approval the user was last prompted for, so each new one prompts once.
   const promptedApproval = useRef<string | null>(null);
   // An app that leaves the custody to the user: the user picks it for each wallet step.
@@ -275,6 +278,13 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     }, PAYMENT_CHECK_EVERY_MS);
     return () => clearInterval(timer);
   }, [client, orderId, awaitingPayment, paymentCheckUntil]);
+
+  useEffect(() => {
+    if (awaitingPayment || checkErrorRef.current === null) return;
+    const shown = checkErrorRef.current;
+    checkErrorRef.current = null;
+    setErrorMsg((current) => (current === shown ? null : current));
+  }, [awaitingPayment]);
 
   // A co-signed step of the order waits on the user's device: bring its request up the moment it appears.
   const approval = order?.pendingAction?.kind === 'COSIGN_APPROVAL' ? order.pendingAction.actionId : null;
@@ -550,8 +560,12 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     try {
       setOrder(await client.checkRampOrder(order.id));
     } catch (error) {
+      // A check that timed out still runs on the server: the checks every PAYMENT_CHECK_EVERY_MS carry on.
+      if (isPollarNetworkError(error)) return;
       setPaymentCheckUntil(null);
-      setErrorMsg(rampErrorMessage(error, 'Could not check the payment. Please try again.'));
+      const message = rampErrorMessage(error, 'Could not check the payment. Please try again.');
+      checkErrorRef.current = message;
+      setErrorMsg(message);
     }
   }
 

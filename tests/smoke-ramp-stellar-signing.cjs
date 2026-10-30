@@ -117,7 +117,8 @@ refused(TransactionBuilder.buildFeeBumpTransaction(other, '200', challengeTx, ne
 // Unreadable input is refused, never let through.
 refused('AAAA');
 refused(pay.toXDR().slice(0, 60));
-refused(pay, 'payment', `${user.publicKey().slice(0, 55)}A`);
+// Swap the last character for a different one; a key that already ends in A would stay valid.
+refused(pay, 'payment', `${user.publicKey().slice(0, 55)}${user.publicKey().endsWith('A') ? 'B' : 'A'}`);
 refused(pay, 'payment', 'not-an-address');
 
 console.log(

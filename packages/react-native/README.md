@@ -72,7 +72,7 @@ export default function App() {
 }
 ```
 
-`config` is read once, on mount. To switch API keys, remount the provider (for example with `key={apiKey}`).
+`config` is compared key by key on every render. A changed value (another API key, a new storage or adapter object) cancels any login, destroys the client and mounts the children again with a new one; equal inline scalars do not. Keep object values stable (module scope or `useMemo`) so a re-render does not restart the client.
 
 ### 3. OAuth (Google, GitHub)
 
@@ -110,11 +110,11 @@ const visibilityProvider = await createAppStateVisibilityProvider();
 Creates the `PollarClient`, exposes it through `usePollar()` and mounts the login, transaction, KYC, ramp, transaction
 history and wallet balance modals. You do not render the modals yourself.
 
-| Prop       | Type                 | Required | Description                                                            |
-| ---------- | -------------------- | -------- | ---------------------------------------------------------------------- |
-| `config`   | `PollarClientConfig` | Yes      | Passed to `new PollarClient(config)`. Read once on mount.              |
-| `styles`   | `PollarStyles`       | No       | Merged over the styles configured in the dashboard.                    |
-| `adapters` | `PollarAdapters`     | No       | Custom transaction builders, used with `createPollarAdapterHook(key)`. |
+| Prop       | Type                 | Required | Description                                                                |
+| ---------- | -------------------- | -------- | -------------------------------------------------------------------------- |
+| `config`   | `PollarClientConfig` | Yes      | Passed to `new PollarClient(config)`. A changed value replaces the client. |
+| `styles`   | `PollarStyles`       | No       | Merged over the styles configured in the dashboard.                        |
+| `adapters` | `PollarAdapters`     | No       | Custom transaction builders, used with `createPollarAdapterHook(key)`.     |
 
 ## `usePollar()`
 
