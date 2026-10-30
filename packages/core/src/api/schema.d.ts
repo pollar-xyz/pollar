@@ -2611,8 +2611,7 @@ export interface operations {
                                     stepKey?: string;
                                     signedXdr?: string;
                                     signedAuthEntry?: string;
-                                    /** @constant */
-                                    appPaysFee?: true;
+                                    appPaysFee: boolean;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
@@ -2773,8 +2772,7 @@ export interface operations {
                                     stepKey?: string;
                                     signedXdr?: string;
                                     signedAuthEntry?: string;
-                                    /** @constant */
-                                    appPaysFee?: true;
+                                    appPaysFee: boolean;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
@@ -2932,8 +2930,7 @@ export interface operations {
                                     stepKey?: string;
                                     signedXdr?: string;
                                     signedAuthEntry?: string;
-                                    /** @constant */
-                                    appPaysFee?: true;
+                                    appPaysFee: boolean;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
@@ -3496,8 +3493,7 @@ export interface operations {
                                     stepKey?: string;
                                     signedXdr?: string;
                                     signedAuthEntry?: string;
-                                    /** @constant */
-                                    appPaysFee?: true;
+                                    appPaysFee: boolean;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
@@ -4270,8 +4266,7 @@ export interface operations {
                                     stepKey?: string;
                                     signedXdr?: string;
                                     signedAuthEntry?: string;
-                                    /** @constant */
-                                    appPaysFee?: true;
+                                    appPaysFee: boolean;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
@@ -8050,8 +8045,7 @@ export interface operations {
                                     stepKey?: string;
                                     signedXdr?: string;
                                     signedAuthEntry?: string;
-                                    /** @constant */
-                                    appPaysFee?: true;
+                                    appPaysFee: boolean;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
@@ -8141,8 +8135,7 @@ export interface operations {
                                     stepKey?: string;
                                     signedXdr?: string;
                                     signedAuthEntry?: string;
-                                    /** @constant */
-                                    appPaysFee?: true;
+                                    appPaysFee: boolean;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
@@ -10254,8 +10247,7 @@ export interface operations {
                                 stepKey?: string;
                                 signedXdr?: string;
                                 signedAuthEntry?: string;
-                                /** @constant */
-                                appPaysFee?: true;
+                                appPaysFee: boolean;
                                 submit?: {
                                     hash: string;
                                     /** @enum {string} */
@@ -10342,8 +10334,7 @@ export interface operations {
                                 stepKey?: string;
                                 signedXdr?: string;
                                 signedAuthEntry?: string;
-                                /** @constant */
-                                appPaysFee?: true;
+                                appPaysFee: boolean;
                                 submit?: {
                                     hash: string;
                                     /** @enum {string} */
@@ -10443,8 +10434,7 @@ export interface operations {
                                 stepKey?: string;
                                 signedXdr?: string;
                                 signedAuthEntry?: string;
-                                /** @constant */
-                                appPaysFee?: true;
+                                appPaysFee: boolean;
                                 submit?: {
                                     hash: string;
                                     /** @enum {string} */
@@ -10544,8 +10534,7 @@ export interface operations {
                                 stepKey?: string;
                                 signedXdr?: string;
                                 signedAuthEntry?: string;
-                                /** @constant */
-                                appPaysFee?: true;
+                                appPaysFee: boolean;
                                 submit?: {
                                     hash: string;
                                     /** @enum {string} */
@@ -10672,8 +10661,7 @@ export interface operations {
                                 stepKey?: string;
                                 signedXdr?: string;
                                 signedAuthEntry?: string;
-                                /** @constant */
-                                appPaysFee?: true;
+                                appPaysFee: boolean;
                                 submit?: {
                                     hash: string;
                                     /** @enum {string} */
@@ -12262,8 +12250,7 @@ export interface operations {
                                     stepKey?: string;
                                     signedXdr?: string;
                                     signedAuthEntry?: string;
-                                    /** @constant */
-                                    appPaysFee?: true;
+                                    appPaysFee: boolean;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
