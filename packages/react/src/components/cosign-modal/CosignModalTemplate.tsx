@@ -116,6 +116,7 @@ export function CosignModalTemplate({
         raw: request.unsignedPayload,
         fallbackTitle: labelOf(request, copy),
         extraRows: [{ label: copy.expiresIn, value: expiresIn(request, copy) }],
+        appPaysFee: request.appPaysFee,
       },
       TX_REVIEW_COPY[language],
     );

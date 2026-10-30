@@ -28,7 +28,10 @@ export interface TxReviewData {
   kind: 'send' | 'bridge' | 'approve' | 'swap' | 'payment' | 'create_account' | 'other';
   from?: TxParty;
   to?: TxParty;
-  /** Who paid the network fee, once the transaction is signed; absent before, and when the platform did not say. */
+  /**
+   * Who pays the network fee: after the signature, as the platform reported it;
+   * before, only when the transaction itself makes the app pay (`appPaysFee`).
+   */
   fee?: { sponsored: boolean };
   rows: TxDetailRow[];
   raw?: string;
@@ -138,6 +141,8 @@ export interface SigningRequestParts {
   fallbackTitle: string;
   /** Rows the caller adds at the end (a cosign request's expiry). */
   extraRows?: TxDetailRow[];
+  /** The platform read the payload: its fee is charged to the app's wallet, so the app pays or nothing lands. */
+  appPaysFee?: boolean | undefined;
 }
 
 /** A cosign request or a confirmation prompt, as the review draws it. */
@@ -200,11 +205,13 @@ export function reviewFromRequest(parts: SigningRequestParts, copy: TxReviewCopy
   const method = asString(details.method);
   if (method) rows.push({ label: copy.rows.method, value: method, mono: true });
 
+  if (parts.appPaysFee) rows.push({ label: copy.rows.fee, value: copy.rows.feeCovered });
   rows.push(...(parts.extraRows ?? []));
 
   return {
     ...data,
     title: titleOf(data, parts.fallbackTitle, copy),
+    ...(parts.appPaysFee ? { fee: { sponsored: true } } : {}),
     rows,
     ...(parts.raw ? { raw: parts.raw } : {}),
     ...(parts.hash ? { hash: parts.hash } : {}),
