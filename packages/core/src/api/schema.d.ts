@@ -858,6 +858,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cards/funding/deposit-addresses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get collateral deposit addresses
+         * @description Where the card is funded, one address per network with the tokens it accepts.
+         */
+        get: operations["getCardsFundingDepositAddresses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cards/funding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List fundings
+         * @description The user's transfers from their wallet to the card's collateral, newest first.
+         */
+        get: operations["getCardsFunding"];
+        put?: never;
+        /**
+         * Fund the card from the wallet
+         * @description Moves USDC from the user's wallet on `chain` to the card collateral. STELLAR (default): to the provider's Polygon address through CCTP. SOLANA: straight to the provider's Solana address; the fee follows the app's sponsorship rules. Pollar's custodial wallet is paid at once (201). An external Stellar wallet receives `pendingSignature` `xdr` to sign and send to /funding/{fundingId}/signature (201). An external Solana wallet receives `pendingSignature` `solana`: sign `unsignedTransaction` and send it to /tx/submit with its `idempotencyKey` before `lastValidBlockHeight` (201). A co-signed wallet, on either chain, receives `pendingSignature` `cosign`, the request its device approves (202); the funding moves on once it is approved. With `idempotencyKey`, a retry returns the funding that key started, as it stands and without `pendingSignature` (200), and pays nothing; a failed funding stays failed, so a new attempt needs a new key.
+         */
+        post: operations["postCardsFunding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cards/funding/{fundingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a funding
+         * @description Where one funding stands, leg by leg.
+         */
+        get: operations["getCardsFundingByFundingId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cards/funding/{fundingId}/signature": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit the signed funding payment
+         * @description Broadcasts the Stellar payment an external wallet signed.
+         */
+        post: operations["postCardsFundingByFundingIdSignature"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cards/providers": {
         parameters: {
             query?: never;
@@ -1020,90 +1104,6 @@ export interface paths {
         get: operations["getCardsTransactions"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/cards/funding/deposit-addresses": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get collateral deposit addresses
-         * @description Where the card is funded, one address per network with the tokens it accepts.
-         */
-        get: operations["getCardsFundingDepositAddresses"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/cards/funding": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List fundings
-         * @description The user's transfers from their wallet to the card's collateral, newest first.
-         */
-        get: operations["getCardsFunding"];
-        put?: never;
-        /**
-         * Fund the card from the wallet
-         * @description Moves USDC from the user Stellar wallet to the card collateral address through CCTP. Custodial wallets are paid at once; an external wallet receives `pendingSignature.unsignedXdr` to sign and send back.
-         */
-        post: operations["postCardsFunding"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/cards/funding/{fundingId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get a funding
-         * @description Where one funding stands, leg by leg.
-         */
-        get: operations["getCardsFundingByFundingId"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/cards/funding/{fundingId}/signature": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Submit the signed funding payment
-         * @description Broadcasts the payment an external wallet signed.
-         */
-        post: operations["postCardsFundingByFundingIdSignature"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1517,11 +1517,51 @@ export interface paths {
         };
         /**
          * Get enabled swap venues for this app
-         * @description Returns the swap venues the application exposes to end-users (the operator's dashboard selection, intersected with server capability — e.g. Soroswap only appears when the server has an API key). An empty list means swap is disabled for this app and the SDK should render no swap UI.
+         * @description The swap venues the application exposes to end-users on a chain: the operator's selection intersected with what the platform serves. `chain=SOLANA` lists the Solana venues (Jupiter, Titan; mainnet only); without it, the Stellar ones. An empty list means no swap on that chain.
          */
         get: operations["getSwapConfig"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/swap/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quote an asset swap
+         * @description Prices a swap across the requested venue(s), best output first. Read-only. With `"chain": "SOLANA"` it quotes Jupiter and Titan for the signed-in user's Solana wallet, in base units of each mint; without `chain`, the Stellar venues as in v2, with a ready-to-execute `build` payload. An empty `quotes` array means no route exists for the pair.
+         */
+        post: operations["postSwapQuote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/swap/build": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Build a Solana swap for the user to sign
+         * @description Builds the swap the user picked from a quote (`chain: "SOLANA"`, a concrete `provider`) as an unsigned v0 transaction for the user's Solana wallet. The route is asked for again, so `quote` may differ a little from the earlier one. The wallet signs `unsignedTransaction` as is and sends it to POST /v3/tx/submit with the same `idempotencyKey`, before `lastValidBlockHeight`. When `sponsored`, the app's GAS wallet pays the fee and signs last, at submit. A co-signed wallet answers 202 with the pending co-sign request instead: the SDK refreshes it right before the vote (the route is asked for again) and the platform broadcasts it once the user approves. Custodial wallets are refused.
+         */
+        post: operations["postSwapBuild"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1542,26 +1582,6 @@ export interface paths {
         get: operations["getSwapTokens"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/swap/quote": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Quote an asset swap (DEX/AMM)
-         * @description Prices a swap of one asset for another across the requested venue(s). Read-only: returns the estimated output, price impact and minimum received (after slippage), plus a ready-to-execute `build` payload to pass to POST /tx/build (operation invoke_contract). With provider "auto" it ranks every available venue by output, best first; an empty `quotes` array means no route exists for the pair on this network. Phase 1 implements the Aquarius AMM; Soroswap and SDEX are added later.
-         */
-        post: operations["postSwapQuote"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1999,7 +2019,7 @@ export interface paths {
         put?: never;
         /**
          * Check a fiat payment now
-         * @description For a user who says they paid: the provider is asked about the `FIAT_PAYMENT` pending action now instead of at its next recheck, at most once every 10 seconds per order. Any other order is answered as it stands.
+         * @description For a user who says they paid: the provider is asked about the `FIAT_PAYMENT` pending action now instead of at its next recheck, at most once every 10 seconds per order. Any other order is answered as it stands. The legs after the payment run after the answer; read the order to follow them.
          */
         post: operations["postRampsOrdersByIdCheck"];
         delete?: never;
@@ -2062,6 +2082,110 @@ export interface paths {
          * @description For a quote rejected with `set_up_wallet` (the chain is the failure's `detail`): creates my Turnkey wallet with this device as its first credential, holding only that chain's account, in the app's custody (`custody` is required when the app leaves it to me). A user who already has a Turnkey wallet gets the account derived in it, a request they approve (422 SDK_RAMPS_WALLET_NOT_READY until then). The wallet signs once it has a recovery method (`recoveryConfigured`). Then quote again.
          */
         post: operations["postRampsWalletsByChain"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bridge/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bridge directions
+         * @description The directions the user can bridge USDC in now: both chains enabled on the app and a wallet on each. `available` is false on testnet, where CCTP does not run.
+         */
+        get: operations["getBridgeConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bridge/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quote a bridge
+         * @description What a transfer of `amount` USDC from the user's wallet on `fromChain` to theirs on `toChain` delivers, Pollar's fee and how the source wallet signs. Nothing moves. 422 SDK_BRIDGE_UNAVAILABLE off mainnet or without the GAS wallets the app needs; SDK_BRIDGE_WALLET_NOT_READY when a wallet is missing, cannot sign a bridge (an external Solana wallet as the source) or a Stellar destination has no USDC trustline.
+         */
+        post: operations["postBridgeQuote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bridge/transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the user's bridges
+         * @description Newest first.
+         */
+        get: operations["getBridgeTransfers"];
+        put?: never;
+        /**
+         * Start a bridge
+         * @description Starts the transfer and its first step. A custodial wallet burns at once; an external wallet gets `pendingAction` SIGNATURE to sign and send to /transfers/{transferId}/signature; a co-signed wallet gets `pendingAction` COSIGN_APPROVAL, the request its device approves. The app GAS wallet relays the mint on `toChain` once Circle attests the burn, about five minutes later; follow it with GET /transfers/{transferId}. With `idempotencyKey`, a retry returns the transfer that key started (200) and moves nothing.
+         */
+        post: operations["postBridgeTransfers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bridge/transfers/{transferId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a bridge
+         * @description Where the transfer stands. A read moves a transfer whose next step is due.
+         */
+        get: operations["getBridgeTransfersByTransferId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bridge/transfers/{transferId}/signature": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit the signed bridge step
+         * @description The source wallet's signature of the SIGNATURE action named by `actionId`. 409 SDK_BRIDGE_ACTION_CHANGED when the transfer no longer waits on that action: read it again and sign the new one.
+         */
+        post: operations["postBridgeTransfersByTransferIdSignature"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2208,6 +2332,10 @@ export interface operations {
                         } | {
                             /** @constant */
                             type: "id";
+                            value: string;
+                        } | {
+                            /** @constant */
+                            type: "hash";
                             value: string;
                         };
                         maxFeeStroops?: number;
@@ -2541,6 +2669,7 @@ export interface operations {
                             status: "PENDING" | "SUCCESS" | "FAILED";
                             resultCode?: string;
                             message?: string;
+                            sponsored?: boolean;
                         };
                     };
                 };
@@ -2585,12 +2714,15 @@ export interface operations {
                                     };
                                     stepKey?: string;
                                     signedXdr?: string;
+                                    signedAuthEntry?: string;
+                                    appPaysFee: boolean;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
                                         status: "PENDING" | "SUCCESS" | "FAILED";
                                         resultCode?: string;
                                         message?: string;
+                                        sponsored?: boolean;
                                     };
                                     txRecordId?: string;
                                     failureReason?: string;
@@ -2743,12 +2875,15 @@ export interface operations {
                                     };
                                     stepKey?: string;
                                     signedXdr?: string;
+                                    signedAuthEntry?: string;
+                                    appPaysFee: boolean;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
                                         status: "PENDING" | "SUCCESS" | "FAILED";
                                         resultCode?: string;
                                         message?: string;
+                                        sponsored?: boolean;
                                     };
                                     txRecordId?: string;
                                     failureReason?: string;
@@ -2854,6 +2989,67 @@ export interface operations {
                         success: true;
                         content: {
                             signedAuthEntry: string;
+                        };
+                    };
+                };
+            };
+            /** @description Co-signed (Turnkey) wallet: the request the user's device must approve before the entry is signed */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_COSIGN_PENDING";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            pendingSignature: {
+                                /** @constant */
+                                kind: "cosign";
+                                request: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                    /** @enum {string} */
+                                    network: "STELLAR" | "POLYGON" | "SOLANA";
+                                    /** @enum {string} */
+                                    status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "FAILED";
+                                    subOrgId: string;
+                                    activityId: string | null;
+                                    fingerprint: string | null;
+                                    signWith: string;
+                                    account?: string;
+                                    unsignedPayload: string;
+                                    payloadHash: string;
+                                    refreshable: boolean;
+                                    /** @enum {string} */
+                                    intent: "sign" | "sign_and_send" | "account_create" | "add_accounts";
+                                    operation?: string;
+                                    summary?: string;
+                                    details?: {
+                                        [key: string]: unknown;
+                                    };
+                                    stepKey?: string;
+                                    signedXdr?: string;
+                                    signedAuthEntry?: string;
+                                    appPaysFee: boolean;
+                                    submit?: {
+                                        hash: string;
+                                        /** @enum {string} */
+                                        status: "PENDING" | "SUCCESS" | "FAILED";
+                                        resultCode?: string;
+                                        message?: string;
+                                        sponsored?: boolean;
+                                    };
+                                    txRecordId?: string;
+                                    failureReason?: string;
+                                    expiresAt: string;
+                                    createdAt: string;
+                                    resolvedAt: string | null;
+                                };
+                            };
                         };
                     };
                 };
@@ -2982,6 +3178,7 @@ export interface operations {
                             status: "PENDING" | "SUCCESS" | "FAILED";
                             resultCode?: string;
                             message?: string;
+                            sponsored?: boolean;
                         };
                     };
                 };
@@ -3123,6 +3320,10 @@ export interface operations {
                         } | {
                             /** @constant */
                             type: "id";
+                            value: string;
+                        } | {
+                            /** @constant */
+                            type: "hash";
                             value: string;
                         };
                         maxFeeStroops?: number;
@@ -3339,6 +3540,7 @@ export interface operations {
                                 fee: string;
                             };
                             estimatedFee: string;
+                            sponsored?: boolean;
                         } | {
                             hash: string;
                             /** @enum {string} */
@@ -3394,12 +3596,15 @@ export interface operations {
                                     };
                                     stepKey?: string;
                                     signedXdr?: string;
+                                    signedAuthEntry?: string;
+                                    appPaysFee: boolean;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
                                         status: "PENDING" | "SUCCESS" | "FAILED";
                                         resultCode?: string;
                                         message?: string;
+                                        sponsored?: boolean;
                                     };
                                     txRecordId?: string;
                                     failureReason?: string;
@@ -4164,12 +4369,15 @@ export interface operations {
                                     };
                                     stepKey?: string;
                                     signedXdr?: string;
+                                    signedAuthEntry?: string;
+                                    appPaysFee: boolean;
                                     submit?: {
                                         hash: string;
                                         /** @enum {string} */
                                         status: "PENDING" | "SUCCESS" | "FAILED";
                                         resultCode?: string;
                                         message?: string;
+                                        sponsored?: boolean;
                                     };
                                     txRecordId?: string;
                                     failureReason?: string;
@@ -7623,6 +7831,820 @@ export interface operations {
             };
         };
     };
+    getCardsFundingDepositAddresses: {
+        parameters: {
+            query?: {
+                cardProviderId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_CARDS_DEPOSIT_ADDRESSES";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            depositAddresses: {
+                                network: string;
+                                chainId: number;
+                                address: string;
+                                tokens: {
+                                    currency: string | null;
+                                    tokenAddress: string;
+                                }[];
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider not configured or request rejected by it */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getCardsFunding: {
+        parameters: {
+            query?: {
+                cardProviderId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_CARDS_FUNDINGS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            fundings: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "CREATED" | "SENT" | "BURNED" | "ATTESTED" | "MINTED" | "CREDITED" | "FAILED";
+                                amount: string;
+                                asset: string;
+                                depositAddress: string;
+                                chainId: number;
+                                stellarTxHash: string | null;
+                                burnTxHash: string | null;
+                                polygonMintTxHash: string | null;
+                                providerTxId: string | null;
+                                error: string | null;
+                                createdAt: string;
+                                updatedAt: string;
+                                /** @enum {string} */
+                                chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                sourceTxHash: string | null;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider not configured or request rejected by it */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postCardsFunding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    cardProviderId?: string;
+                    amount: string;
+                    /** @enum {string} */
+                    chain?: "STELLAR" | "SOLANA";
+                    idempotencyKey?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Retry of an idempotency key: the funding it already started */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_CARDS_FUNDING_STATUS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            funding: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "CREATED" | "SENT" | "BURNED" | "ATTESTED" | "MINTED" | "CREDITED" | "FAILED";
+                                amount: string;
+                                asset: string;
+                                depositAddress: string;
+                                chainId: number;
+                                stellarTxHash: string | null;
+                                burnTxHash: string | null;
+                                polygonMintTxHash: string | null;
+                                providerTxId: string | null;
+                                error: string | null;
+                                createdAt: string;
+                                updatedAt: string;
+                                /** @enum {string} */
+                                chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                sourceTxHash: string | null;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_CARDS_FUNDING_CREATED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            funding: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "CREATED" | "SENT" | "BURNED" | "ATTESTED" | "MINTED" | "CREDITED" | "FAILED";
+                                amount: string;
+                                asset: string;
+                                depositAddress: string;
+                                chainId: number;
+                                stellarTxHash: string | null;
+                                burnTxHash: string | null;
+                                polygonMintTxHash: string | null;
+                                providerTxId: string | null;
+                                error: string | null;
+                                createdAt: string;
+                                updatedAt: string;
+                                /** @enum {string} */
+                                chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                sourceTxHash: string | null;
+                            };
+                            pendingSignature?: {
+                                /** @constant */
+                                kind: "xdr";
+                                unsignedXdr: string;
+                            } | {
+                                /** @constant */
+                                kind: "cosign";
+                                request: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                    /** @enum {string} */
+                                    network: "STELLAR" | "POLYGON" | "SOLANA";
+                                    /** @enum {string} */
+                                    status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "FAILED";
+                                    subOrgId: string;
+                                    activityId: string | null;
+                                    fingerprint: string | null;
+                                    signWith: string;
+                                    account?: string;
+                                    unsignedPayload: string;
+                                    payloadHash: string;
+                                    refreshable: boolean;
+                                    /** @enum {string} */
+                                    intent: "sign" | "sign_and_send" | "account_create" | "add_accounts";
+                                    operation?: string;
+                                    summary?: string;
+                                    details?: {
+                                        [key: string]: unknown;
+                                    };
+                                    stepKey?: string;
+                                    signedXdr?: string;
+                                    signedAuthEntry?: string;
+                                    appPaysFee: boolean;
+                                    submit?: {
+                                        hash: string;
+                                        /** @enum {string} */
+                                        status: "PENDING" | "SUCCESS" | "FAILED";
+                                        resultCode?: string;
+                                        message?: string;
+                                        sponsored?: boolean;
+                                    };
+                                    txRecordId?: string;
+                                    failureReason?: string;
+                                    expiresAt: string;
+                                    createdAt: string;
+                                    resolvedAt: string | null;
+                                };
+                            } | {
+                                /** @constant */
+                                kind: "solana";
+                                unsignedTransaction: string;
+                                idempotencyKey: string;
+                                lastValidBlockHeight: number;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Created; a co-signed wallet approves the payment on its device */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_COSIGN_PENDING";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            funding: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "CREATED" | "SENT" | "BURNED" | "ATTESTED" | "MINTED" | "CREDITED" | "FAILED";
+                                amount: string;
+                                asset: string;
+                                depositAddress: string;
+                                chainId: number;
+                                stellarTxHash: string | null;
+                                burnTxHash: string | null;
+                                polygonMintTxHash: string | null;
+                                providerTxId: string | null;
+                                error: string | null;
+                                createdAt: string;
+                                updatedAt: string;
+                                /** @enum {string} */
+                                chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                sourceTxHash: string | null;
+                            };
+                            pendingSignature?: {
+                                /** @constant */
+                                kind: "xdr";
+                                unsignedXdr: string;
+                            } | {
+                                /** @constant */
+                                kind: "cosign";
+                                request: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                    /** @enum {string} */
+                                    network: "STELLAR" | "POLYGON" | "SOLANA";
+                                    /** @enum {string} */
+                                    status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "FAILED";
+                                    subOrgId: string;
+                                    activityId: string | null;
+                                    fingerprint: string | null;
+                                    signWith: string;
+                                    account?: string;
+                                    unsignedPayload: string;
+                                    payloadHash: string;
+                                    refreshable: boolean;
+                                    /** @enum {string} */
+                                    intent: "sign" | "sign_and_send" | "account_create" | "add_accounts";
+                                    operation?: string;
+                                    summary?: string;
+                                    details?: {
+                                        [key: string]: unknown;
+                                    };
+                                    stepKey?: string;
+                                    signedXdr?: string;
+                                    signedAuthEntry?: string;
+                                    appPaysFee: boolean;
+                                    submit?: {
+                                        hash: string;
+                                        /** @enum {string} */
+                                        status: "PENDING" | "SUCCESS" | "FAILED";
+                                        resultCode?: string;
+                                        message?: string;
+                                        sponsored?: boolean;
+                                    };
+                                    txRecordId?: string;
+                                    failureReason?: string;
+                                    expiresAt: string;
+                                    createdAt: string;
+                                    resolvedAt: string | null;
+                                };
+                            } | {
+                                /** @constant */
+                                kind: "solana";
+                                unsignedTransaction: string;
+                                idempotencyKey: string;
+                                lastValidBlockHeight: number;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider not configured or request rejected by it */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getCardsFundingByFundingId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fundingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_CARDS_FUNDING_STATUS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            funding: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "CREATED" | "SENT" | "BURNED" | "ATTESTED" | "MINTED" | "CREDITED" | "FAILED";
+                                amount: string;
+                                asset: string;
+                                depositAddress: string;
+                                chainId: number;
+                                stellarTxHash: string | null;
+                                burnTxHash: string | null;
+                                polygonMintTxHash: string | null;
+                                providerTxId: string | null;
+                                error: string | null;
+                                createdAt: string;
+                                updatedAt: string;
+                                /** @enum {string} */
+                                chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                sourceTxHash: string | null;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider not configured or request rejected by it */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postCardsFundingByFundingIdSignature: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fundingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    signedXdr: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_CARDS_FUNDING_SIGNATURE_ACCEPTED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            funding: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "CREATED" | "SENT" | "BURNED" | "ATTESTED" | "MINTED" | "CREDITED" | "FAILED";
+                                amount: string;
+                                asset: string;
+                                depositAddress: string;
+                                chainId: number;
+                                stellarTxHash: string | null;
+                                burnTxHash: string | null;
+                                polygonMintTxHash: string | null;
+                                providerTxId: string | null;
+                                error: string | null;
+                                createdAt: string;
+                                updatedAt: string;
+                                /** @enum {string} */
+                                chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                sourceTxHash: string | null;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider not configured or request rejected by it */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
     getCardsProviders: {
         parameters: {
             query?: never;
@@ -8878,628 +9900,6 @@ export interface operations {
             };
         };
     };
-    getCardsFundingDepositAddresses: {
-        parameters: {
-            query?: {
-                cardProviderId?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_CARDS_DEPOSIT_ADDRESSES";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            depositAddresses: {
-                                network: string;
-                                chainId: number;
-                                address: string;
-                                tokens: {
-                                    currency: string | null;
-                                    tokenAddress: string;
-                                }[];
-                            }[];
-                        };
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Provider not configured or request rejected by it */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Provider error */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-        };
-    };
-    getCardsFunding: {
-        parameters: {
-            query?: {
-                cardProviderId?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_CARDS_FUNDINGS";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            fundings: {
-                                id: string;
-                                /** @enum {string} */
-                                status: "CREATED" | "BURNED" | "ATTESTED" | "MINTED" | "CREDITED" | "FAILED";
-                                amount: string;
-                                asset: string;
-                                depositAddress: string;
-                                chainId: number;
-                                stellarTxHash: string | null;
-                                burnTxHash: string | null;
-                                polygonMintTxHash: string | null;
-                                providerTxId: string | null;
-                                error: string | null;
-                                createdAt: string;
-                                updatedAt: string;
-                            }[];
-                        };
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Provider not configured or request rejected by it */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Provider error */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-        };
-    };
-    postCardsFunding: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    cardProviderId?: string;
-                    amount: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_CARDS_FUNDING_CREATED";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            funding: {
-                                id: string;
-                                /** @enum {string} */
-                                status: "CREATED" | "BURNED" | "ATTESTED" | "MINTED" | "CREDITED" | "FAILED";
-                                amount: string;
-                                asset: string;
-                                depositAddress: string;
-                                chainId: number;
-                                stellarTxHash: string | null;
-                                burnTxHash: string | null;
-                                polygonMintTxHash: string | null;
-                                providerTxId: string | null;
-                                error: string | null;
-                                createdAt: string;
-                                updatedAt: string;
-                            };
-                            pendingSignature?: {
-                                unsignedXdr: string;
-                            };
-                        };
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Provider not configured or request rejected by it */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Provider error */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-        };
-    };
-    getCardsFundingByFundingId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                fundingId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_CARDS_FUNDING_STATUS";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            funding: {
-                                id: string;
-                                /** @enum {string} */
-                                status: "CREATED" | "BURNED" | "ATTESTED" | "MINTED" | "CREDITED" | "FAILED";
-                                amount: string;
-                                asset: string;
-                                depositAddress: string;
-                                chainId: number;
-                                stellarTxHash: string | null;
-                                burnTxHash: string | null;
-                                polygonMintTxHash: string | null;
-                                providerTxId: string | null;
-                                error: string | null;
-                                createdAt: string;
-                                updatedAt: string;
-                            };
-                        };
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Provider not configured or request rejected by it */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Provider error */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-        };
-    };
-    postCardsFundingByFundingIdSignature: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                fundingId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    signedXdr: string;
-                };
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_CARDS_FUNDING_SIGNATURE_ACCEPTED";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            funding: {
-                                id: string;
-                                /** @enum {string} */
-                                status: "CREATED" | "BURNED" | "ATTESTED" | "MINTED" | "CREDITED" | "FAILED";
-                                amount: string;
-                                asset: string;
-                                depositAddress: string;
-                                chainId: number;
-                                stellarTxHash: string | null;
-                                burnTxHash: string | null;
-                                polygonMintTxHash: string | null;
-                                providerTxId: string | null;
-                                error: string | null;
-                                createdAt: string;
-                                updatedAt: string;
-                            };
-                        };
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Provider not configured or request rejected by it */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Provider error */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-        };
-    };
     getCardsSecretsPublicKey: {
         parameters: {
             query?: {
@@ -9775,6 +10175,8 @@ export interface operations {
                                 modalBorderRadius?: number;
                                 buttonBorderRadius?: number;
                                 modalZIndex?: number;
+                                /** @enum {string} */
+                                language?: "device" | "en" | "es" | "pt";
                                 emailEnabled?: boolean;
                                 embeddedWallets?: boolean;
                                 smartWallet?: boolean;
@@ -9984,12 +10386,15 @@ export interface operations {
                                 };
                                 stepKey?: string;
                                 signedXdr?: string;
+                                signedAuthEntry?: string;
+                                appPaysFee: boolean;
                                 submit?: {
                                     hash: string;
                                     /** @enum {string} */
                                     status: "PENDING" | "SUCCESS" | "FAILED";
                                     resultCode?: string;
                                     message?: string;
+                                    sponsored?: boolean;
                                 };
                                 txRecordId?: string;
                                 failureReason?: string;
@@ -10068,12 +10473,15 @@ export interface operations {
                                 };
                                 stepKey?: string;
                                 signedXdr?: string;
+                                signedAuthEntry?: string;
+                                appPaysFee: boolean;
                                 submit?: {
                                     hash: string;
                                     /** @enum {string} */
                                     status: "PENDING" | "SUCCESS" | "FAILED";
                                     resultCode?: string;
                                     message?: string;
+                                    sponsored?: boolean;
                                 };
                                 txRecordId?: string;
                                 failureReason?: string;
@@ -10165,12 +10573,15 @@ export interface operations {
                                 };
                                 stepKey?: string;
                                 signedXdr?: string;
+                                signedAuthEntry?: string;
+                                appPaysFee: boolean;
                                 submit?: {
                                     hash: string;
                                     /** @enum {string} */
                                     status: "PENDING" | "SUCCESS" | "FAILED";
                                     resultCode?: string;
                                     message?: string;
+                                    sponsored?: boolean;
                                 };
                                 txRecordId?: string;
                                 failureReason?: string;
@@ -10262,12 +10673,15 @@ export interface operations {
                                 };
                                 stepKey?: string;
                                 signedXdr?: string;
+                                signedAuthEntry?: string;
+                                appPaysFee: boolean;
                                 submit?: {
                                     hash: string;
                                     /** @enum {string} */
                                     status: "PENDING" | "SUCCESS" | "FAILED";
                                     resultCode?: string;
                                     message?: string;
+                                    sponsored?: boolean;
                                 };
                                 txRecordId?: string;
                                 failureReason?: string;
@@ -10386,12 +10800,15 @@ export interface operations {
                                 };
                                 stepKey?: string;
                                 signedXdr?: string;
+                                signedAuthEntry?: string;
+                                appPaysFee: boolean;
                                 submit?: {
                                     hash: string;
                                     /** @enum {string} */
                                     status: "PENDING" | "SUCCESS" | "FAILED";
                                     resultCode?: string;
                                     message?: string;
+                                    sponsored?: boolean;
                                 };
                                 txRecordId?: string;
                                 failureReason?: string;
@@ -11484,7 +11901,9 @@ export interface operations {
     };
     getSwapConfig: {
         parameters: {
-            query?: never;
+            query?: {
+                chain?: "STELLAR" | "SOLANA";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -11504,6 +11923,8 @@ export interface operations {
                         success: true;
                         content: {
                             venues: ("aquarius" | "soroswap" | "sdex")[];
+                        } | {
+                            venues: ("jupiter" | "titan")[];
                         };
                     };
                 };
@@ -11540,69 +11961,6 @@ export interface operations {
             };
         };
     };
-    getSwapTokens: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Curated swap buy tokens (possibly empty) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_SWAP_TOKENS";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            tokens: {
-                                code: string;
-                                issuer: string;
-                                name: string;
-                                domain: string | null;
-                            }[];
-                        };
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Error */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-        };
-    };
     postSwapQuote: {
         parameters: {
             query?: never;
@@ -11613,6 +11971,19 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @constant */
+                    chain: "SOLANA";
+                    inputMint: string;
+                    outputMint: string;
+                    amount: string;
+                    /**
+                     * @default auto
+                     * @enum {string}
+                     */
+                    provider?: "auto" | "jupiter" | "titan";
+                    /** @default 50 */
+                    slippageBps?: number;
+                } | {
                     publicKey?: string;
                     address?: string;
                     sellAsset: {
@@ -11815,6 +12186,24 @@ export interface operations {
                             }[];
                             /** @enum {string} */
                             best?: "aquarius" | "soroswap" | "sdex";
+                        } | {
+                            quotes: {
+                                /** @constant */
+                                chain: "SOLANA";
+                                /** @enum {string} */
+                                provider: "jupiter" | "titan";
+                                inputMint: string;
+                                outputMint: string;
+                                inAmount: string;
+                                outAmount: string;
+                                minOut: string;
+                                priceImpactPct: string | null;
+                                route: {
+                                    hops: string[];
+                                };
+                            }[];
+                            /** @enum {string} */
+                            best?: "jupiter" | "titan";
                         };
                     };
                 };
@@ -11849,6 +12238,21 @@ export interface operations {
                     };
                 };
             };
+            /** @description The user has no Solana wallet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
             /** @description No route for the pair */
             422: {
                 headers: {
@@ -11864,7 +12268,287 @@ export interface operations {
                     };
                 };
             };
-            /** @description Quote error (Soroban RPC/provider) */
+            /** @description Quote error (RPC or aggregator) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postSwapBuild: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @constant */
+                    chain: "SOLANA";
+                    /** @enum {string} */
+                    provider: "jupiter" | "titan";
+                    inputMint: string;
+                    outputMint: string;
+                    amount: string;
+                    /** @default 50 */
+                    slippageBps?: number;
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The unsigned swap transaction */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_TX_BUILT";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            /** @constant */
+                            chain: "SOLANA";
+                            quote: {
+                                /** @constant */
+                                chain: "SOLANA";
+                                /** @enum {string} */
+                                provider: "jupiter" | "titan";
+                                inputMint: string;
+                                outputMint: string;
+                                inAmount: string;
+                                outAmount: string;
+                                minOut: string;
+                                priceImpactPct: string | null;
+                                route: {
+                                    hops: string[];
+                                };
+                            };
+                            unsignedTransaction: string;
+                            idempotencyKey: string;
+                            recentBlockhash: string;
+                            lastValidBlockHeight: number;
+                            feeLamports: string;
+                            feePayer: string;
+                            sponsored: boolean;
+                        };
+                    };
+                };
+            };
+            /** @description A co-signed wallet: the pending request the user approves on their device */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_COSIGN_PENDING";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            pendingSignature: {
+                                /** @constant */
+                                kind: "cosign";
+                                request: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                    /** @enum {string} */
+                                    network: "STELLAR" | "POLYGON" | "SOLANA";
+                                    /** @enum {string} */
+                                    status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "FAILED";
+                                    subOrgId: string;
+                                    activityId: string | null;
+                                    fingerprint: string | null;
+                                    signWith: string;
+                                    account?: string;
+                                    unsignedPayload: string;
+                                    payloadHash: string;
+                                    refreshable: boolean;
+                                    /** @enum {string} */
+                                    intent: "sign" | "sign_and_send" | "account_create" | "add_accounts";
+                                    operation?: string;
+                                    summary?: string;
+                                    details?: {
+                                        [key: string]: unknown;
+                                    };
+                                    stepKey?: string;
+                                    signedXdr?: string;
+                                    signedAuthEntry?: string;
+                                    appPaysFee: boolean;
+                                    submit?: {
+                                        hash: string;
+                                        /** @enum {string} */
+                                        status: "PENDING" | "SUCCESS" | "FAILED";
+                                        resultCode?: string;
+                                        message?: string;
+                                        sponsored?: boolean;
+                                    };
+                                    txRecordId?: string;
+                                    failureReason?: string;
+                                    expiresAt: string;
+                                    createdAt: string;
+                                    resolvedAt: string | null;
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description The idempotencyKey belongs to another user */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description No Solana wallet, or the idempotencyKey was already submitted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description No route for the pair on that venue */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Aggregator or custody error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getSwapTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Curated swap buy tokens (possibly empty) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_SWAP_TOKENS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            tokens: {
+                                code: string;
+                                issuer: string;
+                                name: string;
+                                domain: string | null;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Error */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -13235,10 +13919,12 @@ export interface operations {
                                 label: {
                                     en: string;
                                     es: string;
+                                    pt?: string;
                                 };
                                 help?: {
                                     en?: string;
                                     es?: string;
+                                    pt?: string;
                                 };
                                 /** @default false */
                                 required: boolean;
@@ -13247,6 +13933,7 @@ export interface operations {
                                     label: {
                                         en: string;
                                         es: string;
+                                        pt?: string;
                                     };
                                 }[];
                                 validation?: {
@@ -13254,6 +13941,10 @@ export interface operations {
                                     max?: number;
                                     maxLength?: number;
                                     pattern?: string;
+                                };
+                                showIf?: {
+                                    key: string;
+                                    in: string[];
                                 };
                             }[];
                             answers: {
@@ -14425,6 +15116,13 @@ export interface operations {
                                     resolutionOwner: string;
                                     resolutionAction: string;
                                     detail?: string;
+                                    limit?: {
+                                        min: string | null;
+                                        max: string | null;
+                                        /** @enum {string} */
+                                        side: "in" | "out";
+                                        currency: string;
+                                    };
                                 };
                                 requirement?: {
                                     corridorId: string;
@@ -16020,6 +16718,744 @@ export interface operations {
             };
             /** @description Unprocessable */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getBridgeConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_CONFIG";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            available: boolean;
+                            reason: "mainnet_only" | null;
+                            /** @constant */
+                            asset: "USDC";
+                            directions: {
+                                /** @enum {string} */
+                                fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @enum {string} */
+                                toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getBridgeTransfers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_TRANSFERS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            transfers: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "AWAITING_ACTION" | "BURNED" | "ATTESTED" | "COMPLETED" | "FAILED" | "HELD";
+                                /** @enum {string} */
+                                fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @enum {string} */
+                                toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @constant */
+                                asset: "USDC";
+                                amount: string;
+                                amountOut: string | null;
+                                fromAddress: string;
+                                toAddress: string;
+                                burnTxHash: string | null;
+                                mintTxHash: string | null;
+                                pendingAction: ({
+                                    /** @constant */
+                                    kind: "SIGNATURE";
+                                    actionId: string;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "SOLANA" | "POLYGON";
+                                    payload: {
+                                        encoding: string;
+                                        value: string;
+                                    };
+                                    summary: string;
+                                    expiresAt: string;
+                                } | {
+                                    /** @constant */
+                                    kind: "COSIGN_APPROVAL";
+                                    actionId: string;
+                                    cosignRequestId: string;
+                                    summary: string;
+                                }) | null;
+                                failure: {
+                                    code: string;
+                                } | null;
+                                etaSeconds: number;
+                                createdAt: string;
+                                updatedAt: string;
+                                completedAt: string | null;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getBridgeTransfersByTransferId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transferId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_TRANSFER";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            transfer: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "AWAITING_ACTION" | "BURNED" | "ATTESTED" | "COMPLETED" | "FAILED" | "HELD";
+                                /** @enum {string} */
+                                fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @enum {string} */
+                                toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @constant */
+                                asset: "USDC";
+                                amount: string;
+                                amountOut: string | null;
+                                fromAddress: string;
+                                toAddress: string;
+                                burnTxHash: string | null;
+                                mintTxHash: string | null;
+                                pendingAction: ({
+                                    /** @constant */
+                                    kind: "SIGNATURE";
+                                    actionId: string;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "SOLANA" | "POLYGON";
+                                    payload: {
+                                        encoding: string;
+                                        value: string;
+                                    };
+                                    summary: string;
+                                    expiresAt: string;
+                                } | {
+                                    /** @constant */
+                                    kind: "COSIGN_APPROVAL";
+                                    actionId: string;
+                                    cosignRequestId: string;
+                                    summary: string;
+                                }) | null;
+                                failure: {
+                                    code: string;
+                                } | null;
+                                etaSeconds: number;
+                                createdAt: string;
+                                updatedAt: string;
+                                completedAt: string | null;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postBridgeQuote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                    /** @enum {string} */
+                    toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                    amount: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_QUOTE";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            /** @enum {string} */
+                            fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                            /** @enum {string} */
+                            toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                            /** @constant */
+                            asset: "USDC";
+                            amountIn: string;
+                            amountOut: string;
+                            fee: {
+                                amount: string;
+                                /** @constant */
+                                currency: "USD";
+                            } | null;
+                            etaSeconds: number;
+                            fromAddress: string;
+                            toAddress: string;
+                            /** @enum {string} */
+                            signing: "INTERNAL" | "COSIGNED" | "SELF_CUSTODY" | "EXTERNAL";
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not enough credits */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unprocessable */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postBridgeTransfers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                    /** @enum {string} */
+                    toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                    amount: string;
+                    idempotencyKey?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Retry of an idempotency key: the transfer it already started */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_TRANSFER";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            transfer: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "AWAITING_ACTION" | "BURNED" | "ATTESTED" | "COMPLETED" | "FAILED" | "HELD";
+                                /** @enum {string} */
+                                fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @enum {string} */
+                                toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @constant */
+                                asset: "USDC";
+                                amount: string;
+                                amountOut: string | null;
+                                fromAddress: string;
+                                toAddress: string;
+                                burnTxHash: string | null;
+                                mintTxHash: string | null;
+                                pendingAction: ({
+                                    /** @constant */
+                                    kind: "SIGNATURE";
+                                    actionId: string;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "SOLANA" | "POLYGON";
+                                    payload: {
+                                        encoding: string;
+                                        value: string;
+                                    };
+                                    summary: string;
+                                    expiresAt: string;
+                                } | {
+                                    /** @constant */
+                                    kind: "COSIGN_APPROVAL";
+                                    actionId: string;
+                                    cosignRequestId: string;
+                                    summary: string;
+                                }) | null;
+                                failure: {
+                                    code: string;
+                                } | null;
+                                etaSeconds: number;
+                                createdAt: string;
+                                updatedAt: string;
+                                completedAt: string | null;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_TRANSFER_CREATED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            transfer: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "AWAITING_ACTION" | "BURNED" | "ATTESTED" | "COMPLETED" | "FAILED" | "HELD";
+                                /** @enum {string} */
+                                fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @enum {string} */
+                                toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @constant */
+                                asset: "USDC";
+                                amount: string;
+                                amountOut: string | null;
+                                fromAddress: string;
+                                toAddress: string;
+                                burnTxHash: string | null;
+                                mintTxHash: string | null;
+                                pendingAction: ({
+                                    /** @constant */
+                                    kind: "SIGNATURE";
+                                    actionId: string;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "SOLANA" | "POLYGON";
+                                    payload: {
+                                        encoding: string;
+                                        value: string;
+                                    };
+                                    summary: string;
+                                    expiresAt: string;
+                                } | {
+                                    /** @constant */
+                                    kind: "COSIGN_APPROVAL";
+                                    actionId: string;
+                                    cosignRequestId: string;
+                                    summary: string;
+                                }) | null;
+                                failure: {
+                                    code: string;
+                                } | null;
+                                etaSeconds: number;
+                                createdAt: string;
+                                updatedAt: string;
+                                completedAt: string | null;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not enough credits */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unprocessable */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postBridgeTransfersByTransferIdSignature: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transferId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    actionId: string;
+                    signedPayload: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_SIGNATURE_ACCEPTED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            transfer: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "AWAITING_ACTION" | "BURNED" | "ATTESTED" | "COMPLETED" | "FAILED" | "HELD";
+                                /** @enum {string} */
+                                fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @enum {string} */
+                                toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @constant */
+                                asset: "USDC";
+                                amount: string;
+                                amountOut: string | null;
+                                fromAddress: string;
+                                toAddress: string;
+                                burnTxHash: string | null;
+                                mintTxHash: string | null;
+                                pendingAction: ({
+                                    /** @constant */
+                                    kind: "SIGNATURE";
+                                    actionId: string;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "SOLANA" | "POLYGON";
+                                    payload: {
+                                        encoding: string;
+                                        value: string;
+                                    };
+                                    summary: string;
+                                    expiresAt: string;
+                                } | {
+                                    /** @constant */
+                                    kind: "COSIGN_APPROVAL";
+                                    actionId: string;
+                                    cosignRequestId: string;
+                                    summary: string;
+                                }) | null;
+                                failure: {
+                                    code: string;
+                                } | null;
+                                etaSeconds: number;
+                                createdAt: string;
+                                updatedAt: string;
+                                completedAt: string | null;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

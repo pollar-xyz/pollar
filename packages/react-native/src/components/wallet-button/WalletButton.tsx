@@ -2,7 +2,9 @@ import { type CosignCustody, isPollarApiError } from '@pollar/core';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { WalletButtonTemplate } from './WalletButtonUI'; // Bypassing cache
+import { WALLET_BUTTON_COPY } from './wallet-button-copy';
 
 export function WalletButton() {
   const {
@@ -20,6 +22,8 @@ export function WalletButton() {
     appConfig,
     createWallet,
   } = usePollar();
+  const language = useModalLanguage();
+  const copy = WALLET_BUTTON_COPY[language];
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [creatingWallet, setCreatingWallet] = useState(false);
@@ -54,13 +58,13 @@ export function WalletButton() {
       clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(false), 1500);
     } catch (error) {
-      if (mounted.current) Alert.alert('Copy failed', String(error));
+      if (mounted.current) Alert.alert(copy.copyFailed, String(error));
     }
   }
 
   function handleLogout() {
     setOpen(false);
-    void logout().catch((error: unknown) => Alert.alert('Logout failed', String(error)));
+    void logout().catch((error: unknown) => Alert.alert(copy.logoutFailed, String(error)));
   }
 
   function handleWalletBalance() {
@@ -84,8 +88,8 @@ export function WalletButton() {
       if (mounted.current)
         setCreateWalletError(
           isPollarApiError(err) && err.code === 'SDK_WALLET_PROVISIONING_DISABLED'
-            ? 'This app does not create wallets.'
-            : 'Could not create the wallet. Try again.',
+            ? copy.provisioningDisabled
+            : copy.createWalletFailed,
         );
     } finally {
       if (mounted.current) setCreatingWallet(false);
@@ -120,6 +124,7 @@ export function WalletButton() {
       createWalletError={createWalletError}
       custodyChoice={appConfig.application?.walletCustodyMode === 'USER_CHOICE'}
       {...(appConfig.application?.walletProvisioning === 'NONE' ? {} : { onCreateWallet: handleCreateWallet })}
+      language={language}
     />
   );
 }

@@ -7,6 +7,9 @@
 // spendable figure such as an Earn position).
 // -----------------------------------------------------------------------------
 
+import { useInheritedLanguage } from '../language-context';
+import type { PollarLanguage } from '@pollar/core';
+import { COMMONS_COPY } from './commons-copy';
 import './send-modal/SendModal.css';
 import './shared.css';
 
@@ -26,6 +29,7 @@ interface AmountFieldProps {
   onMax?: (() => void) | undefined;
   placeholder?: string | undefined;
   disabled?: boolean | undefined;
+  language?: PollarLanguage | undefined;
 }
 
 // An unreadable chain shows a dash, never 0: a wallet that failed to load must not look empty.
@@ -45,7 +49,10 @@ export function AmountField({
   onMax,
   placeholder = '0.00',
   disabled = false,
+  language: languageProp,
 }: AmountFieldProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = COMMONS_COPY[language];
   const showBalance = available !== undefined;
   const canMax = showBalance && available !== null && parseFloat(available) > 0 && !disabled;
 
@@ -57,7 +64,7 @@ export function AmountField({
         </label>
         {showBalance && (
           <span className="pollar-send-hint">
-            Available: {formatAvailable(available)} {unit ?? ''}
+            {copy.available} {formatAvailable(available)} {unit ?? ''}
           </span>
         )}
       </div>
@@ -81,7 +88,7 @@ export function AmountField({
               disabled={!canMax}
               onClick={() => (onMax ? onMax() : available && onChange(available))}
             >
-              Max
+              {copy.max}
             </button>
           )}
           {unit && <span>{unit}</span>}

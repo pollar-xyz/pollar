@@ -1,6 +1,7 @@
 import { type CosignCustody, type CustodyMigrationState, isPollarApiError, transactionErrorMessage } from '@pollar/core';
 import React, { useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { PollarOverlay } from '../commons';
 import { CustodyMigrationModalTemplate } from './CustodyMigrationModalUI';
 
@@ -15,6 +16,7 @@ interface CustodyMigrationModalProps {
 export function CustodyMigrationModal({ state, onMoved, onLater }: CustodyMigrationModalProps) {
   const { getClient, styles, logout } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const language = useModalLanguage();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [blockedReasons, setBlockedReasons] = useState<string[] | null>(null);
@@ -32,7 +34,9 @@ export function CustodyMigrationModal({ state, onMoved, onLater }: CustodyMigrat
         setBlockedReasons(Array.isArray(reasons) ? reasons.map(String) : []);
         return;
       }
-      setError(transactionErrorMessage(isPollarApiError(err) ? err.code : null, err instanceof Error ? err.message : null));
+      setError(
+        transactionErrorMessage(isPollarApiError(err) ? err.code : null, err instanceof Error ? err.message : null, language),
+      );
     } finally {
       setBusy(false);
     }
@@ -50,6 +54,7 @@ export function CustodyMigrationModal({ state, onMoved, onLater }: CustodyMigrat
         onMove={(custody) => void move(custody)}
         onLater={onLater}
         onLogout={() => void logout()}
+        language={language}
       />
     </PollarOverlay>
   );

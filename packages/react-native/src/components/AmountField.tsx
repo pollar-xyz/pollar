@@ -1,5 +1,8 @@
+import { useInheritedLanguage } from '../language-context';
+import type { PollarLanguage } from '@pollar/core';
 import React from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { COMMONS_COPY } from './commons-copy';
 
 // --- Shared amount field --------------------------------------------------------
 // The native twin of the web AmountField: label on the left, "Available: X CODE" on
@@ -23,6 +26,7 @@ interface AmountFieldProps {
   /** Replaces filling in the whole `available`, for a max that leaves a fee behind. */
   onMax?: (() => void) | undefined;
   placeholder?: string | undefined;
+  language?: PollarLanguage | undefined;
 }
 
 // An unreadable chain shows a dash, never 0: a wallet that failed to load must not look empty.
@@ -42,7 +46,10 @@ export function AmountField({
   available,
   onMax,
   placeholder = '0.00',
+  language: languageProp,
 }: AmountFieldProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = COMMONS_COPY[language];
   const isDark = theme === 'dark';
   const colors = {
     text: isDark ? '#ffffff' : '#111827',
@@ -59,7 +66,7 @@ export function AmountField({
         <Text style={[styles.label, { color: colors.muted }]}>{label}</Text>
         {showBalance && (
           <Text style={[styles.hint, { color: colors.muted }]} numberOfLines={1}>
-            Available: {formatAvailable(available)} {unit ?? ''}
+            {copy.available} {formatAvailable(available)} {unit ?? ''}
           </Text>
         )}
       </View>
@@ -78,9 +85,9 @@ export function AmountField({
             style={[styles.max, { backgroundColor: `${accentColor}1A`, opacity: canMax ? 1 : 0.45 }]}
             disabled={!canMax}
             onPress={() => (onMax ? onMax() : available && onChange(available))}
-            accessibilityLabel="Max"
+            accessibilityLabel={copy.max}
           >
-            <Text style={[styles.maxText, { color: accentColor }]}>Max</Text>
+            <Text style={[styles.maxText, { color: accentColor }]}>{copy.max}</Text>
           </TouchableOpacity>
         )}
         {unit ? <Text style={[styles.unit, { color: colors.muted }]}>{unit}</Text> : null}

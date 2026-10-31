@@ -40,9 +40,19 @@ export function base64urlEncode(bytes: Uint8Array): string {
   return result;
 }
 
+/**
+ * The string without its trailing "=" padding. Read by index: the input can come
+ * from outside, and a backtracking pattern over it is quadratic on a long run of "=".
+ */
+export function stripBase64Padding(input: string): string {
+  let end = input.length;
+  while (end > 0 && input.charCodeAt(end - 1) === 61) end--;
+  return input.slice(0, end);
+}
+
 /** Decode a base64url string (with or without "=" padding) to raw bytes. */
 export function base64urlDecode(input: string): Uint8Array {
-  const clean = input.replace(/=+$/, '');
+  const clean = stripBase64Padding(input);
   const out = new Uint8Array(Math.floor((clean.length * 3) / 4));
   let byteIdx = 0;
   for (let i = 0; i < clean.length; i += 4) {

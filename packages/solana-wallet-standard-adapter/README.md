@@ -21,20 +21,11 @@ Pollar runs on Solana end to end for wallets and payments:
   fees** and token accounts created for the recipient.
 - **Fiat on/off-ramps to Solana**: Bolivia (BOB, via Stereum + CCTP) and Brazil (BRL via Pix, PagFinance).
 
-> **0.12.0** accepts `@pollar/core@^0.11.2 || ^0.12.0`. A session restored after a
-> reload signs without reconnecting, and a wallet without `solana:signIn` logs in
-> through `signMessage`.
->
-> **0.11.5** is the adapter's first release on npm, on the SDK's version line. It
-> requires `@pollar/core@^0.11.2`; no adapter changes since 0.11.2.
->
-> **0.11.2** requires `@pollar/core@^0.11.2` (peer range bump only; no adapter
-> changes).
->
-> **0.11.1** introduced the adapter. It declares
-> `chain: 'SOLANA'`, which is what routes `login({ provider })` through the SIWS
-> flow instead of Stellar's SEP-10 challenge - end to end, discovery through
-> login.
+> **Compatibility:** `@pollar/core@^0.11.2 || ^0.12.0`. The adapter declares
+> `chain: 'SOLANA'`, which routes `login({ provider })` through the SIWS flow
+> instead of Stellar's SEP-10 challenge. A session restored after a reload signs
+> without reconnecting, and a wallet without `solana:signIn` logs in through
+> `signMessage`.
 
 ## Installation
 
@@ -98,10 +89,14 @@ The class behind the factory, exported for direct use outside `PollarClient`.
 Beyond the shared `WalletAdapter` contract it carries the Solana-specific
 surface:
 
-| Member                      | Purpose                                                                                                       |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `chain`                     | Always `'SOLANA'` - what routes login through SIWS                                                            |
-| `supportsSignIn`            | Whether the wallet exposes the native `solana:signIn` feature                                                 |
-| `signIn(input)`             | SIWS login; throws if the wallet lacks `solana:signIn` (check `supportsSignIn` first, then use `signMessage`) |
-| `signMessage(message)`      | Raw message signing                                                                                           |
-| `signSolanaTransaction(tx)` | Signs a Solana transaction (sponsored external transfers)                                                     |
+| Member                              | Purpose                                                                                        |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `chain`                             | Always `'SOLANA'` - what routes login through SIWS                                             |
+| `supportsSignIn`                    | Whether the wallet exposes the native `solana:signIn` feature                                  |
+| `signIn(input)`                     | SIWS login; a wallet without `solana:signIn` signs the same message text through `signMessage` |
+| `signMessage(message)`              | Raw message signing                                                                            |
+| `signSolanaTransaction(tx, chain?)` | Signs a Solana transaction (sponsored external transfers)                                      |
+
+## License
+
+Apache-2.0. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).

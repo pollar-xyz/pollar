@@ -1,9 +1,20 @@
 'use client';
 
-import { EnabledAssetRecord, StellarNetwork, WalletBalanceRecord, WalletBalanceState, WalletChain } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import {
+  EnabledAssetRecord,
+  PollarLanguage,
+  StellarNetwork,
+  WalletBalanceRecord,
+  WalletBalanceState,
+  WalletChain,
+} from '@pollar/core';
 import { ChainSelect, resolveChain } from '../ChainSelect';
 import { BusyOverlay, CopyButton, cropAddress, PollarModalFooter, RefreshIcon, useStickyData } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
+import { WALLET_BALANCE_COPY } from './wallet-balance-copy';
+
+type WalletBalanceCopy = (typeof WALLET_BALANCE_COPY)['en'];
 
 // Stellar amounts are int64 scaled by 10^7, so 7 decimals is the ledger's exact
 // precision and the default. A Polygon/Solana token carries its own `decimals`
@@ -30,9 +41,9 @@ interface FaucetHint {
  * caller passes `null` on mainnet, where these faucets don't fund. Solana's
  * native SOL points at the Solana faucet; USDC (an SPL token) at Circle's.
  */
-function faucetFor(record: WalletBalanceRecord): FaucetHint | null {
-  if (record.type === 'native') return { url: 'https://faucet.solana.com/', label: 'Get test SOL' };
-  if (record.code === 'USDC') return { url: 'https://faucet.circle.com/', label: 'Get test USDC' };
+function faucetFor(record: WalletBalanceRecord, copy: WalletBalanceCopy): FaucetHint | null {
+  if (record.type === 'native') return { url: 'https://faucet.solana.com/', label: copy.getTestSol };
+  if (record.code === 'USDC') return { url: 'https://faucet.circle.com/', label: copy.getTestUsdc };
   return null;
 }
 
@@ -59,13 +70,15 @@ function BalanceItem({
   record,
   faucet,
   metadata,
+  copy,
 }: {
   record: WalletBalanceRecord;
   faucet: FaucetHint | null;
   metadata?: EnabledAssetRecord | undefined;
+  copy: WalletBalanceCopy;
 }) {
   const balanceDiffers = record.balance !== record.available;
-  const secondary = metadata?.name ?? (record.issuer ? cropAddress(record.issuer) : 'Native asset');
+  const secondary = metadata?.name ?? (record.issuer ? cropAddress(record.issuer) : copy.nativeAsset);
   return (
     <div className="pollar-bal-item">
       <div className="pollar-bal-asset-info">
@@ -75,13 +88,13 @@ function BalanceItem({
             <span className="pollar-bal-asset">{record.code}</span>
             <span className="pollar-bal-asset-secondary">
               {secondary}
-              {record.issuer && <CopyButton value={record.issuer} label="Copy issuer address" className="pollar-copy-btn-sm" />}
+              {record.issuer && <CopyButton value={record.issuer} label={copy.copyIssuer} className="pollar-copy-btn-sm" />}
             </span>
           </span>
         </span>
         {faucet && (
           <span className="pollar-bal-faucet-hint">
-            Need more?{' '}
+            {copy.needMore}{' '}
             <a href={faucet.url} target="_blank" rel="noopener noreferrer">
               {faucet.label}
             </a>
@@ -94,7 +107,9 @@ function BalanceItem({
       <div className="pollar-bal-amounts">
         <span className="pollar-bal-amount">{formatBalance(record.balance, record.decimals)}</span>
         {balanceDiffers && (
-          <span className="pollar-bal-available">{formatBalance(record.available, record.decimals)} available</span>
+          <span className="pollar-bal-available">
+            {copy.available.replace('{amount}', formatBalance(record.available, record.decimals))}
+          </span>
         )}
       </div>
     </div>
@@ -122,6 +137,8 @@ export interface WalletBalanceModalTemplateProps {
   onSelectChain?: (chain: WalletChain) => void;
   onRefresh: () => void;
   onClose: () => void;
+  /** Language of the modal. Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
 
 export function WalletBalanceModalTemplate({
@@ -137,8 +154,11 @@ export function WalletBalanceModalTemplate({
   onSelectChain,
   onRefresh,
   onClose,
+  language: languageProp,
 }: WalletBalanceModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
+  const copy = WALLET_BALANCE_COPY[language];
 
   const isLoading = walletBalance.step === 'loading';
   // Keep the previous payload on screen while refreshing; the overlay below
@@ -152,22 +172,22 @@ export function WalletBalanceModalTemplate({
 
   return (
     <div className="pollar-modal-card pollar-bal-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
-      {isLoading && data && <BusyOverlay label="Refreshing balances…" />}
+      {isLoading && data && <BusyOverlay label={copy.refreshing} />}
 
       <div className="pollar-modal-header">
-        <h2 className="pollar-modal-title">Wallet Balance</h2>
+        <h2 className="pollar-modal-title">{copy.title}</h2>
         <div className="pollar-modal-header-actions">
           <button
             type="button"
             className="pollar-modal-close"
             onClick={onRefresh}
             disabled={isLoading}
-            aria-label="Refresh"
-            title="Refresh"
+            aria-label={copy.refresh}
+            title={copy.refresh}
           >
             <RefreshIcon spinning={isLoading} />
           </button>
-          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
+          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
               <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
@@ -176,13 +196,19 @@ export function WalletBalanceModalTemplate({
       </div>
 
       {chains && onSelectChain && (
-        <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoading} />
+        <ChainSelect
+          label={copy.network}
+          value={selectedChain}
+          options={chains}
+          onChange={onSelectChain}
+          disabled={isLoading}
+        />
       )}
 
       {walletAddress && (
         <div className="pollar-address-row">
           <span className="pollar-address">{cropAddress(walletAddress)}</span>
-          <CopyButton value={walletAddress} label="Copy wallet address" />
+          <CopyButton value={walletAddress} label={copy.copyWalletAddress} />
         </div>
       )}
 
@@ -190,15 +216,17 @@ export function WalletBalanceModalTemplate({
       {isLoading && !data && (
         <div className="pollar-loading-block">
           <div className="pollar-spinner" />
-          <span>Loading…</span>
+          <span>{copy.loading}</span>
         </div>
       )}
 
       {walletBalance.step === 'error' && <div className="pollar-modal-error">{walletBalance.message}</div>}
 
-      {data && !data.exists && <div className="pollar-modal-empty">Account not found on {data.network}.</div>}
+      {data && !data.exists && (
+        <div className="pollar-modal-empty">{copy.accountNotFound.replace('{network}', data.network)}</div>
+      )}
 
-      {data?.exists && balances.length === 0 && <div className="pollar-modal-empty">No balances found on this network.</div>}
+      {data?.exists && balances.length === 0 && <div className="pollar-modal-empty">{copy.empty}</div>}
 
       {data?.exists && balances.length > 0 && (
         <div className="pollar-bal-list">
@@ -207,7 +235,8 @@ export function WalletBalanceModalTemplate({
               key={(b.chain ?? '') + b.code + (b.issuer ?? '')}
               record={b}
               metadata={assetMetadataFor(b, assetMetadata)}
-              faucet={showFaucets ? faucetFor(b) : null}
+              faucet={showFaucets ? faucetFor(b, copy) : null}
+              copy={copy}
             />
           ))}
         </div>

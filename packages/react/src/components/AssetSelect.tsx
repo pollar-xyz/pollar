@@ -8,7 +8,10 @@
 // "Select asset" placeholder in the normal flow.
 // -----------------------------------------------------------------------------
 
+import { useInheritedLanguage } from '../language-context';
+import type { PollarLanguage } from '@pollar/core';
 import type { ReactNode } from 'react';
+import { COMMONS_COPY } from './commons-copy';
 import './send-modal/SendModal.css';
 import './shared.css';
 
@@ -39,6 +42,7 @@ interface AssetSelectProps {
   /** Extra content rendered inside the field, below the select (e.g. a
    *  "+ Add a token" toggle). Hidden while loading. */
   children?: ReactNode;
+  language?: PollarLanguage | undefined;
 }
 
 function formatAmount(value: string): string {
@@ -46,8 +50,8 @@ function formatAmount(value: string): string {
   return isNaN(n) ? value : n.toLocaleString(undefined, { maximumFractionDigits: 7 });
 }
 
-const optionLabel = (o: AssetSelectOption): string =>
-  o.available !== undefined ? `${o.code} — ${formatAmount(o.available)} available` : o.code;
+const optionLabel = (o: AssetSelectOption, language: PollarLanguage): string =>
+  o.available !== undefined ? COMMONS_COPY[language].assetAvailable(o.code, formatAmount(o.available)) : o.code;
 
 export function AssetSelect({
   label,
@@ -57,10 +61,13 @@ export function AssetSelect({
   loading = false,
   loadingLabel,
   disabled = false,
-  appGroupLabel = 'App assets',
-  otherGroupLabel = 'Other assets',
+  appGroupLabel,
+  otherGroupLabel,
   children,
+  language: languageProp,
 }: AssetSelectProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = COMMONS_COPY[language];
   const appAssets = options.filter((o) => o.enabledInApp);
   const otherAssets = options.filter((o) => !o.enabledInApp);
 
@@ -87,19 +94,19 @@ export function AssetSelect({
               options); hidden so it never shows in the open dropdown. */}
           {value === '' && <option value="" disabled hidden />}
           {appAssets.length > 0 && (
-            <optgroup label={appGroupLabel}>
+            <optgroup label={appGroupLabel ?? copy.appAssets}>
               {appAssets.map((o) => (
                 <option key={o.key} value={o.key}>
-                  {optionLabel(o)}
+                  {optionLabel(o, language)}
                 </option>
               ))}
             </optgroup>
           )}
           {otherAssets.length > 0 && (
-            <optgroup label={otherGroupLabel}>
+            <optgroup label={otherGroupLabel ?? copy.otherAssets}>
               {otherAssets.map((o) => (
                 <option key={o.key} value={o.key}>
-                  {optionLabel(o)}
+                  {optionLabel(o, language)}
                 </option>
               ))}
             </optgroup>

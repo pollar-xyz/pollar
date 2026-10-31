@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet, TouchableWithoutFeedback } from 'react-native';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { WalletBalanceModalTemplate } from './WalletBalanceModalUI';
 
 export interface WalletBalanceModalProps {
@@ -10,6 +11,7 @@ export interface WalletBalanceModalProps {
 export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
   const { styles, walletBalance, refreshBalance, config } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const language = useModalLanguage();
 
   useEffect(() => {
     refreshBalance();
@@ -31,6 +33,7 @@ export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
               appName={config.application?.name ?? 'Pollar'}
               onClose={onClose}
               onRefresh={() => refreshBalance()}
+              language={language}
             />
           </View>
         </TouchableWithoutFeedback>

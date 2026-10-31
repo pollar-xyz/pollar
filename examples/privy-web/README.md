@@ -11,7 +11,7 @@ It uses the local workspace packages (`@pollar/core`, `@pollar/react`,
 
 For the login to actually work, your Privy app must have:
 
-- **Stellar enabled** (extended chains / Stellar wallets) — otherwise creating the
+- **Stellar enabled** (extended chains / Stellar wallets); otherwise creating the
   Stellar embedded wallet fails.
 - **`http://localhost:5173`** added to the allowed origins.
 - The **login methods** you want enabled (email, and Google/GitHub OAuth configured
@@ -28,13 +28,15 @@ npm run build
 # then, in this folder:
 cp .env.example .env.local
 # edit .env.local: set VITE_PRIVY_APP_ID and VITE_POLLAR_API_KEY
+# optional: VITE_POLLAR_BASE_URL, and VITE_STELLAR_NETWORK (testnet by
+# default, or mainnet; match your Privy app's Stellar network)
 npm run dev          # or: npm run dev -w @pollar-examples/privy-web  (from root)
 ```
 
 Open http://localhost:5173, click **Log in**, choose **Privy**, and complete the
 flow. On success the page shows the connected Stellar wallet address.
 
-> Dev-only: run it with `npm run dev`. A production `vite build` currently fails
+> Dev-only: run it with `npm run dev`. A production `vite build` fails
 > because `@privy-io/react-auth` references `@solana/kit` (an _optional_ peer for a
 > Solana funding feature we never use) and the production bundler validates its
 > exports. The dev server (esbuild) stubs that optional peer, so the app runs fine.
@@ -43,9 +45,9 @@ flow. On success the page shows the connected Stellar wallet address.
 
 `src/App.tsx` is the whole integration:
 
-- `createPrivyAdapter({ appId, loginMethods })` builds the adapter.
+- `createPrivyAdapter({ appId, loginMethods, debug: true })` builds the adapter.
 - `<PrivyAdapterProvider adapter={privy}>` mounts Privy and wires it in.
-- `<PollarProvider client={{ apiKey, walletAdapters: [privy] }}>` registers it.
+- `<PollarProvider client={{ apiKey, walletAdapters: [privy], stellarNetwork }}>` registers it.
 - A local `appConfig` with `styles.embeddedWallets: true` surfaces the Privy button
   without a backend config round-trip.
 

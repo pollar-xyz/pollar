@@ -7,6 +7,7 @@ import {
   associatedTokenAddress,
   base58Of,
   checkSolanaRequest,
+  LOOKUP_ACCOUNT_PREFIX,
   decodeSolanaTransaction,
   SOLANA_MAX_FEE_LAMPORTS,
   solanaMaxFeeLamports,
@@ -142,6 +143,29 @@ test('a burn that differs from what the request states is refused', () => {
     assert.equal(result.ok, false, reason);
     assert.match((result as { reason: string }).reason, new RegExp(reason), reason);
   }
+});
+
+test('a burn toward Stellar carries its hook, and the hook must be the one the request states', () => {
+  // deposit_for_burn_with_hook: the same params, then the hook as a Borsh Vec<u8>.
+  const HOOK_DISC = [111, 245, 62, 131, 204, 108, 223, 155];
+  const hook = '00'.repeat(24) + '00000000' + '00000038' + '47'.repeat(56);
+  const hooked = (hookHex: string): Ix => {
+    const base = burnIx({ domain: 27 });
+    const bytes = Array.from(hookHex.match(/../g)!, (h) => parseInt(h, 16));
+    return { ...base, data: [...HOOK_DISC, ...base.data.slice(8), ...le(BigInt(bytes.length), 4), ...bytes] };
+  };
+  const stated = { destinationDomain: 27, hookData: `0x${hook}` };
+  assert.deepEqual(check(request(serialize({ payer: GAS, instructions: [hooked(hook)] }), stated)), { ok: true });
+
+  const other = check(request(serialize({ payer: GAS, instructions: [hooked('00'.repeat(32) + '48'.repeat(56))] }), stated));
+  assert.equal(other.ok, false, 'a hook paying someone else');
+  assert.match((other as { reason: string }).reason, /hook data/);
+
+  const unstated = check(request(serialize({ payer: GAS, instructions: [hooked(hook)] }), { destinationDomain: 27 }));
+  assert.equal(unstated.ok, false, 'a hook the request does not state');
+
+  const missing = check(request(serialize({ payer: GAS, instructions: [burnIx({ domain: 27 })] }), stated));
+  assert.equal(missing.ok, false, 'a stated hook the burn does not carry');
 });
 
 test('anything beside the burn is refused, and a burn is never hidden in another request', () => {
@@ -302,4 +326,144 @@ test('compute budget instructions beyond one unit limit and one unit price are r
     const result = transferRequest([budgetIx, extra, solIx()], solDetails, USER);
     assert.match((result as { reason: string }).reason, /compute budget instruction/);
   }
+});
+
+// Swaps
+
+const JUPITER = 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4';
+const TITAN = 'T1TANpTeScyeqVzzgNViGDNrkQ6qHz9KrSBS4aNXvGT';
+const ATA = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
+const WSOL = 'So11111111111111111111111111111111111111112';
+const USDC_MINT = key(20);
+const TABLE = key(21);
+/** An account the router loads from the lookup table, by its index there. */
+const loaded = (index: number) => `${LOOKUP_ACCOUNT_PREFIX}${TABLE}:${index}`;
+
+/**
+ * A v0 swap transaction: the signers first (fee payer, then the user unless it
+ * is the payer), every other account static unless it is `loaded(n)`, which
+ * comes from one lookup table (writable entries in the order first used).
+ */
+function serializeSwap(opts: { payer: string; user?: string; extraSigner?: string; instructions: Ix[] }): string {
+  const user = opts.user ?? USER;
+  const signerKeys = [opts.payer, ...(user !== opts.payer ? [user] : []), ...(opts.extraSigner ? [opts.extraSigner] : [])];
+  const keys = [...signerKeys];
+  const lookups: number[] = [];
+  for (const ix of opts.instructions) {
+    for (const k of [...ix.accounts, ix.program]) {
+      if (k.startsWith(LOOKUP_ACCOUNT_PREFIX)) {
+        const index = Number(k.split(':').pop());
+        if (!lookups.includes(index)) lookups.push(index);
+      } else if (!keys.includes(k)) keys.push(k);
+    }
+  }
+  const indexOf = (k: string) =>
+    k.startsWith(LOOKUP_ACCOUNT_PREFIX) ? keys.length + lookups.indexOf(Number(k.split(':').pop())) : keys.indexOf(k);
+  const bytes: number[] = [signerKeys.length, ...new Array(64 * signerKeys.length).fill(0)];
+  bytes.push(0x80, signerKeys.length, 0, 0);
+  bytes.push(keys.length);
+  for (const k of keys) bytes.push(...base58Decode(k));
+  bytes.push(...new Array(32).fill(5));
+  bytes.push(opts.instructions.length);
+  for (const ix of opts.instructions) {
+    bytes.push(indexOf(ix.program), ix.accounts.length, ...ix.accounts.map(indexOf));
+    bytes.push(ix.data.length, ...ix.data);
+  }
+  if (lookups.length) {
+    bytes.push(1, ...base58Decode(TABLE), lookups.length, ...lookups, 0);
+  } else {
+    bytes.push(0);
+  }
+  return bytes.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+const swapLimitIx: Ix = { program: COMPUTE_BUDGET, accounts: [], data: [2, ...le(400_000n, 4)] };
+const createOwnAta = (payer: string, mint = USDC_MINT): Ix => ({
+  program: ATA,
+  accounts: [payer, associatedTokenAddress(USER, mint), USER, mint, SYSTEM, TOKEN],
+  data: [1],
+});
+const routerIx = (program = JUPITER): Ix => ({
+  program,
+  accounts: [USER, loaded(0), loaded(1), loaded(2)],
+  data: [9, 9, 9],
+});
+const wrapIx = (lamports: bigint, to = associatedTokenAddress(USER, WSOL)): Ix => ({
+  program: SYSTEM,
+  accounts: [USER, to],
+  data: [...le(2n, 4), ...le(lamports, 8)],
+});
+const syncIx: Ix = { program: TOKEN, accounts: [associatedTokenAddress(USER, WSOL)], data: [17] };
+const closeIx = (destination = USER): Ix => ({
+  program: TOKEN,
+  accounts: [associatedTokenAddress(USER, WSOL), destination, USER],
+  data: [9],
+});
+
+const swapRequest = (payload: string, details: Record<string, unknown> = {}) =>
+  checkSolanaRequest(payload, {
+    operation: 'swap',
+    signWith: USER,
+    details: { feePayer: GAS, inAmount: '1000000000', provider: 'jupiter', ...details },
+  });
+
+test('the swaps the platform builds are recognized, lookup tables and all', () => {
+  // Sponsored, buying a token: the payer creates the user's account for it.
+  assert.deepEqual(swapRequest(serializeSwap({ payer: GAS, instructions: [swapLimitIx, createOwnAta(GAS), routerIx()] })), {
+    ok: true,
+  });
+  // Selling SOL through Titan, the user paying its own fee: wrap, sync, swap, close back to the user.
+  const sellSol = serializeSwap({
+    payer: USER,
+    instructions: [swapLimitIx, createOwnAta(USER, WSOL), wrapIx(1_000_000_000n), syncIx, routerIx(TITAN), closeIx()],
+  });
+  assert.deepEqual(swapRequest(sellSol, { feePayer: USER, provider: 'titan' }), { ok: true });
+});
+
+test('lookup tables decode as unresolved accounts, and stay refused outside a swap', () => {
+  const payload = serializeSwap({ payer: GAS, instructions: [routerIx()] });
+  const tx = decodeSolanaTransaction(payload, { allowLookupTables: true });
+  assert.deepEqual(tx.signers, [GAS, USER]);
+  assert.deepEqual(tx.instructions[0]!.accounts, [USER, loaded(0), loaded(1), loaded(2)]);
+  assert.throws(() => decodeSolanaTransaction(payload), /lookup tables are not supported/);
+  const asTransfer = checkSolanaRequest(payload, {
+    signWith: USER,
+    details: { destination: OTHER, amount: '1', mint: null },
+  });
+  assert.equal(asTransfer.ok, false);
+});
+
+test('a swap paid by another account, or signed by a third one, is refused', () => {
+  const payload = serializeSwap({ payer: GAS, instructions: [routerIx()] });
+  assert.match(String((swapRequest(payload, { feePayer: OTHER }) as { reason: string }).reason), /fee is not paid/);
+  const extra = serializeSwap({ payer: GAS, extraSigner: OTHER, instructions: [routerIx()] });
+  assert.match(String((swapRequest(extra) as { reason: string }).reason), /signer other than/);
+  assert.equal(swapRequest(payload, { feePayer: undefined }).ok, false);
+});
+
+test('a swap that calls no known router, or an unknown program, is refused', () => {
+  const none = serializeSwap({ payer: GAS, instructions: [swapLimitIx, createOwnAta(GAS)] });
+  assert.match(String((swapRequest(none) as { reason: string }).reason), /no known aggregator/);
+  const unknown = serializeSwap({ payer: GAS, instructions: [routerIx(key(30))] });
+  assert.match(String((swapRequest(unknown) as { reason: string }).reason), /which a swap never carries/);
+});
+
+test("a swap that moves the user's funds at the top level is refused", () => {
+  // SOL to someone else, more SOL than the swap sells, a direct token transfer, a close to someone else.
+  const cases: Ix[][] = [
+    [wrapIx(1n, OTHER), routerIx()],
+    [wrapIx(1_000_000_001n), syncIx, routerIx()],
+    [{ program: TOKEN, accounts: [key(31), USDC_MINT, OTHER, USER], data: [12, ...le(1n, 8), 6] }, routerIx()],
+    [routerIx(), closeIx(OTHER)],
+    [{ ...createOwnAta(GAS), accounts: [GAS, key(32), OTHER, USDC_MINT, SYSTEM, TOKEN] }, routerIx()],
+  ];
+  for (const instructions of cases) {
+    assert.equal(swapRequest(serializeSwap({ payer: GAS, instructions })).ok, false, JSON.stringify(instructions[0]));
+  }
+});
+
+test('a swap whose priority fee can pass the cap is refused', () => {
+  const pricey: Ix = { program: COMPUTE_BUDGET, accounts: [], data: [3, ...le(10_000_000n, 8)] };
+  const payload = serializeSwap({ payer: GAS, instructions: [swapLimitIx, pricey, routerIx()] });
+  assert.match(String((swapRequest(payload) as { reason: string }).reason), /above the .* cap/);
 });

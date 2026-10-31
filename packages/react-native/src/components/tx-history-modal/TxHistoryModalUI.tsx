@@ -1,7 +1,9 @@
-import { TxHistoryState } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { PollarLanguage, TxHistoryState, WalletChain } from '@pollar/core';
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, Linking } from 'react-native';
 import { ModalStatusBanner, PollarModalFooter, PollarOverlay } from '../commons';
+import { TX_HISTORY_COPY } from './tx-history-copy';
 
 export interface TxHistoryModalTemplateProps {
   theme: string;
@@ -9,16 +11,41 @@ export interface TxHistoryModalTemplateProps {
   txHistory: TxHistoryState;
   onClose: () => void;
   onRefresh: () => void;
+  /** Language of the modal. Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
+  /** The networks to pick from; the picker shows when there is more than one. */
+  chains?: WalletChain[] | undefined;
+  chain?: WalletChain | null | undefined;
+  onChainChange?: ((chain: WalletChain) => void) | undefined;
 }
 
-const STATUS_MESSAGES: Record<TxHistoryState['step'], string> = {
-  idle: '',
-  loading: 'Loading history…',
-  loaded: '',
-  error: 'Failed to load history',
-};
+/** The explorer page of a transaction on its own chain; testnet is Solana devnet and Polygon Amoy. */
+function explorerTxUrl(chain: WalletChain | undefined, hash: string, network: string): string {
+  const testnet = network === 'testnet';
+  if (chain === 'SOLANA') return `https://explorer.solana.com/tx/${hash}${testnet ? '?cluster=devnet' : ''}`;
+  if (chain === 'POLYGON') return `https://${testnet ? 'amoy.' : ''}polygonscan.com/tx/${hash}`;
+  return `https://stellar.expert/explorer/${testnet ? 'testnet' : 'public'}/tx/${hash}`;
+}
 
-export function TxHistoryModalTemplate({ theme, accentColor, txHistory, onClose, onRefresh }: TxHistoryModalTemplateProps) {
+export function TxHistoryModalTemplate({
+  theme,
+  accentColor,
+  txHistory,
+  onClose,
+  onRefresh,
+  language: languageProp,
+  chains = [],
+  chain = null,
+  onChainChange,
+}: TxHistoryModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = TX_HISTORY_COPY[language];
+  const statusMessages: Record<TxHistoryState['step'], string> = {
+    idle: '',
+    loading: copy.loadingHistory,
+    loaded: '',
+    error: copy.loadFailed,
+  };
   const isDark = theme === 'dark';
 
   const colors = {
@@ -40,7 +67,7 @@ export function TxHistoryModalTemplate({ theme, accentColor, txHistory, onClose,
     <PollarOverlay onCancel={onClose}>
       <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Transaction History</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{copy.title}</Text>
           <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh} disabled={isLoading}>
             <Text style={{ color: colors.muted }}>🔄</Text>
           </TouchableOpacity>
@@ -50,9 +77,25 @@ export function TxHistoryModalTemplate({ theme, accentColor, txHistory, onClose,
           <Text style={{ color: colors.muted, fontSize: 16 }}>✕</Text>
         </TouchableOpacity>
 
+        {chains.length > 1 && (
+          <View style={styles.chainRow} accessibilityLabel={copy.network}>
+            {chains.map((c) => (
+              <TouchableOpacity
+                key={c}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: c === chain }}
+                style={[styles.chainChip, { borderColor: c === chain ? accentColor : colors.border }]}
+                onPress={() => onChainChange?.(c)}
+              >
+                <Text style={{ color: colors.text }}>{c}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         {isLoaded && transactions.length === 0 && (
           <View style={styles.emptyBox}>
-            <Text style={{ color: colors.muted, textAlign: 'center' }}>No transactions found.</Text>
+            <Text style={{ color: colors.muted, textAlign: 'center' }}>{copy.emptyFound}</Text>
           </View>
         )}
 
@@ -64,10 +107,12 @@ export function TxHistoryModalTemplate({ theme, accentColor, txHistory, onClose,
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={[styles.txRow, { backgroundColor: colors.itemBg, borderColor: colors.border }]}
-                onPress={() => Linking.openURL(`https://stellar.expert/explorer/${item.network}/tx/${item.hash}`)}
+                onPress={() => Linking.openURL(explorerTxUrl(item.chain ?? chain ?? undefined, item.hash, item.network))}
               >
                 <View style={styles.txRowLeft}>
-                  <Text style={[styles.txType, { color: colors.text }]}>{item.operation || 'Transaction'}</Text>
+                  <Text style={[styles.txType, { color: colors.text }]}>
+                    {item.operation ? (copy.operations[item.operation] ?? item.operation) : copy.transaction}
+                  </Text>
                   <Text style={{ color: colors.muted, fontSize: 12 }}>{new Date(item.createdAt).toLocaleDateString()}</Text>
                 </View>
                 <View style={styles.txRowRight}>
@@ -80,7 +125,11 @@ export function TxHistoryModalTemplate({ theme, accentColor, txHistory, onClose,
                       },
                     ]}
                   >
-                    {item.status === 'SUCCESS' ? 'Success' : item.status === 'PENDING' ? 'Pending' : 'Failed'}
+                    {item.status === 'SUCCESS'
+                      ? copy.status.SUCCESS
+                      : item.status === 'PENDING'
+                        ? copy.status.PENDING
+                        : copy.status.FAILED}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -95,7 +144,7 @@ export function TxHistoryModalTemplate({ theme, accentColor, txHistory, onClose,
         )}
 
         <ModalStatusBanner
-          message={STATUS_MESSAGES[txHistory.step] || ''}
+          message={statusMessages[txHistory.step] || ''}
           status={isError ? 'ERROR' : isLoading ? 'LOADING' : 'NONE'}
           onRetry={isError ? onRefresh : undefined}
         />
@@ -145,6 +194,18 @@ const styles = StyleSheet.create({
   closeBtn: {
     top: 16,
     right: 16,
+  },
+  chainRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  chainChip: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   emptyBox: {
     padding: 24,

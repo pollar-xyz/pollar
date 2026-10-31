@@ -433,8 +433,134 @@ const order = (pendingAction, patch = {}) => ({
     saved = null;
   }
 
+  // --- Country names in the widget's language; the provider's language follows its prop and setLocale ---
+  {
+    const ars = { kind: 'fiat', currency: 'ARS', rail: 'BANK_TRANSFER', country: 'AR' };
+    client.getRampRoutes = async () => ({
+      routes: [
+        { fiat: bob, asset: usdc, legs: ['PROVIDER_ONRAMP'] },
+        { fiat: ars, asset: usdc, legs: ['PROVIDER_ONRAMP'] },
+      ],
+    });
+    client.listRampOrders = async () => ({ orders: [], nextCursor: null });
+    texts = [];
+    unmount = await render(React.createElement(RampWidget, { onClose() {}, language: 'pt' }));
+    const chipsShown = [...new Set(buttons.map(label))];
+    const ar = chipsShown.indexOf('Argentina');
+    const bo = chipsShown.indexOf('Bolívia');
+    assert.ok(ar >= 0 && bo > ar, `country chips by name, in Portuguese; have: ${chipsShown.join(', ')}`);
+    await unmount();
+
+    const { ModalLanguageContext, useProviderLanguage, useInheritedLanguage } = load(
+      'packages/react-native/src/language-context.ts',
+    );
+    let locale;
+    const listeners = new Set();
+    const host = {
+      getLocale: () => locale,
+      onLocaleChange: (cb) => (listeners.add(cb), () => listeners.delete(cb)),
+      setLocale(next) {
+        locale = next;
+        for (const cb of listeners) cb(next);
+      },
+    };
+    let current;
+    const Modal = () => {
+      current = useInheritedLanguage();
+      return null;
+    };
+    const Provider = ({ language, dashboard }) =>
+      React.createElement(
+        ModalLanguageContext.Provider,
+        { value: useProviderLanguage(host, dashboard, language) },
+        React.createElement(Modal),
+      );
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    const show = (props) => React.act(async () => root.render(React.createElement(Provider, props)));
+    await show({ language: 'en' });
+    assert.equal(current, 'en');
+    await show({ language: 'es-AR' });
+    assert.equal(current, 'es', 'an open modal follows the new prop');
+    await show({ language: 'fr' });
+    assert.equal(current, 'en', 'a tag the modals lack falls back (jsdom device: en-US)');
+    await React.act(async () => host.setLocale('pt-BR'));
+    assert.equal(current, 'pt', 'setLocale switches the open modal');
+    await show({ language: 'es', dashboard: 'pt' });
+    assert.equal(current, 'pt', 'the dashboard pin wins over the prop');
+    await React.act(async () => root.unmount());
+  }
+
+  // --- Opened on options: the seed applies to the first routes of its direction, a dead end falls back ---
+  {
+    const brl = { kind: 'fiat', currency: 'BRL', rail: 'PIX', country: 'BR' };
+    const xlm = { kind: 'asset', code: 'XLM', identifier: null, chain: 'STELLAR' };
+    const routesFor = {
+      ONRAMP: [
+        { fiat: bob, asset: usdc, legs: ['PROVIDER_ONRAMP'] },
+        { fiat: brl, asset: xlm, legs: ['PROVIDER_ONRAMP'] },
+        { fiat: brl, asset: usdc, legs: ['PROVIDER_ONRAMP'] },
+      ],
+      // Brazil does not sell.
+      OFFRAMP: [{ fiat: bob, asset: usdc, legs: ['PROVIDER_OFFRAMP'] }],
+    };
+    let hold = null;
+    const asked = [];
+    client.getRampRoutes = async (direction) => {
+      asked.push(direction);
+      if (hold) await hold;
+      return { routes: routesFor[direction] };
+    };
+    client.listRampOrders = async () => ({ orders: [], nextCursor: null });
+    saved = null;
+    // The chips drawn with the accent border are the picked ones; a chip's last render is its state.
+    const picked = () => {
+      const last = new Map(buttons.map((b) => [label(b), b.style?.[1]?.borderColor === '#005DB4']));
+      return [...last].filter(([, on]) => on).map(([name]) => name);
+    };
+    const amountValue = () => [...inputs].reverse().find((i) => i.keyboardType === 'decimal-pad')?.value;
+    const open = async (initial) => {
+      inputs = [];
+      const done = await render(React.createElement(RampWidget, { onClose() {}, initial }));
+      await rerender(() => new Promise((r) => setTimeout(r, 10)));
+      return done;
+    };
+
+    unmount = await open({ country: 'br', direction: 'buy', asset: 'USDC', amount: '50' });
+    assert.equal(asked.at(-1), 'ONRAMP');
+    assert.ok(picked().includes('Brazil'), `the seeded country; picked: ${picked().join(', ')}`);
+    assert.ok(
+      picked().some((l) => l.startsWith('USDC')),
+      'the seeded asset, not the country first one',
+    );
+    assert.equal(amountValue(), '50');
+    await unmount();
+
+    unmount = await open({ country: 'BR', direction: 'sell' });
+    assert.equal(asked.at(-1), 'OFFRAMP', 'the requested direction stays');
+    assert.ok(picked().includes('Bolivia'), 'a country that does not sell falls back to the default');
+    assert.equal(amountValue(), '');
+    await unmount();
+
+    // A kept order wins over the options.
+    saved = { direction: 'ONRAMP', order: order(null, { state: 'processing' }) };
+    unmount = await open({ country: 'BR', direction: 'sell' });
+    assert.notEqual(asked.at(-1), 'OFFRAMP', 'the kept order keeps its direction');
+    await unmount();
+    saved = null;
+
+    let release;
+    hold = new Promise((r) => (release = r));
+    unmount = await open({ country: 'BR', amount: '20' });
+    hold = null;
+    await rerender(() => release());
+    assert.ok(picked().includes('Brazil'), 'the seed applies once the routes load');
+    assert.equal(amountValue(), '20');
+    await unmount();
+  }
+
   console.log(
-    'React Native RampWidget v3: route, quote, details, order, QR, kept order, explicit signature, account approval resume, lapsed quotes, a provider KYC note and a missing payment code passed',
+    'React Native RampWidget v3: route, quote, details, order, QR, kept order, explicit signature, account approval resume, lapsed quotes, a provider KYC note, a missing payment code, country names, a runtime language and opening on options passed',
   );
 })().catch((error) => {
   console.error(error);

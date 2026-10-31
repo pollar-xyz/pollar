@@ -19,10 +19,15 @@ import { checkCustodySwitchStep, type CustodySwitchStep } from './custody';
 import { CosignRecovery } from './recovery';
 import { checkEvmRequest, polygonChainIdFor } from './evm';
 import { checkSolanaRequest } from './solana';
+import { stellarAuthEntryHashHex } from './stellar-auth-entry';
 import { stellarTransactionHashHex } from './stellar-hash';
 import { isRecord, stringField } from '../api/error-fields';
 
 const REQUEST_VOTE_TIMEOUT_MS = 60_000;
+/** Refreshes asked before a vote while a ramp step's network fee is on its way; sdk-api waits about 5s on each. */
+const GAS_PENDING_ATTEMPTS = 6;
+/** A refresh rebuilds the transaction and can wait for its network fee: more than the 10s default. */
+const REFRESH_TIMEOUT_MS = 20_000;
 
 /**
  * The user's half of a Turnkey wallet, headless: no UI, only promises and the
@@ -240,10 +245,30 @@ export class CosignManager {
    */
   async refresh(target: CosignRequest | string): Promise<CosignRequest> {
     const id = typeof target === 'string' ? target : target.id;
-    const res = await this.deps.api.POST('/cosign/requests/{id}/refresh', { params: { path: { id } } });
+    const res = await this.deps.api.POST('/cosign/requests/{id}/refresh', {
+      params: { path: { id } },
+      headers: { 'x-pollar-timeout-ms': String(REFRESH_TIMEOUT_MS) },
+    });
     const request = content(res, 'SDK_COSIGN_REQUEST_NOT_FOUND').request;
     this.deps.onRequest(request);
     return request;
+  }
+
+  /**
+   * {@link refresh} before a vote. A ramp step on Polygon is voted once its
+   * network fee reached the wallet; sdk-api waits a few seconds for it, and
+   * answers `SDK_COSIGN_GAS_PENDING` when it is still on its way at the end of
+   * that wait. The refresh is asked again before that reaches the user.
+   */
+  private async refreshForVote(request: CosignRequest): Promise<CosignRequest> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.refresh(request);
+      } catch (err) {
+        if (!(err instanceof PollarApiError && err.code === 'SDK_COSIGN_GAS_PENDING') || attempt >= GAS_PENDING_ATTEMPTS)
+          throw err;
+      }
+    }
   }
 
   /**
@@ -275,14 +300,24 @@ export class CosignManager {
     }
 
     if (request.network === 'STELLAR') {
+      // An AUTH_ENTRY payload is a Soroban authorization entry, signed the same
+      // way as a transaction: ed25519 over the hash recomputed here.
+      const what = request.kind === 'AUTH_ENTRY' ? 'auth entry' : 'transaction';
       let localHash: string;
       try {
-        localHash = await stellarTransactionHashHex(request.unsignedPayload, this.deps.networkPassphrase());
+        localHash =
+          request.kind === 'AUTH_ENTRY'
+            ? await stellarAuthEntryHashHex(
+                request.unsignedPayload,
+                this.deps.networkPassphrase(),
+                request.account ?? request.signWith,
+              )
+            : await stellarTransactionHashHex(request.unsignedPayload, this.deps.networkPassphrase());
       } catch (err) {
-        return { ok: false, reason: `could not hash the transaction: ${err instanceof Error ? err.message : String(err)}` };
+        return { ok: false, reason: `could not hash the ${what}: ${err instanceof Error ? err.message : String(err)}` };
       }
       if (localHash !== request.payloadHash.toLowerCase()) {
-        return { ok: false, reason: 'the transaction does not hash to what Pollar asks to sign', localHash };
+        return { ok: false, reason: `the ${what} does not hash to what Pollar asks to sign`, localHash };
       }
       return {
         ok: true,
@@ -360,7 +395,7 @@ export class CosignManager {
     if (request.status !== 'PENDING') throw new PollarApiError('SDK_COSIGN_REQUEST_NOT_PENDING', { status: request.status });
     // Rebuild first, so the payload this device verifies and proposes is
     // seconds old; see {@link refresh} for what goes stale while the user decides.
-    if (request.refreshable) request = await this.refresh(request);
+    if (request.refreshable) request = await this.refreshForVote(request);
     if (request.status !== 'PENDING') return request;
     // Already proposed (by this device or another of the user's): only the
     // approver's vote is outstanding, and sdk-api reads it back from Turnkey.

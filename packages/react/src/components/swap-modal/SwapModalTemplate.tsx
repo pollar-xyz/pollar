@@ -1,29 +1,55 @@
 'use client';
 
-import { SwapProvider, SwapQuote, SwapQuoteParams, TransactionState, WalletId } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { type PollarLanguage, SwapQuoteParams, TransactionState, WalletId } from '@pollar/core';
 import { useState } from 'react';
 import { PollarModalFooter, RefreshIcon } from '../commons';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
+import { SWAP_COPY } from './swap-copy';
+
+type SwapCopy = (typeof SWAP_COPY)[PollarLanguage];
+
+/** The chain a swap runs on; the modal shows a selector when the app offers both. */
+export type SwapChain = 'STELLAR' | 'SOLANA';
 
 export interface SwapAssetOption {
-  ref: SwapQuoteParams['sellAsset'];
+  /** Stellar: the asset ref the quote takes. */
+  ref?: SwapQuoteParams['sellAsset'] | undefined;
   code: string;
+  /** Stellar: the issuer. Solana: the mint (wrapped SOL for SOL). */
   issuer?: string | undefined;
+  /** Solana: the mint's decimals, to turn a decimal amount into base units. */
+  decimals?: number | undefined;
   available?: string | undefined;
   enabledInApp?: boolean | undefined;
+}
+
+/** A quote as the form shows it, whichever chain priced it: decimal amounts. */
+export interface SwapQuoteView {
+  provider: string;
+  amountOut: string;
+  minReceived: string;
+  /** Percent; null when the venue does not report it. */
+  priceImpactPct: string | null;
 }
 
 export function assetOptionKey(o: SwapAssetOption): string {
   return `${o.code}:${o.issuer ?? 'native'}`;
 }
 
-const PROVIDER_LABELS: Record<SwapProvider, string> = {
-  auto: 'Best price',
+const PROVIDER_LABELS: Record<string, string> = {
   aquarius: 'Aquarius',
   soroswap: 'Soroswap',
   sdex: 'Stellar DEX',
+  jupiter: 'Jupiter',
+  titan: 'Titan',
 };
+
+const providerLabel = (provider: string, copy: SwapCopy) =>
+  provider === 'auto' ? copy.bestPrice : (PROVIDER_LABELS[provider] ?? provider);
+
+const CHAIN_LABELS: Record<SwapChain, string> = { STELLAR: 'Stellar', SOLANA: 'Solana' };
 
 function formatAmount(value: string | undefined): string {
   if (value === undefined) return '—';
@@ -65,12 +91,14 @@ function AssetPill({
   value,
   options,
   disabled,
+  copy,
   onChange,
 }: {
   label: string;
   value: string;
   options: SwapAssetOption[];
   disabled: boolean;
+  copy: SwapCopy;
   onChange: (key: string) => void;
 }) {
   const selected = options.find((option) => assetOptionKey(option) === value);
@@ -90,7 +118,7 @@ function AssetPill({
       >
         {value === '' && <option value="" disabled hidden />}
         {appAssets.length > 0 && (
-          <optgroup label="App assets">
+          <optgroup label={copy.appAssets}>
             {appAssets.map((option) => (
               <option key={assetOptionKey(option)} value={assetOptionKey(option)}>
                 {option.code}
@@ -99,7 +127,7 @@ function AssetPill({
           </optgroup>
         )}
         {otherAssets.length > 0 && (
-          <optgroup label="Other assets">
+          <optgroup label={copy.otherAssets}>
             {otherAssets.map((option) => (
               <option key={assetOptionKey(option)} value={assetOptionKey(option)}>
                 {option.code}
@@ -132,9 +160,12 @@ export interface SwapModalTemplateProps {
   selectedSell: SwapAssetOption | null;
   selectedBuy: SwapAssetOption | null;
   amount: string;
-  provider: SwapProvider;
-  providers: SwapProvider[];
-  quote: SwapQuote | null;
+  /** The chains the app offers swaps on; a selector shows when there are two. */
+  chains: SwapChain[];
+  chain: SwapChain;
+  provider: string;
+  providers: string[];
+  quote: SwapQuoteView | null;
   quoteLoading: boolean;
   quoteError: string;
   formError: string;
@@ -150,6 +181,8 @@ export interface SwapModalTemplateProps {
   walletType?: WalletId | null | undefined;
   showBack: boolean;
   isInProgress: boolean;
+  /** Language of the modal's text; the device's when not given. */
+  language?: PollarLanguage | undefined;
   onClose: () => void;
   onBack: () => void;
   onRefresh: () => void;
@@ -159,7 +192,8 @@ export interface SwapModalTemplateProps {
   onMax: () => void;
   onAddCustomToken: (code: string, issuer: string) => string | null;
   onAmountChange: (value: string) => void;
-  onProviderChange: (p: SwapProvider) => void;
+  onChainChange: (chain: SwapChain) => void;
+  onProviderChange: (p: string) => void;
   onSwap: () => void;
   onToggleXdr: () => void;
   onCopyHash: () => void;
@@ -178,6 +212,8 @@ export function SwapModalTemplate({
   selectedSell,
   selectedBuy,
   amount,
+  chains,
+  chain,
   provider,
   providers,
   quote,
@@ -196,6 +232,7 @@ export function SwapModalTemplate({
   walletType,
   showBack,
   isInProgress,
+  language: languageProp,
   onClose,
   onBack,
   onRefresh,
@@ -205,6 +242,7 @@ export function SwapModalTemplate({
   onReverse,
   onMax,
   onAmountChange,
+  onChainChange,
   onProviderChange,
   onSwap,
   onToggleXdr,
@@ -212,6 +250,8 @@ export function SwapModalTemplate({
   onRetry,
   onDone,
 }: SwapModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = SWAP_COPY[language];
   const [customOpen, setCustomOpen] = useState(false);
   const [customCode, setCustomCode] = useState('');
   const [customIssuer, setCustomIssuer] = useState('');
@@ -243,7 +283,7 @@ export function SwapModalTemplate({
     !quoteLoading &&
     !isLoadingData;
   const rate = quote && amount ? formatRate(quote.amountOut, amount) : null;
-  const title = step === 'form' ? 'Swap' : txTitle;
+  const title = step === 'form' ? copy.title : txTitle;
 
   const selectSell = (key: string) => {
     const found = sellOptions.find((option) => assetOptionKey(option) === key);
@@ -263,7 +303,7 @@ export function SwapModalTemplate({
       <div className="pollar-modal-header">
         <div className="pollar-send-header-left">
           {showBack && (
-            <button type="button" className="pollar-modal-close" onClick={onBack} aria-label="Back">
+            <button type="button" className="pollar-modal-close" onClick={onBack} aria-label={copy.back}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                 <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -279,13 +319,13 @@ export function SwapModalTemplate({
                 className="pollar-modal-close"
                 onClick={onRefresh}
                 disabled={configLoading || isLoadingData}
-                aria-label="Refresh"
-                title="Refresh balances and options"
+                aria-label={copy.refresh}
+                title={copy.refreshTitle}
               >
                 <RefreshIcon spinning={configLoading || isLoadingData} />
               </button>
             )}
-            <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
+            <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                 <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
@@ -294,30 +334,47 @@ export function SwapModalTemplate({
         )}
       </div>
 
-      {step === 'form' && !configLoading && swapUnavailable && (
-        <div className="pollar-modal-error">Swap is not available for this app.</div>
-      )}
+      {step === 'form' && !configLoading && swapUnavailable && <div className="pollar-modal-error">{copy.unavailable}</div>}
 
       {step === 'form' && !swapUnavailable && (
         <>
-          {smartUnsupported && (
-            <div className="pollar-modal-error">Swaps are not yet available for smart (passkey) wallets.</div>
+          {chains.length > 1 && (
+            <label className="pollar-swap-route-wrap pollar-swap-chain-wrap">
+              <span className="sr-only">{copy.network}</span>
+              <select
+                className="pollar-swap-route-pill"
+                aria-label={copy.network}
+                value={chain}
+                disabled={configLoading || isLoadingData}
+                onChange={(event) => onChainChange(event.target.value as SwapChain)}
+              >
+                {chains.map((c) => (
+                  <option key={c} value={c}>
+                    {CHAIN_LABELS[c]}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
+
+          {smartUnsupported && chain === 'STELLAR' && <div className="pollar-modal-error">{copy.smartUnavailable}</div>}
 
           <div className="pollar-swap-panels">
             <section className="pollar-swap-panel" aria-labelledby="pollar-swap-pay-label">
               <div className="pollar-swap-panel-heading">
                 <span id="pollar-swap-pay-label" className="pollar-swap-panel-label">
-                  You pay
+                  {copy.youPay}
                 </span>
-                <span className="pollar-swap-balance">Balance: {formatAmount(selectedSell?.available)}</span>
+                <span className="pollar-swap-balance">
+                  {copy.balance} {formatAmount(selectedSell?.available)}
+                </span>
               </div>
               <div className="pollar-swap-panel-main">
                 <input
                   className="pollar-swap-amount"
                   type="text"
                   inputMode="decimal"
-                  aria-label="Amount to pay"
+                  aria-label={copy.amountToPay}
                   placeholder="0.00"
                   value={amount}
                   disabled={configLoading || isLoadingData}
@@ -325,10 +382,11 @@ export function SwapModalTemplate({
                 />
                 <div className="pollar-swap-panel-selector">
                   <AssetPill
-                    label="Asset to pay"
+                    label={copy.assetToPay}
                     value={sellKey}
                     options={sellOptions}
                     disabled={configLoading || isLoadingData}
+                    copy={copy}
                     onChange={selectSell}
                   />
                   <button
@@ -337,7 +395,7 @@ export function SwapModalTemplate({
                     onClick={onMax}
                     disabled={!selectedSell?.available || configLoading || isLoadingData}
                   >
-                    Max
+                    {copy.max}
                   </button>
                 </div>
               </div>
@@ -348,8 +406,8 @@ export function SwapModalTemplate({
               className="pollar-swap-reverse"
               onClick={onReverse}
               disabled={!selectedSell || !selectedBuy}
-              aria-label="Swap pay and receive assets"
-              title="Swap pay and receive assets"
+              aria-label={copy.reverse}
+              title={copy.reverse}
             >
               <svg width="17" height="17" viewBox="0 0 17 17" fill="none" aria-hidden>
                 <path
@@ -365,9 +423,11 @@ export function SwapModalTemplate({
             <section className="pollar-swap-panel" aria-labelledby="pollar-swap-receive-label">
               <div className="pollar-swap-panel-heading">
                 <span id="pollar-swap-receive-label" className="pollar-swap-panel-label">
-                  You receive
+                  {copy.youReceive}
                 </span>
-                <span className="pollar-swap-balance">Balance: {formatAmount(selectedBuy?.available)}</span>
+                <span className="pollar-swap-balance">
+                  {copy.balance} {formatAmount(selectedBuy?.available)}
+                </span>
               </div>
               <div className="pollar-swap-panel-main">
                 <div className={`pollar-swap-output${quoteLoading ? ' is-loading' : ''}`} aria-live="polite">
@@ -381,64 +441,67 @@ export function SwapModalTemplate({
                 </div>
                 <div className="pollar-swap-panel-selector">
                   <AssetPill
-                    label="Asset to receive"
+                    label={copy.assetToReceive}
                     value={buyKey}
                     options={buyOptions}
                     disabled={configLoading || isLoadingData}
+                    copy={copy}
                     onChange={selectBuy}
                   />
-                  <span className="pollar-swap-panel-note">Quoted amount</span>
+                  <span className="pollar-swap-panel-note">{copy.quotedAmount}</span>
                 </div>
               </div>
             </section>
           </div>
 
-          {/* A buy token the app has not enabled, by code and issuer */}
-          <div className="pollar-swap-custom-area">
-            {customOpen ? (
-              <div className="pollar-swap-custom">
-                <input
-                  className="pollar-input"
-                  type="text"
-                  placeholder="Code (e.g. USDC)"
-                  value={customCode}
-                  onChange={(e) => setCustomCode(e.target.value)}
-                />
-                <input
-                  className="pollar-input"
-                  type="text"
-                  placeholder="Issuer (G...)"
-                  value={customIssuer}
-                  onChange={(e) => setCustomIssuer(e.target.value)}
-                />
-                {customError && <div className="pollar-modal-error">{customError}</div>}
-                <div className="pollar-swap-custom-actions">
-                  <button type="button" className="pollar-btn-primary" onClick={submitCustomToken}>
-                    Add token
-                  </button>
-                  <button
-                    type="button"
-                    className="pollar-swap-custom-cancel"
-                    onClick={() => {
-                      setCustomOpen(false);
-                      setCustomError('');
-                    }}
-                  >
-                    Cancel
-                  </button>
+          {/* A Stellar buy token the app has not enabled, by code and issuer */}
+          {chain === 'STELLAR' && (
+            <div className="pollar-swap-custom-area">
+              {customOpen ? (
+                <div className="pollar-swap-custom">
+                  <input
+                    className="pollar-input"
+                    type="text"
+                    placeholder={copy.customCodePlaceholder}
+                    value={customCode}
+                    onChange={(e) => setCustomCode(e.target.value)}
+                  />
+                  <input
+                    className="pollar-input"
+                    type="text"
+                    placeholder={copy.customIssuerPlaceholder}
+                    value={customIssuer}
+                    onChange={(e) => setCustomIssuer(e.target.value)}
+                  />
+                  {customError && <div className="pollar-modal-error">{customError}</div>}
+                  <div className="pollar-swap-custom-actions">
+                    <button type="button" className="pollar-btn-primary" onClick={submitCustomToken}>
+                      {copy.addToken}
+                    </button>
+                    <button
+                      type="button"
+                      className="pollar-swap-custom-cancel"
+                      onClick={() => {
+                        setCustomOpen(false);
+                        setCustomError('');
+                      }}
+                    >
+                      {copy.cancel}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="pollar-swap-custom-toggle"
-                disabled={configLoading}
-                onClick={() => setCustomOpen(true)}
-              >
-                + Add a token by code / issuer
-              </button>
-            )}
-          </div>
+              ) : (
+                <button
+                  type="button"
+                  className="pollar-swap-custom-toggle"
+                  disabled={configLoading}
+                  onClick={() => setCustomOpen(true)}
+                >
+                  {copy.addCustomToken}
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="pollar-swap-rate-row">
             <div className="pollar-swap-rate" aria-live="polite">
@@ -447,31 +510,31 @@ export function SwapModalTemplate({
                   1 {selectedSell.code} ≈ {rate} {selectedBuy.code}
                 </>
               ) : quoteLoading ? (
-                'Updating rate…'
+                copy.updatingRate
               ) : (
-                'Exchange rate unavailable'
+                copy.rateUnavailable
               )}
             </div>
             {configLoading ? (
               <div className="pollar-swap-route-pill">
-                <span className="pollar-spinner pollar-spinner-sm" /> Loading
+                <span className="pollar-spinner pollar-spinner-sm" /> {copy.loading}
               </div>
             ) : (
               <label className="pollar-swap-route-wrap">
-                <span className="sr-only">Route</span>
+                <span className="sr-only">{copy.route}</span>
                 <select
                   className="pollar-swap-route-pill"
-                  aria-label="Route"
+                  aria-label={copy.route}
                   value={provider}
                   disabled={providers.length === 0}
-                  onChange={(event) => onProviderChange(event.target.value as SwapProvider)}
+                  onChange={(event) => onProviderChange(event.target.value)}
                 >
                   {providers.length === 0 ? (
-                    <option value={provider}>{PROVIDER_LABELS[provider]}</option>
+                    <option value={provider}>{providerLabel(provider, copy)}</option>
                   ) : (
                     providers.map((p) => (
                       <option key={p} value={p}>
-                        {PROVIDER_LABELS[p]}
+                        {providerLabel(p, copy)}
                       </option>
                     ))
                   )}
@@ -482,38 +545,35 @@ export function SwapModalTemplate({
 
           {!quoteLoading && quoteError && <div className="pollar-modal-error">{quoteError}</div>}
           {!quoteLoading && !quoteError && !quote && selectedSell && selectedBuy && !!amount && (
-            <div className="pollar-send-hint">No route found for this pair.</div>
+            <div className="pollar-send-hint">{copy.noRoute}</div>
           )}
           {quote && (
             <div className="pollar-swap-quote">
               <div className="pollar-swap-quote-row">
-                <span>Minimum received</span>
+                <span>{copy.minimumReceived}</span>
                 <strong>
                   {formatAmount(quote.minReceived)} {selectedBuy?.code}
                 </strong>
               </div>
               <div className="pollar-swap-quote-row">
-                <span>Price impact</span>
-                <strong>{quote.priceImpactPct}%</strong>
+                <span>{copy.priceImpact}</span>
+                <strong>{quote.priceImpactPct === null ? '—' : `${quote.priceImpactPct}%`}</strong>
               </div>
               <div className="pollar-swap-quote-row">
-                <span>Route</span>
-                <strong>{PROVIDER_LABELS[quote.provider]}</strong>
+                <span>{copy.route}</span>
+                <strong>{providerLabel(quote.provider, copy)}</strong>
               </div>
             </div>
           )}
           {buyNeedsTrustline && selectedBuy && (
-            <div className="pollar-swap-trustline-notice">
-              To receive {selectedBuy.code} your wallet needs a trustline. Swapping will create it first (~0.5 XLM reserve,
-              refundable if you later remove it).
-            </div>
+            <div className="pollar-swap-trustline-notice">{copy.trustlineNotice(selectedBuy.code)}</div>
           )}
-          {sameAsset && <div className="pollar-modal-error">Choose two different assets to swap.</div>}
+          {sameAsset && <div className="pollar-modal-error">{copy.sameAsset}</div>}
           {formError && <div className="pollar-modal-error">{formError}</div>}
 
           <div className="pollar-modal-actions">
             <button type="button" className="pollar-btn-primary" onClick={onSwap} disabled={!canSwap}>
-              {buyNeedsTrustline ? 'Create trustline & swap' : 'Swap'}
+              {buyNeedsTrustline ? copy.trustlineAndSwap : copy.swapButton}
             </button>
           </div>
         </>

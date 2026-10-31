@@ -3,21 +3,30 @@
 import { WalletChain } from '@pollar/core';
 import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { walletNotReadyReason } from '../../lib/wallet-provisioning';
 import { useChains } from '../../useChains';
+import { oneOf } from '../../modal-options';
 import { addressForChain } from '../ChainSelect';
 import '../shared.css';
 import './ReceiveModal.css';
 import { ReceiveModalTemplate } from './ReceiveModalTemplate';
 import { modalChrome } from '../modal-theme';
 
-interface ReceiveModalProps {
-  onClose: () => void;
+/** Where the receive modal opens: the network whose address it shows. A network the app does not offer is left out. */
+export interface ReceiveModalOptions {
+  chain?: WalletChain;
 }
 
-export function ReceiveModal({ onClose }: ReceiveModalProps) {
+interface ReceiveModalProps {
+  onClose: () => void;
+  initial?: ReceiveModalOptions | undefined;
+}
+
+export function ReceiveModal({ onClose, initial }: ReceiveModalProps) {
   const { wallet, wallets, styles, recoveryLocked, openRecoveryModal } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
+  const language = useModalLanguage();
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -26,14 +35,14 @@ export function ReceiveModal({ onClose }: ReceiveModalProps) {
   // Default to the app's first configured network. Runs as an effect because
   // `wallets` is empty on the first render of a cold-start session.
   useEffect(() => {
-    if (selectedChain === null && chains.length > 0) setSelectedChain(chains[0]!);
-  }, [chains, selectedChain]);
+    if (selectedChain === null && chains.length > 0) setSelectedChain(oneOf(chains, initial?.chain) ?? chains[0]!);
+  }, [chains, selectedChain, initial?.chain]);
 
   const walletAddress = addressForChain(wallets, selectedChain);
   // The address is real, but until the account is on the ledger a payment to it
   // is rejected by the network. Handing someone a QR without saying so is the
   // one place this window can cost a user a failed transfer from a third party.
-  const notReadyReason = walletNotReadyReason(wallet, selectedChain);
+  const notReadyReason = walletNotReadyReason(wallet, selectedChain, language);
 
   useEffect(
     () => () => {
@@ -78,6 +87,7 @@ export function ReceiveModal({ onClose }: ReceiveModalProps) {
         copied={copied}
         onCopy={handleCopy}
         onClose={onClose}
+        language={language}
       />
     </div>
   );

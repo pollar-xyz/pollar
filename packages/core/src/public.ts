@@ -5,11 +5,15 @@
 
 export { PollarClient, isPollarClient } from './client/client';
 export * from './ramps/index';
+export * from './bridge/index';
 export { POLLAR_CORE_VERSION } from './version';
 export { createLogger } from './lib/logger';
 export { toBaseUnits, fromBaseUnits } from './lib/units';
 export { appUnavailableMessage, cosignRefusalMessage, transactionErrorMessage } from './lib/tx-error-messages';
+export { authErrorMessage } from './client/auth/errorMessages';
 export type { LogLevel, PollarLogger } from './lib/logger';
+export { countryName, languageFromTag, localizedText, resolveLanguage } from './lib/language';
+export type { PollarLanguage } from './lib/language';
 
 // --- Storage ------------------------------------------------------------------
 export type { Storage, OnStorageDegrade, StorageDegradeReason } from './storage/types';
@@ -66,6 +70,8 @@ export { PollarApiClient } from './api/client';
 export type { paths as pollarPaths } from './api/schema';
 export { isValidSession } from './client/session';
 export { StellarClient } from './stellar/StellarClient';
+export { createAuthEntrySigner } from './stellar/auth-entry-signer';
+export { completeAuthEntryStep, isAuthEntryAdapterStep } from './adapter-steps';
 export type { StellarNetwork, StellarClientConfig, StellarBalance } from './stellar/StellarClient';
 
 // --- KYC endpoints ------------------------------------------------------------

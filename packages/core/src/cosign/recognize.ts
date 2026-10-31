@@ -17,6 +17,7 @@ export type SetupRecognition =
 
 const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const STRKEY_ACCOUNT_VERSION = 6 << 3;
+const STRKEY_CONTRACT_VERSION = 2 << 3;
 
 function crc16xmodem(bytes: number[]): number {
   let crc = 0;
@@ -25,6 +26,26 @@ function crc16xmodem(bytes: number[]): number {
     for (let i = 0; i < 8; i++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
   }
   return crc;
+}
+
+/** A G-address (`account`) or C-address (`contract`) from its 32 raw bytes. */
+export function encodeStellarAddress(kind: 'account' | 'contract', key: Uint8Array): string {
+  const payload = [kind === 'account' ? STRKEY_ACCOUNT_VERSION : STRKEY_CONTRACT_VERSION, ...key];
+  const crc = crc16xmodem(payload);
+  const bytes = [...payload, crc & 0xff, (crc >>> 8) & 0xff];
+  let out = '';
+  let bits = 0;
+  let value = 0;
+  for (const byte of bytes) {
+    value = ((value << 8) | byte) & 0xffff;
+    bits += 8;
+    while (bits >= 5) {
+      out += BASE32[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) out += BASE32[(value << (5 - bits)) & 31];
+  return out;
 }
 
 /** The 32 raw bytes of a Stellar G-address, or null when the string is not one (version byte and checksum checked). */

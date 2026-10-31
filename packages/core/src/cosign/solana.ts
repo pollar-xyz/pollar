@@ -5,9 +5,9 @@ import { bytesToHex, hexToBytes } from './encoding';
 /**
  * The device's own reading of a Solana co-sign request: the unsigned
  * transaction decoded by hand (Solana's wire format, no Solana library), and
- * the CCTP burn or the SOL / SPL transfer it carries checked against what the
- * request says it is. A shape this reader does not know is "not recognized",
- * never guessed, and is not approved.
+ * the CCTP burn, the SOL / SPL transfer or the aggregator swap it carries
+ * checked against what the request says it is. A shape this reader does not
+ * know is "not recognized", never guessed, and is not approved.
  */
 
 /** Circle's CCTP V2 TokenMessengerMinter: the program a ramp's burn calls. */
@@ -17,12 +17,30 @@ const SYSTEM_PROGRAM = '11111111111111111111111111111111';
 const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const ASSOCIATED_TOKEN_PROGRAM = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
 const MEMO_PROGRAMS = new Set(['MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr', 'Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo']);
+const WRAPPED_SOL_MINT = 'So11111111111111111111111111111111111111112';
+/**
+ * The aggregator routers a swap may call: Jupiter's v6 (Metis) program and
+ * Titan's router. What they do inside is not readable here; the platform
+ * simulates every swap and refuses one that pays the user less than its
+ * minimum before it ever reaches this device.
+ */
+export const SWAP_ROUTERS = new Set([
+  'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',
+  'T1TANpTeScyeqVzzgNViGDNrkQ6qHz9KrSBS4aNXvGT',
+]);
+/** SPL Token's SyncNative and CloseAccount, one-byte discriminators. */
+const TOKEN_SYNC_NATIVE = 17;
+const TOKEN_CLOSE_ACCOUNT = 9;
 /** SystemProgram's Transfer, a little-endian u32 discriminator. */
 const SYSTEM_TRANSFER = 2;
 /** SPL Token's TransferChecked, a one-byte discriminator. */
 const TOKEN_TRANSFER_CHECKED = 12;
 /** sha256("global:deposit_for_burn")[0..8], from Circle's V2 IDL. */
 const DEPOSIT_FOR_BURN = 'd73c3d2e723780b0';
+/** sha256("global:deposit_for_burn_with_hook")[0..8]: a burn toward Stellar, paid out by Circle's forwarder. */
+const DEPOSIT_FOR_BURN_WITH_HOOK = '6ff53e83cc6cdf9b';
+/** Where the hook data starts in deposit_for_burn_with_hook: discriminator, amount, domain, recipient, caller, max fee, finality. */
+const HOOK_DATA_OFFSET = 8 + 8 + 4 + 32 + 32 + 8 + 4;
 /** Positions in deposit_for_burn's account list (the IDL's order). */
 const OWNER = 0;
 const EVENT_RENT_PAYER = 1;
@@ -130,11 +148,24 @@ export interface DecodedSolanaTransaction {
   feePayer: string;
   /** Signatures the message requires; each costs the base fee. */
   requiredSignatures: number;
+  /** The accounts that sign, the fee payer first. */
+  signers: string[];
   instructions: DecodedSolanaInstruction[];
 }
 
-/** A serialized (unsigned) legacy or v0 transaction. Address lookup tables are refused. */
-export function decodeSolanaTransaction(hex: string): DecodedSolanaTransaction {
+/**
+ * The prefix an account loaded from an address lookup table is read as:
+ * `lookup:<table>:<index>`. Its address is not knowable without reading the
+ * table from the chain, so it equals no address a check compares against.
+ */
+export const LOOKUP_ACCOUNT_PREFIX = 'lookup:';
+
+/**
+ * A serialized (unsigned) legacy or v0 transaction. Address lookup tables are
+ * refused unless `allowLookupTables`; then each account a table loads is read
+ * as `lookup:<table>:<index>`, and a program must still be a static key.
+ */
+export function decodeSolanaTransaction(hex: string, options: { allowLookupTables?: boolean } = {}): DecodedSolanaTransaction {
   const r = new Reader(hexToBytes(hex.replace(/^0x/i, '')));
   const signatures = r.compactU16();
   r.take(signatures * 64);
@@ -151,28 +182,46 @@ export function decodeSolanaTransaction(hex: string): DecodedSolanaTransaction {
   for (let i = 0; i < keyCount; i++) keys.push(base58Of(r.take(32)));
   r.take(32); // recent blockhash
 
-  const instructions: DecodedSolanaInstruction[] = [];
+  // Account indexes are resolved once the lookup tables, which follow the instructions, are read.
+  const raw: { programIndex: number; accounts: number[]; data: Uint8Array }[] = [];
   const count = r.compactU16();
   for (let i = 0; i < count; i++) {
     const programIndex = r.u8();
     const accountCount = r.compactU16();
-    const accounts: string[] = [];
-    for (let a = 0; a < accountCount; a++) {
-      const key = keys[r.u8()];
-      if (!key) throw new Error('solana: account index out of range');
-      accounts.push(key);
-    }
-    const data = r.take(r.compactU16());
-    const program = keys[programIndex];
-    if (!program) throw new Error('solana: program index out of range');
-    instructions.push({ program, accounts, data });
+    const accounts: number[] = [];
+    for (let a = 0; a < accountCount; a++) accounts.push(r.u8());
+    raw.push({ programIndex, accounts, data: r.take(r.compactU16()) });
   }
+
+  // Loaded accounts follow the static keys: every table's writable ones, then every table's readonly ones.
+  const writable: string[] = [];
+  const readonly: string[] = [];
   const lookups = versioned ? r.compactU16() : 0;
-  if (lookups !== 0) throw new Error('solana: address lookup tables are not supported');
+  if (lookups !== 0 && !options.allowLookupTables) throw new Error('solana: address lookup tables are not supported');
+  for (let t = 0; t < lookups; t++) {
+    const table = base58Of(r.take(32));
+    const writableCount = r.compactU16();
+    for (let i = 0; i < writableCount; i++) writable.push(`${LOOKUP_ACCOUNT_PREFIX}${table}:${r.u8()}`);
+    const readonlyCount = r.compactU16();
+    for (let i = 0; i < readonlyCount; i++) readonly.push(`${LOOKUP_ACCOUNT_PREFIX}${table}:${r.u8()}`);
+  }
   if (!r.done) throw new Error('solana: trailing bytes');
+  const accountKeys = [...keys, ...writable, ...readonly];
+
+  const instructions: DecodedSolanaInstruction[] = raw.map((ix) => {
+    const program = keys[ix.programIndex];
+    if (!program) throw new Error('solana: program index out of range');
+    const accounts = ix.accounts.map((index) => {
+      const key = accountKeys[index];
+      if (!key) throw new Error('solana: account index out of range');
+      return key;
+    });
+    return { program, accounts, data: ix.data };
+  });
   const feePayer = keys[0];
   if (!feePayer) throw new Error('solana: no fee payer');
-  return { feePayer, requiredSignatures, instructions };
+  if (requiredSignatures > keys.length) throw new Error('solana: more signers than account keys');
+  return { feePayer, requiredSignatures, signers: keys.slice(0, requiredSignatures), instructions };
 }
 
 function u64le(bytes: Uint8Array): bigint {
@@ -321,7 +370,77 @@ function checkSolanaTransfer(
 }
 
 /**
- * Check a Solana request before voting. A request declared as a CCTP burn
+ * Check a swap request (`operation: 'swap'`): the transaction calls a known
+ * aggregator router, the fee is paid by the account the request names
+ * (`details.feePayer`), the user and that payer are its only signers, and
+ * nothing at the top level moves the user's funds anywhere but into the swap:
+ * beside compute budget and the router it may only create one of the user's own
+ * token accounts, move SOL from the user into the user's own wrapped SOL
+ * account (at most `details.inAmount`), sync it, and close one of the user's
+ * token accounts back to the user. What the router does with the user's tokens
+ * is not readable here (its accounts come from lookup tables); the platform's
+ * simulation answers for that.
+ */
+function checkSolanaSwap(
+  tx: DecodedSolanaTransaction,
+  user: string,
+  details: Record<string, unknown>,
+): { ok: true } | { ok: false; reason: string } {
+  const payer = typeof details.feePayer === 'string' ? details.feePayer : null;
+  const inAmount = typeof details.inAmount === 'string' && /^\d+$/.test(details.inAmount) ? BigInt(details.inAmount) : null;
+  if (!payer || inAmount === null) return { ok: false, reason: 'the request does not state the swap it carries' };
+  if (tx.feePayer !== payer) return { ok: false, reason: 'the fee is not paid by the account the request names' };
+  if (!tx.signers.includes(user)) return { ok: false, reason: 'the signing account does not sign the swap' };
+  if (tx.signers.some((signer) => signer !== user && signer !== payer)) {
+    return { ok: false, reason: 'the swap asks for a signer other than the user and the fee payer' };
+  }
+
+  const wrappedSol = associatedTokenAddress(user, WRAPPED_SOL_MINT);
+  let routed = 0;
+  let wrapped = 0n;
+  for (const ix of tx.instructions) {
+    if (ix.program === COMPUTE_BUDGET) continue;
+    if (SWAP_ROUTERS.has(ix.program)) {
+      routed++;
+      continue;
+    }
+    if (ix.program === ASSOCIATED_TOKEN_PROGRAM) {
+      // [payer, associated account, owner, mint, system program, token program]; Create or CreateIdempotent.
+      const createsOwn =
+        (ix.data.length === 0 || (ix.data.length === 1 && ix.data[0] === 1)) &&
+        ix.accounts[2] === user &&
+        (ix.accounts[0] === user || ix.accounts[0] === payer);
+      if (!createsOwn) return { ok: false, reason: "an account creation that is not one of the user's token accounts" };
+      continue;
+    }
+    if (ix.program === SYSTEM_PROGRAM) {
+      const wraps =
+        ix.data.length === 12 &&
+        u32le(ix.data.subarray(0, 4)) === SYSTEM_TRANSFER &&
+        ix.accounts[0] === user &&
+        ix.accounts[1] === wrappedSol;
+      if (!wraps) return { ok: false, reason: "a system instruction that is not wrapping the user's SOL" };
+      wrapped += u64le(ix.data.subarray(4, 12));
+      continue;
+    }
+    if (ix.program === TOKEN_PROGRAM) {
+      if (ix.data.length === 1 && ix.data[0] === TOKEN_SYNC_NATIVE && ix.accounts[0] === wrappedSol) continue;
+      // [account, destination, owner]
+      if (ix.data.length === 1 && ix.data[0] === TOKEN_CLOSE_ACCOUNT && ix.accounts[1] === user && ix.accounts[2] === user) {
+        continue;
+      }
+      return { ok: false, reason: 'a token instruction a swap never carries at the top level' };
+    }
+    return { ok: false, reason: `an instruction for ${ix.program}, which a swap never carries` };
+  }
+  if (routed === 0) return { ok: false, reason: 'the swap calls no known aggregator' };
+  if (wrapped > inAmount) return { ok: false, reason: 'the swap wraps more SOL than the amount the request sells' };
+  return { ok: true };
+}
+
+/**
+ * Check a Solana request before voting. A request declared as a swap
+ * (`operation: 'swap'`) is read as one, lookup tables allowed. A request declared as a CCTP burn
  * (`operation: 'cctp_burn'`) must hold exactly one deposit_for_burn and nothing
  * but compute-budget instructions beside it, burn from the signing account,
  * have the fee and the event account's rent paid by the account the request
@@ -333,6 +452,20 @@ export function checkSolanaRequest(
   unsignedPayload: string,
   request: { operation?: string | undefined; details?: Record<string, unknown> | undefined; signWith: string },
 ): { ok: true } | { ok: false; reason: string } {
+  if (request.operation === 'swap') {
+    let swap: DecodedSolanaTransaction;
+    try {
+      swap = decodeSolanaTransaction(unsignedPayload, { allowLookupTables: true });
+    } catch (err) {
+      return { ok: false, reason: `the transaction is not readable: ${err instanceof Error ? err.message : String(err)}` };
+    }
+    if (swap.instructions.some((ix) => ix.program === TOKEN_MESSENGER_MINTER_V2)) {
+      return { ok: false, reason: 'a CCTP burn the request does not declare' };
+    }
+    const fee = checkSolanaFee(swap);
+    if (!fee.ok) return fee;
+    return checkSolanaSwap(swap, request.signWith, request.details ?? {});
+  }
   if (request.operation !== 'cctp_burn') {
     let transfer: DecodedSolanaTransaction;
     try {
@@ -363,7 +496,8 @@ export function checkSolanaRequest(
   const fee = checkSolanaFee(tx);
   if (!fee.ok) return fee;
   const burn = burns[0]!;
-  if (burn.data.length < 52 || bytesToHex(burn.data.subarray(0, 8)) !== DEPOSIT_FOR_BURN) {
+  const discriminator = bytesToHex(burn.data.subarray(0, 8));
+  if (burn.data.length < 52 || (discriminator !== DEPOSIT_FOR_BURN && discriminator !== DEPOSIT_FOR_BURN_WITH_HOOK)) {
     return { ok: false, reason: 'not a deposit_for_burn' };
   }
   if (burn.accounts[OWNER] !== request.signWith)
@@ -382,5 +516,13 @@ export function checkSolanaRequest(
     return { ok: false, reason: 'the destination domain is not the one the request states' };
   if (recipient !== hex32(details.mintRecipient))
     return { ok: false, reason: 'the mint recipient is not the one the request states' };
+  // Toward Stellar the recipient above is Circle's forwarder; who it pays is in the hook data.
+  const stated = typeof details.hookData === 'string' ? details.hookData.replace(/^0x/, '').toLowerCase() : null;
+  if (discriminator === DEPOSIT_FOR_BURN_WITH_HOOK) {
+    const data = burn.data.subarray(HOOK_DATA_OFFSET);
+    const length = data.length >= 4 ? u32le(data.subarray(0, 4)) : -1;
+    if (length !== data.length - 4 || stated === null || bytesToHex(data.subarray(4)) !== stated)
+      return { ok: false, reason: 'the hook data is not the one the request states' };
+  } else if (stated !== null) return { ok: false, reason: 'the request states hook data the burn does not carry' };
   return { ok: true };
 }

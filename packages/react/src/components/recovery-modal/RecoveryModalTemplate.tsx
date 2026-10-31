@@ -1,9 +1,11 @@
 'use client';
 
-import type { CosignDevicesContent, RecoveryState } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { type CosignDevicesContent, type PollarLanguage, type RecoveryState } from '@pollar/core';
 import { useState } from 'react';
 import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
+import { RECOVERY_COPY } from './recovery-copy';
 
 export type RecoveryView = 'overview' | 'email' | 'export' | 'recover-email';
 
@@ -44,7 +46,11 @@ export interface RecoveryModalTemplateProps {
   onRecoverWithCode: (code: string) => void;
   onExport: () => void;
   onClose: () => void;
+  /** Language of the modal's text. Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
+
+type Copy = (typeof RECOVERY_COPY)['en'];
 
 function CloseIcon() {
   return (
@@ -57,6 +63,7 @@ function CloseIcon() {
 const shortKey = (key: string) => `${key.slice(0, 6)}...${key.slice(-4)}`;
 
 function Button(props: {
+  copy: Copy;
   busy: string | null;
   id: string;
   label: string;
@@ -73,12 +80,12 @@ function Button(props: {
       onClick={props.onClick}
       disabled={props.disabled || props.busy !== null}
     >
-      {running ? (props.busyLabel ?? 'Working...') : props.label}
+      {running ? (props.busyLabel ?? props.copy.working) : props.label}
     </button>
   );
 }
 
-function CodeForm(props: { busy: string | null; id: string; label: string; onSubmit: (code: string) => void }) {
+function CodeForm(props: { copy: Copy; busy: string | null; id: string; label: string; onSubmit: (code: string) => void }) {
   const [code, setCode] = useState('');
   return (
     <form
@@ -92,11 +99,12 @@ function CodeForm(props: { busy: string | null; id: string; label: string; onSub
         className="pollar-recovery-input"
         value={code}
         onChange={(e) => setCode(e.target.value)}
-        placeholder="Code from the email"
+        placeholder={props.copy.codePlaceholder}
         autoComplete="one-time-code"
-        aria-label="Code from the email"
+        aria-label={props.copy.codePlaceholder}
       />
       <Button
+        copy={props.copy}
         busy={props.busy}
         id={props.id}
         label={props.label}
@@ -109,6 +117,7 @@ function CodeForm(props: { busy: string | null; id: string; label: string; onSub
 
 export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
   const cssVars = buildModalCssVars(p.theme, p.accentColor, p.styleOverrides);
+  const copy = RECOVERY_COPY[useInheritedLanguage(p.language)];
   const [exportAccepted, setExportAccepted] = useState(false);
   const [risksAccepted, setRisksAccepted] = useState(false);
   const state = p.state;
@@ -121,46 +130,49 @@ export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
 
   let body: React.ReactNode;
   if (!state) {
-    body = <p className="pollar-recovery-muted">Loading your wallet&apos;s recovery methods...</p>;
+    body = <p className="pollar-recovery-muted">{copy.loading}</p>;
   } else if (!state.required) {
-    body = (
-      <p className="pollar-recovery-muted">
-        This wallet doesn&apos;t need recovery methods: it isn&apos;t secured by your device.
-      </p>
-    );
+    body = <p className="pollar-recovery-muted">{copy.notRequired}</p>;
   } else if (!p.thisDeviceEnrolled && p.view !== 'recover-email') {
     // A device the user signed in on, but whose key is not one of the wallet's credentials.
     body = (
       <>
         <div className="pollar-recovery-banner pollar-recovery-banner-warn" role="status">
-          This device isn&apos;t part of your wallet yet. Get back in with one of your recovery methods, or ask a device that
-          already has the wallet to add this one.
+          {copy.notEnrolled}
         </div>
         {state.passkeys.length > 0 && p.passkeyAvailable && (
-          <Button busy={p.busy} id="recover-passkey" label="Use a passkey" kind="primary" onClick={p.onRecoverWithPasskey} />
+          <Button
+            copy={copy}
+            busy={p.busy}
+            id="recover-passkey"
+            label={copy.usePasskey}
+            kind="primary"
+            onClick={p.onRecoverWithPasskey}
+          />
         )}
         {state.email.verified && (
           <Button
+            copy={copy}
             busy={p.busy}
             id="recover-send"
-            label={`Email a code to ${state.email.address ?? 'your email'}`}
+            label={copy.emailCodeTo(state.email.address ?? copy.yourEmail)}
             onClick={() => p.onView('recover-email')}
           />
         )}
-        <Button busy={p.busy} id="enroll" label="Ask another device to add this one" onClick={p.onRequestEnrollment} />
+        <Button copy={copy} busy={p.busy} id="enroll" label={copy.askAnotherDevice} onClick={p.onRequestEnrollment} />
       </>
     );
   } else if (risksPending && p.view === 'overview') {
     body = (
       <>
         <div className="pollar-recovery-banner pollar-recovery-banner-warn" role="alert">
-          This is a self-custody wallet: only your device can sign. If you lose this device and every recovery method, nobody
-          can recover the wallet or its funds, not the app and not Pollar. Nobody can undo or freeze a transaction you sign.
+          {copy.selfCustodyWarning}
         </div>
         <Button
+          copy={copy}
           busy={p.busy}
           id="accept-risks"
-          label="I understand and accept these risks"
+          label={copy.acceptRisks}
           kind="primary"
           onClick={() => setRisksAccepted(true)}
         />
@@ -169,25 +181,26 @@ export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
   } else if (p.view === 'recover-email') {
     body = (
       <>
-        <p className="pollar-recovery-muted">
-          We&apos;ll email a code to {state.email.address}. The code goes straight to the wallet provider, encrypted on this
-          device.
-        </p>
+        <p className="pollar-recovery-muted">{copy.recoverEmailIntro(state.email.address ?? copy.yourEmail)}</p>
         {!p.codeSent ? (
-          <Button busy={p.busy} id="recover-send" label="Send code" kind="primary" onClick={p.onSendRecoveryCode} />
+          <Button
+            copy={copy}
+            busy={p.busy}
+            id="recover-send"
+            label={copy.sendCode}
+            kind="primary"
+            onClick={p.onSendRecoveryCode}
+          />
         ) : (
-          <CodeForm busy={p.busy} id="recover-code" label="Recover" onSubmit={p.onRecoverWithCode} />
+          <CodeForm copy={copy} busy={p.busy} id="recover-code" label={copy.recover} onSubmit={p.onRecoverWithCode} />
         )}
-        <Button busy={p.busy} id="back" label="Back" onClick={() => p.onView('overview')} />
+        <Button copy={copy} busy={p.busy} id="back" label={copy.back} onClick={() => p.onView('overview')} />
       </>
     );
   } else if (p.view === 'email') {
     body = (
       <>
-        <p className="pollar-recovery-muted">
-          Confirm an email you control. If you lose this device, a code sent there lets you add a new one. Anyone who controls
-          this inbox could do the same, so use one that is well protected.
-        </p>
+        <p className="pollar-recovery-muted">{copy.emailIntro}</p>
         {!p.codeSent ? (
           <form
             className="pollar-recovery-row"
@@ -201,52 +214,51 @@ export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
               type="email"
               value={p.emailDraft}
               onChange={(e) => p.onEmailDraft(e.target.value)}
-              placeholder="you@example.com"
-              aria-label="Email"
+              placeholder={copy.emailPlaceholder}
+              aria-label={copy.email}
             />
             <Button
+              copy={copy}
               busy={p.busy}
               id="email-send"
-              label="Send code"
+              label={copy.sendCode}
               kind="primary"
               onClick={p.onSendEmailCode}
               disabled={!p.emailDraft.trim()}
             />
           </form>
         ) : (
-          <CodeForm busy={p.busy} id="email-confirm" label="Confirm" onSubmit={p.onConfirmEmail} />
+          <CodeForm copy={copy} busy={p.busy} id="email-confirm" label={copy.confirm} onSubmit={p.onConfirmEmail} />
         )}
-        <Button busy={p.busy} id="back" label="Back" onClick={() => p.onView('overview')} />
+        <Button copy={copy} busy={p.busy} id="back" label={copy.back} onClick={() => p.onView('overview')} />
       </>
     );
   } else if (p.view === 'export') {
     body = p.phrase ? (
       <>
         <div className="pollar-recovery-banner pollar-recovery-banner-warn" role="alert">
-          Anyone with these words controls every account in this wallet. Write them down offline and never share them.
+          {copy.phraseWarning}
         </div>
         <pre className="pollar-recovery-phrase">{p.phrase}</pre>
-        <Button busy={p.busy} id="hide" label="Hide" kind="primary" onClick={() => p.onView('overview')} />
+        <Button copy={copy} busy={p.busy} id="hide" label={copy.hide} kind="primary" onClick={() => p.onView('overview')} />
       </>
     ) : (
       <>
-        <p className="pollar-recovery-muted">
-          Your recovery phrase lets you take this wallet to another app. It is decrypted only on this device; the app and Pollar
-          never see it.
-        </p>
+        <p className="pollar-recovery-muted">{copy.exportIntro}</p>
         <label className="pollar-recovery-check">
-          <input type="checkbox" checked={exportAccepted} onChange={(e) => setExportAccepted(e.target.checked)} /> I understand
-          that whoever sees the phrase controls the wallet
+          <input type="checkbox" checked={exportAccepted} onChange={(e) => setExportAccepted(e.target.checked)} />{' '}
+          {copy.exportAccept}
         </label>
         <Button
+          copy={copy}
           busy={p.busy}
           id="export"
-          label="Show recovery phrase"
+          label={copy.showPhrase}
           kind="danger"
           onClick={p.onExport}
           disabled={!exportAccepted}
         />
-        <Button busy={p.busy} id="back" label="Back" onClick={() => p.onView('overview')} />
+        <Button copy={copy} busy={p.busy} id="back" label={copy.back} onClick={() => p.onView('overview')} />
       </>
     );
   } else {
@@ -255,25 +267,25 @@ export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
       <>
         {locked ? (
           <div className="pollar-recovery-banner pollar-recovery-banner-warn" role="alert">
-            Your wallet is locked until you add a way to recover it. Without one, losing this device means losing the funds, and
-            nobody can get them back, not the app and not Pollar. Add a passkey, a second device or your email.
+            {copy.locked(true)}
           </div>
         ) : (
           <div className="pollar-recovery-banner pollar-recovery-banner-ok" role="status">
-            Your wallet can be recovered if you lose this device.
+            {copy.recoverable}
           </div>
         )}
 
         <section className="pollar-recovery-section">
-          <h3>Passkeys</h3>
-          {state.passkeys.length === 0 && <p className="pollar-recovery-muted">No passkey yet.</p>}
+          <h3>{copy.passkeys}</h3>
+          {state.passkeys.length === 0 && <p className="pollar-recovery-muted">{copy.noPasskey}</p>}
           {state.passkeys.map((pk) => (
             <div key={pk.authenticatorId} className="pollar-recovery-item">
               <span>{pk.name}</span>
               <Button
+                copy={copy}
                 busy={p.busy}
                 id={`passkey:${pk.authenticatorId}`}
-                label="Remove"
+                label={copy.remove}
                 kind="danger"
                 onClick={() => p.onRemovePasskey(pk.authenticatorId)}
                 disabled={lastMethod}
@@ -281,58 +293,60 @@ export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
             </div>
           ))}
           {p.passkeyAvailable ? (
-            <Button busy={p.busy} id="passkey" label="Add a passkey" onClick={p.onAddPasskey} />
+            <Button copy={copy} busy={p.busy} id="passkey" label={copy.addPasskey} onClick={p.onAddPasskey} />
           ) : (
-            <p className="pollar-recovery-muted">Passkeys aren&apos;t available on this device.</p>
+            <p className="pollar-recovery-muted">{copy.passkeysUnavailableDevice}</p>
           )}
         </section>
 
         <section className="pollar-recovery-section">
-          <h3>Email</h3>
+          <h3>{copy.email}</h3>
           {state.email.verified ? (
             <div className="pollar-recovery-item">
               <span>{state.email.address}</span>
-              <span className="pollar-recovery-tag">Confirmed</span>
+              <span className="pollar-recovery-tag">{copy.confirmed}</span>
             </div>
           ) : (
-            <Button busy={p.busy} id="email" label="Confirm an email" onClick={() => p.onView('email')} />
+            <Button copy={copy} busy={p.busy} id="email" label={copy.confirmEmail} onClick={() => p.onView('email')} />
           )}
         </section>
 
         <section className="pollar-recovery-section">
-          <h3>Devices</h3>
+          <h3>{copy.devices}</h3>
           {(p.devices?.devices ?? []).map((d) => (
             <div key={d.id} className="pollar-recovery-item">
               <span>{d.label ?? shortKey(d.publicKey)}</span>
-              {d.publicKey.toLowerCase() === p.thisDeviceKey && <span className="pollar-recovery-tag">This device</span>}
+              {d.publicKey.toLowerCase() === p.thisDeviceKey && <span className="pollar-recovery-tag">{copy.thisDevice}</span>}
             </div>
           ))}
           {enrollments.map((e) => (
             <div key={e.id} className="pollar-recovery-item pollar-recovery-item-pending">
-              <span>
-                {e.label ?? 'A device'} wants to join ({shortKey(e.publicKey)})
-              </span>
+              <span>{copy.wantsToJoin(e.label ?? copy.aDevice, shortKey(e.publicKey))}</span>
               <span className="pollar-recovery-actions">
                 <Button
+                  copy={copy}
                   busy={p.busy}
                   id={`approve:${e.id}`}
-                  label="Approve"
+                  label={copy.approve}
                   kind="primary"
                   onClick={() => p.onApproveDevice(e.id)}
                 />
-                <Button busy={p.busy} id={`reject:${e.id}`} label="Reject" onClick={() => p.onRejectDevice(e.id)} />
+                <Button
+                  copy={copy}
+                  busy={p.busy}
+                  id={`reject:${e.id}`}
+                  label={copy.reject}
+                  onClick={() => p.onRejectDevice(e.id)}
+                />
               </span>
             </div>
           ))}
-          <p className="pollar-recovery-muted">
-            To add another device, sign in there and choose &quot;Ask another device to add this one&quot;; it shows up here to
-            approve. Only approve a device you are holding.
-          </p>
+          <p className="pollar-recovery-muted">{copy.addDeviceHelp}</p>
         </section>
 
         <section className="pollar-recovery-section">
-          <h3>Recovery phrase</h3>
-          <Button busy={p.busy} id="export" label="Export recovery phrase" onClick={() => p.onView('export')} />
+          <h3>{copy.recoveryPhrase}</h3>
+          <Button copy={copy} busy={p.busy} id="export" label={copy.exportPhrase} onClick={() => p.onView('export')} />
         </section>
       </>
     );
@@ -346,9 +360,9 @@ export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
       onClick={(e) => e.stopPropagation()}
     >
       <div className="pollar-modal-header">
-        <h2 className="pollar-modal-title">Wallet recovery</h2>
+        <h2 className="pollar-modal-title">{copy.title}</h2>
         <div className="pollar-modal-header-actions">
-          <button type="button" className="pollar-modal-close" onClick={p.onClose} aria-label="Close" title="Close">
+          <button type="button" className="pollar-modal-close" onClick={p.onClose} aria-label={copy.close} title={copy.close}>
             <CloseIcon />
           </button>
         </div>

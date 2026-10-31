@@ -244,14 +244,19 @@ const all = client.getWallets(); // one per chain, [] on pre-multichain sessions
 
 await client.refreshBalance(); // pushes into WalletBalanceState
 const state = client.getWalletBalanceState();
+// { step: 'idle' } | { step: 'loading' } | { step: 'error'; message } | { step: 'loaded'; data }
+if (state.step === 'loaded') {
+  for (const record of state.data.balances) record.balance; // string | null, per record
+}
 ```
 
 The wallet exposes `address` only. There is no `publicKey` field, and `address` can be `null` when the
 wallet has no address yet.
 
-Balance records are multichain and tagged by `chain`, each carrying `decimals`, `limit`, and
-`sponsored`. `balance` and `available` are `string | null`, and **`null` means the chain could not be
-read**. Render it as unavailable, never as `0`, or the UI will tell a user their money is gone during a
+`WalletBalanceState` is a union on `step` with no top-level `balance` field: balances exist only in
+`data.balances` once `step === 'loaded'`. Each record is tagged by `chain` and carries `decimals`,
+`limit`, and `sponsored`. A record's `balance` and `available` are `string | null`, and **`null` means
+the chain could not be read**. Render it as unavailable, never as `0`, or the UI will tell a user their money is gone during a
 transient RPC outage.
 
 For anything that moves value (payments, trustlines, swaps, ramps, earn, ownership proofs) read

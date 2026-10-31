@@ -1,7 +1,14 @@
-import { type CosignRequest, type CosignVerification, fromBaseUnits } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { type CosignRequest, type CosignVerification, type PollarLanguage, type StellarNetwork } from '@pollar/core';
 import React, { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { PollarModalFooter } from '../commons';
+import { TxFeeBadge, TxReview } from '../tx-review/TxReview';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
+import { reviewFromRequest } from '../tx-review/tx-review-model';
+import { COSIGN_COPY } from './cosign-copy';
+
+type CosignCopy = (typeof COSIGN_COPY)[PollarLanguage];
 
 export interface CosignModalTemplateProps {
   theme: string;
@@ -18,6 +25,12 @@ export interface CosignModalTemplateProps {
   nextStep?: string | null;
   /** The transaction hash was just copied. */
   copied?: boolean;
+  /** Language of the modal's text; the device's when not given. */
+  language?: PollarLanguage | undefined;
+  /** The app's network, shown next to the chain in the details. */
+  network?: StellarNetwork | undefined;
+  /** Puts a value on the clipboard, for the copy buttons in the details. */
+  copyText?: ((text: string) => Promise<void>) | undefined;
   onCopyHash: (hash: string) => void;
   onSelect: (request: CosignRequest) => void;
   onApprove: (request: CosignRequest) => void;
@@ -25,57 +38,21 @@ export interface CosignModalTemplateProps {
   onClose: () => void;
 }
 
-const OPERATION_LABELS: Record<string, string> = {
-  payment: 'Send',
-  path_payment_strict_send: 'Swap',
-  change_trust: 'Add asset',
-  create_account: 'Create account',
-  invoke_contract: 'Contract call',
-};
-
-function labelOf(request: CosignRequest): string {
+function labelOf(request: CosignRequest, copy: CosignCopy): string {
   const op = request.operation ?? '';
-  return OPERATION_LABELS[op] ?? (op ? op.replace(/_/g, ' ') : 'Transaction');
+  return copy.operations[op] ?? (op ? op.replace(/_/g, ' ') : copy.transaction);
 }
 
 function crop(value: string): string {
   return value.length > 16 ? `${value.slice(0, 6)}...${value.slice(-6)}` : value;
 }
 
-function expiresIn(request: CosignRequest): string {
+function expiresIn(request: CosignRequest, copy: CosignCopy): string {
   const ms = new Date(request.expiresAt).getTime() - Date.now();
-  if (!Number.isFinite(ms) || ms <= 0) return 'expired';
+  if (!Number.isFinite(ms) || ms <= 0) return copy.expired;
   const h = Math.floor(ms / 3_600_000);
   const m = Math.floor((ms % 3_600_000) / 60_000);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
-
-/** A base-unit amount with the `decimals` and `symbol` written next to it, as the user reads it; null when either is missing. */
-function readableAmount(details: Record<string, unknown>): { amount: string; symbol: string } | null {
-  const { amount, decimals, symbol } = details;
-  if (typeof amount !== 'string' || typeof decimals !== 'number' || typeof symbol !== 'string') return null;
-  try {
-    return { amount: fromBaseUnits(amount, decimals), symbol };
-  } catch {
-    return null;
-  }
-}
-
-function detailRows(request: CosignRequest): Array<[string, string]> {
-  const details = (request.details ?? {}) as Record<string, unknown>;
-  const rows: Array<[string, string]> = [];
-  const push = (label: string, value: unknown) => {
-    if (value === undefined || value === null || value === '') return;
-    const text = String(value);
-    rows.push([label, /^[GC][A-Z2-7]{55}$/.test(text) ? crop(text) : text]);
-  };
-  push('Destination', details.destination);
-  const readable = readableAmount(details);
-  push('Amount', readable ? `${readable.amount} ${readable.symbol}` : details.amount);
-  push('Asset', details.asset ?? details.assetCode ?? readable?.symbol);
-  push('Network', request.network);
-  rows.push(['Expires in', expiresIn(request)]);
-  return rows;
 }
 
 export function CosignModalTemplate({
@@ -90,12 +67,17 @@ export function CosignModalTemplate({
   closesIn = null,
   nextStep = null,
   copied = false,
+  language: languageProp,
+  network,
+  copyText,
   onCopyHash,
   onSelect,
   onApprove,
   onReject,
   onClose,
 }: CosignModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = COSIGN_COPY[language];
   const isDark = theme === 'dark';
   const colors = {
     bg: isDark ? '#1a1a1a' : '#ffffff',
@@ -110,12 +92,29 @@ export function CosignModalTemplate({
   // Keyed by request id, so the explanation folds back when another request is shown.
   const [verifiedOpenFor, setVerifiedOpenFor] = useState<string | null>(null);
   const verifiedOpen = !!current && verifiedOpenFor === current.id;
+  const reviewOf = (request: CosignRequest) =>
+    reviewFromRequest(
+      {
+        chain: request.network,
+        network,
+        operation: request.operation,
+        summary: request.summary,
+        details: request.details,
+        signWith: request.account ?? request.signWith,
+        raw: request.unsignedPayload,
+        fallbackTitle: labelOf(request, copy),
+        extraRows: [{ label: copy.expiresIn, value: expiresIn(request, copy) }],
+        appPaysFee: request.appPaysFee,
+      },
+      TX_REVIEW_COPY[language],
+    );
+  const review = current ? reviewOf(current) : null;
 
   return (
     <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>Confirm with your device</Text>
-        <TouchableOpacity onPress={onClose} accessibilityLabel="Close">
+        <Text style={[styles.title, { color: colors.text }]}>{copy.title}</Text>
+        <TouchableOpacity onPress={onClose} accessibilityLabel={copy.close}>
           <Text style={{ color: colors.muted, fontSize: 18 }}>x</Text>
         </TouchableOpacity>
       </View>
@@ -124,30 +123,36 @@ export function CosignModalTemplate({
         {pending.length === 0 && (
           <View style={styles.empty}>
             <Text style={{ color: colors.text, fontWeight: '600' }}>
-              {lastResolved
-                ? lastResolved.status === 'APPROVED'
-                  ? 'Approved'
-                  : lastResolved.status.toLowerCase()
-                : 'Nothing waits for your approval.'}
+              {lastResolved ? (copy.status[lastResolved.status] ?? lastResolved.status.toLowerCase()) : copy.nothingWaiting}
             </Text>
             {lastResolved?.submit?.hash && (
               <View style={styles.hashRow}>
-                <Text style={{ color: colors.muted }}>Sent. Transaction {crop(lastResolved.submit.hash)}</Text>
+                <Text style={{ color: colors.muted }}>
+                  {copy.sentTransaction} {crop(lastResolved.submit.hash)}
+                </Text>
                 <TouchableOpacity
                   onPress={() => onCopyHash(lastResolved.submit!.hash)}
-                  accessibilityLabel={copied ? 'Copied' : 'Copy transaction hash'}
+                  accessibilityLabel={copied ? copy.copied : copy.copyHash}
                 >
-                  <Text style={{ color: accentColor, fontWeight: '600' }}>{copied ? 'Copied' : 'Copy'}</Text>
+                  <Text style={{ color: accentColor, fontWeight: '600' }}>{copied ? copy.copied : copy.copy}</Text>
                 </TouchableOpacity>
               </View>
+            )}
+            {lastResolved?.submit?.sponsored !== undefined && (
+              <TxFeeBadge
+                sponsored={lastResolved.submit.sponsored}
+                theme={theme}
+                accentColor={accentColor}
+                language={language}
+              />
             )}
             {nextStep && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <ActivityIndicator size="small" color={accentColor} />
-                <Text style={{ color: colors.text, fontSize: 13 }}>Next: {nextStep}. It appears here in a few seconds.</Text>
+                <Text style={{ color: colors.text, fontSize: 13 }}>{copy.next(nextStep)}</Text>
               </View>
             )}
-            {closesIn !== null && <Text style={{ color: colors.muted, fontSize: 12 }}>Closing in {closesIn}s</Text>}
+            {closesIn !== null && <Text style={{ color: colors.muted, fontSize: 12 }}>{copy.closingIn(closesIn)}</Text>}
           </View>
         )}
 
@@ -158,19 +163,19 @@ export function CosignModalTemplate({
               onPress={() => onSelect(r)}
               style={[styles.item, { borderColor: current?.id === r.id ? accentColor : colors.border }]}
             >
-              <Text style={{ color: colors.text }}>{labelOf(r)}</Text>
-              <Text style={{ color: colors.muted }}>{expiresIn(r)}</Text>
+              <Text style={{ color: colors.text, flexShrink: 1 }}>{reviewOf(r).title}</Text>
+              <Text style={{ color: colors.muted }}>{expiresIn(r, copy)}</Text>
             </TouchableOpacity>
           ))}
 
-        {current && (
-          <View style={[styles.detail, { borderColor: colors.border }]}>
+        {current && review && (
+          <View style={[styles.detail, pending.length > 1 && [styles.detailGrouped, { borderColor: colors.border }]]}>
             <View style={styles.detailHead}>
-              <Text style={[styles.detailTitle, { color: colors.text, flexShrink: 1 }]}>{labelOf(current)}</Text>
+              <Text style={[styles.detailTitle, { color: colors.text, flexShrink: 1 }]}>{review.title}</Text>
               {!verification && (
                 <View style={[styles.chip, { borderColor: colors.border }]}>
                   <ActivityIndicator size="small" color={accentColor} />
-                  <Text style={{ color: colors.muted, fontSize: 12 }}>Checking...</Text>
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>{copy.checking}</Text>
                 </View>
               )}
               {verification?.ok && (
@@ -183,29 +188,30 @@ export function CosignModalTemplate({
                   <View style={[styles.okDot, { backgroundColor: colors.okText }]}>
                     <View style={styles.okMark} />
                   </View>
-                  <Text style={{ color: colors.okText, fontSize: 12, fontWeight: '600' }}>Verified</Text>
+                  <Text style={{ color: colors.okText, fontSize: 12, fontWeight: '600' }}>{copy.verified}</Text>
                 </TouchableOpacity>
               )}
             </View>
-            {current.summary ? <Text style={{ color: colors.muted }}>{current.summary}</Text> : null}
-            {detailRows(current).map(([k, v]) => (
-              <View key={k} style={styles.row}>
-                <Text style={{ color: colors.muted }}>{k}</Text>
-                <Text style={{ color: colors.text, flexShrink: 1, textAlign: 'right' }}>{v}</Text>
-              </View>
-            ))}
+            <TxReview
+              key={current.id}
+              data={review}
+              theme={theme}
+              accentColor={accentColor}
+              copyText={copyText}
+              language={language}
+            />
 
             {verification?.ok && verifiedOpen && (
               <View style={[styles.verify, { borderColor: colors.okText }]}>
-                <Text style={{ color: colors.okText, flexShrink: 1 }}>
-                  Checked against Turnkey: this is exactly what will be signed.
-                </Text>
+                <Text style={{ color: colors.okText, flexShrink: 1 }}>{copy.checkedAgainstTurnkey}</Text>
               </View>
             )}
             {/* A failed check stays spelled out: it is the only place the user learns why Approve is off. */}
             {verification && !verification.ok && (
               <View style={[styles.verify, { backgroundColor: colors.errorBg, borderColor: colors.errorText }]}>
-                <Text style={{ color: colors.errorText, flexShrink: 1 }}>Not verified: {verification.reason}</Text>
+                <Text style={{ color: colors.errorText, flexShrink: 1 }}>
+                  {copy.notVerified} {verification.reason}
+                </Text>
               </View>
             )}
 
@@ -222,7 +228,7 @@ export function CosignModalTemplate({
                 style={[styles.btn, { borderColor: colors.border }]}
               >
                 <Text style={{ color: colors.text, fontWeight: '600' }}>
-                  {busy === 'rejecting' ? 'Rejecting...' : 'Reject'}
+                  {busy === 'rejecting' ? copy.rejecting : copy.reject}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -230,7 +236,7 @@ export function CosignModalTemplate({
                 onPress={() => onApprove(current)}
                 style={[styles.btn, { backgroundColor: accentColor, borderColor: accentColor, opacity: canVote ? 1 : 0.55 }]}
               >
-                <Text style={{ color: '#fff', fontWeight: '600' }}>{busy === 'approving' ? 'Approving...' : 'Approve'}</Text>
+                <Text style={{ color: '#fff', fontWeight: '600' }}>{busy === 'approving' ? copy.approving : copy.approve}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -255,7 +261,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 6,
   },
-  detail: { borderWidth: 1, borderRadius: 12, padding: 14, gap: 8 },
+  detail: { gap: 8 },
+  detailGrouped: { borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 6 },
   detailHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   detailTitle: { fontSize: 16, fontWeight: '600' },
   chip: {
@@ -277,7 +284,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1.5,
     transform: [{ rotate: '45deg' }],
   },
-  row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   verify: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, padding: 10 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 4 },
   btn: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 10, borderWidth: 1 },

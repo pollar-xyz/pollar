@@ -3,6 +3,7 @@
 import { type CosignRequest, type CosignVerification, isPollarApiError, transactionErrorMessage } from '@pollar/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { explorerTxUrl } from '../commons';
 import { useCosign } from '../../useCosign';
 import '../shared.css';
@@ -32,6 +33,7 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
   const { getClient, styles, network } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   const { pending, lastResolved, loaded, refresh, approve, reject, verify, inspectQuorum } = useCosign();
+  const language = useModalLanguage();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [verification, setVerification] = useState<CosignVerification | null>(null);
@@ -133,8 +135,12 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
       try {
         await action(request);
       } catch (err) {
-        setError(transactionErrorMessage(isPollarApiError(err) ? err.code : null, err instanceof Error ? err.message : null));
-        if (kind === 'approving') setApproveFailedFor(request.id);
+        setError(
+          transactionErrorMessage(isPollarApiError(err) ? err.code : null, err instanceof Error ? err.message : null, language),
+        );
+        // The network fee still on its way: the same approval goes through once it lands.
+        if (kind === 'approving' && !(isPollarApiError(err) && err.code === 'SDK_COSIGN_GAS_PENDING'))
+          setApproveFailedFor(request.id);
       } finally {
         setBusy(null);
       }
@@ -157,6 +163,8 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         {...(lastResolved ? { lastResolved } : {})}
         closesIn={closesIn}
         nextStep={awaitingNext ? nextStep : null}
+        language={language}
+        network={network}
         explorerUrl={lastResolved?.submit?.hash ? explorerTxUrl(lastResolved.network, lastResolved.submit.hash, network) : null}
         onSelect={(r) => setSelectedId(r.id)}
         onApprove={(r) => void run('approving', r, approve)}

@@ -576,6 +576,39 @@ async function waitFor(cond, timeoutMs = 1000) {
     c.destroy();
   }
 
+  // (d2) The transaction state is dispatched inside the call that signs or
+  //      submits: a subscriber that throws (an audit trail anchoring each
+  //      success) must not fail that call nor starve the subscribers after it.
+  {
+    const st = sdk.createMemoryAdapter();
+    await st.set(sessionKey, advSession('READY'));
+    const c = new sdk.PollarClient({ apiKey, storage: st, baseUrl: 'https://x.test' });
+    await c.ready();
+    let offBad;
+    let threwOnSubscribe = false;
+    try {
+      offBad = c.onTransactionStateChange(() => {
+        throw new Error('listener boom');
+      });
+    } catch {
+      threwOnSubscribe = true;
+    }
+    check('a throwing tx listener does not break subscribe()', !threwOnSubscribe && typeof offBad === 'function');
+    const steps = [];
+    const off = c.onTransactionStateChange((s) => steps.push(s.step));
+    let threwOnDispatch = false;
+    try {
+      c.resetTransactionState();
+    } catch {
+      threwOnDispatch = true;
+    }
+    check('  nor the call that moves the state', !threwOnDispatch);
+    check('  and the listener after it still gets the state', steps[steps.length - 1] === 'idle', steps);
+    off();
+    offBad?.();
+    c.destroy();
+  }
+
   // (e) `isWalletNotReady` is documented to accept a RETURNED outcome, so the
   //     build path has to carry the server's code across the boundary. Reducing
   //     a 409 to `{ status: 'error' }` makes the helper answer false for the one

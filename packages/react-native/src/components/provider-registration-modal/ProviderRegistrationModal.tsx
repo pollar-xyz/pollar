@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { ProviderRegistration } from '@pollar/core';
 import { usePollar } from '../../context';
 import { PollarModalFooter } from '../commons';
-import { formLanguage } from '../requirement-form-modal/form-fields';
+import { useModalLanguage } from '../../language';
 import {
   errorCode,
   missingFieldsOf,
@@ -23,6 +23,8 @@ export interface ProviderRegistrationModalProps {
   onClose: () => void;
   /** Called once the user is registered with the provider. */
   onRegistered: () => void;
+  /** Language of the modal, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
+  language?: string | undefined;
 }
 
 /**
@@ -35,11 +37,12 @@ export function ProviderRegistrationModal({
   progress,
   onClose,
   onRegistered,
+  language: languageProp,
 }: ProviderRegistrationModalProps) {
   const { getClient, styles: pollarStyles } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = pollarStyles;
   const client = getClient();
-  const language = useMemo(formLanguage, []);
+  const language = useModalLanguage(languageProp);
   const copy = REGISTRATION_COPY[language];
   const labels = SHARED_FIELD_LABELS[language];
   const isDark = theme === 'dark';
@@ -129,6 +132,7 @@ export function ProviderRegistrationModal({
     return (
       <RequirementFormModal
         formId={fixing}
+        language={languageProp}
         onClose={() => setFixing(null)}
         onSubmitted={() => {
           setFixing(null);

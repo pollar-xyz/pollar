@@ -11,8 +11,10 @@
 // tx state to the submit outcome; reject closes the request; by default the
 // client settles the vote itself and signing calls end as they do for a
 // custodial wallet, recognized setup is approved at login without a prompt and
-// a mismatching payload is rejected; `confirmation: 'prompt'` asks before any
-// signature; the setup recognizer reads the XDR field by field.
+// a mismatching payload is rejected; a card funding from a co-signed wallet is
+// cosign_pending under `cosignManual` and settled (the funding read again) by
+// default, with the chain it was asked for; `confirmation: 'prompt'` asks before
+// any signature; the setup recognizer reads the XDR field by field.
 
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -225,6 +227,8 @@ function request(overrides = {}) {
   let stateWallets = [{ type: 'internal', address: SOURCE, publicKey: SOURCE, chain: 'STELLAR' }];
   let refreshCalls = 0;
   let refreshedRequest = null;
+  // Refreshes answered SDK_COSIGN_GAS_PENDING before the next one succeeds.
+  let gasPendingRefreshes = 0;
   const quorumReports = [];
   let quorumThreshold = 2;
   // The custody /cosign/devices reports and the root users Turnkey lists: 2-of-2
@@ -243,6 +247,26 @@ function request(overrides = {}) {
 
   // A vote whose call drops before answering, though the activity landed upstream.
   let dropVoteRelay = false;
+  // What each POST /cards/funding sent, and the funding sdk-api answers with.
+  const fundingBodies = [];
+  const cardFunding = (overrides = {}) => ({
+    id: 'fund-1',
+    status: 'CREATED',
+    amount: '5',
+    asset: 'USDC',
+    chain: 'STELLAR',
+    depositAddress: '6m2YhU678QMqN7PPtvMNNvK39iEVKNckzegiWmsfmC84',
+    chainId: 900,
+    sourceTxHash: null,
+    stellarTxHash: null,
+    burnTxHash: null,
+    polygonMintTxHash: null,
+    providerTxId: null,
+    error: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...overrides,
+  });
   globalThis.fetch = async (req) => {
     const url = new URL(req.url);
     const method = req.method ?? 'GET';
@@ -279,6 +303,39 @@ function request(overrides = {}) {
         success: true,
         code: 'SDK_COSIGN_PENDING',
         content: { pendingSignature: { kind: 'cosign', request: signingRequest() } },
+      });
+    }
+    // A co-signed wallet's auth entry (an x402 payment) is a request its device approves too.
+    if (url.pathname === '/v3/tx/sign-auth-entry') {
+      return json(202, {
+        success: true,
+        code: 'SDK_COSIGN_PENDING',
+        content: {
+          pendingSignature: {
+            kind: 'cosign',
+            request: request({ id: 'req-auth', kind: 'AUTH_ENTRY', intent: 'sign', operation: 'soroban_auth' }),
+          },
+        },
+      });
+    }
+    // A co-signed wallet funds a card through the request its device approves (202), on either chain.
+    if (url.pathname === '/v3/cards/funding' && method === 'POST') {
+      const body = await req.json();
+      fundingBodies.push(body);
+      return json(202, {
+        success: true,
+        code: 'SDK_COSIGN_PENDING',
+        content: {
+          funding: cardFunding({ chain: body.chain ?? 'STELLAR', amount: body.amount }),
+          pendingSignature: { kind: 'cosign', request: signingRequest() },
+        },
+      });
+    }
+    if (url.pathname === '/v3/cards/funding/fund-1') {
+      return json(200, {
+        success: true,
+        code: 'SDK_CARDS_FUNDING_STATUS',
+        content: { funding: cardFunding({ status: 'SENT' }) },
       });
     }
     // A co-signed wallet's trustline is the request its device approves, never a custodial signature.
@@ -363,6 +420,10 @@ function request(overrides = {}) {
     }
     if (url.pathname === '/v3/cosign/requests/req-1/refresh') {
       refreshCalls++;
+      if (gasPendingRefreshes > 0) {
+        gasPendingRefreshes--;
+        return json(409, { success: false, code: 'SDK_COSIGN_GAS_PENDING' });
+      }
       return json(200, { success: true, code: 'SDK_COSIGN_REQUEST', content: { request: refreshedRequest ?? request() } });
     }
     if (url.pathname === '/v3/cosign/relay') {
@@ -452,11 +513,32 @@ function request(overrides = {}) {
   const sendOutcome = await client.signAndSubmitTx(UNSIGNED_XDR);
   check('signAndSubmitTx answers cosign_pending too', sendOutcome.status === 'cosign_pending');
 
+  // A client of its own: the request it opens stays pending in that client's store.
+  const authClient = await makeClient({ cosignManual: true });
+  const authOutcome = await authClient.signAuthEntry('AAAA', { validUntilLedger: 1100 });
+  check(
+    'signAuthEntry on a co-signed wallet answers cosign_pending with the AUTH_ENTRY request',
+    authOutcome.status === 'cosign_pending' && authOutcome.request.kind === 'AUTH_ENTRY',
+    authOutcome,
+  );
+
   const trustOutcome = await client.setTrustline({ code: 'USDC', issuer: SOURCE });
   check(
     'setTrustline on a co-signed wallet answers cosign_pending with the request, not a success',
     trustOutcome.status === 'cosign_pending' && trustOutcome.request.id === 'req-1',
     trustOutcome,
+  );
+
+  const fundOutcome = await client.fundCard({ amount: '5', chain: 'SOLANA' });
+  check(
+    'fundCard on a co-signed wallet answers cosign_pending with the request and the funding',
+    fundOutcome.status === 'cosign_pending' && fundOutcome.request.id === 'req-1' && fundOutcome.funding.id === 'fund-1',
+    fundOutcome,
+  );
+  check(
+    'fundCard sends the chain it was asked for',
+    fundingBodies.length === 1 && fundingBodies[0].chain === 'SOLANA' && fundOutcome.funding.chain === 'SOLANA',
+    fundingBodies,
   );
 
   const relaysBeforeVerify = calls.filter((c) => c === 'POST /v3/cosign/relay').length;
@@ -525,6 +607,21 @@ function request(overrides = {}) {
   const approvedAfterRefresh = await client.cosign.approve(request({ refreshable: true }));
   check('approve refreshes a refreshable request first', refreshCalls === 1);
   check('approve then verified and proposed the refreshed payload', approvedAfterRefresh.status === 'APPROVED');
+
+  // A ramp step whose network fee is still on its way: the refresh is asked again, then the vote goes through.
+  gasPendingRefreshes = 2;
+  const refreshesBeforeGas = refreshCalls;
+  await client.signAndSubmitTx(UNSIGNED_XDR);
+  const approvedAfterGas = await client.cosign.approve(request({ refreshable: true }));
+  check('approve asks the refresh again while the network fee is on its way', refreshCalls === refreshesBeforeGas + 3);
+  check('approve proposes once the network fee landed', approvedAfterGas.status === 'APPROVED');
+
+  // Still on its way after every attempt: the code reaches the caller.
+  gasPendingRefreshes = 10;
+  await client.signAndSubmitTx(UNSIGNED_XDR);
+  const gasError = await client.cosign.approve(request({ refreshable: true })).catch((err) => err);
+  check('approve gives up with SDK_COSIGN_GAS_PENDING after its attempts', gasError?.code === 'SDK_COSIGN_GAS_PENDING');
+  gasPendingRefreshes = 0;
   refreshedRequest = null;
 
   // A request already proposed is not proposed again; sdk-api reads it back.
@@ -764,6 +861,19 @@ function request(overrides = {}) {
   check('signAndSubmitTx returns success with the hash', autoSend.status === 'success' && autoSend.hash === 'abc123', autoSend);
   check('the tx state ended in success', autoStates[autoStates.length - 1] === 'success');
 
+  // A card funding from a co-signed wallet: the device votes, cosign sends the
+  // payment, and fundCard hands back the funding as the server now reads it.
+  const autoFund = await auto.fundCard({ amount: '5' });
+  check(
+    'fundCard on a co-signed wallet settles the vote and returns the funding read again',
+    autoFund.status === 'ok' && autoFund.funding.status === 'SENT' && calls.includes('GET /v3/cards/funding/fund-1'),
+    autoFund,
+  );
+  check(
+    'fundCard without a chain sends none (Stellar on the server)',
+    fundingBodies[fundingBodies.length - 1].chain === undefined,
+  );
+
   // The vote's call drops, but Turnkey signed and the transaction went out: the
   // request is read back and reported as it stands, and nothing is rejected.
   dropVoteRelay = true;
@@ -881,6 +991,19 @@ function request(overrides = {}) {
     declinedRun,
   );
   check('nothing was sent for the declined calls', calls.length === callsBeforeDecline);
+  const declinedAuth = await prompt.signAuthEntry('AAAA', { validUntilLedger: 1100 });
+  check(
+    'prompt: an auth entry (an x402 payment) asks too, and a decline signs nothing',
+    declinedAuth.status === 'error' &&
+      declinedAuth.code === 'SDK_CONFIRMATION_DECLINED' &&
+      seen[3]?.kind === 'sign_auth_entry' &&
+      seen[3]?.authEntryXdr === 'AAAA',
+    declinedAuth,
+  );
+  check(
+    'nothing was sent for the declined auth entry',
+    !calls.slice(callsBeforeDecline).includes('POST /v3/tx/sign-auth-entry'),
+  );
   check('no confirmation is left pending', prompt.getPendingConfirmations().length === 0);
   unsubscribe();
   prompt.destroy();

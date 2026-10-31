@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { RequirementForm, RequirementFormField } from '@pollar/core';
 import { usePollar } from '../../context';
@@ -8,14 +8,15 @@ import {
   COPY,
   fieldErrorMessage,
   fieldErrorsOf,
-  formLanguage,
   initialValues,
   localFieldError,
   localFieldErrors,
   localized,
+  visibleFields,
   type FormLanguage,
   type FormValues,
 } from './form-fields';
+import { useModalLanguage } from '../../language';
 
 export interface RequirementFormModalProps {
   formId: string;
@@ -24,6 +25,8 @@ export interface RequirementFormModalProps {
   onClose: () => void;
   /** Called once the answers are stored. */
   onSubmitted: () => void;
+  /** Language of the modal, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
+  language?: string | undefined;
 }
 
 type Colors = { text: string; muted: string; border: string; itemBg: string; error: string };
@@ -140,11 +143,17 @@ function FieldInput({
 }
 
 /** One FORM requirement step: the form a route asks for, prefilled with the user's previous answers. */
-export function RequirementFormModal({ formId, progress, onClose, onSubmitted }: RequirementFormModalProps) {
+export function RequirementFormModal({
+  formId,
+  progress,
+  onClose,
+  onSubmitted,
+  language: languageProp,
+}: RequirementFormModalProps) {
   const { getClient, styles: pollarStyles } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = pollarStyles;
   const client = getClient();
-  const language = useMemo(formLanguage, []);
+  const language = useModalLanguage(languageProp);
   const copy = COPY[language];
   const isDark = theme === 'dark';
   const colors: Colors = {
@@ -211,12 +220,13 @@ export function RequirementFormModal({ formId, progress, onClose, onSubmitted }:
   async function submit() {
     if (!form) return;
     setError(null);
-    const local = localFieldErrors(form.fields, values);
+    const shown = visibleFields(form.fields, values);
+    const local = localFieldErrors(shown, values);
     if (Object.keys(local).length) return setFieldErrors(local);
     setSubmitting(true);
     setFieldErrors({});
     try {
-      await client.submitRequirementForm(form.formId, answersOf(form.fields, values));
+      await client.submitRequirementForm(form.formId, answersOf(shown, values));
       if (mounted.current) onSubmitted();
     } catch (e) {
       if (!mounted.current) return;
@@ -268,7 +278,7 @@ export function RequirementFormModal({ formId, progress, onClose, onSubmitted }:
               {!!form.description && (
                 <Text style={{ color: colors.muted, fontSize: 14, marginBottom: 12 }}>{form.description}</Text>
               )}
-              {form.fields.map((field) => {
+              {visibleFields(form.fields, values).map((field) => {
                 const fieldError = fieldErrors[field.key];
                 const help = localized(field.help, language);
                 const label = `${localized(field.label, language)}${field.required ? ' *' : ''}`;

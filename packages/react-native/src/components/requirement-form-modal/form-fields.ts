@@ -1,21 +1,18 @@
-import type { RequirementFormAnswers, RequirementFormField } from '@pollar/core';
+import { localizedText, type PollarLanguage, type RequirementFormAnswers, type RequirementFormField } from '@pollar/core';
 
-export type FormLanguage = 'en' | 'es';
+export type FormLanguage = PollarLanguage;
 
-/** Field labels come in English and Spanish; the device's language picks one. */
-export function formLanguage(): FormLanguage {
-  let language = '';
+/** The device's language tag: the last source of the modal language (see `useModalLanguage`). */
+export function deviceLanguageTag(): string {
   try {
-    language = Intl.DateTimeFormat().resolvedOptions().locale ?? '';
+    return Intl.DateTimeFormat().resolvedOptions().locale ?? '';
   } catch {
-    language = '';
+    return '';
   }
-  return language.toLowerCase().startsWith('es') ? 'es' : 'en';
 }
 
-export function localized(text: { en?: string; es?: string } | undefined, language: FormLanguage): string {
-  return (language === 'es' ? text?.es || text?.en : text?.en || text?.es) ?? '';
-}
+/** A field's label, help or option in the modal's language, else the closest one it has. */
+export const localized = localizedText;
 
 /** Values as the inputs hold them: text for every text-like input. */
 export type FormValues = Record<string, string | boolean | string[]>;
@@ -75,6 +72,24 @@ export function localFieldErrors(fields: RequirementFormField[], values: FormVal
   return errors;
 }
 
+/**
+ * The fields asked with the current values: one with `showIf` only while the earlier
+ * field it names answers one of its values, the way the server judges it. A hidden
+ * field is neither checked nor sent.
+ */
+export function visibleFields(fields: RequirementFormField[], values: FormValues): RequirementFormField[] {
+  const shown: RequirementFormField[] = [];
+  const answered: Record<string, string[]> = {};
+  for (const field of fields) {
+    const condition = field.showIf;
+    if (condition && !(answered[condition.key] ?? []).some((value) => condition.in.includes(value))) continue;
+    shown.push(field);
+    const value = values[field.key];
+    answered[field.key] = Array.isArray(value) ? value : typeof value === 'boolean' ? [String(value)] : value ? [value] : [];
+  }
+  return shown;
+}
+
 /** The answers to send: numbers as numbers, empty inputs left out so the server reports them. */
 export function answersOf(fields: RequirementFormField[], values: FormValues): RequirementFormAnswers {
   const answers: RequirementFormAnswers = {};
@@ -111,6 +126,16 @@ const MESSAGES: Record<FormLanguage, Record<string, string>> = {
     too_large: 'Este valor es demasiado alto.',
     pattern: 'No tiene el formato esperado.',
     invalid_format: 'No tiene el formato esperado.',
+  },
+  pt: {
+    required: 'Este campo é obrigatório.',
+    invalid_type: 'Este valor não é válido.',
+    invalid_option: 'Escolha uma das opções.',
+    too_long: 'É longo demais.',
+    too_small: 'Este valor é baixo demais.',
+    too_large: 'Este valor é alto demais.',
+    pattern: 'Não tem o formato esperado.',
+    invalid_format: 'Não tem o formato esperado.',
   },
 };
 
@@ -157,5 +182,15 @@ export const COPY: Record<
     loadError: 'No se pudo cargar el formulario. Intenta de nuevo.',
     submitError: 'No se pudieron guardar tus respuestas. Intenta de nuevo.',
     step: 'Paso {n} de {total}',
+  },
+  pt: {
+    title: 'Mais alguns dados',
+    loading: 'Carregando o formulário…',
+    submit: 'Continuar',
+    submitting: 'Salvando…',
+    close: 'Fechar',
+    loadError: 'Não foi possível carregar o formulário. Tente novamente.',
+    submitError: 'Não foi possível salvar suas respostas. Tente novamente.',
+    step: 'Passo {n} de {total}',
   },
 };

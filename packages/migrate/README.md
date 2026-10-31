@@ -11,7 +11,7 @@ Each finding links to the section of the [upgrade guide](https://docs.pollar.xyz
 
 ## What it does
 
-1. Finds every `package.json` and source file (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`) under the directory, skipping `node_modules`, build output and native folders. Monorepos are covered.
+1. Finds every `package.json` and source file (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.mts`, `.cts`; not `.d.ts`) under the directory, skipping `node_modules`, build output and native folders. Monorepos are covered.
 2. Reads the release the app is on from what is installed in `node_modules`, or from the ranges in `package.json`. Pass `--from` to set it yourself.
 3. Checks only the files that import an SDK package (`@pollar/core`, `@pollar/react`, `@pollar/react-native` and the adapters), and reports only the changes made after your release.
 
@@ -28,9 +28,9 @@ With `--fix` it applies the changes it can make safely:
 | `stellarWalletsKit()` -> `stellarWalletsKitAdapters()`, `walletAdapter` -> `walletAdapters`                                                                                                     | 0.10   |
 | A `baseUrl` ending in `/v1` or `/v2` -> the origin                                                                                                                                              | 0.11   |
 | `setTrustline(asset, { sponsored: true })` -> `setTrustline(asset)`                                                                                                                             | 0.11.1 |
-| `@pollar/*` ranges in `package.json` -> `^0.12.0`                                                                                                                                               | 0.12   |
+| `@pollar/core`, `react`, `react-native` and the two wallet-adapter ranges in `package.json` -> `^0.12.0`                                                                                        | 0.12   |
 
-Everything else is reported as **to do**, with what to write instead: removed ramp methods, the user profile that left the session, `styles` on the provider, a missing `network`, nullable balances, a headless app with no confirmation handler, direct calls to SDK API v1 or v2, and imports of names 0.12 no longer exports.
+Everything else is reported as **to do**, with what to write instead: removed ramp methods, the user profile that left the session, `styles` on the provider, a missing `network`, nullable balances, a headless app with no confirmation handler, direct calls to SDK API v1 or v2, and imports of names 0.12 does not export.
 
 The files are written only after every file was read, so an error leaves the project untouched. Commit or stash your work first, so you can review the diff.
 
@@ -49,6 +49,7 @@ The files are written only after every file was read, so an error leaves the pro
 | `--fix`            | Write the fixable changes.                                          |
 | `--from <version>` | The release the app is on, when it cannot be read from the project. |
 | `--json`           | Print the result as JSON, for scripts and coding agents.            |
+| `-h`, `--help`     | Show the help.                                                      |
 
 ## JSON output
 
@@ -85,4 +86,4 @@ const result = migrate({ root: process.cwd(), fix: false });
 
 ## License
 
-Apache-2.0
+Apache-2.0. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).

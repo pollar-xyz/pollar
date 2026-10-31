@@ -1,3 +1,4 @@
+import { useInheritedLanguage } from '../../language-context';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -28,7 +29,9 @@ import type {
   RampRoute,
 } from '@pollar/core';
 import {
+  countryName,
   appUnavailableMessage,
+  type PollarLanguage,
   assertRampStellarSigner,
   describeRampAction,
   isPollarApiError,
@@ -55,7 +58,8 @@ import { usePollar } from '../../context';
 import { useWalletAvailable } from '../../useWalletAvailable';
 import { AmountField } from '../AmountField';
 import { PollarOverlay } from '../commons';
-import { formLanguage } from '../requirement-form-modal/form-fields';
+import { useModalLanguage } from '../../language';
+import { RAMP_COPY, type RampCopy } from './ramp-copy';
 import { RejectedRouteDisplay, RouteDisplay } from './RouteDisplay';
 import { KycModal } from '../kyc-modal/KycModal';
 import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
@@ -71,28 +75,19 @@ function trustKey(rejection: RampQuoteRejection): string | null {
 }
 
 /** "a", "a and b", "a, b and c" - for naming what a step is asking for. */
-function listOf(items: string[]): string {
+function listOf(items: string[], copy: RampCopy): string {
   const last = items[items.length - 1];
-  if (last === undefined) return 'a few details';
+  if (last === undefined) return copy.fewDetails;
   if (items.length === 1) return last;
-  return `${items.slice(0, -1).join(', ')} and ${last}`;
+  return `${items.slice(0, -1).join(', ')} ${copy.and} ${last}`;
 }
 
-/** Ramp failures a user can act on, by API code. */
-const RAMP_ERROR_MESSAGES: Record<string, string> = {
-  SDK_RAMPS_QUOTE_EXPIRED: 'This quote expired. Find a route again.',
-  SDK_RAMPS_QUOTE_NOT_FOUND: 'This quote is no longer available. Find a route again.',
-  SDK_RAMPS_ACTION_STALE: 'This step changed. It was refreshed; try again.',
-  SDK_RAMPS_TX_NOT_FOUND: 'This operation was not found.',
-  SDK_RAMPS_WALLET_NOT_READY: 'Approve the new wallet account on your device, then try again.',
-};
-
 /** The text for a failed ramp call: an app that cannot serve it, a known code, the server's reason, or the fallback. */
-function rampErrorMessage(error: unknown, fallback: string): string {
-  const unavailable = appUnavailableMessage(error);
+function rampErrorMessage(error: unknown, fallback: string, copy: RampCopy, language: PollarLanguage): string {
+  const unavailable = appUnavailableMessage(error, language);
   if (unavailable) return unavailable;
   if (isPollarApiError(error)) {
-    const known = RAMP_ERROR_MESSAGES[error.code];
+    const known = copy.errors[error.code];
     if (known) return known;
     const message = error.body.message;
     if (typeof message === 'string' && message && !/^[A-Z0-9_]+$/.test(message)) return message;
@@ -117,7 +112,7 @@ const DECIMAL = /^\d+(\.\d+)?$/;
  * registered its own signer for a chain keeps it, and the widget's are released
  * once the leg is signed.
  */
-async function signLegWithWallet(client: PollarClient, orderId: string, actionId: string): Promise<RampOrder> {
+async function signLegWithWallet(client: PollarClient, orderId: string, actionId: string, copy: RampCopy): Promise<RampOrder> {
   const lent: Array<() => void> = [];
   const lend = (chain: 'STELLAR' | 'SOLANA', encoding: string, handler: RampSigningHandler) => {
     try {
@@ -128,14 +123,13 @@ async function signLegWithWallet(client: PollarClient, orderId: string, actionId
   };
   lend('STELLAR', 'xdr', async (action) => {
     const wallet = client.getWallet();
-    if (!wallet) throw new Error('Connect the Stellar wallet this step was built for.');
+    if (!wallet) throw new Error(copy.connectStellarWallet);
     assertRampStellarSigner(action, wallet.address);
     const outcome = await client.signTx(action.payload.value);
-    if (client.getWallet()?.address !== wallet.address)
-      throw new Error('The connected wallet changed. Refresh before signing.');
+    if (client.getWallet()?.address !== wallet.address) throw new Error(copy.walletChanged);
     if (outcome.status === 'signed') return outcome.signedXdr;
     throw new Error(
-      outcome.status === 'error' ? (outcome.message ?? outcome.details ?? 'Signing was cancelled.') : 'Signing was cancelled.',
+      outcome.status === 'error' ? (outcome.message ?? outcome.details ?? copy.signingCancelled) : copy.signingCancelled,
     );
   });
   lend('SOLANA', 'solana-v0-json', async (action) => {
@@ -143,10 +137,9 @@ async function signLegWithWallet(client: PollarClient, orderId: string, actionId
     const payload = JSON.parse(action.payload.value) as { from?: string; unsignedTransaction?: string };
     const solanaWallet = () => client.getWallets().find((w) => w.chain === 'SOLANA' && w.custody === 'external');
     const wallet = solanaWallet();
-    if (!wallet || payload.from !== wallet.address || !payload.unsignedTransaction)
-      throw new Error('This step must be signed by the Solana wallet it was built for. Reconnect that wallet.');
+    if (!wallet || payload.from !== wallet.address || !payload.unsignedTransaction) throw new Error(copy.solanaWalletMismatch);
     const signed = await client.signSolanaTransaction(payload.unsignedTransaction);
-    if (solanaWallet()?.address !== wallet.address) throw new Error('The connected wallet changed. Refresh before signing.');
+    if (solanaWallet()?.address !== wallet.address) throw new Error(copy.walletChanged);
     return signed;
   });
   try {
@@ -160,7 +153,51 @@ const fiatKey = (fiat: Pick<RampFiat, 'currency' | 'rail'>) => `${fiat.currency}
 const assetKey = (asset: Pick<RampAsset, 'code' | 'chain' | 'identifier'>) =>
   `${asset.code}:${asset.chain}:${asset.identifier ?? ''}`;
 
+/** Where the ramp widget opens: a starting point the user can change, never a lock. */
+export interface RampModalOptions {
+  direction?: 'buy' | 'sell';
+  /** ISO 3166-1 alpha-2, e.g. 'BR'. */
+  country?: string;
+  /** e.g. 'BRL'; the country's first fiat when left out or not offered there. */
+  fiat?: string;
+  /** e.g. 'USDC'. */
+  asset?: string;
+  amount?: string;
+}
+
+/**
+ * The choices a seed names among one direction's routes, as the widget's choice
+ * keys ('' is the default), or null when its country does not route there.
+ */
+function seededSelection(
+  routes: RampRoute[],
+  seed: RampModalOptions,
+): { country: string; fiatChoice: string; assetChoice: string; amount: string } | null {
+  const countries = rampCountries(routes);
+  const wanted = seed.country?.trim().toUpperCase();
+  const country = wanted ? countries.find((c) => c.country === wanted) : countries[0];
+  if (!country) return null;
+  const fiat = country.fiats.find((f) => f.currency === seed.fiat?.trim().toUpperCase()) ?? null;
+  const resolvedFiat = fiat ?? country.fiats[0];
+  const asset = routes.find(
+    (r) =>
+      r.fiat.country === country.country &&
+      resolvedFiat !== undefined &&
+      fiatKey(r.fiat) === fiatKey(resolvedFiat) &&
+      r.asset.code.toUpperCase() === seed.asset?.trim().toUpperCase(),
+  )?.asset;
+  const amount = seed.amount?.trim() ?? '';
+  return {
+    country: country.country,
+    fiatChoice: fiat ? fiatKey(fiat) : '',
+    assetChoice: asset ? assetKey(asset) : '',
+    amount: DECIMAL.test(amount) ? amount : '',
+  };
+}
+
 export interface RampWidgetTemplateProps {
+  /** Language of the rail labels. Defaults to the user's device; the widget passes the resolved one. */
+  language?: PollarLanguage;
   theme?: string;
   accentColor?: string;
   step: RampStep;
@@ -219,6 +256,8 @@ export interface RampWidgetTemplateProps {
   retrying?: boolean;
   /** Runs the user's held order again; absent, a held order only says what happened. */
   onRetryOrder?: (() => void) | undefined;
+  /** Quotes the same amount again when the price changed before anything moved; absent, only a new operation is offered. */
+  onRequote?: (() => void) | undefined;
   /** Opens the wallet's recovery setup, for an order held until the wallet has a way to be recovered. */
   onSetUpRecovery?: (() => void) | undefined;
   /** Whether the wallet still has no way to be recovered; null while its state is unread. */
@@ -239,14 +278,6 @@ export interface RampWidgetTemplateProps {
   onClose: () => void;
 }
 
-/** Renders again at `at` (ms since epoch), so what lapses then (a signature's button) goes then, not at the next read. */
-const timeLeftText = (seconds: number) =>
-  seconds <= 0
-    ? 'Taking a little longer than usual'
-    : seconds < 60
-      ? `About ${seconds}s left`
-      : `About ${Math.ceil(seconds / 60)} min left`;
-
 /** The current time, every second while `running`: what a countdown reads. */
 function useNowEverySecond(running: boolean): number {
   const [now, setNow] = useState(() => Date.now());
@@ -258,6 +289,7 @@ function useNowEverySecond(running: boolean): number {
   return now;
 }
 
+/** Renders again at `at` (ms since epoch), so what lapses then (a signature's button) goes then, not at the next read. */
 function useRenderAt(at: number | null) {
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -310,6 +342,7 @@ export function RampWidgetTemplate({
   noChains = false,
   retrying = false,
   onRetryOrder,
+  onRequote,
   onSetUpRecovery,
   recoveryMissing = null,
   pollTrouble = false,
@@ -324,7 +357,10 @@ export function RampWidgetTemplate({
   onStepSelect,
   onRetry,
   onClose,
+  language: languageProp,
 }: RampWidgetTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = RAMP_COPY[language];
   const isDark = theme === 'dark';
   const colors = {
     bg: isDark ? '#1a1a1a' : '#ffffff',
@@ -335,17 +371,19 @@ export function RampWidgetTemplate({
     error: '#ef4444',
   };
   const onramp = direction === 'ONRAMP';
-  const view = order ? describeRampAction(order) : null;
+  const view = order ? describeRampAction(order, language) : null;
   const settled = order ? ['completed', 'failed', 'refunded'].includes(order.state) : false;
   // A leg running on its own (not waiting on the user) counts down its quoted time.
   const running = order?.legs.find((leg) => rampLegStatus(leg) === 'active' && order.pendingAction?.legIndex !== leg.index);
   const now = useNowEverySecond(step === 'status' && !settled && !!running && running.etaSeconds !== null);
-  const nextApproval = order && !settled ? rampNextApproval(order) : null;
+  const nextApproval = order && !settled ? rampNextApproval(order, language) : null;
   // Held (no next read) or final: the order no longer moves on its own.
   const stopped = order ? rampOrderStopped(order) : false;
   const receive = order ? rampOrderReceive(order) : null;
   // A held order that waits on the wallet's recovery: retrying before it exists fails the same way.
   const waitsOnRecovery = order?.failure?.resolutionAction === 'set_up_recovery';
+  // The price changed before anything moved: the same order would be refused again, so the amount is quoted anew.
+  const asksNewQuote = order?.failure?.resolutionAction === 'accept_new_quote';
   useRenderAt(view?.canSign && view.expiresAt ? Date.parse(view.expiresAt) : null);
   const missingField = fields.some((f) => !rampFieldValid(f, fieldValues[f.key]));
   const canFind = !!amount && Number(amount) > 0 && !!fiat && !!asset && !isLoading;
@@ -395,26 +433,31 @@ export function RampWidgetTemplate({
       <Text style={{ color: colors.text }} selectable>
         {value}
       </Text>
-      <TouchableOpacity onPress={() => onCopy(value)} accessibilityLabel={`Copy ${label}`}>
-        <Text style={{ color: accentColor, fontWeight: '600', marginTop: 4 }}>Copy</Text>
+      <TouchableOpacity onPress={() => onCopy(value)} accessibilityLabel={copy.copyLabel(label)}>
+        <Text style={{ color: accentColor, fontWeight: '600', marginTop: 4 }}>{copy.copy}</Text>
       </TouchableOpacity>
     </View>
   );
   const stepTitle: Record<RampStep, string> = {
-    input: onramp ? 'Buy crypto' : 'Sell crypto',
-    loading_quote: 'Finding the best route',
-    select_route: 'Choose a route',
-    contact: 'Your details',
-    status: order?.state === 'completed' ? 'Transfer completed' : onramp ? 'Your purchase' : 'Your sale',
-    error: 'Something went wrong',
+    input: onramp ? copy.title.buy : copy.title.sell,
+    loading_quote: copy.title.finding,
+    select_route: copy.title.chooseRoute,
+    contact: copy.title.details,
+    status: order?.state === 'completed' ? copy.title.completed : onramp ? copy.title.purchase : copy.title.sale,
+    error: copy.title.error,
   };
   const stepSubtitle: Record<RampStep, string> = {
-    input: onramp ? 'Pick what you receive and how much you pay' : 'Pick what you sell and how much',
-    loading_quote: 'Comparing routes in real time…',
-    select_route: 'All amounts include fees',
-    contact: `This route needs ${listOf(fields.filter((f) => !f.optional).map((f) => f.label.toLowerCase()))} to continue`,
-    status: view?.title ?? 'Processing',
-    error: 'Please try again',
+    input: onramp ? copy.subtitle.buy : copy.subtitle.sell,
+    loading_quote: copy.subtitle.comparing,
+    select_route: copy.subtitle.feesIncluded,
+    contact: copy.subtitle.needs(
+      listOf(
+        fields.filter((f) => !f.optional).map((f) => f.label.toLowerCase()),
+        copy,
+      ),
+    ),
+    status: view?.title ?? copy.subtitle.processing,
+    error: copy.subtitle.error,
   };
   const errorLine = errorMsg ? <Text style={[styles.note, { color: colors.error }]}>{errorMsg}</Text> : null;
   const scannable = view?.scannable ?? null;
@@ -429,16 +472,14 @@ export function RampWidgetTemplate({
       <TouchableOpacity
         style={[styles.iconButton, styles.closeBtn, { borderColor: colors.border }]}
         onPress={onClose}
-        accessibilityLabel="Close"
+        accessibilityLabel={copy.close}
       >
         <Text style={{ color: colors.muted, fontSize: 16 }}>✕</Text>
       </TouchableOpacity>
 
       {flowStepIndex >= 0 && flowSteps.length > 0 && (
         <View style={styles.steps}>
-          <Text style={[styles.stepsLabel, { color: colors.muted }]}>
-            Step {flowStepIndex + 1} of {flowSteps.length}
-          </Text>
+          <Text style={[styles.stepsLabel, { color: colors.muted }]}>{copy.stepOf(flowStepIndex + 1, flowSteps.length)}</Text>
           <View style={styles.stepsTrack}>
             {flowSteps.map((label, i) => {
               const reachable = stepsOpen && i < flowStepIndex;
@@ -450,7 +491,7 @@ export function RampWidgetTemplate({
                   disabled={!reachable}
                   onPress={() => onStepSelect?.(label)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Go to ${label}`}
+                  accessibilityLabel={copy.goTo(label)}
                   accessibilityState={{ disabled: !reachable, selected: current }}
                 >
                   <View style={[styles.stepsSegment, { backgroundColor: i <= flowStepIndex ? accentColor : colors.border }]} />
@@ -479,10 +520,10 @@ export function RampWidgetTemplate({
           <>
             {pendingOrders.length > 0 && (
               <>
-                <Text style={[styles.note, { color: colors.muted }]}>These operations are waiting for you:</Text>
+                <Text style={[styles.note, { color: colors.muted }]}>{copy.pendingNoteShort}</Text>
                 {pendingOrders.map((pending) =>
                   secondary(
-                    `Resume ${pending.direction === 'ONRAMP' ? 'purchase' : 'sale'} · ${pending.id.slice(-8)}`,
+                    copy.resume(pending.direction === 'ONRAMP', pending.id.slice(-8)),
                     () => onResumeOrder(pending.id),
                     isLoading,
                   ),
@@ -491,8 +532,8 @@ export function RampWidgetTemplate({
             )}
             {chips<RampDirection>(
               [
-                { key: 'ONRAMP', label: 'Buy' },
-                { key: 'OFFRAMP', label: 'Sell' },
+                { key: 'ONRAMP', label: copy.buy },
+                { key: 'OFFRAMP', label: copy.sell },
               ],
               direction,
               onDirectionChange,
@@ -500,35 +541,33 @@ export function RampWidgetTemplate({
             {routesLoading ? (
               <ActivityIndicator color={accentColor} style={{ marginBottom: 16 }} />
             ) : countries.length === 0 ? (
-              <Text style={[styles.note, { color: colors.muted }]}>
-                {noChains
-                  ? 'This app has no chains enabled, so there is nothing to buy or sell yet.'
-                  : 'No ramp routes are available for this app yet.'}
-              </Text>
+              <Text style={[styles.note, { color: colors.muted }]}>{noChains ? copy.noChains : copy.noRoutes}</Text>
             ) : (
               <>
-                <Text style={[styles.label, { color: colors.text }]}>Country</Text>
+                <Text style={[styles.label, { color: colors.text }]}>{copy.country}</Text>
                 {chips(
-                  countries.map((c) => ({ key: c.country, label: c.country })),
+                  countries
+                    .map((c) => ({ key: c.country, label: countryName(c.country, language) }))
+                    .sort((a, b) => a.label.localeCompare(b.label, language)),
                   country,
                   onCountryChange,
                 )}
                 {fiats.length > 1 && (
                   <>
-                    <Text style={[styles.label, { color: colors.text }]}>{onramp ? 'Pay with' : 'Receive in'}</Text>
+                    <Text style={[styles.label, { color: colors.text }]}>{onramp ? copy.payWith : copy.receiveIn}</Text>
                     {chips(
                       fiats.map((f) => ({
                         key: fiatKey(f),
-                        label: `${f.currency} · ${rampRailLabel(f.rail, { language: formLanguage() })}`,
+                        label: `${f.currency} · ${rampRailLabel(f.rail, { language })}`,
                       })),
                       fiat ? fiatKey(fiat) : '',
                       onFiatChange,
                     )}
                   </>
                 )}
-                <Text style={[styles.label, { color: colors.text }]}>{onramp ? 'Receive' : 'Sell'}</Text>
+                <Text style={[styles.label, { color: colors.text }]}>{onramp ? copy.receive : copy.sell}</Text>
                 {chips(
-                  assets.map((a) => ({ key: assetKey(a), label: `${a.code} on ${CHAIN_NAME[a.chain] ?? a.chain}` })),
+                  assets.map((a) => ({ key: assetKey(a), label: copy.assetOn(a.code, CHAIN_NAME[a.chain] ?? a.chain) })),
                   asset ? assetKey(asset) : '',
                   onAssetChange,
                 )}
@@ -537,22 +576,23 @@ export function RampWidgetTemplate({
             <AmountField
               theme={theme}
               accentColor={accentColor}
-              label={onramp ? 'You pay' : 'You sell'}
+              label={onramp ? copy.youPay : copy.youSell}
               value={amount}
               onChange={onAmountChange}
               unit={onramp ? fiat?.currency : asset?.code}
               available={onramp ? undefined : sellAvailable}
               placeholder="25.00"
+              language={language}
             />
             {errorLine}
-            {primary('Find best route', onFindRoute, !canFind)}
+            {primary(copy.findBestRoute, onFindRoute, !canFind)}
           </>
         )}
 
         {step === 'loading_quote' && (
           <View style={styles.statusBox}>
             <ActivityIndicator size="large" color={accentColor} />
-            <Text style={{ color: colors.text, marginTop: 16 }}>Finding routes…</Text>
+            <Text style={{ color: colors.text, marginTop: 16 }}>{copy.findingRoutes}</Text>
           </View>
         )}
 
@@ -565,6 +605,7 @@ export function RampWidgetTemplate({
                 best={i === 0}
                 disabled={startingQuoteId != null}
                 onSelect={onSelectQuote}
+                language={language}
               />
             ))}
             {rejected.map((r, i) => (
@@ -579,9 +620,12 @@ export function RampWidgetTemplate({
                 onVerify={onVerifyRoute}
                 onTrust={onTrustAsset}
                 onWalletStep={onWalletStep && ((step, custody) => onWalletStep(step, i, custody))}
+                language={language}
               />
             ))}
-            {quotes.length === 0 && <Text style={[styles.note, { color: colors.muted }]}>{rampNoRouteText(rejected)}</Text>}
+            {quotes.length === 0 && (
+              <Text style={[styles.note, { color: colors.muted }]}>{rampNoRouteText(rejected, language)}</Text>
+            )}
             {startingQuoteId && <ActivityIndicator color={accentColor} />}
             {notice && (
               <View style={styles.noticeRow}>
@@ -591,7 +635,13 @@ export function RampWidgetTemplate({
             )}
             {errorLine}
             {/* A dead end keeps a button out: the step bar alone is too quiet as the only way forward. */}
-            {(errorMsg || !quotes.length) && primary('Back', onBack)}
+            {(errorMsg || !quotes.length) &&
+              primary(
+                !errorMsg && rejected.some((r) => r.failure.resolutionAction === 'change_amount')
+                  ? copy.changeAmount
+                  : copy.back,
+                onBack,
+              )}
           </>
         )}
 
@@ -601,7 +651,7 @@ export function RampWidgetTemplate({
               <View key={f.key}>
                 <Text style={[styles.label, { color: colors.text }]}>
                   {f.label}
-                  {f.optional ? ' (optional)' : ''}
+                  {f.optional ? ` (${copy.optional})` : ''}
                 </Text>
                 {f.type === 'select' && f.options ? (
                   chips(
@@ -621,13 +671,13 @@ export function RampWidgetTemplate({
                   />
                 )}
                 {f.hint ? <Text style={[styles.note, { color: colors.muted }]}>{f.hint}</Text> : null}
-                {rampFieldError(f, fieldValues[f.key]) ? (
-                  <Text style={[styles.note, { color: colors.error }]}>{rampFieldError(f, fieldValues[f.key])}</Text>
+                {rampFieldError(f, fieldValues[f.key], language) ? (
+                  <Text style={[styles.note, { color: colors.error }]}>{rampFieldError(f, fieldValues[f.key], language)}</Text>
                 ) : null}
               </View>
             ))}
             {errorLine}
-            {primary(isLoading ? 'Starting…' : 'Continue', onContactContinue, missingField || isLoading)}
+            {primary(isLoading ? copy.starting : copy.continue, onContactContinue, missingField || isLoading)}
           </>
         )}
 
@@ -652,12 +702,12 @@ export function RampWidgetTemplate({
                       color: status === 'failed' ? colors.error : status === 'pending' ? colors.muted : colors.text,
                     }}
                   >
-                    {rampLegTitle(leg)}
+                    {rampLegTitle(leg, language)}
                   </Text>
                   {status === 'active' && !settled && <ActivityIndicator size="small" color={accentColor} />}
                 </View>
               );
-              const note = rampLegNote(leg);
+              const note = rampLegNote(leg, language);
               const steps = (status === 'active' && !settled ? leg.steps : null) ?? [];
               const timeLeft = running === leg && !settled ? rampLegTimeLeft(leg, now) : null;
               if (!note && !steps.length && timeLeft === null) return row;
@@ -668,7 +718,7 @@ export function RampWidgetTemplate({
                   {steps.map((s) => (
                     <View key={s.kind} style={styles.legStep}>
                       <Text style={{ flex: 1, fontSize: 13, color: s.status === 'pending' ? colors.muted : colors.text }}>
-                        {rampStepTitle(s, leg)}
+                        {rampStepTitle(s, leg, language)}
                       </Text>
                       {s.status === 'confirming' && <ActivityIndicator size="small" color={accentColor} />}
                       <Text
@@ -678,44 +728,46 @@ export function RampWidgetTemplate({
                           fontWeight: s.status === 'awaiting_approval' ? '600' : '400',
                         }}
                       >
-                        {rampStepStatusText(s)}
+                        {rampStepStatusText(s, language)}
                       </Text>
                     </View>
                   ))}
-                  {timeLeft !== null && <Text style={[styles.legNote, { color: colors.muted }]}>{timeLeftText(timeLeft)}</Text>}
+                  {timeLeft !== null && (
+                    <Text style={[styles.legNote, { color: colors.muted }]}>{copy.timeLeft(timeLeft)}</Text>
+                  )}
                 </View>
               );
             })}
             {nextApproval && !order.pendingAction && (
-              <Text style={[styles.note, { color: colors.muted }]}>
-                Next: {nextApproval}. You approve it on this device when it comes up.
-              </Text>
+              <Text style={[styles.note, { color: colors.muted }]}>{copy.next(nextApproval)}</Text>
             )}
 
             {receive &&
               copyRow(
-                order.state === 'completed' ? 'You received' : 'You receive',
+                order.state === 'completed' ? copy.youReceived : copy.youReceive,
                 `${receive.estimated ? '~' : ''}${receive.amount} ${receive.unit}`,
               )}
             {order.failure && (
               <>
-                <Text style={[styles.note, { color: colors.text }]}>{rampOrderResolutionText(order)}</Text>
-                {copyRow('Order', order.id)}
+                <Text style={[styles.note, { color: colors.text }]}>{rampOrderResolutionText(order, language)}</Text>
+                {copyRow(copy.order, order.id)}
                 {stopped &&
                   !settled &&
                   waitsOnRecovery &&
                   recoveryMissing !== false &&
                   onSetUpRecovery &&
-                  secondary('Set up recovery', onSetUpRecovery)}
+                  secondary(copy.setUpRecovery, onSetUpRecovery)}
                 {stopped && !settled && waitsOnRecovery && recoveryMissing === true && (
-                  <Text style={[styles.note, { color: colors.muted }]}>Once it is set up, the order goes on by itself.</Text>
+                  <Text style={[styles.note, { color: colors.muted }]}>{copy.recoveryNote}</Text>
                 )}
+                {stopped && !settled && asksNewQuote && onRequote && primary(copy.newQuote, onRequote)}
                 {stopped &&
                   !settled &&
                   order.failure.resolutionOwner === 'END_USER' &&
+                  !asksNewQuote &&
                   onRetryOrder &&
                   primary(
-                    retrying ? 'Trying again…' : 'Try again',
+                    retrying ? copy.tryingAgain : copy.tryAgain,
                     onRetryOrder,
                     retrying || (waitsOnRecovery && recoveryMissing === true),
                   )}
@@ -724,8 +776,8 @@ export function RampWidgetTemplate({
             {!settled && view.action?.kind === 'FIAT_PAYMENT' && view.expiresAt && (
               <Text style={[styles.note, { color: colors.muted }]}>
                 {Date.parse(view.expiresAt) > Date.now()
-                  ? `Pay before ${new Date(view.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
-                  : 'This payment window has closed. If you have not paid, start a new operation.'}
+                  ? copy.payBefore(new Date(view.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+                  : copy.windowClosed}
               </Text>
             )}
 
@@ -739,43 +791,35 @@ export function RampWidgetTemplate({
                   <Image
                     source={{ uri: `data:${scannable.image.mediaType};base64,${scannable.image.data}` }}
                     style={{ width: 200, height: 200 }}
-                    accessibilityLabel="Payment QR"
+                    accessibilityLabel={copy.paymentQr}
                   />
                 )}
               </View>
             )}
-            {!settled && view.codeMissing && (
-              <Text style={[styles.note, { color: colors.error }]}>
-                The payment code could not be shown. Refresh; if it still does not appear, contact this app's support.
-              </Text>
-            )}
+            {!settled && view.codeMissing && <Text style={[styles.note, { color: colors.error }]}>{copy.codeMissing}</Text>}
             {!settled && scannable?.payload && scannable.payloadLabel && copyRow(scannable.payloadLabel, scannable.payload)}
             {!settled && view.details.map((d) => copyRow(d.label, d.value))}
 
-            {!settled && view.canSign && primary(signing ? 'Waiting for your wallet…' : 'Authorize', onSign, signing)}
+            {!settled && view.canSign && primary(signing ? copy.waitingWallet : copy.authorize, onSign, signing)}
             {!settled && view.action?.kind === 'SIGNATURE' && !view.canSign && (
-              <Text style={[styles.note, { color: colors.muted }]}>Preparing a new signature request…</Text>
+              <Text style={[styles.note, { color: colors.muted }]}>{copy.preparingSignature}</Text>
             )}
-            {!settled && view.canApprove && primary('Approve on this device', onApprove)}
-            {!settled && view.link && primary(view.linkLabel ?? 'Open', () => void Linking.openURL(view.link!))}
+            {!settled && view.canApprove && primary(copy.approveOnDevice, onApprove)}
+            {!settled && view.link && primary(view.linkLabel ?? copy.open, () => void Linking.openURL(view.link!))}
             {!settled && order.pendingAction?.kind === 'KYC' && !view.link && (
-              <Text style={[styles.note, { color: colors.muted }]}>
-                {view.note ?? 'The provider is reviewing your details. This updates on its own.'}
-              </Text>
+              <Text style={[styles.note, { color: colors.muted }]}>{view.note ?? copy.providerReviewing}</Text>
             )}
-            {pollTrouble && !settled && (
-              <Text style={[styles.note, { color: colors.muted }]}>Having trouble reaching the server. Retrying…</Text>
-            )}
+            {pollTrouble && !settled && <Text style={[styles.note, { color: colors.muted }]}>{copy.serverTrouble}</Text>}
             {errorLine}
-            {secondary('Start another operation', onNewOrder)}
+            {secondary(copy.startAnother, onNewOrder)}
           </>
         )}
 
         {step === 'error' && (
           <>
             {errorLine}
-            {primary('Try again', onRetry)}
-            {secondary('Close', onClose)}
+            {primary(copy.tryAgain, onRetry)}
+            {secondary(copy.close, onClose)}
           </>
         )}
       </ScrollView>
@@ -783,7 +827,17 @@ export function RampWidgetTemplate({
   );
 }
 
-export function RampWidget({ onClose }: { onClose: () => void }) {
+export function RampWidget({
+  onClose,
+  language: languageProp,
+  initial,
+}: {
+  onClose: () => void;
+  /** Initial direction, country, fiat, asset and amount. A country that does not route in that direction opens on the defaults; a kept order wins over them. */
+  initial?: RampModalOptions | undefined;
+  /** Language of the widget and the steps it opens, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
+  language?: string | undefined;
+}) {
   const {
     getClient,
     copyText,
@@ -800,10 +854,17 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
     refreshWalletBalance,
   } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = pollarStyles;
+  const language = useModalLanguage(languageProp);
+  const copy = RAMP_COPY[language];
   const client = getClient();
 
   const [step, setStep] = useState<RampStep>(saved ? 'status' : 'input');
-  const [direction, setDirection] = useState<RampDirection>(saved?.direction ?? 'ONRAMP');
+  const seededDirection: RampDirection = initial?.direction === 'sell' ? 'OFFRAMP' : 'ONRAMP';
+  const [direction, setDirection] = useState<RampDirection>(saved?.direction ?? seededDirection);
+  // Applied to the first routes that load for the seeded direction, then dropped; the user moving first drops it too.
+  const seedRef = useRef<{ direction: RampDirection; options: RampModalOptions } | null>(
+    initial && !saved ? { direction: seededDirection, options: initial } : null,
+  );
   const [routes, setRoutes] = useState<RampRoute[]>([]);
   const [routesLoading, setRoutesLoading] = useState(true);
   const [country, setCountry] = useState('');
@@ -869,14 +930,14 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
 
   const flowSteps =
     fields.length || quotes.some((q) => rampQuoteFields(q).length)
-      ? ['Amount', 'Route', 'Details', 'Complete']
-      : ['Amount', 'Route', 'Complete'];
+      ? [copy.steps.amount, copy.steps.route, copy.steps.details, copy.steps.complete]
+      : [copy.steps.amount, copy.steps.route, copy.steps.complete];
   const stepLabel: Partial<Record<RampStep, string>> = {
-    input: 'Amount',
-    loading_quote: 'Amount',
-    select_route: 'Route',
-    contact: 'Details',
-    status: 'Complete',
+    input: copy.steps.amount,
+    loading_quote: copy.steps.amount,
+    select_route: copy.steps.route,
+    contact: copy.steps.details,
+    status: copy.steps.complete,
   };
   const flowLabel = stepLabel[step];
 
@@ -888,11 +949,21 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
       .then(({ routes: found }) => {
         if (!active) return;
         setRoutes(found);
+        const seed = seedRef.current?.direction === direction ? seedRef.current.options : null;
+        if (seed) seedRef.current = null;
+        const seeded = seed ? seededSelection(found, seed) : null;
+        if (seeded) {
+          setCountry(seeded.country);
+          setFiatChoice(seeded.fiatChoice);
+          setAssetChoice(seeded.assetChoice);
+          setAmount(seeded.amount);
+          return;
+        }
         const first = rampCountries(found)[0]?.country ?? '';
         setCountry((current) => (found.some((r) => r.fiat.country === current) ? current : first));
       })
       .catch((error) => {
-        if (active) setErrorMsg(rampErrorMessage(error, 'Could not load the ramp routes.'));
+        if (active) setErrorMsg(rampErrorMessage(error, copy.loadRoutesFailed, copy, language));
       })
       .finally(() => {
         if (active) setRoutesLoading(false);
@@ -931,7 +1002,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
         onError: () => setPollTrouble(true),
       })
       .catch((error: unknown) => {
-        if (!controller.signal.aborted) setErrorMsg(rampErrorMessage(error, 'This operation could not be read.'));
+        if (!controller.signal.aborted) setErrorMsg(rampErrorMessage(error, copy.readOrderFailed, copy, language));
       });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -949,7 +1020,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
   }, [approval, client, openCosignModal]);
 
   // The approval prompt stays up between two approvals of the order instead of closing and reopening.
-  const nextApproval = step === 'status' && order ? rampNextApproval(order) : null;
+  const nextApproval = step === 'status' && order ? rampNextApproval(order, language) : null;
   useEffect(() => {
     setCosignNextStep(nextApproval);
   }, [nextApproval, setCosignNextStep]);
@@ -964,10 +1035,16 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
       setOrder(await client.retryRampOrder(order.id));
       setPollKey((key) => key + 1);
     } catch (error) {
-      setErrorMsg(rampErrorMessage(error, 'Could not try again. Please try again.'));
+      setErrorMsg(rampErrorMessage(error, copy.retryOrderFailed, copy, language));
     } finally {
       setRetrying(false);
     }
+  }
+
+  /** The price changed before anything moved: the same amount is quoted again and the routes shown. */
+  async function handleRequote() {
+    setOrder(null);
+    await handleFindRoute();
   }
 
   // An order held until the wallet has a way to be recovered tries again once it has one.
@@ -984,7 +1061,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
     if (!awaitingAccount || resolvedRequest?.id !== awaitingAccount.requestId) return;
     setAwaitingAccount(null);
     if (resolvedRequest.status !== 'APPROVED') {
-      setErrorMsg('The new account was not approved, so this route cannot start.');
+      setErrorMsg(copy.accountNotApproved);
       return;
     }
     void resumeRoute(awaitingAccount.routeKey);
@@ -995,7 +1072,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
   async function handleFindRoute(): Promise<RampQuote[]> {
     if (!fiat || !asset) return [];
     if (!DECIMAL.test(amount.trim()) || Number(amount) <= 0) {
-      setErrorMsg('Enter an amount greater than zero.');
+      setErrorMsg(copy.amountInvalid);
       return [];
     }
     setStep('loading_quote');
@@ -1019,7 +1096,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
         setStep('select_route');
         return [];
       }
-      setErrorMsg(rampErrorMessage(error, 'Could not find a route. Please try again.'));
+      setErrorMsg(rampErrorMessage(error, copy.findRouteFailed, copy, language));
       setStep('error');
       return [];
     }
@@ -1051,18 +1128,18 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
     try {
       const outcome = await client.setTrustline(asset);
       if (outcome.status === 'error') {
-        setErrorMsg(rampTrustlineErrorText(outcome, asset.code));
+        setErrorMsg(rampTrustlineErrorText(outcome, asset.code, language));
         return;
       }
       if (outcome.status === 'cosign_pending') {
-        setErrorMsg(`Approve the ${asset.code} trustline, then refresh the routes.`);
+        setErrorMsg(copy.approveTrustline(asset.code));
         openCosignModal();
         return;
       }
       await client.refreshAssets().catch(() => {});
       await handleFindRoute();
     } catch (error) {
-      setErrorMsg(rampErrorMessage(error, `Could not add the ${asset.code} trustline. Please try again.`));
+      setErrorMsg(rampErrorMessage(error, copy.addTrustlineFailed(asset.code), copy, language));
     } finally {
       setTrustingAsset(null);
     }
@@ -1080,7 +1157,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
     try {
       const { recoveryRequired } = await client.runRampWalletStep(walletStep, custody);
       if (recoveryRequired) {
-        setErrorMsg('Add a way to recover your wallet, then find the route again.');
+        setErrorMsg(copy.addRecovery);
         openRecoveryModal();
         return;
       }
@@ -1088,14 +1165,14 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
     } catch (error) {
       const code = isPollarApiError(error) ? error.code : null;
       if (code === 'SDK_RAMPS_WALLET_NOT_READY') {
-        setErrorMsg('Approve the new account, then find the route again.');
+        setErrorMsg(copy.approveAccount);
         openCosignModal();
         return;
       }
       setErrorMsg(
         code === 'SDK_WALLET_PROVISIONING_DISABLED'
-          ? 'This app does not create wallets.'
-          : rampErrorMessage(error, 'Could not prepare the wallet. Please try again.'),
+          ? copy.noWalletCreation
+          : rampErrorMessage(error, copy.prepareWalletFailed, copy, language),
       );
     } finally {
       setWalletBusy(null);
@@ -1106,7 +1183,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
   async function resumeRoute(key: string) {
     const same = (await handleFindRoute()).find((q) => routeKey(q) === key);
     if (same) handleSelectQuote(same, true);
-    else setErrorMsg('That route is no longer available. Pick another one.');
+    else setErrorMsg(copy.routeGone);
   }
 
   /** `fresh`: the quote was just taken, so a lapse is reported instead of quoting again. */
@@ -1143,7 +1220,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
         const pending = await client.cosign.pending().catch(() => []);
         const request = pending.find((r) => r.intent === 'add_accounts');
         if (request) setAwaitingAccount({ routeKey: routeKey(quote), requestId: request.id });
-        else setErrorMsg(rampErrorMessage(error, 'Could not start the operation. Please try again.'));
+        else setErrorMsg(rampErrorMessage(error, copy.startOrderFailed, copy, language));
         openCosignModal();
         setStep('select_route');
         return;
@@ -1153,7 +1230,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
         void resumeRoute(routeKey(quote));
         return;
       }
-      setErrorMsg(rampErrorMessage(error, 'Could not start the operation. Please try again.'));
+      setErrorMsg(rampErrorMessage(error, copy.startOrderFailed, copy, language));
       // A refused detail is fixed on the form; an expired quote needs a new one.
       if (isPollarApiError(error) && error.code === 'VALIDATION_ERROR' && rampQuoteFields(quote).length) setStep('contact');
       else setStep('select_route');
@@ -1169,9 +1246,16 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
     setSigning(true);
     setErrorMsg(null);
     try {
-      setOrder(await signLegWithWallet(client, order.id, action.actionId));
+      setOrder(await signLegWithWallet(client, order.id, action.actionId, copy));
     } catch (error) {
-      setErrorMsg(rampErrorMessage(error, error instanceof Error && error.message ? error.message : 'Signing was cancelled.'));
+      setErrorMsg(
+        rampErrorMessage(
+          error,
+          error instanceof Error && error.message ? error.message : copy.signingCancelled,
+          copy,
+          language,
+        ),
+      );
       setOrder(await client.getRampOrder(order.id).catch(() => order));
     } finally {
       setSigning(false);
@@ -1183,11 +1267,12 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
     setErrorMsg(null);
     try {
       const found = await client.getRampOrder(id);
+      seedRef.current = null;
       setDirection(found.direction);
       setOrder(found);
       setStep('status');
     } catch (error) {
-      setErrorMsg(rampErrorMessage(error, 'Could not resume the operation.'));
+      setErrorMsg(rampErrorMessage(error, copy.resumeOrderFailed, copy, language));
     } finally {
       setIsLoading(false);
     }
@@ -1199,16 +1284,29 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
     const done = () => verificationDone(verifying);
     if (verifying.type === 'FORM')
       return (
-        <RequirementFormModal formId={verifying.optionId} progress={progress} onClose={closeVerification} onSubmitted={done} />
+        <RequirementFormModal
+          formId={verifying.optionId}
+          progress={progress}
+          language={languageProp}
+          onClose={closeVerification}
+          onSubmitted={done}
+        />
       );
     if (verifying.type === 'REGISTRY_CHECK')
       return (
-        <RegistryCheckModal optionId={verifying.optionId} progress={progress} onClose={closeVerification} onApproved={done} />
+        <RegistryCheckModal
+          optionId={verifying.optionId}
+          progress={progress}
+          language={languageProp}
+          onClose={closeVerification}
+          onApproved={done}
+        />
       );
     if (verifying.type === 'PROVIDER_REGISTRATION')
       return (
         <ProviderRegistrationModal
           corridorId={verifying.corridorId}
+          language={languageProp}
           progress={progress}
           onClose={closeVerification}
           onRegistered={done}
@@ -1219,6 +1317,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
         country={country}
         corridorId={verifying.corridorId}
         providerId={verifying.optionId}
+        language={languageProp}
         onClose={closeVerification}
         onApproved={done}
       />
@@ -1229,6 +1328,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
     <PollarOverlay onCancel={onClose}>
       <View style={styles.modalWrapper}>
         <RampWidgetTemplate
+          language={language}
           theme={theme}
           accentColor={accentColor}
           step={step}
@@ -1254,8 +1354,9 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
           isLoading={isLoading}
           signing={signing}
           errorMsg={errorMsg}
-          notice={awaitingAccount ? 'Approve the new account on your device. The order starts once it is approved.' : null}
+          notice={awaitingAccount ? copy.awaitingAccount : null}
           onDirectionChange={(next) => {
+            seedRef.current = null;
             setDirection(next);
             setErrorMsg(null);
             setAwaitingAccount(null);
@@ -1285,6 +1386,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
           noChains={Array.isArray(appChains) && appChains.length === 0}
           retrying={retrying}
           onRetryOrder={() => void handleRetryOrder()}
+          onRequote={() => void handleRequote()}
           onSetUpRecovery={openRecoveryModal}
           recoveryMissing={recovery === null ? null : recoveryLocked}
           pollTrouble={pollTrouble}
@@ -1295,7 +1397,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
           onSign={() => void handleSign()}
           onApprove={openCosignModal}
           onCopy={(text) =>
-            void copyText(text).catch((error: unknown) => setErrorMsg(rampErrorMessage(error, 'Could not copy.')))
+            void copyText(text).catch((error: unknown) => setErrorMsg(rampErrorMessage(error, copy.copyFailed, copy, language)))
           }
           onResumeOrder={(id) => void handleResumeOrder(id)}
           onNewOrder={() => {
@@ -1316,7 +1418,7 @@ export function RampWidget({ onClose }: { onClose: () => void }) {
             // Only Amount and Route sit before a step the user can leave; Complete is never left this way.
             setErrorMsg(null);
             setAwaitingAccount(null);
-            setStep(target === 'Route' ? 'select_route' : 'input');
+            setStep(target === copy.steps.route ? 'select_route' : 'input');
           }}
           onRetry={() => {
             setErrorMsg(null);

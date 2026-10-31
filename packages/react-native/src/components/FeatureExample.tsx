@@ -4,6 +4,8 @@ import { ActionButton, ActionState, Card, Choice, Field, Label, ResultView, useA
 import { toBaseUnits, type WalletChain } from '@pollar/core';
 import { ChainSelect, FeaturePanel, type FeatureName } from './FeaturePanel';
 import { usePollar } from '../context';
+import { useModalLanguage } from '../language';
+import { EXAMPLE_COPY } from './example-copy';
 import { useSurfaceColors } from './layout';
 export interface PaymentRequest {
   operation: string;
@@ -47,7 +49,7 @@ const coreExamples: Record<FeatureName, string> = {
   transactions:
     "await client.buildTx('payment', { destination, amount: '1', asset: { type: 'native' } });\nconst state = client.getTransactionState();",
   kyc: '// KYC is a preview only. No backend approval is emitted.',
-  ramp: "import { describeRampAction, rampQuoteFields } from '@pollar/core';\n\n// What the app can ramp between: fiat on a rail and an asset on a chain.\nconst { routes } = await client.getRampRoutes('ONRAMP');\nconst route = routes[0]; // Replace with the user's selection.\nif (!route) throw new Error('No ramp routes are available.');\n\n// Quote every route for the amount the user pays; best first.\nconst { quotes } = await client.quoteRamp({\n  direction: 'ONRAMP',\n  fiat: { currency: route.fiat.currency, rail: route.fiat.rail, country: route.fiat.country },\n  asset: { code: route.asset.code, identifier: route.asset.identifier, chain: route.asset.chain },\n  amount: { value: '20.00', denomination: 'in' },\n});\nconst quote = quotes[0];\nif (!quote) throw new Error('No quote is available.');\n\n// Show quote.legs and collect rampQuoteFields(quote); call only after review.\nasync function acceptQuote(payee: Record<string, string>) {\n  return client.createRampOrder({ quoteId: quote.quoteId, payee });\n}\n\n// Follow the order; reads never pay, sign or approve.\nasync function follow(orderId: string) {\n  return client.pollRampOrder(orderId, {\n    onUpdate: (order) => console.log(describeRampAction(order).title),\n  });\n}\n\n// Call only from an explicit Authorize button.\nasync function authorize(orderId: string, actionId: string) {\n  return client.signRampLeg(orderId, actionId);\n}",
+  ramp: "import { describeRampAction, rampQuoteFields } from '@pollar/core';\n\n// What the app can ramp between: fiat on a rail and an asset on a chain.\nconst { routes } = await client.getRampRoutes('ONRAMP');\nconst route = routes[0]; // Replace with the user's selection.\nif (!route) throw new Error('No ramp routes are available.');\n\n// Quote every route for the amount the user pays; best first.\nconst { quotes } = await client.quoteRamp({\n  direction: 'ONRAMP',\n  fiat: { currency: route.fiat.currency, rail: route.fiat.rail, country: route.fiat.country },\n  asset: { code: route.asset.code, identifier: route.asset.identifier, chain: route.asset.chain },\n  amount: { value: '20.00', denomination: 'in' },\n});\nconst quote = quotes[0];\nif (!quote) throw new Error('No quote is available.');\n\n// Show quote.legs and collect rampQuoteFields(quote); call only after review.\nasync function acceptQuote(payee: Record<string, string>) {\n  return client.createRampOrder({ quoteId: quote.quoteId, payee });\n}\n\n// Follow the order; reads never pay, sign or approve.\nasync function follow(orderId: string) {\n  return client.pollRampOrder(orderId, {\n    onUpdate: (order) => console.log(describeRampAction(order, language).title),\n  });\n}\n\n// Call only from an explicit Authorize button.\nasync function authorize(orderId: string, actionId: string) {\n  return client.signRampLeg(orderId, actionId);\n}",
   swap: "const quotes = await client.getSwapQuote({ sellAsset, buyAsset, amount: '1' });\n// Review a quote before client.swap(quote).",
   earn: 'const providers = await client.getEarnProviders();\nconst opportunities = await client.getEarnOpportunities(providers[0]);\n// Inspect a position before depositing or withdrawing.',
   distribution:
@@ -65,6 +67,7 @@ export function FeatureExample({
   const [mode, setMode] = useState<Mode>('native');
   const [section, setSection] = useState<'demo' | 'code'>('demo');
   const p = usePollar();
+  const copy = EXAMPLE_COPY[useModalLanguage()];
   const c = useSurfaceColors();
   const action = useAction();
   const method = modalMethods[feature];
@@ -106,7 +109,7 @@ export function FeatureExample({
                   fontSize: 11,
                 }}
               >
-                {m === 'core' ? '@pollar/core' : m === 'native' ? '@pollar/react-native' : 'Scan & Pay'}
+                {m === 'core' ? '@pollar/core' : m === 'native' ? '@pollar/react-native' : copy.scanAndPay}
               </Text>
             </Pressable>
           ))}
@@ -117,7 +120,7 @@ export function FeatureExample({
           <Pressable
             key={s}
             accessibilityRole="tab"
-            accessibilityLabel={s === 'demo' ? 'Demo controls' : 'Usage code'}
+            accessibilityLabel={s === 'demo' ? copy.demoLabel : copy.codeLabel}
             accessibilityState={{ selected: s === section }}
             onPress={() => setSection(s)}
             style={{
@@ -126,20 +129,20 @@ export function FeatureExample({
               borderColor: s === section ? c.blue : 'transparent',
             }}
           >
-            <Text style={{ color: s === section ? c.blue : c.muted }}>{s === 'demo' ? 'Demo' : 'Code'}</Text>
+            <Text style={{ color: s === section ? c.blue : c.muted }}>{s === 'demo' ? copy.demo : copy.code}</Text>
           </Pressable>
         ))}
       </View>
       {section === 'code' ? (
         <>
-          <Card title={mode === 'core' ? 'Core client example' : 'Native hooks & components'}>
+          <Card title={mode === 'core' ? copy.coreTitle : copy.nativeTitle}>
             <ResultView value={snippet} />
             <ActionButton
-              title="Copy example"
+              title={copy.copyExample}
               onPress={() =>
                 void action.run(async () => {
                   await p.copyText(snippet);
-                  return 'Copied';
+                  return copy.copied;
                 })
               }
             />
@@ -150,24 +153,15 @@ export function FeatureExample({
         <SignTransactionForm />
       ) : mode === 'native' && method ? (
         <>
-          <Text style={{ color: c.muted, lineHeight: 23 }}>
-            Use the native SDK component. It renders the form, validation and request state for you, backed by the same Pollar
-            client.
-          </Text>
+          <Text style={{ color: c.muted, lineHeight: 23 }}>{copy.nativeIntro}</Text>
           <ActionButton
-            title={
-              feature === 'logout'
-                ? 'Logout'
-                : 'Open ' +
-                  (feature === 'authentication' ? 'Login' : feature.charAt(0).toUpperCase() + feature.slice(1)) +
-                  ' modal'
-            }
+            title={feature === 'logout' ? copy.logout : copy.openModal(copy.modalNames[feature])}
             disabled={feature !== 'authentication' && feature !== 'kyc' && !p.verified}
             onPress={() => void action.run(async () => p[method]())}
           />
           <Text style={{ color: c.muted, fontFamily: 'monospace', fontSize: 12 }}>{method}()</Text>
           <ActionState action={action} />
-          <Card title="Reactive state">
+          <Card title={copy.reactiveState}>
             <ResultView
               value={
                 ['send', 'transactions', 'swap', 'earn'].includes(feature)
@@ -194,18 +188,19 @@ export function FeatureExample({
 export function BalanceLookup() {
   const [publicKey, setPublicKey] = useState('');
   const p = usePollar();
+  const copy = EXAMPLE_COPY[useModalLanguage()];
   const a = useAction();
   return (
-    <Card title="Wallet balance">
-      <Label>Leave the public key empty for the connected wallet, or look up another Stellar address.</Label>
-      <Field label="Public key (optional)" value={publicKey} onChangeText={setPublicKey} />
+    <Card title={copy.balance.title}>
+      <Label>{copy.balance.intro}</Label>
+      <Field label={copy.balance.publicKey} value={publicKey} onChangeText={setPublicKey} />
       <ActionButton
-        title="Fetch balances"
+        title={copy.balance.fetch}
         disabled={a.busy}
         onPress={() =>
           void a.run(async () => {
             if (publicKey.trim()) {
-              if (!/^G[A-Z2-7]{55}$/.test(publicKey.trim())) throw new Error('Enter a valid Stellar public key.');
+              if (!/^G[A-Z2-7]{55}$/.test(publicKey.trim())) throw new Error(copy.balance.invalidKey);
               return p.getClient().getWalletBalance(publicKey.trim());
             }
             await p.refreshWalletBalance();
@@ -219,6 +214,7 @@ export function BalanceLookup() {
 }
 export function SignTransactionForm() {
   const p = usePollar();
+  const copy = EXAMPLE_COPY[useModalLanguage()];
   const a = useAction();
   const [xdr, setXdr] = useState('');
   const [signed, setSigned] = useState<{
@@ -226,10 +222,10 @@ export function SignTransactionForm() {
     submissionToken?: string;
   }>();
   return (
-    <Card title="Sign XDR">
-      <Label>Sign and submit in one call, or sign first and submit the result separately.</Label>
+    <Card title={copy.sign.title}>
+      <Label>{copy.sign.intro}</Label>
       <Field
-        label="Unsigned Stellar XDR"
+        label={copy.sign.xdr}
         value={xdr}
         onChangeText={(value) => {
           setXdr(value);
@@ -264,7 +260,9 @@ export function SignTransactionForm() {
           }
         />
       )}
-      <Label>Transaction: {p.tx.step}</Label>
+      <Label>
+        {copy.transaction}: {p.tx.step}
+      </Label>
       <ResultView value={p.tx} />
       <ActionState action={a} />
     </Card>
@@ -282,12 +280,13 @@ export function PaymentForm({
   };
 }) {
   const p = usePollar();
+  const copy = EXAMPLE_COPY[useModalLanguage()];
   const a = useAction();
   const [chain, setChain] = useState<WalletChain>('STELLAR');
   const [destination, setDestination] = useState(initial?.destination ?? '');
   const [amount, setAmount] = useState(initial?.amount ?? '');
   const [memo, setMemo] = useState(initial?.memo ?? '');
-  const [memoType, setMemoType] = useState<'text' | 'id'>('text');
+  const [memoType, setMemoType] = useState<'text' | 'id' | 'hash'>('text');
   const [token, setToken] = useState(initial?.assetCode ? 'Issued asset' : 'Native');
   const [code, setCode] = useState(initial?.assetCode ?? 'USDC');
   const [issuer, setIssuer] = useState(initial?.assetIssuer ?? '');
@@ -297,8 +296,8 @@ export function PaymentForm({
     setReview(false);
   };
   return (
-    <Card title="Send payment">
-      <Label>Build, sign and submit with a direct core call. Always review the destination, token and network first.</Label>
+    <Card title={copy.payment.title}>
+      <Label>{copy.payment.intro}</Label>
       <ChainSelect
         value={chain}
         onChange={(next) => {
@@ -306,27 +305,37 @@ export function PaymentForm({
           setReview(false);
         }}
       />
-      <Field label="Destination" value={destination} onChangeText={reset(setDestination)} />
-      <Choice label="Token" options={['Native', 'Issued asset']} value={token} onChange={reset(setToken)} />
+      <Field label={copy.payment.destination} value={destination} onChangeText={reset(setDestination)} />
+      <Choice
+        label={copy.payment.token}
+        options={['Native', 'Issued asset']}
+        labels={{ Native: copy.payment.native, 'Issued asset': copy.payment.issued }}
+        value={token}
+        onChange={reset(setToken)}
+      />
       {token !== 'Native' && (
         <>
-          {chain === 'STELLAR' && <Field label="Asset code" value={code} onChangeText={reset(setCode)} />}
-          <Field label={chain === 'STELLAR' ? 'Issuer' : 'Token mint'} value={issuer} onChangeText={reset(setIssuer)} />
+          {chain === 'STELLAR' && <Field label={copy.payment.assetCode} value={code} onChangeText={reset(setCode)} />}
+          <Field
+            label={chain === 'STELLAR' ? copy.payment.issuer : copy.payment.mint}
+            value={issuer}
+            onChangeText={reset(setIssuer)}
+          />
         </>
       )}
-      <Field label="Amount" keyboardType="decimal-pad" value={amount} onChangeText={reset(setAmount)} />
+      <Field label={copy.payment.amount} keyboardType="decimal-pad" value={amount} onChangeText={reset(setAmount)} />
       {chain === 'STELLAR' && (
         <>
           <Choice
-            label="Memo type"
-            options={['text', 'id']}
+            label={copy.payment.memoType}
+            options={['text', 'id', 'hash']}
             value={memoType}
             onChange={(value) => {
               setMemoType(value);
               setReview(false);
             }}
           />
-          <Field label="Memo (optional)" value={memo} onChangeText={reset(setMemo)} />
+          <Field label={copy.payment.memo} value={memo} onChangeText={reset(setMemo)} />
         </>
       )}
       {review && (
@@ -342,21 +351,22 @@ export function PaymentForm({
         />
       )}
       <ActionButton
-        title={review ? 'Confirm payment' : 'Review payment'}
+        title={review ? copy.payment.confirm : copy.payment.review}
         disabled={a.busy || !p.verified}
         onPress={() =>
           void a.run(async () => {
-            if (chain !== 'STELLAR' && chain !== 'SOLANA') throw new Error('Sending is not available on this network yet.');
-            if (chain !== 'STELLAR' && p.wallet?.provider === 'privy') throw new Error('Privy supports Stellar signing only.');
+            if (chain !== 'STELLAR' && chain !== 'SOLANA') throw new Error(copy.payment.unsupportedChain);
+            if (chain !== 'STELLAR' && p.wallet?.provider === 'privy') throw new Error(copy.payment.privyStellarOnly);
             if (!destination.trim() || !/^\d+(\.\d+)?$/.test(amount) || Number(amount) <= 0)
-              throw new Error('Enter a destination and a positive amount.');
+              throw new Error(copy.payment.invalid);
             if (chain === 'STELLAR' && !/^G[A-Z2-7]{55}$/.test(destination.trim()))
-              throw new Error('Enter a Stellar destination address.');
-            if (token !== 'Native' && !issuer.trim()) throw new Error('Enter the asset issuer or mint.');
+              throw new Error(copy.payment.stellarDestination);
+            if (token !== 'Native' && !issuer.trim()) throw new Error(copy.payment.missingIssuer);
             if (memo && memoType === 'text' && new TextEncoder().encode(memo).length > 28)
-              throw new Error('Memo exceeds 28 UTF-8 bytes.');
+              throw new Error(copy.payment.memoTooLong);
             if (memo && memoType === 'id' && (!/^\d+$/.test(memo) || BigInt(memo) > 18446744073709551615n))
-              throw new Error('Memo ID must be an unsigned 64-bit integer.');
+              throw new Error(copy.payment.memoId);
+            if (memo && memoType === 'hash' && !/^[0-9a-fA-F]{64}$/.test(memo)) throw new Error(copy.payment.memoHash);
             if (!review) {
               setReview(true);
               return;
@@ -384,8 +394,7 @@ export function PaymentForm({
                 ? p.walletBalance.data.balances.find((b) => b.chain === chain && b.issuer === issuer)
                 : undefined;
             const decimals = token === 'Native' ? (chain === 'SOLANA' ? 9 : 18) : balance?.decimals;
-            if (decimals === undefined)
-              throw new Error('Refresh wallet balances to verify this token’s decimals before sending.');
+            if (decimals === undefined) throw new Error(copy.payment.decimals);
             return p.sendPayment({
               chain,
               destination: destination.trim(),
@@ -396,21 +405,24 @@ export function PaymentForm({
         }
       />
       <ActionState action={a} />
-      <Label>Transaction: {p.tx.step}</Label>
+      <Label>
+        {copy.transaction}: {p.tx.step}
+      </Label>
       <ResultView value={p.tx} />
     </Card>
   );
 }
 export function PaymentRequestForm({ parsePaymentRequest }: { parsePaymentRequest: PaymentRequestParser }) {
   const [uri, setUri] = useState('');
+  const copy = EXAMPLE_COPY[useModalLanguage()];
   const a = useAction();
   const [request, setRequest] = useState<Parameters<typeof PaymentForm>[0]['initial']>();
   return (
     <>
-      <Card title="Scan & Pay · SEP-7">
-        <Label>Paste a decoded Stellar payment QR request to inspect it. It never sends automatically.</Label>
+      <Card title={copy.request.title}>
+        <Label>{copy.request.intro}</Label>
         <Field
-          label="Stellar payment URI"
+          label={copy.request.uri}
           value={uri}
           multiline
           onChangeText={(value) => {
@@ -419,12 +431,12 @@ export function PaymentRequestForm({ parsePaymentRequest }: { parsePaymentReques
           }}
         />
         <ActionButton
-          title="Read payment request"
+          title={copy.request.read}
           onPress={() =>
             void a.run(async () => {
               const parsed = parsePaymentRequest(uri.trim());
-              if (parsed.operation !== 'pay') throw new Error('Only SEP-7 pay requests are supported.');
-              if (parsed.memoType && parsed.memoType !== 'MEMO_TEXT') throw new Error('Use the core form for non-text memos.');
+              if (parsed.operation !== 'pay') throw new Error(copy.request.onlyPay);
+              if (parsed.memoType && parsed.memoType !== 'MEMO_TEXT') throw new Error(copy.request.textMemo);
               setRequest({
                 destination: parsed.destination,
                 amount: parsed.amount,
@@ -436,7 +448,7 @@ export function PaymentRequestForm({ parsePaymentRequest }: { parsePaymentReques
             })
           }
         />
-        <Label>Camera capture is not yet implemented in this native build; URI parsing and payment review are available.</Label>
+        <Label>{copy.request.noCamera}</Label>
         <ActionState action={a} />
       </Card>
       {request && <PaymentForm key={JSON.stringify(request)} initial={request} />}

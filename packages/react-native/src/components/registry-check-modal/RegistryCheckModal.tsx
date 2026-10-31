@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { RegistryCheck, RegistryCheckPrefill } from '@pollar/core';
 import { usePollar } from '../../context';
 import { PollarModalFooter } from '../commons';
-import { formLanguage } from '../requirement-form-modal/form-fields';
+import { useModalLanguage } from '../../language';
 import { errorCode, REGISTRY_COPY } from './registry-copy';
 
 export interface RegistryCheckModalProps {
@@ -13,17 +13,25 @@ export interface RegistryCheckModalProps {
   onClose: () => void;
   /** Called once the registry confirmed the data. */
   onApproved: () => void;
+  /** Language of the modal, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
+  language?: string | undefined;
 }
 
 /**
  * One REGISTRY_CHECK step (SEGIP): the user's verified data, prefilled and read-only
  * except for the surname split and the CI complement, sent to the registry on confirm.
  */
-export function RegistryCheckModal({ optionId, progress, onClose, onApproved }: RegistryCheckModalProps) {
+export function RegistryCheckModal({
+  optionId,
+  progress,
+  onClose,
+  onApproved,
+  language: languageProp,
+}: RegistryCheckModalProps) {
   const { getClient, styles: pollarStyles } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = pollarStyles;
   const client = getClient();
-  const language = useMemo(formLanguage, []);
+  const language = useModalLanguage(languageProp);
   const copy = REGISTRY_COPY[language];
   const isDark = theme === 'dark';
   const colors = {

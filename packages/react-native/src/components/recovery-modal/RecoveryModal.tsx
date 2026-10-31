@@ -1,4 +1,5 @@
 import {
+  type PollarLanguage,
   type CosignDevicesContent,
   isPollarApiError,
   type RecoveryState,
@@ -7,17 +8,19 @@ import {
 } from '@pollar/core';
 import React, { useCallback, useEffect, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { PollarOverlay } from '../commons';
+import { RECOVERY_COPY } from './recovery-copy';
 import { RecoveryModalTemplate, type RecoveryView } from './RecoveryModalUI';
 
 interface RecoveryModalProps {
   onClose: () => void;
 }
 
-function errorText(err: unknown): string {
+function errorText(err: unknown, language: PollarLanguage): string {
   return (
-    cosignRefusalMessage(err) ??
-    transactionErrorMessage(isPollarApiError(err) ? err.code : null, err instanceof Error ? err.message : null)
+    cosignRefusalMessage(err, language) ??
+    transactionErrorMessage(isPollarApiError(err) ? err.code : null, err instanceof Error ? err.message : null, language)
   );
 }
 
@@ -32,6 +35,8 @@ function errorText(err: unknown): string {
 export function RecoveryModal({ onClose }: RecoveryModalProps) {
   const { getClient, styles, refreshRecovery, appConfig } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const language = useModalLanguage();
+  const copy = RECOVERY_COPY[language];
   const recovery = getClient().cosign.recovery;
 
   const [state, setState] = useState<RecoveryState | null>(null);
@@ -60,7 +65,7 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
   }, [getClient, refreshRecovery]);
 
   useEffect(() => {
-    load().catch((err: unknown) => setError(errorText(err)));
+    load().catch((err: unknown) => setError(errorText(err, language)));
   }, [load]);
 
   /** Run one action with its spinner and error, then read the state again. */
@@ -75,7 +80,7 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
         if (after?.notice) setNotice(after.notice);
         if (after?.view) setView(after.view);
       } catch (err) {
-        setError(errorText(err));
+        setError(errorText(err, language));
       } finally {
         setBusy(null);
       }
@@ -111,7 +116,7 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
           setView(next);
         }}
         onEmailDraft={setEmailDraft}
-        onAddPasskey={() => void run('passkey', () => recovery.addPasskey(), { notice: 'Passkey added.' })}
+        onAddPasskey={() => void run('passkey', () => recovery.addPasskey(), { notice: copy.passkeyAdded })}
         onRemovePasskey={(id) => void run(`passkey:${id}`, () => recovery.removePasskey(id))}
         onSendEmailCode={() =>
           void run('email-send', async () => {
@@ -120,18 +125,18 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
           })
         }
         onConfirmEmail={(code) =>
-          void run('email-confirm', () => recovery.confirmEmail(code.trim()), { notice: 'Email confirmed.', view: 'overview' })
+          void run('email-confirm', () => recovery.confirmEmail(code.trim()), { notice: copy.emailConfirmed, view: 'overview' })
         }
-        onApproveDevice={(id) => void run(`approve:${id}`, () => recovery.approveDevice(id), { notice: 'Device added.' })}
+        onApproveDevice={(id) => void run(`approve:${id}`, () => recovery.approveDevice(id), { notice: copy.deviceAdded })}
         onRejectDevice={(id) => void run(`reject:${id}`, () => recovery.rejectDevice(id))}
         onRequestEnrollment={() =>
           void run('enroll', () => recovery.requestDeviceEnrollment(), {
-            notice: 'Request sent. Approve it from a device that already has this wallet within 15 minutes.',
+            notice: copy.requestSent,
           })
         }
         onRecoverWithPasskey={() =>
           void run('recover-passkey', () => recovery.recoverWithPasskey(), {
-            notice: 'This device is part of your wallet again.',
+            notice: copy.recovered,
           })
         }
         onSendRecoveryCode={() =>
@@ -142,7 +147,7 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
         }
         onRecoverWithCode={(code) =>
           void run('recover-code', () => recovery.recoverWithEmailCode(code.trim()), {
-            notice: 'This device is part of your wallet again.',
+            notice: copy.recovered,
             view: 'overview',
           })
         }
@@ -152,6 +157,7 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
           })
         }
         onClose={onClose}
+        language={language}
       />
     </PollarOverlay>
   );
