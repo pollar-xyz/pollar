@@ -37,6 +37,10 @@ const SYSTEM_TRANSFER = 2;
 const TOKEN_TRANSFER_CHECKED = 12;
 /** sha256("global:deposit_for_burn")[0..8], from Circle's V2 IDL. */
 const DEPOSIT_FOR_BURN = 'd73c3d2e723780b0';
+/** sha256("global:deposit_for_burn_with_hook")[0..8]: a burn toward Stellar, paid out by Circle's forwarder. */
+const DEPOSIT_FOR_BURN_WITH_HOOK = '6ff53e83cc6cdf9b';
+/** Where the hook data starts in deposit_for_burn_with_hook: discriminator, amount, domain, recipient, caller, max fee, finality. */
+const HOOK_DATA_OFFSET = 8 + 8 + 4 + 32 + 32 + 8 + 4;
 /** Positions in deposit_for_burn's account list (the IDL's order). */
 const OWNER = 0;
 const EVENT_RENT_PAYER = 1;
@@ -492,7 +496,8 @@ export function checkSolanaRequest(
   const fee = checkSolanaFee(tx);
   if (!fee.ok) return fee;
   const burn = burns[0]!;
-  if (burn.data.length < 52 || bytesToHex(burn.data.subarray(0, 8)) !== DEPOSIT_FOR_BURN) {
+  const discriminator = bytesToHex(burn.data.subarray(0, 8));
+  if (burn.data.length < 52 || (discriminator !== DEPOSIT_FOR_BURN && discriminator !== DEPOSIT_FOR_BURN_WITH_HOOK)) {
     return { ok: false, reason: 'not a deposit_for_burn' };
   }
   if (burn.accounts[OWNER] !== request.signWith)
@@ -511,5 +516,13 @@ export function checkSolanaRequest(
     return { ok: false, reason: 'the destination domain is not the one the request states' };
   if (recipient !== hex32(details.mintRecipient))
     return { ok: false, reason: 'the mint recipient is not the one the request states' };
+  // Toward Stellar the recipient above is Circle's forwarder; who it pays is in the hook data.
+  const stated = typeof details.hookData === 'string' ? details.hookData.replace(/^0x/, '').toLowerCase() : null;
+  if (discriminator === DEPOSIT_FOR_BURN_WITH_HOOK) {
+    const data = burn.data.subarray(HOOK_DATA_OFFSET);
+    const length = data.length >= 4 ? u32le(data.subarray(0, 4)) : -1;
+    if (length !== data.length - 4 || stated === null || bytesToHex(data.subarray(4)) !== stated)
+      return { ok: false, reason: 'the hook data is not the one the request states' };
+  } else if (stated !== null) return { ok: false, reason: 'the request states hook data the burn does not carry' };
   return { ok: true };
 }

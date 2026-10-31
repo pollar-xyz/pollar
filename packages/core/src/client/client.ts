@@ -45,6 +45,15 @@ import {
   submitCardKyc,
 } from '../api/endpoints/cards';
 import { createCardSecretsSession, openCardSecrets } from '../lib/card-secrets';
+import {
+  createBridgeTransfer,
+  getBridgeConfig,
+  getBridgeTransfer,
+  listBridgeTransfers,
+  pollBridgeTransfer,
+  quoteBridge,
+  submitBridgeSignature,
+} from '../api/endpoints/bridge';
 import { getKycProviders, getKycStatus, pollKycDecision, pollKycStatus, resolveKyc, startKyc } from '../api/endpoints/kyc';
 import {
   getAppRequirements,
@@ -124,6 +133,10 @@ import {
   CardFunding,
   CardFundingChain,
   CardFundingOutcome,
+  BridgeConfig,
+  BridgeQuote,
+  BridgeQuoteParams,
+  BridgeTransfer,
   CardHolder,
   CardInfo,
   CardKycInput,
@@ -4825,6 +4838,80 @@ export class PollarClient {
       this._rampSigning--;
     }
     return submitRampLegSignature(this._api, orderId, action.legIndex, { actionId, signedPayload });
+  }
+
+  // --- Bridge (USDC between the user's own wallets) -------------------------
+
+  /** The directions the user can bridge USDC in now: both chains on the app, a wallet on each. Off mainnet `available` is false. */
+  getBridgeConfig(): Promise<BridgeConfig> {
+    return getBridgeConfig(this._api);
+  }
+
+  /** What a bridge of `amount` USDC delivers, Pollar's fee to the app and how the source wallet signs. Nothing moves. */
+  quoteBridge(params: BridgeQuoteParams): Promise<BridgeQuote> {
+    return quoteBridge(this._api, params);
+  }
+
+  /**
+   * Starts moving `amount` USDC from the user's wallet on `fromChain` to theirs on
+   * `toChain`, by Circle CCTP. A custodial wallet burns at once. An external
+   * wallet's transfer waits on a SIGNATURE action: sign it with
+   * {@link signBridgeStep} from the user's explicit Authorize. A co-signed
+   * wallet's waits on COSIGN_APPROVAL, the request its device approves. The mint
+   * on `toChain` follows about five minutes later; follow it with
+   * {@link pollBridgeTransfer}.
+   *
+   * `idempotencyKey` names one transfer the user means to make: a retry with it
+   * returns the transfer it already started and moves nothing.
+   */
+  bridge(params: BridgeQuoteParams & { idempotencyKey?: string }): Promise<BridgeTransfer> {
+    return createBridgeTransfer(this._api, params);
+  }
+
+  getBridgeTransfer(transferId: string): Promise<BridgeTransfer> {
+    return getBridgeTransfer(this._api, transferId);
+  }
+
+  /** The user's latest bridges, newest first. */
+  listBridgeTransfers(): Promise<BridgeTransfer[]> {
+    return listBridgeTransfers(this._api);
+  }
+
+  /** Reads the transfer until it settles or waits on the user, unless `until` says otherwise. */
+  pollBridgeTransfer(
+    transferId: string,
+    opts?: {
+      signal?: AbortSignal;
+      onUpdate?: (transfer: BridgeTransfer) => void;
+      onError?: (error: unknown) => void;
+      until?: (transfer: BridgeTransfer) => boolean;
+    },
+  ): Promise<BridgeTransfer> {
+    return pollBridgeTransfer(this._api, transferId, opts);
+  }
+
+  /**
+   * Signs the transfer's SIGNATURE action with the handler registered for its
+   * chain and encoding ({@link registerRampSigningHandler}: a bridge step signs
+   * like a ramp leg) and sends it. Call it only from the user's explicit
+   * Authorize: the action is read again and must still be the one the user saw.
+   */
+  async signBridgeStep(transferId: string, actionId: string): Promise<BridgeTransfer> {
+    const transfer = await getBridgeTransfer(this._api, transferId);
+    const action = transfer.pendingAction;
+    if (action?.kind !== 'SIGNATURE' || action.actionId !== actionId || !(Date.parse(action.expiresAt) > Date.now()))
+      throw new Error('The bridge step changed. Refresh before signing.');
+    const handler = this._rampSigners.resolve(action.chain, action.payload.encoding);
+    if (!handler) throw new Error(`Register a ramp signing handler for ${action.chain}/${action.payload.encoding}.`);
+    // A bridge moves the user's funds between chains: the signature is confirmed by the user whatever the policy.
+    this._rampSigning++;
+    let signedPayload: string;
+    try {
+      signedPayload = await handler({ ...action, legIndex: 0 });
+    } finally {
+      this._rampSigning--;
+    }
+    return submitBridgeSignature(this._api, transferId, { actionId, signedPayload });
   }
 
   // --- Distribution ---------------------------------------------------------

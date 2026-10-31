@@ -5,6 +5,7 @@
 
 export { PollarClient, isPollarClient } from './client/client';
 export * from './ramps/index';
+export * from './bridge/index';
 export { POLLAR_CORE_VERSION } from './version';
 export { createLogger } from './lib/logger';
 export { toBaseUnits, fromBaseUnits } from './lib/units';

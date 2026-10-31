@@ -2088,6 +2088,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bridge/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bridge directions
+         * @description The directions the user can bridge USDC in now: both chains enabled on the app and a wallet on each. `available` is false on testnet, where CCTP does not run.
+         */
+        get: operations["getBridgeConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bridge/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quote a bridge
+         * @description What a transfer of `amount` USDC from the user's wallet on `fromChain` to theirs on `toChain` delivers, Pollar's fee and how the source wallet signs. Nothing moves. 422 SDK_BRIDGE_UNAVAILABLE off mainnet or without the GAS wallets the app needs; SDK_BRIDGE_WALLET_NOT_READY when a wallet is missing, cannot sign a bridge (an external Solana wallet as the source) or a Stellar destination has no USDC trustline.
+         */
+        post: operations["postBridgeQuote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bridge/transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the user's bridges
+         * @description Newest first.
+         */
+        get: operations["getBridgeTransfers"];
+        put?: never;
+        /**
+         * Start a bridge
+         * @description Starts the transfer and its first step. A custodial wallet burns at once; an external wallet gets `pendingAction` SIGNATURE to sign and send to /transfers/{transferId}/signature; a co-signed wallet gets `pendingAction` COSIGN_APPROVAL, the request its device approves. The app GAS wallet relays the mint on `toChain` once Circle attests the burn, about five minutes later; follow it with GET /transfers/{transferId}. With `idempotencyKey`, a retry returns the transfer that key started (200) and moves nothing.
+         */
+        post: operations["postBridgeTransfers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bridge/transfers/{transferId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a bridge
+         * @description Where the transfer stands. A read moves a transfer whose next step is due.
+         */
+        get: operations["getBridgeTransfersByTransferId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bridge/transfers/{transferId}/signature": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit the signed bridge step
+         * @description The source wallet's signature of the SIGNATURE action named by `actionId`. 409 SDK_BRIDGE_ACTION_CHANGED when the transfer no longer waits on that action: read it again and sign the new one.
+         */
+        post: operations["postBridgeTransfersByTransferIdSignature"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -16614,6 +16718,744 @@ export interface operations {
             };
             /** @description Unprocessable */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getBridgeConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_CONFIG";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            available: boolean;
+                            reason: "mainnet_only" | null;
+                            /** @constant */
+                            asset: "USDC";
+                            directions: {
+                                /** @enum {string} */
+                                fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @enum {string} */
+                                toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getBridgeTransfers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_TRANSFERS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            transfers: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "AWAITING_ACTION" | "BURNED" | "ATTESTED" | "COMPLETED" | "FAILED" | "HELD";
+                                /** @enum {string} */
+                                fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @enum {string} */
+                                toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @constant */
+                                asset: "USDC";
+                                amount: string;
+                                amountOut: string | null;
+                                fromAddress: string;
+                                toAddress: string;
+                                burnTxHash: string | null;
+                                mintTxHash: string | null;
+                                pendingAction: ({
+                                    /** @constant */
+                                    kind: "SIGNATURE";
+                                    actionId: string;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "SOLANA" | "POLYGON";
+                                    payload: {
+                                        encoding: string;
+                                        value: string;
+                                    };
+                                    summary: string;
+                                    expiresAt: string;
+                                } | {
+                                    /** @constant */
+                                    kind: "COSIGN_APPROVAL";
+                                    actionId: string;
+                                    cosignRequestId: string;
+                                    summary: string;
+                                }) | null;
+                                failure: {
+                                    code: string;
+                                } | null;
+                                etaSeconds: number;
+                                createdAt: string;
+                                updatedAt: string;
+                                completedAt: string | null;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getBridgeTransfersByTransferId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transferId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_TRANSFER";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            transfer: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "AWAITING_ACTION" | "BURNED" | "ATTESTED" | "COMPLETED" | "FAILED" | "HELD";
+                                /** @enum {string} */
+                                fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @enum {string} */
+                                toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @constant */
+                                asset: "USDC";
+                                amount: string;
+                                amountOut: string | null;
+                                fromAddress: string;
+                                toAddress: string;
+                                burnTxHash: string | null;
+                                mintTxHash: string | null;
+                                pendingAction: ({
+                                    /** @constant */
+                                    kind: "SIGNATURE";
+                                    actionId: string;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "SOLANA" | "POLYGON";
+                                    payload: {
+                                        encoding: string;
+                                        value: string;
+                                    };
+                                    summary: string;
+                                    expiresAt: string;
+                                } | {
+                                    /** @constant */
+                                    kind: "COSIGN_APPROVAL";
+                                    actionId: string;
+                                    cosignRequestId: string;
+                                    summary: string;
+                                }) | null;
+                                failure: {
+                                    code: string;
+                                } | null;
+                                etaSeconds: number;
+                                createdAt: string;
+                                updatedAt: string;
+                                completedAt: string | null;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postBridgeQuote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                    /** @enum {string} */
+                    toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                    amount: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_QUOTE";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            /** @enum {string} */
+                            fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                            /** @enum {string} */
+                            toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                            /** @constant */
+                            asset: "USDC";
+                            amountIn: string;
+                            amountOut: string;
+                            fee: {
+                                amount: string;
+                                /** @constant */
+                                currency: "USD";
+                            } | null;
+                            etaSeconds: number;
+                            fromAddress: string;
+                            toAddress: string;
+                            /** @enum {string} */
+                            signing: "INTERNAL" | "COSIGNED" | "SELF_CUSTODY" | "EXTERNAL";
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not enough credits */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unprocessable */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postBridgeTransfers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                    /** @enum {string} */
+                    toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                    amount: string;
+                    idempotencyKey?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Retry of an idempotency key: the transfer it already started */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_TRANSFER";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            transfer: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "AWAITING_ACTION" | "BURNED" | "ATTESTED" | "COMPLETED" | "FAILED" | "HELD";
+                                /** @enum {string} */
+                                fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @enum {string} */
+                                toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @constant */
+                                asset: "USDC";
+                                amount: string;
+                                amountOut: string | null;
+                                fromAddress: string;
+                                toAddress: string;
+                                burnTxHash: string | null;
+                                mintTxHash: string | null;
+                                pendingAction: ({
+                                    /** @constant */
+                                    kind: "SIGNATURE";
+                                    actionId: string;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "SOLANA" | "POLYGON";
+                                    payload: {
+                                        encoding: string;
+                                        value: string;
+                                    };
+                                    summary: string;
+                                    expiresAt: string;
+                                } | {
+                                    /** @constant */
+                                    kind: "COSIGN_APPROVAL";
+                                    actionId: string;
+                                    cosignRequestId: string;
+                                    summary: string;
+                                }) | null;
+                                failure: {
+                                    code: string;
+                                } | null;
+                                etaSeconds: number;
+                                createdAt: string;
+                                updatedAt: string;
+                                completedAt: string | null;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_TRANSFER_CREATED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            transfer: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "AWAITING_ACTION" | "BURNED" | "ATTESTED" | "COMPLETED" | "FAILED" | "HELD";
+                                /** @enum {string} */
+                                fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @enum {string} */
+                                toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @constant */
+                                asset: "USDC";
+                                amount: string;
+                                amountOut: string | null;
+                                fromAddress: string;
+                                toAddress: string;
+                                burnTxHash: string | null;
+                                mintTxHash: string | null;
+                                pendingAction: ({
+                                    /** @constant */
+                                    kind: "SIGNATURE";
+                                    actionId: string;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "SOLANA" | "POLYGON";
+                                    payload: {
+                                        encoding: string;
+                                        value: string;
+                                    };
+                                    summary: string;
+                                    expiresAt: string;
+                                } | {
+                                    /** @constant */
+                                    kind: "COSIGN_APPROVAL";
+                                    actionId: string;
+                                    cosignRequestId: string;
+                                    summary: string;
+                                }) | null;
+                                failure: {
+                                    code: string;
+                                } | null;
+                                etaSeconds: number;
+                                createdAt: string;
+                                updatedAt: string;
+                                completedAt: string | null;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not enough credits */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unprocessable */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postBridgeTransfersByTransferIdSignature: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transferId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    actionId: string;
+                    signedPayload: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_SIGNATURE_ACCEPTED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            transfer: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "AWAITING_ACTION" | "BURNED" | "ATTESTED" | "COMPLETED" | "FAILED" | "HELD";
+                                /** @enum {string} */
+                                fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @enum {string} */
+                                toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @constant */
+                                asset: "USDC";
+                                amount: string;
+                                amountOut: string | null;
+                                fromAddress: string;
+                                toAddress: string;
+                                burnTxHash: string | null;
+                                mintTxHash: string | null;
+                                pendingAction: ({
+                                    /** @constant */
+                                    kind: "SIGNATURE";
+                                    actionId: string;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "SOLANA" | "POLYGON";
+                                    payload: {
+                                        encoding: string;
+                                        value: string;
+                                    };
+                                    summary: string;
+                                    expiresAt: string;
+                                } | {
+                                    /** @constant */
+                                    kind: "COSIGN_APPROVAL";
+                                    actionId: string;
+                                    cosignRequestId: string;
+                                    summary: string;
+                                }) | null;
+                                failure: {
+                                    code: string;
+                                } | null;
+                                etaSeconds: number;
+                                createdAt: string;
+                                updatedAt: string;
+                                completedAt: string | null;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1634,6 +1634,32 @@ export type CardFundingOutcome =
   | { status: 'cancelled'; funding: CardFunding }
   | { status: 'cosign_pending'; funding: CardFunding; request: CosignRequest };
 
+// --- Bridge (USDC between the user's own wallets, by CCTP) ---------------------
+
+type BridgeContent<P extends '/bridge/config' | '/bridge/transfers' | '/bridge/transfers/{transferId}'> =
+  pollarPaths[P]['get']['responses'][200]['content']['application/json']['content'];
+
+/** The chains a bridge joins: every direction between them, USDC only, mainnet only. */
+export type BridgeChain = 'STELLAR' | 'SOLANA' | 'POLYGON';
+/** GET /bridge/config: the directions the user can bridge in now. `available` is false on testnet. */
+export type BridgeConfig = BridgeContent<'/bridge/config'>;
+export type BridgeQuoteParams = { fromChain: BridgeChain; toChain: BridgeChain; amount: string };
+/**
+ * What a bridge delivers (`amountOut`, equal to `amountIn`: CCTP's Standard Transfer
+ * charges nothing), Pollar's fee to the app, and how the source wallet signs.
+ */
+export type BridgeQuote = pollarPaths['/bridge/quote']['post']['responses'][200]['content']['application/json']['content'];
+/**
+ * One bridge. PENDING -> (AWAITING_ACTION) -> BURNED -> ATTESTED -> COMPLETED, about
+ * five minutes end to end. FAILED: nothing moved. HELD: the USDC was burned and what
+ * followed failed; Pollar resolves it.
+ */
+export type BridgeTransfer = BridgeContent<'/bridge/transfers/{transferId}'>['transfer'];
+export type BridgeTransferStatus = BridgeTransfer['status'];
+export type BridgePendingAction = NonNullable<BridgeTransfer['pendingAction']>;
+/** A step the source wallet signs; the same chains and encodings as a ramp leg's SIGNATURE. */
+export type BridgeSignatureAction = Extract<BridgePendingAction, { kind: 'SIGNATURE' }>;
+
 // --- Earn types (yield vaults / lending) ---------------------------------------
 
 /** Providers this app exposes (from GET /earn/providers). Empty = Earn disabled. */

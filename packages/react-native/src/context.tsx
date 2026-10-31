@@ -19,6 +19,7 @@ import { FeatureModal } from './components/FeatureModal';
 import { ModalErrorBoundary } from './components/commons';
 import { AppKycFlow } from './components/kyc-modal/AppKycFlow';
 import { CardModal } from './components/card-modal/CardModal';
+import { BridgeModal } from './components/bridge-modal/BridgeModal';
 import { ConfirmModal } from './components/confirm-modal/ConfirmModal';
 import { CosignModal } from './components/cosign-modal/CosignModal';
 import { CustodyMigrationModal } from './components/custody-migration-modal/CustodyMigrationModal';
@@ -95,6 +96,7 @@ type ModalMethods =
   | 'openRampModal'
   | 'openRampWidget'
   | 'openCardModal'
+  | 'openBridgeModal'
   | 'openTxHistoryModal'
   | 'openWalletBalanceModal'
   | 'openEnabledAssetsModal'
@@ -247,7 +249,7 @@ function ClientProvider({
 }) {
   const client = runtime.client;
   const [, update] = useState(0);
-  const [modal, setModal] = useState<FeatureName | 'cards' | null>(null);
+  const [modal, setModal] = useState<FeatureName | 'cards' | 'bridge' | null>(null);
   const [kycOptions, setKycOptions] = useState<{
     country?: string;
     level?: 'basic' | 'intermediate' | 'enhanced';
@@ -378,7 +380,7 @@ function ClientProvider({
   const firstConfirmation = confirmations[0] ?? null;
   const wallet = client.getWallet();
   const tx = client.getTransactionState() ?? { step: 'idle' as const };
-  const open = (next: FeatureName | 'cards') => {
+  const open = (next: FeatureName | 'cards' | 'bridge') => {
     if (modal === 'authentication' && next !== modal) client.cancelLogin();
     setModal(next);
   };
@@ -471,6 +473,7 @@ function ClientProvider({
     openRampModal: () => open('ramp'),
     openRampWidget: () => open('ramp'),
     openCardModal: () => open('cards'),
+    openBridgeModal: () => open('bridge'),
     openSwapModal: () => open('swap'),
     openEarnModal: () => open('earn'),
     openDistributionRulesModal: () => open('distribution'),
@@ -499,6 +502,8 @@ function ClientProvider({
                 <AppKycFlow onClose={close} {...kycOptions} />
               ) : modal === 'ramp' ? (
                 <RampWidget onClose={close} />
+              ) : modal === 'bridge' ? (
+                <BridgeModal onClose={close} />
               ) : modal === 'cards' ? (
                 <CardModal key={wallet?.address ?? ''} onClose={close} />
               ) : modal === 'transactions' ? (

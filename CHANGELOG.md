@@ -167,6 +167,20 @@
   and React Native, keeps one key per attempt and drops it once the server
   answers. Requires an sdk-api that accepts `idempotencyKey` on
   `POST /v3/cards/funding`.
+- **Move USDC between the user's own wallets on Stellar, Solana and Polygon.**
+  `client.bridge({ fromChain, toChain, amount, idempotencyKey })` moves it by
+  Circle CCTP in any direction between the three, on mainnet, about five
+  minutes end to end; `getBridgeConfig()` lists the directions the user holds
+  wallets for, `quoteBridge()` shows what arrives, Pollar's fee to the app and
+  how the wallet signs, and `pollBridgeTransfer()` follows it. A custodial
+  wallet burns at once; a co-signed one approves the request on its device; an
+  external Stellar wallet signs each step through `signBridgeStep(id, actionId)`,
+  which uses the ramp signing handlers (`registerRampSigningHandler`). An
+  external Solana wallet cannot be the source yet. `openBridgeModal()` /
+  `<BridgeModal>`, web and React Native, run the whole flow. The device's
+  check of a Solana burn now accepts `deposit_for_burn_with_hook` when the
+  request states the same hook data, which names the Stellar account Circle's
+  forwarder pays. Requires sdk-api with `/v3/bridge`.
 - **Approvals and transaction screens show what moves.** `<ConfirmModal>`,
   `<CosignModal>` and every transaction status view (send, swap, earn, the
   transaction modal), web and React Native, share one review: the asset and

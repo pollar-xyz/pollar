@@ -43,6 +43,7 @@ export { WalletBalanceModal } from './components/wallet-balance-modal/WalletBala
 export { EnabledAssetsModal } from './components/enabled-assets-modal/EnabledAssetsModal';
 export { SendModal } from './components/send-modal/SendModal';
 export { SwapModal } from './components/swap-modal/SwapModal';
+export { BridgeModal } from './components/bridge-modal/BridgeModal';
 export { EarnModal } from './components/earn-modal/EarnModal';
 export { CardModal } from './components/card-modal/CardModal';
 export { ReceiveModal } from './components/receive-modal/ReceiveModal';
@@ -80,6 +81,8 @@ export { SendModalTemplate } from './components/send-modal/SendModalTemplate';
 export type { SendMemoType, SendModalTemplateProps } from './components/send-modal/SendModalTemplate';
 export { SwapModalTemplate } from './components/swap-modal/SwapModalTemplate';
 export type { SwapModalTemplateProps, SwapAssetOption } from './components/swap-modal/SwapModalTemplate';
+export { BridgeModalTemplate } from './components/bridge-modal/BridgeModalTemplate';
+export type { BridgeModalTemplateProps, BridgeModalStep } from './components/bridge-modal/BridgeModalTemplate';
 export { ReceiveModalTemplate } from './components/receive-modal/ReceiveModalTemplate';
 export type { ReceiveModalTemplateProps } from './components/receive-modal/ReceiveModalTemplate';
 export { SessionsModalTemplate } from './components/sessions-modal/SessionsModalTemplate';

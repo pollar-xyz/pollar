@@ -145,6 +145,29 @@ test('a burn that differs from what the request states is refused', () => {
   }
 });
 
+test('a burn toward Stellar carries its hook, and the hook must be the one the request states', () => {
+  // deposit_for_burn_with_hook: the same params, then the hook as a Borsh Vec<u8>.
+  const HOOK_DISC = [111, 245, 62, 131, 204, 108, 223, 155];
+  const hook = '00'.repeat(24) + '00000000' + '00000038' + '47'.repeat(56);
+  const hooked = (hookHex: string): Ix => {
+    const base = burnIx({ domain: 27 });
+    const bytes = Array.from(hookHex.match(/../g)!, (h) => parseInt(h, 16));
+    return { ...base, data: [...HOOK_DISC, ...base.data.slice(8), ...le(BigInt(bytes.length), 4), ...bytes] };
+  };
+  const stated = { destinationDomain: 27, hookData: `0x${hook}` };
+  assert.deepEqual(check(request(serialize({ payer: GAS, instructions: [hooked(hook)] }), stated)), { ok: true });
+
+  const other = check(request(serialize({ payer: GAS, instructions: [hooked('00'.repeat(32) + '48'.repeat(56))] }), stated));
+  assert.equal(other.ok, false, 'a hook paying someone else');
+  assert.match((other as { reason: string }).reason, /hook data/);
+
+  const unstated = check(request(serialize({ payer: GAS, instructions: [hooked(hook)] }), { destinationDomain: 27 }));
+  assert.equal(unstated.ok, false, 'a hook the request does not state');
+
+  const missing = check(request(serialize({ payer: GAS, instructions: [burnIx({ domain: 27 })] }), stated));
+  assert.equal(missing.ok, false, 'a stated hook the burn does not carry');
+});
+
 test('anything beside the burn is refused, and a burn is never hidden in another request', () => {
   const transfer: Ix = { program: SYSTEM, accounts: [GAS, OTHER], data: [2, 0, 0, 0, ...le(1n, 8)] };
   const extra = check(request(serialize({ payer: GAS, instructions: [burnIx(), transfer] })));

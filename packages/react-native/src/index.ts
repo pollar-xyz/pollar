@@ -86,6 +86,8 @@ export { ProviderRegistrationModal } from './components/provider-registration-mo
 export { KycStatus } from './components/kyc-modal/KycStatus';
 export { RampWidget } from './components/ramp-widget/RampWidget';
 export { CardModal } from './components/card-modal/CardModal';
+export { BridgeModal } from './components/bridge-modal/BridgeModal';
+export type { BridgeModalProps } from './components/bridge-modal/BridgeModal';
 export { CosignModal } from './components/cosign-modal/CosignModal';
 export { RecoveryModal } from './components/recovery-modal/RecoveryModal';
 export { CustodyMigrationModal } from './components/custody-migration-modal/CustodyMigrationModal';
