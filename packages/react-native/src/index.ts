@@ -91,6 +91,7 @@ export { BridgeModal } from './components/bridge-modal/BridgeModal';
 export type { BridgeModalProps } from './components/bridge-modal/BridgeModal';
 export type { CardModalOptions } from './components/card-modal/CardModal';
 export type { EarnModalOptions, ReceiveModalOptions, SendModalOptions, SwapModalOptions } from './components/FeaturePanel';
+export type { TxHistoryModalOptions } from './components/tx-history-modal/TxHistoryModal';
 export { CosignModal } from './components/cosign-modal/CosignModal';
 export { RecoveryModal } from './components/recovery-modal/RecoveryModal';
 export { CustodyMigrationModal } from './components/custody-migration-modal/CustodyMigrationModal';

@@ -412,9 +412,10 @@ takes, country names, and the provider's runtime language.
 
 #### `smoke-rn-modal-options.cjs`
 
-The options the React Native `open*Modal` actions take: the send, swap, earn,
-receive and card panels open on them, an option the wallet cannot use falls back
-to the default, and `onSuccess` / `onFunded` hear the outcome once.
+The options the React Native `open*Modal` actions take: the send, swap, earn
+panels and the history open on them (the send memo, a Solana swap quoted in base
+units, the earn tab, the history network), an option the app or wallet cannot
+use falls back to the default, and `onSuccess` hears the outcome once.
 
 #### `smoke-custom-ramp.cjs` and `test:custom-ramp-example`
 

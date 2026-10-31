@@ -179,7 +179,7 @@ const {
   openTxModal, // also as `openTransactionModal`
   openKycModal, // (options?: { country?, level?, onApproved? }) => void
   openRampModal, // (options?: RampModalOptions) => void, also as `openRampWidget`
-  openTxHistoryModal,
+  openTxHistoryModal, // (options?: TxHistoryModalOptions) => void
   openWalletBalanceModal,
   openSendModal, // (options?: SendModalOptions) => void
   openReceiveModal, // (options?: ReceiveModalOptions) => void
@@ -196,7 +196,8 @@ co-sign state (`cosign`, `openCosignModal`), the recovery state (`recovery`, `re
 
 ### Modal options
 
-The ramp, send, receive, swap, earn and card openers take where their modal opens. The options are a starting point
+The ramp, send, receive, swap, earn, history and card openers take where their modal opens, with the same fields as
+`@pollar/react`. The options are a starting point
 the user can change. An option that matches nothing the modal offers (a chain without a wallet, an asset code that is
 not listed, a provider the app lacks, an amount that is not a plain decimal such as `'100'` or `'12.5'`) is left out
 and that field opens on its default; nothing is thrown. An option whose data is still loading applies when it
@@ -232,6 +233,8 @@ dropped.
 | `asset`       | `string`                             | Code of an asset enabled on that chain; the native asset otherwise |
 | `destination` | `string`                             | The address to send to                                             |
 | `amount`      | `string`                             | A plain decimal (base units on Solana and Polygon)                 |
+| `memo`        | `string`                             | Stellar only: the memo, validated against its type                 |
+| `memoType`    | `'text' \| 'id' \| 'hash'`           | The memo's type. Defaults to `'text'`                              |
 | `onSuccess`   | `(result: { hash: string }) => void` | Called once for each transaction the modal sends that lands        |
 
 `ReceiveModalOptions`
@@ -244,6 +247,7 @@ dropped.
 
 | Option      | Type                                 | Description                                                 |
 | ----------- | ------------------------------------ | ----------------------------------------------------------- |
+| `chain`     | `'STELLAR' \| 'SOLANA'`              | A network the app has swap venues on; the first otherwise   |
 | `sell`      | `string`                             | Code of the token to sell, e.g. `'XLM'`                     |
 | `buy`       | `string`                             | Code of the token to buy, e.g. `'USDC'`                     |
 | `amount`    | `string`                             | A plain decimal                                             |
@@ -255,8 +259,15 @@ dropped.
 | --------------- | ------------------------------------ | -------------------------------------------------------------- |
 | `provider`      | `EarnProviderId`                     | A provider the app enables, e.g. `'blend'`                     |
 | `opportunityId` | `string`                             | One of that provider's opportunities; its position is read too |
+| `tab`           | `'deposit' \| 'withdraw'`            | The operation. Defaults to `'deposit'`                         |
 | `amount`        | `string`                             | A plain decimal                                                |
 | `onSuccess`     | `(result: { hash: string }) => void` | Called once for each transaction the modal sends that lands    |
+
+`TxHistoryModalOptions`
+
+| Option  | Type          | Description                                                            |
+| ------- | ------------- | ---------------------------------------------------------------------- |
+| `chain` | `WalletChain` | The network whose transactions it lists; the app's first one otherwise |
 
 `CardModalOptions`
 
@@ -266,6 +277,12 @@ dropped.
 | `amount`   | `string`                         | A plain decimal                                                                     |
 | `chain`    | `CardFundingChain`               | A chain the user can fund the card from                                             |
 | `onFunded` | `(funding: CardFunding) => void` | Called with each funding the modal creates                                          |
+
+The send modal takes a Stellar memo (text up to 28 bytes, an ID up to 2^64 - 1, or a 32-byte hash as 64 hex
+characters) and hides it on other chains. The swap modal swaps on Solana too (Jupiter and Titan, amounts in the
+token's decimals, SOL as wrapped SOL), with a network picker when the app has venues on both chains. The earn modal
+has deposit and withdraw tabs. The history has a network picker when the user holds wallets on more than one chain,
+and each row opens its own chain's explorer.
 
 ### Login options
 

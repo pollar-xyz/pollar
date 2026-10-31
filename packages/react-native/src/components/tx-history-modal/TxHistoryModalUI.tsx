@@ -1,5 +1,5 @@
 import { useInheritedLanguage } from '../../language-context';
-import { PollarLanguage, TxHistoryState } from '@pollar/core';
+import { PollarLanguage, TxHistoryState, WalletChain } from '@pollar/core';
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, Linking } from 'react-native';
 import { ModalStatusBanner, PollarModalFooter, PollarOverlay } from '../commons';
@@ -13,6 +13,18 @@ export interface TxHistoryModalTemplateProps {
   onRefresh: () => void;
   /** Language of the modal. Defaults to the user's device; the modal passes the resolved one. */
   language?: PollarLanguage | undefined;
+  /** The networks to pick from; the picker shows when there is more than one. */
+  chains?: WalletChain[] | undefined;
+  chain?: WalletChain | null | undefined;
+  onChainChange?: ((chain: WalletChain) => void) | undefined;
+}
+
+/** The explorer page of a transaction on its own chain; testnet is Solana devnet and Polygon Amoy. */
+function explorerTxUrl(chain: WalletChain | undefined, hash: string, network: string): string {
+  const testnet = network === 'testnet';
+  if (chain === 'SOLANA') return `https://explorer.solana.com/tx/${hash}${testnet ? '?cluster=devnet' : ''}`;
+  if (chain === 'POLYGON') return `https://${testnet ? 'amoy.' : ''}polygonscan.com/tx/${hash}`;
+  return `https://stellar.expert/explorer/${testnet ? 'testnet' : 'public'}/tx/${hash}`;
 }
 
 export function TxHistoryModalTemplate({
@@ -22,6 +34,9 @@ export function TxHistoryModalTemplate({
   onClose,
   onRefresh,
   language: languageProp,
+  chains = [],
+  chain = null,
+  onChainChange,
 }: TxHistoryModalTemplateProps) {
   const language = useInheritedLanguage(languageProp);
   const copy = TX_HISTORY_COPY[language];
@@ -62,6 +77,22 @@ export function TxHistoryModalTemplate({
           <Text style={{ color: colors.muted, fontSize: 16 }}>✕</Text>
         </TouchableOpacity>
 
+        {chains.length > 1 && (
+          <View style={styles.chainRow} accessibilityLabel={copy.network}>
+            {chains.map((c) => (
+              <TouchableOpacity
+                key={c}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: c === chain }}
+                style={[styles.chainChip, { borderColor: c === chain ? accentColor : colors.border }]}
+                onPress={() => onChainChange?.(c)}
+              >
+                <Text style={{ color: colors.text }}>{c}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         {isLoaded && transactions.length === 0 && (
           <View style={styles.emptyBox}>
             <Text style={{ color: colors.muted, textAlign: 'center' }}>{copy.emptyFound}</Text>
@@ -76,7 +107,7 @@ export function TxHistoryModalTemplate({
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={[styles.txRow, { backgroundColor: colors.itemBg, borderColor: colors.border }]}
-                onPress={() => Linking.openURL(`https://stellar.expert/explorer/${item.network}/tx/${item.hash}`)}
+                onPress={() => Linking.openURL(explorerTxUrl(item.chain ?? chain ?? undefined, item.hash, item.network))}
               >
                 <View style={styles.txRowLeft}>
                   <Text style={[styles.txType, { color: colors.text }]}>
@@ -163,6 +194,18 @@ const styles = StyleSheet.create({
   closeBtn: {
     top: 16,
     right: 16,
+  },
+  chainRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  chainChip: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   emptyBox: {
     padding: 24,

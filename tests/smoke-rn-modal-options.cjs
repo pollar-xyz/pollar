@@ -1,4 +1,4 @@
-// React Native send, swap and earn panels opened on options: the seed applies
+// React Native send, swap, earn panels and the history opened on options: the seed applies
 // once its data loads, an option that matches nothing leaves the default, and
 // onSuccess fires once per transaction the panel sends.
 //
@@ -33,6 +33,10 @@ const reactNative = {
     return h(React.Fragment, null, props.children);
   },
   TouchableOpacity: passthrough,
+  TouchableWithoutFeedback: passthrough,
+  FlatList: () => null,
+  Modal: passthrough,
+  Platform: { OS: 'ios', select: (o) => o.ios ?? o.default },
   TextInput: (props) => {
     inputs.push(props);
     return null;
@@ -65,6 +69,7 @@ function load(file) {
 }
 
 const { SendPanel, SwapPanel, EarnPanel } = load('packages/react-native/src/components/FeaturePanel.tsx');
+const { TxHistoryModal } = load('packages/react-native/src/components/tx-history-modal/TxHistoryModal.tsx');
 
 const usdc = { chain: 'STELLAR', code: 'USDC', issuer: 'GA5Z', enabledInApp: true, trustlineEstablished: true };
 function context(patch = {}) {
@@ -79,7 +84,10 @@ function context(patch = {}) {
       { address: 'SoLuser', chain: 'SOLANA' },
     ],
     enabledAssets: { step: 'loading' },
+    walletBalance: { step: 'idle' },
     refreshAssets: async () => {},
+    refreshWalletBalance: async () => {},
+    getSolanaSwapConfig: async () => [],
     tx: { step: 'idle' },
     copyText: async () => {},
     getClient: () => ({ getTxStatus: async () => null }),
@@ -136,12 +144,12 @@ async function unmount() {
       onSuccess: (r) => hashes.push(r.hash),
     };
     await show(SendPanel, { initial });
-    assert.deepEqual(checked(), ['STELLAR', 'Native'], 'the asset waits for the enabled assets');
+    assert.deepEqual(checked(), ['STELLAR', 'Native', 'Text'], 'the asset waits for the enabled assets');
     assert.equal(input('Destination address'), 'GDEST');
     assert.equal(input('Amount'), '5');
     ctx.enabledAssets = { step: 'loaded', data: { assets: [usdc] } };
     await show(SendPanel, { initial });
-    assert.deepEqual(checked(), ['STELLAR', 'STELLAR:USDC:GA5Z'], 'the seeded asset once it loads');
+    assert.deepEqual(checked(), ['STELLAR', 'STELLAR:USDC:GA5Z', 'Text'], 'the seeded asset once it loads');
 
     await press('Review payment');
     await press('Confirm payment');
@@ -153,8 +161,40 @@ async function unmount() {
     ctx = context({ enabledAssets: { step: 'loaded', data: { assets: [usdc] } } });
     await mount();
     await show(SendPanel, { initial: { chain: 'POLYGON', asset: 'NOPE', amount: '1e3' } });
-    assert.deepEqual(checked(), ['STELLAR', 'Native'], 'an unknown chain and asset keep the defaults');
+    assert.deepEqual(checked(), ['STELLAR', 'Native', 'Text'], 'an unknown chain and asset keep the defaults');
     assert.equal(input('Amount'), '', 'an amount that is not a plain decimal is left out');
+    await unmount();
+
+    // The memo: seeded, validated like the web form, and sent as the build option.
+    const sent = [];
+    ctx = context({
+      enabledAssets: { step: 'loaded', data: { assets: [usdc] } },
+      sendPayment: async (params) => {
+        sent.push(params);
+        return { status: 'success', hash: 'h2' };
+      },
+    });
+    await mount();
+    const memoed = { destination: 'GDEST', amount: '1', memo: '12345', memoType: 'id' };
+    await show(SendPanel, { initial: memoed });
+    assert.deepEqual(checked(), ['STELLAR', 'Native', 'ID']);
+    assert.equal(input('Memo (optional)'), '12345');
+    await press('Review payment');
+    await press('Confirm payment');
+    assert.deepEqual(JSON.parse(JSON.stringify(sent[0].options)), { memo: { type: 'id', value: '12345' } });
+    await unmount();
+
+    ctx = context({ sendPayment: async (params) => sent.push(params) });
+    await mount();
+    await show(SendPanel, { initial: { destination: 'GDEST', amount: '1', memo: 'abc', memoType: 'hash' } });
+    await press('Review payment');
+    await press('Confirm payment');
+    assert.equal(sent.length, 1, 'an invalid hash memo is refused before sending');
+    await unmount();
+    ctx = context();
+    await mount();
+    await show(SendPanel, { initial: { chain: 'SOLANA', memo: 'x' } });
+    assert.equal(input('Memo (optional)'), undefined, 'no memo field off Stellar');
     await unmount();
   }
 
@@ -167,7 +207,7 @@ async function unmount() {
     ];
     ctx = context({
       getSwapTokens: async () => tokens,
-      getSwapConfig: async () => ({ venues: ['soroswap'] }),
+      getSwapConfig: async () => ['soroswap'],
       getSwapQuote: async () => [{ provider: 'soroswap', amountOut: '1' }],
       swap: async () => {
         ctx.tx = { step: 'success', hash: 's1' };
@@ -185,10 +225,57 @@ async function unmount() {
     assert.deepEqual(hashes, ['s1']);
     await unmount();
 
-    ctx = context({ getSwapTokens: async () => tokens, getSwapConfig: async () => ({}) });
+    ctx = context({ getSwapTokens: async () => tokens, getSwapConfig: async () => ['soroswap'] });
     await mount();
     await show(SwapPanel, { initial: { sell: 'NOPE', buy: 'usdc' } });
     assert.deepEqual(checked(), ['STELLAR:USDC:GA5Z'], 'an unknown token leaves its picker on the default');
+    await unmount();
+
+    // Solana: the network picker, the mints from the balances, and the quote in base units.
+    const solQuotes = [];
+    const solana = {
+      getSwapTokens: async () => tokens,
+      getSwapConfig: async () => ['soroswap'],
+      getSolanaSwapConfig: async () => ['jupiter'],
+      walletBalance: {
+        step: 'loaded',
+        data: { balances: [{ chain: 'SOLANA', type: 'native', code: 'SOL', balance: '2', available: '2' }] },
+      },
+      enabledAssets: {
+        step: 'loaded',
+        data: { assets: [{ chain: 'SOLANA', type: 'token', code: 'USDC', issuer: 'EPjF', decimals: 6 }] },
+      },
+      getSolanaSwapQuote: async (params) => {
+        solQuotes.push(params);
+        return [{ provider: 'jupiter', outAmount: '1' }];
+      },
+      swapSolana: async () => {
+        ctx.tx = { step: 'success', hash: 'sol1' };
+        return { status: 'success', hash: 'sol1' };
+      },
+    };
+    const solHashes = [];
+    ctx = context(solana);
+    await mount();
+    const onSolana = { chain: 'SOLANA', sell: 'sol', buy: 'USDC', amount: '1.5', onSuccess: (r) => solHashes.push(r.hash) };
+    await show(SwapPanel, { initial: onSolana });
+    assert.deepEqual(checked(), ['SOLANA', 'SOL', 'USDC'], 'the network, then the mints by code');
+    await press('Get quotes');
+    assert.deepEqual(JSON.parse(JSON.stringify(solQuotes[0])), {
+      inputMint: 'So11111111111111111111111111111111111111112',
+      outputMint: 'EPjF',
+      amount: '1500000000',
+      slippageBps: 50,
+    });
+    await press('Confirm swap via jupiter');
+    await show(SwapPanel, { initial: onSolana });
+    assert.deepEqual(solHashes, ['sol1']);
+    await unmount();
+
+    ctx = context({ ...solana, getSolanaSwapConfig: async () => [] });
+    await mount();
+    await show(SwapPanel, { initial: { chain: 'SOLANA', sell: 'XLM' } });
+    assert.deepEqual(checked(), ['STELLAR:XLM:native'], 'a network the app lacks falls back, with no picker');
     await unmount();
   }
 
@@ -207,7 +294,7 @@ async function unmount() {
     await mount();
     const initial = { provider: 'blend', opportunityId: 'o2', amount: '3', onSuccess: (r) => hashes.push(r.hash) };
     await show(EarnPanel, { initial });
-    assert.deepEqual(checked(), ['blend', 'o2']);
+    assert.deepEqual(checked(), ['blend', 'o2', 'Deposit']);
     assert.equal(input('Amount'), '3');
     await press('Review deposit');
     await press('Confirm deposit');
@@ -222,17 +309,55 @@ async function unmount() {
     });
     await mount();
     await show(EarnPanel, { initial: { provider: 'blend', opportunityId: 'missing' } });
-    assert.deepEqual(checked(), ['blend'], 'a missing opportunity is left unpicked, the provider still applies');
+    assert.deepEqual(checked(), ['blend', 'Deposit'], 'a missing opportunity is left unpicked, the provider still applies');
     await unmount();
     ctx = context({ getEarnProviders: async () => ['defindex'] });
     await mount();
     await show(EarnPanel, { initial: { provider: 'blend' } });
-    assert.deepEqual(checked(), [], 'a provider the app lacks opens on no provider, as today');
+    assert.deepEqual(checked(), ['Deposit'], 'a provider the app lacks opens on no provider, as today');
+    await unmount();
+
+    const withdrawn = [];
+    ctx = context({
+      getEarnProviders: async () => ['blend'],
+      getEarnOpportunities: async () => [{ id: 'o1' }],
+      getEarnPosition: async () => ({ withdrawUnit: 'shares' }),
+      earnWithdraw: async (params) => withdrawn.push(params),
+    });
+    await mount();
+    await show(EarnPanel, { initial: { provider: 'blend', opportunityId: 'o1', tab: 'withdraw', amount: '2' } });
+    assert.deepEqual(checked(), ['blend', 'o1', 'Withdraw']);
+    await press('Review withdraw');
+    await press('Confirm withdraw');
+    assert.deepEqual(JSON.parse(JSON.stringify(withdrawn)), [{ provider: 'blend', opportunity: 'o1', amount: '2' }]);
+    await unmount();
+  }
+
+  // --- History: the chain option, and one the app does not offer falling back ---
+  {
+    const fetched = [];
+    ctx = context({
+      appConfig: { application: { chains: ['STELLAR', 'SOLANA'] } },
+      txHistory: { step: 'idle' },
+      getClient: () => ({ fetchTxHistory: async (params) => fetched.push(params) }),
+    });
+    await mount();
+    await show(TxHistoryModal, { onClose() {}, initial: { chain: 'SOLANA' } });
+    assert.deepEqual(JSON.parse(JSON.stringify(fetched[0])), { chain: 'SOLANA' });
+    await unmount();
+    fetched.length = 0;
+    await mount();
+    await show(TxHistoryModal, { onClose() {}, initial: { chain: 'POLYGON' } });
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(fetched[0])),
+      { chain: 'STELLAR' },
+      'a chain the app lacks falls back to its first',
+    );
     await unmount();
   }
 
   console.log(
-    'React Native modal options: send, swap and earn seeds, late data, unknown values falling back and onSuccess once passed',
+    'React Native modal options: send (memo), swap (Solana, network), earn (tabs) and history (network) seeds, late data, unknown values falling back and onSuccess once passed',
   );
 })().catch((error) => {
   console.error(error);

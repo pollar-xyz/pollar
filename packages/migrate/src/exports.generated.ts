@@ -647,6 +647,7 @@ export const TARGET_EXPORTS: Record<string, readonly string[]> = {
     'TransactionModalTemplateProps',
     'TransactionPanel',
     'TransactionStatus',
+    'TxHistoryModalOptions',
     'TxHistoryModalTemplate',
     'WalletBalanceModal',
     'WalletBalanceModalTemplate',

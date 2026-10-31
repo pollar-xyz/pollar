@@ -114,10 +114,11 @@
   modal `panel: 'fund'`, `amount` and `chain`. Send, swap and earn call
   `onSuccess({ hash })` once the transaction lands, and the card modal
   `onFunded(funding)` for each funding sent. `@pollar/react-native` takes
-  the same options where its panels have the field (its send has no memo,
-  its swap is Stellar-only, its earn has no tabs and its history no network
-  picker), and `openRampModal(options)` as on the web. The option types are
-  exported from both packages.
+  the same options, and its panels gain what that needs: a memo with its
+  type on a Stellar send, Solana swaps with a network picker, deposit and
+  withdraw tabs in Earn, and a network picker in the history, whose rows
+  open each chain's explorer. The option types are exported from both
+  packages.
 - **The modals follow a language that changes at runtime.**
   `<PollarProvider language={tag}>` (a BCP 47 tag) is read on every render,
   unlike `client`, so open and later modals switch with the app's language

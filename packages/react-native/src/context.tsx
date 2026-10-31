@@ -28,7 +28,7 @@ import { LoginModal } from './components/login-modal/LoginModal';
 import { RecoveryModal } from './components/recovery-modal/RecoveryModal';
 import { RampWidget, type RampModalOptions } from './components/ramp-widget/RampWidget';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
-import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
+import { TxHistoryModal, type TxHistoryModalOptions } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 import { PollarUIProvider } from './components/layout';
 import { ModalLanguageContext, useProviderLanguage } from './language-context';
@@ -124,6 +124,7 @@ type SeededModalMethods = {
   openSwapModal: (options?: SwapModalOptions) => void;
   openEarnModal: (options?: EarnModalOptions) => void;
   openCardModal: (options?: CardModalOptions) => void;
+  openTxHistoryModal: (options?: TxHistoryModalOptions) => void;
 };
 export type PollarContextValue = Methods &
   Record<
@@ -493,7 +494,7 @@ function ClientProvider({
     openReceiveModal: (options) => open('receive', options),
     openWalletBalanceModal: () => open('wallet'),
     openEnabledAssetsModal: () => open('assets'),
-    openTxHistoryModal: () => open('history'),
+    openTxHistoryModal: (options) => open('history', options),
     openSessionsModal: () => open('sessions'),
     openKycModal: (options = {}) => {
       setKycOptions(options);
@@ -538,7 +539,7 @@ function ClientProvider({
               ) : modal === 'transactions' ? (
                 <TransactionModal onClose={close} />
               ) : modal === 'history' ? (
-                <TxHistoryModal onClose={close} />
+                <TxHistoryModal onClose={close} initial={modalInitial as TxHistoryModalOptions | undefined} />
               ) : modal === 'wallet' ? (
                 <WalletBalanceModal onClose={close} />
               ) : (

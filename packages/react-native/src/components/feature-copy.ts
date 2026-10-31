@@ -54,6 +54,12 @@ const EN = {
     nativeAsset: 'native',
     invalid: 'Enter a destination and positive amount.',
     baseUnits: 'Use integer base units for this chain.',
+    memo: 'Memo (optional)',
+    memoType: 'Memo type',
+    memoTypes: { text: 'Text', id: 'ID', hash: 'Hash' } as Record<'text' | 'id' | 'hash', string>,
+    memoTextTooLong: 'The memo text can be at most 28 bytes.',
+    memoHashInvalid: 'The memo hash must be 32 bytes as 64 hex characters.',
+    memoIdInvalid: 'The memo ID must be a whole number up to 2^64 - 1.',
   },
   playground: {
     title: 'Transaction playground',
@@ -99,6 +105,7 @@ const EN = {
     getQuotes: 'Get quotes',
     confirmVia: (provider: string) => `Confirm swap via ${provider}`,
     noTokens: 'No supported tokens loaded. Check your app configuration or retry.',
+    network: 'Network',
   },
   earn: {
     title: 'Earn',
@@ -109,6 +116,8 @@ const EN = {
     review: { deposit: 'Review deposit', withdraw: 'Review withdraw' },
     confirm: { deposit: 'Confirm deposit', withdraw: 'Confirm withdraw' },
     noProviders: 'No earn providers loaded for this application.',
+    operation: 'Operation',
+    tabs: { deposit: 'Deposit', withdraw: 'Withdraw' } as Record<'deposit' | 'withdraw', string>,
   },
   distribution: {
     title: 'Distribution',
@@ -216,6 +225,12 @@ export const FEATURE_COPY: Record<PollarLanguage, typeof EN> = {
       nativeAsset: 'nativo',
       invalid: 'Ingresa un destino y un monto positivo.',
       baseUnits: 'Usa unidades base enteras en esta red.',
+      memo: 'Memo (opcional)',
+      memoType: 'Tipo de memo',
+      memoTypes: { text: 'Texto', id: 'ID', hash: 'Hash' },
+      memoTextTooLong: 'El texto del memo puede tener como máximo 28 bytes.',
+      memoHashInvalid: 'El hash del memo debe tener 32 bytes, escritos como 64 caracteres hexadecimales.',
+      memoIdInvalid: 'El ID del memo debe ser un número entero de hasta 2^64 - 1.',
     },
     playground: {
       title: 'Laboratorio de transacciones',
@@ -261,6 +276,7 @@ export const FEATURE_COPY: Record<PollarLanguage, typeof EN> = {
       getQuotes: 'Obtener cotizaciones',
       confirmVia: (provider) => `Confirmar intercambio con ${provider}`,
       noTokens: 'No se cargaron tokens compatibles. Revisa la configuración de tu app o intenta de nuevo.',
+      network: 'Red',
     },
     earn: {
       title: 'Rendimientos',
@@ -271,6 +287,8 @@ export const FEATURE_COPY: Record<PollarLanguage, typeof EN> = {
       review: { deposit: 'Revisar depósito', withdraw: 'Revisar retiro' },
       confirm: { deposit: 'Confirmar depósito', withdraw: 'Confirmar retiro' },
       noProviders: 'No hay proveedores de rendimientos para esta aplicación.',
+      operation: 'Operación',
+      tabs: { deposit: 'Depositar', withdraw: 'Retirar' },
     },
     distribution: {
       title: 'Distribución',
@@ -374,6 +392,12 @@ export const FEATURE_COPY: Record<PollarLanguage, typeof EN> = {
       nativeAsset: 'nativo',
       invalid: 'Informe um destino e um valor positivo.',
       baseUnits: 'Use unidades base inteiras nesta rede.',
+      memo: 'Memo (opcional)',
+      memoType: 'Tipo de memo',
+      memoTypes: { text: 'Texto', id: 'ID', hash: 'Hash' },
+      memoTextTooLong: 'O texto do memo pode ter no máximo 28 bytes.',
+      memoHashInvalid: 'O hash do memo precisa ter 32 bytes, escritos como 64 caracteres hexadecimais.',
+      memoIdInvalid: 'O ID do memo precisa ser um número inteiro de até 2^64 - 1.',
     },
     playground: {
       title: 'Laboratório de transações',
@@ -419,6 +443,7 @@ export const FEATURE_COPY: Record<PollarLanguage, typeof EN> = {
       getQuotes: 'Obter cotações',
       confirmVia: (provider) => `Confirmar troca via ${provider}`,
       noTokens: 'Nenhum token compatível foi carregado. Confira a configuração do seu app ou tente de novo.',
+      network: 'Rede',
     },
     earn: {
       title: 'Rendimentos',
@@ -429,6 +454,8 @@ export const FEATURE_COPY: Record<PollarLanguage, typeof EN> = {
       review: { deposit: 'Revisar depósito', withdraw: 'Revisar saque' },
       confirm: { deposit: 'Confirmar depósito', withdraw: 'Confirmar saque' },
       noProviders: 'Nenhum provedor de rendimentos para este aplicativo.',
+      operation: 'Operação',
+      tabs: { deposit: 'Depositar', withdraw: 'Sacar' },
     },
     distribution: {
       title: 'Distribuição',

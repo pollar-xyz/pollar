@@ -7,6 +7,7 @@ import type {
   EarnOpportunity,
   EarnProviderId,
   EarnPosition,
+  SolanaSwapQuote,
   SwapQuote,
   SwapToken,
   WalletChain,
@@ -73,12 +74,17 @@ export interface SendModalOptions {
   asset?: string;
   destination?: string;
   amount?: string;
+  /** Stellar only. */
+  memo?: string;
+  memoType?: 'text' | 'id' | 'hash';
   /** Called once per transaction the modal sends that lands. */
   onSuccess?: (result: { hash: string }) => void;
 }
 
 /** Where the swap modal opens. */
 export interface SwapModalOptions {
+  /** A network the app has swap venues on; the first one when left out or not offered. */
+  chain?: 'STELLAR' | 'SOLANA';
   /** Asset codes, e.g. 'XLM' and 'USDC'. */
   sell?: string;
   buy?: string;
@@ -90,6 +96,7 @@ export interface SwapModalOptions {
 export interface EarnModalOptions {
   provider?: EarnProviderId;
   opportunityId?: string;
+  tab?: 'deposit' | 'withdraw';
   amount?: string;
   onSuccess?: (result: { hash: string }) => void;
 }
@@ -112,6 +119,29 @@ const DECIMAL = /^\d+(\.\d+)?$/;
 const seededAmount = (amount: string | undefined) => (DECIMAL.test(amount?.trim() ?? '') ? amount!.trim() : '');
 const sameCode = (code: string, wanted: string | undefined) =>
   wanted !== undefined && code.toUpperCase() === wanted.trim().toUpperCase();
+
+type MemoType = 'text' | 'id' | 'hash';
+const MEMO_TYPES: readonly MemoType[] = ['text', 'id', 'hash'];
+const MAX_MEMO_ID = 18446744073709551615n;
+/** UTF-8 length without TextEncoder, which older Hermes builds lack. */
+const utf8Length = (value: string) => encodeURIComponent(value).replace(/%[0-9A-F]{2}/g, 'x').length;
+/**
+ * A Stellar memo as the build endpoint takes it, undefined when the field is
+ * empty, or the error to show. Text is capped at 28 bytes on-chain; an ID is an
+ * unsigned 64-bit integer; a hash is 32 bytes written as 64 hex characters.
+ */
+function parseMemo(
+  type: MemoType,
+  raw: string,
+  copy: (typeof FEATURE_COPY)['en']['send'],
+): { type: MemoType; value: string } | undefined | string {
+  const value = type === 'text' ? raw : raw.trim();
+  if (value.trim() === '') return undefined;
+  if (type === 'text') return utf8Length(value) > 28 ? copy.memoTextTooLong : { type, value };
+  if (type === 'hash') return /^[0-9a-fA-F]{64}$/.test(value) ? { type, value } : copy.memoHashInvalid;
+  if (!/^\d+$/.test(value) || BigInt(value) > MAX_MEMO_ID) return copy.memoIdInvalid;
+  return { type, value };
+}
 
 /**
  * Calls `onSuccess` once for each transaction this panel started that reaches
@@ -346,6 +376,10 @@ export function SendPanel({ initial }: { initial?: SendModalOptions | undefined 
   const [chain, setChain] = useState<WalletChain>(seededChain ?? 'STELLAR');
   const [destination, setDestination] = useState(initial?.destination?.trim() ?? '');
   const [amount, setAmount] = useState(seededAmount(initial?.amount));
+  const [memo, setMemo] = useState(initial?.memo ?? '');
+  const [memoType, setMemoType] = useState<MemoType>(
+    MEMO_TYPES.includes(initial?.memoType as MemoType) ? (initial!.memoType as MemoType) : 'text',
+  );
   const [selected, setSelected] = useState('');
   const [review, setReview] = useState(false);
   const arm = useSuccessCallback(initial?.onSuccess);
@@ -366,6 +400,9 @@ export function SendPanel({ initial }: { initial?: SendModalOptions | undefined 
   async function send() {
     if (!destination.trim() || !/^(?:\d+)(?:\.\d+)?$/.test(amount) || Number(amount) <= 0) throw new Error(copy.send.invalid);
     if (chain === 'STELLAR') {
+      const parsedMemo = parseMemo(memoType, memo, copy.send);
+      if (typeof parsedMemo === 'string') throw new Error(parsedMemo);
+      const options = parsedMemo ? { options: { memo: parsedMemo } } : {};
       if (asset?.issuer && asset.issuer !== '0')
         return p.sendPayment({
           destination: destination.trim(),
@@ -375,8 +412,9 @@ export function SendPanel({ initial }: { initial?: SendModalOptions | undefined 
             code: asset.code,
             issuer: asset.issuer,
           },
+          ...options,
         });
-      return p.sendPayment({ destination: destination.trim(), amount, asset: { type: 'native' } });
+      return p.sendPayment({ destination: destination.trim(), amount, asset: { type: 'native' }, ...options });
     }
     if (p.wallet?.provider === 'privy') throw new Error(copy.privyStellarOnly);
     if (!/^\d+$/.test(amount)) throw new Error(copy.send.baseUnits);
@@ -421,6 +459,28 @@ export function SendPanel({ initial }: { initial?: SendModalOptions | undefined 
           setReview(false);
         }}
       />
+      {chain === 'STELLAR' && (
+        <>
+          <Choice
+            label={copy.send.memoType}
+            labels={copy.send.memoTypes}
+            options={MEMO_TYPES}
+            value={memoType}
+            onChange={(v) => {
+              setMemoType(v);
+              setReview(false);
+            }}
+          />
+          <Field
+            label={copy.send.memo}
+            value={memo}
+            onChangeText={(v) => {
+              setMemo(v);
+              setReview(false);
+            }}
+          />
+        </>
+      )}
       {review && <Label>{copy.send.review(p.network, amount, asset?.code ?? copy.send.nativeAsset, destination)}</Label>}
       <ActionButton
         title={review ? copy.confirmPayment : copy.reviewPayment}
@@ -591,15 +651,17 @@ export function HistoryPanel() {
   const p = usePollar();
   const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
+  const [chain, setChain] = useState<WalletChain>(p.wallets[0]?.chain ?? 'STELLAR');
   useEffect(() => {
-    void action.run(() => p.fetchTxHistory());
-  }, []);
+    void action.run(() => p.fetchTxHistory({ chain }));
+  }, [chain]);
   return (
     <Card title={copy.history.title}>
+      <ChainSelect value={chain} onChange={setChain} />
       <ActionButton
         title={copy.history.refresh}
         disabled={action.busy}
-        onPress={() => void action.run(() => p.fetchTxHistory())}
+        onPress={() => void action.run(() => p.fetchTxHistory({ chain }))}
       />
       <ResultView value={p.txHistory} />
       <ActionState action={action} />
@@ -649,38 +711,105 @@ export function KycPreview() {
     </Card>
   );
 }
+type SwapChain = 'STELLAR' | 'SOLANA';
+/** Solana's native SOL is swapped as wrapped SOL, 9 decimals. */
+const WRAPPED_SOL_MINT = 'So11111111111111111111111111111111111111112';
+const SOL_DECIMALS = 9;
+/** A Solana swap side: the mint and its decimals. */
+type SolanaSwapOption = { code: string; mint: string; decimals: number };
+/** `1.5` with 6 decimals is `1500000`; null for anything that is not a positive decimal within those decimals. */
+function toBaseUnits(amount: string, decimals: number): string | null {
+  const trimmed = amount.trim();
+  if (!DECIMAL.test(trimmed)) return null;
+  const [whole = '0', fraction = ''] = trimmed.split('.');
+  if (fraction.length > decimals) return null;
+  const units = BigInt(`${whole}${fraction.padEnd(decimals, '0')}`);
+  return units > 0n ? units.toString() : null;
+}
 export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined }) {
   const p = usePollar();
   const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
+  const [chains, setChains] = useState<SwapChain[] | null>(null);
+  const [chain, setChain] = useState<SwapChain>(initial?.chain === 'SOLANA' ? 'SOLANA' : 'STELLAR');
   const [tokens, setTokens] = useState<SwapToken[]>([]);
   const [sell, setSell] = useState('');
   const [buy, setBuy] = useState('');
   const [amount, setAmount] = useState(seededAmount(initial?.amount));
   const [quotes, setQuotes] = useState<SwapQuote[]>([]);
+  const [solanaQuotes, setSolanaQuotes] = useState<SolanaSwapQuote[]>([]);
   const arm = useSuccessCallback(initial?.onSuccess);
-  // Applied to the first token list that loads, then dropped.
-  const seed = useRef(initial);
+  // The asset options wait for a list that has them (tokens, balances and enabled assets load apart) until the user picks.
+  const sellSeed = useRef(initial?.sell);
+  const buySeed = useRef(initial?.buy);
+  const chainSeed = useRef(initial?.chain);
+
+  const balances = p.walletBalance.step === 'loaded' ? p.walletBalance.data.balances : [];
+  const records = p.enabledAssets.step === 'loaded' ? p.enabledAssets.data.assets : [];
+  const solanaSell: SolanaSwapOption[] = balances
+    .filter((b) => b.chain === 'SOLANA' && (b.type === 'native' || (b.type === 'token' && !!b.issuer)))
+    .flatMap((b) =>
+      b.type === 'native'
+        ? [{ code: 'SOL', mint: WRAPPED_SOL_MINT, decimals: SOL_DECIMALS }]
+        : b.decimals !== undefined
+          ? [{ code: b.code, mint: b.issuer!, decimals: b.decimals }]
+          : [],
+    );
+  const solanaBuy: SolanaSwapOption[] = [
+    { code: 'SOL', mint: WRAPPED_SOL_MINT, decimals: SOL_DECIMALS },
+    ...records
+      .filter((a) => a.chain === 'SOLANA' && a.type === 'token' && !!a.issuer && a.decimals !== undefined)
+      .map((a) => ({ code: a.code, mint: a.issuer!, decimals: a.decimals! })),
+  ];
+  const tokenKey = (t: SwapToken) => assetKey(t);
+  const sellKeys = chain === 'SOLANA' ? solanaSell.map((o) => o.mint) : tokens.map(tokenKey);
+  const buyKeys = chain === 'SOLANA' ? solanaBuy.map((o) => o.mint) : tokens.map(tokenKey);
+  const codeOf = (key: string) =>
+    chain === 'SOLANA'
+      ? ([...solanaSell, ...solanaBuy].find((o) => o.mint === key)?.code ?? key)
+      : (tokens.find((t) => tokenKey(t) === key)?.code ?? key);
+  const keyFor = (keys: string[], code: string | undefined) => keys.find((k) => sameCode(codeOf(k), code));
+
+  useEffect(() => {
+    const seeded = keyFor(sellKeys, sellSeed.current);
+    if (seeded) {
+      sellSeed.current = undefined;
+      setSell(seeded);
+    }
+    const seededBuy = keyFor(buyKeys, buySeed.current);
+    if (seededBuy) {
+      buySeed.current = undefined;
+      setBuy(seededBuy);
+    }
+  }, [sellKeys.join('|'), buyKeys.join('|')]);
+
   async function refreshSwap() {
     setQuotes([]);
-    setSell('');
-    setBuy('');
+    setSolanaQuotes([]);
+    const [stellarVenues, solanaVenues] = await Promise.all([
+      p.getSwapConfig().catch(() => []),
+      p.getSolanaSwapConfig().catch(() => []),
+    ]);
+    const offered: SwapChain[] = [
+      ...(stellarVenues.length > 0 ? (['STELLAR'] as const) : []),
+      ...(solanaVenues.length > 0 ? (['SOLANA'] as const) : []),
+    ];
+    setChains(offered);
+    // A network the app does not offer falls back to the first one it does.
+    const wanted = chainSeed.current;
+    chainSeed.current = undefined;
+    setChain((current) => {
+      const next = wanted && offered.includes(wanted) ? wanted : current;
+      return offered.length === 0 || offered.includes(next) ? next : offered[0]!;
+    });
     const t = await p.getSwapTokens();
     setTokens(t);
-    const pick = (code: string | undefined) => t.find((token) => sameCode(token.code, code));
-    if (seed.current) {
-      const sellToken = pick(seed.current.sell);
-      const buyToken = pick(seed.current.buy);
-      if (sellToken) setSell(tokenKey(sellToken));
-      if (buyToken) setBuy(tokenKey(buyToken));
-      seed.current = undefined;
-    }
-    return p.getSwapConfig();
+    if (solanaVenues.length > 0) await Promise.all([p.refreshWalletBalance(), p.refreshAssets()]);
+    return stellarVenues;
   }
   useEffect(() => {
     void action.run(refreshSwap);
   }, []);
-  const tokenKey = (t: SwapToken) => assetKey(t);
   const swapAsset = (t: SwapToken) =>
     !t.issuer || t.issuer === '0'
       ? { type: 'native' as const }
@@ -689,25 +818,70 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
           code: t.code,
           issuer: t.issuer,
         };
+  function clearPicks() {
+    sellSeed.current = undefined;
+    buySeed.current = undefined;
+    setSell('');
+    setBuy('');
+    setQuotes([]);
+    setSolanaQuotes([]);
+  }
+  async function getQuotes() {
+    if (chain === 'SOLANA') {
+      const from = solanaSell.find((o) => o.mint === sell);
+      const to = solanaBuy.find((o) => o.mint === buy);
+      const units = from ? toBaseUnits(amount, from.decimals) : null;
+      if (!from || !to || !units) throw new Error(copy.send.invalid);
+      const q = await p.getSolanaSwapQuote({ inputMint: from.mint, outputMint: to.mint, amount: units, slippageBps: 50 });
+      setSolanaQuotes(q);
+      return q;
+    }
+    const q = await p.getSwapQuote({
+      sellAsset: swapAsset(tokens.find((t) => tokenKey(t) === sell)!),
+      buyAsset: swapAsset(tokens.find((t) => tokenKey(t) === buy)!),
+      amount,
+      slippageBps: 50,
+    });
+    setQuotes(q);
+    return q;
+  }
+  const labels = Object.fromEntries([...sellKeys, ...buyKeys].map((k) => [k, codeOf(k)]));
   return (
     <Card title={copy.swap.title}>
       <ActionButton title={copy.swap.refresh} disabled={action.busy} onPress={() => void action.run(refreshSwap)} />
+      {chains && chains.length > 1 && (
+        <Choice
+          label={copy.swap.network}
+          options={chains}
+          value={chain}
+          onChange={(v) => {
+            setChain(v);
+            clearPicks();
+          }}
+        />
+      )}
       <Choice
         label={copy.swap.sell}
-        options={tokens.map(tokenKey)}
+        {...(chain === 'SOLANA' ? { labels } : {})}
+        options={sellKeys}
         value={sell}
         onChange={(v) => {
+          sellSeed.current = undefined;
           setSell(v);
           setQuotes([]);
+          setSolanaQuotes([]);
         }}
       />
       <Choice
         label={copy.swap.buy}
-        options={tokens.map(tokenKey)}
+        {...(chain === 'SOLANA' ? { labels } : {})}
+        options={buyKeys}
         value={buy}
         onChange={(v) => {
+          buySeed.current = undefined;
           setBuy(v);
           setQuotes([]);
+          setSolanaQuotes([]);
         }}
       />
       <Field
@@ -717,23 +891,13 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
         onChangeText={(v) => {
           setAmount(v);
           setQuotes([]);
+          setSolanaQuotes([]);
         }}
       />
       <ActionButton
         title={copy.swap.getQuotes}
         disabled={action.busy || !sell || !buy || Number(amount) <= 0}
-        onPress={() =>
-          void action.run(async () => {
-            const q = await p.getSwapQuote({
-              sellAsset: swapAsset(tokens.find((t) => tokenKey(t) === sell)!),
-              buyAsset: swapAsset(tokens.find((t) => tokenKey(t) === buy)!),
-              amount,
-              slippageBps: 50,
-            });
-            setQuotes(q);
-            return q;
-          })
-        }
+        onPress={() => void action.run(getQuotes)}
       />
       {quotes.map((q, i) => (
         <View key={i} style={{ gap: 8 }}>
@@ -751,7 +915,23 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
           />
         </View>
       ))}
-      {!tokens.length && <Label>{copy.swap.noTokens}</Label>}
+      {solanaQuotes.map((q, i) => (
+        <View key={`sol-${i}`} style={{ gap: 8 }}>
+          <ResultView value={q} />
+          <ActionButton
+            title={copy.swap.confirmVia(q.provider)}
+            disabled={action.busy || !p.verified}
+            onPress={() =>
+              void action.run(async () => {
+                setSolanaQuotes([]);
+                arm();
+                return p.swapSolana(q, { slippageBps: 50 });
+              })
+            }
+          />
+        </View>
+      ))}
+      {chain === 'STELLAR' && !tokens.length && <Label>{copy.swap.noTokens}</Label>}
       <TransactionStatus />
       <ActionState action={action} />
     </Card>
@@ -767,7 +947,8 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
   const [opportunity, setOpportunity] = useState('');
   const [amount, setAmount] = useState(seededAmount(initial?.amount));
   const [position, setPosition] = useState<EarnPosition>();
-  const [confirmation, setConfirmation] = useState<'deposit' | 'withdraw'>();
+  const [tab, setTab] = useState<'deposit' | 'withdraw'>(initial?.tab === 'withdraw' ? 'withdraw' : 'deposit');
+  const [confirmation, setConfirmation] = useState(false);
   const arm = useSuccessCallback(initial?.onSuccess);
   // Applied to the first provider list that loads, then dropped.
   const seed = useRef(initial);
@@ -776,7 +957,7 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
     setOpportunities([]);
     setOpportunity('');
     setPosition(undefined);
-    setConfirmation(undefined);
+    setConfirmation(false);
     const list = await p.getEarnProviders();
     setProviders(list);
     const wanted = seed.current;
@@ -809,7 +990,7 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
             setOpportunities([]);
             setOpportunity('');
             setPosition(undefined);
-            setConfirmation(undefined);
+            setConfirmation(false);
             const list = await p.getEarnOpportunities(v as EarnProviderId);
             setOpportunities(list);
             return list;
@@ -823,7 +1004,7 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
         value={opportunity}
         onChange={(v) => {
           setOpportunity(v);
-          setConfirmation(undefined);
+          setConfirmation(false);
           setPosition(undefined);
           if (provider)
             void action.run(async () => {
@@ -841,28 +1022,35 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
         keyboardType="decimal-pad"
         onChangeText={(v) => {
           setAmount(v);
-          setConfirmation(undefined);
+          setConfirmation(false);
+        }}
+      />
+      <Choice
+        label={copy.earn.operation}
+        labels={copy.earn.tabs}
+        options={['deposit', 'withdraw'] as const}
+        value={tab}
+        onChange={(v) => {
+          setTab(v);
+          setConfirmation(false);
         }}
       />
       <Label>{copy.earn.units(position?.withdrawUnit)}</Label>
-      {(['deposit', 'withdraw'] as const).map((direction) => (
-        <ActionButton
-          key={direction}
-          title={confirmation === direction ? copy.earn.confirm[direction] : copy.earn.review[direction]}
-          disabled={action.busy || !provider || !opportunity || !position || Number(amount) <= 0 || !p.verified}
-          onPress={() =>
-            confirmation !== direction
-              ? setConfirmation(direction)
-              : void action.run(async () => {
-                  setConfirmation(undefined);
-                  arm();
-                  return direction === 'deposit'
-                    ? p.earnDeposit({ provider: provider!, opportunity, amount })
-                    : p.earnWithdraw({ provider: provider!, opportunity, amount });
-                })
-          }
-        />
-      ))}
+      <ActionButton
+        title={confirmation ? copy.earn.confirm[tab] : copy.earn.review[tab]}
+        disabled={action.busy || !provider || !opportunity || !position || Number(amount) <= 0 || !p.verified}
+        onPress={() =>
+          !confirmation
+            ? setConfirmation(true)
+            : void action.run(async () => {
+                setConfirmation(false);
+                arm();
+                return tab === 'deposit'
+                  ? p.earnDeposit({ provider: provider!, opportunity, amount })
+                  : p.earnWithdraw({ provider: provider!, opportunity, amount });
+              })
+        }
+      />
       {!providers.length && <Label>{copy.earn.noProviders}</Label>}
       <TransactionStatus />
       <ActionState action={action} />
