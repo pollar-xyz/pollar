@@ -1033,12 +1033,12 @@ export function PollarProvider({
           </ModalErrorBoundary>
         )}
         {sendModalOpen && (
-          <ModalErrorBoundary key={sendModalKey} onClose={() => setSendModalOpen(false)}>
+          <ModalErrorBoundary key={`send:${sendModalKey}`} onClose={() => setSendModalOpen(false)}>
             <SendModal onClose={() => setSendModalOpen(false)} initial={sendModalOptions} />
           </ModalErrorBoundary>
         )}
         {swapModalOpen && (
-          <ModalErrorBoundary key={swapModalKey} onClose={() => setSwapModalOpen(false)}>
+          <ModalErrorBoundary key={`swap:${swapModalKey}`} onClose={() => setSwapModalOpen(false)}>
             <SwapModal onClose={() => setSwapModalOpen(false)} initial={swapModalOptions} />
           </ModalErrorBoundary>
         )}
@@ -1048,7 +1048,7 @@ export function PollarProvider({
           </ModalErrorBoundary>
         )}
         {earnModalOpen && (
-          <ModalErrorBoundary key={earnModalKey} onClose={() => setEarnModalOpen(false)}>
+          <ModalErrorBoundary key={`earn:${earnModalKey}`} onClose={() => setEarnModalOpen(false)}>
             <EarnModal onClose={() => setEarnModalOpen(false)} initial={earnModalOptions} />
           </ModalErrorBoundary>
         )}
