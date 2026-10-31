@@ -12,7 +12,7 @@ export { toBaseUnits, fromBaseUnits } from './lib/units';
 export { appUnavailableMessage, cosignRefusalMessage, transactionErrorMessage } from './lib/tx-error-messages';
 export { authErrorMessage } from './client/auth/errorMessages';
 export type { LogLevel, PollarLogger } from './lib/logger';
-export { languageFromTag, localizedText, resolveLanguage } from './lib/language';
+export { countryName, languageFromTag, localizedText, resolveLanguage } from './lib/language';
 export type { PollarLanguage } from './lib/language';
 
 // --- Storage ------------------------------------------------------------------

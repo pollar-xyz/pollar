@@ -248,8 +248,8 @@ dropped.
 | Option      | Type                                 | Description                                                 |
 | ----------- | ------------------------------------ | ----------------------------------------------------------- |
 | `chain`     | `'STELLAR' \| 'SOLANA'`              | A network the app has swap venues on; the first otherwise   |
-| `sell`      | `string`                             | Code of the token to sell, e.g. `'XLM'`                     |
-| `buy`       | `string`                             | Code of the token to buy, e.g. `'USDC'`                     |
+| `sell`      | `string`                             | Code of an asset the wallet holds, e.g. `'XLM'`             |
+| `buy`       | `string`                             | Code of an asset the swap can buy, e.g. `'USDC'`            |
 | `amount`    | `string`                             | A plain decimal                                             |
 | `onSuccess` | `(result: { hash: string }) => void` | Called once for each transaction the modal sends that lands |
 
@@ -280,7 +280,10 @@ dropped.
 
 The send modal takes a Stellar memo (text up to 28 bytes, an ID up to 2^64 - 1, or a 32-byte hash as 64 hex
 characters) and hides it on other chains. The swap modal swaps on Solana too (Jupiter and Titan, amounts in the
-token's decimals, SOL as wrapped SOL), with a network picker when the app has venues on both chains. The earn modal
+token's decimals, SOL as wrapped SOL), with a network picker when the app has venues on both chains. It sells what the
+wallet holds, with **Max** filling what the wallet can spend, and on Stellar buys the app's enabled assets, the curated
+catalog and a token the user adds by code and issuer, saying when the swap creates a trustline first. A route picker
+quotes with the best price (`auto`) or one venue. The earn modal
 has deposit and withdraw tabs. The history has a network picker when the user holds wallets on more than one chain,
 and each row opens its own chain's explorer.
 
@@ -337,8 +340,8 @@ cycles through `en`, `es` and `pt`.
 
 An app whose language changes at runtime passes it as `<PollarProvider language={i18n.language}>`: open and later
 modals follow it without replacing the client, which a changed `config.locale` would do. The ramp widget names each
-country in the modal's language where the JS engine's `Intl.DisplayNames` has the name (Hermes has none, so the ISO
-code shows there).
+country in the modal's language, Hermes included: `countryName` from `@pollar/core` reads the engine's
+`Intl.DisplayNames` and, where it is missing, a table of every region in English, Spanish and Portuguese.
 
 ## Requirement step modals
 

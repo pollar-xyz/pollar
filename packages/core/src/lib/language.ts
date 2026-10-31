@@ -1,3 +1,5 @@
+import { COUNTRY_NAMES } from './country-names.generated';
+
 /** Languages the SDK's modals are written in. */
 export type PollarLanguage = 'en' | 'es' | 'pt';
 
@@ -43,4 +45,22 @@ export function localizedText(
         ? [text.es, text.en, text.pt]
         : [text.en, text.es, text.pt];
   return order.find((value) => !!value) ?? '';
+}
+
+const LANGUAGE_INDEX: Record<PollarLanguage, 0 | 1 | 2> = { en: 0, es: 1, pt: 2 };
+
+/**
+ * A country's name in `language` from its ISO 3166-1 alpha-2 code: the engine's
+ * Intl.DisplayNames, else the generated table (Hermes has no DisplayNames), else
+ * the code as it came.
+ */
+export function countryName(code: string, language: PollarLanguage): string {
+  const region = code.trim().toUpperCase();
+  try {
+    const name = new Intl.DisplayNames([language], { type: 'region', fallback: 'none' }).of(region);
+    if (name) return name;
+  } catch {
+    // No Intl.DisplayNames, or a code it refuses: the table answers.
+  }
+  return COUNTRY_NAMES[region]?.[LANGUAGE_INDEX[language]] ?? code;
 }

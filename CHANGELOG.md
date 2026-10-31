@@ -135,9 +135,11 @@
   `<PollarProvider language>` does the same without replacing the client,
   which a changed `config.locale` does.
 - The React and React Native ramp widgets name each country in the modal's
-  language ("Bolivia", "Bolívia"), sorted by name, instead of its ISO code; a
-  code Intl has no name for shows as it came (on Hermes, which lacks
-  `Intl.DisplayNames`, every code does).
+  language ("Bolivia", "Bolívia"), sorted by name, instead of its ISO code.
+  `countryName(code, language)` in `@pollar/core` names it with the engine's
+  `Intl.DisplayNames`, and on Hermes, which lacks it, with a table of every
+  region in English, Spanish and Portuguese (`scripts/generate-country-names.cjs`
+  writes it from Node's Intl).
 - A route dropped for a missing trustline names the asset it delivers ("Your
   Stellar wallet must trust ARS to receive it."), instead of always saying
   USDC.

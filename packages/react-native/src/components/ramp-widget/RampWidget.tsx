@@ -29,6 +29,7 @@ import type {
   RampRoute,
 } from '@pollar/core';
 import {
+  countryName,
   appUnavailableMessage,
   type PollarLanguage,
   assertRampStellarSigner,
@@ -82,15 +83,6 @@ function listOf(items: string[], copy: RampCopy): string {
 }
 
 /** The text for a failed ramp call: an app that cannot serve it, a known code, the server's reason, or the fallback. */
-/** A country's name in the modal's language; its code when the engine's Intl has no name for it (Hermes lacks DisplayNames). */
-function countryName(code: string, language: PollarLanguage): string {
-  try {
-    return new Intl.DisplayNames([language], { type: 'region' }).of(code) ?? code;
-  } catch {
-    return code;
-  }
-}
-
 function rampErrorMessage(error: unknown, fallback: string, copy: RampCopy, language: PollarLanguage): string {
   const unavailable = appUnavailableMessage(error, language);
   if (unavailable) return unavailable;

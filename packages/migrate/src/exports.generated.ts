@@ -302,6 +302,7 @@ export const TARGET_EXPORTS: Record<string, readonly string[]> = {
     'compressedPublicKeyHex',
     'computeJwkThumbprint',
     'cosignRefusalMessage',
+    'countryName',
     'createAuthEntrySigner',
     'createCardFunding',
     'createCardHolder',

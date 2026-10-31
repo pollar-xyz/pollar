@@ -1047,7 +1047,8 @@ const language = resolveLanguage({ code: [client.getLocale()], device: navigator
 transactionErrorMessage(outcome.code, outcome.details, language);
 ```
 
-`languageFromTag(tag)` maps a BCP 47 tag to a `PollarLanguage` (or `null`), and `localizedText()` picks a text in the
+`countryName(code, language)` names an ISO 3166-1 alpha-2 country (`'BO'` is `'Bolívia'` in `'pt'`), on engines without
+`Intl.DisplayNames` (Hermes) too. `languageFromTag(tag)` maps a BCP 47 tag to a `PollarLanguage` (or `null`), and `localizedText()` picks a text in the
 language asked, falling back to the closest one. The functions that write user-facing text take a trailing optional
 language (`'en'` by default): `transactionErrorMessage`, `cosignRefusalMessage`, `appUnavailableMessage`, every ramp
 text (`rampLegTitle`, `rampStepTitle`, `rampStepStatusText`, `rampNextApproval`, `rampFieldError`,

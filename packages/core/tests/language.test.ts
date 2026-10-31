@@ -4,7 +4,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PollarClient } from '../src/index';
-import { languageFromTag, localizedText, resolveLanguage } from '../src/lib/language';
+import { COUNTRY_NAMES } from '../src/lib/country-names.generated';
+import { countryName, languageFromTag, localizedText, resolveLanguage } from '../src/lib/language';
 
 test('a BCP 47 tag maps to a modal language by its base', () => {
   assert.equal(languageFromTag('pt-BR'), 'pt');
@@ -44,4 +45,29 @@ test('setLocale changes the locale and tells the subscribers once per change', (
   assert.deepEqual(seen, ['pt-BR', undefined]);
   assert.equal(client.getLocale(), 'en');
   client.destroy();
+});
+
+test('a country is named in the language asked, by Intl or, without it, by the table', () => {
+  assert.equal(countryName('BO', 'en'), 'Bolivia');
+  assert.equal(countryName('bo', 'pt'), 'Bolívia');
+  assert.equal(countryName('BR', 'es'), 'Brasil');
+  const displayNames = Intl.DisplayNames;
+  // Hermes ships no Intl.DisplayNames.
+  Object.defineProperty(Intl, 'DisplayNames', { value: undefined, configurable: true, writable: true });
+  try {
+    assert.equal(countryName('BO', 'pt'), 'Bolívia');
+    assert.equal(countryName('MX', 'es'), 'México');
+    assert.equal(countryName('ZZ9', 'en'), 'ZZ9', 'a code neither knows shows as it came');
+  } finally {
+    Object.defineProperty(Intl, 'DisplayNames', { value: displayNames, configurable: true, writable: true });
+  }
+});
+
+test('the country table has every alpha-2 code with a name in each language', () => {
+  const codes = Object.keys(COUNTRY_NAMES);
+  assert.ok(codes.length > 240, `${codes.length} regions`);
+  for (const code of codes) {
+    assert.match(code, /^[A-Z]{2}$/);
+    for (const name of COUNTRY_NAMES[code]!) assert.ok(name.length > 0, code);
+  }
 });

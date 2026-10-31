@@ -18,6 +18,7 @@ import type {
   StellarNetwork,
 } from '@pollar/core';
 import {
+  countryName,
   describeRampAction,
   rampLegStatus,
   rampLegNote,
@@ -83,15 +84,6 @@ function flagEmoji(code: string): string {
   if (!/^[A-Z]{2}$/.test(cc)) return '';
   const base = 0x1f1e6;
   return String.fromCodePoint(base + (cc.charCodeAt(0) - 65), base + (cc.charCodeAt(1) - 65));
-}
-
-/** A country's name in the modal's language; its code when Intl has no name for it. */
-function countryName(code: string, language: PollarLanguage): string {
-  try {
-    return new Intl.DisplayNames([language], { type: 'region' }).of(code) ?? code;
-  } catch {
-    return code;
-  }
 }
 
 const CHAIN_NAME: Record<string, string> = { STELLAR: 'Stellar', POLYGON: 'Polygon', SOLANA: 'Solana' };
