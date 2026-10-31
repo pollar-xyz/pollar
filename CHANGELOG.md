@@ -233,6 +233,14 @@
   autofills, and spreads it across the six boxes; a paste, or a code typed next
   to a digit already there, fills them the same way
   ([#89](https://github.com/pollar-xyz/pollar/pull/89)).
+- **A ramp step on Polygon waits for its network fee instead of failing.** A
+  co-signed Polygon wallet pays its own gas with POL the app sends it, and a
+  ramp step is signed only once the wallet holds that transaction's fee.
+  sdk-api waits a few seconds for it on the refresh before the vote and answers
+  `SDK_COSIGN_GAS_PENDING` when it is still on its way; `approve()` asks the
+  refresh again, up to six times, and the refresh gets a 20s budget instead of
+  the 10s default. `<CosignModal>` keeps Approve enabled for that code, and
+  `transactionErrorMessage` has its text in English, Spanish and Portuguese.
 - `@pollar/react` and `@pollar/react-native` require `@pollar/core@^0.12.1`.
 
 ## `@pollar/migrate` 0.12.0
