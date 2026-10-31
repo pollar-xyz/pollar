@@ -18,6 +18,10 @@ export interface CosignModalTemplateProps {
   verification: CosignVerification | null;
   busy: 'approving' | 'rejecting' | null;
   error: string | null;
+  /** This device is not one of the wallet's devices: it cannot vote, only reject, until it is added. */
+  deviceNotLinked?: boolean;
+  /** Opens where this device gets added; the button shows only with it. */
+  onLinkDevice?: () => void;
   lastResolved?: CosignRequest;
   /** Seconds until the modal closes on its own, while what it shows needs nothing from the user. */
   closesIn?: number | null;
@@ -63,6 +67,8 @@ export function CosignModalTemplate({
   verification,
   busy,
   error,
+  deviceNotLinked = false,
+  onLinkDevice,
   lastResolved,
   closesIn = null,
   nextStep = null,
@@ -88,7 +94,8 @@ export function CosignModalTemplate({
     errorText: isDark ? '#f87171' : '#b91c1c',
     okText: isDark ? '#4ade80' : '#15803d',
   };
-  const canVote = !!current && verification?.ok === true && !busy;
+  const verified = verification?.ok === true && !deviceNotLinked;
+  const canVote = !!current && verified && !busy;
   // Keyed by request id, so the explanation folds back when another request is shown.
   const [verifiedOpenFor, setVerifiedOpenFor] = useState<string | null>(null);
   const verifiedOpen = !!current && verifiedOpenFor === current.id;
@@ -172,13 +179,13 @@ export function CosignModalTemplate({
           <View style={[styles.detail, pending.length > 1 && [styles.detailGrouped, { borderColor: colors.border }]]}>
             <View style={styles.detailHead}>
               <Text style={[styles.detailTitle, { color: colors.text, flexShrink: 1 }]}>{review.title}</Text>
-              {!verification && (
+              {!verification && !deviceNotLinked && (
                 <View style={[styles.chip, { borderColor: colors.border }]}>
                   <ActivityIndicator size="small" color={accentColor} />
                   <Text style={{ color: colors.muted, fontSize: 12 }}>{copy.checking}</Text>
                 </View>
               )}
-              {verification?.ok && (
+              {verified && (
                 <TouchableOpacity
                   onPress={() => setVerifiedOpenFor(verifiedOpen ? null : current.id)}
                   accessibilityRole="button"
@@ -201,18 +208,32 @@ export function CosignModalTemplate({
               language={language}
             />
 
-            {verification?.ok && verifiedOpen && (
+            {verified && verifiedOpen && (
               <View style={[styles.verify, { borderColor: colors.okText }]}>
                 <Text style={{ color: colors.okText, flexShrink: 1 }}>{copy.checkedAgainstTurnkey}</Text>
               </View>
             )}
             {/* A failed check stays spelled out: it is the only place the user learns why Approve is off. */}
-            {verification && !verification.ok && (
+            {deviceNotLinked ? (
               <View style={[styles.verify, { backgroundColor: colors.errorBg, borderColor: colors.errorText }]}>
-                <Text style={{ color: colors.errorText, flexShrink: 1 }}>
-                  {copy.notVerified} {verification.reason}
-                </Text>
+                <Text style={{ color: colors.errorText, flexShrink: 1 }}>{copy.deviceNotLinked}</Text>
+                {onLinkDevice && (
+                  <TouchableOpacity onPress={onLinkDevice} accessibilityRole="button" style={{ marginTop: 6 }}>
+                    <Text style={{ color: colors.errorText, fontWeight: '600', textDecorationLine: 'underline' }}>
+                      {copy.linkDevice}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
+            ) : (
+              verification &&
+              !verification.ok && (
+                <View style={[styles.verify, { backgroundColor: colors.errorBg, borderColor: colors.errorText }]}>
+                  <Text style={{ color: colors.errorText, flexShrink: 1 }}>
+                    {copy.notVerified} {verification.reason}
+                  </Text>
+                </View>
+              )
             )}
 
             {error ? (

@@ -483,6 +483,12 @@ export type CosignQuorumReport =
   | {
       ok: false;
       reason: string;
+      /**
+       * `DEVICE_NOT_ENROLLED`: this device's key is not one of the user's
+       * devices, so it cannot read the quorum nor vote. Says nothing about the
+       * wallet; the device must be added (another device, a passkey, the email).
+       */
+      code?: 'DEVICE_NOT_ENROLLED';
       custody?: CosignCustody;
       threshold?: number;
       rootUsers?: number;

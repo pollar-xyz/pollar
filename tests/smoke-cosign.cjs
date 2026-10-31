@@ -708,8 +708,27 @@ function request(overrides = {}) {
   );
   approvedRequest = approvedBefore;
 
+  // A device whose key is not among the user's devices (another origin, another
+  // install): the relay would refuse its stamp, so nothing is relayed and
+  // nothing is recorded; the sub-org is not BROKEN because of it.
+  const relaysBeforeNotEnrolled = calls.filter((c) => c === 'POST /v3/cosign/relay').length;
+  const reportsBeforeNotEnrolled = quorumReports.length;
+  check('isDeviceEnrolled is false for a key the user does not hold', (await client.cosign.isDeviceEnrolled()) === false);
+  const notEnrolled = await client.cosign.inspectQuorum();
+  check(
+    'inspectQuorum reports DEVICE_NOT_ENROLLED for a key the user does not hold',
+    notEnrolled.ok === false && notEnrolled.code === 'DEVICE_NOT_ENROLLED' && notEnrolled.deviceRegistered === false,
+    notEnrolled,
+  );
+  check(
+    'a device that is not enrolled relays nothing to read the quorum',
+    calls.filter((c) => c === 'POST /v3/cosign/relay').length === relaysBeforeNotEnrolled,
+  );
+  check('a device that is not enrolled records no quorum reading', quorumReports.length === reportsBeforeNotEnrolled);
+
   // Quorum: read from Turnkey with the device key and recorded server-side.
   mockDeviceKeyHex = await client.cosign.publicKeyHex();
+  check('isDeviceEnrolled is true once the key is among the user devices', (await client.cosign.isDeviceEnrolled()) === true);
   const quorum = await client.cosign.inspectQuorum();
   check(
     'inspectQuorum sees the 2-of-2 with this device registered',

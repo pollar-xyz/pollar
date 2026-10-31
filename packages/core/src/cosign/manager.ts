@@ -497,11 +497,27 @@ export class CosignManager {
   }
 
   /**
+   * Whether this device's key is one of the user's devices, the only keys that
+   * can vote on a request. Each browser origin and each app install holds its
+   * own key, so the same user on another site or device starts out not
+   * enrolled until an enrolled device, a passkey or the email adds it.
+   */
+  async isDeviceEnrolled(): Promise<boolean> {
+    return this.isEnrolledIn((await this.devices()).devices);
+  }
+
+  private async isEnrolledIn(devices: CosignDevicesContent['devices']): Promise<boolean> {
+    const own = (await this.publicKeyHex()).toLowerCase();
+    return devices.some((d) => d.publicKey.toLowerCase() === own);
+  }
+
+  /**
    * Read the sub-organization back with the device key and report whether it
    * is the quorum the wallet's custody promises: two root users at threshold 2
    * (co-signed) or the user alone at threshold 1 (self-custody), with this
    * device among the user's credentials. Run once after the wallet is created,
-   * before the first deposit.
+   * before the first deposit. A device that is not enrolled reports
+   * `code: 'DEVICE_NOT_ENROLLED'` without reading Turnkey.
    */
   async inspectQuorum(options?: { report?: boolean }): Promise<CosignQuorumReport> {
     const report = await this.readQuorum();
@@ -600,8 +616,20 @@ export class CosignManager {
   }
 
   private async readQuorum(): Promise<CosignQuorumReport> {
-    const { subOrgId, custody } = await this.devices();
+    const { subOrgId, custody, devices } = await this.devices();
     if (!subOrgId || !custody) return { ok: false, reason: 'this user has no Turnkey wallet' };
+    // The relay forwards only an enrolled device's stamp, so a device that is
+    // not enrolled cannot read the quorum. No threshold in the report keeps
+    // inspectQuorum from recording the sub-org as BROKEN over it.
+    if (!(await this.isEnrolledIn(devices))) {
+      return {
+        ok: false,
+        code: 'DEVICE_NOT_ENROLLED',
+        reason: 'this device is not one of the wallet devices',
+        custody,
+        deviceRegistered: false,
+      };
+    }
     // What the sub-org must look like for this custody: the root users and the
     // threshold are what make the wallet the user's.
     const expected = custody === 'SELF_CUSTODY' ? { threshold: 1, rootUsers: 1 } : { threshold: 2, rootUsers: 2 };

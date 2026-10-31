@@ -25,7 +25,7 @@ interface CosignModalProps {
  * against Turnkey before enabling Approve.
  */
 export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
-  const { getClient, styles, cosign, copyText, network } = usePollar();
+  const { getClient, styles, cosign, copyText, network, openRecoveryModal } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const { pending, lastResolved } = cosign;
   const language = useModalLanguage();
@@ -106,12 +106,17 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
   // The quorum as this device read it from Turnkey, once per open; a bad
   // reading fails every verification so nothing is approved on it.
   const [quorumFailure, setQuorumFailure] = useState<string | null>(null);
+  // Another install of the same user holds its own key: until it is added,
+  // every vote it stamps is refused, so it is told how to add itself.
+  const [deviceNotLinked, setDeviceNotLinked] = useState(false);
   useEffect(() => {
     let cancelled = false;
     getClient()
       .cosign.inspectQuorum()
       .then((q) => {
-        if (!cancelled && !q.ok) setQuorumFailure(q.reason);
+        if (cancelled || q.ok) return;
+        if (q.code === 'DEVICE_NOT_ENROLLED') setDeviceNotLinked(true);
+        else setQuorumFailure(q.reason);
       })
       .catch(() => undefined);
     return () => {
@@ -169,6 +174,11 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         verification={current ? (quorumFailure ? { ok: false, reason: quorumFailure } : verification) : null}
         busy={busy}
         error={error}
+        deviceNotLinked={deviceNotLinked}
+        onLinkDevice={() => {
+          onClose();
+          openRecoveryModal();
+        }}
         {...(lastResolved ? { lastResolved } : {})}
         closesIn={closesIn}
         nextStep={awaitingNext ? nextStep : null}

@@ -166,6 +166,19 @@
   font-size: 0.82rem;
 }
 
+.pollar-cosign-link {
+  display: block;
+  margin-top: 0.4rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .pollar-cosign-actions {
   display: flex;
   gap: 0.5rem;

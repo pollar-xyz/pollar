@@ -42,7 +42,7 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     SDK_COSIGN_VERIFICATION_FAILED: "The transaction didn't match what would be signed, so it was not approved.",
     SDK_COSIGN_REQUEST_NOT_PENDING: 'This request is no longer waiting for approval.',
     SDK_COSIGN_REQUEST_NOT_FOUND: 'This request no longer exists.',
-    SDK_COSIGN_DEVICE_NOT_ENROLLED: "This device can't approve requests for this wallet.",
+    SDK_COSIGN_DEVICE_NOT_ENROLLED: "This device isn't linked to your wallet yet. Add it from your wallet's recovery options.",
     SDK_COSIGN_UPSTREAM_ERROR: "The signing service didn't answer. Please try again.",
     SDK_WALLET_RECOVERY_REQUIRED:
       'Set up a way to recover this wallet first: a passkey, a second device or your email. Without one, losing this device means losing the funds, and nobody can get them back.',
@@ -77,7 +77,8 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     SDK_COSIGN_VERIFICATION_FAILED: 'La transacción no coincidía con lo que se iba a firmar, así que no se aprobó.',
     SDK_COSIGN_REQUEST_NOT_PENDING: 'Esta solicitud ya no está esperando aprobación.',
     SDK_COSIGN_REQUEST_NOT_FOUND: 'Esta solicitud ya no existe.',
-    SDK_COSIGN_DEVICE_NOT_ENROLLED: 'Este dispositivo no puede aprobar solicitudes de esta billetera.',
+    SDK_COSIGN_DEVICE_NOT_ENROLLED:
+      'Este dispositivo aún no está vinculado a tu billetera. Agrégalo desde las opciones de recuperación.',
     SDK_COSIGN_UPSTREAM_ERROR: 'El servicio de firma no respondió. Intenta de nuevo.',
     SDK_WALLET_RECOVERY_REQUIRED:
       'Primero configura una forma de recuperar esta billetera: una passkey, un segundo dispositivo o tu email. Sin una, perder este dispositivo significa perder los fondos, y nadie podrá recuperarlos.',
@@ -112,7 +113,8 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     SDK_COSIGN_VERIFICATION_FAILED: 'A transação não correspondia ao que seria assinado, então não foi aprovada.',
     SDK_COSIGN_REQUEST_NOT_PENDING: 'Esta solicitação não está mais aguardando aprovação.',
     SDK_COSIGN_REQUEST_NOT_FOUND: 'Esta solicitação não existe mais.',
-    SDK_COSIGN_DEVICE_NOT_ENROLLED: 'Este dispositivo não pode aprovar solicitações desta carteira.',
+    SDK_COSIGN_DEVICE_NOT_ENROLLED:
+      'Este dispositivo ainda não está vinculado à sua carteira. Adicione-o nas opções de recuperação.',
     SDK_COSIGN_UPSTREAM_ERROR: 'O serviço de assinatura não respondeu. Tente novamente.',
     SDK_WALLET_RECOVERY_REQUIRED:
       'Primeiro configure uma forma de recuperar esta carteira: uma passkey, um segundo dispositivo ou seu email. Sem uma, perder este dispositivo significa perder os fundos, e ninguém poderá recuperá-los.',

@@ -71,7 +71,7 @@ function loader(mocks) {
 }
 
 /** A client whose cosign store refreshes like core's: same requests, new objects. */
-function fakeClient() {
+function fakeClient({ quorum = { ok: true } } = {}) {
   const listeners = new Set();
   let state = { pending: [] };
   const emit = () => listeners.forEach((cb) => cb({ ...state, pending: [...state.pending] }));
@@ -101,7 +101,7 @@ function fakeClient() {
       },
       inspectQuorum: async () => {
         client.calls.inspectQuorum++;
-        return { ok: true };
+        return quorum;
       },
       verify: async () => {
         client.calls.verify++;
@@ -269,6 +269,72 @@ async function mount(element) {
       check(`${name}: closes on its own`, () => assert.equal(closed, 1));
       await view.unmount();
     }
+  }
+
+  // ── 4. A device that is not enrolled ────────────────────────────
+  // Another origin or install of the same user: its key is not among the
+  // wallet's devices, so it is told to add itself and Approve stays off.
+  const notEnrolled = { ok: false, code: 'DEVICE_NOT_ENROLLED', reason: 'not enrolled', deviceRegistered: false };
+  console.log('\n── 4. web, device not enrolled ───────────────────────────');
+  {
+    const client = fakeClient({ quorum: notEnrolled });
+    let closed = 0;
+    let recoveryOpened = 0;
+    const context = {
+      getClient: () => client,
+      isAuthenticated: true,
+      styles: {},
+      openRecoveryModal: () => recoveryOpened++,
+    };
+    const { CosignModal } = loader({
+      '../../context': { usePollar: () => context },
+      './context': { usePollar: () => context },
+      '../commons': { CopyButton: () => null, cropAddress: (s) => s, PollarModalFooter: () => null },
+    })('packages/react/src/components/cosign-modal/CosignModal.tsx');
+    await React.act(async () => client.arrive(request));
+    const view = await mount(React.createElement(CosignModal, { onClose: () => closed++ }));
+    await settle();
+    const buttons = () => [...view.container.querySelectorAll('button')];
+    check('it says the device is not linked', () => assert.match(view.container.textContent, /isn't linked to your wallet/));
+    check('it does not claim the request is verified', () => assert.doesNotMatch(view.container.textContent, /Verified/));
+    const approve = buttons().find((b) => b.textContent.trim() === 'Approve');
+    check('Approve is disabled', () => assert.ok(approve && approve.disabled, 'Approve missing or enabled'));
+    const reject = buttons().find((b) => b.textContent.trim() === 'Reject');
+    check('Reject stays available', () => assert.ok(reject && !reject.disabled, 'Reject missing or disabled'));
+    const link = buttons().find((b) => b.textContent.trim() === 'Link this device');
+    await React.act(async () => link?.click());
+    check('Link this device opens recovery and closes the prompt', () => {
+      assert.equal(recoveryOpened, 1);
+      assert.equal(closed, 1);
+    });
+    await view.unmount();
+  }
+  console.log('\n── 4. react-native, device not enrolled ──────────────────');
+  {
+    const client = fakeClient({ quorum: notEnrolled });
+    const context = {
+      getClient: () => client,
+      styles: {},
+      cosign: client.getCosignState(),
+      openRecoveryModal: () => undefined,
+    };
+    const { CosignModal } = loader({
+      'react-native': reactNative,
+      'react-native-svg': reactNativeSvg,
+      '../../context': { usePollar: () => context },
+      './context': { usePollar: () => context },
+      '../commons': { PollarOverlay: passthrough, PollarModalFooter: () => null },
+    })('packages/react-native/src/components/cosign-modal/CosignModal.tsx');
+    await React.act(async () => client.arrive(request));
+    context.cosign = client.getCosignState();
+    const view = await mount(React.createElement(CosignModal, { onClose: () => undefined }));
+    await settle();
+    check('it says the device is not linked', () => assert.match(view.container.textContent, /isn't linked to your wallet/));
+    check('it does not claim the request is verified', () => assert.doesNotMatch(view.container.textContent, /Verified/));
+    const approve = [...view.container.querySelectorAll('button')].find((b) => /Approve/.test(b.textContent));
+    check('Approve is disabled', () => assert.ok(approve && approve.disabled, 'Approve missing or enabled'));
+    check('it offers to link the device', () => assert.match(view.container.textContent, /Link this device/));
+    await view.unmount();
   }
 
   console.log(`\n${passed} pass, ${failed} fail`);

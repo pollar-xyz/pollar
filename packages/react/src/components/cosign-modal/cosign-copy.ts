@@ -27,6 +27,8 @@ export const COSIGN_COPY: Record<
     approve: string;
     approving: string;
     genericError: string;
+    deviceNotLinked: string;
+    linkDevice: string;
     transaction: string;
     operations: Record<string, string>;
   }
@@ -56,6 +58,9 @@ export const COSIGN_COPY: Record<
     approve: 'Approve',
     approving: 'Approving...',
     genericError: 'Something went wrong. Please try again.',
+    deviceNotLinked:
+      "This device isn't linked to your wallet yet, so it can't approve. Add it with a device that already is, your passkey or your email.",
+    linkDevice: 'Link this device',
     transaction: 'Transaction',
     operations: {
       payment: 'Send',
@@ -95,6 +100,9 @@ export const COSIGN_COPY: Record<
     approve: 'Aprobar',
     approving: 'Aprobando...',
     genericError: 'Algo salió mal. Intenta de nuevo.',
+    deviceNotLinked:
+      'Este dispositivo aún no está vinculado a tu billetera, así que no puede aprobar. Agrégalo con un dispositivo que ya lo esté, tu passkey o tu email.',
+    linkDevice: 'Vincular este dispositivo',
     transaction: 'Transacción',
     operations: {
       payment: 'Enviar',
@@ -134,6 +142,9 @@ export const COSIGN_COPY: Record<
     approve: 'Aprovar',
     approving: 'Aprovando...',
     genericError: 'Algo deu errado. Tente novamente.',
+    deviceNotLinked:
+      'Este dispositivo ainda não está vinculado à sua carteira, então não pode aprovar. Adicione-o com um dispositivo que já esteja, sua passkey ou seu email.',
+    linkDevice: 'Vincular este dispositivo',
     transaction: 'Transação',
     operations: {
       payment: 'Enviar',

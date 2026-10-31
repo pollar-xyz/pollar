@@ -27,6 +27,10 @@ export interface CosignModalTemplateProps {
   error: string | null;
   /** Approve stays off for a request whose approval just failed. */
   approveBlocked?: boolean;
+  /** This device is not one of the wallet's devices: it cannot vote, only reject, until it is added. */
+  deviceNotLinked?: boolean;
+  /** Opens where this device gets added; the button shows only with it. */
+  onLinkDevice?: () => void;
   /** The last request that reached a final state, shown once the list is empty. */
   lastResolved?: CosignRequest;
   /** Explorer page of {@link lastResolved}'s transaction, when it was sent. */
@@ -85,6 +89,8 @@ export function CosignModalTemplate({
   busy,
   error,
   approveBlocked = false,
+  deviceNotLinked = false,
+  onLinkDevice,
   lastResolved,
   explorerUrl,
   closesIn = null,
@@ -99,7 +105,7 @@ export function CosignModalTemplate({
   const language = useInheritedLanguage(languageProp);
   const copy = COSIGN_COPY[language];
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
-  const verified = verification?.ok === true;
+  const verified = verification?.ok === true && !deviceNotLinked;
   const canVote = !!current && verified && !busy && !approveBlocked;
   // Keyed by request id, so the explanation folds back when another request is shown.
   const [verifiedOpenFor, setVerifiedOpenFor] = useState<string | null>(null);
@@ -219,13 +225,13 @@ export function CosignModalTemplate({
         <div className={`pollar-cosign-detail${pending.length > 1 ? ' pollar-cosign-detail-grouped' : ''}`}>
           <div className="pollar-cosign-detail-head">
             <p className="pollar-cosign-detail-title">{review.title}</p>
-            {!verification && (
+            {!verification && !deviceNotLinked && (
               <span className="pollar-cosign-chip">
                 <span className="pollar-spinner pollar-spinner-sm" aria-hidden />
                 {copy.checking}
               </span>
             )}
-            {verification?.ok && (
+            {verified && (
               <button
                 type="button"
                 className="pollar-cosign-chip pollar-cosign-chip-ok"
@@ -239,14 +245,26 @@ export function CosignModalTemplate({
           </div>
           <TxReview key={current.id} data={review} language={language} />
 
-          {verification?.ok && verifiedOpen && (
+          {verified && verifiedOpen && (
             <div className="pollar-cosign-verify pollar-cosign-verify-ok">{copy.checkedAgainstTurnkey}</div>
           )}
           {/* A failed check stays spelled out: it is the only place the user learns why Approve is off. */}
-          {verification && !verification.ok && (
+          {deviceNotLinked ? (
             <div className="pollar-cosign-verify pollar-cosign-verify-bad">
-              {copy.notVerified} {verification.reason}
+              {copy.deviceNotLinked}
+              {onLinkDevice && (
+                <button type="button" className="pollar-cosign-link" onClick={onLinkDevice}>
+                  {copy.linkDevice}
+                </button>
+              )}
             </div>
+          ) : (
+            verification &&
+            !verification.ok && (
+              <div className="pollar-cosign-verify pollar-cosign-verify-bad">
+                {copy.notVerified} {verification.reason}
+              </div>
+            )
           )}
 
           {error && <div className="pollar-cosign-error">{error}</div>}

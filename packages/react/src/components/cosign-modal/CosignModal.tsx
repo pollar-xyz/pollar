@@ -31,7 +31,7 @@ interface CosignModalProps {
  * transaction the device checked itself.
  */
 export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
-  const { getClient, styles, network } = usePollar();
+  const { getClient, styles, network, openRecoveryModal } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   const { pending, lastResolved, loaded, refresh, approve, reject, verify, inspectQuorum } = useCosign();
   const language = useModalLanguage();
@@ -48,11 +48,16 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
   // vote on a wallet someone else can also control, so a bad reading fails
   // every verification below.
   const [quorumFailure, setQuorumFailure] = useState<string | null>(null);
+  // Another origin or install of the same user holds its own key: until it is
+  // added, every vote it stamps is refused, so it is told how to add itself.
+  const [deviceNotLinked, setDeviceNotLinked] = useState(false);
   useEffect(() => {
     let cancelled = false;
     inspectQuorum()
       .then((q) => {
-        if (!cancelled && !q.ok) setQuorumFailure(q.reason);
+        if (cancelled || q.ok) return;
+        if (q.code === 'DEVICE_NOT_ENROLLED') setDeviceNotLinked(true);
+        else setQuorumFailure(q.reason);
       })
       .catch(() => undefined);
     return () => {
@@ -161,6 +166,11 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         busy={busy}
         error={error}
         approveBlocked={!!current && approveFailedFor === current.id}
+        deviceNotLinked={deviceNotLinked}
+        onLinkDevice={() => {
+          onClose();
+          openRecoveryModal();
+        }}
         {...(lastResolved ? { lastResolved } : {})}
         closesIn={closesIn}
         nextStep={awaitingNext ? nextStep : null}
