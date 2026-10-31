@@ -92,6 +92,16 @@
   sent), the React and React Native ramp widgets show "Get a new quote", which
   quotes the same amount again and shows the routes, instead of "Try again",
   which would resend the stale order.
+- **`openRampModal` takes where the widget opens.** In `@pollar/react`,
+  `openRampModal({ direction, country, fiat, asset, amount })` opens the ramp
+  widget on that direction and country, the way `openKycModal` takes `country`
+  (`openRampModal({ country: 'BR', direction: 'sell' })`). The options are a
+  starting point the user can change. A country that does not route in that
+  direction, or that the app does not offer, opens on the default country,
+  without throwing; options given while the routes load apply once they arrive;
+  each call drops the options of the one before, and `openRampModal()` opens as
+  it always did. `RampModalOptions` is exported, and `<RampWidget>` takes the
+  same options as `initial`.
 - A route dropped for a missing trustline names the asset it delivers ("Your
   Stellar wallet must trust ARS to receive it."), instead of always saying
   USDC.

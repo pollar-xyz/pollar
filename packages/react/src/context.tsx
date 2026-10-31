@@ -44,7 +44,7 @@ import { EnabledAssetsModal } from './components/enabled-assets-modal/EnabledAss
 import { KycModal } from './components/kyc-modal/KycModal';
 import { AppKycFlow } from './components/kyc-modal/AppKycFlow';
 import { LoginModal } from './components/login-modal/LoginModal';
-import { RampWidget } from './components/ramp-widget/RampWidget';
+import { RampWidget, type RampModalOptions } from './components/ramp-widget/RampWidget';
 import { ReceiveModal } from './components/receive-modal/ReceiveModal';
 import { SendModal } from './components/send-modal/SendModal';
 import { SwapModal } from './components/swap-modal/SwapModal';
@@ -249,7 +249,8 @@ interface PollarContextValue {
     onApproved?: () => void;
   }) => void;
   // ramps
-  openRampModal: () => void;
+  /** Opens the ramp widget, on the direction, country, fiat, asset and amount given; without options, on its defaults. */
+  openRampModal: (options?: RampModalOptions) => void;
   // tx history
   txHistory: TxHistoryState;
   openTxHistoryModal: () => void;
@@ -661,6 +662,10 @@ export function PollarProvider({
     onApproved?: () => void;
   }>({});
   const [rampModalOpen, setRampModalOpen] = useState(false);
+  const [rampModalOptions, setRampModalOptions] = useState<RampModalOptions | undefined>(undefined);
+  // Remounts the widget when it opens on other options, or on none after some, so no earlier seed stays.
+  const [rampModalKey, setRampModalKey] = useState(0);
+  const rampModalSeeded = useRef(false);
   const [txHistoryModalOpen, setTxHistoryModalOpen] = useState(false);
   const [walletBalanceModalOpen, setWalletBalanceModalOpen] = useState(false);
   const [enabledAssetsModalOpen, setEnabledAssetsModalOpen] = useState(false);
@@ -889,7 +894,13 @@ export function PollarProvider({
         setKycModalOpen(true);
       },
       // ramp
-      openRampModal: () => setRampModalOpen(true),
+      openRampModal: (options?: RampModalOptions) => {
+        const seeded = options !== undefined && Object.keys(options).length > 0;
+        if (seeded || rampModalSeeded.current) setRampModalKey((k) => k + 1);
+        rampModalSeeded.current = seeded;
+        setRampModalOptions(seeded ? options : undefined);
+        setRampModalOpen(true);
+      },
       // config
       appConfig: resolvedConfig,
       styles,
@@ -965,8 +976,8 @@ export function PollarProvider({
           </ModalErrorBoundary>
         )}
         {rampModalOpen && (
-          <ModalErrorBoundary onClose={() => setRampModalOpen(false)}>
-            <RampWidget onClose={() => setRampModalOpen(false)} />
+          <ModalErrorBoundary key={rampModalKey} onClose={() => setRampModalOpen(false)}>
+            <RampWidget onClose={() => setRampModalOpen(false)} initial={rampModalOptions} />
           </ModalErrorBoundary>
         )}
         {txHistoryModalOpen && (

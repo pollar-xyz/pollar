@@ -13,6 +13,7 @@ Stellar and Solana applications.
 > offers a network picker when the user holds a wallet on Stellar and Solana, and funds the card from a co-signed
 > wallet too. The email code input takes an autofilled one-time code. The ramp widget says a route's minimum or
 > maximum and offers "Change amount", and an order whose price changed before anything moved offers "Get a new quote".
+> `openRampModal(options)` opens the ramp widget on a direction, country, fiat, asset and amount.
 > A hook built with `createPollarAdapterHook` signs the auth entry an adapter answers with, without submitting
 > anything, and hands it to the adapter's `complete`.
 >
@@ -223,7 +224,7 @@ const {
   openKycModal, // (options?: { corridorId?, providerId?, country?, level?, onApproved? }) => void
 
   // Ramp (fiat on/off-ramps on the v3 ramps API, wired through core)
-  openRampModal, // () => void
+  openRampModal, // (options?: RampModalOptions) => void
 
   // App config / styles served by the Pollar API
   appConfig, // PollarConfig
@@ -236,6 +237,31 @@ const {
 
 Custody is derived from `wallet`, not a separate field - e.g.
 `wallet?.custody === 'external' ? wallet.provider : null`.
+
+#### Ramp options
+
+`openRampModal()` opens the ramp widget on its defaults. `openRampModal(options)` opens it on a direction, country,
+fiat, asset and amount; the user can still change each one.
+
+```ts
+import type { RampModalOptions } from '@pollar/react';
+
+openRampModal({ country: 'BR', direction: flow === 'withdraw' ? 'sell' : 'buy' });
+openRampModal({ direction: 'buy', country: 'MX', fiat: 'MXN', asset: 'USDC', amount: '500' });
+```
+
+| Option      | Type              | Description                                                          |
+| ----------- | ----------------- | -------------------------------------------------------------------- |
+| `direction` | `'buy' \| 'sell'` | Buy (on-ramp) or sell (off-ramp). Defaults to `'buy'`                |
+| `country`   | `string`          | ISO 3166-1 alpha-2, e.g. `'BR'`                                      |
+| `fiat`      | `string`          | Currency code, e.g. `'BRL'`. Defaults to the country's first fiat    |
+| `asset`     | `string`          | Asset code, e.g. `'USDC'`. Defaults to the first asset for that fiat |
+| `amount`    | `string`          | A plain decimal, e.g. `'100'` or `'12.5'`; anything else is left out |
+
+A country that does not route in the requested direction, or that the app does not offer, opens on the widget's default
+country, without the fiat, asset or amount; a fiat or asset the country does not offer opens on the country's first one.
+Nothing is thrown. The options wait for the routes when they are still loading. Each call starts over: opening again
+with other options, or with none, drops the earlier ones. `<RampWidget initial={options}>` takes the same options.
 
 #### Login options
 

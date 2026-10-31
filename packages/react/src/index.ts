@@ -37,6 +37,7 @@ export { RegistryCheckModal } from './components/registry-check-modal/RegistryCh
 export { ProviderRegistrationModal } from './components/provider-registration-modal/ProviderRegistrationModal';
 export { KycStatus } from './components/kyc-modal/KycStatus';
 export { RampWidget } from './components/ramp-widget/RampWidget';
+export type { RampModalOptions } from './components/ramp-widget/RampWidget';
 export { RejectedRouteDisplay, RouteDisplay } from './components/ramp-widget/RouteDisplay';
 export { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 export { EnabledAssetsModal } from './components/enabled-assets-modal/EnabledAssetsModal';

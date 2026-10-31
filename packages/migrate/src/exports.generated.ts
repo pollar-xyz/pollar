@@ -468,6 +468,7 @@ export const TARGET_EXPORTS: Record<string, readonly string[]> = {
     'PollarProvider',
     'PollarStyles',
     'ProviderRegistrationModal',
+    'RampModalOptions',
     'RampStep',
     'RampWidget',
     'RampWidgetTemplate',

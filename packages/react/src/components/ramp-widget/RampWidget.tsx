@@ -38,8 +38,22 @@ import { ProviderRegistrationModal } from '../provider-registration-modal/Provid
 import { useModalLanguage } from '../../language';
 import { RAMP_COPY, type RampCopy } from './ramp-copy';
 
+/** Where the ramp widget opens: a starting point the user can change, never a lock. */
+export interface RampModalOptions {
+  direction?: 'buy' | 'sell';
+  /** ISO 3166-1 alpha-2, e.g. 'BR'. */
+  country?: string;
+  /** e.g. 'BRL'; the country's first fiat when left out or not offered there. */
+  fiat?: string;
+  /** e.g. 'USDC'. */
+  asset?: string;
+  amount?: string;
+}
+
 interface RampWidgetProps {
   onClose: () => void;
+  /** Initial direction, country, fiat, asset and amount. A country that does not route in that direction opens on the defaults. */
+  initial?: RampModalOptions | undefined;
   /** Language of the widget and the steps it opens, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
   language?: string | undefined;
 }
@@ -70,6 +84,36 @@ function routeKey(quote: RampQuote): string {
 
 /** An exact decimal, as the API takes amounts: "10", "10.5", never "1e3" or "-2". */
 const DECIMAL = /^\d+(\.\d+)?$/;
+
+/**
+ * The choices a seed names among one direction's routes, as the widget's choice
+ * keys ('' is the default), or null when its country does not route there.
+ */
+function seededSelection(
+  routes: RampRoute[],
+  seed: RampModalOptions,
+): { country: string; fiatChoice: string; assetChoice: string; amount: string } | null {
+  const countries = rampCountries(routes);
+  const wanted = seed.country?.trim().toUpperCase();
+  const country = wanted ? countries.find((c) => c.country === wanted) : countries[0];
+  if (!country) return null;
+  const fiat = country.fiats.find((f) => f.currency === seed.fiat?.trim().toUpperCase()) ?? null;
+  const resolvedFiat = fiat ?? country.fiats[0];
+  const asset = routes.find(
+    (r) =>
+      r.fiat.country === country.country &&
+      resolvedFiat !== undefined &&
+      fiatKey(r.fiat) === fiatKey(resolvedFiat) &&
+      r.asset.code.toUpperCase() === seed.asset?.trim().toUpperCase(),
+  )?.asset;
+  const amount = seed.amount?.trim() ?? '';
+  return {
+    country: country.country,
+    fiatChoice: fiat ? fiatKey(fiat) : '',
+    assetChoice: asset ? assetKey(asset) : '',
+    amount: DECIMAL.test(amount) ? amount : '',
+  };
+}
 
 /**
  * Signs a leg, lending the user's own connected wallet as the ramp signer while
@@ -115,7 +159,7 @@ async function signLegWithWallet(client: PollarClient, orderId: string, actionId
   }
 }
 
-export function RampWidget({ onClose, language: languageProp }: RampWidgetProps) {
+export function RampWidget({ onClose, language: languageProp, initial }: RampWidgetProps) {
   const {
     getClient,
     styles,
@@ -135,7 +179,11 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<RampStep>('input');
-  const [direction, setDirection] = useState<RampDirection>('ONRAMP');
+  const [direction, setDirection] = useState<RampDirection>(initial?.direction === 'sell' ? 'OFFRAMP' : 'ONRAMP');
+  // Applied to the first routes that load for the seeded direction, then dropped; the user moving first drops it too.
+  const seedRef = useRef<{ direction: RampDirection; options: RampModalOptions } | null>(
+    initial ? { direction: initial.direction === 'sell' ? 'OFFRAMP' : 'ONRAMP', options: initial } : null,
+  );
   const [routes, setRoutes] = useState<RampRoute[]>([]);
   const [routesLoading, setRoutesLoading] = useState(true);
   const [country, setCountry] = useState('');
@@ -202,6 +250,16 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
     try {
       const { routes: found } = await client.getRampRoutes(next);
       setRoutes(found);
+      const seed = seedRef.current?.direction === next ? seedRef.current.options : null;
+      if (seed) seedRef.current = null;
+      const seeded = seed ? seededSelection(found, seed) : null;
+      if (seeded) {
+        setCountry(seeded.country);
+        setFiatChoice(seeded.fiatChoice);
+        setAssetChoice(seeded.assetChoice);
+        setAmount(seeded.amount);
+        return;
+      }
       const first = rampCountries(found)[0]?.country ?? '';
       setCountry((current) => (found.some((r) => r.fiat.country === current) ? current : first));
     } catch (error) {
@@ -313,6 +371,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
   }, [awaitingAccount, resolvedRequest]);
 
   function handleDirectionChange(next: RampDirection) {
+    seedRef.current = null;
     setDirection(next);
     setErrorMsg(null);
     setAwaitingAccount(null);
@@ -521,6 +580,7 @@ export function RampWidget({ onClose, language: languageProp }: RampWidgetProps)
     setErrorMsg(null);
     try {
       const found = await client.getRampOrder(id);
+      seedRef.current = null;
       setDirection(found.direction);
       setOrder(found);
       setStep('status');
