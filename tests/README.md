@@ -414,8 +414,9 @@ takes, country names, and the provider's runtime language.
 
 The options the React Native `open*Modal` actions take: the send, swap, earn
 panels and the history open on them (the send memo, a Solana swap quoted in base
-units, the earn tab, the history network), an option the app or wallet cannot
-use falls back to the default, and `onSuccess` hears the outcome once.
+units, the earn tab, the history network), the swap's Max, venue, enabled-asset
+and user-added buy assets with the trustline notice, an option the app or wallet
+cannot use falls back to the default, and `onSuccess` hears the outcome once.
 
 #### `smoke-custom-ramp.cjs` and `test:custom-ramp-example`
 

@@ -117,10 +117,12 @@ async function press(label) {
     await new Promise((r) => setTimeout(r, 10));
   });
 }
+let container;
 async function mount() {
-  const container = document.createElement('div');
+  container = document.createElement('div');
   root = createRoot(container);
 }
+const texts = () => container.textContent;
 async function unmount() {
   await React.act(async () => root.unmount());
 }
@@ -198,37 +200,103 @@ async function unmount() {
     await unmount();
   }
 
-  // --- Swap: the sell and buy tokens once the token list loads ---
+  // --- Swap: the sell asset from the balances, the buy asset once the catalog loads, Max, the venue ---
   {
     const hashes = [];
+    const stellarQuotes = [];
     const tokens = [
       { code: 'XLM', chain: 'STELLAR' },
       { code: 'USDC', issuer: 'GA5Z', chain: 'STELLAR' },
     ];
-    ctx = context({
+    const stellarBalances = {
+      step: 'loaded',
+      data: {
+        balances: [
+          { chain: 'STELLAR', type: 'native', code: 'XLM', balance: '100', available: '98.5' },
+          { chain: 'STELLAR', type: 'credit_alphanum4', code: 'USDC', issuer: 'GA5Z', balance: '5', available: '5' },
+        ],
+      },
+    };
+    const stellar = {
+      walletBalance: stellarBalances,
       getSwapTokens: async () => tokens,
-      getSwapConfig: async () => ['soroswap'],
-      getSwapQuote: async () => [{ provider: 'soroswap', amountOut: '1' }],
+      getSwapConfig: async () => ['soroswap', 'aquarius'],
+      getSwapQuote: async (params) => {
+        stellarQuotes.push(params);
+        return [{ provider: 'aquarius', amountOut: '1' }];
+      },
       swap: async () => {
         ctx.tx = { step: 'success', hash: 's1' };
         return { status: 'success', hash: 's1' };
       },
-    });
+    };
+    ctx = context(stellar);
     await mount();
     const initial = { sell: 'xlm', buy: 'USDC', amount: '10', onSuccess: (r) => hashes.push(r.hash) };
     await show(SwapPanel, { initial });
-    assert.deepEqual(checked(), ['STELLAR:XLM:native', 'STELLAR:USDC:GA5Z']);
+    assert.deepEqual(checked(), ['XLM', 'USDC', 'Best price'], 'sell and buy by code, the venue on auto');
     assert.equal(input('Amount'), '10');
+    await press('Max');
+    await show(SwapPanel, { initial });
+    assert.equal(input('Amount'), '98.5', 'Max fills what the wallet can spend of the sell asset');
+    await press('Aquarius');
     await press('Get quotes');
-    await press('Confirm swap via soroswap');
+    assert.deepEqual(JSON.parse(JSON.stringify(stellarQuotes.at(-1))), {
+      sellAsset: { type: 'native' },
+      buyAsset: { type: 'credit_alphanum4', code: 'USDC', issuer: 'GA5Z' },
+      amount: '98.5',
+      provider: 'aquarius',
+      slippageBps: 50,
+    });
+    await press('Confirm swap via aquarius');
     await show(SwapPanel, { initial });
     assert.deepEqual(hashes, ['s1']);
     await unmount();
 
-    ctx = context({ getSwapTokens: async () => tokens, getSwapConfig: async () => ['soroswap'] });
+    ctx = context(stellar);
     await mount();
     await show(SwapPanel, { initial: { sell: 'NOPE', buy: 'usdc' } });
-    assert.deepEqual(checked(), ['STELLAR:USDC:GA5Z'], 'an unknown token leaves its picker on the default');
+    assert.deepEqual(checked(), ['USDC', 'Best price'], 'an unknown asset leaves its picker on the default');
+    await unmount();
+
+    // The buy list: the app's enabled assets, the catalog, and a token the user adds (with its trustline notice).
+    const AQUA_ISSUER = `G${'A'.repeat(55)}`;
+    ctx = context({
+      ...stellar,
+      getSwapTokens: async () => [],
+      enabledAssets: {
+        step: 'loaded',
+        data: {
+          assets: [
+            { chain: 'STELLAR', type: 'native', code: 'XLM', trustlineEstablished: true },
+            { chain: 'STELLAR', type: 'credit_alphanum4', code: 'EURC', issuer: 'GEUR', trustlineEstablished: true },
+          ],
+        },
+      },
+    });
+    await mount();
+    await show(SwapPanel, { initial: { sell: 'XLM', buy: 'EURC', amount: '1' } });
+    assert.deepEqual(checked(), ['XLM', 'EURC', 'Best price'], 'an enabled asset is buyable');
+    await React.act(async () => {
+      inputs.find((i) => i.accessibilityLabel === 'Code (e.g. USDC)').onChangeText('aqua');
+      inputs.find((i) => i.accessibilityLabel === 'Issuer (G...)').onChangeText('GBAD');
+    });
+    await show(SwapPanel, { initial: { sell: 'XLM', buy: 'EURC', amount: '1' } });
+    await press('Add token');
+    await show(SwapPanel, { initial: { sell: 'XLM', buy: 'EURC', amount: '1' } });
+    assert.match(texts(), /Issuer must be a Stellar address/, 'a malformed issuer is refused');
+    await React.act(async () => inputs.find((i) => i.accessibilityLabel === 'Issuer (G...)').onChangeText(AQUA_ISSUER));
+    await show(SwapPanel, { initial: { sell: 'XLM', buy: 'EURC', amount: '1' } });
+    await press('Add token');
+    await show(SwapPanel, { initial: { sell: 'XLM', buy: 'EURC', amount: '1' } });
+    assert.deepEqual(checked(), ['XLM', 'AQUA', 'Best price'], 'the added token is bought');
+    assert.match(texts(), /To receive AQUA your wallet needs a trustline/);
+    await press('Get quotes');
+    assert.deepEqual(JSON.parse(JSON.stringify(stellarQuotes.at(-1).buyAsset)), {
+      type: 'credit_alphanum4',
+      code: 'AQUA',
+      issuer: AQUA_ISSUER,
+    });
     await unmount();
 
     // Solana: the network picker, the mints from the balances, and the quote in base units.
@@ -259,7 +327,7 @@ async function unmount() {
     await mount();
     const onSolana = { chain: 'SOLANA', sell: 'sol', buy: 'USDC', amount: '1.5', onSuccess: (r) => solHashes.push(r.hash) };
     await show(SwapPanel, { initial: onSolana });
-    assert.deepEqual(checked(), ['SOLANA', 'SOL', 'USDC'], 'the network, then the mints by code');
+    assert.deepEqual(checked(), ['SOLANA', 'SOL', 'USDC', 'Best price'], 'the network, the mints by code, auto venue');
     await press('Get quotes');
     assert.deepEqual(JSON.parse(JSON.stringify(solQuotes[0])), {
       inputMint: 'So11111111111111111111111111111111111111112',
@@ -275,7 +343,7 @@ async function unmount() {
     ctx = context({ ...solana, getSolanaSwapConfig: async () => [] });
     await mount();
     await show(SwapPanel, { initial: { chain: 'SOLANA', sell: 'XLM' } });
-    assert.deepEqual(checked(), ['STELLAR:XLM:native'], 'a network the app lacks falls back, with no picker');
+    assert.deepEqual(checked(), ['Best price'], 'a network the app lacks falls back to Stellar, with no picker');
     await unmount();
   }
 
@@ -357,7 +425,7 @@ async function unmount() {
   }
 
   console.log(
-    'React Native modal options: send (memo), swap (Solana, network), earn (tabs) and history (network) seeds, late data, unknown values falling back and onSuccess once passed',
+    'React Native modal options: send (memo), swap (Solana, network, Max, venue, enabled and custom buy assets), earn (tabs) and history (network) seeds, late data, unknown values falling back and onSuccess once passed',
   );
 })().catch((error) => {
   console.error(error);

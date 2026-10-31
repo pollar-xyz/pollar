@@ -716,7 +716,7 @@ type SwapChain = 'STELLAR' | 'SOLANA';
 const WRAPPED_SOL_MINT = 'So11111111111111111111111111111111111111112';
 const SOL_DECIMALS = 9;
 /** A Solana swap side: the mint and its decimals. */
-type SolanaSwapOption = { code: string; mint: string; decimals: number };
+type SolanaSwapOption = { code: string; mint: string; decimals: number; available?: string | undefined };
 /** `1.5` with 6 decimals is `1500000`; null for anything that is not a positive decimal within those decimals. */
 function toBaseUnits(amount: string, decimals: number): string | null {
   const trimmed = amount.trim();
@@ -726,13 +726,44 @@ function toBaseUnits(amount: string, decimals: number): string | null {
   const units = BigInt(`${whole}${fraction.padEnd(decimals, '0')}`);
   return units > 0n ? units.toString() : null;
 }
+/** The venue labels the swap shows; a venue this version does not know shows as it came. */
+const VENUE_LABELS: Record<string, string> = {
+  aquarius: 'Aquarius',
+  soroswap: 'Soroswap',
+  sdex: 'Stellar DEX',
+  jupiter: 'Jupiter',
+  titan: 'Titan',
+};
+type StellarSwapRef = { type: 'native' } | { type: 'credit_alphanum4' | 'credit_alphanum12'; code: string; issuer: string };
+/** A Stellar swap side: its key in the pickers, the asset ref a quote takes and what the wallet can spend. */
+type StellarSwapOption = { key: string; code: string; issuer?: string; ref: StellarSwapRef; available?: string };
+function stellarRef(code: string, issuer: string | undefined): StellarSwapRef {
+  if (!issuer || issuer === '0') return { type: 'native' };
+  return { type: code.length <= 4 ? 'credit_alphanum4' : 'credit_alphanum12', code, issuer };
+}
+function stellarOption(code: string, issuer: string | undefined, available?: string | null): StellarSwapOption {
+  const native = !issuer || issuer === '0';
+  return {
+    key: assetKey({ chain: 'STELLAR', code, ...(native ? {} : { issuer: issuer! }) }),
+    code,
+    ...(native ? {} : { issuer: issuer! }),
+    ref: stellarRef(code, issuer),
+    ...(available != null ? { available } : {}),
+  };
+}
 export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined }) {
   const p = usePollar();
   const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   const [chains, setChains] = useState<SwapChain[] | null>(null);
+  const [venues, setVenues] = useState<Record<SwapChain, string[]>>({ STELLAR: [], SOLANA: [] });
+  const [venue, setVenue] = useState('auto');
   const [chain, setChain] = useState<SwapChain>(initial?.chain === 'SOLANA' ? 'SOLANA' : 'STELLAR');
   const [tokens, setTokens] = useState<SwapToken[]>([]);
+  const [customTokens, setCustomTokens] = useState<StellarSwapOption[]>([]);
+  const [customCode, setCustomCode] = useState('');
+  const [customIssuer, setCustomIssuer] = useState('');
+  const [customError, setCustomError] = useState('');
   const [sell, setSell] = useState('');
   const [buy, setBuy] = useState('');
   const [amount, setAmount] = useState(seededAmount(initial?.amount));
@@ -746,13 +777,15 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
 
   const balances = p.walletBalance.step === 'loaded' ? p.walletBalance.data.balances : [];
   const records = p.enabledAssets.step === 'loaded' ? p.enabledAssets.data.assets : [];
+  const availableFor = (code: string, issuer: string | undefined) =>
+    balances.find((b) => b.code === code && (b.issuer ?? '') === (issuer ?? ''))?.available;
   const solanaSell: SolanaSwapOption[] = balances
     .filter((b) => b.chain === 'SOLANA' && (b.type === 'native' || (b.type === 'token' && !!b.issuer)))
     .flatMap((b) =>
       b.type === 'native'
-        ? [{ code: 'SOL', mint: WRAPPED_SOL_MINT, decimals: SOL_DECIMALS }]
+        ? [{ code: 'SOL', mint: WRAPPED_SOL_MINT, decimals: SOL_DECIMALS, available: b.available ?? undefined }]
         : b.decimals !== undefined
-          ? [{ code: b.code, mint: b.issuer!, decimals: b.decimals }]
+          ? [{ code: b.code, mint: b.issuer!, decimals: b.decimals, available: b.available ?? undefined }]
           : [],
     );
   const solanaBuy: SolanaSwapOption[] = [
@@ -761,14 +794,47 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
       .filter((a) => a.chain === 'SOLANA' && a.type === 'token' && !!a.issuer && a.decimals !== undefined)
       .map((a) => ({ code: a.code, mint: a.issuer!, decimals: a.decimals! })),
   ];
-  const tokenKey = (t: SwapToken) => assetKey(t);
-  const sellKeys = chain === 'SOLANA' ? solanaSell.map((o) => o.mint) : tokens.map(tokenKey);
-  const buyKeys = chain === 'SOLANA' ? solanaBuy.map((o) => o.mint) : tokens.map(tokenKey);
+  // Stellar sells what the wallet holds; it buys the app's assets, then the catalog, then the tokens the user adds.
+  const stellarSell: StellarSwapOption[] = balances
+    .filter(
+      (b) =>
+        (b.chain === undefined || b.chain === 'STELLAR') &&
+        (b.type === 'native' || ((b.type === 'credit_alphanum4' || b.type === 'credit_alphanum12') && !b.trustlineRemoved)),
+    )
+    .map((b) => stellarOption(b.code, b.type === 'native' ? undefined : b.issuer, b.available));
+  const enabledBuy = records
+    .filter(
+      (a) =>
+        (a.chain === undefined || a.chain === 'STELLAR') &&
+        (a.type === 'native' || a.type === 'credit_alphanum4' || a.type === 'credit_alphanum12'),
+    )
+    .map((a) => stellarOption(a.code, a.type === 'native' ? undefined : a.issuer, availableFor(a.code, a.issuer)));
+  const stellarBuyAll: StellarSwapOption[] = [];
+  for (const option of [
+    ...enabledBuy,
+    ...tokens.map((t) => stellarOption(t.code, t.issuer, availableFor(t.code, t.issuer))),
+    ...customTokens,
+  ])
+    if (!stellarBuyAll.some((o) => o.key === option.key)) stellarBuyAll.push(option);
+  const stellarBuy = stellarBuyAll.filter((o) => o.key !== sell || o.key === buy);
+  const sellKeys = chain === 'SOLANA' ? solanaSell.map((o) => o.mint) : stellarSell.map((o) => o.key);
+  const buyKeys = chain === 'SOLANA' ? solanaBuy.map((o) => o.mint) : stellarBuy.map((o) => o.key);
   const codeOf = (key: string) =>
     chain === 'SOLANA'
       ? ([...solanaSell, ...solanaBuy].find((o) => o.mint === key)?.code ?? key)
-      : (tokens.find((t) => tokenKey(t) === key)?.code ?? key);
+      : ([...stellarSell, ...stellarBuyAll].find((o) => o.key === key)?.code ?? key);
   const keyFor = (keys: string[], code: string | undefined) => keys.find((k) => sameCode(codeOf(k), code));
+  const sellAvailable =
+    chain === 'SOLANA'
+      ? solanaSell.find((o) => o.mint === sell)?.available
+      : stellarSell.find((o) => o.key === sell)?.available;
+  const buyOption = chain === 'STELLAR' ? stellarBuyAll.find((o) => o.key === buy) : undefined;
+  // A credit asset the wallet does not trust yet: the swap creates the trustline first.
+  const buyNeedsTrustline =
+    !!buyOption &&
+    buyOption.ref.type !== 'native' &&
+    !records.find((a) => a.code === buyOption.code && a.issuer === buyOption.issuer)?.trustlineEstablished;
+  const chainVenues = venues[chain];
 
   useEffect(() => {
     const seeded = keyFor(sellKeys, sellSeed.current);
@@ -790,6 +856,7 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
       p.getSwapConfig().catch(() => []),
       p.getSolanaSwapConfig().catch(() => []),
     ]);
+    setVenues({ STELLAR: stellarVenues, SOLANA: solanaVenues });
     const offered: SwapChain[] = [
       ...(stellarVenues.length > 0 ? (['STELLAR'] as const) : []),
       ...(solanaVenues.length > 0 ? (['SOLANA'] as const) : []),
@@ -804,27 +871,37 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
     });
     const t = await p.getSwapTokens();
     setTokens(t);
-    if (solanaVenues.length > 0) await Promise.all([p.refreshWalletBalance(), p.refreshAssets()]);
+    await Promise.all([p.refreshWalletBalance(), p.refreshAssets()]);
     return stellarVenues;
   }
   useEffect(() => {
     void action.run(refreshSwap);
   }, []);
-  const swapAsset = (t: SwapToken) =>
-    !t.issuer || t.issuer === '0'
-      ? { type: 'native' as const }
-      : {
-          type: t.code.length <= 4 ? ('credit_alphanum4' as const) : ('credit_alphanum12' as const),
-          code: t.code,
-          issuer: t.issuer,
-        };
+  function clearQuotes() {
+    setQuotes([]);
+    setSolanaQuotes([]);
+  }
   function clearPicks() {
     sellSeed.current = undefined;
     buySeed.current = undefined;
     setSell('');
     setBuy('');
-    setQuotes([]);
-    setSolanaQuotes([]);
+    setVenue('auto');
+    clearQuotes();
+  }
+  function addCustomToken() {
+    const code = customCode.trim().toUpperCase();
+    const issuer = customIssuer.trim();
+    if (code.length < 1 || code.length > 12) return setCustomError(copy.swap.codeLength);
+    if (issuer.length !== 56 || !issuer.startsWith('G')) return setCustomError(copy.swap.issuerFormat);
+    const option = stellarOption(code, issuer, availableFor(code, issuer));
+    setCustomTokens((current) => (current.some((o) => o.key === option.key) ? current : [...current, option]));
+    buySeed.current = undefined;
+    setBuy(option.key);
+    setCustomCode('');
+    setCustomIssuer('');
+    setCustomError('');
+    clearQuotes();
   }
   async function getQuotes() {
     if (chain === 'SOLANA') {
@@ -832,20 +909,32 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
       const to = solanaBuy.find((o) => o.mint === buy);
       const units = from ? toBaseUnits(amount, from.decimals) : null;
       if (!from || !to || !units) throw new Error(copy.send.invalid);
-      const q = await p.getSolanaSwapQuote({ inputMint: from.mint, outputMint: to.mint, amount: units, slippageBps: 50 });
+      const q = await p.getSolanaSwapQuote({
+        inputMint: from.mint,
+        outputMint: to.mint,
+        amount: units,
+        ...(venue !== 'auto' ? { provider: venue as SolanaSwapQuote['provider'] } : {}),
+        slippageBps: 50,
+      });
       setSolanaQuotes(q);
       return q;
     }
+    const from = stellarSell.find((o) => o.key === sell);
+    if (!from || !buyOption) throw new Error(copy.send.invalid);
     const q = await p.getSwapQuote({
-      sellAsset: swapAsset(tokens.find((t) => tokenKey(t) === sell)!),
-      buyAsset: swapAsset(tokens.find((t) => tokenKey(t) === buy)!),
+      sellAsset: from.ref,
+      buyAsset: buyOption.ref,
       amount,
+      ...(venue !== 'auto' ? { provider: venue as SwapQuote['provider'] } : {}),
       slippageBps: 50,
     });
     setQuotes(q);
     return q;
   }
   const labels = Object.fromEntries([...sellKeys, ...buyKeys].map((k) => [k, codeOf(k)]));
+  const venueLabels = Object.fromEntries(
+    ['auto', ...chainVenues].map((v) => [v, v === 'auto' ? copy.swap.bestPrice : (VENUE_LABELS[v] ?? v)]),
+  );
   return (
     <Card title={copy.swap.title}>
       <ActionButton title={copy.swap.refresh} disabled={action.busy} onPress={() => void action.run(refreshSwap)} />
@@ -862,38 +951,69 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
       )}
       <Choice
         label={copy.swap.sell}
-        {...(chain === 'SOLANA' ? { labels } : {})}
+        labels={labels}
         options={sellKeys}
         value={sell}
         onChange={(v) => {
           sellSeed.current = undefined;
           setSell(v);
-          setQuotes([]);
-          setSolanaQuotes([]);
+          clearQuotes();
         }}
       />
       <Choice
         label={copy.swap.buy}
-        {...(chain === 'SOLANA' ? { labels } : {})}
+        labels={labels}
         options={buyKeys}
         value={buy}
         onChange={(v) => {
           buySeed.current = undefined;
           setBuy(v);
-          setQuotes([]);
-          setSolanaQuotes([]);
+          clearQuotes();
         }}
       />
+      {chain === 'STELLAR' && (
+        <>
+          <Field label={copy.swap.customCode} value={customCode} onChangeText={setCustomCode} />
+          <Field label={copy.swap.customIssuer} value={customIssuer} onChangeText={setCustomIssuer} />
+          <ActionButton
+            title={copy.swap.addToken}
+            disabled={!customCode.trim() || !customIssuer.trim()}
+            onPress={addCustomToken}
+          />
+          {customError ? <Label>{customError}</Label> : null}
+        </>
+      )}
+      {buyNeedsTrustline && buyOption && <Label>{copy.swap.trustlineNotice(buyOption.code)}</Label>}
+      {chainVenues.length > 0 && (
+        <Choice
+          label={copy.swap.route}
+          labels={venueLabels}
+          options={['auto', ...chainVenues]}
+          value={venue}
+          onChange={(v) => {
+            setVenue(v);
+            clearQuotes();
+          }}
+        />
+      )}
       <Field
         label={copy.amount}
         value={amount}
         keyboardType="decimal-pad"
         onChangeText={(v) => {
           setAmount(v);
-          setQuotes([]);
-          setSolanaQuotes([]);
+          clearQuotes();
         }}
       />
+      {sellAvailable != null && (
+        <ActionButton
+          title={copy.swap.max}
+          onPress={() => {
+            setAmount(sellAvailable);
+            clearQuotes();
+          }}
+        />
+      )}
       <ActionButton
         title={copy.swap.getQuotes}
         disabled={action.busy || !sell || !buy || Number(amount) <= 0}
@@ -931,7 +1051,7 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
           />
         </View>
       ))}
-      {chain === 'STELLAR' && !tokens.length && <Label>{copy.swap.noTokens}</Label>}
+      {chain === 'STELLAR' && stellarBuyAll.length === 0 && <Label>{copy.swap.noTokens}</Label>}
       <TransactionStatus />
       <ActionState action={action} />
     </Card>
