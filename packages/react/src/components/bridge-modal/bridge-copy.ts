@@ -42,7 +42,7 @@ export interface BridgeCopy {
     noGasWallet: string;
     noWallet: (chain: string) => string;
     noTrustline: string;
-    externalSolana: string;
+    connectSolanaWallet: string;
     unsupportedWallet: string;
     credits: string;
     actionChanged: string;
@@ -112,7 +112,7 @@ export const BRIDGE_COPY: Record<PollarLanguage, BridgeCopy> = {
       noGasWallet: 'This app cannot pay the network fees for this move right now.',
       noWallet: (chain) => `You do not have a wallet on ${chain} yet.`,
       noTrustline: 'Your Stellar wallet needs to accept USDC first.',
-      externalSolana: 'USDC cannot be moved from a connected Solana wallet yet.',
+      connectSolanaWallet: 'Connect the Solana wallet this move leaves from to sign.',
       unsupportedWallet: 'This wallet cannot move USDC between networks.',
       credits: 'This app cannot cover this operation right now.',
       actionChanged: 'The step changed. Review it and authorize again.',
@@ -180,7 +180,7 @@ export const BRIDGE_COPY: Record<PollarLanguage, BridgeCopy> = {
       noGasWallet: 'Esta app no puede pagar ahora las comisiones de red de este movimiento.',
       noWallet: (chain) => `Todavía no tienes una wallet en ${chain}.`,
       noTrustline: 'Tu wallet de Stellar primero tiene que aceptar USDC.',
-      externalSolana: 'Todavía no se puede mover USDC desde una wallet de Solana conectada.',
+      connectSolanaWallet: 'Conecta la wallet de Solana desde la que sale este movimiento para firmar.',
       unsupportedWallet: 'Esta wallet no puede mover USDC entre redes.',
       credits: 'Esta app no puede cubrir esta operación ahora.',
       actionChanged: 'El paso cambió. Revísalo y autoriza de nuevo.',
@@ -248,7 +248,7 @@ export const BRIDGE_COPY: Record<PollarLanguage, BridgeCopy> = {
       noGasWallet: 'Este app não consegue pagar agora as taxas de rede deste movimento.',
       noWallet: (chain) => `Você ainda não tem uma carteira na ${chain}.`,
       noTrustline: 'Sua carteira Stellar precisa aceitar USDC primeiro.',
-      externalSolana: 'Ainda não é possível mover USDC de uma carteira Solana conectada.',
+      connectSolanaWallet: 'Conecte a carteira Solana de onde sai este movimento para assinar.',
       unsupportedWallet: 'Esta carteira não pode mover USDC entre redes.',
       credits: 'Este app não consegue cobrir esta operação agora.',
       actionChanged: 'O passo mudou. Revise e autorize de novo.',

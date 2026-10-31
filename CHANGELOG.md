@@ -216,8 +216,10 @@
   how the wallet signs, and `pollBridgeTransfer()` follows it. A custodial
   wallet burns at once; a co-signed one approves the request on its device; an
   external Stellar wallet signs each step through `signBridgeStep(id, actionId)`,
-  which uses the ramp signing handlers (`registerRampSigningHandler`). An
-  external Solana wallet cannot be the source yet. `openBridgeModal()` /
+  which uses the ramp signing handlers (`registerRampSigningHandler`); an
+  external Solana wallet signs the burn the server built
+  (`SOLANA`/`solana-cctp-json`, base64, as `signSolanaTransaction` takes it),
+  and Pollar adds the fee payer's signature. `openBridgeModal()` /
   `<BridgeModal>`, web and React Native, run the whole flow;
   `openBridgeModal({ fromChain, toChain, amount, onSuccess })` opens it on a
   direction and amount the user can still change, and `onSuccess` hears the

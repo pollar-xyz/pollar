@@ -50,7 +50,6 @@ function errorText(error: unknown, copy: BridgeCopy): string {
       return copy.errors.noGasWallet;
     case 'SDK_BRIDGE_WALLET_NOT_READY':
       if (reason === 'no_usdc_trustline') return copy.errors.noTrustline;
-      if (reason === 'external_solana_source') return copy.errors.externalSolana;
       if (reason === 'no_wallet') return copy.errors.noWallet(chain);
       return copy.errors.unsupportedWallet;
     case 'SDK_CREDITS_INSUFFICIENT':
@@ -64,21 +63,39 @@ function errorText(error: unknown, copy: BridgeCopy): string {
 }
 
 /**
- * Signs a bridge step, lending the user's connected Stellar wallet as the
- * signer while it does, as the ramp widget does for a ramp leg: the wallet
- * shows the transaction and the user approves it there. A signer the app
+ * The external Solana wallet's signature of a burn the server built: only for
+ * the wallet connected now, and only the transaction as built (base64).
+ */
+function solanaBurnSigner(client: PollarClient, copy: BridgeCopy): RampSigningHandler {
+  return async (action) => {
+    const payload = JSON.parse(action.payload.value) as { from?: string; unsignedTransaction?: string };
+    const solanaWallet = () => client.getWallets().find((w) => w.chain === 'SOLANA' && w.custody === 'external');
+    const wallet = solanaWallet();
+    if (!wallet || payload.from !== wallet.address || !payload.unsignedTransaction)
+      throw new Error(copy.errors.connectSolanaWallet);
+    const signed = await client.signSolanaTransaction(payload.unsignedTransaction);
+    if (solanaWallet()?.address !== wallet.address) throw new Error(copy.errors.walletChanged);
+    return signed;
+  };
+}
+
+/**
+ * Signs a bridge step, lending the user's connected wallet (Stellar or Solana)
+ * as the signer while it does, as the ramp widget does for a ramp leg: the
+ * wallet shows the transaction and the user approves it there. A signer the app
  * registered itself for that chain keeps signing.
  */
 async function signStepWithWallet(client: PollarClient, transferId: string, actionId: string, copy: BridgeCopy) {
   const lent: Array<() => void> = [];
-  const lend = (encoding: string, handler: RampSigningHandler) => {
+  const lend = (chain: 'STELLAR' | 'SOLANA', encoding: string, handler: RampSigningHandler) => {
     try {
-      lent.push(client.registerRampSigningHandler('STELLAR', encoding, handler));
+      lent.push(client.registerRampSigningHandler(chain, encoding, handler));
     } catch {
-      // The app registered its own Stellar signer: that one signs.
+      // The app registered its own signer for this chain: that one signs.
     }
   };
-  lend('xdr', async (action) => {
+  lend('SOLANA', 'solana-cctp-json', solanaBurnSigner(client, copy));
+  lend('STELLAR', 'xdr', async (action) => {
     const wallet = client.getWallet();
     if (!wallet) throw new Error(copy.errors.connectStellarWallet);
     assertRampStellarSigner(action, wallet.address);
