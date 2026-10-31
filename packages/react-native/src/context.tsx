@@ -16,16 +16,17 @@ import { ActivityIndicator, Text } from 'react-native';
 import type { PollarConfig, PollarStyles } from './types';
 import type { FeatureName } from './components/FeaturePanel';
 import { FeatureModal } from './components/FeatureModal';
+import type { EarnModalOptions, ReceiveModalOptions, SendModalOptions, SwapModalOptions } from './components/FeaturePanel';
 import { ModalErrorBoundary } from './components/commons';
 import { AppKycFlow } from './components/kyc-modal/AppKycFlow';
-import { CardModal } from './components/card-modal/CardModal';
+import { CardModal, type CardModalOptions } from './components/card-modal/CardModal';
 import { BridgeModal } from './components/bridge-modal/BridgeModal';
 import { ConfirmModal } from './components/confirm-modal/ConfirmModal';
 import { CosignModal } from './components/cosign-modal/CosignModal';
 import { CustodyMigrationModal } from './components/custody-migration-modal/CustodyMigrationModal';
 import { LoginModal } from './components/login-modal/LoginModal';
 import { RecoveryModal } from './components/recovery-modal/RecoveryModal';
-import { RampWidget } from './components/ramp-widget/RampWidget';
+import { RampWidget, type RampModalOptions } from './components/ramp-widget/RampWidget';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
 import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
@@ -41,6 +42,14 @@ export interface NativePlatformAdapters {
 export interface PollarProviderProps {
   /** Configuration changes replace and clean up the owned client. Memoize object-valued adapters. */
   config: PollarClientConfig;
+  /**
+   * Language of the modals, a BCP 47 tag such as `'es'` or `'pt-BR'`: typically
+   * the app's current language. Followed on every render without replacing the
+   * client, so open modals switch when it changes. It wins over `config.locale`;
+   * a language pinned in the dashboard wins over it, and a tag the modals have
+   * no translation for is skipped.
+   */
+  language?: string | undefined;
   appConfig?: PollarConfig;
   styles?: PollarStyles;
   adapters?: PollarAdapters;
@@ -106,11 +115,22 @@ type ModalMethods =
   | 'openEarnModal'
   | 'openSessionsModal'
   | 'openDistributionRulesModal';
+/** The openers that take where their modal opens. */
+type SeededModalMethods = {
+  openRampModal: (options?: RampModalOptions) => void;
+  openRampWidget: (options?: RampModalOptions) => void;
+  openSendModal: (options?: SendModalOptions) => void;
+  openReceiveModal: (options?: ReceiveModalOptions) => void;
+  openSwapModal: (options?: SwapModalOptions) => void;
+  openEarnModal: (options?: EarnModalOptions) => void;
+  openCardModal: (options?: CardModalOptions) => void;
+};
 export type PollarContextValue = Methods &
   Record<
-    ModalMethods,
+    Exclude<ModalMethods, keyof SeededModalMethods>,
     (options?: { country?: string; level?: 'basic' | 'intermediate' | 'enhanced'; onApproved?: () => void }) => void
-  > & {
+  > &
+  SeededModalMethods & {
     getClient: () => PollarClient;
     wallet: ReturnType<PollarClient['getWallet']>;
     wallets: ReturnType<PollarClient['getWallets']>;
@@ -240,6 +260,7 @@ export function PollarProvider(props: PollarProviderProps) {
 function ClientProvider({
   runtime,
   children,
+  language,
   appConfig,
   styles: overrides,
   platform,
@@ -250,6 +271,10 @@ function ClientProvider({
   const client = runtime.client;
   const [, update] = useState(0);
   const [modal, setModal] = useState<FeatureName | 'cards' | 'bridge' | null>(null);
+  // The options the open modal was opened on; the key remounts it when it opens on other options, or on none after some.
+  const [modalInitial, setModalInitial] = useState<object | undefined>(undefined);
+  const [modalKey, setModalKey] = useState(0);
+  const modalSeeded = useRef(false);
   const [kycOptions, setKycOptions] = useState<{
     country?: string;
     level?: 'basic' | 'intermediate' | 'enhanced';
@@ -380,8 +405,12 @@ function ClientProvider({
   const firstConfirmation = confirmations[0] ?? null;
   const wallet = client.getWallet();
   const tx = client.getTransactionState() ?? { step: 'idle' as const };
-  const open = (next: FeatureName | 'cards' | 'bridge') => {
+  const open = (next: FeatureName | 'cards' | 'bridge', options?: object) => {
     if (modal === 'authentication' && next !== modal) client.cancelLogin();
+    const seeded = options !== undefined && Object.keys(options).length > 0;
+    if (seeded || modalSeeded.current) setModalKey((k) => k + 1);
+    modalSeeded.current = seeded;
+    setModalInitial(seeded ? options : undefined);
     setModal(next);
   };
   const close = () => {
@@ -460,8 +489,8 @@ function ClientProvider({
     openLoginModal: () => open('authentication'),
     openTxModal: () => open('transactions'),
     openTransactionModal: () => open('transactions'),
-    openSendModal: () => open('send'),
-    openReceiveModal: () => open('receive'),
+    openSendModal: (options) => open('send', options),
+    openReceiveModal: (options) => open('receive', options),
     openWalletBalanceModal: () => open('wallet'),
     openEnabledAssetsModal: () => open('assets'),
     openTxHistoryModal: () => open('history'),
@@ -470,12 +499,12 @@ function ClientProvider({
       setKycOptions(options);
       open('kyc');
     },
-    openRampModal: () => open('ramp'),
-    openRampWidget: () => open('ramp'),
-    openCardModal: () => open('cards'),
+    openRampModal: (options) => open('ramp', options),
+    openRampWidget: (options) => open('ramp', options),
+    openCardModal: (options) => open('cards', options),
     openBridgeModal: () => open('bridge'),
-    openSwapModal: () => open('swap'),
-    openEarnModal: () => open('earn'),
+    openSwapModal: (options) => open('swap', options),
+    openEarnModal: (options) => open('earn', options),
     openDistributionRulesModal: () => open('distribution'),
     cosign,
     openCosignModal: () => setCosignModalOpen(true),
@@ -488,24 +517,24 @@ function ClientProvider({
     refreshCustodyMigration,
     confirmations,
   };
-  const modalLanguage = useProviderLanguage(client, value.styles?.language);
+  const modalLanguage = useProviderLanguage(client, value.styles?.language, language);
   return (
     <Context.Provider value={value}>
       <ModalLanguageContext.Provider value={modalLanguage}>
         <PollarUIProvider theme={value.styles.theme === 'dark' ? 'dark' : 'light'}>
           {children}
           {modal && (
-            <ModalErrorBoundary onClose={close}>
+            <ModalErrorBoundary key={modalKey} onClose={close}>
               {modal === 'authentication' ? (
                 <LoginModal onClose={close} />
               ) : modal === 'kyc' ? (
                 <AppKycFlow onClose={close} {...kycOptions} />
               ) : modal === 'ramp' ? (
-                <RampWidget onClose={close} />
+                <RampWidget onClose={close} initial={modalInitial as RampModalOptions | undefined} />
               ) : modal === 'bridge' ? (
                 <BridgeModal onClose={close} />
               ) : modal === 'cards' ? (
-                <CardModal key={wallet?.address ?? ''} onClose={close} />
+                <CardModal key={wallet?.address ?? ''} onClose={close} initial={modalInitial as CardModalOptions | undefined} />
               ) : modal === 'transactions' ? (
                 <TransactionModal onClose={close} />
               ) : modal === 'history' ? (
@@ -513,7 +542,7 @@ function ClientProvider({
               ) : modal === 'wallet' ? (
                 <WalletBalanceModal onClose={close} />
               ) : (
-                <FeatureModal feature={modal} onClose={close} />
+                <FeatureModal feature={modal} onClose={close} initial={modalInitial ? { [modal]: modalInitial } : undefined} />
               )}
             </ModalErrorBoundary>
           )}

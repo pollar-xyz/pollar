@@ -102,6 +102,36 @@
   each call drops the options of the one before, and `openRampModal()` opens as
   it always did. `RampModalOptions` is exported, and `<RampWidget>` takes the
   same options as `initial`.
+- **The other modals take where they open, and report back.** In
+  `@pollar/react`, `openSendModal`, `openSwapModal`, `openEarnModal`,
+  `openReceiveModal`, `openTxHistoryModal` and `openCardModal` take options,
+  with the same contract as `openRampModal`: a starting point the user can
+  change, an option the app or wallet cannot use left out, data that loads
+  late picked up when it arrives, and each call dropping the options of the
+  one before. Send takes `chain`, `asset`, `destination`, `amount`, `memo`
+  and `memoType`; swap `chain`, `sell`, `buy` and `amount`; earn `provider`,
+  `opportunityId`, `tab` and `amount`; receive and history `chain`; the card
+  modal `panel: 'fund'`, `amount` and `chain`. Send, swap and earn call
+  `onSuccess({ hash })` once the transaction lands, and the card modal
+  `onFunded(funding)` for each funding sent. `@pollar/react-native` takes
+  the same options where its panels have the field (its send has no memo,
+  its swap is Stellar-only, its earn has no tabs and its history no network
+  picker), and `openRampModal(options)` as on the web. The option types are
+  exported from both packages.
+- **The modals follow a language that changes at runtime.**
+  `<PollarProvider language={tag}>` (a BCP 47 tag) is read on every render,
+  unlike `client`, so open and later modals switch with the app's language
+  without remounting the provider. `client.setLocale(tag)` does the same from
+  outside React (`onLocaleChange(cb)` reports it), and `config.locale` stays
+  the starting value. The order is unchanged around it: the dashboard's pin,
+  then a modal's own `language`, then the provider's, then the client's
+  `locale`, then the browser; a tag the modals lack is skipped. React Native's
+  `<PollarProvider language>` does the same without replacing the client,
+  which a changed `config.locale` does.
+- The React and React Native ramp widgets name each country in the modal's
+  language ("Bolivia", "Bolívia"), sorted by name, instead of its ISO code; a
+  code Intl has no name for shows as it came (on Hermes, which lacks
+  `Intl.DisplayNames`, every code does).
 - A route dropped for a missing trustline names the asset it delivers ("Your
   Stellar wallet must trust ARS to receive it."), instead of always saying
   USDC.

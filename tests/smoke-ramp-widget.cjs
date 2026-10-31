@@ -1063,8 +1063,70 @@ async function mount(client, application = {}) {
     client.destroy();
   }
 
+  // --- Country names in the modal's language; the provider's `language` and `setLocale` switch an open widget ---
+  {
+    const ars = { kind: 'fiat', currency: 'ARS', rail: 'BANK_TRANSFER', country: 'AR' };
+    const { client } = fixtureClient({
+      getRampRoutes: async () => ({
+        routes: [
+          { fiat: bob, asset: usdc, legs: ['PROVIDER_ONRAMP'] },
+          { fiat: ars, asset: usdc, legs: ['PROVIDER_ONRAMP'] },
+        ],
+      }),
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const render = async (language, styles = {}) => {
+      await act(async () => {
+        root.render(
+          h(
+            PollarProvider,
+            {
+              client,
+              language,
+              appConfig: { application: { name: 'Fixture', network: 'mainnet', chains: ['STELLAR'] }, styles },
+            },
+            h(RampWidget, { onClose() {} }),
+          ),
+        );
+        await new Promise((r) => setTimeout(r, 20));
+      });
+    };
+    const options = () =>
+      [...container.querySelectorAll('#pollar-ramp-country option')].map((o) => o.textContent.replace(/^\S+\s/, ''));
+    const label = () => container.querySelector('label[for="pollar-ramp-country"]').textContent;
+
+    await render('en');
+    assert.deepEqual(options(), ['Argentina', 'Bolivia'], 'names, sorted by name');
+    assert.equal(container.querySelector('#pollar-ramp-country').value, 'BO', 'the default country stays the first route');
+    assert.equal(label(), 'Country');
+    await render('es-BO');
+    assert.deepEqual(options(), ['Argentina', 'Bolivia']);
+    assert.equal(label(), 'País', 'the open widget follows the new language prop');
+    await render('pt-BR');
+    assert.deepEqual(options(), ['Argentina', 'Bolívia']);
+
+    // A tag the modals lack is skipped: the client's locale, then the device (jsdom: en-US).
+    await render('fr');
+    assert.equal(label(), 'Country');
+    await act(async () => client.setLocale('es'));
+    assert.equal(label(), 'País', 'setLocale switches the open widget');
+    await act(async () => client.setLocale(undefined));
+    assert.equal(label(), 'Country');
+
+    // A language pinned in the dashboard wins over the prop.
+    await render('pt', { language: 'es' });
+    assert.deepEqual(options(), ['Argentina', 'Bolivia']);
+    assert.equal(label(), 'País');
+
+    await act(async () => root.unmount());
+    container.remove();
+    client.destroy();
+  }
+
   console.log(
-    'Ramp widget v3: route, quote, details, order, QR, Stellar and Solana wallet signing, verification step, trustline, wallet creation, no chains, resume, open orders, QR window, receive amount, approvals, retry, account approval resume, lapsed quotes, missing payment code, JPEG QR, provider KYC note, closed QR, hosted payment, 402 and openRampModal seeds passed.',
+    'Ramp widget v3: route, quote, details, order, QR, Stellar and Solana wallet signing, verification step, trustline, wallet creation, no chains, resume, open orders, QR window, receive amount, approvals, retry, account approval resume, lapsed quotes, missing payment code, JPEG QR, provider KYC note, closed QR, hosted payment, 402, openRampModal seeds, country names and a runtime language passed.',
   );
 })().catch((error) => {
   console.error(error);

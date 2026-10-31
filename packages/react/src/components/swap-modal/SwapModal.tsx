@@ -11,9 +11,23 @@ import './SwapModal.css';
 import { SWAP_COPY } from './swap-copy';
 import { SwapAssetOption, SwapChain, SwapModalTemplate, SwapQuoteView } from './SwapModalTemplate';
 import { modalChrome } from '../modal-theme';
+import { byCode, oneOf, seededAmount, useSuccessReport } from '../../modal-options';
+
+/** Where the swap modal opens: a starting point the user can change. An option the app does not offer is left out. */
+export interface SwapModalOptions {
+  chain?: SwapChain;
+  /** Code of the asset sold, e.g. 'XLM'. */
+  sell?: string;
+  /** Code of the asset bought, e.g. 'USDC'. */
+  buy?: string;
+  amount?: string;
+  /** Called once the swap lands, with its transaction hash. */
+  onSuccess?: (result: { hash: string }) => void;
+}
 
 interface SwapModalProps {
   onClose: () => void;
+  initial?: SwapModalOptions | undefined;
 }
 
 /** Debounce (ms) before re-quoting as the user edits the amount / assets. */
@@ -54,7 +68,7 @@ function catalogRef(code: string, issuer: string): SwapQuoteParams['sellAsset'] 
   return code.length <= 4 ? { type: 'credit_alphanum4', code, issuer } : { type: 'credit_alphanum12', code, issuer };
 }
 
-export function SwapModal({ onClose }: SwapModalProps) {
+export function SwapModal({ onClose, initial }: SwapModalProps) {
   const {
     getSwapConfig,
     getSwapTokens,
@@ -76,7 +90,10 @@ export function SwapModal({ onClose }: SwapModalProps) {
   const language = useModalLanguage();
   const copy = SWAP_COPY[language];
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;
-  const [chain, setChain] = useState<SwapChain>('STELLAR');
+  const [chain, setChain] = useState<SwapChain>(() => oneOf<SwapChain>(['STELLAR', 'SOLANA'], initial?.chain) ?? 'STELLAR');
+  // The asset options wait for a matching asset (catalog tokens load after the balances) until the user picks one.
+  const sellSeed = useRef(initial?.sell);
+  const buySeed = useRef(initial?.buy);
   // A smart (C-address) wallet is a Stellar account: it says nothing about Solana.
   const smartUnsupported = chain === 'STELLAR' && wallet?.custody === 'smart';
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
@@ -84,7 +101,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
   const [step, setStep] = useState<'form' | 'tx'>('form');
   const [selectedSell, setSelectedSell] = useState<SwapAssetOption | null>(null);
   const [selectedBuy, setSelectedBuy] = useState<SwapAssetOption | null>(null);
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(() => seededAmount(initial?.amount));
   const [provider, setProvider] = useState<string>('auto');
   const [venues, setVenues] = useState<SwapVenue[] | null>(null); // null = config loading
   const [solanaVenues, setSolanaVenues] = useState<SolanaSwapVenue[] | null>(null);
@@ -262,6 +279,12 @@ export function SwapModal({ onClose }: SwapModalProps) {
   // valid selection if the list changes - so the pickers never sit empty.
   useEffect(() => {
     if (sellOptions.length === 0) return;
+    const seeded = byCode(sellOptions, sellSeed.current);
+    if (seeded) {
+      sellSeed.current = undefined;
+      setSelectedSell(seeded);
+      return;
+    }
     if (!selectedSell || !sellOptions.some((o) => optKey(o) === optKey(selectedSell))) {
       setSelectedSell(sellOptions[0]!);
     }
@@ -269,6 +292,12 @@ export function SwapModal({ onClose }: SwapModalProps) {
 
   useEffect(() => {
     if (buyOptions.length === 0) return;
+    const seeded = byCode(buyOptions, buySeed.current);
+    if (seeded) {
+      buySeed.current = undefined;
+      setSelectedBuy(seeded);
+      return;
+    }
     if (!selectedBuy || !buyOptions.some((o) => optKey(o) === optKey(selectedBuy))) {
       setSelectedBuy(buyOptions[0]!);
     }
@@ -283,6 +312,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
     if (i.length !== 56 || !i.startsWith('G')) return copy.issuerFormat;
     const opt: SwapAssetOption = { ref: catalogRef(c, i), code: c, issuer: i, enabledInApp: false };
     setCustomTokens((prev) => (prev.some((o) => optKey(o) === optKey(opt)) ? prev : [...prev, opt]));
+    buySeed.current = undefined;
     setSelectedBuy(opt);
     return null;
   }
@@ -330,6 +360,8 @@ export function SwapModal({ onClose }: SwapModalProps) {
   }, [chains, chain]);
 
   function handleChainChange(next: SwapChain) {
+    sellSeed.current = undefined;
+    buySeed.current = undefined;
     setChain(next);
     setSelectedSell(null);
     setSelectedBuy(null);
@@ -413,6 +445,7 @@ export function SwapModal({ onClose }: SwapModalProps) {
   ]);
 
   const hash = transaction.step === 'success' ? transaction.hash : null;
+  useSuccessReport(transaction, step === 'tx', initial?.onSuccess);
   const buildData = 'buildData' in transaction ? transaction.buildData : null;
   const explorerNetwork = buildData?.summary.network?.toLowerCase().includes('testnet')
     ? 'testnet'
@@ -497,6 +530,8 @@ export function SwapModal({ onClose }: SwapModalProps) {
 
   function handleReverse() {
     if (!selectedSell || !selectedBuy) return;
+    sellSeed.current = undefined;
+    buySeed.current = undefined;
     const previousSell = selectedSell;
     setSelectedSell(selectedBuy);
     setSelectedBuy(previousSell);
@@ -557,8 +592,14 @@ export function SwapModal({ onClose }: SwapModalProps) {
         onClose={onClose}
         onBack={handleBack}
         onRefresh={handleRefresh}
-        onSelectSell={setSelectedSell}
-        onSelectBuy={setSelectedBuy}
+        onSelectSell={(option) => {
+          sellSeed.current = undefined;
+          setSelectedSell(option);
+        }}
+        onSelectBuy={(option) => {
+          buySeed.current = undefined;
+          setSelectedBuy(option);
+        }}
         onReverse={handleReverse}
         onMax={handleMax}
         onAddCustomToken={addCustomToken}

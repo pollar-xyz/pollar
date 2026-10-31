@@ -118,14 +118,15 @@ confirmation, co-sign, recovery, custody migration, KYC, ramp, card, transaction
 plus the Send, Receive, Swap, Earn, Sessions, enabled assets and distribution rules modals. You do not render the
 modals yourself.
 
-| Prop           | Type                     | Required | Description                                                                         |
-| -------------- | ------------------------ | -------- | ----------------------------------------------------------------------------------- |
-| `config`       | `PollarClientConfig`     | Yes      | Passed to `new PollarClient(config)`. A changed value replaces the client.          |
-| `appConfig`    | `PollarConfig`           | No       | An application config to use in place of the one read from the dashboard.           |
-| `styles`       | `PollarStyles`           | No       | Merged over the styles configured in the dashboard.                                 |
-| `adapters`     | `PollarAdapters`         | No       | Custom transaction builders, used with `createPollarAdapterHook(key)`.              |
-| `platform`     | `NativePlatformAdapters` | No       | `storage`, `visibilityProvider`, `openAuthUrl` and `copyText` (clipboard) adapters. |
-| `privyAdapter` | `InteractiveAuthAdapter` | No       | An interactive login adapter. Mount its native provider above `PollarProvider`.     |
+| Prop           | Type                     | Required | Description                                                                                                          |
+| -------------- | ------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------- |
+| `config`       | `PollarClientConfig`     | Yes      | Passed to `new PollarClient(config)`. A changed value replaces the client.                                           |
+| `language`     | `string`                 | No       | The modals' language, a BCP 47 tag. Followed on every render without replacing the client. See [Language](#language) |
+| `appConfig`    | `PollarConfig`           | No       | An application config to use in place of the one read from the dashboard.                                            |
+| `styles`       | `PollarStyles`           | No       | Merged over the styles configured in the dashboard.                                                                  |
+| `adapters`     | `PollarAdapters`         | No       | Custom transaction builders, used with `createPollarAdapterHook(key)`.                                               |
+| `platform`     | `NativePlatformAdapters` | No       | `storage`, `visibilityProvider`, `openAuthUrl` and `copyText` (clipboard) adapters.                                  |
+| `privyAdapter` | `InteractiveAuthAdapter` | No       | An interactive login adapter. Mount its native provider above `PollarProvider`.                                      |
 
 ## `usePollar()`
 
@@ -177,13 +178,14 @@ const {
   openLoginModal,
   openTxModal, // also as `openTransactionModal`
   openKycModal, // (options?: { country?, level?, onApproved? }) => void
-  openRampModal, // also as `openRampWidget`
+  openRampModal, // (options?: RampModalOptions) => void, also as `openRampWidget`
   openTxHistoryModal,
   openWalletBalanceModal,
-  openSendModal,
-  openReceiveModal,
-  openSwapModal,
-  openCardModal, // the card flow, for an app with a card provider
+  openSendModal, // (options?: SendModalOptions) => void
+  openReceiveModal, // (options?: ReceiveModalOptions) => void
+  openSwapModal, // (options?: SwapModalOptions) => void
+  openEarnModal, // (options?: EarnModalOptions) => void
+  openCardModal, // (options?: CardModalOptions) => void, the card flow, for an app with a card provider
   openRecoveryModal,
 } = usePollar();
 ```
@@ -191,6 +193,79 @@ const {
 `buildTx` opens the transaction modal automatically, and the user confirms from there. The context also carries the
 co-sign state (`cosign`, `openCosignModal`), the recovery state (`recovery`, `recoveryLocked`), the custody migration
 (`custodyMigration`) and the earn, distribution and session methods of `PollarClient`.
+
+### Modal options
+
+The ramp, send, receive, swap, earn and card openers take where their modal opens. The options are a starting point
+the user can change. An option that matches nothing the modal offers (a chain without a wallet, an asset code that is
+not listed, a provider the app lacks, an amount that is not a plain decimal such as `'100'` or `'12.5'`) is left out
+and that field opens on its default; nothing is thrown. An option whose data is still loading applies when it
+arrives. Each call starts over: opening again with other options, or with none, drops the earlier ones. Asset codes
+match without regard to case. Every options type is exported, and each modal component takes the same options as
+`initial` (`<RampWidget initial={...}>`, `<SendModal initial={...}>`).
+
+```ts
+openRampModal({ country: 'BR', direction: flow === 'withdraw' ? 'sell' : 'buy' });
+openSendModal({ asset: 'USDC', destination: 'G...', amount: '25', onSuccess: ({ hash }) => markPaid(hash) });
+openCardModal({ panel: 'fund', amount: '50' });
+```
+
+`RampModalOptions`
+
+| Option      | Type              | Description                                                          |
+| ----------- | ----------------- | -------------------------------------------------------------------- |
+| `direction` | `'buy' \| 'sell'` | Buy (on-ramp) or sell (off-ramp). Defaults to `'buy'`                |
+| `country`   | `string`          | ISO 3166-1 alpha-2, e.g. `'BR'`                                      |
+| `fiat`      | `string`          | Currency code, e.g. `'BRL'`. Defaults to the country's first fiat    |
+| `asset`     | `string`          | Asset code, e.g. `'USDC'`. Defaults to the first asset for that fiat |
+| `amount`    | `string`          | A plain decimal                                                      |
+
+A country that does not route in the requested direction opens on the default country, in that direction, without
+the fiat, asset or amount. An order the widget keeps from before wins: the widget opens on it and the options are
+dropped.
+
+`SendModalOptions`
+
+| Option        | Type                                 | Description                                                        |
+| ------------- | ------------------------------------ | ------------------------------------------------------------------ |
+| `chain`       | `WalletChain`                        | A chain the user holds a wallet on                                 |
+| `asset`       | `string`                             | Code of an asset enabled on that chain; the native asset otherwise |
+| `destination` | `string`                             | The address to send to                                             |
+| `amount`      | `string`                             | A plain decimal (base units on Solana and Polygon)                 |
+| `onSuccess`   | `(result: { hash: string }) => void` | Called once for each transaction the modal sends that lands        |
+
+`ReceiveModalOptions`
+
+| Option  | Type          | Description                        |
+| ------- | ------------- | ---------------------------------- |
+| `chain` | `WalletChain` | A chain the user holds a wallet on |
+
+`SwapModalOptions`
+
+| Option      | Type                                 | Description                                                 |
+| ----------- | ------------------------------------ | ----------------------------------------------------------- |
+| `sell`      | `string`                             | Code of the token to sell, e.g. `'XLM'`                     |
+| `buy`       | `string`                             | Code of the token to buy, e.g. `'USDC'`                     |
+| `amount`    | `string`                             | A plain decimal                                             |
+| `onSuccess` | `(result: { hash: string }) => void` | Called once for each transaction the modal sends that lands |
+
+`EarnModalOptions`
+
+| Option          | Type                                 | Description                                                    |
+| --------------- | ------------------------------------ | -------------------------------------------------------------- |
+| `provider`      | `EarnProviderId`                     | A provider the app enables, e.g. `'blend'`                     |
+| `opportunityId` | `string`                             | One of that provider's opportunities; its position is read too |
+| `amount`        | `string`                             | A plain decimal                                                |
+| `onSuccess`     | `(result: { hash: string }) => void` | Called once for each transaction the modal sends that lands    |
+
+`CardModalOptions`
+
+| Option     | Type                             | Description                                                                         |
+| ---------- | -------------------------------- | ----------------------------------------------------------------------------------- |
+| `panel`    | `'fund'`                         | Opens the funding panel once the user's card loads; a user without a card stays put |
+| `amount`   | `string`                         | A plain decimal                                                                     |
+| `chain`    | `CardFundingChain`               | A chain the user can fund the card from                                             |
+| `onFunded` | `(funding: CardFunding) => void` | Called with each funding the modal creates                                          |
 
 ### Login options
 
@@ -238,9 +313,15 @@ methods come from the dashboard and can be overridden with the `styles` prop.
 
 Every modal, template, `FeaturePanel`, `FeatureExample`, `AppShell` and `AccountOnboarding` shows English, Spanish or
 Portuguese. The language is the one the app pins in the dashboard (Branding > Language), else the modal's `language`
-prop (`<RampWidget>`, `<KycModal>` and the requirement step modals take one), else the client's `locale`
-(`{ apiKey, locale: 'pt-BR' }`, any BCP 47 tag), else the device language; English when none of them is one of the
-three. `AppShell`'s language toggle cycles through `en`, `es` and `pt`.
+prop (`<RampWidget>`, `<KycModal>` and the requirement step modals take one), else the `language` prop of
+`<PollarProvider>`, else the client's `locale` (`{ apiKey, locale: 'pt-BR' }`, or `client.setLocale(tag)` later, any
+BCP 47 tag), else the device language; English when none of them is one of the three. `AppShell`'s language toggle
+cycles through `en`, `es` and `pt`.
+
+An app whose language changes at runtime passes it as `<PollarProvider language={i18n.language}>`: open and later
+modals follow it without replacing the client, which a changed `config.locale` would do. The ramp widget names each
+country in the modal's language where the JS engine's `Intl.DisplayNames` has the name (Hermes has none, so the ISO
+code shows there).
 
 ## Requirement step modals
 

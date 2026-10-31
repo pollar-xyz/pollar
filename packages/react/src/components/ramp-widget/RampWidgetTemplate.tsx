@@ -85,6 +85,15 @@ function flagEmoji(code: string): string {
   return String.fromCodePoint(base + (cc.charCodeAt(0) - 65), base + (cc.charCodeAt(1) - 65));
 }
 
+/** A country's name in the modal's language; its code when Intl has no name for it. */
+function countryName(code: string, language: PollarLanguage): string {
+  try {
+    return new Intl.DisplayNames([language], { type: 'region' }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
 const CHAIN_NAME: Record<string, string> = { STELLAR: 'Stellar', POLYGON: 'Polygon', SOLANA: 'Solana' };
 
 /** The explorer transaction URL by chain; testnet is Solana devnet and Polygon Amoy. */
@@ -458,11 +467,14 @@ export function RampWidgetTemplate({
                   value={country}
                   onChange={(e) => onCountryChange(e.target.value)}
                 >
-                  {countries.map((c) => (
-                    <option key={c.country} value={c.country}>
-                      {flagEmoji(c.country)} {c.country}
-                    </option>
-                  ))}
+                  {countries
+                    .map((c) => ({ code: c.country, name: countryName(c.country, language) }))
+                    .sort((a, b) => a.name.localeCompare(b.name, language))
+                    .map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {flagEmoji(c.code)} {c.name}
+                      </option>
+                    ))}
                 </select>
               </div>
 

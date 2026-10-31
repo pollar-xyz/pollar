@@ -45,12 +45,12 @@ import { KycModal } from './components/kyc-modal/KycModal';
 import { AppKycFlow } from './components/kyc-modal/AppKycFlow';
 import { LoginModal } from './components/login-modal/LoginModal';
 import { RampWidget, type RampModalOptions } from './components/ramp-widget/RampWidget';
-import { ReceiveModal } from './components/receive-modal/ReceiveModal';
-import { SendModal } from './components/send-modal/SendModal';
-import { SwapModal } from './components/swap-modal/SwapModal';
+import { ReceiveModal, type ReceiveModalOptions } from './components/receive-modal/ReceiveModal';
+import { SendModal, type SendModalOptions } from './components/send-modal/SendModal';
+import { SwapModal, type SwapModalOptions } from './components/swap-modal/SwapModal';
 import { BridgeModal } from './components/bridge-modal/BridgeModal';
-import { EarnModal } from './components/earn-modal/EarnModal';
-import { CardModal } from './components/card-modal/CardModal';
+import { EarnModal, type EarnModalOptions } from './components/earn-modal/EarnModal';
+import { CardModal, type CardModalOptions } from './components/card-modal/CardModal';
 import { SessionsModal } from './components/sessions-modal/SessionsModal';
 import { CosignModal } from './components/cosign-modal/CosignModal';
 import { CustodyMigrationModal } from './components/custody-migration-modal/CustodyMigrationModal';
@@ -58,7 +58,8 @@ import { RecoveryModal } from './components/recovery-modal/RecoveryModal';
 import { ConfirmModal } from './components/confirm-modal/ConfirmModal';
 import type { CosignState, CustodyMigrationState, PendingConfirmation, RecoveryState } from '@pollar/core';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
-import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
+import { TxHistoryModal, type TxHistoryModalOptions } from './components/tx-history-modal/TxHistoryModal';
+import { useModalOptions } from './modal-options';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 import { browserPasskeyCeremony, browserPasskeySigner, browserRecoveryPasskey } from './lib/passkey-ceremony';
 import type { PollarConfig, PollarStyles } from './types';
@@ -254,12 +255,15 @@ interface PollarContextValue {
   openRampModal: (options?: RampModalOptions) => void;
   // tx history
   txHistory: TxHistoryState;
-  openTxHistoryModal: () => void;
+  /** Opens the history, on the network given; without options, on the app's first network. */
+  openTxHistoryModal: (options?: TxHistoryModalOptions) => void;
   // wallet balance modal
   openWalletBalanceModal: () => void;
   // send / receive
-  openSendModal: () => void;
-  openReceiveModal: () => void;
+  /** Opens the send modal, prefilled with the options given; `onSuccess` hears the payment land. */
+  openSendModal: (options?: SendModalOptions) => void;
+  /** Opens the receive modal, on the network given. */
+  openReceiveModal: (options?: ReceiveModalOptions) => void;
   // swap (DEX/AMM)
   /**
    * The swap venues this app exposes to end-users (empty = swap disabled, hide
@@ -288,7 +292,8 @@ interface PollarContextValue {
   /** Run a Solana swap from a quote. Drives the transaction state machine. Mirrors {@link PollarClient.swapSolana}. */
   swapSolana: (quote: SolanaSwapQuote, opts?: { slippageBps?: number }) => Promise<SubmitOutcome>;
   /** Open the swap modal. */
-  openSwapModal: () => void;
+  /** Opens the swap modal, on the network, assets and amount given; `onSuccess` hears the swap land. */
+  openSwapModal: (options?: SwapModalOptions) => void;
   /** Open the modal that moves USDC between the user's wallets on different networks (mainnet). */
   openBridgeModal: () => void;
   // earn (yield vaults / lending)
@@ -318,14 +323,16 @@ interface PollarContextValue {
    */
   earnWithdraw: (params: EarnTxParams) => Promise<SubmitOutcome>;
   /** Open the Earn modal. */
-  openEarnModal: () => void;
+  /** Opens the earn modal, on the provider, opportunity, tab and amount given; `onSuccess` hears the transaction land. */
+  openEarnModal: (options?: EarnModalOptions) => void;
   // cards
   /**
    * Open the Cards modal: sign-up, identity verification, issuing, the card
    * itself and its activity. The card calls live on {@link PollarClient}
    * (`getCardProviders`, `issueCard`, `revealCardSecrets`, ...).
    */
-  openCardModal: () => void;
+  /** Opens the card modal, on its funding panel when asked; `onFunded` hears each funding sent. */
+  openCardModal: (options?: CardModalOptions) => void;
   // distribution
   openDistributionRulesModal: () => void;
   // adapters
@@ -349,6 +356,14 @@ interface PollarProviderProps {
    * always kept.
    */
   client: PollarClient | PollarClientConfig;
+  /**
+   * Language of the modals, a BCP 47 tag such as `'es'` or `'pt-BR'`: typically
+   * the app's current language. Unlike `client`, it is followed on every render,
+   * so open modals switch when it changes. It wins over the client's `locale`; a
+   * language pinned in the dashboard wins over it, and a tag the modals have no
+   * translation for is skipped.
+   */
+  language?: string | undefined;
   /**
    * Local REPLACEMENT for the `/applications/config` response, not a patch over
    * it. Passing anything at all skips the remote fetch entirely; what you pass
@@ -421,6 +436,7 @@ const clientByConfig = new WeakMap<PollarClientConfig, PollarClient>();
 
 export function PollarProvider({
   client,
+  language,
   appConfig: appConfigProp,
   adapters,
   onStorageDegrade,
@@ -665,10 +681,14 @@ export function PollarProvider({
     onApproved?: () => void;
   }>({});
   const [rampModalOpen, setRampModalOpen] = useState(false);
-  const [rampModalOptions, setRampModalOptions] = useState<RampModalOptions | undefined>(undefined);
-  // Remounts the widget when it opens on other options, or on none after some, so no earlier seed stays.
-  const [rampModalKey, setRampModalKey] = useState(0);
-  const rampModalSeeded = useRef(false);
+  const [rampSeed, seedRamp] = useModalOptions<RampModalOptions>();
+  const [receiveSeed, seedReceive] = useModalOptions<ReceiveModalOptions>();
+  const [txHistorySeed, seedTxHistory] = useModalOptions<TxHistoryModalOptions>();
+  // The transaction modals remount on every opening already; these carry what each opened on.
+  const [sendModalOptions, setSendModalOptions] = useState<SendModalOptions | undefined>(undefined);
+  const [swapModalOptions, setSwapModalOptions] = useState<SwapModalOptions | undefined>(undefined);
+  const [earnModalOptions, setEarnModalOptions] = useState<EarnModalOptions | undefined>(undefined);
+  const [cardModalOptions, setCardModalOptions] = useState<CardModalOptions | undefined>(undefined);
   const [txHistoryModalOpen, setTxHistoryModalOpen] = useState(false);
   const [walletBalanceModalOpen, setWalletBalanceModalOpen] = useState(false);
   const [enabledAssetsModalOpen, setEnabledAssetsModalOpen] = useState(false);
@@ -829,7 +849,10 @@ export function PollarProvider({
       openTxModal: () => setTransactionModalOpen(true),
       // tx history
       txHistory,
-      openTxHistoryModal: () => setTxHistoryModalOpen(true),
+      openTxHistoryModal: (options?: TxHistoryModalOptions) => {
+        seedTxHistory(options);
+        setTxHistoryModalOpen(true);
+      },
       // wallet balance
       walletBalance,
       refreshWalletBalance,
@@ -840,12 +863,16 @@ export function PollarProvider({
       setTrustline: (asset, opts) => pollarClient.setTrustline(asset, opts),
       openEnabledAssetsModal: () => setEnabledAssetsModalOpen(true),
       // send / receive
-      openSendModal: () => {
+      openSendModal: (options?: SendModalOptions) => {
+        setSendModalOptions(options);
         pollarClient.resetTransactionState();
         setSendModalKey((k) => k + 1);
         setSendModalOpen(true);
       },
-      openReceiveModal: () => setReceiveModalOpen(true),
+      openReceiveModal: (options?: ReceiveModalOptions) => {
+        seedReceive(options);
+        setReceiveModalOpen(true);
+      },
       // swap
       getSwapConfig: () => pollarClient.getSwapConfig(),
       getSwapTokens: () => pollarClient.getSwapTokens(),
@@ -854,7 +881,8 @@ export function PollarProvider({
       getSolanaSwapConfig: () => pollarClient.getSolanaSwapConfig(),
       getSolanaSwapQuote: (params) => pollarClient.getSolanaSwapQuote(params),
       swapSolana: (quote, opts) => pollarClient.swapSolana(quote, opts),
-      openSwapModal: () => {
+      openSwapModal: (options?: SwapModalOptions) => {
+        setSwapModalOptions(options);
         pollarClient.resetTransactionState();
         setSwapModalKey((k) => k + 1);
         setSwapModalOpen(true);
@@ -869,13 +897,15 @@ export function PollarProvider({
       getEarnPosition: (params) => pollarClient.getEarnPosition(params),
       earnDeposit: (params) => pollarClient.earnDeposit(params),
       earnWithdraw: (params) => pollarClient.earnWithdraw(params),
-      openEarnModal: () => {
+      openEarnModal: (options?: EarnModalOptions) => {
+        setEarnModalOptions(options);
         pollarClient.resetTransactionState();
         setEarnModalKey((k) => k + 1);
         setEarnModalOpen(true);
       },
       // cards
-      openCardModal: () => {
+      openCardModal: (options?: CardModalOptions) => {
+        setCardModalOptions(options);
         setCardModalKey((k) => k + 1);
         setCardModalOpen(true);
       },
@@ -905,10 +935,7 @@ export function PollarProvider({
       },
       // ramp
       openRampModal: (options?: RampModalOptions) => {
-        const seeded = options !== undefined && Object.keys(options).length > 0;
-        if (seeded || rampModalSeeded.current) setRampModalKey((k) => k + 1);
-        rampModalSeeded.current = seeded;
-        setRampModalOptions(seeded ? options : undefined);
+        seedRamp(options);
         setRampModalOpen(true);
       },
       // config
@@ -947,7 +974,7 @@ export function PollarProvider({
     adapters,
   ]);
 
-  const modalLanguage = useProviderLanguage(pollarClient, contextValue.styles?.language);
+  const modalLanguage = useProviderLanguage(pollarClient, contextValue.styles?.language, language);
 
   return (
     <PollarContext.Provider value={contextValue}>
@@ -986,13 +1013,13 @@ export function PollarProvider({
           </ModalErrorBoundary>
         )}
         {rampModalOpen && (
-          <ModalErrorBoundary key={rampModalKey} onClose={() => setRampModalOpen(false)}>
-            <RampWidget onClose={() => setRampModalOpen(false)} initial={rampModalOptions} />
+          <ModalErrorBoundary key={`ramp:${rampSeed.key}`} onClose={() => setRampModalOpen(false)}>
+            <RampWidget onClose={() => setRampModalOpen(false)} initial={rampSeed.options} />
           </ModalErrorBoundary>
         )}
         {txHistoryModalOpen && (
-          <ModalErrorBoundary onClose={() => setTxHistoryModalOpen(false)}>
-            <TxHistoryModal onClose={() => setTxHistoryModalOpen(false)} />
+          <ModalErrorBoundary key={`history:${txHistorySeed.key}`} onClose={() => setTxHistoryModalOpen(false)}>
+            <TxHistoryModal onClose={() => setTxHistoryModalOpen(false)} initial={txHistorySeed.options} />
           </ModalErrorBoundary>
         )}
         {walletBalanceModalOpen && (
@@ -1007,12 +1034,12 @@ export function PollarProvider({
         )}
         {sendModalOpen && (
           <ModalErrorBoundary key={sendModalKey} onClose={() => setSendModalOpen(false)}>
-            <SendModal onClose={() => setSendModalOpen(false)} />
+            <SendModal onClose={() => setSendModalOpen(false)} initial={sendModalOptions} />
           </ModalErrorBoundary>
         )}
         {swapModalOpen && (
           <ModalErrorBoundary key={swapModalKey} onClose={() => setSwapModalOpen(false)}>
-            <SwapModal onClose={() => setSwapModalOpen(false)} />
+            <SwapModal onClose={() => setSwapModalOpen(false)} initial={swapModalOptions} />
           </ModalErrorBoundary>
         )}
         {bridgeModalOpen && (
@@ -1022,18 +1049,18 @@ export function PollarProvider({
         )}
         {earnModalOpen && (
           <ModalErrorBoundary key={earnModalKey} onClose={() => setEarnModalOpen(false)}>
-            <EarnModal onClose={() => setEarnModalOpen(false)} />
+            <EarnModal onClose={() => setEarnModalOpen(false)} initial={earnModalOptions} />
           </ModalErrorBoundary>
         )}
         {cardModalOpen && (
           // Keyed by the wallet too: a different user, or signing in with it open, starts it from scratch.
           <ModalErrorBoundary key={`${cardModalKey}:${walletAddress}`} onClose={() => setCardModalOpen(false)}>
-            <CardModal onClose={() => setCardModalOpen(false)} />
+            <CardModal onClose={() => setCardModalOpen(false)} initial={cardModalOptions} />
           </ModalErrorBoundary>
         )}
         {receiveModalOpen && (
-          <ModalErrorBoundary onClose={() => setReceiveModalOpen(false)}>
-            <ReceiveModal onClose={() => setReceiveModalOpen(false)} />
+          <ModalErrorBoundary key={`receive:${receiveSeed.key}`} onClose={() => setReceiveModalOpen(false)}>
+            <ReceiveModal onClose={() => setReceiveModalOpen(false)} initial={receiveSeed.options} />
           </ModalErrorBoundary>
         )}
         {sessionsModalOpen && (

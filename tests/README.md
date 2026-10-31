@@ -35,8 +35,9 @@ node tests/smoke-session-races.cjs
 `smoke-lifecycle` (with `--expose-gc`), `smoke-invariants`, `smoke-cross-document`,
 `smoke-react`, `smoke-card-secrets`, `smoke-card-stage`, `smoke-registration-fix`,
 `smoke-form-fields`, `smoke-kyc`, `smoke-kyc-modal`, `smoke-email-code-input`,
-`smoke-rn-kyc`, `smoke-rn-ramp`, `smoke-ramp-chain-types`, `smoke-ramp-client`,
-`smoke-ramp-stellar-signing`, `smoke-ramp-widget`, `smoke-custom-ramp`, the
+`smoke-rn-kyc`, `smoke-rn-ramp`, `smoke-rn-modal-options`, `smoke-ramp-chain-types`,
+`smoke-ramp-client`, `smoke-ramp-stellar-signing`, `smoke-ramp-widget`,
+`smoke-modal-options`, `smoke-custom-ramp`, the
 `test:custom-ramp-example` type check, `smoke-migrate` and `check-comment-ascii`.
 
 ## What each file covers
@@ -390,14 +391,30 @@ and core does not.
 #### `smoke-ramp-widget.cjs`
 
 The React RampWidget: route, quote, the fields a quote asks for, the order with
-its QR, an explicit Authorize, resuming a pending order, and an app out of
-credits.
+its QR, an explicit Authorize, resuming a pending order, an app out of credits,
+the options `openRampModal` takes, country names in the modal's language, and a
+language that changes at runtime.
+
+#### `smoke-modal-options.cjs`
+
+The options the React `open*Modal` actions take, through the real provider: the
+send, swap, earn, receive, history and card modals open on them, an option the
+app or wallet cannot use falls back to the default, opening on none after some
+leaves nothing behind, a swap token that loads late is still picked, and
+`onSuccess` / `onFunded` hear the outcome once.
 
 #### `smoke-rn-ramp.cjs`
 
 The React Native RampWidget with `react-native` mocked as plain components:
 route, quote, the fields a quote asks for, the order, its payment code, an
-explicit signature, and the order kept while closed.
+explicit signature, the order kept while closed, the options `openRampModal`
+takes, country names, and the provider's runtime language.
+
+#### `smoke-rn-modal-options.cjs`
+
+The options the React Native `open*Modal` actions take: the send, swap, earn,
+receive and card panels open on them, an option the wallet cannot use falls back
+to the default, and `onSuccess` / `onFunded` hear the outcome once.
 
 #### `smoke-custom-ramp.cjs` and `test:custom-ramp-example`
 

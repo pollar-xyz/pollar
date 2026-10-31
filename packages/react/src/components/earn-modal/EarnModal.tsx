@@ -15,9 +15,22 @@ import '../send-modal/SendModal.css';
 import '../swap-modal/SwapModal.css';
 import './EarnModal.css';
 import { EARN_COPY } from './earn-copy';
+import { oneOf, seededAmount, useSuccessReport } from '../../modal-options';
+
+/** Where the earn modal opens: a starting point the user can change. An option the app does not offer is left out. */
+export interface EarnModalOptions {
+  provider?: EarnProviderId;
+  /** The vault or pool, as `getEarnOpportunities` names it. */
+  opportunityId?: string;
+  tab?: 'deposit' | 'withdraw';
+  amount?: string;
+  /** Called once the deposit or withdrawal lands, with its transaction hash. */
+  onSuccess?: (result: { hash: string }) => void;
+}
 
 interface EarnModalProps {
   onClose: () => void;
+  initial?: EarnModalOptions | undefined;
 }
 
 /** Poll interval (ms) for the live position + APY. */
@@ -42,7 +55,7 @@ function formatAmount(value: string): string {
   return isNaN(n) ? value : n.toLocaleString(undefined, { maximumFractionDigits: 7 });
 }
 
-export function EarnModal({ onClose }: EarnModalProps) {
+export function EarnModal({ onClose, initial }: EarnModalProps) {
   const {
     getEarnProviders,
     getEarnOpportunities,
@@ -65,13 +78,16 @@ export function EarnModal({ onClose }: EarnModalProps) {
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<'form' | 'tx'>('form');
-  const [tab, setTab] = useState<'deposit' | 'withdraw'>('deposit');
+  const [tab, setTab] = useState<'deposit' | 'withdraw'>(
+    () => oneOf<'deposit' | 'withdraw'>(['deposit', 'withdraw'], initial?.tab) ?? 'deposit',
+  );
   const [providers, setProviders] = useState<EarnProviderId[] | null>(null); // null = loading
   const [provider, setProvider] = useState<EarnProviderId | null>(null);
   const [opportunities, setOpportunities] = useState<EarnOpportunity[]>([]);
-  const [opportunityId, setOpportunityId] = useState('');
+  // The opportunity option is kept when the provider's list has it, like a choice the user made.
+  const [opportunityId, setOpportunityId] = useState(() => initial?.opportunityId ?? '');
   const [position, setPosition] = useState<EarnPosition | null>(null);
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(() => seededAmount(initial?.amount));
   const [loadingOpps, setLoadingOpps] = useState(false);
   const [formError, setFormError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -85,10 +101,10 @@ export function EarnModal({ onClose }: EarnModalProps) {
     return getEarnProviders()
       .then((ps) => {
         setProviders(ps);
-        setProvider((cur) => cur ?? ps[0] ?? null);
+        setProvider((cur) => cur ?? oneOf(ps, initial?.provider) ?? ps[0] ?? null);
       })
       .catch(() => setProviders([]));
-  }, [getEarnProviders]);
+  }, [getEarnProviders, initial?.provider]);
 
   useEffect(() => {
     void loadProviders();
@@ -183,6 +199,7 @@ export function EarnModal({ onClose }: EarnModalProps) {
     tab === 'deposit' && !smartUnsupported && !!selectedOpportunity?.asset.issuer && !depositAssetRecord?.trustlineEstablished;
 
   const hash = transaction.step === 'success' ? transaction.hash : null;
+  useSuccessReport(transaction, step === 'tx', initial?.onSuccess);
   const buildData = 'buildData' in transaction ? transaction.buildData : null;
   const explorerNetwork = buildData?.summary.network?.toLowerCase().includes('testnet')
     ? 'testnet'

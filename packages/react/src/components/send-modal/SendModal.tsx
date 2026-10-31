@@ -6,6 +6,7 @@ import { usePollar } from '../../context';
 import { useModalLanguage } from '../../language';
 import { walletNotReadyReason } from '../../lib/wallet-provisioning';
 import { useChains } from '../../useChains';
+import { byCode, oneOf, seededAmount, useSuccessReport } from '../../modal-options';
 import { resolveChain } from '../ChainSelect';
 import '../shared.css';
 import '../transaction-modal/TransactionModal.css';
@@ -14,8 +15,22 @@ import { SEND_COPY } from './send-copy';
 import { SendModalTemplate, type SendMemoType } from './SendModalTemplate';
 import { modalChrome } from '../modal-theme';
 
+/** Where the send modal opens: a starting point the user can change. An option the wallet cannot use is left out. */
+export interface SendModalOptions {
+  chain?: WalletChain;
+  /** Asset code, e.g. 'USDC'. */
+  asset?: string;
+  destination?: string;
+  amount?: string;
+  memo?: string;
+  memoType?: SendMemoType;
+  /** Called once the payment lands, with its transaction hash. */
+  onSuccess?: (result: { hash: string }) => void;
+}
+
 interface SendModalProps {
   onClose: () => void;
+  initial?: SendModalOptions | undefined;
 }
 
 const MAX_MEMO_ID = 18446744073709551615n;
@@ -62,7 +77,7 @@ function assetParam(record: WalletBalanceRecord) {
   return { type: 'credit_alphanum12' as const, code: record.code, issuer: record.issuer! };
 }
 
-export function SendModal({ onClose }: SendModalProps) {
+export function SendModal({ onClose, initial }: SendModalProps) {
   const {
     walletBalance,
     refreshWalletBalance,
@@ -86,10 +101,14 @@ export function SendModal({ onClose }: SendModalProps) {
   // The destination had no Stellar account, so the tx being built creates it.
   const [createsAccount, setCreatesAccount] = useState(false);
   const [checkingDestination, setCheckingDestination] = useState(false);
-  const [amount, setAmount] = useState('');
-  const [destination, setDestination] = useState('');
-  const [memo, setMemo] = useState('');
-  const [memoType, setMemoType] = useState<SendMemoType>('text');
+  const [amount, setAmount] = useState(() => seededAmount(initial?.amount));
+  const [destination, setDestination] = useState(() => initial?.destination?.trim() ?? '');
+  const [memo, setMemo] = useState(() => initial?.memo ?? '');
+  const [memoType, setMemoType] = useState<SendMemoType>(
+    () => oneOf<SendMemoType>(['text', 'id', 'hash'], initial?.memoType) ?? 'text',
+  );
+  // The asset option, used on the first pick only: a network the user switches to starts on its first asset.
+  const assetSeed = useRef(initial?.asset);
   const [selectedAsset, setSelectedAsset] = useState<WalletBalanceRecord | null>(null);
   const [showXdr, setShowXdr] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -101,8 +120,8 @@ export function SendModal({ onClose }: SendModalProps) {
   // Default to the app's first configured network. Runs as an effect because
   // `wallets` is empty on the first render of a cold-start session.
   useEffect(() => {
-    if (selectedChain === null && chains.length > 0) setSelectedChain(chains[0]!);
-  }, [chains, selectedChain]);
+    if (selectedChain === null && chains.length > 0) setSelectedChain(oneOf(chains, initial?.chain) ?? chains[0]!);
+  }, [chains, selectedChain, initial?.chain]);
 
   const canSendOnChain = selectedChain === 'STELLAR' || selectedChain === 'SOLANA' || selectedChain === 'POLYGON';
   // A Stellar account still being created cannot source a payment: every
@@ -148,10 +167,14 @@ export function SendModal({ onClose }: SendModalProps) {
       setSelectedAsset(sortedAssets[0] ?? null);
       return;
     }
-    if (!selectedAsset && sortedAssets.length > 0) setSelectedAsset(sortedAssets[0]!);
+    if (!selectedAsset && sortedAssets.length > 0) {
+      setSelectedAsset(byCode(sortedAssets, assetSeed.current) ?? sortedAssets[0]!);
+      assetSeed.current = undefined;
+    }
   }, [sortedAssets, selectedAsset, selectedChain]);
 
   const hash = transaction.step === 'success' ? transaction.hash : null;
+  useSuccessReport(transaction, step === 'tx', initial?.onSuccess);
   const buildData = 'buildData' in transaction ? transaction.buildData : null;
   const explorerNetwork = buildData?.summary.network?.toLowerCase().includes('testnet')
     ? 'testnet'

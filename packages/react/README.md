@@ -13,7 +13,10 @@ Stellar and Solana applications.
 > offers a network picker when the user holds a wallet on Stellar and Solana, and funds the card from a co-signed
 > wallet too. The email code input takes an autofilled one-time code. The ramp widget says a route's minimum or
 > maximum and offers "Change amount", and an order whose price changed before anything moved offers "Get a new quote".
-> `openRampModal(options)` opens the ramp widget on a direction, country, fiat, asset and amount.
+> `openRampModal(options)` opens the ramp widget on a direction, country, fiat, asset and amount; the send, swap, earn,
+> receive, history and card modals take options too, with `onSuccess` / `onFunded` callbacks.
+> `<PollarProvider language>` and `client.setLocale()` switch the modals' language at runtime, open ones included. The
+> ramp widget names each country in the modal's language.
 > A hook built with `createPollarAdapterHook` signs the auth entry an adapter answers with, without submitting
 > anything, and hands it to the adapter's `complete`.
 >
@@ -109,6 +112,7 @@ Context provider that initialises the Pollar client and makes it available to ch
 | Prop               | Type                                 | Required | Description                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ------------------ | ------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `client`           | `PollarClient \| PollarClientConfig` | Yes      | Either a pre-built `PollarClient` (testing, reuse outside React) or a `PollarClientConfig` the provider will construct one from. **Locked at first render** - swapping after mount is ignored                                                                                                                                                                                                                                  |
+| `language`         | `string`                             | No       | The modals' language, a BCP 47 tag (`'es'`, `'pt-BR'`): typically the app's current language. Followed on every render, so open modals switch when it changes. See [Language](#language)                                                                                                                                                                                                                                       |
 | `appConfig`        | `PollarConfig`                       | No       | Local replacement for `/applications/config`, used verbatim and never merged with the server's answer. **Presence is the opt-out switch**: pass it and the remote fetch is skipped. Omit it to fetch the config on mount, which keeps branding, login methods and chains current. Unlike `client`, it can be added or swapped after mount - the context re-applies it (compared by value, so an inline object literal is fine) |
 | `adapters`         | `PollarAdapters`                     | No       | Named set of `PollarAdapter` objects (e.g. Trustless Work). See [Custom adapters](#custom-adapters)                                                                                                                                                                                                                                                                                                                            |
 | `onStorageDegrade` | `OnStorageDegrade`                   | No       | Called once when persistent storage falls back to in-memory mode (Safari private browsing, sandboxed iframes), so the session will not survive a reload                                                                                                                                                                                                                                                                        |
@@ -175,7 +179,7 @@ const {
 
   // Transaction history
   txHistory, // TxHistoryState
-  openTxHistoryModal, // () => void
+  openTxHistoryModal, // (options?: TxHistoryModalOptions) => void
 
   // Wallet balance
   walletBalance, // WalletBalanceState
@@ -196,7 +200,7 @@ const {
   getSolanaSwapConfig, // () => Promise<SolanaSwapVenue[]>  (Jupiter, Titan; mainnet)
   getSolanaSwapQuote, // (params: SolanaSwapQuoteParams) => Promise<SolanaSwapQuote[]>
   swapSolana, // (quote: SolanaSwapQuote, opts?: { slippageBps? }) => Promise<SubmitOutcome>
-  openSwapModal, // () => void
+  openSwapModal, // (options?: SwapModalOptions) => void
 
   // Earn (yield vaults + lending - DeFindex + Blend)
   getEarnProviders, // () => Promise<EarnProviderId[]>  ([] means Earn is disabled)
@@ -204,17 +208,17 @@ const {
   getEarnPosition, // (params: EarnPositionParams) => Promise<EarnPosition>
   earnDeposit, // (params: EarnTxParams) => Promise<SubmitOutcome>
   earnWithdraw, // (params: EarnTxParams) => Promise<SubmitOutcome>
-  openEarnModal, // () => void
+  openEarnModal, // (options?: EarnModalOptions) => void
 
   // Cards (the card calls live on getClient(): getCardProviders, issueCard, fundCard, ...)
-  openCardModal, // () => void
+  openCardModal, // (options?: CardModalOptions) => void
 
   // Distribution rules
   openDistributionRulesModal, // () => void
 
   // Send / Receive
-  openSendModal, // () => void
-  openReceiveModal, // () => void
+  openSendModal, // (options?: SendModalOptions) => void
+  openReceiveModal, // (options?: ReceiveModalOptions) => void
 
   // Network
   network, // StellarNetwork - 'mainnet' | 'testnet'
@@ -262,6 +266,35 @@ A country that does not route in the requested direction, or that the app does n
 country, without the fiat, asset or amount; a fiat or asset the country does not offer opens on the country's first one.
 Nothing is thrown. The options wait for the routes when they are still loading. Each call starts over: opening again
 with other options, or with none, drops the earlier ones. `<RampWidget initial={options}>` takes the same options.
+
+#### Modal options
+
+The other `open*Modal` actions take options the same way: the modal opens on them and the user can still change each
+one. An option the app or wallet cannot use (a network the app does not offer, an asset the wallet does not hold, a
+provider that is not enabled, an amount that is not a plain decimal) is left out and that field opens on its default;
+nothing is thrown. An option whose data is still loading is applied when it arrives. Each call starts over: opening
+again with other options, or with none, drops the earlier ones. Every type is exported from `@pollar/react`, and each
+modal takes the same options as its `initial` prop.
+
+```ts
+openSendModal({ asset: 'USDC', destination: 'G...', amount: '25', memo: 'order-1042', onSuccess: ({ hash }) => save(hash) });
+openSwapModal({ sell: 'XLM', buy: 'USDC', amount: '100' });
+openEarnModal({ provider: 'blend', tab: 'withdraw' });
+openReceiveModal({ chain: 'SOLANA' });
+openCardModal({ panel: 'fund', amount: '50', onFunded: (funding) => track(funding.id) });
+```
+
+| Action               | Options                                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `openSendModal`      | `chain`, `asset` (code), `destination`, `amount`, `memo`, `memoType` (`'text' \| 'id' \| 'hash'`), `onSuccess({ hash })` |
+| `openSwapModal`      | `chain` (`'STELLAR' \| 'SOLANA'`), `sell` (code), `buy` (code), `amount`, `onSuccess({ hash })`                          |
+| `openEarnModal`      | `provider`, `opportunityId`, `tab` (`'deposit' \| 'withdraw'`), `amount`, `onSuccess({ hash })`                          |
+| `openReceiveModal`   | `chain`                                                                                                                  |
+| `openTxHistoryModal` | `chain`                                                                                                                  |
+| `openCardModal`      | `panel: 'fund'` (opens the funding panel once the user's card loads), `amount`, `chain`, `onFunded(funding)`             |
+
+`onSuccess` is called once per transaction that lands while the modal is open; `onFunded` with each funding the user
+sends from the card modal. A Solana or Polygon send takes `amount` in the asset's decimals, as the form shows it.
 
 #### Login options
 
@@ -340,13 +373,23 @@ session still carries it.
 ### Language
 
 Every modal, shared block (footer, copy button, amount field, pickers) and exported template speaks English (`en`),
-Spanish (`es`) and Portuguese (`pt`). The provider picks the language once, in this order:
+Spanish (`es`) and Portuguese (`pt`). The language is, in this order:
 
 1. The language the app pins in the dashboard (Branding > Language, served as `styles.language`).
 2. The `language` prop of `<RampWidget>`, `<KycModal>`, `<RequirementFormModal>`, `<RegistryCheckModal>` or
    `<ProviderRegistrationModal>`, a BCP 47 tag.
-3. The client's `locale` (`client={{ apiKey, locale: 'pt-BR' }}`), any BCP 47 tag.
-4. The browser language.
+3. The `language` prop of `<PollarProvider>`, a BCP 47 tag.
+4. The client's `locale` (`client={{ apiKey, locale: 'pt-BR' }}`, or `client.setLocale(tag)` later), any BCP 47 tag.
+5. The browser language.
+
+An app whose language changes at runtime passes it to the provider, and every open or later modal follows it without
+remounting anything:
+
+```tsx
+<PollarProvider client={{ apiKey }} language={i18n.language}>
+```
+
+`getClient().setLocale(tag)` does the same from outside React; `config.locale` is the starting value.
 
 A tag the modals have no translation for is skipped, and English is the fallback. Every exported template takes a
 `language` prop (`PollarLanguage` from `@pollar/core`: `'en' | 'es' | 'pt'`); a template rendered inside the provider

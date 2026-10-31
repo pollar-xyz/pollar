@@ -3,6 +3,7 @@
 // Run with `npm test` in packages/core (or `npm run test:unit` at the root).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { PollarClient } from '../src/index';
 import { languageFromTag, localizedText, resolveLanguage } from '../src/lib/language';
 
 test('a BCP 47 tag maps to a modal language by its base', () => {
@@ -27,4 +28,20 @@ test('a missing translation falls back: pt to es, then en', () => {
   assert.equal(localizedText({ en: 'City' }, 'pt'), 'City');
   assert.equal(localizedText({ es: 'Ciudad', pt: 'Cidade' }, 'en'), 'Ciudad');
   assert.equal(localizedText(undefined, 'es'), '');
+});
+
+test('setLocale changes the locale and tells the subscribers once per change', () => {
+  const client = new PollarClient({ apiKey: 'pub_testnet_probe', locale: 'es', logLevel: 'silent' });
+  const seen: Array<string | undefined> = [];
+  const unsubscribe = client.onLocaleChange((locale) => seen.push(locale));
+  assert.equal(client.getLocale(), 'es', 'config.locale is the starting value');
+  client.setLocale('pt-BR');
+  client.setLocale('pt-BR');
+  client.setLocale(undefined);
+  assert.deepEqual(seen, ['pt-BR', undefined], 'no replay on subscribe, nothing for an unchanged value');
+  unsubscribe();
+  client.setLocale('en');
+  assert.deepEqual(seen, ['pt-BR', undefined]);
+  assert.equal(client.getLocale(), 'en');
+  client.destroy();
 });

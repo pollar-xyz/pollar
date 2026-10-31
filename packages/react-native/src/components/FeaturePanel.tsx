@@ -66,6 +66,74 @@ export function AssetSelect({
 export const assetKey = (asset: { chain?: WalletChain; code: string; issuer?: string }) =>
   [asset.chain ?? 'STELLAR', asset.code, asset.issuer ?? 'native'].join(':');
 
+/** Where the send modal opens: a starting point the user can change, never a lock. */
+export interface SendModalOptions {
+  chain?: WalletChain;
+  /** Asset code, e.g. 'USDC'; the native asset when left out or not enabled on that chain. */
+  asset?: string;
+  destination?: string;
+  amount?: string;
+  /** Called once per transaction the modal sends that lands. */
+  onSuccess?: (result: { hash: string }) => void;
+}
+
+/** Where the swap modal opens. */
+export interface SwapModalOptions {
+  /** Asset codes, e.g. 'XLM' and 'USDC'. */
+  sell?: string;
+  buy?: string;
+  amount?: string;
+  onSuccess?: (result: { hash: string }) => void;
+}
+
+/** Where the earn modal opens. */
+export interface EarnModalOptions {
+  provider?: EarnProviderId;
+  opportunityId?: string;
+  amount?: string;
+  onSuccess?: (result: { hash: string }) => void;
+}
+
+/** Where the receive modal opens. */
+export interface ReceiveModalOptions {
+  chain?: WalletChain;
+}
+
+/** The options a feature panel opens on, by feature. */
+export interface FeatureInitial {
+  send?: SendModalOptions;
+  receive?: ReceiveModalOptions;
+  swap?: SwapModalOptions;
+  earn?: EarnModalOptions;
+}
+
+const DECIMAL = /^\d+(\.\d+)?$/;
+/** A seeded amount, or '' when it is not a plain decimal. */
+const seededAmount = (amount: string | undefined) => (DECIMAL.test(amount?.trim() ?? '') ? amount!.trim() : '');
+const sameCode = (code: string, wanted: string | undefined) =>
+  wanted !== undefined && code.toUpperCase() === wanted.trim().toUpperCase();
+
+/**
+ * Calls `onSuccess` once for each transaction this panel started that reaches
+ * `success`, including one that was still pending when its call returned.
+ * `arm()` marks the start of such a transaction.
+ */
+function useSuccessCallback(onSuccess: ((result: { hash: string }) => void) | undefined) {
+  const p = usePollar();
+  const armed = useRef(false);
+  const reported = useRef(new Set<string>());
+  const hash = p.tx.step === 'success' ? p.tx.hash : null;
+  useEffect(() => {
+    if (!armed.current || !hash || reported.current.has(hash)) return;
+    reported.current.add(hash);
+    armed.current = false;
+    onSuccess?.({ hash });
+  }, [hash, onSuccess]);
+  return () => {
+    armed.current = true;
+  };
+}
+
 export function AuthPanel() {
   const p = usePollar();
   const copy = FEATURE_COPY[useModalLanguage()];
@@ -231,11 +299,12 @@ export function WalletPanel() {
     </Card>
   );
 }
-export function ReceivePanel() {
+export function ReceivePanel({ initial }: { initial?: ReceiveModalOptions | undefined }) {
   const p = usePollar();
   const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
-  const [chain, setChain] = useState<WalletChain>('STELLAR');
+  const seededChain = p.wallets.some((w) => (w.chain ?? 'STELLAR') === initial?.chain) ? initial?.chain : undefined;
+  const [chain, setChain] = useState<WalletChain>(seededChain ?? 'STELLAR');
   const address = p.wallets.find((w) => (w.chain ?? 'STELLAR') === chain)?.address;
   return (
     <Card title={copy.receive.title}>
@@ -269,20 +338,30 @@ export function ReceivePanel() {
     </Card>
   );
 }
-export function SendPanel() {
+export function SendPanel({ initial }: { initial?: SendModalOptions | undefined }) {
   const p = usePollar();
   const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
-  const [chain, setChain] = useState<WalletChain>('STELLAR');
-  const [destination, setDestination] = useState('');
-  const [amount, setAmount] = useState('');
+  const seededChain = p.wallets.some((w) => (w.chain ?? 'STELLAR') === initial?.chain) ? initial?.chain : undefined;
+  const [chain, setChain] = useState<WalletChain>(seededChain ?? 'STELLAR');
+  const [destination, setDestination] = useState(initial?.destination?.trim() ?? '');
+  const [amount, setAmount] = useState(seededAmount(initial?.amount));
   const [selected, setSelected] = useState('');
   const [review, setReview] = useState(false);
+  const arm = useSuccessCallback(initial?.onSuccess);
+  // Picked once the enabled assets load; the user changing chain or token first drops it.
+  const assetSeed = useRef(initial?.asset);
   const assets =
     p.enabledAssets.step === 'loaded' ? p.enabledAssets.data.assets.filter((a) => (a.chain ?? 'STELLAR') === chain) : [];
   useEffect(() => {
     if (p.verified) void action.run(p.refreshAssets);
   }, [p.verified]);
+  useEffect(() => {
+    if (assetSeed.current === undefined || p.enabledAssets.step !== 'loaded') return;
+    const match = assets.find((a) => a.issuer && a.issuer !== '0' && sameCode(a.code, assetSeed.current));
+    assetSeed.current = undefined;
+    if (match) setSelected(assetKey(match));
+  }, [p.enabledAssets]);
   const asset = assets.find((a) => assetKey(a) === selected);
   async function send() {
     if (!destination.trim() || !/^(?:\d+)(?:\.\d+)?$/.test(amount) || Number(amount) <= 0) throw new Error(copy.send.invalid);
@@ -308,6 +387,7 @@ export function SendPanel() {
       <ChainSelect
         value={chain}
         onChange={(v) => {
+          assetSeed.current = undefined;
           setChain(v);
           setSelected('');
           setReview(false);
@@ -319,6 +399,7 @@ export function SendPanel() {
         options={['Native', ...assets.filter((a) => a.issuer && a.issuer !== '0').map(assetKey)]}
         value={selected || 'Native'}
         onChange={(v) => {
+          assetSeed.current = undefined;
           setSelected(v);
           setReview(false);
         }}
@@ -347,6 +428,7 @@ export function SendPanel() {
         onPress={() =>
           review
             ? void action.run(async () => {
+                arm();
                 const result = await send();
                 setReview(false);
                 return result;
@@ -567,21 +649,32 @@ export function KycPreview() {
     </Card>
   );
 }
-export function SwapPanel() {
+export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined }) {
   const p = usePollar();
   const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   const [tokens, setTokens] = useState<SwapToken[]>([]);
   const [sell, setSell] = useState('');
   const [buy, setBuy] = useState('');
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(seededAmount(initial?.amount));
   const [quotes, setQuotes] = useState<SwapQuote[]>([]);
+  const arm = useSuccessCallback(initial?.onSuccess);
+  // Applied to the first token list that loads, then dropped.
+  const seed = useRef(initial);
   async function refreshSwap() {
     setQuotes([]);
     setSell('');
     setBuy('');
     const t = await p.getSwapTokens();
     setTokens(t);
+    const pick = (code: string | undefined) => t.find((token) => sameCode(token.code, code));
+    if (seed.current) {
+      const sellToken = pick(seed.current.sell);
+      const buyToken = pick(seed.current.buy);
+      if (sellToken) setSell(tokenKey(sellToken));
+      if (buyToken) setBuy(tokenKey(buyToken));
+      seed.current = undefined;
+    }
     return p.getSwapConfig();
   }
   useEffect(() => {
@@ -651,6 +744,7 @@ export function SwapPanel() {
             onPress={() =>
               void action.run(async () => {
                 setQuotes([]);
+                arm();
                 return p.swap(q, { autoTrustline: true });
               })
             }
@@ -663,7 +757,7 @@ export function SwapPanel() {
     </Card>
   );
 }
-export function EarnPanel() {
+export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined }) {
   const p = usePollar();
   const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
@@ -671,9 +765,12 @@ export function EarnPanel() {
   const [provider, setProvider] = useState<EarnProviderId>();
   const [opportunities, setOpportunities] = useState<EarnOpportunity[]>([]);
   const [opportunity, setOpportunity] = useState('');
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(seededAmount(initial?.amount));
   const [position, setPosition] = useState<EarnPosition>();
   const [confirmation, setConfirmation] = useState<'deposit' | 'withdraw'>();
+  const arm = useSuccessCallback(initial?.onSuccess);
+  // Applied to the first provider list that loads, then dropped.
+  const seed = useRef(initial);
   async function refreshEarn() {
     setProvider(undefined);
     setOpportunities([]);
@@ -682,6 +779,17 @@ export function EarnPanel() {
     setConfirmation(undefined);
     const list = await p.getEarnProviders();
     setProviders(list);
+    const wanted = seed.current;
+    seed.current = undefined;
+    if (wanted?.provider && list.includes(wanted.provider)) {
+      setProvider(wanted.provider);
+      const opps = await p.getEarnOpportunities(wanted.provider);
+      setOpportunities(opps);
+      if (wanted.opportunityId && opps.some((o) => o.id === wanted.opportunityId)) {
+        setOpportunity(wanted.opportunityId);
+        setPosition(await p.getEarnPosition({ provider: wanted.provider, opportunity: wanted.opportunityId }));
+      }
+    }
     return list;
   }
   useEffect(() => {
@@ -747,6 +855,7 @@ export function EarnPanel() {
               ? setConfirmation(direction)
               : void action.run(async () => {
                   setConfirmation(undefined);
+                  arm();
                   return direction === 'deposit'
                     ? p.earnDeposit({ provider: provider!, opportunity, amount })
                     : p.earnWithdraw({ provider: provider!, opportunity, amount });
@@ -1060,7 +1169,7 @@ export function ChainsPanel() {
     </Card>
   );
 }
-const panels: Record<FeatureName, React.ComponentType> = {
+const panels: Record<FeatureName, React.ComponentType<{ initial?: never }>> = {
   authentication: AuthPanel,
   logout: LogoutPanel,
   chains: ChainsPanel,
@@ -1077,7 +1186,7 @@ const panels: Record<FeatureName, React.ComponentType> = {
   earn: EarnPanel,
   distribution: DistributionPanel,
 };
-export function FeaturePanel({ feature }: { feature: FeatureName }) {
+export function FeaturePanel({ feature, initial }: { feature: FeatureName; initial?: FeatureInitial | undefined }) {
   const p = usePollar();
   const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
@@ -1105,5 +1214,6 @@ export function FeaturePanel({ feature }: { feature: FeatureName }) {
         <ActionState action={action} />
       </Card>
     );
-  return <Panel />;
+  const seeded = (initial as Record<string, unknown> | undefined)?.[feature];
+  return <Panel {...(seeded !== undefined && { initial: seeded as never })} />;
 }

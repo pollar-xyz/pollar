@@ -82,6 +82,15 @@ function listOf(items: string[], copy: RampCopy): string {
 }
 
 /** The text for a failed ramp call: an app that cannot serve it, a known code, the server's reason, or the fallback. */
+/** A country's name in the modal's language; its code when the engine's Intl has no name for it (Hermes lacks DisplayNames). */
+function countryName(code: string, language: PollarLanguage): string {
+  try {
+    return new Intl.DisplayNames([language], { type: 'region' }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
 function rampErrorMessage(error: unknown, fallback: string, copy: RampCopy, language: PollarLanguage): string {
   const unavailable = appUnavailableMessage(error, language);
   if (unavailable) return unavailable;
@@ -151,6 +160,48 @@ const CHAIN_NAME: Record<string, string> = { STELLAR: 'Stellar', POLYGON: 'Polyg
 const fiatKey = (fiat: Pick<RampFiat, 'currency' | 'rail'>) => `${fiat.currency}:${fiat.rail}`;
 const assetKey = (asset: Pick<RampAsset, 'code' | 'chain' | 'identifier'>) =>
   `${asset.code}:${asset.chain}:${asset.identifier ?? ''}`;
+
+/** Where the ramp widget opens: a starting point the user can change, never a lock. */
+export interface RampModalOptions {
+  direction?: 'buy' | 'sell';
+  /** ISO 3166-1 alpha-2, e.g. 'BR'. */
+  country?: string;
+  /** e.g. 'BRL'; the country's first fiat when left out or not offered there. */
+  fiat?: string;
+  /** e.g. 'USDC'. */
+  asset?: string;
+  amount?: string;
+}
+
+/**
+ * The choices a seed names among one direction's routes, as the widget's choice
+ * keys ('' is the default), or null when its country does not route there.
+ */
+function seededSelection(
+  routes: RampRoute[],
+  seed: RampModalOptions,
+): { country: string; fiatChoice: string; assetChoice: string; amount: string } | null {
+  const countries = rampCountries(routes);
+  const wanted = seed.country?.trim().toUpperCase();
+  const country = wanted ? countries.find((c) => c.country === wanted) : countries[0];
+  if (!country) return null;
+  const fiat = country.fiats.find((f) => f.currency === seed.fiat?.trim().toUpperCase()) ?? null;
+  const resolvedFiat = fiat ?? country.fiats[0];
+  const asset = routes.find(
+    (r) =>
+      r.fiat.country === country.country &&
+      resolvedFiat !== undefined &&
+      fiatKey(r.fiat) === fiatKey(resolvedFiat) &&
+      r.asset.code.toUpperCase() === seed.asset?.trim().toUpperCase(),
+  )?.asset;
+  const amount = seed.amount?.trim() ?? '';
+  return {
+    country: country.country,
+    fiatChoice: fiat ? fiatKey(fiat) : '',
+    assetChoice: asset ? assetKey(asset) : '',
+    amount: DECIMAL.test(amount) ? amount : '',
+  };
+}
 
 export interface RampWidgetTemplateProps {
   /** Language of the rail labels. Defaults to the user's device; the widget passes the resolved one. */
@@ -503,7 +554,9 @@ export function RampWidgetTemplate({
               <>
                 <Text style={[styles.label, { color: colors.text }]}>{copy.country}</Text>
                 {chips(
-                  countries.map((c) => ({ key: c.country, label: c.country })),
+                  countries
+                    .map((c) => ({ key: c.country, label: countryName(c.country, language) }))
+                    .sort((a, b) => a.label.localeCompare(b.label, language)),
                   country,
                   onCountryChange,
                 )}
@@ -785,8 +838,11 @@ export function RampWidgetTemplate({
 export function RampWidget({
   onClose,
   language: languageProp,
+  initial,
 }: {
   onClose: () => void;
+  /** Initial direction, country, fiat, asset and amount. A country that does not route in that direction opens on the defaults; a kept order wins over them. */
+  initial?: RampModalOptions | undefined;
   /** Language of the widget and the steps it opens, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
   language?: string | undefined;
 }) {
@@ -811,7 +867,12 @@ export function RampWidget({
   const client = getClient();
 
   const [step, setStep] = useState<RampStep>(saved ? 'status' : 'input');
-  const [direction, setDirection] = useState<RampDirection>(saved?.direction ?? 'ONRAMP');
+  const seededDirection: RampDirection = initial?.direction === 'sell' ? 'OFFRAMP' : 'ONRAMP';
+  const [direction, setDirection] = useState<RampDirection>(saved?.direction ?? seededDirection);
+  // Applied to the first routes that load for the seeded direction, then dropped; the user moving first drops it too.
+  const seedRef = useRef<{ direction: RampDirection; options: RampModalOptions } | null>(
+    initial && !saved ? { direction: seededDirection, options: initial } : null,
+  );
   const [routes, setRoutes] = useState<RampRoute[]>([]);
   const [routesLoading, setRoutesLoading] = useState(true);
   const [country, setCountry] = useState('');
@@ -896,6 +957,16 @@ export function RampWidget({
       .then(({ routes: found }) => {
         if (!active) return;
         setRoutes(found);
+        const seed = seedRef.current?.direction === direction ? seedRef.current.options : null;
+        if (seed) seedRef.current = null;
+        const seeded = seed ? seededSelection(found, seed) : null;
+        if (seeded) {
+          setCountry(seeded.country);
+          setFiatChoice(seeded.fiatChoice);
+          setAssetChoice(seeded.assetChoice);
+          setAmount(seeded.amount);
+          return;
+        }
         const first = rampCountries(found)[0]?.country ?? '';
         setCountry((current) => (found.some((r) => r.fiat.country === current) ? current : first));
       })
@@ -1204,6 +1275,7 @@ export function RampWidget({
     setErrorMsg(null);
     try {
       const found = await client.getRampOrder(id);
+      seedRef.current = null;
       setDirection(found.direction);
       setOrder(found);
       setStep('status');
@@ -1292,6 +1364,7 @@ export function RampWidget({
           errorMsg={errorMsg}
           notice={awaitingAccount ? copy.awaitingAccount : null}
           onDirectionChange={(next) => {
+            seedRef.current = null;
             setDirection(next);
             setErrorMsg(null);
             setAwaitingAccount(null);

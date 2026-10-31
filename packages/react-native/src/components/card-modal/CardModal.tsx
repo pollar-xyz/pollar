@@ -39,8 +39,20 @@ import { RequirementFormModal } from '../requirement-form-modal/RequirementFormM
 import { CARD_COPY, type CardCopy } from './card-copy';
 import { blockedStepMessage, cardStage, pendingFromRequirement, requiredCardStep, type PendingCardStep } from './card-kyc';
 
+/** Where the card modal opens: a starting point the user can change, never a lock. */
+export interface CardModalOptions {
+  /** 'fund' opens the funding panel once the user's card has loaded; a user without a card stays where they are. */
+  panel?: 'fund';
+  amount?: string;
+  /** Used only when the user can fund the card from that chain. */
+  chain?: CardFundingChain;
+  /** Called with each funding the modal creates. */
+  onFunded?: (funding: CardFunding) => void;
+}
+
 export interface CardModalProps {
   onClose: () => void;
+  initial?: CardModalOptions | undefined;
 }
 
 /** How often the holder is re-read while the provider's identity verification is pending. */
@@ -157,7 +169,7 @@ function CardCopyButton({
   );
 }
 
-export function CardModal({ onClose }: CardModalProps) {
+export function CardModal({ onClose, initial }: CardModalProps) {
   const { getClient, copyText, styles: pollarStyles, wallets, appConfig } = usePollar();
   const language = useModalLanguage();
   const copy = CARD_COPY[language];
@@ -183,7 +195,9 @@ export function CardModal({ onClose }: CardModalProps) {
   const [transactions, setTransactions] = useState<CardTransaction[] | null>(null);
   const [deposit, setDeposit] = useState<CardDepositAddress[] | null>(null);
   const [fundings, setFundings] = useState<CardFunding[] | null>(null);
-  const [fundAmount, setFundAmount] = useState('');
+  const [fundAmount, setFundAmount] = useState(
+    /^\d+(\.\d+)?$/.test(initial?.amount?.trim() ?? '') ? initial!.amount!.trim() : '',
+  );
   // One key per funding the user means to make: a double click or a retry after
   // a lost response gets that funding back instead of paying twice.
   const fundKey = useRef<string | null>(null);
@@ -216,7 +230,8 @@ export function CardModal({ onClose }: CardModalProps) {
     (c) => wallets.some((w) => (w.chain ?? 'STELLAR') === c.value) && (appChains.length === 0 || appChains.includes(c.value)),
   ).sort((a, b) => appChains.indexOf(a.value) - appChains.indexOf(b.value));
   const [fundChain, setFundChain] = useState<CardFundingChain | null>(null);
-  const selectedFundChain = fundChain ?? fundChains[0]?.value ?? 'STELLAR';
+  const seededChain = fundChains.some((c) => c.value === initial?.chain) ? initial?.chain : undefined;
+  const selectedFundChain = fundChain ?? seededChain ?? fundChains[0]?.value ?? 'STELLAR';
   const fundAvailable = useWalletAvailable(panel === 'fund' ? { chain: selectedFundChain, code: fundingAsset } : null);
   const card = cards?.[0] ?? null;
   const expiry = card?.expMonth && card.expYear ? `${card.expMonth}/${card.expYear.slice(-2)}` : null;
@@ -400,6 +415,15 @@ export function CardModal({ onClose }: CardModalProps) {
       copy.failed.loadFundings,
     );
 
+  // Opens the funding panel the first time the user's card is on screen.
+  const fundSeed = useRef(initial?.panel === 'fund');
+  useEffect(() => {
+    if (!fundSeed.current || !card) return;
+    fundSeed.current = false;
+    void openFund();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card]);
+
   const fund = () =>
     run(
       'fund-send',
@@ -425,6 +449,7 @@ export function CardModal({ onClose }: CardModalProps) {
         }
         setFundings((cur) => [outcome.funding, ...(cur ?? []).filter((f) => f.id !== outcome.funding.id)]);
         setFundAmount('');
+        initial?.onFunded?.(outcome.funding);
       },
       copy.failed.fund,
     );

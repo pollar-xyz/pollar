@@ -1035,7 +1035,8 @@ signing unasked. `getPendingConfirmations()` returns the current list. `cosignRe
 The SDK's user-facing texts come in English, Spanish and Portuguese (`PollarLanguage`: `'en' | 'es' | 'pt'`). The
 language a modal shows is, strongest first: the one the app pins in the dashboard (Branding > Language), the one the
 code asks for (a component's `language` prop, then the client's `locale`), then the browser or device language;
-English when none is one the SDK has.
+English when none is one the SDK has. `client.setLocale(tag)` changes the `locale` at runtime (`undefined` clears it),
+and `client.onLocaleChange(cb)` tells a UI layer to follow it; the React provider's modals do.
 
 ```ts
 import { PollarClient, resolveLanguage, transactionErrorMessage } from '@pollar/core';
@@ -1154,7 +1155,8 @@ unsubAuth();
 
 Snapshot getters are also available: `getAuthState()`, `getTransactionState()`, `getTxHistoryState()`,
 `getWalletBalanceState()`, `getEnabledAssetsState()`, `getSessionsState()`, `getNetworkState()`, `getCosignState()`,
-`getPendingConfirmations()`, `getLogger()`, `getLocale()`.
+`getPendingConfirmations()`, `getLogger()`, `getLocale()`. `onLocaleChange(cb)` is called on each `setLocale()`
+that changes the locale; unlike the state subscribers it does not replay the current value.
 
 `fetchSessions()` refreshes `SessionsState` from the server (the same data `listSessions()` returns, pushed through the
 subscriber instead of returned).

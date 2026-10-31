@@ -393,7 +393,8 @@ export class PollarClient {
 
   private readonly _api: PollarApiClient;
   private readonly _log: PollarLogger;
-  private readonly _locale: string | undefined;
+  private _locale: string | undefined;
+  private _localeListeners = new Set<(locale: string | undefined) => void>();
   private readonly _storage: Storage;
   private readonly _keyManager: KeyManager;
   /** Resolves once `keyManager.init()` and the initial session restore complete. */
@@ -946,6 +947,7 @@ export class PollarClient {
     this._walletStateListeners.clear();
     this._enabledAssetsStateListeners.clear();
     this._networkStateListeners.clear();
+    this._localeListeners.clear();
     this._storageDegradeListeners.clear();
     this._cosignStateListeners.clear();
   }
@@ -2321,9 +2323,21 @@ export class PollarClient {
     return this._log;
   }
 
-  /** The `locale` this client was configured with, if any. See {@link PollarClientConfig.locale}. */
+  /** The modals' `locale`, if any: the configured one until {@link setLocale} changes it. See {@link PollarClientConfig.locale}. */
   getLocale(): string | undefined {
     return this._locale;
+  }
+
+  /** Changes the modals' `locale` (a BCP 47 tag, or undefined to clear it); open modals follow it. */
+  setLocale(locale: string | undefined): void {
+    if (locale === this._locale) return;
+    this._locale = locale;
+    for (const cb of this._localeListeners) cb(locale);
+  }
+
+  onLocaleChange(cb: (locale: string | undefined) => void): () => void {
+    this._localeListeners.add(cb);
+    return () => this._localeListeners.delete(cb);
   }
 
   setNetwork(network: StellarNetwork): void {
