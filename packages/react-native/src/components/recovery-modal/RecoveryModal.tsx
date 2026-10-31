@@ -13,6 +13,11 @@ import { PollarOverlay } from '../commons';
 import { RECOVERY_COPY } from './recovery-copy';
 import { RecoveryModalTemplate, type RecoveryView } from './RecoveryModalUI';
 
+/** How often the modal reads again while another device is asked to add this one. */
+const APPROVAL_POLL_MS = 3_000;
+/** An enrollment request expires after 15 minutes; past that nothing can approve it. */
+const APPROVAL_WINDOW_MS = 15 * 60_000;
+
 interface RecoveryModalProps {
   onClose: () => void;
 }
@@ -90,6 +95,25 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
 
   const enrolled = !!thisDeviceKey && !!devices?.devices.some((d) => d.publicKey.toLowerCase() === thisDeviceKey);
 
+  // The approval happens on another device, so nothing here learns of it unless
+  // this modal reads again: while the request is open it looks every few
+  // seconds and says so the moment this device is in.
+  const [awaitingApproval, setAwaitingApproval] = useState(false);
+  useEffect(() => {
+    if (!awaitingApproval) return;
+    if (enrolled) {
+      setAwaitingApproval(false);
+      setNotice(copy.deviceAdded);
+      return;
+    }
+    const timer = setInterval(() => void load().catch(() => undefined), APPROVAL_POLL_MS);
+    const stop = setTimeout(() => setAwaitingApproval(false), APPROVAL_WINDOW_MS);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(stop);
+    };
+  }, [awaitingApproval, enrolled, load, copy]);
+
   return (
     <PollarOverlay onCancel={onClose}>
       <RecoveryModalTemplate
@@ -130,9 +154,14 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
         onApproveDevice={(id) => void run(`approve:${id}`, () => recovery.approveDevice(id), { notice: copy.deviceAdded })}
         onRejectDevice={(id) => void run(`reject:${id}`, () => recovery.rejectDevice(id))}
         onRequestEnrollment={() =>
-          void run('enroll', () => recovery.requestDeviceEnrollment(), {
-            notice: copy.requestSent,
-          })
+          void run(
+            'enroll',
+            async () => {
+              await recovery.requestDeviceEnrollment();
+              setAwaitingApproval(true);
+            },
+            { notice: copy.requestSent },
+          )
         }
         onRecoverWithPasskey={() =>
           void run('recover-passkey', () => recovery.recoverWithPasskey(), {

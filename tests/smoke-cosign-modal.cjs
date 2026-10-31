@@ -337,6 +337,91 @@ async function mount(element) {
     await view.unmount();
   }
 
+  // ── 5. Recovery: asking another device ──────────────────────────
+  // The approval happens on the other device; the modal must notice it on its
+  // own instead of telling the user this device is still not part of the wallet.
+  console.log('\n── 5. web RecoveryModal, waiting for another device ──────');
+  {
+    const THIS_KEY = '03' + 'cd'.repeat(32);
+    const OTHER_KEY = '02' + 'ab'.repeat(32);
+    const device = (id, publicKey) => ({
+      id,
+      publicKey,
+      tkApiKeyId: `tk-${id}`,
+      label: id,
+      enrolledVia: 'ONBOARDING',
+      lastSeenAt: null,
+      createdAt: '',
+    });
+    let approved = false;
+    let enrollmentRequests = 0;
+    let deviceReads = 0;
+    const client = {
+      onAuthStateChange: () => () => undefined,
+      cosign: {
+        publicKeyHex: async () => THIS_KEY,
+        devices: async () => {
+          deviceReads++;
+          return {
+            subOrgId: 'sub-1',
+            endUserId: 'tk-user',
+            custody: 'COSIGNED',
+            quorumState: 'VERIFIED',
+            devices: approved ? [device('d0', OTHER_KEY), device('d1', THIS_KEY)] : [device('d0', OTHER_KEY)],
+            enrollments: [],
+          };
+        },
+        recovery: {
+          passkeyAvailable: false,
+          status: async () => ({
+            required: true,
+            configured: true,
+            subOrgId: 'sub-1',
+            endUserId: 'tk-user',
+            walletId: 'w-1',
+            authProxyConfigId: 'cfg',
+            email: { address: null, verified: false },
+            passkeys: [],
+            devices: [{ apiKeyId: 'k0', name: 'phone', publicKey: OTHER_KEY, createdAt: '' }],
+          }),
+          requestDeviceEnrollment: async () => {
+            enrollmentRequests++;
+            return { id: 'e1', expiresAt: new Date(Date.now() + 900_000).toISOString() };
+          },
+        },
+      },
+    };
+    const context = { getClient: () => client, styles: {}, refreshRecovery: () => undefined, appConfig: {} };
+    const { RecoveryModal } = loader({
+      '../../context': { usePollar: () => context },
+      './context': { usePollar: () => context },
+      '../commons': { PollarModalFooter: () => null },
+    })('packages/react/src/components/recovery-modal/RecoveryModal.tsx');
+    const view = await mount(React.createElement(RecoveryModal, { onClose: () => undefined }));
+    await settle();
+    check('a device that is not part of the wallet is told so', () =>
+      assert.match(view.container.textContent, /isn't part of your wallet yet/),
+    );
+    const ask = [...view.container.querySelectorAll('button')].find((b) => /Ask another device/.test(b.textContent));
+    await React.act(async () => ask?.click());
+    await settle();
+    check('asking sends one enrollment request', () => assert.equal(enrollmentRequests, 1));
+    check('it says the request was sent', () => assert.match(view.container.textContent, /Request sent/));
+    const readsBeforeApproval = deviceReads;
+    approved = true;
+    await React.act(() => new Promise((resolve) => setTimeout(resolve, 3_300)));
+    await settle();
+    check('it reads the devices again while it waits', () => assert.ok(deviceReads > readsBeforeApproval));
+    check('it notices the approval on its own', () => assert.match(view.container.textContent, /Device added/));
+    check('it no longer says the device is not part of the wallet', () =>
+      assert.doesNotMatch(view.container.textContent, /isn't part of your wallet yet/),
+    );
+    const readsAfterAdded = deviceReads;
+    await React.act(() => new Promise((resolve) => setTimeout(resolve, 3_300)));
+    check('it stops reading once the device is in', () => assert.equal(deviceReads, readsAfterAdded));
+    await view.unmount();
+  }
+
   console.log(`\n${passed} pass, ${failed} fail`);
   process.exit(failed ? 1 : 0);
 })();
