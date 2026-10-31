@@ -82,5 +82,11 @@ const html = renderToStaticMarkup(React.createElement(EmailCodeInput, { email: '
 assert.equal((html.match(/<input/g) || []).length, 6);
 assert.equal((html.match(/autoComplete="one-time-code"|autocomplete="one-time-code"/g) || []).length, 1);
 assert.doesNotMatch(html, /maxlength/i);
+assert.match(html, /aria-label="Digit 2 of 6"/);
+// Each box is named in the modal's language.
+const markup = (language) =>
+  renderToStaticMarkup(React.createElement(EmailCodeInput, { email: 'a@b.c', onSubmit() {}, language }));
+assert.match(markup('es'), /aria-label="Dígito 2 de 6"/);
+assert.match(markup('pt'), /aria-label="Dígito 2 de 6"/);
 
-console.log('Email code input: autofill, keystrokes, overtype, partial runs and paste passed');
+console.log('Email code input: autofill, keystrokes, overtype, partial runs, paste and box names per language passed');

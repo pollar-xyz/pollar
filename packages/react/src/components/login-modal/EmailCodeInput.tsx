@@ -48,7 +48,7 @@ export function EmailCodeInput({ email, onSubmit, language }: EmailCodeInputProp
             // No maxLength: OTP autofill writes the whole code into one box, and a
             // maxLength would truncate it before onChange sees it.
             autoComplete={i === 0 ? 'one-time-code' : 'off'}
-            aria-label={`Digit ${i + 1} of ${EMAIL_CODE_LENGTH}`}
+            aria-label={copy.codeDigit(i + 1, EMAIL_CODE_LENGTH)}
             value={digit}
             className="pollar-code-input"
             onChange={(e) => apply(applyEmailCodeInput(digits, i, e.target.value, e.target.selectionStart))}

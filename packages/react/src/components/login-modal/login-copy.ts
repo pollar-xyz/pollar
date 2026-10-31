@@ -18,6 +18,8 @@ export const LOGIN_COPY: Record<
     genericError: string;
     codeLabel: string;
     yourEmail: string;
+    /** Accessible name of one box of the code, e.g. "Digit 2 of 6". */
+    codeDigit: (position: number, total: number) => string;
     codePlaceholder: string;
     verifyCode: string;
     status: Record<AuthState['step'], string>;
@@ -39,6 +41,7 @@ export const LOGIN_COPY: Record<
     genericError: 'Something went wrong. Please try again.',
     codeLabel: 'Enter the 6-digit code sent to',
     yourEmail: 'your email',
+    codeDigit: (position, total) => `Digit ${position} of ${total}`,
     codePlaceholder: 'Enter verification code',
     verifyCode: 'Verify Code',
     status: {
@@ -76,6 +79,7 @@ export const LOGIN_COPY: Record<
     genericError: 'Algo salió mal. Intenta de nuevo.',
     codeLabel: 'Ingresa el código de 6 dígitos que enviamos a',
     yourEmail: 'tu correo',
+    codeDigit: (position, total) => `Dígito ${position} de ${total}`,
     codePlaceholder: 'Ingresa el código de verificación',
     verifyCode: 'Verificar código',
     status: {
@@ -113,6 +117,7 @@ export const LOGIN_COPY: Record<
     genericError: 'Algo deu errado. Tente novamente.',
     codeLabel: 'Digite o código de 6 dígitos enviado para',
     yourEmail: 'seu e-mail',
+    codeDigit: (position, total) => `Dígito ${position} de ${total}`,
     codePlaceholder: 'Digite o código de verificação',
     verifyCode: 'Verificar código',
     status: {
