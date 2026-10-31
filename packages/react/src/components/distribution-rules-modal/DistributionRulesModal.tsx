@@ -9,6 +9,7 @@ import './DistributionRulesModal.css';
 import { DISTRIBUTION_RULES_COPY } from './distribution-rules-copy';
 import { DistributionRulesModalTemplate } from './DistributionRulesModalTemplate';
 import { modalChrome } from '../modal-theme';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface DistributionRulesModalProps {
   onClose: () => void;
@@ -67,7 +68,7 @@ export function DistributionRulesModal({ onClose }: DistributionRulesModalProps)
   );
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <DistributionRulesModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -81,6 +82,6 @@ export function DistributionRulesModal({ onClose }: DistributionRulesModalProps)
         onClaim={handleClaim}
         onClose={onClose}
       />
-    </div>
+    </PollarOverlay>
   );
 }

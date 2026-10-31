@@ -12,6 +12,7 @@ import '../shared.css';
 import './ReceiveModal.css';
 import { ReceiveModalTemplate } from './ReceiveModalTemplate';
 import { modalChrome } from '../modal-theme';
+import { PollarOverlay } from '../PollarOverlay';
 
 /** Where the receive modal opens: the network whose address it shows. A network the app does not offer is left out. */
 export interface ReceiveModalOptions {
@@ -64,7 +65,7 @@ export function ReceiveModal({ onClose, initial }: ReceiveModalProps) {
   }
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <ReceiveModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -89,6 +90,6 @@ export function ReceiveModal({ onClose, initial }: ReceiveModalProps) {
         onClose={onClose}
         language={language}
       />
-    </div>
+    </PollarOverlay>
   );
 }

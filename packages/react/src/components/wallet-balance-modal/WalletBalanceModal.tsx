@@ -10,6 +10,7 @@ import '../shared.css';
 import './WalletBalanceModal.css';
 import { WalletBalanceModalTemplate } from './WalletBalanceModalTemplate';
 import { modalChrome } from '../modal-theme';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface WalletBalanceModalProps {
   onClose: () => void;
@@ -35,7 +36,7 @@ export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
   }, [refreshWalletBalance]);
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <WalletBalanceModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -51,6 +52,6 @@ export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
         onClose={onClose}
         language={language}
       />
-    </div>
+    </PollarOverlay>
   );
 }

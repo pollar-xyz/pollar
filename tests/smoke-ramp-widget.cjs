@@ -188,7 +188,7 @@ async function mount(client, application = {}) {
     );
     await new Promise((r) => setTimeout(r, 20));
   });
-  const button = (text) => [...container.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith(text));
+  const button = (text) => [...document.body.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith(text));
   const click = async (element) => {
     assert.ok(element, 'missing element');
     await act(async () => {
@@ -206,7 +206,8 @@ async function mount(client, application = {}) {
     await act(async () => root.unmount());
     container.remove();
   };
-  return { container, button, click, type, unmount };
+  // The widget portals into body, so that is where its content is.
+  return { container: document.body, button, click, type, unmount };
 }
 
 (async () => {
@@ -1094,12 +1095,12 @@ async function mount(client, application = {}) {
       });
     };
     const options = () =>
-      [...container.querySelectorAll('#pollar-ramp-country option')].map((o) => o.textContent.replace(/^\S+\s/, ''));
-    const label = () => container.querySelector('label[for="pollar-ramp-country"]').textContent;
+      [...document.body.querySelectorAll('#pollar-ramp-country option')].map((o) => o.textContent.replace(/^\S+\s/, ''));
+    const label = () => document.body.querySelector('label[for="pollar-ramp-country"]').textContent;
 
     await render('en');
     assert.deepEqual(options(), ['Argentina', 'Bolivia'], 'names, sorted by name');
-    assert.equal(container.querySelector('#pollar-ramp-country').value, 'BO', 'the default country stays the first route');
+    assert.equal(document.body.querySelector('#pollar-ramp-country').value, 'BO', 'the default country stays the first route');
     assert.equal(label(), 'Country');
     await render('es-BO');
     assert.deepEqual(options(), ['Argentina', 'Bolivia']);

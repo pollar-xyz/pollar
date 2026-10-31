@@ -37,6 +37,7 @@ import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
 import { useModalLanguage } from '../../language';
 import { RAMP_COPY, type RampCopy } from './ramp-copy';
+import { PollarOverlay } from '../PollarOverlay';
 
 /** Where the ramp widget opens: a starting point the user can change, never a lock. */
 export interface RampModalOptions {
@@ -742,7 +743,7 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   }
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <RampWidgetTemplate
         language={language}
         theme={theme}
@@ -823,6 +824,6 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
         onRefresh={() => void handleRefresh()}
         onClose={onClose}
       />
-    </div>
+    </PollarOverlay>
   );
 }

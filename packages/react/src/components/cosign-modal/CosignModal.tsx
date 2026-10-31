@@ -10,6 +10,7 @@ import '../shared.css';
 import './CosignModal.css';
 import { CosignModalTemplate } from './CosignModalTemplate';
 import { modalChrome } from '../modal-theme';
+import { PollarOverlay } from '../PollarOverlay';
 
 /** How long an outcome that needs nothing from the user stays up before the modal closes. */
 const CLOSE_AFTER_SECONDS = 3;
@@ -149,7 +150,7 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
   );
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <CosignModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -171,6 +172,6 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         onReject={(r) => void run('rejecting', r, reject)}
         onClose={onClose}
       />
-    </div>
+    </PollarOverlay>
   );
 }

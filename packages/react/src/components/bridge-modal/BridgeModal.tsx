@@ -17,6 +17,7 @@ import '../shared.css';
 import './BridgeModal.css';
 import { BRIDGE_COPY, type BridgeCopy } from './bridge-copy';
 import { BRIDGE_CHAIN_LABEL, BridgeModalTemplate, type BridgeModalStep } from './BridgeModalTemplate';
+import { PollarOverlay } from '../PollarOverlay';
 
 /** Where the bridge modal opens: a starting point the user can change, never a lock. */
 export interface BridgeModalOptions {
@@ -287,7 +288,7 @@ export function BridgeModal({ onClose, initial }: BridgeModalProps) {
         : 'form';
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <BridgeModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -324,6 +325,6 @@ export function BridgeModal({ onClose, initial }: BridgeModalProps) {
         onClose={onClose}
         language={language}
       />
-    </div>
+    </PollarOverlay>
   );
 }

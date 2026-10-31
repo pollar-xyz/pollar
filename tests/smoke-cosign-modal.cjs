@@ -54,7 +54,7 @@ function loader(mocks) {
     const output = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
     }).outputText;
-    const scope = { exports: {}, setInterval, clearInterval, setTimeout, clearTimeout, globalThis };
+    const scope = { exports: {}, setInterval, clearInterval, setTimeout, clearTimeout, globalThis, document };
     scope.require = (id) => {
       if (id in mocks) return mocks[id];
       if (id.endsWith('.css')) return {};
@@ -129,9 +129,17 @@ async function settle() {
 
 async function mount(element) {
   const container = document.createElement('div');
+  document.body.appendChild(container);
   const root = createRoot(container);
   await React.act(async () => root.render(element));
-  return { container, unmount: () => React.act(async () => root.unmount()) };
+  // The web modals portal into body, so that is where their content is.
+  return {
+    container: document.body,
+    unmount: async () => {
+      await React.act(async () => root.unmount());
+      container.remove();
+    },
+  };
 }
 
 (async () => {

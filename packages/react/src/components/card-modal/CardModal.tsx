@@ -36,6 +36,7 @@ import { blockedStepMessage, cardStage, pendingFromRequirement, requiredCardStep
 import '../shared.css';
 import '../send-modal/SendModal.css';
 import './CardModal.css';
+import { PollarOverlay } from '../PollarOverlay';
 
 /** Where the card modal opens: a starting point the user can change. An option the user cannot use is left out. */
 export interface CardModalOptions {
@@ -572,7 +573,7 @@ export function CardModal({ onClose, initial }: CardModalProps) {
   const title = panel === 'fund' ? copy.title.addFunds : card ? (card.nickname ?? copy.title.yourCard) : copy.title.getCard;
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <div
         className="pollar-modal-card pollar-card-modal"
         data-theme={theme}
@@ -1004,6 +1005,6 @@ export function CardModal({ onClose, initial }: CardModalProps) {
 
         <PollarModalFooter language={language} />
       </div>
-    </div>
+    </PollarOverlay>
   );
 }

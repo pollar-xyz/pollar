@@ -21,6 +21,7 @@ import {
 import { useModalLanguage } from '../../language';
 import '../shared.css';
 import './RequirementFormModal.css';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface RequirementFormModalProps {
   formId: string;
@@ -201,7 +202,7 @@ export function RequirementFormModal({
   }
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <div
         className="pollar-modal-card pollar-form-modal"
         role="dialog"
@@ -301,6 +302,6 @@ export function RequirementFormModal({
         )}
         <PollarModalFooter />
       </div>
-    </div>
+    </PollarOverlay>
   );
 }

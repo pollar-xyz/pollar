@@ -29,6 +29,9 @@
   padding: 1rem;
   box-sizing: border-box;
   background-color: var(--pollar-overlay-bg);
+  /* A Radix modal sets `pointer-events: none` on body while it is open, and the
+   * overlay is a child of body. */
+  pointer-events: auto;
 }
 
 /* --- Modal card base (all modals extend this) ---------------------------------- */

@@ -259,6 +259,19 @@
   refresh again, up to six times, and the refresh gets a 20s budget instead of
   the 10s default. `<CosignModal>` keeps Approve enabled for that code, and
   `transactionErrorMessage` has its text in English, Spanish and Portuguese.
+- **The modals work on top of the app's own modal.** Every `@pollar/react`
+  modal renders into `document.body` through a portal, marked
+  `data-react-aria-top-layer`, instead of inline inside the app's tree. A React
+  Aria or HeroUI modal makes everything outside itself `inert`, so a
+  `<ConfirmModal>` opened by a signature started from that modal showed on top
+  and took no clicks, and under `confirmation: 'prompt'` the signature waited
+  forever. React Aria now leaves the Pollar modal reachable and does not close
+  its own modal on a press inside it. The overlay also sets
+  `pointer-events: auto`, which a Radix modal turns off on body. A font or a
+  `--pollar-font-family` set on an element of the app around
+  `<PollarProvider>` no longer reaches the modals; set it on `:root` or
+  `.pollar-modal-card`. Notes for Radix and Headless UI modals are in the
+  `@pollar/react` reference.
 - `@pollar/react` and `@pollar/react-native` require `@pollar/core@^0.12.1`.
 
 ## `@pollar/migrate` 0.12.0

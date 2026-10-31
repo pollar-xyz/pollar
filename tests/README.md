@@ -37,7 +37,7 @@ node tests/smoke-session-races.cjs
 `smoke-form-fields`, `smoke-kyc`, `smoke-kyc-modal`, `smoke-email-code-input`,
 `smoke-rn-kyc`, `smoke-rn-ramp`, `smoke-rn-modal-options`, `smoke-ramp-chain-types`,
 `smoke-ramp-client`, `smoke-ramp-stellar-signing`, `smoke-ramp-widget`,
-`smoke-modal-options`, `smoke-custom-ramp`, the
+`smoke-modal-options`, `smoke-host-modal-portal`, `smoke-custom-ramp`, the
 `test:custom-ramp-example` type check, `smoke-migrate` and `check-comment-ascii`.
 
 ## What each file covers
@@ -402,6 +402,15 @@ send, swap, earn, receive, history and card modals open on them, an option the
 app or wallet cannot use falls back to the default, opening on none after some
 leaves nothing behind, a swap token that loads late is still picked, and
 `onSuccess` / `onFunded` hear the outcome once.
+
+#### `smoke-host-modal-portal.cjs`
+
+The provider's prompts over a host modal, with React Aria's real
+`useModalOverlay` (what HeroUI uses), which marks everything outside it `inert`.
+A confirmation raised while that modal is open renders as a direct child of
+body marked `data-react-aria-top-layer`, is neither inert nor aria-hidden,
+keeps focus, and confirms on a press, and the press does not dismiss the host
+modal. Needs `react-aria` and `react-stately` (root dev dependencies).
 
 #### `smoke-rn-ramp.cjs`
 

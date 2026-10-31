@@ -14,6 +14,7 @@ import './SendModal.css';
 import { SEND_COPY } from './send-copy';
 import { SendModalTemplate, type SendMemoType } from './SendModalTemplate';
 import { modalChrome } from '../modal-theme';
+import { PollarOverlay } from '../PollarOverlay';
 
 /** Where the send modal opens: a starting point the user can change. An option the wallet cannot use is left out. */
 export interface SendModalOptions {
@@ -407,7 +408,7 @@ export function SendModal({ onClose, initial }: SendModalProps) {
   }
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
+    <PollarOverlay style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
       <SendModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -455,6 +456,6 @@ export function SendModal({ onClose, initial }: SendModalProps) {
         onDone={onClose}
         language={language}
       />
-    </div>
+    </PollarOverlay>
   );
 }

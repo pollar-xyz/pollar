@@ -9,6 +9,7 @@ import { useModalLanguage } from '../../language';
 import { errorCode, REGISTRY_COPY } from './registry-copy';
 import '../shared.css';
 import '../requirement-form-modal/RequirementFormModal.css';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface RegistryCheckModalProps {
   optionId: string;
@@ -133,7 +134,7 @@ export function RegistryCheckModal({
   );
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <div
         className="pollar-modal-card pollar-form-modal"
         role="dialog"
@@ -249,6 +250,6 @@ export function RegistryCheckModal({
         )}
         <PollarModalFooter />
       </div>
-    </div>
+    </PollarOverlay>
   );
 }

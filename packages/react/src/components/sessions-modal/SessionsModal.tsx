@@ -8,6 +8,7 @@ import './SessionsModal.css';
 import { SessionsModalTemplate } from './SessionsModalTemplate';
 import { SESSIONS_COPY } from './sessions-copy';
 import { modalChrome } from '../modal-theme';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface SessionsModalProps {
   onClose: () => void;
@@ -79,7 +80,7 @@ export function SessionsModal({ onClose }: SessionsModalProps) {
   }, [getClient, onClose]);
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <SessionsModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -94,6 +95,6 @@ export function SessionsModal({ onClose }: SessionsModalProps) {
         onClose={onClose}
         language={language}
       />
-    </div>
+    </PollarOverlay>
   );
 }

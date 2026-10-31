@@ -16,6 +16,7 @@ import {
 import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
 import '../shared.css';
 import '../requirement-form-modal/RequirementFormModal.css';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface ProviderRegistrationModalProps {
   /** The route whose ramp the user registers with. */
@@ -138,7 +139,7 @@ export function ProviderRegistrationModal({
   }
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <div
         className="pollar-modal-card pollar-form-modal"
         role="dialog"
@@ -239,6 +240,6 @@ export function ProviderRegistrationModal({
         )}
         <PollarModalFooter />
       </div>
-    </div>
+    </PollarOverlay>
   );
 }

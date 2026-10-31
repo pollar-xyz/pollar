@@ -7,6 +7,7 @@ import '../shared.css';
 import './TransactionModal.css';
 import { TransactionModalTemplate } from './TransactionModalTemplate';
 import { modalChrome } from '../modal-theme';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface TransactionModalProps {
   onClose: () => void;
@@ -67,7 +68,7 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
   }
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <TransactionModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -84,6 +85,6 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
         onRetry={handleRetry}
         language={language}
       />
-    </div>
+    </PollarOverlay>
   );
 }

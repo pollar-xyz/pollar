@@ -12,6 +12,7 @@ import { SWAP_COPY } from './swap-copy';
 import { SwapAssetOption, SwapChain, SwapModalTemplate, SwapQuoteView } from './SwapModalTemplate';
 import { modalChrome } from '../modal-theme';
 import { byCode, oneOf, seededAmount, useSuccessReport } from '../../modal-options';
+import { PollarOverlay } from '../PollarOverlay';
 
 /** Where the swap modal opens: a starting point the user can change. An option the app does not offer is left out. */
 export interface SwapModalOptions {
@@ -556,7 +557,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   }
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
+    <PollarOverlay style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
       <SwapModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -612,6 +613,6 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
         onRetry={() => void handleRetry()}
         onDone={onClose}
       />
-    </div>
+    </PollarOverlay>
   );
 }

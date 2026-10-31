@@ -16,6 +16,7 @@ import '../swap-modal/SwapModal.css';
 import './EarnModal.css';
 import { EARN_COPY } from './earn-copy';
 import { oneOf, seededAmount, useSuccessReport } from '../../modal-options';
+import { PollarOverlay } from '../PollarOverlay';
 
 /** Where the earn modal opens: a starting point the user can change. An option the app does not offer is left out. */
 export interface EarnModalOptions {
@@ -342,7 +343,7 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
   const title = step === 'form' ? copy.title : txTitle;
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
+    <PollarOverlay style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
       <div
         className="pollar-modal-card pollar-send-modal"
         data-theme={theme}
@@ -540,6 +541,6 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
 
         <PollarModalFooter />
       </div>
-    </div>
+    </PollarOverlay>
   );
 }

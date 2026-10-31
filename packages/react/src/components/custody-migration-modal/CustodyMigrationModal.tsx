@@ -8,6 +8,7 @@ import '../shared.css';
 import '../recovery-modal/RecoveryModal.css';
 import { modalChrome } from '../modal-theme';
 import { CustodyMigrationModalTemplate } from './CustodyMigrationModalTemplate';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface CustodyMigrationModalProps {
   state: CustodyMigrationState;
@@ -47,7 +48,7 @@ export function CustodyMigrationModal({ state, onMoved, onLater }: CustodyMigrat
   }
 
   return (
-    <div className="pollar-overlay" style={overlayStyle}>
+    <PollarOverlay style={overlayStyle}>
       <CustodyMigrationModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -61,6 +62,6 @@ export function CustodyMigrationModal({ state, onMoved, onLater }: CustodyMigrat
         onLogout={() => void getClient().logout()}
         language={language}
       />
-    </div>
+    </PollarOverlay>
   );
 }

@@ -16,6 +16,7 @@ import './RecoveryModal.css';
 import { modalChrome } from '../modal-theme';
 import { RECOVERY_COPY } from './recovery-copy';
 import { RecoveryModalTemplate, type RecoveryView } from './RecoveryModalTemplate';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface RecoveryModalProps {
   onClose: () => void;
@@ -104,7 +105,7 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
   const enrolled = !!thisDeviceKey && !!devices?.devices.some((d) => d.publicKey.toLowerCase() === thisDeviceKey);
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <RecoveryModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -173,6 +174,6 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
         onClose={onClose}
         language={language}
       />
-    </div>
+    </PollarOverlay>
   );
 }

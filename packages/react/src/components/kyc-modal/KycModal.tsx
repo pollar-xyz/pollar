@@ -17,6 +17,7 @@ import { kycErrorMessage } from './kyc-messages';
 import '../shared.css';
 import './KycModal.css';
 import { modalChrome } from '../modal-theme';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface KycModalProps {
   corridorId?: string;
@@ -214,7 +215,7 @@ export function KycModal({
   }
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <KycModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -237,6 +238,6 @@ export function KycModal({
         onClose={onClose}
         language={language}
       />
-    </div>
+    </PollarOverlay>
   );
 }

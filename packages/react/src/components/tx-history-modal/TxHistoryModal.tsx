@@ -11,6 +11,7 @@ import '../shared.css';
 import './TxHistoryModal.css';
 import { TxHistoryModalTemplate } from './TxHistoryModalTemplate';
 import { modalChrome } from '../modal-theme';
+import { PollarOverlay } from '../PollarOverlay';
 
 const PAGE_SIZE = 10;
 
@@ -62,7 +63,7 @@ export function TxHistoryModal({ onClose, initial }: TxHistoryModalProps) {
   };
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <TxHistoryModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -79,6 +80,6 @@ export function TxHistoryModal({ onClose, initial }: TxHistoryModalProps) {
         onClose={onClose}
         language={language}
       />
-    </div>
+    </PollarOverlay>
   );
 }

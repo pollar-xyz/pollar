@@ -11,6 +11,7 @@ import './EnabledAssetsModal.css';
 import { CustomTrustlineModalTemplate, EnabledAssetsModalTemplate } from './EnabledAssetsModalTemplate';
 import { modalChrome } from '../modal-theme';
 import { ENABLED_ASSETS_COPY } from './enabled-assets-copy';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface EnabledAssetsModalProps {
   onClose: () => void;
@@ -93,7 +94,7 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
   );
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       {view === 'list' ? (
         <EnabledAssetsModalTemplate
           theme={theme}
@@ -131,6 +132,6 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
           language={language}
         />
       )}
-    </div>
+    </PollarOverlay>
   );
 }

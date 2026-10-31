@@ -14,6 +14,7 @@ import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
 import { reviewFromBuild, reviewFromRequest } from '../tx-review/tx-review-model';
 import '../shared.css';
 import '../cosign-modal/CosignModal.css';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface ConfirmModalProps {
   confirmation: PendingConfirmation;
@@ -71,7 +72,7 @@ export function ConfirmModal({ confirmation }: ConfirmModalProps) {
   }, [getClient]);
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={confirmation.reject}>
+    <PollarOverlay style={overlayStyle} onClick={confirmation.reject}>
       <div
         className="pollar-modal-card pollar-cosign-modal"
         data-theme={theme}
@@ -110,6 +111,6 @@ export function ConfirmModal({ confirmation }: ConfirmModalProps) {
 
         <PollarModalFooter />
       </div>
-    </div>
+    </PollarOverlay>
   );
 }

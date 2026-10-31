@@ -17,6 +17,7 @@ import { LoginModalStatus, LoginModalTemplate } from './LoginModalTemplate';
 import { PrivyLoginSubmodal } from './PrivyLoginSubmodal';
 import '../shared.css';
 import './LoginModal.css';
+import { PollarOverlay } from '../PollarOverlay';
 
 type TimeoutHandle = ReturnType<typeof setTimeout>;
 
@@ -155,7 +156,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
   }
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={handleClose}>
+    <PollarOverlay style={overlayStyle} onClick={handleClose}>
       {configStatus !== 'ready' ? (
         <LoginModalStatus
           status={configStatus === 'error' ? 'error' : 'loading'}
@@ -215,6 +216,6 @@ export function LoginModal({ onClose }: LoginModalProps) {
           language={language}
         />
       )}
-    </div>
+    </PollarOverlay>
   );
 }
