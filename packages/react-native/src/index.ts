@@ -88,7 +88,7 @@ export { RampWidget } from './components/ramp-widget/RampWidget';
 export type { RampModalOptions } from './components/ramp-widget/RampWidget';
 export { CardModal } from './components/card-modal/CardModal';
 export { BridgeModal } from './components/bridge-modal/BridgeModal';
-export type { BridgeModalProps } from './components/bridge-modal/BridgeModal';
+export type { BridgeModalOptions, BridgeModalProps } from './components/bridge-modal/BridgeModal';
 export type { CardModalOptions } from './components/card-modal/CardModal';
 export type { EarnModalOptions, ReceiveModalOptions, SendModalOptions, SwapModalOptions } from './components/FeaturePanel';
 export type { TxHistoryModalOptions } from './components/tx-history-modal/TxHistoryModal';

@@ -50,6 +50,7 @@ export { EnabledAssetsModal } from './components/enabled-assets-modal/EnabledAss
 export { SendModal } from './components/send-modal/SendModal';
 export { SwapModal } from './components/swap-modal/SwapModal';
 export { BridgeModal } from './components/bridge-modal/BridgeModal';
+export type { BridgeModalOptions } from './components/bridge-modal/BridgeModal';
 export { EarnModal } from './components/earn-modal/EarnModal';
 export { CardModal } from './components/card-modal/CardModal';
 export { ReceiveModal } from './components/receive-modal/ReceiveModal';

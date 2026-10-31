@@ -208,7 +208,10 @@
   external Stellar wallet signs each step through `signBridgeStep(id, actionId)`,
   which uses the ramp signing handlers (`registerRampSigningHandler`). An
   external Solana wallet cannot be the source yet. `openBridgeModal()` /
-  `<BridgeModal>`, web and React Native, run the whole flow. The device's
+  `<BridgeModal>`, web and React Native, run the whole flow;
+  `openBridgeModal({ fromChain, toChain, amount, onSuccess })` opens it on a
+  direction and amount the user can still change, and `onSuccess` hears the
+  completed transfer once (`BridgeModalOptions`). The device's
   check of a Solana burn now accepts `deposit_for_burn_with_hook` when the
   request states the same hook data, which names the Stellar account Circle's
   forwarder pays. Requires sdk-api with `/v3/bridge`.

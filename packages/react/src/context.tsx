@@ -48,7 +48,7 @@ import { RampWidget, type RampModalOptions } from './components/ramp-widget/Ramp
 import { ReceiveModal, type ReceiveModalOptions } from './components/receive-modal/ReceiveModal';
 import { SendModal, type SendModalOptions } from './components/send-modal/SendModal';
 import { SwapModal, type SwapModalOptions } from './components/swap-modal/SwapModal';
-import { BridgeModal } from './components/bridge-modal/BridgeModal';
+import { BridgeModal, type BridgeModalOptions } from './components/bridge-modal/BridgeModal';
 import { EarnModal, type EarnModalOptions } from './components/earn-modal/EarnModal';
 import { CardModal, type CardModalOptions } from './components/card-modal/CardModal';
 import { SessionsModal } from './components/sessions-modal/SessionsModal';
@@ -294,8 +294,8 @@ interface PollarContextValue {
   /** Open the swap modal. */
   /** Opens the swap modal, on the network, assets and amount given; `onSuccess` hears the swap land. */
   openSwapModal: (options?: SwapModalOptions) => void;
-  /** Open the modal that moves USDC between the user's wallets on different networks (mainnet). */
-  openBridgeModal: () => void;
+  /** Opens the modal that moves USDC between the user's wallets on different networks (mainnet), on the direction and amount given; `onSuccess` hears the USDC arrive. */
+  openBridgeModal: (options?: BridgeModalOptions) => void;
   // earn (yield vaults / lending)
   /**
    * The yield providers this app exposes to end-users (empty = Earn disabled,
@@ -702,6 +702,7 @@ export function PollarProvider({
   const [swapModalKey, setSwapModalKey] = useState(0);
   const [bridgeModalOpen, setBridgeModalOpen] = useState(false);
   const [bridgeModalKey, setBridgeModalKey] = useState(0);
+  const [bridgeModalOptions, setBridgeModalOptions] = useState<BridgeModalOptions | undefined>(undefined);
   const [earnModalKey, setEarnModalKey] = useState(0);
   const [cardModalOpen, setCardModalOpen] = useState(false);
   const [cardModalKey, setCardModalKey] = useState(0);
@@ -887,7 +888,8 @@ export function PollarProvider({
         setSwapModalKey((k) => k + 1);
         setSwapModalOpen(true);
       },
-      openBridgeModal: () => {
+      openBridgeModal: (options?: BridgeModalOptions) => {
+        setBridgeModalOptions(options);
         setBridgeModalKey((k) => k + 1);
         setBridgeModalOpen(true);
       },
@@ -1044,7 +1046,7 @@ export function PollarProvider({
         )}
         {bridgeModalOpen && (
           <ModalErrorBoundary key={bridgeModalKey} onClose={() => setBridgeModalOpen(false)}>
-            <BridgeModal onClose={() => setBridgeModalOpen(false)} />
+            <BridgeModal onClose={() => setBridgeModalOpen(false)} initial={bridgeModalOptions} />
           </ModalErrorBoundary>
         )}
         {earnModalOpen && (

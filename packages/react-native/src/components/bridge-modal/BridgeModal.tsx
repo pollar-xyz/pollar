@@ -21,9 +21,22 @@ import { useSurfaceColors } from '../layout';
 import { ActionButton, Card, Choice, Field, Label, useNativeColors } from '../native-ui';
 import { BRIDGE_COPY, type BridgeCopy } from './bridge-copy';
 
+/** Where the bridge modal opens: a starting point the user can change, never a lock. */
+export interface BridgeModalOptions {
+  /** Used only when the user can bridge from that chain. */
+  fromChain?: BridgeChain;
+  /** Used only when the user can bridge to it from the chain the modal opens on. */
+  toChain?: BridgeChain;
+  /** USDC, e.g. '25'. */
+  amount?: string;
+  /** Called once the USDC arrives on the destination, with the completed transfer. */
+  onSuccess?: (transfer: BridgeTransfer) => void;
+}
+
 export interface BridgeModalProps {
   onClose: () => void;
   visible?: boolean;
+  initial?: BridgeModalOptions | undefined;
 }
 
 const CHAIN_LABEL: Record<BridgeChain, string> = { STELLAR: 'Stellar', SOLANA: 'Solana', POLYGON: 'Polygon' };
@@ -99,7 +112,7 @@ function newIntentKey(): string {
 }
 
 /** Moves USDC between the user's wallets on Stellar, Solana and Polygon (mainnet). The web SDK's BridgeModal, native. */
-export function BridgeModal({ onClose, visible = true }: BridgeModalProps) {
+export function BridgeModal({ onClose, visible = true, initial }: BridgeModalProps) {
   const { getClient, walletBalance, refreshWalletBalance, openCosignModal } = usePollar();
   const language = useModalLanguage();
   const copy = BRIDGE_COPY[language];
@@ -111,7 +124,9 @@ export function BridgeModal({ onClose, visible = true }: BridgeModalProps) {
   const [configError, setConfigError] = useState<string | null>(null);
   const [fromChain, setFromChain] = useState<BridgeChain | null>(null);
   const [toChain, setToChain] = useState<BridgeChain | null>(null);
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(() =>
+    /^\d+(\.\d+)?$/.test(initial?.amount?.trim() ?? '') ? initial!.amount!.trim() : '',
+  );
   const [quote, setQuote] = useState<BridgeQuote | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -129,9 +144,11 @@ export function BridgeModal({ onClose, visible = true }: BridgeModalProps) {
       .then((loaded) => {
         if (cancelled) return;
         setConfig(loaded);
-        const from = bridgeSourceChains(loaded)[0] ?? null;
+        const sources = bridgeSourceChains(loaded);
+        const from = (initial?.fromChain && sources.includes(initial.fromChain) ? initial.fromChain : sources[0]) ?? null;
+        const targets = from ? bridgeTargetChains(loaded, from) : [];
         setFromChain(from);
-        setToChain(from ? (bridgeTargetChains(loaded, from)[0] ?? null) : null);
+        setToChain((initial?.toChain && targets.includes(initial.toChain) ? initial.toChain : targets[0]) ?? null);
       })
       .catch((error: unknown) => !cancelled && setConfigError(errorText(error, copy)));
     return () => {
@@ -200,6 +217,15 @@ export function BridgeModal({ onClose, visible = true }: BridgeModalProps) {
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, transfer?.id, transfer?.pendingAction?.actionId]);
+
+  // Heard once per transfer, whichever read first saw it complete.
+  const reported = useRef<string | null>(null);
+  const onSuccess = initial?.onSuccess;
+  useEffect(() => {
+    if (transfer?.status !== 'COMPLETED' || reported.current === transfer.id) return;
+    reported.current = transfer.id;
+    onSuccess?.(transfer);
+  }, [transfer, onSuccess]);
 
   async function submit() {
     if (!fromChain || !toChain || !amountValid || overBalance) return;

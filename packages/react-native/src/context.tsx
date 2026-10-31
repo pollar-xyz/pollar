@@ -20,7 +20,7 @@ import type { EarnModalOptions, ReceiveModalOptions, SendModalOptions, SwapModal
 import { ModalErrorBoundary } from './components/commons';
 import { AppKycFlow } from './components/kyc-modal/AppKycFlow';
 import { CardModal, type CardModalOptions } from './components/card-modal/CardModal';
-import { BridgeModal } from './components/bridge-modal/BridgeModal';
+import { BridgeModal, type BridgeModalOptions } from './components/bridge-modal/BridgeModal';
 import { ConfirmModal } from './components/confirm-modal/ConfirmModal';
 import { CosignModal } from './components/cosign-modal/CosignModal';
 import { CustodyMigrationModal } from './components/custody-migration-modal/CustodyMigrationModal';
@@ -125,6 +125,7 @@ type SeededModalMethods = {
   openEarnModal: (options?: EarnModalOptions) => void;
   openCardModal: (options?: CardModalOptions) => void;
   openTxHistoryModal: (options?: TxHistoryModalOptions) => void;
+  openBridgeModal: (options?: BridgeModalOptions) => void;
 };
 export type PollarContextValue = Methods &
   Record<
@@ -503,7 +504,7 @@ function ClientProvider({
     openRampModal: (options) => open('ramp', options),
     openRampWidget: (options) => open('ramp', options),
     openCardModal: (options) => open('cards', options),
-    openBridgeModal: () => open('bridge'),
+    openBridgeModal: (options) => open('bridge', options),
     openSwapModal: (options) => open('swap', options),
     openEarnModal: (options) => open('earn', options),
     openDistributionRulesModal: () => open('distribution'),
@@ -533,7 +534,7 @@ function ClientProvider({
               ) : modal === 'ramp' ? (
                 <RampWidget onClose={close} initial={modalInitial as RampModalOptions | undefined} />
               ) : modal === 'bridge' ? (
-                <BridgeModal onClose={close} />
+                <BridgeModal onClose={close} initial={modalInitial as BridgeModalOptions | undefined} />
               ) : modal === 'cards' ? (
                 <CardModal key={wallet?.address ?? ''} onClose={close} initial={modalInitial as CardModalOptions | undefined} />
               ) : modal === 'transactions' ? (
