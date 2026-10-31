@@ -721,6 +721,7 @@ export function PollarProvider({
   // A co-signed signature this device cannot vote on: the recovery modal is
   // where it gets added (another device, a passkey or the email).
   useEffect(() => pollarClient.onCosignDeviceNotEnrolled(() => setRecoveryModalOpen(true)), [pollarClient]);
+  useEffect(() => pollarClient.onWalletRecoveryRequired(() => setRecoveryModalOpen(true)), [pollarClient]);
   const [distributionRulesModalOpen, setDistributionRulesModalOpen] = useState(false);
 
   // When the session ends (logout, revoked, ended in another tab) every modal that

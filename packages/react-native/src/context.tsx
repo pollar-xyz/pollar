@@ -355,6 +355,7 @@ function ClientProvider({
   // A co-signed signature this device cannot vote on: the recovery modal is
   // where it gets added (another device, a passkey or the email).
   useEffect(() => client.onCosignDeviceNotEnrolled(() => setRecoveryModalOpen(true)), [client]);
+  useEffect(() => client.onWalletRecoveryRequired(() => setRecoveryModalOpen(true)), [client]);
   // The recovery state of a Turnkey wallet, read once signed in and again when
   // the wallet changes, so a locked wallet says so before the user tries to
   // send. A user without a Turnkey wallet reads `required: false`.

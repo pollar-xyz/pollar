@@ -97,7 +97,7 @@ import { createLogger, type PollarLogger } from '../lib/logger';
 import { redactBody, redactDeep } from '../lib/logging';
 import { randomUUID } from '../lib/random-uuid';
 import { onChainErrorCode } from '../lib/tx-error-messages';
-import { apiErrorFields, isRecord, stringField } from '../api/error-fields';
+import { apiErrorFields, isRecord, responseErrorCode, stringField } from '../api/error-fields';
 import { bytesToHex, hexToBytes } from '../cosign/encoding';
 import { base64urlDecode, base64urlEncode } from '../lib/base64url';
 import { createAuthEntrySigner } from '../stellar/auth-entry-signer';
@@ -573,6 +573,7 @@ export class PollarClient {
   private _cosignState: CosignState = { pending: [] };
   private _cosignStateListeners = new Set<(state: CosignState) => void>();
   private _deviceNotEnrolledListeners = new Set<() => void>();
+  private _walletRecoveryRequiredListeners = new Set<() => void>();
 
   /** The confirmation policy; see `PollarClientConfig.confirmation` and `cosignManual`. */
   private readonly _confirmation: ConfirmationPolicy | undefined;
@@ -952,6 +953,7 @@ export class PollarClient {
     this._storageDegradeListeners.clear();
     this._cosignStateListeners.clear();
     this._deviceNotEnrolledListeners.clear();
+    this._walletRecoveryRequiredListeners.clear();
   }
 
   // --- Middlewares (DPoP + auto-refresh) ------------------------------------
@@ -1094,6 +1096,10 @@ export class PollarClient {
           self._log.warn(
             "[PollarClient] Pollar refuses this app's billable features (402): it is out of credits (SDK_CREDITS_INSUFFICIENT) or has an overdue statement (SDK_BILLING_OVERDUE). Top up or pay it in the Pollar dashboard.",
           );
+        }
+
+        if (response.status === 409 && (await responseErrorCode(response)) === 'SDK_WALLET_RECOVERY_REQUIRED') {
+          self._emitWalletRecoveryRequired();
         }
 
         if (response.status !== 401) return self._logHttp(request, response);
@@ -3410,6 +3416,29 @@ export class PollarClient {
     return () => {
       this._deviceNotEnrolledListeners.delete(cb);
     };
+  }
+
+  /**
+   * Subscribe to the API refusing a call because the user's co-signed wallet has
+   * no recovery method yet (`SDK_WALLET_RECOVERY_REQUIRED`): a signature, a send,
+   * an on-ramp. The call still fails with that code; this is the cue to open the
+   * recovery setup. No replay.
+   */
+  onWalletRecoveryRequired(cb: () => void): () => void {
+    this._walletRecoveryRequiredListeners.add(cb);
+    return () => {
+      this._walletRecoveryRequiredListeners.delete(cb);
+    };
+  }
+
+  private _emitWalletRecoveryRequired(): void {
+    for (const cb of this._walletRecoveryRequiredListeners) {
+      try {
+        cb();
+      } catch (err) {
+        this._log.error('[PollarClient] onWalletRecoveryRequired listener threw', err);
+      }
+    }
   }
 
   private _emitDeviceNotEnrolled(): void {
