@@ -33,7 +33,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * What one input can tell before the server does, with the same rules the server
  * applies: a number that is not one or is out of range, a date outside
- * `YYYY-MM-DD`, text longer than allowed or not matching the field's pattern. The
+ * `YYYY-MM-DD`, text shorter or longer than allowed or not matching the field's pattern. The
  * server checks all of it again, so a custom UI cannot skip it; this only answers
  * sooner. Empty values are left to the server's `required`.
  */
@@ -52,6 +52,7 @@ export function localFieldError(field: RequirementFormField, value: FormValues[s
     return DATE.test(text) && !Number.isNaN(Date.parse(`${text}T00:00:00Z`)) ? null : 'invalid_format';
   }
   if (field.type === 'select' || field.type === 'multiselect' || field.type === 'checkbox') return null;
+  if (rules.minLength !== undefined && text.length < rules.minLength) return 'too_short';
   if (rules.maxLength !== undefined && text.length > rules.maxLength) return 'too_long';
   if (rules.pattern) {
     try {
@@ -111,6 +112,7 @@ const MESSAGES: Record<FormLanguage, Record<string, string>> = {
     required: 'This field is required.',
     invalid_type: 'This value is not valid.',
     invalid_option: 'Choose one of the options.',
+    too_short: 'This is too short.',
     too_long: 'This is too long.',
     too_small: 'This value is too small.',
     too_large: 'This value is too large.',
@@ -121,6 +123,7 @@ const MESSAGES: Record<FormLanguage, Record<string, string>> = {
     required: 'Este campo es obligatorio.',
     invalid_type: 'Este valor no es válido.',
     invalid_option: 'Elige una de las opciones.',
+    too_short: 'Es demasiado corto.',
     too_long: 'Es demasiado largo.',
     too_small: 'Este valor es demasiado bajo.',
     too_large: 'Este valor es demasiado alto.',
@@ -131,6 +134,7 @@ const MESSAGES: Record<FormLanguage, Record<string, string>> = {
     required: 'Este campo é obrigatório.',
     invalid_type: 'Este valor não é válido.',
     invalid_option: 'Escolha uma das opções.',
+    too_short: 'É curto demais.',
     too_long: 'É longo demais.',
     too_small: 'Este valor é baixo demais.',
     too_large: 'Este valor é alto demais.',

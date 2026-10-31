@@ -13939,6 +13939,7 @@ export interface operations {
                                 validation?: {
                                     min?: number;
                                     max?: number;
+                                    minLength?: number;
                                     maxLength?: number;
                                     pattern?: string;
                                 };
