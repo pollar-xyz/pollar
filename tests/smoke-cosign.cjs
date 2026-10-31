@@ -617,7 +617,7 @@ function request(overrides = {}) {
   check('approve proposes once the network fee landed', approvedAfterGas.status === 'APPROVED');
 
   // Still on its way after every attempt: the code reaches the caller.
-  gasPendingRefreshes = 5;
+  gasPendingRefreshes = 10;
   await client.signAndSubmitTx(UNSIGNED_XDR);
   const gasError = await client.cosign.approve(request({ refreshable: true })).catch((err) => err);
   check('approve gives up with SDK_COSIGN_GAS_PENDING after its attempts', gasError?.code === 'SDK_COSIGN_GAS_PENDING');

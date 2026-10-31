@@ -24,8 +24,10 @@ import { stellarTransactionHashHex } from './stellar-hash';
 import { isRecord, stringField } from '../api/error-fields';
 
 const REQUEST_VOTE_TIMEOUT_MS = 60_000;
-/** Refreshes asked before a vote while a ramp step's network fee is on its way; sdk-api waits up to 30s on each. */
-const GAS_PENDING_ATTEMPTS = 3;
+/** Refreshes asked before a vote while a ramp step's network fee is on its way; sdk-api waits about 5s on each. */
+const GAS_PENDING_ATTEMPTS = 6;
+/** A refresh rebuilds the transaction and can wait for its network fee: more than the 10s default. */
+const REFRESH_TIMEOUT_MS = 20_000;
 
 /**
  * The user's half of a Turnkey wallet, headless: no UI, only promises and the
@@ -243,7 +245,10 @@ export class CosignManager {
    */
   async refresh(target: CosignRequest | string): Promise<CosignRequest> {
     const id = typeof target === 'string' ? target : target.id;
-    const res = await this.deps.api.POST('/cosign/requests/{id}/refresh', { params: { path: { id } } });
+    const res = await this.deps.api.POST('/cosign/requests/{id}/refresh', {
+      params: { path: { id } },
+      headers: { 'x-pollar-timeout-ms': String(REFRESH_TIMEOUT_MS) },
+    });
     const request = content(res, 'SDK_COSIGN_REQUEST_NOT_FOUND').request;
     this.deps.onRequest(request);
     return request;
@@ -251,9 +256,9 @@ export class CosignManager {
 
   /**
    * {@link refresh} before a vote. A ramp step on Polygon is voted once its
-   * network fee reached the wallet; sdk-api waits for it, and answers
-   * `SDK_COSIGN_GAS_PENDING` when it is still on its way at the end of that
-   * wait. The refresh is asked again a few times before that reaches the user.
+   * network fee reached the wallet; sdk-api waits a few seconds for it, and
+   * answers `SDK_COSIGN_GAS_PENDING` when it is still on its way at the end of
+   * that wait. The refresh is asked again before that reaches the user.
    */
   private async refreshForVote(request: CosignRequest): Promise<CosignRequest> {
     for (let attempt = 1; ; attempt++) {
