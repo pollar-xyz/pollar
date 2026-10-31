@@ -26,7 +26,7 @@ export const CUSTODY_MIGRATION_COPY: Record<
   en: {
     title: 'Move your wallets to this device',
     intro:
-      "Until now Pollar held the keys of your wallets. This app now keeps wallets on its users' devices, so they move here, with everything they hold.",
+      'We are strengthening the security of your account: your wallets move to this device and every signature starts here, from your keys. They move with everything they hold.',
     whatMoves: 'What moves',
     newAddress: 'New address',
     sameAddress: 'Same address',
@@ -49,7 +49,7 @@ export const CUSTODY_MIGRATION_COPY: Record<
   es: {
     title: 'Mueve tus billeteras a este dispositivo',
     intro:
-      'Hasta ahora Pollar guardaba las llaves de tus billeteras. Esta app ahora guarda las billeteras en los dispositivos de sus usuarios, así que se mueven aquí con todo lo que contienen.',
+      'Estamos reforzando la seguridad de tu cuenta: tus billeteras pasan a este dispositivo y cada firma sale desde aquí, con tus llaves. Se mueven con todo lo que contienen.',
     whatMoves: 'Qué se mueve',
     newAddress: 'Dirección nueva',
     sameAddress: 'Misma dirección',
@@ -73,7 +73,7 @@ export const CUSTODY_MIGRATION_COPY: Record<
   pt: {
     title: 'Mova suas carteiras para este dispositivo',
     intro:
-      'Até agora a Pollar guardava as chaves das suas carteiras. Este app agora mantém as carteiras nos dispositivos dos usuários, então elas vêm para cá com tudo o que contêm.',
+      'Estamos reforçando a segurança da sua conta: suas carteiras passam para este dispositivo e cada assinatura sai daqui, com as suas chaves. Elas vêm com tudo o que contêm.',
     whatMoves: 'O que será movido',
     newAddress: 'Endereço novo',
     sameAddress: 'Mesmo endereço',
