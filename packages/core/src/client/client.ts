@@ -572,6 +572,7 @@ export class PollarClient {
   readonly cosign: CosignManager;
   private _cosignState: CosignState = { pending: [] };
   private _cosignStateListeners = new Set<(state: CosignState) => void>();
+  private _deviceNotEnrolledListeners = new Set<() => void>();
 
   /** The confirmation policy; see `PollarClientConfig.confirmation` and `cosignManual`. */
   private readonly _confirmation: ConfirmationPolicy | undefined;
@@ -950,6 +951,7 @@ export class PollarClient {
     this._localeListeners.clear();
     this._storageDegradeListeners.clear();
     this._cosignStateListeners.clear();
+    this._deviceNotEnrolledListeners.clear();
   }
 
   // --- Middlewares (DPoP + auto-refresh) ------------------------------------
@@ -3397,6 +3399,39 @@ export class PollarClient {
     return { ...this._cosignState, pending: [...this._cosignState.pending] };
   }
 
+  /**
+   * Subscribe to a co-signed signature stopping because this device is not one
+   * of the wallet's devices (another origin or install of the same user). The
+   * signing call still ends in `SDK_COSIGN_DEVICE_NOT_ENROLLED`; this is the
+   * cue to offer adding the device. No replay.
+   */
+  onCosignDeviceNotEnrolled(cb: () => void): () => void {
+    this._deviceNotEnrolledListeners.add(cb);
+    return () => {
+      this._deviceNotEnrolledListeners.delete(cb);
+    };
+  }
+
+  private _emitDeviceNotEnrolled(): void {
+    for (const cb of this._deviceNotEnrolledListeners) {
+      try {
+        cb();
+      } catch (err) {
+        this._log.error('[PollarClient] onCosignDeviceNotEnrolled listener threw', err);
+      }
+    }
+  }
+
+  /**
+   * Refuse a vote this device cannot cast before stamping it. A failed check
+   * lets the vote go ahead: the relay refuses a key that is not enrolled anyway.
+   */
+  private async _assertDeviceEnrolled(): Promise<void> {
+    const enrolled = await this.cosign.isDeviceEnrolled().catch(() => true);
+    if (!enrolled)
+      throw new PollarApiError('SDK_COSIGN_DEVICE_NOT_ENROLLED', { reason: 'this device is not one of the wallet devices' });
+  }
+
   /** Subscribe to co-sign state. Replays the current value on subscribe. */
   onCosignStateChange(cb: (state: CosignState) => void): () => void {
     this._cosignStateListeners.add(cb);
@@ -3535,6 +3570,7 @@ export class PollarClient {
     if (this._cosignManual) return { status: 'cosign_pending', request, ...(buildData && { buildData }) };
     this._autoHandling.add(request.id);
     try {
+      await this._assertDeviceEnrolled();
       const resolved = await this.cosign.settle(await this.cosign.approve(request));
       return await this._outcomeOfCosign(resolved, ctx);
     } catch (err) {
@@ -3558,6 +3594,7 @@ export class PollarClient {
       await this.cosign.reject(request).catch((rejectErr) => {
         this._log.warn('[PollarClient] could not reject a co-sign request after a failed send', rejectErr);
       });
+      if (code === 'SDK_COSIGN_DEVICE_NOT_ENROLLED') this._emitDeviceNotEnrolled();
       this._setTransactionState({
         step: 'error',
         phase: ctx.phase,
@@ -3610,6 +3647,7 @@ export class PollarClient {
     if (this._cosignManual) return { status: 'cosign_pending', request };
     this._autoHandling.add(request.id);
     try {
+      await this._assertDeviceEnrolled();
       return authEntryOutcomeOf(await this.cosign.settle(await this.cosign.approve(request)));
     } catch (err) {
       if (isRetryableTransportError(err)) {
@@ -3627,6 +3665,7 @@ export class PollarClient {
       await this.cosign.reject(request).catch((rejectErr) => {
         this._log.warn('[PollarClient] could not reject a co-sign request after a failed auth-entry signing', rejectErr);
       });
+      if (code === 'SDK_COSIGN_DEVICE_NOT_ENROLLED') this._emitDeviceNotEnrolled();
       return { status: 'error', ...(details && { details }), ...(code && { code }) };
     } finally {
       this._autoHandling.delete(request.id);

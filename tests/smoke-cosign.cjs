@@ -187,8 +187,13 @@ function request(overrides = {}) {
       ...extra,
     });
     await c.ready();
+    // Every client here is the user's own enrolled device, as after onboarding;
+    // the not-enrolled checks hide them with `hideClientDevices`.
+    clientDeviceKeys.add((await c.cosign.publicKeyHex()).toLowerCase());
     return c;
   }
+  const clientDeviceKeys = new Set();
+  let hideClientDevices = false;
 
   const calls = [];
   let approveCalls = 0;
@@ -376,6 +381,15 @@ function request(overrides = {}) {
               lastSeenAt: null,
               createdAt: new Date().toISOString(),
             },
+            ...(hideClientDevices ? [] : [...clientDeviceKeys]).map((publicKey, i) => ({
+              id: `dev-client-${i}`,
+              publicKey,
+              tkApiKeyId: `tk-key-client-${i}`,
+              label: 'this browser',
+              enrolledVia: 'ONBOARDING',
+              lastSeenAt: null,
+              createdAt: new Date().toISOString(),
+            })),
           ],
         },
       });
@@ -711,6 +725,7 @@ function request(overrides = {}) {
   // A device whose key is not among the user's devices (another origin, another
   // install): the relay would refuse its stamp, so nothing is relayed and
   // nothing is recorded; the sub-org is not BROKEN because of it.
+  hideClientDevices = true;
   const relaysBeforeNotEnrolled = calls.filter((c) => c === 'POST /v3/cosign/relay').length;
   const reportsBeforeNotEnrolled = quorumReports.length;
   check('isDeviceEnrolled is false for a key the user does not hold', (await client.cosign.isDeviceEnrolled()) === false);
@@ -725,6 +740,7 @@ function request(overrides = {}) {
     calls.filter((c) => c === 'POST /v3/cosign/relay').length === relaysBeforeNotEnrolled,
   );
   check('a device that is not enrolled records no quorum reading', quorumReports.length === reportsBeforeNotEnrolled);
+  hideClientDevices = false;
 
   // Quorum: read from Turnkey with the device key and recorded server-side.
   mockDeviceKeyHex = await client.cosign.publicKeyHex();
@@ -880,6 +896,30 @@ function request(overrides = {}) {
   check('signAndSubmitTx returns success with the hash', autoSend.status === 'success' && autoSend.hash === 'abc123', autoSend);
   check('the tx state ended in success', autoStates[autoStates.length - 1] === 'success');
 
+  // This browser is not one of the wallet's devices (another origin of the same
+  // user): the vote is refused before anything is stamped, the request is
+  // closed and the provider hears about it to offer adding the device.
+  hideClientDevices = true;
+  let notEnrolledEvents = 0;
+  const offNotEnrolled = auto.onCosignDeviceNotEnrolled(() => notEnrolledEvents++);
+  const votesBeforeNotEnrolled = approveCalls;
+  const rejectsBeforeNotEnrolled = rejectCalls;
+  const notEnrolledSign = await auto.signTx(UNSIGNED_XDR);
+  check(
+    'signTx from a device that is not enrolled ends in SDK_COSIGN_DEVICE_NOT_ENROLLED',
+    notEnrolledSign.status === 'error' && notEnrolledSign.code === 'SDK_COSIGN_DEVICE_NOT_ENROLLED',
+    notEnrolledSign,
+  );
+  check('a device that is not enrolled stamps no vote', approveCalls === votesBeforeNotEnrolled);
+  check('the request it cannot vote on is closed', rejectCalls === rejectsBeforeNotEnrolled + 1);
+  check('the not-enrolled event fired once', notEnrolledEvents === 1);
+  check('the tx state ended in error with the code', autoStates[autoStates.length - 1] === 'error');
+  offNotEnrolled();
+  hideClientDevices = false;
+  const enrolledAgain = await auto.signAndSubmitTx(UNSIGNED_XDR);
+  check('once enrolled the same client votes again', enrolledAgain.status === 'success', enrolledAgain);
+  check('an unsubscribed listener hears nothing more', notEnrolledEvents === 1);
+
   // A card funding from a co-signed wallet: the device votes, cosign sends the
   // payment, and fundCard hands back the funding as the server now reads it.
   const autoFund = await auto.fundCard({ amount: '5' });
@@ -962,13 +1002,14 @@ function request(overrides = {}) {
 
   // sdk-api claims a hash the transaction does not have.
   signingRequest = (overrides) => request({ payloadHash: 'ff'.repeat(32), ...overrides });
+  const rejectsBeforeMismatch = rejectCalls;
   const mismatch = await auto.signTx(UNSIGNED_XDR);
   check(
     'a payload that does not hash to what Pollar claims ends as an error, not a signature',
     mismatch.status === 'error' && mismatch.code === 'SDK_COSIGN_VERIFICATION_FAILED',
     mismatch,
   );
-  check('the mismatching request was rejected by the device', rejectCalls === 1);
+  check('the mismatching request was rejected by the device', rejectCalls === rejectsBeforeMismatch + 1);
   check('the tx state ended in error', autoStates[autoStates.length - 1] === 'error');
   signingRequest = (overrides) => request(overrides);
   auto.destroy();
