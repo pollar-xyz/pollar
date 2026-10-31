@@ -42,6 +42,9 @@ for (const key of [
   'Node',
   'NodeFilter',
   'MutationObserver',
+  // React Aria dispatches these on jsdom nodes, which refuse Node's own.
+  'Event',
+  'CustomEvent',
 ]) {
   globalThis[key] = window[key];
 }
@@ -86,14 +89,20 @@ function press(el) {
 
 const host = {};
 
-function HostModal({ state, children }) {
+// The hook runs inside <Overlay>, as React Aria Components' Modal does: that is
+// what turns on the overlay's focus trap.
+function HostModalContent({ state, children }) {
   const ref = React.useRef(null);
   const { modalProps, underlayProps } = useModalOverlay({ isDismissable: true }, state, ref);
   return h(
-    Overlay,
-    null,
-    h('div', { ...underlayProps, 'data-host-underlay': '' }, h('div', { ...modalProps, ref, 'data-host-modal': '' }, children)),
+    'div',
+    { ...underlayProps, 'data-host-underlay': '' },
+    h('div', { ...modalProps, ref, 'data-host-modal': '' }, children),
   );
+}
+
+function HostModal({ state, children }) {
+  return h(Overlay, null, h(HostModalContent, { state }, children));
 }
 
 function HostApp() {
@@ -148,6 +157,16 @@ function HostApp() {
     "the host's app root is inert, so anything rendered inside it takes no clicks",
     !!document.getElementById('host-app').closest('[inert]'),
   );
+
+  // The user is on the host modal's Pay button when the signature starts. With
+  // nothing focused inside, the focus trap has nowhere to send focus back to
+  // and the check on the prompt below would pass with or without the fix.
+  const payButton = document.getElementById('host-pay');
+  await act(async () => {
+    payButton.focus();
+    await sleep(10);
+  });
+  check("focus is on the host modal's Pay button", document.activeElement === payButton);
 
   console.log('── 2. A confirmation raised from the host modal is reachable ─');
   // The path every signing call takes once the policy says to ask the user.
