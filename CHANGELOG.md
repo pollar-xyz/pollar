@@ -117,8 +117,13 @@
   the same options, and its panels gain what that needs: a memo with its
   type on a Stellar send, Solana swaps with a network picker, deposit and
   withdraw tabs in Earn, and a network picker in the history, whose rows
-  open each chain's explorer. The option types are exported from both
-  packages.
+  open each chain's explorer. The React Native swap also sells what the
+  wallet holds with **Max**, quotes with the best price or one venue, and on
+  Stellar buys the app's enabled assets, the catalog and a token the user
+  adds, saying when the swap creates a trustline. The option types are
+  exported from both packages.
+- The email code boxes are named in the modal's language ("Dígito 2 de 6")
+  for screen readers, instead of always in English.
 - **The modals follow a language that changes at runtime.**
   `<PollarProvider language={tag}>` (a BCP 47 tag) is read on every render,
   unlike `client`, so open and later modals switch with the app's language
@@ -198,6 +203,11 @@
   and React Native, keeps one key per attempt and drops it once the server
   answers. Requires an sdk-api that accepts `idempotencyKey` on
   `POST /v3/cards/funding`.
+- `<CardModal>`, web and React Native, says why a funding failed in the
+  user's language (no SOL for the network fee, not enough USDC, the payment
+  not sent) instead of showing the wallet service's sentence, and a funding
+  the card provider has not credited after two hours reads "Taking longer than
+  usual" instead of crediting forever.
 - **Move USDC between the user's own wallets on Stellar, Solana and Polygon.**
   `client.bridge({ fromChain, toChain, amount, idempotencyKey })` moves it by
   Circle CCTP in any direction between the three, on mainnet, about five

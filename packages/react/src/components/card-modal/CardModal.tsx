@@ -31,7 +31,7 @@ import { buildModalCssVars, modalChrome } from '../modal-theme';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
 import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
 import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
-import { CARD_COPY, type CardCopy } from './card-copy';
+import { CARD_COPY, CREDIT_DELAYED, fundingProblemText, type CardCopy } from './card-copy';
 import { blockedStepMessage, cardStage, pendingFromRequirement, requiredCardStep, type PendingCardStep } from './card-kyc';
 import '../shared.css';
 import '../send-modal/SendModal.css';
@@ -122,6 +122,17 @@ function errorText(e: unknown, fallback: string, copy: CardCopy): string {
   if (isPollarApiError(e)) {
     const known = copy.errors[e.code];
     if (known) return known;
+    // A funding custody refused or the wallet cannot pay: its reason, not custody's sentence.
+    if (e.code === 'SDK_CARDS_FUNDING_WALLET_NOT_READY') {
+      const { reason, code, message } = e.body;
+      if (reason === 'insufficient_usdc') return copy.fundingProblem.noBalance;
+      if (reason === 'build_failed' || reason === 'payment_rejected') {
+        return fundingProblemText(
+          `${typeof code === 'string' ? code : ''}: ${typeof message === 'string' ? message : ''}`,
+          copy,
+        );
+      }
+    }
     const providerMessage = e.body.providerMessage;
     if (typeof providerMessage === 'string' && providerMessage) return providerMessage;
     const message = e.body.message;
@@ -936,12 +947,13 @@ export function CardModal({ onClose, initial }: CardModalProps) {
                         </span>
                         {inflight && step > 0 && (
                           <span className="pollar-card-tx-meta" role="status">
-                            {copy.stepOf(step, steps.length)} · {state?.hint}
+                            {copy.stepOf(step, steps.length)} ·{' '}
+                            {f.error === CREDIT_DELAYED ? copy.fundingProblem.delayed : state?.hint}
                           </span>
                         )}
                         <span className="pollar-card-tx-meta">
                           {new Date(f.createdAt).toLocaleString()}
-                          {f.status === 'FAILED' && f.error ? ` · ${f.error}` : ''}
+                          {f.status === 'FAILED' ? ` · ${fundingProblemText(f.error, copy)}` : ''}
                         </span>
                       </div>
                       <div className="pollar-card-tx-amount" data-direction={f.status === 'CREDITED' ? 'credit' : undefined}>

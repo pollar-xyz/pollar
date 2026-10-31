@@ -102,6 +102,15 @@ export interface CardCopy {
   sendOnly: (tokens: string, network: string) => string;
   noDeposit: string;
   hideDeposit: string;
+  /** A funding that failed or is held up, in the user's words rather than custody's. */
+  fundingProblem: {
+    noGas: string;
+    sponsorNoGas: string;
+    noBalance: string;
+    notPaid: string;
+    failed: string;
+    delayed: string;
+  };
 }
 
 export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
@@ -266,6 +275,14 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
     sendOnly: (tokens, network) => `Send only ${tokens} on ${network}; anything else can be lost.`,
     noDeposit: 'The provider returned no deposit address.',
     hideDeposit: 'Hide the deposit address',
+    fundingProblem: {
+      noGas: 'Your wallet does not have enough to pay the network fee.',
+      sponsorNoGas: 'The network fee cannot be covered right now. Please try again later.',
+      noBalance: 'Your wallet does not have enough USDC for this amount.',
+      notPaid: 'The payment was not sent.',
+      failed: 'The payment could not be completed. Please try again.',
+      delayed: 'Taking longer than usual. We are following up with the card provider.',
+    },
   },
   es: {
     funding: {
@@ -428,6 +445,14 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
     sendOnly: (tokens, network) => `Envía solo ${tokens} en ${network}; cualquier otra cosa puede perderse.`,
     noDeposit: 'El proveedor no devolvió ninguna dirección de depósito.',
     hideDeposit: 'Ocultar la dirección de depósito',
+    fundingProblem: {
+      noGas: 'Tu wallet no tiene saldo suficiente para pagar la comisión de red.',
+      sponsorNoGas: 'Ahora no se puede cubrir la comisión de red. Intenta de nuevo más tarde.',
+      noBalance: 'Tu wallet no tiene suficiente USDC para este monto.',
+      notPaid: 'El pago no se envió.',
+      failed: 'No se pudo completar el pago. Intenta de nuevo.',
+      delayed: 'Está tardando más de lo normal. Estamos haciendo seguimiento con el emisor de la tarjeta.',
+    },
   },
   pt: {
     funding: {
@@ -591,5 +616,32 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
     sendOnly: (tokens, network) => `Envie apenas ${tokens} na ${network}; qualquer outra coisa pode ser perdida.`,
     noDeposit: 'O provedor não retornou nenhum endereço de depósito.',
     hideDeposit: 'Ocultar o endereço de depósito',
+    fundingProblem: {
+      noGas: 'Sua carteira não tem saldo suficiente para pagar a taxa de rede.',
+      sponsorNoGas: 'A taxa de rede não pode ser coberta agora. Tente novamente mais tarde.',
+      noBalance: 'Sua carteira não tem USDC suficiente para este valor.',
+      notPaid: 'O pagamento não foi enviado.',
+      failed: 'Não foi possível concluir o pagamento. Tente novamente.',
+      delayed: 'Está demorando mais que o normal. Estamos acompanhando com o emissor do cartão.',
+    },
   },
 };
+
+/** The `error` the server keeps on a funding still waiting for the card provider's credit. */
+export const CREDIT_DELAYED = 'provider_credit_delayed';
+
+/**
+ * A failed funding's `error` for the user. The server stores custody's code
+ * first (`TX_INSUFFICIENT_BALANCE: ...`); an older row holds custody's sentence
+ * alone, which is matched by its wording.
+ */
+export function fundingProblemText(error: string | null | undefined, copy: CardCopy): string {
+  const raw = error ?? '';
+  if (/^TX_INSUFFICIENT_BALANCE|needed \(fee/.test(raw)) {
+    if (/sponsor/i.test(raw)) return copy.fundingProblem.sponsorNoGas;
+    return /token balance/i.test(raw) ? copy.fundingProblem.noBalance : copy.fundingProblem.noGas;
+  }
+  if (/insufficient_usdc/.test(raw)) return copy.fundingProblem.noBalance;
+  if (/^(payment_not_received|cosign_rejected|cosign_expired)/.test(raw)) return copy.fundingProblem.notPaid;
+  return copy.fundingProblem.failed;
+}

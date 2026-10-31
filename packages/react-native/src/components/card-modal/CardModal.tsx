@@ -36,7 +36,7 @@ import { KycModal } from '../kyc-modal/KycModal';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
 import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
 import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
-import { CARD_COPY, type CardCopy } from './card-copy';
+import { CARD_COPY, CREDIT_DELAYED, fundingProblemText, type CardCopy } from './card-copy';
 import { blockedStepMessage, cardStage, pendingFromRequirement, requiredCardStep, type PendingCardStep } from './card-kyc';
 
 /** Where the card modal opens: a starting point the user can change, never a lock. */
@@ -123,6 +123,17 @@ function errorText(e: unknown, fallback: string, copy: CardCopy): string {
   if (isPollarApiError(e)) {
     const known = copy.errors[e.code];
     if (known) return known;
+    // A funding custody refused or the wallet cannot pay: its reason, not custody's sentence.
+    if (e.code === 'SDK_CARDS_FUNDING_WALLET_NOT_READY') {
+      const { reason, code, message } = e.body;
+      if (reason === 'insufficient_usdc') return copy.fundingProblem.noBalance;
+      if (reason === 'build_failed' || reason === 'payment_rejected') {
+        return fundingProblemText(
+          `${typeof code === 'string' ? code : ''}: ${typeof message === 'string' ? message : ''}`,
+          copy,
+        );
+      }
+    }
     const providerMessage = e.body.providerMessage;
     if (typeof providerMessage === 'string' && providerMessage) return providerMessage;
     const message = e.body.message;
@@ -919,12 +930,13 @@ export function CardModal({ onClose, initial }: CardModalProps) {
                             </View>
                             {inflight && step > 0 && (
                               <Text style={{ color: colors.muted, fontSize: 11 }} accessibilityLiveRegion="polite">
-                                {copy.stepOf(step, steps.length)} · {state?.hint}
+                                {copy.stepOf(step, steps.length)} ·{' '}
+                                {f.error === CREDIT_DELAYED ? copy.fundingProblem.delayed : state?.hint}
                               </Text>
                             )}
                             <Text style={{ color: colors.muted, fontSize: 11 }}>
                               {new Date(f.createdAt).toLocaleString()}
-                              {f.status === 'FAILED' && f.error ? ` ${f.error}` : ''}
+                              {f.status === 'FAILED' ? ` ${fundingProblemText(f.error, copy)}` : ''}
                             </Text>
                           </View>
                           <Text style={{ color: f.status === 'CREDITED' ? '#15803d' : colors.text, fontSize: 13 }}>
