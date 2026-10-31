@@ -138,7 +138,9 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         setError(
           transactionErrorMessage(isPollarApiError(err) ? err.code : null, err instanceof Error ? err.message : null, language),
         );
-        if (kind === 'approving') setApproveFailedFor(request.id);
+        // The network fee still on its way: the same approval goes through once it lands.
+        if (kind === 'approving' && !(isPollarApiError(err) && err.code === 'SDK_COSIGN_GAS_PENDING'))
+          setApproveFailedFor(request.id);
       } finally {
         setBusy(null);
       }

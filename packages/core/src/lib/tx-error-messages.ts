@@ -47,6 +47,8 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     SDK_WALLET_RECOVERY_REQUIRED:
       'Set up a way to recover this wallet first: a passkey, a second device or your email. Without one, losing this device means losing the funds, and nobody can get them back.',
     SDK_COSIGN_TURNKEY_REJECTED: 'The wallet provider refused the request. Please try again in a moment.',
+    SDK_COSIGN_GAS_PENDING:
+      'The network fee for this step is still on its way to your wallet. Please try again in a few seconds.',
     SDK_COSIGN_CUSTODY_SWITCH_PENDING: 'Finish or cancel the pending approvals before changing how this wallet is secured.',
     SDK_COSIGN_CUSTODY_SWITCH_NOT_ALLOWED: "This app doesn't let you change how your wallet is secured.",
     SDK_COSIGN_PASSKEY_UNAVAILABLE: "Passkeys aren't available on this device.",
@@ -80,6 +82,8 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     SDK_WALLET_RECOVERY_REQUIRED:
       'Primero configura una forma de recuperar esta billetera: una passkey, un segundo dispositivo o tu email. Sin una, perder este dispositivo significa perder los fondos, y nadie podrá recuperarlos.',
     SDK_COSIGN_TURNKEY_REJECTED: 'El proveedor de la billetera rechazó la solicitud. Intenta de nuevo en un momento.',
+    SDK_COSIGN_GAS_PENDING:
+      'La comisión de la red para este paso todavía está llegando a tu billetera. Intenta de nuevo en unos segundos.',
     SDK_COSIGN_CUSTODY_SWITCH_PENDING:
       'Termina o cancela las aprobaciones pendientes antes de cambiar cómo se protege esta billetera.',
     SDK_COSIGN_CUSTODY_SWITCH_NOT_ALLOWED: 'Esta app no te permite cambiar cómo se protege tu billetera.',
@@ -113,6 +117,8 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     SDK_WALLET_RECOVERY_REQUIRED:
       'Primeiro configure uma forma de recuperar esta carteira: uma passkey, um segundo dispositivo ou seu email. Sem uma, perder este dispositivo significa perder os fundos, e ninguém poderá recuperá-los.',
     SDK_COSIGN_TURNKEY_REJECTED: 'O provedor da carteira recusou a solicitação. Tente novamente em instantes.',
+    SDK_COSIGN_GAS_PENDING:
+      'A taxa da rede desta etapa ainda está a caminho da sua carteira. Tente novamente em alguns segundos.',
     SDK_COSIGN_CUSTODY_SWITCH_PENDING:
       'Conclua ou cancele as aprovações pendentes antes de mudar como esta carteira é protegida.',
     SDK_COSIGN_CUSTODY_SWITCH_NOT_ALLOWED: 'Este app não permite mudar como sua carteira é protegida.',

@@ -227,6 +227,8 @@ function request(overrides = {}) {
   let stateWallets = [{ type: 'internal', address: SOURCE, publicKey: SOURCE, chain: 'STELLAR' }];
   let refreshCalls = 0;
   let refreshedRequest = null;
+  // Refreshes answered SDK_COSIGN_GAS_PENDING before the next one succeeds.
+  let gasPendingRefreshes = 0;
   const quorumReports = [];
   let quorumThreshold = 2;
   // The custody /cosign/devices reports and the root users Turnkey lists: 2-of-2
@@ -418,6 +420,10 @@ function request(overrides = {}) {
     }
     if (url.pathname === '/v3/cosign/requests/req-1/refresh') {
       refreshCalls++;
+      if (gasPendingRefreshes > 0) {
+        gasPendingRefreshes--;
+        return json(409, { success: false, code: 'SDK_COSIGN_GAS_PENDING' });
+      }
       return json(200, { success: true, code: 'SDK_COSIGN_REQUEST', content: { request: refreshedRequest ?? request() } });
     }
     if (url.pathname === '/v3/cosign/relay') {
@@ -601,6 +607,21 @@ function request(overrides = {}) {
   const approvedAfterRefresh = await client.cosign.approve(request({ refreshable: true }));
   check('approve refreshes a refreshable request first', refreshCalls === 1);
   check('approve then verified and proposed the refreshed payload', approvedAfterRefresh.status === 'APPROVED');
+
+  // A ramp step whose network fee is still on its way: the refresh is asked again, then the vote goes through.
+  gasPendingRefreshes = 2;
+  const refreshesBeforeGas = refreshCalls;
+  await client.signAndSubmitTx(UNSIGNED_XDR);
+  const approvedAfterGas = await client.cosign.approve(request({ refreshable: true }));
+  check('approve asks the refresh again while the network fee is on its way', refreshCalls === refreshesBeforeGas + 3);
+  check('approve proposes once the network fee landed', approvedAfterGas.status === 'APPROVED');
+
+  // Still on its way after every attempt: the code reaches the caller.
+  gasPendingRefreshes = 5;
+  await client.signAndSubmitTx(UNSIGNED_XDR);
+  const gasError = await client.cosign.approve(request({ refreshable: true })).catch((err) => err);
+  check('approve gives up with SDK_COSIGN_GAS_PENDING after its attempts', gasError?.code === 'SDK_COSIGN_GAS_PENDING');
+  gasPendingRefreshes = 0;
   refreshedRequest = null;
 
   // A request already proposed is not proposed again; sdk-api reads it back.

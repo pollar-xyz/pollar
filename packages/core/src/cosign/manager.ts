@@ -24,6 +24,8 @@ import { stellarTransactionHashHex } from './stellar-hash';
 import { isRecord, stringField } from '../api/error-fields';
 
 const REQUEST_VOTE_TIMEOUT_MS = 60_000;
+/** Refreshes asked before a vote while a ramp step's network fee is on its way; sdk-api waits up to 30s on each. */
+const GAS_PENDING_ATTEMPTS = 3;
 
 /**
  * The user's half of a Turnkey wallet, headless: no UI, only promises and the
@@ -248,6 +250,23 @@ export class CosignManager {
   }
 
   /**
+   * {@link refresh} before a vote. A ramp step on Polygon is voted once its
+   * network fee reached the wallet; sdk-api waits for it, and answers
+   * `SDK_COSIGN_GAS_PENDING` when it is still on its way at the end of that
+   * wait. The refresh is asked again a few times before that reaches the user.
+   */
+  private async refreshForVote(request: CosignRequest): Promise<CosignRequest> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.refresh(request);
+      } catch (err) {
+        if (!(err instanceof PollarApiError && err.code === 'SDK_COSIGN_GAS_PENDING') || attempt >= GAS_PENDING_ATTEMPTS)
+          throw err;
+      }
+    }
+  }
+
+  /**
    * Check a request before proposing it: the unsigned payload it carries is
    * read here, never its summary, and must be what the request says it is.
    * The report carries the Turnkey request built from the checked values, the
@@ -371,7 +390,7 @@ export class CosignManager {
     if (request.status !== 'PENDING') throw new PollarApiError('SDK_COSIGN_REQUEST_NOT_PENDING', { status: request.status });
     // Rebuild first, so the payload this device verifies and proposes is
     // seconds old; see {@link refresh} for what goes stale while the user decides.
-    if (request.refreshable) request = await this.refresh(request);
+    if (request.refreshable) request = await this.refreshForVote(request);
     if (request.status !== 'PENDING') return request;
     // Already proposed (by this device or another of the user's): only the
     // approver's vote is outstanding, and sdk-api reads it back from Turnkey.
