@@ -6,6 +6,12 @@ interface EmailCodeInputProps {
   onSubmit: (code: string) => void;
 }
 
+/**
+ * Six one-digit boxes for the email login code. Typing, paste and OTP autofill
+ * (which writes the whole code into the focused box) all go through
+ * `applyEmailCodeInput` / `applyEmailCodePaste`; `onSubmit` fires once every
+ * box holds a digit.
+ */
 export function EmailCodeInput({ email, onSubmit }: EmailCodeInputProps) {
   const [digits, setDigits] = useState<string[]>(() => Array.from({ length: EMAIL_CODE_LENGTH }, () => ''));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -26,6 +32,11 @@ export function EmailCodeInput({ email, onSubmit }: EmailCodeInputProps) {
     return () => listeners.forEach((remove) => remove?.());
   }, []);
 
+  /**
+   * onChange of box `index`: tells the pure helper whether the box's old digit
+   * was selected (so replaced) when the input arrived, then applies the result.
+   * The recorded selection is cleared so it never leaks into a later input.
+   */
   function handleChange(index: number, el: HTMLInputElement) {
     const previous = digits[index] ?? '';
     const selection = selections.current[index];
@@ -34,18 +45,21 @@ export function EmailCodeInput({ email, onSubmit }: EmailCodeInputProps) {
     apply(applyEmailCodeInput(digits, index, el.value, el.selectionStart, replaced));
   }
 
+  /** Stores the new digits, moves focus, and submits once all boxes are filled. */
   function apply({ digits: next, focus }: EmailCodeUpdate) {
     setDigits(next);
     inputRefs.current[focus]?.focus();
     if (next.every(Boolean)) onSubmit(next.join(''));
   }
 
+  /** Backspace in an empty box moves focus to the previous one. */
   function handleKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Backspace' && !digits[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
   }
 
+  /** A paste anywhere fills the boxes from the first one. */
   function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
     e.preventDefault();
     apply(applyEmailCodePaste(e.clipboardData.getData('text')));
