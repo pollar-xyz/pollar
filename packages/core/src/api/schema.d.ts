@@ -829,7 +829,7 @@ export interface paths {
         put?: never;
         /**
          * Sign a message (SEP-53 ownership proof, embedded)
-         * @description Signs a plaintext message with the user's embedded wallet using the SEP-53 "Stellar Signed Message" framing. Returns the base64 signature and signer address. External wallets sign client-side in the SDK.
+         * @description Signs a plaintext message with the user's embedded wallet using the SEP-53 "Stellar Signed Message" framing. Returns the base64 signature and signer address. Only for a wallet whose key Pollar holds; any other wallet answers 422 SDK_STELLAR_SERVER_CANNOT_SIGN and signs client-side or on the device.
          */
         post: operations["postStellarSep53Sign"];
         delete?: never;
@@ -849,7 +849,7 @@ export interface paths {
         put?: never;
         /**
          * Sign a SEP-10 web-auth challenge (ownership proof, embedded)
-         * @description Signs a verifier-issued SEP-10 challenge transaction with the user's embedded wallet. wallet-service validates the challenge is a harmless, un-submittable SEP-10 tx before signing. External wallets sign client-side in the SDK.
+         * @description Signs a verifier-issued SEP-10 challenge transaction with the user's embedded wallet. wallet-service validates the challenge is a harmless, un-submittable SEP-10 tx before signing. Only for a wallet whose key Pollar holds; any other wallet answers 422 SDK_STELLAR_SERVER_CANNOT_SIGN and signs client-side or on the device.
          */
         post: operations["postStellarSep10Sign"];
         delete?: never;
@@ -1420,7 +1420,7 @@ export interface paths {
         };
         /**
          * My recovery methods
-         * @description Whether my Turnkey wallet can be recovered without this device (a passkey, a second device, or an email confirmed with an OTP code), and the methods it has. Until `configured`, signatures other than the wallet setup and on-ramps answer 409 SDK_WALLET_RECOVERY_REQUIRED, on testnet and mainnet.
+         * @description Whether my Turnkey wallet can be recovered without this device (a passkey, a second device, or an email confirmed with an OTP code), and the methods it has. Until `configured`, every signature but the wallet setup (its account and trustlines) answers 409 SDK_WALLET_RECOVERY_REQUIRED, and so does starting an on-ramp, on testnet and mainnet.
          */
         get: operations["getCosignRecovery"];
         put?: never;
@@ -1517,7 +1517,7 @@ export interface paths {
         };
         /**
          * Get enabled swap venues for this app
-         * @description The swap venues the application exposes to end-users on a chain: the operator's selection intersected with what the platform serves. `chain=SOLANA` lists the Solana venues (Jupiter, Titan; mainnet only); without it, the Stellar ones. An empty list means no swap on that chain.
+         * @description The swap venues the application exposes to end-users on a chain: the operator's selection intersected with what the platform serves. `chain=SOLANA` lists the Solana venues (mainnet only) and, when one reaches other chains, `destinationChains`; without it, the Stellar ones. An empty list means no swap on that chain.
          */
         get: operations["getSwapConfig"];
         put?: never;
@@ -1539,7 +1539,7 @@ export interface paths {
         put?: never;
         /**
          * Quote an asset swap
-         * @description Prices a swap across the requested venue(s), best output first. Read-only. With `"chain": "SOLANA"` it quotes Jupiter and Titan for the signed-in user's Solana wallet, in base units of each mint; without `chain`, the Stellar venues as in v2, with a ready-to-execute `build` payload. An empty `quotes` array means no route exists for the pair.
+         * @description Prices a swap across the requested venue(s), best output first. Read-only. With `"chain": "SOLANA"` it quotes the Solana venues for the signed-in user's Solana wallet, in base units of each mint, and `destinationChain` asks for a route delivering to the user's own wallet on that chain; without `chain`, the Stellar venues as in v2, with a ready-to-execute `build` payload. An empty `quotes` array means no route exists for the pair.
          */
         post: operations["postSwapQuote"];
         delete?: never;
@@ -1559,9 +1559,29 @@ export interface paths {
         put?: never;
         /**
          * Build a Solana swap for the user to sign
-         * @description Builds the swap the user picked from a quote (`chain: "SOLANA"`, a concrete `provider`) as an unsigned v0 transaction for the user's Solana wallet. The route is asked for again, so `quote` may differ a little from the earlier one. The wallet signs `unsignedTransaction` as is and sends it to POST /v3/tx/submit with the same `idempotencyKey`, before `lastValidBlockHeight`. When `sponsored`, the app's GAS wallet pays the fee and signs last, at submit. A co-signed wallet answers 202 with the pending co-sign request instead: the SDK refreshes it right before the vote (the route is asked for again) and the platform broadcasts it once the user approves. Custodial wallets are refused.
+         * @description Builds the swap the user picked from a quote (`chain: "SOLANA"`, a concrete `provider`) as an unsigned v0 transaction for the user's Solana wallet. The route is asked for again, so `quote` may differ a little from the earlier one. The wallet signs `unsignedTransaction` as is and sends it to POST /v3/tx/submit with the same `idempotencyKey`, before `lastValidBlockHeight`. When `sponsored`, the app's GAS wallet pays the fee and signs last, at submit. A co-signed wallet answers 202 with the pending co-sign request instead: the SDK refreshes it right before the vote (the route is asked for again) and the platform broadcasts it once the user approves. Custodial wallets are refused. With `destinationChain` the swap settles after the signature: follow it on GET /v3/swap/status.
          */
         post: operations["postSwapBuild"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/swap/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where a built swap stands
+         * @description A swap by the `idempotencyKey` it was built under. A cross-chain swap carries `settlement`: `status` stays `BUILT` after the origin transaction lands and turns `CONFIRMED` once the destination is final, `FAILED` if it failed or was refunded. `HELD` means no final answer arrived in time and support is looking at it.
+         */
+        get: operations["getSwapStatus"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1637,7 +1657,7 @@ export interface paths {
         };
         /**
          * Get enabled yield providers for this app
-         * @description Returns the Earn providers (yield vaults / lending) this application exposes to end-users, intersected with server capability (a provider only appears when it's configured — Blend needs a pool address, DeFindex needs an API key). An empty list means Earn is disabled and the SDK renders no Earn UI. Network comes from the API key.
+         * @description The Earn providers this application exposes to end-users on a chain. Without `chain`, the Stellar ones as in v2. An empty list means no Earn on that chain.
          */
         get: operations["getEarnProviders"];
         put?: never;
@@ -1656,8 +1676,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List a provider vaults/pools
-         * @description The vaults (DeFindex) or pools (Blend) the provider exposes on this API key's network, each with its live APY. Read-only. Use an `id` from here as the `opportunity` in the position and build calls.
+         * List yield opportunities
+         * @description The opportunities this application opted into on a chain, with the expected APY after fees and the actions each takes right now. With `chain=SOLANA` no `provider` is needed; without `chain`, the Stellar ones of `provider`, as in v2. Use an `id` from here as the `opportunity` in the position and build calls.
          */
         get: operations["getEarnOpportunities"];
         put?: never;
@@ -1676,8 +1696,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read the user position + APY in a vault/pool
-         * @description Read-only: the user's balance (in underlying-asset terms), the unit their withdraw amount must be given in (`asset` for Blend, `shares` for DeFindex), the max withdrawable, and the live APY. Poll this to show the position updating.
+         * Read the user's position in an opportunity
+         * @description Read-only. With `chain=SOLANA` it reads the signed-in user's Solana wallet: balance, cost basis, profit after fees and the expected APY after fees. Without `chain`, the Stellar position of the address given, as in v2.
          */
         get: operations["getEarnPosition"];
         put?: never;
@@ -1698,8 +1718,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Build a deposit/withdraw XDR
-         * @description Builds the unsigned Soroban XDR for a deposit or withdraw against the vault/pool. The provider builds it server-side (contract-direct for Blend, via the DeFindex API for DeFindex); the SDK then signs and submits it with `signAndSubmitTx`. For `deposit` the amount is the underlying asset; for `withdraw` it is in the provider `withdrawUnit` (read it from GET /earn/position).
+         * Build a deposit or withdrawal
+         * @description Without `chain`, the Stellar XDR as in v2. With `chain: "SOLANA"`, an unsigned transaction for the signed-in user's Solana wallet, which also pays the network fee: an external wallet signs `unsignedTransaction` as is and sends it to POST /v3/tx/submit with the same `idempotencyKey`, before `lastValidBlockHeight`. A co-signed wallet answers 202 with the pending co-sign request: the SDK refreshes it right before the vote and the platform broadcasts once the user approves. Custodial and contract wallets are refused with SDK_EARN_WALLET_UNSUPPORTED.
          */
         post: operations["postEarnBuild"];
         delete?: never;
@@ -2692,7 +2712,7 @@ export interface operations {
                                 request: {
                                     id: string;
                                     /** @enum {string} */
-                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT" | "EVM_AUTHORIZATION";
                                     /** @enum {string} */
                                     network: "STELLAR" | "POLYGON" | "SOLANA";
                                     /** @enum {string} */
@@ -2853,7 +2873,7 @@ export interface operations {
                                 request: {
                                     id: string;
                                     /** @enum {string} */
-                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT" | "EVM_AUTHORIZATION";
                                     /** @enum {string} */
                                     network: "STELLAR" | "POLYGON" | "SOLANA";
                                     /** @enum {string} */
@@ -3011,7 +3031,7 @@ export interface operations {
                                 request: {
                                     id: string;
                                     /** @enum {string} */
-                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT" | "EVM_AUTHORIZATION";
                                     /** @enum {string} */
                                     network: "STELLAR" | "POLYGON" | "SOLANA";
                                     /** @enum {string} */
@@ -3574,7 +3594,7 @@ export interface operations {
                                 request: {
                                     id: string;
                                     /** @enum {string} */
-                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT" | "EVM_AUTHORIZATION";
                                     /** @enum {string} */
                                     network: "STELLAR" | "POLYGON" | "SOLANA";
                                     /** @enum {string} */
@@ -4347,7 +4367,7 @@ export interface operations {
                                 request: {
                                     id: string;
                                     /** @enum {string} */
-                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT" | "EVM_AUTHORIZATION";
                                     /** @enum {string} */
                                     network: "STELLAR" | "POLYGON" | "SOLANA";
                                     /** @enum {string} */
@@ -7716,6 +7736,36 @@ export interface operations {
                     };
                 };
             };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description SDK_STELLAR_SERVER_CANNOT_SIGN: the wallet's key is not Pollar's (co-signed, external or contract wallet) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
             /** @description Signing error */
             502: {
                 headers: {
@@ -7801,6 +7851,36 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description SDK_STELLAR_SERVER_CANNOT_SIGN: the wallet's key is not Pollar's (co-signed, external or contract wallet) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8162,7 +8242,7 @@ export interface operations {
                                 request: {
                                     id: string;
                                     /** @enum {string} */
-                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT" | "EVM_AUTHORIZATION";
                                     /** @enum {string} */
                                     network: "STELLAR" | "POLYGON" | "SOLANA";
                                     /** @enum {string} */
@@ -8252,7 +8332,7 @@ export interface operations {
                                 request: {
                                     id: string;
                                     /** @enum {string} */
-                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT" | "EVM_AUTHORIZATION";
                                     /** @enum {string} */
                                     network: "STELLAR" | "POLYGON" | "SOLANA";
                                     /** @enum {string} */
@@ -10364,7 +10444,7 @@ export interface operations {
                             requests: {
                                 id: string;
                                 /** @enum {string} */
-                                kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT" | "EVM_AUTHORIZATION";
                                 /** @enum {string} */
                                 network: "STELLAR" | "POLYGON" | "SOLANA";
                                 /** @enum {string} */
@@ -10451,7 +10531,7 @@ export interface operations {
                             request: {
                                 id: string;
                                 /** @enum {string} */
-                                kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT" | "EVM_AUTHORIZATION";
                                 /** @enum {string} */
                                 network: "STELLAR" | "POLYGON" | "SOLANA";
                                 /** @enum {string} */
@@ -10551,7 +10631,7 @@ export interface operations {
                             request: {
                                 id: string;
                                 /** @enum {string} */
-                                kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT" | "EVM_AUTHORIZATION";
                                 /** @enum {string} */
                                 network: "STELLAR" | "POLYGON" | "SOLANA";
                                 /** @enum {string} */
@@ -10651,7 +10731,7 @@ export interface operations {
                             request: {
                                 id: string;
                                 /** @enum {string} */
-                                kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT" | "EVM_AUTHORIZATION";
                                 /** @enum {string} */
                                 network: "STELLAR" | "POLYGON" | "SOLANA";
                                 /** @enum {string} */
@@ -10778,7 +10858,7 @@ export interface operations {
                             request?: {
                                 id: string;
                                 /** @enum {string} */
-                                kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT" | "EVM_AUTHORIZATION";
                                 /** @enum {string} */
                                 network: "STELLAR" | "POLYGON" | "SOLANA";
                                 /** @enum {string} */
@@ -11924,7 +12004,8 @@ export interface operations {
                         content: {
                             venues: ("aquarius" | "soroswap" | "sdex")[];
                         } | {
-                            venues: ("jupiter" | "titan")[];
+                            venues: ("jupiter" | "titan" | "multichain")[];
+                            destinationChains?: ("SOLANA" | "POLYGON")[];
                         };
                     };
                 };
@@ -11980,9 +12061,11 @@ export interface operations {
                      * @default auto
                      * @enum {string}
                      */
-                    provider?: "auto" | "jupiter" | "titan";
+                    provider?: "auto" | "jupiter" | "titan" | "multichain";
                     /** @default 50 */
                     slippageBps?: number;
+                    /** @enum {string} */
+                    destinationChain?: "SOLANA" | "POLYGON";
                 } | {
                     publicKey?: string;
                     address?: string;
@@ -12191,7 +12274,7 @@ export interface operations {
                                 /** @constant */
                                 chain: "SOLANA";
                                 /** @enum {string} */
-                                provider: "jupiter" | "titan";
+                                provider: "jupiter" | "titan" | "multichain";
                                 inputMint: string;
                                 outputMint: string;
                                 inAmount: string;
@@ -12201,9 +12284,27 @@ export interface operations {
                                 route: {
                                     hops: string[];
                                 };
+                                /** @enum {string} */
+                                destinationChain?: "SOLANA" | "POLYGON";
+                                outputDecimals?: number;
+                                outputSymbol?: string;
+                                feeBreakdown?: {
+                                    charges: {
+                                        /** @enum {string} */
+                                        kind: "routing" | "integrator" | "bridge_and_slippage" | "other";
+                                        amount: string | null;
+                                        amountUsd: number | null;
+                                        asset: ("input" | "output") | null;
+                                        symbol: string | null;
+                                        decimals: number | null;
+                                    }[];
+                                    totalFeesUsd: number | null;
+                                    bridgeAndSlippageUsd: number | null;
+                                };
+                                expiresAt?: string;
                             }[];
                             /** @enum {string} */
-                            best?: "jupiter" | "titan";
+                            best?: "jupiter" | "titan" | "multichain";
                         };
                     };
                 };
@@ -12298,13 +12399,15 @@ export interface operations {
                     /** @constant */
                     chain: "SOLANA";
                     /** @enum {string} */
-                    provider: "jupiter" | "titan";
+                    provider: "jupiter" | "titan" | "multichain";
                     inputMint: string;
                     outputMint: string;
                     amount: string;
                     /** @default 50 */
                     slippageBps?: number;
                     idempotencyKey: string;
+                    /** @enum {string} */
+                    destinationChain?: "SOLANA" | "POLYGON";
                 };
             };
         };
@@ -12327,7 +12430,7 @@ export interface operations {
                                 /** @constant */
                                 chain: "SOLANA";
                                 /** @enum {string} */
-                                provider: "jupiter" | "titan";
+                                provider: "jupiter" | "titan" | "multichain";
                                 inputMint: string;
                                 outputMint: string;
                                 inAmount: string;
@@ -12337,6 +12440,24 @@ export interface operations {
                                 route: {
                                     hops: string[];
                                 };
+                                /** @enum {string} */
+                                destinationChain?: "SOLANA" | "POLYGON";
+                                outputDecimals?: number;
+                                outputSymbol?: string;
+                                feeBreakdown?: {
+                                    charges: {
+                                        /** @enum {string} */
+                                        kind: "routing" | "integrator" | "bridge_and_slippage" | "other";
+                                        amount: string | null;
+                                        amountUsd: number | null;
+                                        asset: ("input" | "output") | null;
+                                        symbol: string | null;
+                                        decimals: number | null;
+                                    }[];
+                                    totalFeesUsd: number | null;
+                                    bridgeAndSlippageUsd: number | null;
+                                };
+                                expiresAt?: string;
                             };
                             unsignedTransaction: string;
                             idempotencyKey: string;
@@ -12367,7 +12488,7 @@ export interface operations {
                                 request: {
                                     id: string;
                                     /** @enum {string} */
-                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT";
+                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT" | "EVM_AUTHORIZATION";
                                     /** @enum {string} */
                                     network: "STELLAR" | "POLYGON" | "SOLANA";
                                     /** @enum {string} */
@@ -12487,6 +12608,106 @@ export interface operations {
             };
             /** @description Aggregator or custody error */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getSwapStatus: {
+        parameters: {
+            query: {
+                idempotencyKey: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The swap */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_SWAP_STATUS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            idempotencyKey: string;
+                            status: ("BUILT" | "CONFIRMED" | "FAILED" | "EXPIRED") | null;
+                            phase: string;
+                            txHash: string | null;
+                            settlement: {
+                                /** @enum {string} */
+                                status: "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED" | "EXPIRED" | "HELD";
+                                destinationChain: string;
+                                destinationAddress: string;
+                                destinationToken: string;
+                                destinationTxHash: string | null;
+                                feeBreakdown: {
+                                    charges: {
+                                        /** @enum {string} */
+                                        kind: "routing" | "integrator" | "bridge_and_slippage" | "other";
+                                        amount: string | null;
+                                        amountUsd: number | null;
+                                        asset: ("input" | "output") | null;
+                                        symbol: string | null;
+                                        decimals: number | null;
+                                    }[];
+                                    totalFeesUsd: number | null;
+                                    bridgeAndSlippageUsd: number | null;
+                                } | null;
+                                resolvedAt: string | null;
+                            } | null;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description No swap of this user's under that key */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12673,7 +12894,7 @@ export interface operations {
                                 id: string;
                                 chain: string;
                                 /** @enum {string} */
-                                provider: "DEFINDEX" | "BLEND";
+                                provider: "DEFINDEX" | "BLEND" | "AGGREGATOR";
                                 opportunityId: string;
                                 /** @enum {string} */
                                 action: "DEPOSIT" | "WITHDRAW";
@@ -12725,7 +12946,9 @@ export interface operations {
     };
     getEarnProviders: {
         parameters: {
-            query?: never;
+            query?: {
+                chain?: "SOLANA";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -12745,7 +12968,26 @@ export interface operations {
                         success: true;
                         content: {
                             providers: ("blend" | "defindex")[];
+                        } | {
+                            /** @enum {string} */
+                            chain: "SOLANA";
+                            providers: "aggregator"[];
                         };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
                     };
                 };
             };
@@ -12783,8 +13025,9 @@ export interface operations {
     };
     getEarnOpportunities: {
         parameters: {
-            query: {
-                provider: "blend" | "defindex";
+            query?: {
+                chain?: "SOLANA";
+                provider?: "blend" | "defindex";
             };
             header?: never;
             path?: never;
@@ -12820,6 +13063,28 @@ export interface operations {
                                 apy: number;
                                 metadata?: {
                                     [key: string]: unknown;
+                                };
+                            }[];
+                        } | {
+                            opportunities: {
+                                /** @enum {string} */
+                                chain: "SOLANA";
+                                /** @enum {string} */
+                                provider: "aggregator";
+                                id: string;
+                                name: string;
+                                /** @constant */
+                                kind: "vault";
+                                asset: {
+                                    code: string;
+                                    address: string;
+                                    decimals: number | null;
+                                };
+                                apy: number;
+                                actions: ("deposit" | "withdraw")[];
+                                paused: boolean;
+                                metadata: {
+                                    protocol: string | null;
                                 };
                             }[];
                         };
@@ -12871,8 +13136,23 @@ export interface operations {
                     };
                 };
             };
-            /** @description Provider/RPC error */
+            /** @description Provider or RPC error */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description The provider is busy; try again in a moment */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12891,10 +13171,10 @@ export interface operations {
     getEarnPosition: {
         parameters: {
             query: {
-                provider: "blend" | "defindex";
+                chain?: "SOLANA";
                 opportunity: string;
+                provider?: "blend" | "defindex";
                 publicKey?: string;
-                address?: string;
             };
             header?: never;
             path?: never;
@@ -12926,6 +13206,21 @@ export interface operations {
                             metadata?: {
                                 [key: string]: unknown;
                             };
+                        } | {
+                            /** @enum {string} */
+                            chain: "SOLANA";
+                            /** @enum {string} */
+                            provider: "aggregator";
+                            opportunityId: string;
+                            address: string;
+                            balance: string;
+                            principal: string;
+                            profit: string | null;
+                            /** @constant */
+                            withdrawUnit: "asset";
+                            withdrawable: string;
+                            apy: number | null;
+                            stale: boolean;
                         };
                     };
                 };
@@ -12975,6 +13270,21 @@ export interface operations {
                     };
                 };
             };
+            /** @description The user has no wallet on the chain */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
             /** @description Provider not configured */
             422: {
                 headers: {
@@ -12990,8 +13300,23 @@ export interface operations {
                     };
                 };
             };
-            /** @description Provider/RPC error */
+            /** @description Provider or RPC error */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description The provider is busy; try again in a moment */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13018,6 +13343,14 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
+                    chain: "SOLANA";
+                    /** @enum {string} */
+                    action: "deposit" | "withdraw";
+                    opportunity: string;
+                    amount: string;
+                    idempotencyKey: string;
+                } | {
+                    /** @enum {string} */
                     action: "deposit" | "withdraw";
                     /** @enum {string} */
                     provider: "blend" | "defindex";
@@ -13029,7 +13362,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Unsigned XDR ready to sign+submit */
+            /** @description The unsigned transaction */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -13097,6 +13430,81 @@ export interface operations {
                                     })[];
                                 };
                             };
+                        } | {
+                            /** @enum {string} */
+                            chain: "SOLANA";
+                            /** @enum {string} */
+                            action: "deposit" | "withdraw";
+                            opportunityId: string;
+                            unsignedTransaction: string;
+                            idempotencyKey: string;
+                            recentBlockhash: string;
+                            lastValidBlockHeight: number;
+                            feeLamports: string;
+                            feePayer: string;
+                            /** @constant */
+                            sponsored: false;
+                        };
+                    };
+                };
+            };
+            /** @description A co-signed wallet: the pending request the user approves on their device */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_COSIGN_PENDING";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            pendingSignature: {
+                                /** @constant */
+                                kind: "cosign";
+                                request: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    kind: "TX" | "SEP10" | "SEP53" | "AUTH_ENTRY" | "MESSAGE" | "ACCOUNT" | "EVM_AUTHORIZATION";
+                                    /** @enum {string} */
+                                    network: "STELLAR" | "POLYGON" | "SOLANA";
+                                    /** @enum {string} */
+                                    status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "FAILED";
+                                    subOrgId: string;
+                                    activityId: string | null;
+                                    fingerprint: string | null;
+                                    signWith: string;
+                                    account?: string;
+                                    unsignedPayload: string;
+                                    payloadHash: string;
+                                    refreshable: boolean;
+                                    /** @enum {string} */
+                                    intent: "sign" | "sign_and_send" | "account_create" | "add_accounts";
+                                    operation?: string;
+                                    summary?: string;
+                                    details?: {
+                                        [key: string]: unknown;
+                                    };
+                                    stepKey?: string;
+                                    signedXdr?: string;
+                                    signedAuthEntry?: string;
+                                    appPaysFee: boolean;
+                                    submit?: {
+                                        hash: string;
+                                        /** @enum {string} */
+                                        status: "PENDING" | "SUCCESS" | "FAILED";
+                                        resultCode?: string;
+                                        message?: string;
+                                        sponsored?: boolean;
+                                    };
+                                    txRecordId?: string;
+                                    failureReason?: string;
+                                    expiresAt: string;
+                                    createdAt: string;
+                                    resolvedAt: string | null;
+                                };
+                            };
                         };
                     };
                 };
@@ -13131,6 +13539,21 @@ export interface operations {
                     };
                 };
             };
+            /** @description The idempotencyKey belongs to another user */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
             /** @description Opportunity not found */
             404: {
                 headers: {
@@ -13146,7 +13569,22 @@ export interface operations {
                     };
                 };
             };
-            /** @description Provider not configured */
+            /** @description No wallet on the chain, or the idempotencyKey was already used */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider not configured, action not available, wallet not supported or amount not valid */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -13161,8 +13599,23 @@ export interface operations {
                     };
                 };
             };
-            /** @description Build error (Soroban RPC/provider) */
+            /** @description Build error */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description The provider is busy; try again in a moment */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -16801,6 +17254,121 @@ export interface operations {
             };
         };
     };
+    postBridgeQuote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                    /** @enum {string} */
+                    toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                    amount: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_QUOTE";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            /** @enum {string} */
+                            fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                            /** @enum {string} */
+                            toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                            /** @constant */
+                            asset: "USDC";
+                            amountIn: string;
+                            amountOut: string;
+                            fee: {
+                                amount: string;
+                                /** @constant */
+                                currency: "USD";
+                            } | null;
+                            etaSeconds: number;
+                            fromAddress: string;
+                            toAddress: string;
+                            /** @enum {string} */
+                            signing: "INTERNAL" | "COSIGNED" | "SELF_CUSTODY" | "EXTERNAL" | "APP_CUSTODY";
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not enough credits */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unprocessable */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
     getBridgeTransfers: {
         parameters: {
             query?: never;
@@ -16886,238 +17454,6 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-        };
-    };
-    getBridgeTransfersByTransferId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                transferId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_BRIDGE_TRANSFER";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            transfer: {
-                                id: string;
-                                /** @enum {string} */
-                                status: "PENDING" | "AWAITING_ACTION" | "BURNED" | "ATTESTED" | "COMPLETED" | "FAILED" | "HELD";
-                                /** @enum {string} */
-                                fromChain: "STELLAR" | "SOLANA" | "POLYGON";
-                                /** @enum {string} */
-                                toChain: "STELLAR" | "SOLANA" | "POLYGON";
-                                /** @constant */
-                                asset: "USDC";
-                                amount: string;
-                                amountOut: string | null;
-                                fromAddress: string;
-                                toAddress: string;
-                                burnTxHash: string | null;
-                                mintTxHash: string | null;
-                                pendingAction: ({
-                                    /** @constant */
-                                    kind: "SIGNATURE";
-                                    actionId: string;
-                                    /** @enum {string} */
-                                    chain: "STELLAR" | "SOLANA" | "POLYGON";
-                                    payload: {
-                                        encoding: string;
-                                        value: string;
-                                    };
-                                    summary: string;
-                                    expiresAt: string;
-                                } | {
-                                    /** @constant */
-                                    kind: "COSIGN_APPROVAL";
-                                    actionId: string;
-                                    cosignRequestId: string;
-                                    summary: string;
-                                }) | null;
-                                failure: {
-                                    code: string;
-                                } | null;
-                                etaSeconds: number;
-                                createdAt: string;
-                                updatedAt: string;
-                                completedAt: string | null;
-                            };
-                        };
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-        };
-    };
-    postBridgeQuote: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @enum {string} */
-                    fromChain: "STELLAR" | "SOLANA" | "POLYGON";
-                    /** @enum {string} */
-                    toChain: "STELLAR" | "SOLANA" | "POLYGON";
-                    amount: string;
-                };
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_BRIDGE_QUOTE";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            /** @enum {string} */
-                            fromChain: "STELLAR" | "SOLANA" | "POLYGON";
-                            /** @enum {string} */
-                            toChain: "STELLAR" | "SOLANA" | "POLYGON";
-                            /** @constant */
-                            asset: "USDC";
-                            amountIn: string;
-                            amountOut: string;
-                            fee: {
-                                amount: string;
-                                /** @constant */
-                                currency: "USD";
-                            } | null;
-                            etaSeconds: number;
-                            fromAddress: string;
-                            toAddress: string;
-                            /** @enum {string} */
-                            signing: "INTERNAL" | "COSIGNED" | "SELF_CUSTODY" | "EXTERNAL";
-                        };
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Not enough credits */
-            402: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Unprocessable */
-            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -17318,6 +17654,123 @@ export interface operations {
             };
             /** @description Unprocessable */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getBridgeTransfersByTransferId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transferId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_BRIDGE_TRANSFER";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            transfer: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "AWAITING_ACTION" | "BURNED" | "ATTESTED" | "COMPLETED" | "FAILED" | "HELD";
+                                /** @enum {string} */
+                                fromChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @enum {string} */
+                                toChain: "STELLAR" | "SOLANA" | "POLYGON";
+                                /** @constant */
+                                asset: "USDC";
+                                amount: string;
+                                amountOut: string | null;
+                                fromAddress: string;
+                                toAddress: string;
+                                burnTxHash: string | null;
+                                mintTxHash: string | null;
+                                pendingAction: ({
+                                    /** @constant */
+                                    kind: "SIGNATURE";
+                                    actionId: string;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "SOLANA" | "POLYGON";
+                                    payload: {
+                                        encoding: string;
+                                        value: string;
+                                    };
+                                    summary: string;
+                                    expiresAt: string;
+                                } | {
+                                    /** @constant */
+                                    kind: "COSIGN_APPROVAL";
+                                    actionId: string;
+                                    cosignRequestId: string;
+                                    summary: string;
+                                }) | null;
+                                failure: {
+                                    code: string;
+                                } | null;
+                                etaSeconds: number;
+                                createdAt: string;
+                                updatedAt: string;
+                                completedAt: string | null;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -18,11 +18,21 @@ import {
   buildSolanaSwap,
   getSolanaSwapConfig,
   getSwapConfig,
+  getSwapStatus,
   getSwapTokens,
   quoteSolanaSwap,
   quoteSwap,
 } from '../api/endpoints/swap';
-import { buildEarnTx, getEarnOpportunities, getEarnPosition, getEarnProviders } from '../api/endpoints/earn';
+import {
+  buildChainEarn,
+  buildEarnTx,
+  getChainEarnOpportunities,
+  getChainEarnPosition,
+  getChainEarnProviders,
+  getEarnOpportunities,
+  getEarnPosition,
+  getEarnProviders,
+} from '../api/endpoints/earn';
 import {
   createCardFunding,
   createCardHolder,
@@ -118,6 +128,12 @@ import {
   SolanaSwapQuote,
   SolanaSwapQuoteParams,
   SolanaSwapVenue,
+  SolanaSwapOptions,
+  SwapStatus,
+  SolanaEarnOpportunity,
+  SolanaEarnPosition,
+  SolanaEarnTxParams,
+  SolanaEarnProviderId,
   SwapQuote,
   SwapQuoteBody,
   SwapQuoteParams,
@@ -320,6 +336,10 @@ const REFRESH_SKEW_SECONDS = 60;
 const PROVISIONING_BASE_DELAY_MS = 1_000;
 const PROVISIONING_MAX_DELAY_MS = 10_000;
 const PROVISIONING_MAX_ATTEMPTS = 12;
+
+/** A Solana Earn build the provider answered 503 (busy) is sent again this many times in all, this far apart. */
+const EARN_BUSY_ATTEMPTS = 3;
+const EARN_BUSY_BACKOFF_MS = 600;
 
 /**
  * Cross-copy brand for `PollarClient`, stamped on every instance.
@@ -5116,10 +5136,26 @@ export class PollarClient {
   }
 
   /**
-   * Quote a swap from the session user's Solana wallet on Jupiter and Titan.
-   * Read-only. Amounts are integer base units of each mint; quotes come best
-   * output first, an empty array means no route. The quotes carry no
-   * transaction: {@link swapSolana} has the picked one built when it runs.
+   * The Solana venues and the chains a Solana swap can deliver to besides
+   * Solana itself (`POLYGON`, when a venue that crosses chains is enabled), in
+   * one read. `destinationChains` is empty when every swap stays on Solana.
+   */
+  async getSolanaSwapOptions(): Promise<SolanaSwapOptions> {
+    const content = await getSolanaSwapConfig(this._api);
+    return {
+      venues: content.venues ?? [],
+      destinationChains: (content.destinationChains ?? []).filter((chain) => chain !== 'SOLANA'),
+    };
+  }
+
+  /**
+   * Quote a swap from the session user's Solana wallet, best output first.
+   * Read-only. Amounts are integer base units of each mint; an empty array
+   * means no route. With `destinationChain: 'POLYGON'` the route delivers to
+   * the user's own Polygon wallet and `outputMint` is the ERC-20 address. A
+   * quote may carry `feeBreakdown` and `expiresAt`, after which it is quoted
+   * again. The quotes carry no transaction: {@link swapSolana} has the picked
+   * one built when it runs.
    */
   async getSolanaSwapQuote(params: SolanaSwapQuoteParams): Promise<SolanaSwapQuote[]> {
     const content = await quoteSolanaSwap(this._api, {
@@ -5129,8 +5165,20 @@ export class PollarClient {
       amount: params.amount,
       ...(params.provider !== undefined && { provider: params.provider }),
       ...(params.slippageBps !== undefined && { slippageBps: params.slippageBps }),
+      ...(params.destinationChain !== undefined && { destinationChain: params.destinationChain }),
     });
     return content.quotes;
+  }
+
+  /**
+   * Where a swap built under `idempotencyKey` stands. A cross-chain swap keeps
+   * `status: 'BUILT'` after its Solana transaction lands and turns `CONFIRMED`
+   * once the destination wallet is paid (`settlement.destinationTxHash`), or
+   * `FAILED` if it failed or was refunded; a settlement `HELD` is being checked
+   * by support. Throws `PollarApiError` (`SDK_SWAP_NOT_FOUND` for an unknown key).
+   */
+  getSwapStatus(idempotencyKey: string): Promise<SwapStatus> {
+    return getSwapStatus(this._api, idempotencyKey);
   }
 
   /**
@@ -5141,14 +5189,27 @@ export class PollarClient {
    * approves it on the device; an external wallet signs it in the connected
    * wallet and the backend broadcasts it. Custodial wallets cannot swap on
    * Solana. Drives the same transaction state machine as {@link sendPayment}.
+   *
+   * A quote past its `expiresAt` is refused with `SDK_SWAP_QUOTE_EXPIRED`
+   * before anything is built: quote again. A quote with a `destinationChain`
+   * settles after the Solana transaction lands; pass `idempotencyKey` and
+   * follow it with {@link getSwapStatus}.
    */
-  async swapSolana(quote: SolanaSwapQuote, opts?: { slippageBps?: number }): Promise<SubmitOutcome> {
+  async swapSolana(quote: SolanaSwapQuote, opts?: { slippageBps?: number; idempotencyKey?: string }): Promise<SubmitOutcome> {
     this._txStartGen = this._sessionGeneration;
     const wallet = this.getWallets().find((w) => w.chain === 'SOLANA');
     if (!wallet) {
       this._setTransactionState({ step: 'error', phase: 'building', details: 'No Solana wallet' });
       return { status: 'error', details: 'No Solana wallet' };
     }
+    if (quote.expiresAt && Date.parse(quote.expiresAt) <= Date.now()) {
+      const code = 'SDK_SWAP_QUOTE_EXPIRED';
+      const details = 'The quote expired; quote again.';
+      this._setTransactionState({ step: 'error', phase: 'building', code, details });
+      return { status: 'error', code, details };
+    }
+    const destinationChain =
+      quote.destinationChain !== undefined && quote.destinationChain !== 'SOLANA' ? quote.destinationChain : undefined;
     const answer = await this._confirm({
       kind: 'build_sign_submit',
       network: 'SOLANA',
@@ -5160,6 +5221,7 @@ export class PollarClient {
         inAmount: quote.inAmount,
         outAmount: quote.outAmount,
         minOut: quote.minOut,
+        ...(destinationChain && { destinationChain }),
       },
     });
     if (!answer.ok) return this._declined('building', undefined, answer);
@@ -5180,7 +5242,7 @@ export class PollarClient {
     }
 
     // One key ties the build to its submit (external) or to the co-sign request.
-    const idempotencyKey = randomUUID();
+    const idempotencyKey = opts?.idempotencyKey ?? randomUUID();
     this._setTransactionState({ step: 'building' });
     let unsignedTransaction: string;
     try {
@@ -5191,6 +5253,7 @@ export class PollarClient {
         outputMint: quote.outputMint,
         amount: quote.inAmount,
         ...(opts?.slippageBps !== undefined && { slippageBps: opts.slippageBps }),
+        ...(destinationChain && { destinationChain }),
         idempotencyKey,
       });
       const pendingRequest = this._cosignPendingOf(data);
@@ -5305,6 +5368,123 @@ export class PollarClient {
     // runTx (re-simulated server-side), mirroring swap.
     if ('unsignedXdr' in build) return this.signAndSubmitTx(build.unsignedXdr);
     return this.runTx(build.operation, build.params);
+  }
+
+  // --- Earn on Solana -----------------------------------------------------------
+
+  /** The Earn providers this app exposes on Solana. An empty array means no Earn on Solana. */
+  async getSolanaEarnProviders(): Promise<SolanaEarnProviderId[]> {
+    return (await getChainEarnProviders(this._api, 'SOLANA')).providers ?? [];
+  }
+
+  /**
+   * The Solana opportunities this app opted into. `apy` is the expected APY
+   * after fees, as a percentage; `actions` lists what each one takes right now
+   * (a paused one may take only `withdraw`, or nothing). A provider that is
+   * busy (503) is asked again a couple of times before this throws.
+   */
+  async getSolanaEarnOpportunities(): Promise<SolanaEarnOpportunity[]> {
+    return (await getChainEarnOpportunities(this._api, 'SOLANA')).opportunities ?? [];
+  }
+
+  /**
+   * The session user's position in a Solana opportunity, read from their own
+   * Solana wallet: `balance`, `principal`, `profit` after fees and `apy`.
+   * `withdrawable` is in the asset, the unit {@link earnSolanaWithdraw} takes.
+   */
+  getSolanaEarnPosition(opportunity: string): Promise<SolanaEarnPosition> {
+    return getChainEarnPosition(this._api, 'SOLANA', opportunity);
+  }
+
+  /**
+   * Deposit into a Solana opportunity from the session user's Solana wallet,
+   * which pays its own network fee. An external wallet signs the transaction
+   * the backend built and it is submitted under the same `idempotencyKey`; a
+   * co-signed wallet approves it on the device and the platform broadcasts it.
+   * Custodial and contract wallets are refused with
+   * `SDK_EARN_WALLET_UNSUPPORTED`; an opportunity that does not take deposits
+   * right now with `SDK_EARN_ACTION_UNAVAILABLE`, and an amount it does not
+   * take with `SDK_EARN_AMOUNT_INVALID`.
+   */
+  earnSolanaDeposit(params: SolanaEarnTxParams): Promise<SubmitOutcome> {
+    return this._earnSolana('deposit', params);
+  }
+
+  /** Withdraw from a Solana opportunity; `amount` is in the asset, at most the position's `withdrawable`. */
+  earnSolanaWithdraw(params: SolanaEarnTxParams): Promise<SubmitOutcome> {
+    return this._earnSolana('withdraw', params);
+  }
+
+  private async _earnSolana(action: 'deposit' | 'withdraw', params: SolanaEarnTxParams): Promise<SubmitOutcome> {
+    this._txStartGen = this._sessionGeneration;
+    const wallet = this.getWallets().find((w) => w.chain === 'SOLANA');
+    if (!wallet) {
+      this._setTransactionState({ step: 'error', phase: 'building', details: 'No Solana wallet' });
+      return { status: 'error', details: 'No Solana wallet' };
+    }
+    const answer = await this._confirm({
+      kind: 'build_sign_submit',
+      network: 'SOLANA',
+      operation: action === 'deposit' ? 'earn_deposit' : 'earn_withdraw',
+      details: { action, opportunity: params.opportunity, amount: params.amount },
+    });
+    if (!answer.ok) return this._declined('building', undefined, answer);
+
+    const adapter = this._walletAdapter;
+    if (wallet.custody === 'external') {
+      const noSigner = this._externalSignerMissing();
+      if (noSigner) {
+        this._setTransactionState({ step: 'error', phase: 'building', details: noSigner.details });
+        return noSigner;
+      }
+      if (!adapter?.signSolanaTransaction) {
+        const details = `Wallet "${adapter?.type}" cannot sign a Solana transaction.`;
+        this._setTransactionState({ step: 'error', phase: 'building', details });
+        return { status: 'error', details };
+      }
+    }
+
+    const idempotencyKey = params.idempotencyKey ?? randomUUID();
+    this._setTransactionState({ step: 'building' });
+    let unsignedTransaction: string;
+    try {
+      const body = { chain: 'SOLANA' as const, action, opportunity: params.opportunity, amount: params.amount, idempotencyKey };
+      let built = await buildChainEarn(this._api, body);
+      // 503: the provider is busy, and the same build under the same key can succeed in a moment.
+      for (let attempt = 1; built.response.status === 503 && attempt < EARN_BUSY_ATTEMPTS; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, EARN_BUSY_BACKOFF_MS * attempt));
+        built = await buildChainEarn(this._api, body);
+      }
+      const { data, error } = built;
+      const pendingRequest = this._cosignPendingOf(data);
+      if (pendingRequest) {
+        return this._settleCosign(pendingRequest, { intent: 'sign_and_send', phase: 'building-signing-submitting' });
+      }
+      const content = !error && data?.success && data.content && 'unsignedTransaction' in data.content ? data.content : null;
+      if (!content) {
+        const { details, code, message } = this._resolveTxApiError(error, data);
+        this._setTransactionState({
+          step: 'error',
+          phase: 'building',
+          ...(details && { details }),
+          ...(code && { code }),
+          ...(message && { message }),
+        });
+        return { status: 'error', ...(details && { details }), ...(code && { code }), ...(message && { message }) };
+      }
+      unsignedTransaction = content.unsignedTransaction;
+    } catch (err) {
+      const details = err instanceof Error ? err.message : undefined;
+      this._setTransactionState({ step: 'error', phase: 'building', ...(details && { details }) });
+      return { status: 'error', ...(details && { details }) };
+    }
+
+    if (!adapter?.signSolanaTransaction) {
+      const details = 'This Solana wallet signs on the device; the build did not open a co-sign request.';
+      this._setTransactionState({ step: 'error', phase: 'building', details });
+      return { status: 'error', details };
+    }
+    return this._signAndSubmitSolana(adapter.signSolanaTransaction.bind(adapter), unsignedTransaction, idempotencyKey);
   }
 
   // --- Cards -------------------------------------------------------------------

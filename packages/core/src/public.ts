@@ -102,10 +102,18 @@ export {
 export { listDistributionRules, claimDistributionRule } from './api/endpoints/distribution';
 
 // --- Swap endpoints -----------------------------------------------------------
-export { quoteSwap, getSwapConfig, getSwapTokens } from './api/endpoints/swap';
+export { quoteSwap, getSwapConfig, getSwapTokens, getSwapStatus } from './api/endpoints/swap';
 
 // --- Earn endpoints -----------------------------------------------------------
-export { getEarnProviders, getEarnOpportunities, getEarnPosition, buildEarnTx } from './api/endpoints/earn';
+export {
+  getEarnProviders,
+  getEarnOpportunities,
+  getEarnPosition,
+  buildEarnTx,
+  getChainEarnProviders,
+  getChainEarnOpportunities,
+  getChainEarnPosition,
+} from './api/endpoints/earn';
 
 export {
   describeRampAction,

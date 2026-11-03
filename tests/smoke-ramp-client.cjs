@@ -249,10 +249,12 @@ const order = (patch) => ({
       },
     }),
   );
+  // The provider matches the transfer by its reference: it is required, and the note says where it goes.
   assert.deepEqual(bank.details, [
     { label: 'CLABE', value: '012' },
-    { label: 'Reference', value: 'R1' },
+    { label: 'Reference (required)', value: 'R1' },
   ]);
+  assert.match(bank.note, /description or memo/);
   assert.equal(
     sdk.describeRampAction(
       order({ pendingAction: { kind: 'COSIGN_APPROVAL', actionId: 'c', legIndex: 0, cosignRequestId: 'r', summary: 's' } }),

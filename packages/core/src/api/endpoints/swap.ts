@@ -6,8 +6,10 @@ import type {
   SwapConfigContent,
   SwapQuoteBody,
   SwapQuoteContent,
+  SwapStatus,
   SwapTokensContent,
 } from '../../types';
+import { PollarApiError } from '../../types';
 import type { PollarApiClient } from '../client';
 import { apiErrorFields } from '../error-fields';
 
@@ -27,7 +29,8 @@ export async function getSwapConfig(api: PollarApiClient): Promise<SwapConfigCon
 
 /**
  * GET /swap/config?chain=SOLANA
- * The Solana venues this app exposes (Jupiter, Titan; mainnet only). Empty = no swap on Solana.
+ * The Solana venues this app exposes (mainnet only) and, when a venue reaches
+ * other chains, `destinationChains`. Empty `venues` = no swap on Solana.
  */
 export async function getSolanaSwapConfig(api: PollarApiClient): Promise<SolanaSwapConfigContent> {
   const { data, error } = await api.GET('/swap/config', { params: { query: { chain: 'SOLANA' } } });
@@ -87,4 +90,21 @@ export async function quoteSolanaSwap(api: PollarApiClient, body: SolanaSwapQuot
  */
 export function buildSolanaSwap(api: PollarApiClient, body: SolanaSwapBuildBody) {
   return api.POST('/swap/build', { body });
+}
+
+/**
+ * GET /swap/status?idempotencyKey=
+ * Where a swap built under that key stands; a cross-chain one carries its
+ * settlement on the destination chain.
+ */
+export async function getSwapStatus(api: PollarApiClient, idempotencyKey: string): Promise<SwapStatus> {
+  const { data, error, response } = await api.GET('/swap/status', { params: { query: { idempotencyKey } } });
+  if (!data?.content || error) {
+    const fields = apiErrorFields(error);
+    throw new PollarApiError(fields.code ?? 'SDK_SWAP_STATUS_FAILED', {
+      status: response.status,
+      ...(fields.message ? { message: fields.message } : {}),
+    });
+  }
+  return data.content;
 }

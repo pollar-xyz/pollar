@@ -83,12 +83,27 @@ export function rampRailLabel(
   return RAIL_LABEL[language][rail] ?? rail;
 }
 
-/** Every field the quote asks the user for, across its legs, once per key. */
-export function rampQuoteFields(quote: RampQuote): RampField[] {
+/**
+ * Every field the quote asks the user for, across its legs, once per key. A
+ * field this SDK knows (the Pix key a sale pays out to) is labelled in
+ * `language`; any other keeps the provider's words.
+ */
+export function rampQuoteFields(quote: RampQuote, language: PollarLanguage = 'en'): RampField[] {
   const fields = new Map<string, RampField>();
   for (const leg of quote.legs)
-    for (const field of leg.requiredFields) if (!fields.has(field.key)) fields.set(field.key, field);
+    for (const field of leg.requiredFields) if (!fields.has(field.key)) fields.set(field.key, localizedField(field, language));
   return [...fields.values()];
+}
+
+function localizedField(field: RampField, language: PollarLanguage): RampField {
+  if (field.key !== 'pixKey' || field.type !== 'text') return field;
+  const copy = COPY[language];
+  return { ...field, label: copy.pixKey, hint: field.hint ?? copy.pixKeyHint };
+}
+
+/** A payment code given as text (an EMV string such as Pix copy and paste), not as an image's base64. */
+function textPaymentCode(payload: string): boolean {
+  return payload.startsWith('000201') && /^[\x20-\x7e]+$/.test(payload);
 }
 
 const CHAIN_NAME: Record<string, string> = { STELLAR: 'Stellar', POLYGON: 'Polygon', SOLANA: 'Solana' };
@@ -163,6 +178,14 @@ const EN = {
   approveOnDevice: 'Approve on your device',
   kycTitle: 'Complete verification',
   kycLink: 'Complete verification',
+  kycReviewing: 'Verification in review',
+  referenceRequired: 'Reference (required)',
+  referenceNote:
+    "Write the reference in the transfer's description or memo, exactly as shown. Without it the payment cannot be matched to your order.",
+  pixCopyPaste: 'Pix copy and paste code',
+  paymentCode: 'Payment code',
+  pixKey: 'Pix key',
+  pixKeyHint: 'The Pix key that receives the payment: CPF, CNPJ, email, phone or random key.',
 };
 
 const COPY: Record<PollarLanguage, typeof EN> = {
@@ -236,6 +259,14 @@ const COPY: Record<PollarLanguage, typeof EN> = {
     approveOnDevice: 'Aprueba en tu dispositivo',
     kycTitle: 'Completa la verificación',
     kycLink: 'Completar verificación',
+    kycReviewing: 'Verificación en revisión',
+    referenceRequired: 'Referencia (obligatoria)',
+    referenceNote:
+      'Escribe la referencia en la descripción o el concepto de la transferencia, tal como aparece. Sin ella el pago no se puede asociar a tu orden.',
+    pixCopyPaste: 'Código Pix copia y pega',
+    paymentCode: 'Código de pago',
+    pixKey: 'Clave Pix',
+    pixKeyHint: 'La clave Pix que recibe el pago: CPF, CNPJ, email, teléfono o clave aleatoria.',
   },
   pt: {
     assetOn: (code, chain) => `${code} na ${chain}`,
@@ -306,6 +337,14 @@ const COPY: Record<PollarLanguage, typeof EN> = {
     approveOnDevice: 'Aprove no seu dispositivo',
     kycTitle: 'Conclua a verificação',
     kycLink: 'Concluir verificação',
+    kycReviewing: 'Verificação em análise',
+    referenceRequired: 'Referência (obrigatória)',
+    referenceNote:
+      'Escreva a referência na descrição ou mensagem da transferência, exatamente como aparece. Sem ela o pagamento não pode ser associado ao seu pedido.',
+    pixCopyPaste: 'Código Pix copia e cola',
+    paymentCode: 'Código de pagamento',
+    pixKey: 'Chave Pix',
+    pixKeyHint: 'A chave Pix que recebe o pagamento: CPF, CNPJ, email, telefone ou chave aleatória.',
   },
 };
 
@@ -752,6 +791,13 @@ function kycNote(steps: unknown): string | null {
   return said.length ? said.join(' ') : null;
 }
 
+/** Whether every verification step left is on the provider's side: nothing for the user to do but wait. */
+function kycAwaitingProvider(steps: unknown): boolean {
+  if (!Array.isArray(steps) || steps.length === 0) return false;
+  const statuses = steps.map((step) => (step as { status?: unknown } | null)?.status);
+  return statuses.includes('awaiting_provider') && !statuses.includes('required');
+}
+
 /** The action as a screen shows it; platforms supply the controls, links and QR rendering. */
 export function describeRampAction(
   order: Pick<RampOrder, 'pendingAction' | 'state'>,
@@ -764,6 +810,11 @@ export function describeRampAction(
   scannable: RampScannable | null;
   /** A QR payment that arrived without its code rendered: there is nothing to pay with, and the screen says so. */
   codeMissing: boolean;
+  /**
+   * A text payment code that arrived without its rendered image (a Pix copy and
+   * paste string): the screen draws the QR from `value` if it can, and offers it to copy.
+   */
+  pasteCode: { label: string; value: string } | null;
   details: Array<{ label: string; value: string }>;
   link: string | null;
   /** What the button that opens `link` says; null when there is no link. */
@@ -785,6 +836,7 @@ export function describeRampAction(
     canApprove: false,
     scannable: null,
     codeMissing: false,
+    pasteCode: null as { label: string; value: string } | null,
     details: [] as Array<{ label: string; value: string }>,
     link: null as string | null,
     linkLabel: null as string | null,
@@ -806,22 +858,36 @@ export function describeRampAction(
       }
       const link = instructions.link ? safeRampUrl(instructions.link) : null;
       const page = { link, linkLabel: link ? (instructions.kind === 'qr' ? copy.openPaymentPage : copy.openStatusPage) : null };
-      if (instructions.kind === 'qr')
+      if (instructions.kind === 'qr') {
+        // Every EMV code starts 000201 and sdk-api reads them all as `pix`; only a real one pays in BRL.
+        const codeLabel = instructions.currency === 'BRL' ? copy.pixCopyPaste : copy.paymentCode;
+        const scannable = instructions.scannable
+          ? {
+              ...instructions.scannable,
+              payloadLabel: instructions.scannable.payloadLabel === null ? null : codeLabel,
+            }
+          : null;
+        const pasteCode =
+          !scannable && textPaymentCode(instructions.payload) ? { label: codeLabel, value: instructions.payload } : null;
         return {
           ...base,
           title,
           ...page,
-          scannable: instructions.scannable ?? null,
-          codeMissing: !instructions.scannable && !link,
+          scannable,
+          pasteCode,
+          codeMissing: !scannable && !pasteCode && !link,
         };
+      }
+      // The provider matches a transfer to the order by this reference alone.
       return {
         ...base,
         title,
         ...page,
         details: [
           ...instructions.details,
-          ...(instructions.reference ? [{ label: copy.reference, value: instructions.reference }] : []),
+          ...(instructions.reference ? [{ label: copy.referenceRequired, value: instructions.reference }] : []),
         ],
+        note: instructions.reference ? copy.referenceNote : null,
       };
     }
     case 'SIGNATURE':
@@ -832,7 +898,7 @@ export function describeRampAction(
       const link = action.url ? safeRampUrl(action.url) : null;
       return {
         ...base,
-        title: copy.kycTitle,
+        title: !link && kycAwaitingProvider(action.steps) ? copy.kycReviewing : copy.kycTitle,
         link,
         linkLabel: link ? copy.kycLink : null,
         note: link ? null : kycNote(action.steps),

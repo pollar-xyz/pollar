@@ -166,6 +166,56 @@ const CATALOG: Record<string, CatalogEntry> = {
     },
     errorCode: AUTH_ERROR_CODES.TX_FAILED,
   },
+
+  // -- Earn and swaps on other chains ------------------------------------------
+  SDK_EARN_WALLET_UNSUPPORTED: {
+    message: {
+      en: 'Earn on this network is not available for this wallet yet.',
+      es: 'Rendimientos en esta red todavía no está disponible para esta billetera.',
+      pt: 'Rendimentos nesta rede ainda não está disponível para esta carteira.',
+    },
+    errorCode: AUTH_ERROR_CODES.TX_FAILED,
+  },
+  SDK_EARN_ACTION_UNAVAILABLE: {
+    message: {
+      en: 'This opportunity does not take that operation right now.',
+      es: 'Esta oportunidad no acepta esa operación en este momento.',
+      pt: 'Esta oportunidade não aceita essa operação no momento.',
+    },
+    errorCode: AUTH_ERROR_CODES.TX_FAILED,
+  },
+  SDK_EARN_AMOUNT_INVALID: {
+    message: {
+      en: 'This amount cannot be used here. Check it, and that the wallet holds SOL for the network fee.',
+      es: 'Este monto no se puede usar aquí. Revísalo, y que la billetera tenga SOL para la comisión de red.',
+      pt: 'Este valor não pode ser usado aqui. Confira-o, e que a carteira tenha SOL para a taxa de rede.',
+    },
+    errorCode: AUTH_ERROR_CODES.TX_FAILED,
+  },
+  SDK_EARN_BUILD_ERROR: {
+    message: {
+      en: 'This operation cannot be done right now. Try again in a moment.',
+      es: 'Esta operación no se puede hacer en este momento. Intenta de nuevo en un momento.',
+      pt: 'Esta operação não pode ser feita agora. Tente novamente em instantes.',
+    },
+    errorCode: AUTH_ERROR_CODES.TX_FAILED,
+  },
+  SDK_SWAP_NO_ROUTE: {
+    message: {
+      en: 'There is no route for this swap right now. Try another amount or asset.',
+      es: 'No hay una ruta para este intercambio en este momento. Prueba con otro monto o activo.',
+      pt: 'Não há rota para esta troca no momento. Tente outro valor ou ativo.',
+    },
+    errorCode: AUTH_ERROR_CODES.TX_FAILED,
+  },
+  SDK_SWAP_QUOTE_EXPIRED: {
+    message: {
+      en: 'The price expired. Get a new quote and try again.',
+      es: 'El precio venció. Pide una nueva cotización e intenta de nuevo.',
+      pt: 'O preço expirou. Peça uma nova cotação e tente novamente.',
+    },
+    errorCode: AUTH_ERROR_CODES.TX_FAILED,
+  },
 };
 
 /**

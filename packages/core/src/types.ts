@@ -1396,16 +1396,43 @@ export type SolanaSwapConfigContent = Extract<AnySwapConfigContent, { venues: So
 
 export type SolanaSwapBuildBody = NonNullable<pollarPaths['/swap/build']['post']['requestBody']>['content']['application/json'];
 
+/** Where a Solana swap delivers: the same chain, or the user's own wallet on another one. */
+export type SwapDestinationChain = NonNullable<SolanaSwapQuoteBody['destinationChain']>;
+
+/** What a quote's route charges, by kind (`routing`, `integrator`, `bridge_and_slippage`, `other`). */
+export type SolanaSwapFeeBreakdown = NonNullable<SolanaSwapQuote['feeBreakdown']>;
+export type SolanaSwapFeeCharge = SolanaSwapFeeBreakdown['charges'][number];
+
+/** The Solana venues and, when one of them reaches other chains, the chains a swap can deliver to. */
+export type SolanaSwapOptions = {
+  venues: SolanaSwapVenue[];
+  /** Chains other than Solana a swap can deliver to; empty when none. */
+  destinationChains: SwapDestinationChain[];
+};
+
+/**
+ * Where a built swap stands (GET /swap/status). A cross-chain swap carries
+ * `settlement`: `status` stays `BUILT` after the Solana transaction lands and
+ * turns `CONFIRMED` once the destination is final, `FAILED` if it failed or was
+ * refunded. A settlement `HELD` had no final answer in time and support is
+ * checking it.
+ */
+export type SwapStatus = pollarPaths['/swap/status']['get']['responses'][200]['content']['application/json']['content'];
+export type SwapSettlement = NonNullable<SwapStatus['settlement']>;
+
 /** Input to `client.getSolanaSwapQuote`; the wallet is the session user's own Solana wallet. */
 export type SolanaSwapQuoteParams = {
   /** Mint sold; wrapped SOL (So11111111111111111111111111111111111111112) for SOL. */
   inputMint: string;
+  /** Mint bought, or the ERC-20 contract address when `destinationChain` is `POLYGON`. */
   outputMint: string;
   /** Integer amount of `inputMint` in base units. */
   amount: string;
   provider?: SolanaSwapProvider;
   /** Default 50 (0.5%). */
   slippageBps?: number;
+  /** Deliver to the user's own wallet on this chain. Default `SOLANA`. */
+  destinationChain?: SwapDestinationChain;
 };
 
 /** Curated "buy" tokens the app opted into (from GET /swap/tokens). */
@@ -1668,28 +1695,73 @@ export type BridgeSignatureAction = Extract<BridgePendingAction, { kind: 'SIGNAT
 
 // --- Earn types (yield vaults / lending) ---------------------------------------
 
-/** Providers this app exposes (from GET /earn/providers). Empty = Earn disabled. */
-export type EarnProvidersContent =
+// The /earn routes answer for Stellar, or for another chain when the request
+// names `chain`. The unprefixed names are the Stellar side.
+type AnyEarnProvidersContent =
   pollarPaths['/earn/providers']['get']['responses'][200]['content']['application/json']['content'];
+type AnyEarnOpportunitiesContent =
+  pollarPaths['/earn/opportunities']['get']['responses'][200]['content']['application/json']['content'];
+type AnyEarnOpportunity = AnyEarnOpportunitiesContent['opportunities'][number];
+type AnyEarnPosition = pollarPaths['/earn/position']['get']['responses'][200]['content']['application/json']['content'];
+type AnyEarnBuildBody = NonNullable<pollarPaths['/earn/build']['post']['requestBody']>['content']['application/json'];
+type AnyEarnBuildContent = pollarPaths['/earn/build']['post']['responses'][200]['content']['application/json']['content'];
+
+/** Providers this app exposes (from GET /earn/providers). Empty = Earn disabled. */
+export type EarnProvidersContent = Exclude<AnyEarnProvidersContent, { chain: 'SOLANA' }>;
 
 /** A concrete Earn provider. */
 export type EarnProviderId = EarnProvidersContent['providers'][number];
 
-export type EarnOpportunitiesContent =
-  pollarPaths['/earn/opportunities']['get']['responses'][200]['content']['application/json']['content'];
-
 /** A vault (DeFindex) or pool (Blend) the user can deposit into. */
-export type EarnOpportunity = EarnOpportunitiesContent['opportunities'][number];
+export type EarnOpportunity = Exclude<AnyEarnOpportunity, { chain: 'SOLANA' }>;
+
+export type EarnOpportunitiesContent = { opportunities: EarnOpportunity[] };
 
 /** The user's position (balance + APY) in a vault/pool (from GET /earn/position). */
-export type EarnPosition = pollarPaths['/earn/position']['get']['responses'][200]['content']['application/json']['content'];
+export type EarnPosition = Exclude<AnyEarnPosition, { chain: 'SOLANA' }>;
 
 /** Which unit a provider's withdraw amount is in: asset (Blend) or shares (DeFindex). */
 export type EarnWithdrawUnit = EarnPosition['withdrawUnit'];
 
-export type EarnBuildBody = NonNullable<pollarPaths['/earn/build']['post']['requestBody']>['content']['application/json'];
+export type EarnBuildBody = Exclude<AnyEarnBuildBody, { chain: 'SOLANA' }>;
 
-export type EarnBuildContent = pollarPaths['/earn/build']['post']['responses'][200]['content']['application/json']['content'];
+export type EarnBuildContent = Exclude<AnyEarnBuildContent, { chain: 'SOLANA' }>;
+
+/** A chain Earn serves besides Stellar. */
+export type EarnChain = 'SOLANA';
+
+/** Earn providers on Solana (GET /earn/providers?chain=SOLANA). Empty = no Earn on Solana. */
+export type SolanaEarnProvidersContent = Extract<AnyEarnProvidersContent, { chain: 'SOLANA' }>;
+export type SolanaEarnProviderId = SolanaEarnProvidersContent['providers'][number];
+
+/**
+ * A yield opportunity on Solana. `apy` is already the expected APY after fees,
+ * as a percentage (3.96 is 3.96%); `actions` says what it takes right now.
+ */
+export type SolanaEarnOpportunity = Extract<AnyEarnOpportunity, { chain: 'SOLANA' }>;
+
+/**
+ * The session user's position in a Solana opportunity. `profit` is the gain
+ * after fees in the asset (negative on a loss, null when unknown) and `apy` the
+ * expected APY after fees; `stale` means the figures are the last known ones.
+ */
+export type SolanaEarnPosition = Extract<AnyEarnPosition, { chain: 'SOLANA' }>;
+
+/** The body of a Solana Earn build. */
+export type SolanaEarnBuildBody = Extract<AnyEarnBuildBody, { chain: 'SOLANA' }>;
+
+/** A Solana Earn build for an external wallet: the unsigned transaction it signs as is. */
+export type SolanaEarnBuildContent = Extract<AnyEarnBuildContent, { chain: 'SOLANA' }>;
+
+/** Input to `client.earnSolanaDeposit` / `client.earnSolanaWithdraw`; the wallet is the session user's Solana wallet. */
+export type SolanaEarnTxParams = {
+  /** The opportunity `id`. */
+  opportunity: string;
+  /** Decimal amount of the opportunity's asset. */
+  amount: string;
+  /** Ties the build to its submit or co-sign request; one is made when absent. Reuse it to retry the same operation. */
+  idempotencyKey?: string;
+};
 
 /** The ready-to-sign payload a build returns. */
 export type EarnBuild = EarnBuildContent['build'];
