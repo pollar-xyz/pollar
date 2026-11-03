@@ -32,6 +32,8 @@ export const SWAP_ROUTERS = new Set([
 /** SPL Token's SyncNative and CloseAccount, one-byte discriminators. */
 const TOKEN_SYNC_NATIVE = 17;
 const TOKEN_CLOSE_ACCOUNT = 9;
+/** What a deposit may wrap past its amount when it closes the wrapped account back to the user: 0.005 SOL. */
+const WRAP_SURPLUS_LAMPORTS = 5_000_000n;
 /** SystemProgram's Transfer, a little-endian u32 discriminator. */
 const SYSTEM_TRANSFER = 2;
 /** SPL Token's TransferChecked, a one-byte discriminator. */
@@ -476,6 +478,7 @@ function checkThirdPartyTransaction(
   const wrappedSol = associatedTokenAddress(user, WRAPPED_SOL_MINT);
   let protocolCalls = 0;
   let wrapped = 0n;
+  let closesWrappedSol = false;
   for (const ix of tx.instructions) {
     if (ix.program === COMPUTE_BUDGET || MEMO_PROGRAMS.has(ix.program)) continue;
     if (ix.program === TOKEN_MESSENGER_MINTER_V2) return { ok: false, reason: 'a CCTP burn the request does not declare' };
@@ -502,6 +505,7 @@ function checkThirdPartyTransaction(
       if (ix.data.length === 1 && ix.data[0] === TOKEN_SYNC_NATIVE && ix.accounts[0] === wrappedSol) continue;
       // [account, destination, owner]
       if (ix.data.length === 1 && ix.data[0] === TOKEN_CLOSE_ACCOUNT && ix.accounts[1] === user && ix.accounts[2] === user) {
+        if (ix.accounts[0] === wrappedSol) closesWrappedSol = true;
         continue;
       }
       return { ok: false, reason: 'a token instruction that moves funds at the top level' };
@@ -509,7 +513,10 @@ function checkThirdPartyTransaction(
     protocolCalls++;
   }
   if (protocolCalls === 0) return { ok: false, reason: 'the transaction calls no protocol' };
-  if (wrapped > maxWrap) return { ok: false, reason: 'the transaction wraps more SOL than the request moves' };
+  // A Kamino SOL deposit wraps the amount plus rent and closes the wrapped account back to the user
+  // in the same transaction, so the surplus returns; custody's simulation bounds what the wallet loses.
+  const allowedWrap = closesWrappedSol && maxWrap > 0n ? maxWrap + WRAP_SURPLUS_LAMPORTS : maxWrap;
+  if (wrapped > allowedWrap) return { ok: false, reason: 'the transaction wraps more SOL than the request moves' };
   return { ok: true };
 }
 

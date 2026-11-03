@@ -170,6 +170,12 @@ function solanaTx({ signers, readonlyUnsigned, keys, instructions, lookups = [] 
   return Buffer.from(bytes).toString('hex');
 }
 
+const KAMINO_SOL_DEPOSIT =
+  'AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQAKELIjEUw80bLre65s7T9F2BL12sfYOidS/LtzzMP3VuE1aZPzkd0xhjTxPOC+EBhwpBPcOejvNaPkqEfk+9Wf4X214S0kIrFUmK3+JM6/eQvCEEh11CaNJbZmMYZH9FtTzoE3TkfHUg/M/lQSDRx8ZHMtxF3isUnReGx3L5IVISyD4oCOWDbZgcVCqko1sXH5RrFhSgblv4UPwQk0Ng2tYI2hk0Qk/CKBkLqtxahX2AkhEJnKw1miNZ0Hvnt9vtAraAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACMlyWPTiSJ8bs9ECkUjg2DC1oTmdr/EIQEjnvY2+n4WQbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpAnemr5czm3rIjRiSyQRG9QACMJJm9i5TwRgkSYIAAAAEsqyxEljM42gsQYuocv89+RECcS8VrxK2vmmzQ1sACHoo6fT2sbRZ+3pnz11iUH7iaDbqdPSoWOWoQDUII1OK2LAQF2PT5R8SbmFW3oXejGEwWbhEaNDaP+iioiUcxwEqy7rHSTbiUiI68uJLjWgBxwwON1pf6bQG+5rFmRObKuCKrgSxbJpbu+wgw2sEZwRuHkBMxKqXYzT7ilBZ3KFVUyR45QiRp9Ron5HYv2LTD2V7Y9oppcOfqAY7bGMb0yQOBgAFAkBCDwAHAgABDAIAAAB4+CUAAAAAAAgGAAEAFQcJAQEJAQEBEQoEAgAABw0AAAAAnWC3GwAAAAD9CwYAAAMLFgcodamwRcUXD6LpPaeoJImBZqVWSs7Mr81afq5UuOqRRGdnBDEn3QIb8QsJAAAEFwcHAxYHCvsK50wbC59gAAALCwAABAwQEQUXDRYHCYg/D7rTmKikAAsGEBcLCwsOCALaiutPyRlmCwIXBAghhJPkl8BIWQsRAAQXDBAVEhMUAQsJCRgFEQ0Q2OC/G8yXZq9AQg8AAAAAAAkDAQAAAQkPAFF7InZlcnNpb24iOjAsImFjdGlvbiI6MCwiYW1vdW50QmVmb3JlRmVlcyI6IjEwMDAwMDAiLCJhbW91bnRBZnRlckZlZXMiOiIxMDAwMDAwIn0PADN7InZlcnNpb24iOjEsImFjdGlvbklkIjoiNmFlYTJhNmRjOTYyYzM3NjI4ODBjZGNkIn0B0/JvJLSWE/N93vfUYNjIAMOt4Of84iU5s/N1oXkRml4FPllg1dwEjwQCBQ==';
+
+const KAMINO_USDC_DEPOSIT =
+  'AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQAIDrIjEUw80bLre65s7T9F2BL12sfYOidS/LtzzMP3VuE15VPe4enSY5nyJHyfS68hnaCwrCLJd+EmIckGwcV3UIK14S0kIrFUmK3+JM6/eQvCEEh11CaNJbZmMYZH9FtTzoE3TkfHUg/M/lQSDRx8ZHMtxF3isUnReGx3L5IVISyD4oCOWDbZgcVCqko1sXH5RrFhSgblv4UPwQk0Ng2tYI1RZ2+LheVe0T1VrHstxaJ00vVg3aQp+otDh1eacLw0oQMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAAjJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FkCd6avlzObesiNGJLJBEb1AAIwkmb2LlPBGCRJggAAAASyrLESWMzjaCxBi6hy/z35EQJxLxWvEra+abNDWwAIeijp9PaxtFn7emfPXWJQfuJoNup09KhY5ahANQgjU4rYsBAXY9PlHxJuYVbehd6MYTBZuERo0No/6KKiJRzHASrLusdJNuJSIjry4kuNaAHHDA43Wl/ptAb7msWZE5sq4IquBLFsmlu77CDDawRnBG4eQEzEqpdjNPuKUFncoVWCcX9h5Kx3si0m15E9WW1HQzoBsR+YOXwBNKSRwRiAvgsGAAUCQEIPAAcGAAEAExQVAQEIBAIAABQNAAAAAJ1gtxsAAAAA/QkGAAADCRYUKHWpsEXFFw+iPkKgLzlVXzJKWzDx7wtQXmQYEfGABBcdH2l0bI8cgtEJCQAABBcUFAMWFAr7CudMGwufYAAACQsAAAQKDg8FFwsWFAmIPw+605iopAAJBg4XCQkJDAgC2orrT8kZZgkCFwQIIYST5JfASFkJEQAEFwoOExAREgEJFRUYBQ8LENjgvxvMl2avQEIPAAAAAAANAFF7InZlcnNpb24iOjAsImFjdGlvbiI6MCwiYW1vdW50QmVmb3JlRmVlcyI6IjEwMDAwMDAiLCJhbW91bnRBZnRlckZlZXMiOiIxMDAwMDAwIn0NADN7InZlcnNpb24iOjEsImFjdGlvbklkIjoiNmFlYTJhNmRjOTYyYzM3NjI4ODBjZGY0In0B0/JvJLSWE/N93vfUYNjIAMOt4Of84iU5s/N1oXkRml4FlpeERIUGnggHBAIF';
+
 const USER = key('user');
 const SPONSOR = key('sponsor');
 const PROTOCOL = key('protocol');
@@ -408,6 +414,51 @@ function request(overrides) {
   check(
     'a withdrawal that wraps SOL is refused',
     !(await verify({ ...solDeposit, operation: 'earn_withdraw', unsignedPayload: wrap(1) })).ok,
+  );
+  const wrapAndClose = (lamports, closeTo = USER) =>
+    solanaTx({
+      signers: 1,
+      readonlyUnsigned: 3,
+      keys: [USER, USER_WSOL, VAULT_ACCOUNT, PROTOCOL, SYSTEM_PROGRAM, TOKEN_PROGRAM],
+      instructions: [
+        { program: SYSTEM_PROGRAM, accounts: [USER, USER_WSOL], data: [...u32(2), ...u64(lamports)] },
+        { program: PROTOCOL, accounts: [USER, USER_WSOL, VAULT_ACCOUNT], data: [1] },
+        { program: TOKEN_PROGRAM, accounts: [USER_WSOL, closeTo, USER], data: [9] },
+      ],
+    });
+  check(
+    'a SOL deposit that closes its wrapped account back to the user may wrap up to 0.005 SOL of rent past its amount',
+    (await verify({ ...solDeposit, unsignedPayload: wrapAndClose(505_000_000) })).ok === true,
+  );
+  check(
+    'a surplus past 0.005 SOL is refused even when the wrapped account is closed',
+    !(await verify({ ...solDeposit, unsignedPayload: wrapAndClose(505_000_001) })).ok,
+  );
+  check(
+    'closing the wrapped account to someone else earns no surplus',
+    !(await verify({ ...solDeposit, unsignedPayload: wrapAndClose(500_000_001, VAULT_ACCOUNT) })).ok,
+  );
+  // The Kamino SOL deposit Pods built on 2026-11-03 for 0.001 SOL: it wraps 2,488,440 lamports and closes the account.
+  const kamino = Buffer.from(KAMINO_SOL_DEPOSIT, 'base64').toString('hex');
+  const kaminoUser = 'CzNat3HpKWPiYc9BmitKodWmeW3S6yamE5USioonmXxQ';
+  const kaminoRequest = {
+    ...earn,
+    signWith: kaminoUser,
+    unsignedPayload: kamino,
+    details: { action: 'deposit', amount: '0.001', assetCode: 'SOL', mint: WSOL_MINT, feePayer: kaminoUser, sponsored: false },
+  };
+  const kaminoOk = await verify(kaminoRequest);
+  check('the real Kamino SOL deposit from Pods is proposed', kaminoOk.ok, kaminoOk);
+  const kaminoUsdc = await verify({
+    ...kaminoRequest,
+    unsignedPayload: Buffer.from(KAMINO_USDC_DEPOSIT, 'base64').toString('hex'),
+    details: { ...kaminoRequest.details, amount: '1', assetCode: 'USDC', mint: USDC_MINT },
+  });
+  check('the real Kamino USDC deposit from Pods is proposed', kaminoUsdc.ok, kaminoUsdc);
+  check(
+    'the same transaction presented as a withdrawal is refused: a withdrawal wraps no SOL',
+    !(await verify({ ...kaminoRequest, operation: 'earn_withdraw', details: { ...kaminoRequest.details, action: 'withdraw' } }))
+      .ok,
   );
 
   console.log('\n-- 4. A swap on the multichain venue, fee paid by the app --');
