@@ -272,6 +272,71 @@
   `<PollarProvider>` no longer reaches the modals; set it on `:root` or
   `.pollar-modal-card`. Notes for Radix and Headless UI modals are in the
   `@pollar/react` reference.
+- **Earn on Solana.** `getSolanaEarnProviders()`,
+  `getSolanaEarnOpportunities()` and `getSolanaEarnPosition(opportunity)` read
+  the app's Solana opportunities and the user's position from their own Solana
+  wallet: `apy` is already the expected APY after fees, `profit` the gain after
+  fees, and `actions` what an opportunity takes right now.
+  `earnSolanaDeposit({ opportunity, amount })` and `earnSolanaWithdraw` ask for
+  the signature confirmation, then have the backend build the transaction: an
+  external wallet signs it and it is submitted under the same `idempotencyKey`,
+  a co-signed wallet approves it on the device. The wallet pays its own network
+  fee. Custodial and contract wallets are refused with
+  `SDK_EARN_WALLET_UNSUPPORTED`, an operation the opportunity does not take
+  with `SDK_EARN_ACTION_UNAVAILABLE` and an amount it does not take with
+  `SDK_EARN_AMOUNT_INVALID`, each worded in the three languages; a provider
+  that answers 503 is asked again a couple of times. The Stellar Earn calls are
+  unchanged; the Solana types are `SolanaEarnOpportunity`,
+  `SolanaEarnPosition`, `SolanaEarnTxParams` and the rest.
+- `<EarnModal>` earns on Solana too. With Earn on both chains a Network
+  selector picks between them (`openEarnModal({ chain: 'SOLANA' })` opens on
+  it); on Solana it shows the APY after fees, the position and what it earned,
+  and says when an opportunity does not take deposits or withdrawals right now.
+  The React Native Earn panel gains the same network picker.
+- **Solana swaps that deliver to Polygon.** `getSolanaSwapOptions()` returns the
+  Solana venues and `destinationChains`, the chains a swap can deliver to
+  besides Solana. `getSolanaSwapQuote({ ..., destinationChain: 'POLYGON' })`
+  quotes a route that pays the user's own Polygon wallet, with the ERC-20
+  address as `outputMint`. A quote may carry `feeBreakdown` (each charge by
+  kind) and `expiresAt`; `swapSolana` refuses a quote past it with
+  `SDK_SWAP_QUOTE_EXPIRED` before anything is built, and takes an
+  `idempotencyKey`. `getSwapStatus(idempotencyKey)` follows a cross-chain swap:
+  `status` stays `BUILT` after the Solana transaction lands and turns
+  `CONFIRMED` once the destination is paid; a settlement `HELD` is being
+  checked by support. A route that needs a wallet the user signs for answers
+  400 and one the platform refuses to sign answers `SDK_SWAP_NO_ROUTE`, now
+  worded in the three languages.
+- `<SwapModal>` on Solana shows a Receive on selector when the app offers
+  another destination (`openSwapModal({ destinationChain: 'POLYGON' })`), lists
+  the app's tokens on that chain, shows each fee by kind with its label in the
+  modal's language, asks for a new price when the old one lapses, and after the
+  swap follows the delivery until the destination wallet is paid. USDC to USDC
+  across chains points to a transfer instead. The React Native swap panel
+  gains the destination picker and a Check delivery button.
+- **A co-signed device reads Earn, cross-chain swaps and EVM batches before it
+  votes.** An Earn transaction and a swap on the cross-chain venue are a third
+  party's: the device checks they are paid by the account the request names
+  (the wallet itself for Earn), signed by the user and that payer alone, under
+  the fee cap, burn nothing over CCTP, and that nothing at the top level moves
+  funds anywhere but into the protocol: beside compute budget and memos only the
+  user's own token accounts, SOL wrapped up to the amount the request moves, and
+  accounts closed back to the user. An `EVM_AUTHORIZATION` request is the
+  EIP-7702 tuple, delegating to Simple7702Account
+  (`0x4Cd241E8d1510e30b2076397afc7508Ae59C66c9`) on this network's chain, whose
+  digest (keccak256 of `0x05 || rlp([chainId, address, nonce])`) the device
+  recomputes and signs unhashed. A Polygon batch is the wallet calling itself
+  with `executeBatch`, exactly the `details.calls` it states, none of them to
+  the wallet or the delegate. The approval and confirmation screens show where
+  a cross-chain swap delivers and each call of a batch.
+- **Ramp payments by Pix code and by transfer reference.** A Pix code is labelled
+  "Pix copy and paste code" in the widget's language; a Pix code that arrives
+  without its image is still offered to copy (`describeRampAction(...).pasteCode`),
+  and the React Native widget draws its QR from the text. A bank transfer's
+  reference is shown as required, with a note to write it in the transfer's
+  description. A verification the provider is reviewing, with nothing to open,
+  is titled as in review. `rampQuoteFields(quote, language)` labels the Pix key
+  a sale pays out to in that language.
+- `@pollar/core`'s types are regenerated from sdk-api's v3 document.
 - `@pollar/react` and `@pollar/react-native` require `@pollar/core@^0.12.1`.
 
 ## `@pollar/migrate` 0.12.0
