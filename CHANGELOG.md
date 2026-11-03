@@ -328,6 +328,14 @@
   with `executeBatch`, exactly the `details.calls` it states, none of them to
   the wallet or the delegate. The approval and confirmation screens show where
   a cross-chain swap delivers and each call of a batch.
+- A co-signed device accepts an Earn transaction on Solana sponsored by the
+  app: `details.feePayer` names the sponsor and `details.sponsored` is `true`.
+  The device then checks the sponsor pays every account the transaction opens
+  at the top level (the user's token account, the lookup table, the lending
+  user metadata, obligation and farms state), never the user; a wrapped SOL
+  account closed back to the user in the same transaction may stay the user's
+  to fund. An Earn request paid by another account without `sponsored: true`
+  is refused, as before.
 - **Ramp payments by Pix code and by transfer reference.** A Pix code is labelled
   "Pix copy and paste code" in the widget's language; a Pix code that arrives
   without its image is still offered to copy (`describeRampAction(...).pasteCode`),

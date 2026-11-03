@@ -456,19 +456,23 @@ function decimalUnits(amount: unknown, decimals: number): bigint | null {
  * device does not hold, and what they do inside is not readable here; custody
  * simulates the transaction and bounds what it may take from the wallet before
  * it reaches this device. What is checked is everything the top level can do:
- * the fee is paid by the account the request names (`details.feePayer`, the
- * wallet itself for Earn), the wallet and that payer are its only signers, it
- * burns nothing over CCTP, and beside compute budget, memos and the protocol's
- * own calls it may only create one of the wallet's own token accounts, wrap at
- * most `maxWrap` lamports of the wallet's SOL into its own wrapped SOL account,
- * sync it, and close one of the wallet's token accounts back to the wallet.
- * Nothing at the top level may move SOL or tokens anywhere else.
+ * the fee is paid by the account the request names (`details.feePayer`), the
+ * wallet and that payer are its only signers, it burns nothing over CCTP, and
+ * beside compute budget, memos and the protocol's own calls it may only create
+ * one of the wallet's own token accounts, wrap at most `maxWrap` lamports of the
+ * wallet's SOL into its own wrapped SOL account, sync it, and close one of the
+ * wallet's token accounts back to the wallet. Nothing at the top level may move
+ * SOL or tokens anywhere else.
+ *
+ * With `sponsoredRent` the payer also pays every account the transaction opens
+ * (see {@link checkSponsoredRent}).
  */
 function checkThirdPartyTransaction(
   tx: DecodedSolanaTransaction,
   user: string,
   payer: string,
   maxWrap: bigint,
+  sponsoredRent = false,
 ): { ok: true } | { ok: false; reason: string } {
   if (tx.feePayer !== payer) return { ok: false, reason: 'the fee is not paid by the account the request names' };
   if (!tx.signers.includes(user)) return { ok: false, reason: 'the signing account does not sign the transaction' };
@@ -517,6 +521,63 @@ function checkThirdPartyTransaction(
   // in the same transaction, so the surplus returns; custody's simulation bounds what the wallet loses.
   const allowedWrap = closesWrappedSol && maxWrap > 0n ? maxWrap + WRAP_SURPLUS_LAMPORTS : maxWrap;
   if (wrapped > allowedWrap) return { ok: false, reason: 'the transaction wraps more SOL than the request moves' };
+  return sponsoredRent ? checkSponsoredRent(tx, user, payer) : { ok: true };
+}
+
+const LOOKUP_TABLE_PROGRAM = 'AddressLookupTab1e1111111111111111111111111';
+const LOOKUP_TABLE_CREATE = 0;
+const KAMINO_LEND_PROGRAM = 'KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD';
+/** The Kamino instructions that open an account, by Anchor discriminator, and the slot of the account that pays its rent. */
+const KAMINO_RENT_PAYER: Record<string, number> = {
+  '75a9b045c5170fa2': 1, // init_user_metadata: [owner, fee_payer, ...]
+  fb0ae74c1b0b9f60: 1, // init_obligation: [obligation_owner, fee_payer, ...]
+  '883f0fbad398a8a4': 0, // init_obligation_farms_for_reserve: [payer, owner, ...]
+};
+
+/**
+ * An Earn transaction the app sponsors: the sponsor pays the rent of every
+ * account it opens at the top level (a token account, the lookup table, the
+ * Kamino user metadata, obligation and farms user state), never the user. A
+ * token account the same transaction closes back to the user may stay the
+ * user's to fund, since its lamports come back to the user.
+ */
+function checkSponsoredRent(
+  tx: DecodedSolanaTransaction,
+  user: string,
+  sponsor: string,
+): { ok: true } | { ok: false; reason: string } {
+  const closedToUser = new Set(
+    tx.instructions
+      .filter(
+        (ix) =>
+          ix.program === TOKEN_PROGRAM &&
+          ix.data.length === 1 &&
+          ix.data[0] === TOKEN_CLOSE_ACCOUNT &&
+          ix.accounts[1] === user &&
+          ix.accounts[2] === user,
+      )
+      .map((ix) => ix.accounts[0]),
+  );
+  for (const ix of tx.instructions) {
+    if (ix.program === ASSOCIATED_TOKEN_PROGRAM) {
+      if (ix.accounts[0] === sponsor || (ix.accounts[0] === user && closedToUser.has(ix.accounts[1]))) continue;
+      return { ok: false, reason: 'a token account the sponsor does not pay for' };
+    }
+    if (ix.program === LOOKUP_TABLE_PROGRAM) {
+      // [lookup table, authority, payer, system program]
+      const creates = ix.data.length === 13 && u32le(ix.data.subarray(0, 4)) === LOOKUP_TABLE_CREATE;
+      if (!creates || ix.accounts[1] !== user || ix.accounts[2] !== sponsor) {
+        return { ok: false, reason: 'a lookup table instruction the sponsor does not pay for' };
+      }
+      continue;
+    }
+    if (ix.program === KAMINO_LEND_PROGRAM) {
+      const slot = KAMINO_RENT_PAYER[bytesToHex(ix.data.subarray(0, 8))];
+      if (slot !== undefined && ix.accounts[slot] !== sponsor) {
+        return { ok: false, reason: 'a lending account the sponsor does not pay for' };
+      }
+    }
+  }
   return { ok: true };
 }
 
@@ -541,12 +602,13 @@ function checkThirdPartyRequest(
     if (inAmount === null) return { ok: false, reason: 'the request does not state the swap it carries' };
     return checkThirdPartyTransaction(tx, request.signWith, payer, inAmount);
   }
-  // The wallet pays its own Earn fee: the provider's transaction fixes the fee payer.
-  if (payer !== request.signWith) return { ok: false, reason: 'an Earn transaction paid by another account' };
+  // Earn is paid by the wallet itself, or by a sponsor only when the request says it is sponsored.
+  const sponsored = payer !== request.signWith;
+  if (sponsored && details.sponsored !== true) return { ok: false, reason: 'an Earn transaction paid by another account' };
   const amount =
     request.operation === 'earn_deposit' && details.mint === WRAPPED_SOL_MINT ? decimalUnits(details.amount, 9) : 0n;
   if (amount === null) return { ok: false, reason: 'the request does not state the amount it moves' };
-  return checkThirdPartyTransaction(tx, request.signWith, payer, amount);
+  return checkThirdPartyTransaction(tx, request.signWith, payer, amount, sponsored);
 }
 
 /**

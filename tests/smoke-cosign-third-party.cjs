@@ -176,6 +176,51 @@ const KAMINO_SOL_DEPOSIT =
 const KAMINO_USDC_DEPOSIT =
   'AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQAIDrIjEUw80bLre65s7T9F2BL12sfYOidS/LtzzMP3VuE15VPe4enSY5nyJHyfS68hnaCwrCLJd+EmIckGwcV3UIK14S0kIrFUmK3+JM6/eQvCEEh11CaNJbZmMYZH9FtTzoE3TkfHUg/M/lQSDRx8ZHMtxF3isUnReGx3L5IVISyD4oCOWDbZgcVCqko1sXH5RrFhSgblv4UPwQk0Ng2tYI1RZ2+LheVe0T1VrHstxaJ00vVg3aQp+otDh1eacLw0oQMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAAjJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FkCd6avlzObesiNGJLJBEb1AAIwkmb2LlPBGCRJggAAAASyrLESWMzjaCxBi6hy/z35EQJxLxWvEra+abNDWwAIeijp9PaxtFn7emfPXWJQfuJoNup09KhY5ahANQgjU4rYsBAXY9PlHxJuYVbehd6MYTBZuERo0No/6KKiJRzHASrLusdJNuJSIjry4kuNaAHHDA43Wl/ptAb7msWZE5sq4IquBLFsmlu77CDDawRnBG4eQEzEqpdjNPuKUFncoVWCcX9h5Kx3si0m15E9WW1HQzoBsR+YOXwBNKSRwRiAvgsGAAUCQEIPAAcGAAEAExQVAQEIBAIAABQNAAAAAJ1gtxsAAAAA/QkGAAADCRYUKHWpsEXFFw+iPkKgLzlVXzJKWzDx7wtQXmQYEfGABBcdH2l0bI8cgtEJCQAABBcUFAMWFAr7CudMGwufYAAACQsAAAQKDg8FFwsWFAmIPw+605iopAAJBg4XCQkJDAgC2orrT8kZZgkCFwQIIYST5JfASFkJEQAEFwoOExAREgEJFRUYBQ8LENjgvxvMl2avQEIPAAAAAAANAFF7InZlcnNpb24iOjAsImFjdGlvbiI6MCwiYW1vdW50QmVmb3JlRmVlcyI6IjEwMDAwMDAiLCJhbW91bnRBZnRlckZlZXMiOiIxMDAwMDAwIn0NADN7InZlcnNpb24iOjEsImFjdGlvbklkIjoiNmFlYTJhNmRjOTYyYzM3NjI4ODBjZGY0In0B0/JvJLSWE/N93vfUYNjIAMOt4Of84iU5s/N1oXkRml4FlpeERIUGnggHBAIF';
 
+// The two deposits above as the platform sponsors them: `sponsorEarnTransaction`
+// (pollar-platform packages/ramps/src/providers/pods/bundle.ts) on 2026-11-03,
+// with 7rhxnLV8C77o6d8oz26AgK8x8m5ePsdeRawjqvojbjnQ as the sponsor.
+const KAMINO_SOL_DEPOSIT_SPONSORED =
+  'AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAIAChFl4eWU9W+LbzHkYy5erq32+K0Kp0kwgKUELcMBr/mwIbIjEUw80bLre65s7T9F2BL12sfYOidS/LtzzMP3VuE1aZPzkd0xhjTxPOC+EBhwpBPcOejvNaPkqEfk+9Wf4X214S0kIrFUmK3+JM6/eQvCEEh11CaNJbZmMYZH9FtTzoE3TkfHUg/M/lQSDRx8ZHMtxF3isUnReGx3L5IVISyD4oCOWDbZgcVCqko1sXH5RrFhSgblv4UPwQk0Ng2tYI2hk0Qk/CKBkLqtxahX2AkhEJnKw1miNZ0Hvnt9vtAraAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACMlyWPTiSJ8bs9ECkUjg2DC1oTmdr/EIQEjnvY2+n4WQbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpAnemr5czm3rIjRiSyQRG9QACMJJm9i5TwRgkSYIAAAAEsqyxEljM42gsQYuocv89+RECcS8VrxK2vmmzQ1sACHoo6fT2sbRZ+3pnz11iUH7iaDbqdPSoWOWoQDUII1OK2LAQF2PT5R8SbmFW3oXejGEwWbhEaNDaP+iioiUcxwEqy7rHSTbiUiI68uJLjWgBxwwON1pf6bQG+5rFmRObKuCKrgSxbJpbu+wgw2sEZwRuHkBMxKqXYzT7ilBZ3KFVUyR45QiRp9Ron5HYv2LTD2V7Y9oppcOfqAY7bGMb0yQOBwAFAkBCDwAIAgECDAIAAAB4+CUAAAAAAAkGAQIBFggKAQEKAQIBEQsEAwEACA0AAAAAnWC3GwAAAAD9DAYBAAQMFwgodamwRcUXD6LpPaeoJImBZqVWSs7Mr81afq5UuOqRRGdnBDEn3QIb8QwJAQAFGAgIBBcICvsK50wbC59gAAAMCwABBQ0REgYYDhcICYg/D7rTmKikAAwGERgMDAwPCALaiutPyRlmDAIYBQghhJPkl8BIWQwRAQUYDREWExQVAgwKChkGEg4Q2OC/G8yXZq9AQg8AAAAAAAoDAgEBAQkQAFF7InZlcnNpb24iOjAsImFjdGlvbiI6MCwiYW1vdW50QmVmb3JlRmVlcyI6IjEwMDAwMDAiLCJhbW91bnRBZnRlckZlZXMiOiIxMDAwMDAwIn0QADN7InZlcnNpb24iOjEsImFjdGlvbklkIjoiNmFlYTJhNmRjOTYyYzM3NjI4ODBjZGNkIn0B0/JvJLSWE/N93vfUYNjIAMOt4Of84iU5s/N1oXkRml4FPllg1dwEjwQCBQ==';
+
+const KAMINO_USDC_DEPOSIT_SPONSORED =
+  'AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAIACA9l4eWU9W+LbzHkYy5erq32+K0Kp0kwgKUELcMBr/mwIbIjEUw80bLre65s7T9F2BL12sfYOidS/LtzzMP3VuE15VPe4enSY5nyJHyfS68hnaCwrCLJd+EmIckGwcV3UIK14S0kIrFUmK3+JM6/eQvCEEh11CaNJbZmMYZH9FtTzoE3TkfHUg/M/lQSDRx8ZHMtxF3isUnReGx3L5IVISyD4oCOWDbZgcVCqko1sXH5RrFhSgblv4UPwQk0Ng2tYI1RZ2+LheVe0T1VrHstxaJ00vVg3aQp+otDh1eacLw0oQMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAAjJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+FkCd6avlzObesiNGJLJBEb1AAIwkmb2LlPBGCRJggAAAASyrLESWMzjaCxBi6hy/z35EQJxLxWvEra+abNDWwAIeijp9PaxtFn7emfPXWJQfuJoNup09KhY5ahANQgjU4rYsBAXY9PlHxJuYVbehd6MYTBZuERo0No/6KKiJRzHASrLusdJNuJSIjry4kuNaAHHDA43Wl/ptAb7msWZE5sq4IquBLFsmlu77CDDawRnBG4eQEzEqpdjNPuKUFncoVWCcX9h5Kx3si0m15E9WW1HQzoBsR+YOXwBNKSRwRiAvgsHAAUCQEIPAAgGAAIBFBUWAQEJBAMBABUNAAAAAJ1gtxsAAAAA/QoGAQAEChcVKHWpsEXFFw+iPkKgLzlVXzJKWzDx7wtQXmQYEfGABBcdH2l0bI8cgtEKCQEABRgVFQQXFQr7CudMGwufYAAACgsAAQULDxAGGAwXFQmIPw+605iopAAKBg8YCgoKDQgC2orrT8kZZgoCGAUIIYST5JfASFkKEQEFGAsPFBESEwIKFhYZBhAMENjgvxvMl2avQEIPAAAAAAAOAFF7InZlcnNpb24iOjAsImFjdGlvbiI6MCwiYW1vdW50QmVmb3JlRmVlcyI6IjEwMDAwMDAiLCJhbW91bnRBZnRlckZlZXMiOiIxMDAwMDAwIn0OADN7InZlcnNpb24iOjEsImFjdGlvbklkIjoiNmFlYTJhNmRjOTYyYzM3NjI4ODBjZGY0In0B0/JvJLSWE/N93vfUYNjIAMOt4Of84iU5s/N1oXkRml4FlpeERIUGnggHBAIF';
+
+/**
+ * `hex` with account `slot` of the first instruction whose program is static key
+ * `program` (and whose data starts with `dataPrefix`) pointed at static key `to`.
+ */
+function repoint(hex, program, dataPrefix, slot, to) {
+  const bytes = Buffer.from(hex, 'hex');
+  let at = 0;
+  const compact = () => {
+    let value = 0;
+    for (let shift = 0; ; shift += 7) {
+      const b = bytes[at++];
+      value |= (b & 0x7f) << shift;
+      if (!(b & 0x80)) return value;
+    }
+  };
+  const signatures = compact();
+  at += signatures * 64 + 4; // version, header
+  const keys = compact();
+  at += keys * 32 + 32;
+  const count = compact();
+  for (let i = 0; i < count; i++) {
+    const programIndex = bytes[at++];
+    const accounts = compact();
+    const accountsAt = at;
+    at += accounts;
+    const length = compact();
+    const data = bytes.subarray(at, at + length).toString('hex');
+    at += length;
+    if (programIndex === program && data.startsWith(dataPrefix)) {
+      bytes[accountsAt + slot] = to;
+      return bytes.toString('hex');
+    }
+  }
+  throw new Error('no such instruction');
+}
+
 const USER = key('user');
 const SPONSOR = key('sponsor');
 const PROTOCOL = key('protocol');
@@ -455,6 +500,49 @@ function request(overrides) {
     details: { ...kaminoRequest.details, amount: '1', assetCode: 'USDC', mint: USDC_MINT },
   });
   check('the real Kamino USDC deposit from Pods is proposed', kaminoUsdc.ok, kaminoUsdc);
+  const sponsor = '7rhxnLV8C77o6d8oz26AgK8x8m5ePsdeRawjqvojbjnQ';
+  const sponsoredUsdcHex = Buffer.from(KAMINO_USDC_DEPOSIT_SPONSORED, 'base64').toString('hex');
+  const sponsoredUsdc = {
+    ...kaminoRequest,
+    unsignedPayload: sponsoredUsdcHex,
+    details: { ...kaminoRequest.details, amount: '1', assetCode: 'USDC', mint: USDC_MINT, feePayer: sponsor, sponsored: true },
+  };
+  const sponsoredUsdcOk = await verify(sponsoredUsdc);
+  check('the real Kamino USDC deposit, sponsored by the app, is proposed', sponsoredUsdcOk.ok, sponsoredUsdcOk);
+  const sponsoredSolOk = await verify({
+    ...kaminoRequest,
+    unsignedPayload: Buffer.from(KAMINO_SOL_DEPOSIT_SPONSORED, 'base64').toString('hex'),
+    details: { ...kaminoRequest.details, feePayer: sponsor, sponsored: true },
+  });
+  check('the real Kamino SOL deposit, sponsored by the app, is proposed', sponsoredSolOk.ok, sponsoredSolOk);
+  check(
+    'a sponsored Earn transaction the request does not mark as sponsored is refused',
+    !(await verify({ ...sponsoredUsdc, details: { ...sponsoredUsdc.details, sponsored: false } })).ok,
+  );
+  check(
+    'a request naming a sponsor that is not the fee payer is refused',
+    !(await verify({ ...sponsoredUsdc, details: { ...sponsoredUsdc.details, feePayer: SPONSOR } })).ok,
+  );
+  check(
+    'the unsponsored deposit declared as sponsored is refused: the user pays its fee',
+    !(await verify({ ...sponsoredUsdc, unsignedPayload: Buffer.from(KAMINO_USDC_DEPOSIT, 'base64').toString('hex') })).ok,
+  );
+  // Static keys of the sponsored USDC deposit: 0 sponsor, 1 user; 8 ATA program, 10 Kamino lend.
+  const obligationPaidByUser = await verify({
+    ...sponsoredUsdc,
+    unsignedPayload: repoint(sponsoredUsdcHex, 10, 'fb0ae74c', 1, 1),
+  });
+  check(
+    'a sponsored deposit whose obligation the user pays is refused',
+    !obligationPaidByUser.ok && /lending account/.test(obligationPaidByUser.reason),
+    obligationPaidByUser,
+  );
+  const tokenAccountPaidByUser = await verify({ ...sponsoredUsdc, unsignedPayload: repoint(sponsoredUsdcHex, 8, '', 0, 1) });
+  check(
+    'a sponsored deposit whose token account the user pays, and never closes, is refused',
+    !tokenAccountPaidByUser.ok && /token account the sponsor/.test(tokenAccountPaidByUser.reason),
+    tokenAccountPaidByUser,
+  );
   check(
     'the same transaction presented as a withdrawal is refused: a withdrawal wraps no SOL',
     !(await verify({ ...kaminoRequest, operation: 'earn_withdraw', details: { ...kaminoRequest.details, action: 'withdraw' } }))
