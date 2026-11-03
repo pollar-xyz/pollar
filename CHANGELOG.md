@@ -303,9 +303,9 @@
   `idempotencyKey`. `getSwapStatus(idempotencyKey)` follows a cross-chain swap:
   `status` stays `BUILT` after the Solana transaction lands and turns
   `CONFIRMED` once the destination is paid; a settlement `HELD` is being
-  checked by support. A route that needs a wallet the user signs for answers
-  400 and one the platform refuses to sign answers `SDK_SWAP_NO_ROUTE`, now
-  worded in the three languages.
+  checked by support. A route the wallet cannot sign answers
+  `SDK_SWAP_SIGNER_UNSUPPORTED` (400) and one the platform refuses to sign
+  answers `SDK_SWAP_ROUTE_REFUSED` (422), each worded in the three languages.
 - `<SwapModal>` on Solana shows a Receive on selector when the app offers
   another destination (`openSwapModal({ destinationChain: 'POLYGON' })`), lists
   the app's tokens on that chain, shows each fee by kind with its label in the

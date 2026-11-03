@@ -208,6 +208,22 @@ const CATALOG: Record<string, CatalogEntry> = {
     },
     errorCode: AUTH_ERROR_CODES.TX_FAILED,
   },
+  SDK_SWAP_SIGNER_UNSUPPORTED: {
+    message: {
+      en: 'This route is not available for this wallet. Choose another route.',
+      es: 'Esta ruta no está disponible para esta billetera. Elige otra ruta.',
+      pt: 'Esta rota não está disponível para esta carteira. Escolha outra rota.',
+    },
+    errorCode: AUTH_ERROR_CODES.TX_FAILED,
+  },
+  SDK_SWAP_ROUTE_REFUSED: {
+    message: {
+      en: 'This route could not be verified, so nothing was signed. Try another amount or route.',
+      es: 'No se pudo verificar esta ruta, así que no se firmó nada. Prueba con otro monto o ruta.',
+      pt: 'Não foi possível verificar esta rota, então nada foi assinado. Tente outro valor ou rota.',
+    },
+    errorCode: AUTH_ERROR_CODES.TX_FAILED,
+  },
   SDK_SWAP_QUOTE_EXPIRED: {
     message: {
       en: 'The price expired. Get a new quote and try again.',
