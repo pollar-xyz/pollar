@@ -1,7 +1,7 @@
 'use client';
 
 import { useInheritedLanguage } from '../../language-context';
-import { type PollarLanguage, SwapQuoteParams, TransactionState, WalletId } from '@pollar/core';
+import { type PollarLanguage, SwapDestinationChain, SwapQuoteParams, TransactionState, WalletId } from '@pollar/core';
 import { useState } from 'react';
 import { PollarModalFooter, RefreshIcon } from '../commons';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
@@ -32,6 +32,20 @@ export interface SwapQuoteView {
   minReceived: string;
   /** Percent; null when the venue does not report it. */
   priceImpactPct: string | null;
+  /** What the route charges, labelled. */
+  fees?: Array<{ label: string; value: string }>;
+  totalFeesUsd?: number | null;
+  /** Seconds the price is good for; null when it has no window. */
+  expiresInSeconds?: number | null;
+}
+
+/** A cross-chain swap's delivery on the destination chain, once its Solana transaction landed. */
+export interface SwapSettlementView {
+  kind: 'pending' | 'completed' | 'held' | 'refunded' | 'failed';
+  text: string;
+  /** The user's wallet it delivers to. */
+  address: string | null;
+  explorerUrl: string | null;
 }
 
 export function assetOptionKey(o: SwapAssetOption): string {
@@ -47,9 +61,17 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 const providerLabel = (provider: string, copy: SwapCopy) =>
-  provider === 'auto' ? copy.bestPrice : (PROVIDER_LABELS[provider] ?? provider);
+  provider === 'auto'
+    ? copy.bestPrice
+    : provider === 'multichain'
+      ? copy.multichainVenue
+      : (PROVIDER_LABELS[provider] ?? provider);
 
-const CHAIN_LABELS: Record<SwapChain, string> = { STELLAR: 'Stellar', SOLANA: 'Solana' };
+const CHAIN_LABELS: Record<SwapChain | SwapDestinationChain, string> = {
+  STELLAR: 'Stellar',
+  SOLANA: 'Solana',
+  POLYGON: 'Polygon',
+};
 
 function formatAmount(value: string | undefined): string {
   if (value === undefined) return '—';
@@ -163,6 +185,12 @@ export interface SwapModalTemplateProps {
   /** The chains the app offers swaps on; a selector shows when there are two. */
   chains: SwapChain[];
   chain: SwapChain;
+  /** Where a Solana swap can deliver; a selector shows when there is more than one. */
+  destinations?: SwapDestinationChain[];
+  destination?: SwapDestinationChain;
+  /** USDC to USDC across chains: a transfer, which the swap does not do. */
+  usdcAcross?: boolean;
+  settlement?: SwapSettlementView | null;
   provider: string;
   providers: string[];
   quote: SwapQuoteView | null;
@@ -193,6 +221,7 @@ export interface SwapModalTemplateProps {
   onAddCustomToken: (code: string, issuer: string) => string | null;
   onAmountChange: (value: string) => void;
   onChainChange: (chain: SwapChain) => void;
+  onDestinationChange?: (chain: SwapDestinationChain) => void;
   onProviderChange: (p: string) => void;
   onSwap: () => void;
   onToggleXdr: () => void;
@@ -214,6 +243,10 @@ export function SwapModalTemplate({
   amount,
   chains,
   chain,
+  destinations = [],
+  destination = 'SOLANA',
+  usdcAcross = false,
+  settlement = null,
   provider,
   providers,
   quote,
@@ -243,6 +276,7 @@ export function SwapModalTemplate({
   onMax,
   onAmountChange,
   onChainChange,
+  onDestinationChange,
   onProviderChange,
   onSwap,
   onToggleXdr,
@@ -281,6 +315,7 @@ export function SwapModalTemplate({
     !!amount &&
     !!quote &&
     !quoteLoading &&
+    !usdcAcross &&
     !isLoadingData;
   const rate = quote && amount ? formatRate(quote.amountOut, amount) : null;
   const title = step === 'form' ? copy.title : txTitle;
@@ -351,6 +386,25 @@ export function SwapModalTemplate({
                 {chains.map((c) => (
                   <option key={c} value={c}>
                     {CHAIN_LABELS[c]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {destinations.length > 1 && (
+            <label className="pollar-swap-route-wrap pollar-swap-chain-wrap">
+              <span className="sr-only">{copy.receiveOn}</span>
+              <select
+                className="pollar-swap-route-pill"
+                aria-label={copy.receiveOn}
+                value={destination}
+                disabled={configLoading || isLoadingData}
+                onChange={(event) => onDestinationChange?.(event.target.value as SwapDestinationChain)}
+              >
+                {destinations.map((c) => (
+                  <option key={c} value={c}>
+                    {copy.receiveOn} {CHAIN_LABELS[c]}
                   </option>
                 ))}
               </select>
@@ -544,7 +598,8 @@ export function SwapModalTemplate({
           </div>
 
           {!quoteLoading && quoteError && <div className="pollar-modal-error">{quoteError}</div>}
-          {!quoteLoading && !quoteError && !quote && selectedSell && selectedBuy && !!amount && (
+          {usdcAcross && <div className="pollar-send-hint">{copy.useTransferForUsdc}</div>}
+          {!usdcAcross && !quoteLoading && !quoteError && !quote && selectedSell && selectedBuy && !!amount && (
             <div className="pollar-send-hint">{copy.noRoute}</div>
           )}
           {quote && (
@@ -563,6 +618,23 @@ export function SwapModalTemplate({
                 <span>{copy.route}</span>
                 <strong>{providerLabel(quote.provider, copy)}</strong>
               </div>
+              {(quote.fees ?? []).map((fee) => (
+                <div key={fee.label} className="pollar-swap-quote-row">
+                  <span>{fee.label}</span>
+                  <strong>{fee.value}</strong>
+                </div>
+              ))}
+              {quote.totalFeesUsd != null && (
+                <div className="pollar-swap-quote-row">
+                  <span>{copy.totalFees}</span>
+                  <strong>${quote.totalFeesUsd.toFixed(2)}</strong>
+                </div>
+              )}
+              {quote.expiresInSeconds != null && (
+                <div className="pollar-send-hint" aria-live="off">
+                  {copy.priceRefreshesIn(quote.expiresInSeconds)}
+                </div>
+              )}
             </div>
           )}
           {buyNeedsTrustline && selectedBuy && (
@@ -592,6 +664,26 @@ export function SwapModalTemplate({
           onRetry={onRetry}
           onDone={onDone}
         />
+      )}
+      {step === 'tx' && settlement && (
+        <div
+          className={settlement.kind === 'failed' ? 'pollar-modal-error' : 'pollar-swap-quote'}
+          role="status"
+          aria-live="polite"
+        >
+          <div>{settlement.text}</div>
+          {settlement.address && (
+            <div className="pollar-swap-quote-row">
+              <span>{copy.deliveredTo}</span>
+              <code style={{ wordBreak: 'break-all' }}>{settlement.address}</code>
+            </div>
+          )}
+          {settlement.explorerUrl && (
+            <a href={settlement.explorerUrl} target="_blank" rel="noopener noreferrer">
+              {settlement.explorerUrl.replace(/^https:\/\//, '').split('/')[0]}
+            </a>
+          )}
+        </div>
       )}
       <PollarModalFooter />
     </div>

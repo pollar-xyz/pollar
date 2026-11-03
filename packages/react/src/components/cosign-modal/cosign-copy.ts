@@ -73,6 +73,10 @@ export const COSIGN_COPY: Record<
       transfer: 'Send',
       ramp_payment: 'Ramp payment',
       cctp_burn: 'Move USDC',
+      swap: 'Swap',
+      earn_deposit: 'Deposit',
+      earn_withdraw: 'Withdraw',
+      evm_delegation: 'Enable atomic transactions',
     },
   },
   es: {
@@ -115,6 +119,10 @@ export const COSIGN_COPY: Record<
       transfer: 'Enviar',
       ramp_payment: 'Pago de rampa',
       cctp_burn: 'Mover USDC',
+      swap: 'Intercambiar',
+      earn_deposit: 'Depositar',
+      earn_withdraw: 'Retirar',
+      evm_delegation: 'Activar transacciones atómicas',
     },
   },
   pt: {
@@ -157,6 +165,10 @@ export const COSIGN_COPY: Record<
       transfer: 'Enviar',
       ramp_payment: 'Pagamento de rampa',
       cctp_burn: 'Mover USDC',
+      swap: 'Trocar',
+      earn_deposit: 'Depositar',
+      earn_withdraw: 'Sacar',
+      evm_delegation: 'Ativar transações atômicas',
     },
   },
 };

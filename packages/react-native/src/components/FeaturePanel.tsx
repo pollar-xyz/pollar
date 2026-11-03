@@ -7,7 +7,12 @@ import type {
   EarnOpportunity,
   EarnProviderId,
   EarnPosition,
+  SolanaEarnOpportunity,
+  SolanaEarnPosition,
+  SolanaSwapOptions,
   SolanaSwapQuote,
+  SwapDestinationChain,
+  SwapSettlement,
   SwapQuote,
   SwapToken,
   WalletChain,
@@ -89,11 +94,15 @@ export interface SwapModalOptions {
   sell?: string;
   buy?: string;
   amount?: string;
+  /** Solana only: deliver to the user's own wallet on this chain, when the app offers it. */
+  destinationChain?: SwapDestinationChain;
   onSuccess?: (result: { hash: string }) => void;
 }
 
 /** Where the earn modal opens. */
 export interface EarnModalOptions {
+  /** The network, when the app offers Earn on both; the first one offered otherwise. */
+  chain?: 'STELLAR' | 'SOLANA';
   provider?: EarnProviderId;
   opportunityId?: string;
   tab?: 'deposit' | 'withdraw';
@@ -751,6 +760,28 @@ function stellarOption(code: string, issuer: string | undefined, available?: str
     ...(available != null ? { available } : {}),
   };
 }
+/** A fresh key per swap, the one its delivery is read by. */
+function newKey(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+/** Where a cross-chain delivery stands, as the panel words it. */
+function settlementKind(settlement: SwapSettlement | null): 'pending' | 'completed' | 'held' | 'refunded' | 'failed' {
+  switch (settlement?.status) {
+    case 'COMPLETED':
+      return 'completed';
+    case 'HELD':
+      return 'held';
+    case 'REFUNDED':
+      return 'refunded';
+    case 'FAILED':
+    case 'EXPIRED':
+      return 'failed';
+    default:
+      return 'pending';
+  }
+}
 export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined }) {
   const p = usePollar();
   const copy = FEATURE_COPY[useModalLanguage()];
@@ -769,6 +800,11 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
   const [amount, setAmount] = useState(seededAmount(initial?.amount));
   const [quotes, setQuotes] = useState<SwapQuote[]>([]);
   const [solanaQuotes, setSolanaQuotes] = useState<SolanaSwapQuote[]>([]);
+  const [destinationChains, setDestinationChains] = useState<SwapDestinationChain[]>([]);
+  const [destination, setDestination] = useState<SwapDestinationChain>('SOLANA');
+  const destinationSeed = useRef(initial?.destinationChain);
+  // The key of the last cross-chain swap sent, and where its delivery stands.
+  const [delivery, setDelivery] = useState<{ key: string; settlement: SwapSettlement | null } | null>(null);
   const arm = useSuccessCallback(initial?.onSuccess);
   // The asset options wait for a list that has them (tokens, balances and enabled assets load apart) until the user picks.
   const sellSeed = useRef(initial?.sell);
@@ -788,12 +824,18 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
           ? [{ code: b.code, mint: b.issuer!, decimals: b.decimals, available: b.available ?? undefined }]
           : [],
     );
-  const solanaBuy: SolanaSwapOption[] = [
-    { code: 'SOL', mint: WRAPPED_SOL_MINT, decimals: SOL_DECIMALS },
-    ...records
-      .filter((a) => a.chain === 'SOLANA' && a.type === 'token' && !!a.issuer && a.decimals !== undefined)
-      .map((a) => ({ code: a.code, mint: a.issuer!, decimals: a.decimals! })),
-  ];
+  const crossChain = chain === 'SOLANA' && destination !== 'SOLANA';
+  // Toward another chain the buy side is the app's tokens there, by contract address.
+  const solanaBuy: SolanaSwapOption[] = crossChain
+    ? records
+        .filter((a) => a.chain === destination && a.type === 'token' && !!a.issuer && a.decimals !== undefined)
+        .map((a) => ({ code: a.code, mint: a.issuer!, decimals: a.decimals! }))
+    : [
+        { code: 'SOL', mint: WRAPPED_SOL_MINT, decimals: SOL_DECIMALS },
+        ...records
+          .filter((a) => a.chain === 'SOLANA' && a.type === 'token' && !!a.issuer && a.decimals !== undefined)
+          .map((a) => ({ code: a.code, mint: a.issuer!, decimals: a.decimals! })),
+      ];
   // Stellar sells what the wallet holds; it buys the app's assets, then the catalog, then the tokens the user adds.
   const stellarSell: StellarSwapOption[] = balances
     .filter(
@@ -834,7 +876,12 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
     !!buyOption &&
     buyOption.ref.type !== 'native' &&
     !records.find((a) => a.code === buyOption.code && a.issuer === buyOption.issuer)?.trustlineEstablished;
-  const chainVenues = venues[chain];
+  // Only the venue that crosses chains routes toward another one.
+  const chainVenues = venues[chain].filter((v) => !crossChain || v === 'multichain');
+  const usdcAcross =
+    crossChain &&
+    solanaSell.find((o) => o.mint === sell)?.code === 'USDC' &&
+    solanaBuy.find((o) => o.mint === buy)?.code === 'USDC';
 
   useEffect(() => {
     const seeded = keyFor(sellKeys, sellSeed.current);
@@ -852,11 +899,19 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
   async function refreshSwap() {
     setQuotes([]);
     setSolanaQuotes([]);
-    const [stellarVenues, solanaVenues] = await Promise.all([
+    const [stellarVenues, solanaOptions] = await Promise.all([
       p.getSwapConfig().catch(() => []),
-      p.getSolanaSwapConfig().catch(() => []),
+      p.getSolanaSwapOptions().catch((): SolanaSwapOptions => ({ venues: [], destinationChains: [] })),
     ]);
+    const solanaVenues = solanaOptions.venues;
     setVenues({ STELLAR: stellarVenues, SOLANA: solanaVenues });
+    setDestinationChains(solanaOptions.destinationChains);
+    const wantedDestination = destinationSeed.current;
+    destinationSeed.current = undefined;
+    setDestination((current) => {
+      const next = wantedDestination ?? current;
+      return next === 'SOLANA' || solanaOptions.destinationChains.includes(next) ? next : 'SOLANA';
+    });
     const offered: SwapChain[] = [
       ...(stellarVenues.length > 0 ? (['STELLAR'] as const) : []),
       ...(solanaVenues.length > 0 ? (['SOLANA'] as const) : []),
@@ -909,12 +964,14 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
       const to = solanaBuy.find((o) => o.mint === buy);
       const units = from ? toBaseUnits(amount, from.decimals) : null;
       if (!from || !to || !units) throw new Error(copy.send.invalid);
+      if (usdcAcross) throw new Error(copy.swap.useTransferForUsdc);
       const q = await p.getSolanaSwapQuote({
         inputMint: from.mint,
         outputMint: to.mint,
         amount: units,
         ...(venue !== 'auto' ? { provider: venue as SolanaSwapQuote['provider'] } : {}),
         slippageBps: 50,
+        ...(crossChain && { destinationChain: destination }),
       });
       setSolanaQuotes(q);
       return q;
@@ -933,7 +990,10 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
   }
   const labels = Object.fromEntries([...sellKeys, ...buyKeys].map((k) => [k, codeOf(k)]));
   const venueLabels = Object.fromEntries(
-    ['auto', ...chainVenues].map((v) => [v, v === 'auto' ? copy.swap.bestPrice : (VENUE_LABELS[v] ?? v)]),
+    ['auto', ...chainVenues].map((v) => [
+      v,
+      v === 'auto' ? copy.swap.bestPrice : v === 'multichain' ? copy.swap.multichainVenue : (VENUE_LABELS[v] ?? v),
+    ]),
   );
   return (
     <Card title={copy.swap.title}>
@@ -949,6 +1009,21 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
           }}
         />
       )}
+      {chain === 'SOLANA' && destinationChains.length > 0 && (
+        <Choice
+          label={copy.swap.receiveOn}
+          options={['SOLANA', ...destinationChains] as SwapDestinationChain[]}
+          value={destination}
+          onChange={(v) => {
+            setDestination(v);
+            buySeed.current = undefined;
+            setBuy('');
+            setVenue('auto');
+            clearQuotes();
+          }}
+        />
+      )}
+      {usdcAcross && <Label>{copy.swap.useTransferForUsdc}</Label>}
       <Choice
         label={copy.swap.sell}
         labels={labels}
@@ -1035,22 +1110,46 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
           />
         </View>
       ))}
-      {solanaQuotes.map((q, i) => (
-        <View key={`sol-${i}`} style={{ gap: 8 }}>
-          <ResultView value={q} />
+      {solanaQuotes.map((q, i) => {
+        const expired = !!q.expiresAt && Date.parse(q.expiresAt) <= Date.now();
+        return (
+          <View key={`sol-${i}`} style={{ gap: 8 }}>
+            <ResultView value={q} />
+            {expired && <Label>{copy.swap.quoteExpired}</Label>}
+            <ActionButton
+              title={copy.swap.confirmVia(q.provider === 'multichain' ? copy.swap.multichainVenue : q.provider)}
+              disabled={action.busy || !p.verified || expired}
+              onPress={() =>
+                void action.run(async () => {
+                  setSolanaQuotes([]);
+                  arm();
+                  const toward = q.destinationChain && q.destinationChain !== 'SOLANA';
+                  const key = newKey();
+                  setDelivery(toward ? { key, settlement: null } : null);
+                  return p.swapSolana(q, { slippageBps: 50, idempotencyKey: key });
+                })
+              }
+            />
+          </View>
+        );
+      })}
+      {delivery && (
+        <>
+          <Label>{copy.swap.settlement[settlementKind(delivery.settlement)]}</Label>
+          {delivery.settlement?.destinationTxHash ? <Label>{delivery.settlement.destinationTxHash}</Label> : null}
           <ActionButton
-            title={copy.swap.confirmVia(q.provider)}
-            disabled={action.busy || !p.verified}
+            title={copy.swap.checkDelivery}
+            disabled={action.busy}
             onPress={() =>
               void action.run(async () => {
-                setSolanaQuotes([]);
-                arm();
-                return p.swapSolana(q, { slippageBps: 50 });
+                const status = await p.getSwapStatus(delivery.key);
+                setDelivery({ key: delivery.key, settlement: status.settlement });
+                return status;
               })
             }
           />
-        </View>
-      ))}
+        </>
+      )}
       {chain === 'STELLAR' && stellarBuyAll.length === 0 && <Label>{copy.swap.noTokens}</Label>}
       <TransactionStatus />
       <ActionState action={action} />
@@ -1069,19 +1168,44 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
   const [position, setPosition] = useState<EarnPosition>();
   const [tab, setTab] = useState<'deposit' | 'withdraw'>(initial?.tab === 'withdraw' ? 'withdraw' : 'deposit');
   const [confirmation, setConfirmation] = useState(false);
+  // Earn on Solana: the network is picked when the app offers both.
+  const [networks, setNetworks] = useState<Array<'STELLAR' | 'SOLANA'>>([]);
+  const [earnChain, setEarnChain] = useState<'STELLAR' | 'SOLANA'>(initial?.chain === 'SOLANA' ? 'SOLANA' : 'STELLAR');
+  const [solanaOpportunities, setSolanaOpportunities] = useState<SolanaEarnOpportunity[]>([]);
+  const [solanaPosition, setSolanaPosition] = useState<SolanaEarnPosition>();
   const arm = useSuccessCallback(initial?.onSuccess);
   // Applied to the first provider list that loads, then dropped.
   const seed = useRef(initial);
+  const onSolana = earnChain === 'SOLANA';
+  const selectedSolana = solanaOpportunities.find((o) => o.id === opportunity);
+  const actionUnavailable = onSolana && !!selectedSolana && !selectedSolana.actions.includes(tab);
   async function refreshEarn() {
     setProvider(undefined);
     setOpportunities([]);
     setOpportunity('');
     setPosition(undefined);
+    setSolanaPosition(undefined);
     setConfirmation(false);
-    const list = await p.getEarnProviders();
+    const [list, solanaList] = await Promise.all([p.getEarnProviders(), p.getSolanaEarnProviders().catch(() => [])]);
     setProviders(list);
+    const offered: Array<'STELLAR' | 'SOLANA'> = [
+      ...(list.length > 0 ? (['STELLAR'] as const) : []),
+      ...(solanaList.length > 0 ? (['SOLANA'] as const) : []),
+    ];
+    setNetworks(offered);
     const wanted = seed.current;
     seed.current = undefined;
+    const chain = wanted?.chain && offered.includes(wanted.chain) ? wanted.chain : (offered[0] ?? 'STELLAR');
+    setEarnChain(chain);
+    if (chain === 'SOLANA') {
+      const opps = await p.getSolanaEarnOpportunities();
+      setSolanaOpportunities(opps);
+      if (wanted?.opportunityId && opps.some((o) => o.id === wanted.opportunityId)) {
+        setOpportunity(wanted.opportunityId);
+        setSolanaPosition(await p.getSolanaEarnPosition(wanted.opportunityId));
+      }
+      return opps;
+    }
     if (wanted?.provider && list.includes(wanted.provider)) {
       setProvider(wanted.provider);
       const opps = await p.getEarnOpportunities(wanted.provider);
@@ -1099,34 +1223,65 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
   return (
     <Card title={copy.earn.title}>
       <ActionButton title={copy.earn.refresh} disabled={action.busy} onPress={() => void action.run(refreshEarn)} />
-      <Choice
-        label={copy.provider}
-        disabled={action.busy}
-        options={providers}
-        value={provider ?? ''}
-        onChange={(v) => {
-          void action.run(async () => {
-            setProvider(v as EarnProviderId);
-            setOpportunities([]);
-            setOpportunity('');
-            setPosition(undefined);
-            setConfirmation(false);
-            const list = await p.getEarnOpportunities(v as EarnProviderId);
-            setOpportunities(list);
-            return list;
-          });
-        }}
-      />
+      {networks.length > 1 && (
+        <Choice
+          label={copy.earn.network}
+          disabled={action.busy}
+          options={networks}
+          value={earnChain}
+          onChange={(v) => {
+            void action.run(async () => {
+              setEarnChain(v);
+              setOpportunity('');
+              setPosition(undefined);
+              setSolanaPosition(undefined);
+              setConfirmation(false);
+              if (v !== 'SOLANA') return providers;
+              const opps = await p.getSolanaEarnOpportunities();
+              setSolanaOpportunities(opps);
+              return opps;
+            });
+          }}
+        />
+      )}
+      {!onSolana && (
+        <Choice
+          label={copy.provider}
+          disabled={action.busy}
+          options={providers}
+          value={provider ?? ''}
+          onChange={(v) => {
+            void action.run(async () => {
+              setProvider(v as EarnProviderId);
+              setOpportunities([]);
+              setOpportunity('');
+              setPosition(undefined);
+              setConfirmation(false);
+              const list = await p.getEarnOpportunities(v as EarnProviderId);
+              setOpportunities(list);
+              return list;
+            });
+          }}
+        />
+      )}
       <Choice
         label={copy.earn.opportunity}
         disabled={action.busy}
-        options={opportunities.map((o) => o.id)}
+        {...(onSolana ? { labels: Object.fromEntries(solanaOpportunities.map((o) => [o.id, o.name])) } : {})}
+        options={(onSolana ? solanaOpportunities : opportunities).map((o) => o.id)}
         value={opportunity}
         onChange={(v) => {
           setOpportunity(v);
           setConfirmation(false);
           setPosition(undefined);
-          if (provider)
+          setSolanaPosition(undefined);
+          if (onSolana)
+            void action.run(async () => {
+              const pos = await p.getSolanaEarnPosition(v);
+              setSolanaPosition(pos);
+              return pos;
+            });
+          else if (provider)
             void action.run(async () => {
               const pos = await p.getEarnPosition({ provider, opportunity: v });
               setPosition(pos);
@@ -1134,8 +1289,21 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
             });
         }}
       />
-      <ResultView value={opportunities.find((o) => o.id === opportunity)} />
-      <ResultView value={position} />
+      {onSolana ? (
+        <>
+          <ResultView value={selectedSolana} />
+          <ResultView value={solanaPosition} />
+          {selectedSolana && <Label>{copy.earn.apyAfterFees((solanaPosition?.apy ?? selectedSolana.apy).toFixed(2))}</Label>}
+          {solanaPosition?.profit != null && (
+            <Label>{copy.earn.profit(`${solanaPosition.profit} ${selectedSolana?.asset.code ?? ''}`.trim())}</Label>
+          )}
+        </>
+      ) : (
+        <>
+          <ResultView value={opportunities.find((o) => o.id === opportunity)} />
+          <ResultView value={position} />
+        </>
+      )}
       <Field
         label={copy.amount}
         value={amount}
@@ -1155,23 +1323,38 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
           setConfirmation(false);
         }}
       />
-      <Label>{copy.earn.units(position?.withdrawUnit)}</Label>
+      {actionUnavailable ? (
+        <Label>{copy.earn.actionUnavailable(tab)}</Label>
+      ) : (
+        <Label>{copy.earn.units(onSolana ? 'asset' : position?.withdrawUnit)}</Label>
+      )}
       <ActionButton
         title={confirmation ? copy.earn.confirm[tab] : copy.earn.review[tab]}
-        disabled={action.busy || !provider || !opportunity || !position || Number(amount) <= 0 || !p.verified}
+        disabled={
+          action.busy ||
+          !opportunity ||
+          actionUnavailable ||
+          (onSolana ? !solanaPosition : !provider || !position) ||
+          Number(amount) <= 0 ||
+          !p.verified
+        }
         onPress={() =>
           !confirmation
             ? setConfirmation(true)
             : void action.run(async () => {
                 setConfirmation(false);
                 arm();
+                if (onSolana)
+                  return tab === 'deposit'
+                    ? p.earnSolanaDeposit({ opportunity, amount })
+                    : p.earnSolanaWithdraw({ opportunity, amount });
                 return tab === 'deposit'
                   ? p.earnDeposit({ provider: provider!, opportunity, amount })
                   : p.earnWithdraw({ provider: provider!, opportunity, amount });
               })
         }
       />
-      {!providers.length && <Label>{copy.earn.noProviders}</Label>}
+      {!networks.length && <Label>{copy.earn.noProviders}</Label>}
       <TransactionStatus />
       <ActionState action={action} />
     </Card>
@@ -1266,7 +1449,7 @@ export function RampPanel() {
   }, [order?.id, settled, client]);
   async function create() {
     if (!quote) throw new Error(copy.ramp.noQuote);
-    const required = rampQuoteFields(quote);
+    const required = rampQuoteFields(quote, language);
     for (const field of required)
       if (!field.optional && !fields[field.key]?.trim()) throw new Error(copy.ramp.required(field.label));
     const payee = Object.fromEntries(required.filter((f) => fields[f.key]?.trim()).map((f) => [f.key, fields[f.key]!.trim()]));
@@ -1351,7 +1534,7 @@ export function RampPanel() {
             </View>
           ))}
           {quote &&
-            rampQuoteFields(quote).map((f) =>
+            rampQuoteFields(quote, language).map((f) =>
               f.type === 'select' && f.options ? (
                 <Choice
                   key={f.key}
@@ -1391,23 +1574,24 @@ export function RampPanel() {
           ))}
           {order.failure && <Label>{rampOrderResolutionText(order, language)}</Label>}
           {view && !settled && <Label>{view.title}</Label>}
-          {view?.scannable?.payload && !settled && (
+          {(view?.scannable?.payload ?? view?.pasteCode?.value) && !settled && (
             <View style={{ alignItems: 'center', paddingVertical: 8 }}>
-              <QRCode value={view.scannable.payload} size={180} />
+              <QRCode value={(view!.scannable?.payload ?? view!.pasteCode?.value)!} size={180} />
             </View>
           )}
-          {view?.scannable?.payload && !settled && (
+          {(view?.scannable?.payload ?? view?.pasteCode?.value) && !settled && (
             <ActionButton
               title={copy.ramp.copyPaymentCode}
               onPress={() =>
                 void action.run(async () => {
-                  await p.copyText(view.scannable!.payload!);
+                  await p.copyText((view!.scannable?.payload ?? view!.pasteCode?.value)!);
                   return copy.copied;
                 })
               }
             />
           )}
           {view && !settled && view.details.map((d) => <Label key={d.label}>{`${d.label}: ${d.value}`}</Label>)}
+          {view && !settled && view.action?.kind === 'FIAT_PAYMENT' && view.note && <Label>{view.note}</Label>}
           {view?.canSign && !settled && order.pendingAction?.kind === 'SIGNATURE' && (
             <ActionButton
               title={copy.ramp.authorize}

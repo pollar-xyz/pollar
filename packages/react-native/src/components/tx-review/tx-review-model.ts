@@ -204,6 +204,23 @@ export function reviewFromRequest(parts: SigningRequestParts, copy: TxReviewCopy
   if (contract) rows.push({ label: copy.rows.contract, value: contract, copyValue: contract, mono: true });
   const method = asString(details.method);
   if (method) rows.push({ label: copy.rows.method, value: method, mono: true });
+  // A cross-chain swap: where it delivers, the user's own wallet on that chain.
+  const destinationChain = asChain(details.destinationChain);
+  const destinationAddress = asString(details.destinationAddress);
+  if (destinationChain && destinationChain !== parts.chain) {
+    rows.push({
+      label: copy.rows.deliversTo,
+      value: [copy.chains[destinationChain], destinationAddress].filter(Boolean).join(' '),
+      ...(destinationAddress ? { copyValue: destinationAddress, mono: true } : {}),
+    });
+  }
+  // An atomic batch: every call it makes, by the contract it calls.
+  if (Array.isArray(details.calls)) {
+    details.calls.forEach((call, index) => {
+      const target = asString((call as { to?: unknown } | null)?.to);
+      if (target) rows.push({ label: copy.rows.call(index + 1), value: target, copyValue: target, mono: true });
+    });
+  }
 
   if (parts.appPaysFee) rows.push({ label: copy.rows.fee, value: copy.rows.feeCovered });
   rows.push(...(parts.extraRows ?? []));

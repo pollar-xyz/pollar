@@ -796,9 +796,18 @@ export function RampWidgetTemplate({
                 )}
               </View>
             )}
+            {!settled && view.pasteCode && (
+              <View style={{ alignItems: 'center', marginVertical: 12 }}>
+                <QRCode value={view.pasteCode.value} size={200} />
+              </View>
+            )}
             {!settled && view.codeMissing && <Text style={[styles.note, { color: colors.error }]}>{copy.codeMissing}</Text>}
             {!settled && scannable?.payload && scannable.payloadLabel && copyRow(scannable.payloadLabel, scannable.payload)}
+            {!settled && view.pasteCode && copyRow(view.pasteCode.label, view.pasteCode.value)}
             {!settled && view.details.map((d) => copyRow(d.label, d.value))}
+            {!settled && view.action?.kind === 'FIAT_PAYMENT' && view.note && (
+              <Text style={[styles.note, { color: colors.muted }]}>{view.note}</Text>
+            )}
 
             {!settled && view.canSign && primary(signing ? copy.waitingWallet : copy.authorize, onSign, signing)}
             {!settled && view.action?.kind === 'SIGNATURE' && !view.canSign && (
@@ -918,7 +927,7 @@ export function RampWidget({
     return [...seen.values()];
   }, [routes, country, fiat]);
   const asset = assets.find((a) => assetKey(a) === assetChoice) ?? assets[0] ?? null;
-  const fields = selected ? rampQuoteFields(selected) : [];
+  const fields = selected ? rampQuoteFields(selected, language) : [];
   const sellAvailable = useWalletAvailable(
     direction === 'OFFRAMP' && asset ? { chain: asset.chain, code: asset.code, issuer: asset.identifier } : null,
   );

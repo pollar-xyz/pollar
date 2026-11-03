@@ -36,6 +36,12 @@ export const EARN_COPY: Record<
     exceedsPosition: string;
     trustlineFailed: (code: string, details: string) => string;
     unknownError: string;
+    network: string;
+    opportunity: string;
+    apyAfterFees: string;
+    profit: string;
+    stale: string;
+    actionUnavailable: (action: string) => string;
   }
 > = {
   en: {
@@ -73,6 +79,13 @@ export const EARN_COPY: Record<
     exceedsPosition: 'Amount exceeds your position',
     trustlineFailed: (code, details) => `Trustline for ${code} failed: ${details}`,
     unknownError: 'unknown error',
+    network: 'Network',
+    opportunity: 'Opportunity',
+    apyAfterFees: 'APY after fees',
+    profit: 'Earned after fees',
+    stale: 'Last known figures; they refresh on their own.',
+    actionUnavailable: (action) =>
+      `This opportunity does not take ${action === 'deposit' ? 'deposits' : 'withdrawals'} right now.`,
   },
   es: {
     title: 'Rendimientos',
@@ -109,6 +122,13 @@ export const EARN_COPY: Record<
     exceedsPosition: 'El monto supera tu posición',
     trustlineFailed: (code, details) => `No se pudo crear la trustline de ${code}: ${details}`,
     unknownError: 'error desconocido',
+    network: 'Red',
+    opportunity: 'Oportunidad',
+    apyAfterFees: 'APY después de comisiones',
+    profit: 'Ganado después de comisiones',
+    stale: 'Últimas cifras conocidas; se actualizan solas.',
+    actionUnavailable: (action) =>
+      `Esta oportunidad no acepta ${action === 'deposit' ? 'depósitos' : 'retiros'} en este momento.`,
   },
   pt: {
     title: 'Rendimentos',
@@ -145,5 +165,11 @@ export const EARN_COPY: Record<
     exceedsPosition: 'O valor excede a sua posição',
     trustlineFailed: (code, details) => `Não foi possível criar a trustline de ${code}: ${details}`,
     unknownError: 'erro desconhecido',
+    network: 'Rede',
+    opportunity: 'Oportunidade',
+    apyAfterFees: 'APY após taxas',
+    profit: 'Ganho após taxas',
+    stale: 'Últimos valores conhecidos; eles se atualizam sozinhos.',
+    actionUnavailable: (action) => `Esta oportunidade não aceita ${action === 'deposit' ? 'depósitos' : 'saques'} no momento.`,
   },
 };

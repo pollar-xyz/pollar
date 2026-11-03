@@ -116,6 +116,18 @@ const EN = {
     issuerFormat: 'Issuer must be a Stellar address (G..., 56 chars)',
     trustlineNotice: (code: string) =>
       `To receive ${code} your wallet needs a trustline. Swapping will create it first (~0.5 XLM reserve, refundable if you later remove it).`,
+    receiveOn: 'Receive on',
+    multichainVenue: 'Cross-chain route',
+    useTransferForUsdc: 'USDC moves between networks with a transfer, not a swap. Choose another asset.',
+    quoteExpired: 'The price expired. Get quotes again.',
+    settlement: {
+      pending: 'Sent from Solana. Delivering to your wallet on the other network.',
+      completed: 'Delivered to your wallet on the other network.',
+      held: 'Support is checking this swap. Your funds are not lost.',
+      refunded: 'The delivery did not complete and the funds were returned to your Solana wallet.',
+      failed: "The delivery did not complete. If your funds do not return, contact this app's support.",
+    } as Record<'pending' | 'completed' | 'held' | 'refunded' | 'failed', string>,
+    checkDelivery: 'Check delivery',
   },
   earn: {
     title: 'Earn',
@@ -128,6 +140,11 @@ const EN = {
     noProviders: 'No earn providers loaded for this application.',
     operation: 'Operation',
     tabs: { deposit: 'Deposit', withdraw: 'Withdraw' } as Record<'deposit' | 'withdraw', string>,
+    network: 'Network',
+    apyAfterFees: (apy: string) => `APY after fees: ${apy}%`,
+    profit: (amount: string) => `Earned after fees: ${amount}`,
+    actionUnavailable: (action: 'deposit' | 'withdraw') =>
+      `This opportunity does not take ${action === 'deposit' ? 'deposits' : 'withdrawals'} right now.`,
   },
   distribution: {
     title: 'Distribution',
@@ -297,6 +314,18 @@ export const FEATURE_COPY: Record<PollarLanguage, typeof EN> = {
       issuerFormat: 'El emisor debe ser una dirección de Stellar (G..., 56 caracteres)',
       trustlineNotice: (code) =>
         `Para recibir ${code}, tu billetera necesita una trustline. El intercambio la creará primero (reserva de ~0.5 XLM, reembolsable si luego la eliminas).`,
+      receiveOn: 'Recibir en',
+      multichainVenue: 'Ruta entre redes',
+      useTransferForUsdc: 'USDC se mueve entre redes con una transferencia, no con un intercambio. Elige otro activo.',
+      quoteExpired: 'El precio venció. Pide cotizaciones de nuevo.',
+      settlement: {
+        pending: 'Enviado desde Solana. Entregando en tu billetera de la otra red.',
+        completed: 'Entregado en tu billetera de la otra red.',
+        held: 'Soporte está revisando este intercambio. Tus fondos no se perdieron.',
+        refunded: 'La entrega no se completó y los fondos volvieron a tu billetera de Solana.',
+        failed: 'La entrega no se completó. Si tus fondos no vuelven, contacta al soporte de esta app.',
+      },
+      checkDelivery: 'Revisar entrega',
     },
     earn: {
       title: 'Rendimientos',
@@ -309,6 +338,11 @@ export const FEATURE_COPY: Record<PollarLanguage, typeof EN> = {
       noProviders: 'No hay proveedores de rendimientos para esta aplicación.',
       operation: 'Operación',
       tabs: { deposit: 'Depositar', withdraw: 'Retirar' },
+      network: 'Red',
+      apyAfterFees: (apy) => `APY después de comisiones: ${apy}%`,
+      profit: (amount) => `Ganado después de comisiones: ${amount}`,
+      actionUnavailable: (action) =>
+        `Esta oportunidad no acepta ${action === 'deposit' ? 'depósitos' : 'retiros'} en este momento.`,
     },
     distribution: {
       title: 'Distribución',
@@ -474,6 +508,18 @@ export const FEATURE_COPY: Record<PollarLanguage, typeof EN> = {
       issuerFormat: 'O emissor deve ser um endereço Stellar (G..., 56 caracteres)',
       trustlineNotice: (code) =>
         `Para receber ${code}, sua carteira precisa de uma trustline. A troca vai criá-la primeiro (reserva de ~0.5 XLM, reembolsável se você removê-la depois).`,
+      receiveOn: 'Receber em',
+      multichainVenue: 'Rota entre redes',
+      useTransferForUsdc: 'USDC se move entre redes com uma transferência, não com uma troca. Escolha outro ativo.',
+      quoteExpired: 'O preço expirou. Peça cotações de novo.',
+      settlement: {
+        pending: 'Enviado da Solana. Entregando na sua carteira da outra rede.',
+        completed: 'Entregue na sua carteira da outra rede.',
+        held: 'O suporte está verificando esta troca. Seus fundos não foram perdidos.',
+        refunded: 'A entrega não foi concluída e os fundos voltaram para a sua carteira Solana.',
+        failed: 'A entrega não foi concluída. Se seus fundos não voltarem, fale com o suporte deste app.',
+      },
+      checkDelivery: 'Verificar entrega',
     },
     earn: {
       title: 'Rendimentos',
@@ -486,6 +532,11 @@ export const FEATURE_COPY: Record<PollarLanguage, typeof EN> = {
       noProviders: 'Nenhum provedor de rendimentos para este aplicativo.',
       operation: 'Operação',
       tabs: { deposit: 'Depositar', withdraw: 'Sacar' },
+      network: 'Rede',
+      apyAfterFees: (apy) => `APY após taxas: ${apy}%`,
+      profit: (amount) => `Ganho após taxas: ${amount}`,
+      actionUnavailable: (action) =>
+        `Esta oportunidade não aceita ${action === 'deposit' ? 'depósitos' : 'saques'} no momento.`,
     },
     distribution: {
       title: 'Distribuição',

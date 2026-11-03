@@ -820,6 +820,17 @@ export function RampWidgetTemplate({
               </div>
             </div>
           )}
+          {!settled && view.pasteCode && (
+            <div className="pollar-ramp-payment-field">
+              <span className="pollar-ramp-payment-label">{view.pasteCode.label}</span>
+              <div className="pollar-ramp-payment-value">
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <code style={{ flex: 1, wordBreak: 'break-all' }}>{view.pasteCode.value}</code>
+                  <CopyButton value={view.pasteCode.value} label={copy.copyLabel(view.pasteCode.label)} language={language} />
+                </span>
+              </div>
+            </div>
+          )}
           {!settled &&
             view.details.map((d) => (
               <div key={d.label} className="pollar-ramp-payment-field">
@@ -833,6 +844,9 @@ export function RampWidgetTemplate({
               </div>
             ))}
 
+          {!settled && view.action?.kind === 'FIAT_PAYMENT' && view.note && (
+            <p className="pollar-ramp-payment-note">{view.note}</p>
+          )}
           {!settled && view.action?.kind === 'FIAT_PAYMENT' && onCheckPayment && (
             <button type="button" className="pollar-btn-primary" disabled={checkingPayment} onClick={onCheckPayment}>
               {checkingPayment ? (

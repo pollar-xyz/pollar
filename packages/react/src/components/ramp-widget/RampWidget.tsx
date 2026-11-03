@@ -237,7 +237,7 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
     return [...seen.values()];
   }, [routes, country, fiat]);
   const asset = assets.find((a) => assetKey(a) === assetChoice) ?? assets[0] ?? null;
-  const fields = selected ? rampQuoteFields(selected) : [];
+  const fields = selected ? rampQuoteFields(selected, language) : [];
   const sellAvailable = useWalletAvailable(
     direction === 'OFFRAMP' && asset ? { chain: asset.chain, code: asset.code, issuer: asset.identifier } : null,
   );

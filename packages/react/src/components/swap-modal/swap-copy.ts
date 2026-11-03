@@ -51,6 +51,14 @@ export const SWAP_COPY: Record<
     insufficientBalance: string;
     noRouteForPair: string;
     quoteFailed: string;
+    receiveOn: string;
+    multichainVenue: string;
+    fees: Record<'routing' | 'integrator' | 'bridge_and_slippage' | 'other', string>;
+    totalFees: string;
+    priceRefreshesIn: (seconds: number) => string;
+    useTransferForUsdc: string;
+    deliveredTo: string;
+    settlement: Record<'pending' | 'completed' | 'held' | 'refunded' | 'failed', (chain: string) => string>;
   }
 > = {
   en: {
@@ -103,6 +111,25 @@ export const SWAP_COPY: Record<
     insufficientBalance: 'Insufficient balance',
     noRouteForPair: 'No route available for this pair',
     quoteFailed: 'Failed to fetch quote',
+    receiveOn: 'Receive on',
+    multichainVenue: 'Cross-chain route',
+    fees: {
+      routing: 'Routing fee',
+      integrator: 'App fee',
+      bridge_and_slippage: 'Network transfer and slippage',
+      other: 'Other fees',
+    },
+    totalFees: 'Total fees',
+    priceRefreshesIn: (seconds) => `This price is good for ${seconds}s; a new one is asked for after.`,
+    useTransferForUsdc: 'USDC moves between networks with a transfer, not a swap. Choose another asset.',
+    deliveredTo: 'Delivered to',
+    settlement: {
+      pending: (chain) => `Sent from Solana. Delivering to your ${chain} wallet; this updates on its own.`,
+      completed: (chain) => `Delivered to your ${chain} wallet.`,
+      held: () => 'Support is checking this swap. Your funds are not lost; this updates on its own.',
+      refunded: () => 'The delivery did not complete and the funds were returned to your Solana wallet.',
+      failed: () => "The delivery did not complete. If your funds do not return, contact this app's support.",
+    },
   },
   es: {
     title: 'Intercambiar',
@@ -154,6 +181,25 @@ export const SWAP_COPY: Record<
     insufficientBalance: 'Saldo insuficiente',
     noRouteForPair: 'No hay una ruta disponible para este par',
     quoteFailed: 'No se pudo obtener la cotización',
+    receiveOn: 'Recibir en',
+    multichainVenue: 'Ruta entre redes',
+    fees: {
+      routing: 'Comisión de ruta',
+      integrator: 'Comisión de la app',
+      bridge_and_slippage: 'Transferencia entre redes y deslizamiento',
+      other: 'Otras comisiones',
+    },
+    totalFees: 'Comisiones totales',
+    priceRefreshesIn: (seconds) => `Este precio vale por ${seconds}s; luego se pide uno nuevo.`,
+    useTransferForUsdc: 'USDC se mueve entre redes con una transferencia, no con un intercambio. Elige otro activo.',
+    deliveredTo: 'Entregado en',
+    settlement: {
+      pending: (chain) => `Enviado desde Solana. Entregando en tu billetera de ${chain}; esto se actualiza solo.`,
+      completed: (chain) => `Entregado en tu billetera de ${chain}.`,
+      held: () => 'Soporte está revisando este intercambio. Tus fondos no se perdieron; esto se actualiza solo.',
+      refunded: () => 'La entrega no se completó y los fondos volvieron a tu billetera de Solana.',
+      failed: () => 'La entrega no se completó. Si tus fondos no vuelven, contacta al soporte de esta app.',
+    },
   },
   pt: {
     title: 'Trocar',
@@ -205,5 +251,24 @@ export const SWAP_COPY: Record<
     insufficientBalance: 'Saldo insuficiente',
     noRouteForPair: 'Nenhuma rota disponível para este par',
     quoteFailed: 'Não foi possível obter a cotação',
+    receiveOn: 'Receber em',
+    multichainVenue: 'Rota entre redes',
+    fees: {
+      routing: 'Taxa de rota',
+      integrator: 'Taxa do app',
+      bridge_and_slippage: 'Transferência entre redes e derrapagem',
+      other: 'Outras taxas',
+    },
+    totalFees: 'Taxas totais',
+    priceRefreshesIn: (seconds) => `Este preço vale por ${seconds}s; depois um novo é pedido.`,
+    useTransferForUsdc: 'USDC se move entre redes com uma transferência, não com uma troca. Escolha outro ativo.',
+    deliveredTo: 'Entregue em',
+    settlement: {
+      pending: (chain) => `Enviado da Solana. Entregando na sua carteira ${chain}; isto se atualiza sozinho.`,
+      completed: (chain) => `Entregue na sua carteira ${chain}.`,
+      held: () => 'O suporte está verificando esta troca. Seus fundos não foram perdidos; isto se atualiza sozinho.',
+      refunded: () => 'A entrega não foi concluída e os fundos voltaram para a sua carteira Solana.',
+      failed: () => 'A entrega não foi concluída. Se seus fundos não voltarem, fale com o suporte deste app.',
+    },
   },
 };

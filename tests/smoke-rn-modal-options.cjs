@@ -73,7 +73,7 @@ const { TxHistoryModal } = load('packages/react-native/src/components/tx-history
 
 const usdc = { chain: 'STELLAR', code: 'USDC', issuer: 'GA5Z', enabledInApp: true, trustlineEstablished: true };
 function context(patch = {}) {
-  return {
+  const ctx = {
     verified: true,
     isAuthenticated: true,
     network: 'testnet',
@@ -91,8 +91,12 @@ function context(patch = {}) {
     tx: { step: 'idle' },
     copyText: async () => {},
     getClient: () => ({ getTxStatus: async () => null }),
+    getSolanaEarnProviders: async () => [],
     ...patch,
   };
+  // The swap panel reads the venues and the destination chains in one call.
+  ctx.getSolanaSwapOptions ??= async () => ({ venues: await ctx.getSolanaSwapConfig(), destinationChains: [] });
+  return ctx;
 }
 
 let root;

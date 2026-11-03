@@ -21,6 +21,12 @@ import {
   SolanaSwapQuote,
   SolanaSwapQuoteParams,
   SolanaSwapVenue,
+  SolanaSwapOptions,
+  SolanaEarnOpportunity,
+  SolanaEarnPosition,
+  SolanaEarnProviderId,
+  SolanaEarnTxParams,
+  SwapStatus,
   SwapQuote,
   SwapQuoteParams,
   SwapToken,
@@ -290,7 +296,11 @@ interface PollarContextValue {
   /** Quote a swap from the user's Solana wallet, in base units. Mirrors {@link PollarClient.getSolanaSwapQuote}. */
   getSolanaSwapQuote: (params: SolanaSwapQuoteParams) => Promise<SolanaSwapQuote[]>;
   /** Run a Solana swap from a quote. Drives the transaction state machine. Mirrors {@link PollarClient.swapSolana}. */
-  swapSolana: (quote: SolanaSwapQuote, opts?: { slippageBps?: number }) => Promise<SubmitOutcome>;
+  swapSolana: (quote: SolanaSwapQuote, opts?: { slippageBps?: number; idempotencyKey?: string }) => Promise<SubmitOutcome>;
+  /** The Solana venues and the chains a Solana swap delivers to. Mirrors {@link PollarClient.getSolanaSwapOptions}. */
+  getSolanaSwapOptions: () => Promise<SolanaSwapOptions>;
+  /** Where a swap built under a key stands, its settlement included. Mirrors {@link PollarClient.getSwapStatus}. */
+  getSwapStatus: (idempotencyKey: string) => Promise<SwapStatus>;
   /** Open the swap modal. */
   /** Opens the swap modal, on the network, assets and amount given; `onSuccess` hears the swap land. */
   openSwapModal: (options?: SwapModalOptions) => void;
@@ -322,6 +332,16 @@ interface PollarContextValue {
    * {@link PollarClient.earnWithdraw}.
    */
   earnWithdraw: (params: EarnTxParams) => Promise<SubmitOutcome>;
+  /** The Earn providers on Solana (empty = no Earn there). Mirrors {@link PollarClient.getSolanaEarnProviders}. */
+  getSolanaEarnProviders: () => Promise<SolanaEarnProviderId[]>;
+  /** The Solana opportunities, APY after fees. Mirrors {@link PollarClient.getSolanaEarnOpportunities}. */
+  getSolanaEarnOpportunities: () => Promise<SolanaEarnOpportunity[]>;
+  /** The user's position in a Solana opportunity. Mirrors {@link PollarClient.getSolanaEarnPosition}. */
+  getSolanaEarnPosition: (opportunity: string) => Promise<SolanaEarnPosition>;
+  /** Deposit into a Solana opportunity. Mirrors {@link PollarClient.earnSolanaDeposit}. */
+  earnSolanaDeposit: (params: SolanaEarnTxParams) => Promise<SubmitOutcome>;
+  /** Withdraw from a Solana opportunity. Mirrors {@link PollarClient.earnSolanaWithdraw}. */
+  earnSolanaWithdraw: (params: SolanaEarnTxParams) => Promise<SubmitOutcome>;
   /** Open the Earn modal. */
   /** Opens the earn modal, on the provider, opportunity, tab and amount given; `onSuccess` hears the transaction land. */
   openEarnModal: (options?: EarnModalOptions) => void;
@@ -886,6 +906,8 @@ export function PollarProvider({
       getSolanaSwapConfig: () => pollarClient.getSolanaSwapConfig(),
       getSolanaSwapQuote: (params) => pollarClient.getSolanaSwapQuote(params),
       swapSolana: (quote, opts) => pollarClient.swapSolana(quote, opts),
+      getSolanaSwapOptions: () => pollarClient.getSolanaSwapOptions(),
+      getSwapStatus: (idempotencyKey) => pollarClient.getSwapStatus(idempotencyKey),
       openSwapModal: (options?: SwapModalOptions) => {
         setSwapModalOptions(options);
         pollarClient.resetTransactionState();
@@ -903,6 +925,11 @@ export function PollarProvider({
       getEarnPosition: (params) => pollarClient.getEarnPosition(params),
       earnDeposit: (params) => pollarClient.earnDeposit(params),
       earnWithdraw: (params) => pollarClient.earnWithdraw(params),
+      getSolanaEarnProviders: () => pollarClient.getSolanaEarnProviders(),
+      getSolanaEarnOpportunities: () => pollarClient.getSolanaEarnOpportunities(),
+      getSolanaEarnPosition: (opportunity) => pollarClient.getSolanaEarnPosition(opportunity),
+      earnSolanaDeposit: (params) => pollarClient.earnSolanaDeposit(params),
+      earnSolanaWithdraw: (params) => pollarClient.earnSolanaWithdraw(params),
       openEarnModal: (options?: EarnModalOptions) => {
         setEarnModalOptions(options);
         pollarClient.resetTransactionState();

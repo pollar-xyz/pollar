@@ -1,7 +1,7 @@
 'use client';
 
-import { EarnOpportunity, EarnPosition, EarnProviderId } from '@pollar/core';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { EarnOpportunity, EarnPosition, EarnProviderId, SolanaEarnOpportunity, SolanaEarnPosition } from '@pollar/core';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { useModalLanguage } from '../../language';
 import { useWalletAvailable } from '../../useWalletAvailable';
@@ -20,6 +20,8 @@ import { PollarOverlay } from '../PollarOverlay';
 
 /** Where the earn modal opens: a starting point the user can change. An option the app does not offer is left out. */
 export interface EarnModalOptions {
+  /** The network the modal opens on, when the app offers Earn on both. */
+  chain?: EarnNetwork;
   provider?: EarnProviderId;
   /** The vault or pool, as `getEarnOpportunities` names it. */
   opportunityId?: string;
@@ -33,6 +35,9 @@ interface EarnModalProps {
   onClose: () => void;
   initial?: EarnModalOptions | undefined;
 }
+
+/** The networks Earn runs on; the modal shows a selector when the app offers both. */
+export type EarnNetwork = 'STELLAR' | 'SOLANA';
 
 /** Poll interval (ms) for the live position + APY. */
 const POSITION_POLL_MS = 10000;
@@ -63,6 +68,11 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
     getEarnPosition,
     earnDeposit,
     earnWithdraw,
+    getSolanaEarnProviders,
+    getSolanaEarnOpportunities,
+    getSolanaEarnPosition,
+    earnSolanaDeposit,
+    earnSolanaWithdraw,
     tx: transaction,
     wallet,
     refreshWalletBalance,
@@ -75,7 +85,12 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
 
   const copy = EARN_COPY[useModalLanguage()];
   const walletType = wallet?.custody === 'external' ? wallet.provider : null;
-  const smartUnsupported = wallet?.custody === 'smart';
+  const [earnChain, setEarnChain] = useState<EarnNetwork>(
+    () => oneOf<EarnNetwork>(['STELLAR', 'SOLANA'], initial?.chain) ?? 'STELLAR',
+  );
+  const onSolana = earnChain === 'SOLANA';
+  // A smart (C-address) wallet is a Stellar account: it says nothing about Solana.
+  const smartUnsupported = !onSolana && wallet?.custody === 'smart';
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<'form' | 'tx'>('form');
@@ -83,6 +98,9 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
     () => oneOf<'deposit' | 'withdraw'>(['deposit', 'withdraw'], initial?.tab) ?? 'deposit',
   );
   const [providers, setProviders] = useState<EarnProviderId[] | null>(null); // null = loading
+  const [solanaProviders, setSolanaProviders] = useState<string[] | null>(null);
+  const [solanaOpportunities, setSolanaOpportunities] = useState<SolanaEarnOpportunity[]>([]);
+  const [solanaPosition, setSolanaPosition] = useState<SolanaEarnPosition | null>(null);
   const [provider, setProvider] = useState<EarnProviderId | null>(null);
   const [opportunities, setOpportunities] = useState<EarnOpportunity[]>([]);
   // The opportunity option is kept when the provider's list has it, like a choice the user made.
@@ -99,13 +117,19 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
   // --- Providers ------------------------------------------------------------
   const loadProviders = useCallback(() => {
     setProviders(null);
-    return getEarnProviders()
-      .then((ps) => {
-        setProviders(ps);
-        setProvider((cur) => cur ?? oneOf(ps, initial?.provider) ?? ps[0] ?? null);
-      })
-      .catch(() => setProviders([]));
-  }, [getEarnProviders, initial?.provider]);
+    setSolanaProviders(null);
+    return Promise.all([
+      getEarnProviders()
+        .then((ps) => {
+          setProviders(ps);
+          setProvider((cur) => cur ?? oneOf(ps, initial?.provider) ?? ps[0] ?? null);
+        })
+        .catch(() => setProviders([])),
+      getSolanaEarnProviders()
+        .then(setSolanaProviders)
+        .catch(() => setSolanaProviders([])),
+    ]);
+  }, [getEarnProviders, getSolanaEarnProviders, initial?.provider]);
 
   useEffect(() => {
     void loadProviders();
@@ -120,7 +144,7 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
 
   // --- Opportunities (per provider) -------------------------------------------
   useEffect(() => {
-    if (!provider) return;
+    if (!provider || onSolana) return;
     let cancelled = false;
     setLoadingOpps(true);
     getEarnOpportunities(provider)
@@ -138,30 +162,70 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
     return () => {
       cancelled = true;
     };
-  }, [provider, getEarnOpportunities]);
+  }, [provider, onSolana, getEarnOpportunities]);
 
-  const selectedOpportunity = opportunities.find((o) => o.id === opportunityId) ?? null;
+  const networks = useMemo<EarnNetwork[]>(
+    () => [
+      ...(providers && providers.length > 0 ? (['STELLAR'] as const) : []),
+      ...(solanaProviders && solanaProviders.length > 0 ? (['SOLANA'] as const) : []),
+    ],
+    [providers, solanaProviders],
+  );
+  const networksLoading = providers === null || solanaProviders === null;
+  // Land on a network the app offers Earn on; Stellar first when it offers both.
+  useEffect(() => {
+    if (!networksLoading && networks.length > 0 && !networks.includes(earnChain)) setEarnChain(networks[0]!);
+  }, [networksLoading, networks, earnChain]);
+
+  // --- Solana opportunities ----------------------------------------------------
+  const loadSolanaOpportunities = useCallback(() => {
+    setLoadingOpps(true);
+    return getSolanaEarnOpportunities()
+      .then((opps) => {
+        setSolanaOpportunities(opps);
+        setOpportunityId((cur) => (opps.some((o) => o.id === cur) ? cur : (opps[0]?.id ?? '')));
+      })
+      .catch(() => setSolanaOpportunities([]))
+      .finally(() => setLoadingOpps(false));
+  }, [getSolanaEarnOpportunities]);
+
+  useEffect(() => {
+    if (onSolana && solanaProviders && solanaProviders.length > 0) void loadSolanaOpportunities();
+  }, [onSolana, solanaProviders, loadSolanaOpportunities]);
+
+  const selectedOpportunity = onSolana ? null : (opportunities.find((o) => o.id === opportunityId) ?? null);
+  const selectedSolana = onSolana ? (solanaOpportunities.find((o) => o.id === opportunityId) ?? null) : null;
 
   // --- Position (live, polled) ------------------------------------------------
   const refreshPosition = useCallback(() => {
-    if (!provider || !opportunityId || !wallet) return;
+    if (!opportunityId || !wallet) return;
+    if (onSolana) {
+      getSolanaEarnPosition(opportunityId)
+        .then(setSolanaPosition)
+        .catch(() => {
+          /* leave the last snapshot on a transient read error */
+        });
+      return;
+    }
+    if (!provider) return;
     getEarnPosition({ provider, opportunity: opportunityId })
       .then(setPosition)
       .catch(() => {
         /* leave the last snapshot on a transient read error */
       });
-  }, [provider, opportunityId, wallet, getEarnPosition]);
+  }, [onSolana, provider, opportunityId, wallet, getEarnPosition, getSolanaEarnPosition]);
 
   useEffect(() => {
     setPosition(null);
+    setSolanaPosition(null);
     refreshPosition();
   }, [refreshPosition]);
 
   useEffect(() => {
-    if (step !== 'form' || !provider || !opportunityId) return;
+    if (step !== 'form' || (!onSolana && !provider) || !opportunityId) return;
     const id = setInterval(refreshPosition, POSITION_POLL_MS);
     return () => clearInterval(id);
-  }, [step, provider, opportunityId, refreshPosition]);
+  }, [step, onSolana, provider, opportunityId, refreshPosition]);
 
   useEffect(
     () => () => {
@@ -171,14 +235,21 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
   );
 
   // --- Derived ----------------------------------------------------------------
-  const providersLoading = providers === null;
-  const earnUnavailable = providers !== null && providers.length === 0;
-  const withdrawUnit = position?.withdrawUnit ?? 'asset';
-  const assetCode = selectedOpportunity?.asset.code ?? '';
+  const providersLoading = networksLoading;
+  const earnUnavailable = !networksLoading && networks.length === 0;
+  const withdrawUnit = onSolana ? 'asset' : (position?.withdrawUnit ?? 'asset');
+  const assetCode = (onSolana ? selectedSolana?.asset.code : selectedOpportunity?.asset.code) ?? '';
   const amountUnitLabel = tab === 'deposit' ? assetCode : withdrawUnit === 'shares' ? copy.shares : assetCode;
+  // What the opportunity takes right now: a paused one may only let funds out, or nothing.
+  const actionUnavailable = !!selectedSolana && !selectedSolana.actions.includes(tab);
+  const withdrawable = onSolana ? solanaPosition?.withdrawable : position?.withdrawable;
 
   const walletAvailable = useWalletAvailable(
-    selectedOpportunity ? { chain: 'STELLAR', code: assetCode, issuer: selectedOpportunity.asset.issuer } : null,
+    selectedSolana
+      ? { chain: 'SOLANA', code: assetCode, issuer: selectedSolana.asset.address }
+      : selectedOpportunity
+        ? { chain: 'STELLAR', code: assetCode, issuer: selectedOpportunity.asset.issuer }
+        : null,
   );
 
   // Depositing an issued asset (e.g. USDC) needs the wallet to trust it first.
@@ -197,7 +268,11 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
     );
   })();
   const depositNeedsTrustline =
-    tab === 'deposit' && !smartUnsupported && !!selectedOpportunity?.asset.issuer && !depositAssetRecord?.trustlineEstablished;
+    !onSolana &&
+    tab === 'deposit' &&
+    !smartUnsupported &&
+    !!selectedOpportunity?.asset.issuer &&
+    !depositAssetRecord?.trustlineEstablished;
 
   const hash = transaction.step === 'success' ? transaction.hash : null;
   useSuccessReport(transaction, step === 'tx', initial?.onSuccess);
@@ -209,7 +284,11 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
       : network === 'testnet'
         ? 'testnet'
         : 'public';
-  const explorerUrl = hash ? `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}` : null;
+  const explorerUrl = !hash
+    ? null
+    : onSolana
+      ? `https://solscan.io/tx/${hash}${network === 'testnet' ? '?cluster=devnet' : ''}`
+      : `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}`;
 
   const isInProgress = (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step);
   const showBack = step === 'tx' && (transaction.step === 'error' || transaction.step === 'success') && !isInProgress;
@@ -233,11 +312,12 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
   const exceedsAvailable =
     tab === 'deposit'
       ? walletAvailable != null && parsedAmount > parseFloat(walletAvailable)
-      : position != null && parsedAmount > parseFloat(position.withdrawable);
+      : withdrawable != null && parsedAmount > parseFloat(withdrawable);
 
   const canSubmit =
     !smartUnsupported &&
-    !!provider &&
+    (onSolana || !!provider) &&
+    !actionUnavailable &&
     !!opportunityId &&
     !!amount &&
     parsedAmount > 0 &&
@@ -254,8 +334,12 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
       setFormError(copy.smartNotSupported);
       return;
     }
-    if (!provider || !opportunityId) {
+    if ((!onSolana && !provider) || !opportunityId) {
       setFormError(copy.selectOpportunity);
+      return;
+    }
+    if (actionUnavailable) {
+      setFormError(copy.actionUnavailable(tab));
       return;
     }
     const parsed = parseFloat(amount);
@@ -267,7 +351,7 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
       setFormError(copy.exceedsWallet);
       return;
     }
-    if (tab === 'withdraw' && position && parsed > parseFloat(position.withdrawable)) {
+    if (tab === 'withdraw' && withdrawable != null && parsed > parseFloat(withdrawable)) {
       setFormError(copy.exceedsPosition);
       return;
     }
@@ -286,19 +370,26 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
       await refreshAssets();
     }
 
-    const params = { provider, opportunity: opportunityId, amount };
-    const outcome = tab === 'deposit' ? await earnDeposit(params) : await earnWithdraw(params);
-    if (outcome.status === 'success' || outcome.status === 'pending') {
+    const outcome = await runEarn();
+    if (outcome && (outcome.status === 'success' || outcome.status === 'pending')) {
       setAmount('');
       refreshPosition();
     }
   }
 
-  async function handleRetry() {
-    if (transaction.step !== 'error' || !provider || !opportunityId) return;
+  function runEarn() {
+    if (onSolana) {
+      const params = { opportunity: opportunityId, amount };
+      return tab === 'deposit' ? earnSolanaDeposit(params) : earnSolanaWithdraw(params);
+    }
+    if (!provider) return null;
     const params = { provider, opportunity: opportunityId, amount };
-    if (tab === 'deposit') await earnDeposit(params);
-    else await earnWithdraw(params);
+    return tab === 'deposit' ? earnDeposit(params) : earnWithdraw(params);
+  }
+
+  async function handleRetry() {
+    if (transaction.step !== 'error' || !opportunityId) return;
+    await runEarn();
   }
 
   function handleCopyHash() {
@@ -325,10 +416,16 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
   // ("In your wallet" + Max). Leaves the current data in place on a transient
   // read error.
   async function handleRefresh() {
-    if (refreshing || !provider) return;
+    if (refreshing || (!onSolana && !provider)) return;
     setRefreshing(true);
     try {
       void refreshWalletBalance();
+      if (onSolana) {
+        await loadSolanaOpportunities();
+        refreshPosition();
+        return;
+      }
+      if (!provider) return;
       const opps = await getEarnOpportunities(provider);
       setOpportunities(opps);
       setOpportunityId((cur) => (opps.some((o) => o.id === cur) ? cur : (opps[0]?.id ?? '')));
@@ -430,8 +527,31 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
               </button>
             </div>
 
+            {/* Network */}
+            {networks.length > 1 && (
+              <div className="pollar-send-field">
+                <label className="pollar-send-label">{copy.network}</label>
+                <select
+                  className="pollar-input pollar-send-select"
+                  value={earnChain}
+                  onChange={(e) => {
+                    setEarnChain(e.target.value as EarnNetwork);
+                    setOpportunityId('');
+                    setAmount('');
+                    setFormError('');
+                  }}
+                >
+                  {networks.map((n) => (
+                    <option key={n} value={n}>
+                      {n === 'SOLANA' ? 'Solana' : 'Stellar'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Provider */}
-            {providers && providers.length > 1 && (
+            {!onSolana && providers && providers.length > 1 && (
               <div className="pollar-send-field">
                 <label className="pollar-send-label">{copy.provider}</label>
                 <select
@@ -450,7 +570,9 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
 
             {/* Opportunity */}
             <div className="pollar-send-field">
-              <label className="pollar-send-label">{provider === 'defindex' ? copy.vault : copy.pool}</label>
+              <label className="pollar-send-label">
+                {onSolana ? copy.opportunity : provider === 'defindex' ? copy.vault : copy.pool}
+              </label>
               {loadingOpps || providersLoading ? (
                 <div className="pollar-input pollar-select-loading">
                   <span className="pollar-spinner pollar-spinner-sm" />
@@ -460,13 +582,13 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
                 <select
                   className="pollar-input pollar-send-select"
                   value={opportunityId}
-                  disabled={opportunities.length === 0}
+                  disabled={(onSolana ? solanaOpportunities : opportunities).length === 0}
                   onChange={(e) => setOpportunityId(e.target.value)}
                 >
-                  {opportunities.length === 0 ? (
+                  {(onSolana ? solanaOpportunities : opportunities).length === 0 ? (
                     <option value="">{copy.noneAvailable}</option>
                   ) : (
-                    opportunities.map((o) => (
+                    (onSolana ? solanaOpportunities : opportunities).map((o) => (
                       <option key={o.id} value={o.id}>
                         {o.name} · {o.apy.toFixed(2)}% APY
                       </option>
@@ -475,6 +597,40 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
                 </select>
               )}
             </div>
+
+            {/* Live position panel, Solana: the APY and the profit are after fees */}
+            {selectedSolana && (
+              <div className="pollar-swap-quote">
+                {tab === 'deposit' && (
+                  <div className="pollar-swap-quote-row">
+                    <span className="pollar-send-hint">{copy.inYourWallet}</span>
+                    <span>
+                      {walletAvailable != null ? formatAmount(walletAvailable) : '...'} {assetCode}
+                    </span>
+                  </div>
+                )}
+                <div className="pollar-swap-quote-row">
+                  <span className="pollar-send-hint">{copy.yourPosition}</span>
+                  <span>
+                    {solanaPosition ? formatAmount(solanaPosition.balance) : '...'} {assetCode}
+                  </span>
+                </div>
+                {solanaPosition?.profit != null && (
+                  <div className="pollar-swap-quote-row">
+                    <span className="pollar-send-hint">{copy.profit}</span>
+                    <span>
+                      {formatAmount(solanaPosition.profit)} {assetCode}
+                    </span>
+                  </div>
+                )}
+                <div className="pollar-swap-quote-row">
+                  <span className="pollar-send-hint">{copy.apyAfterFees}</span>
+                  <span className="pollar-earn-live">{(solanaPosition?.apy ?? selectedSolana.apy).toFixed(2)}%</span>
+                </div>
+                {solanaPosition?.stale && <div className="pollar-send-hint">{copy.stale}</div>}
+              </div>
+            )}
+            {actionUnavailable && <div className="pollar-send-hint">{copy.actionUnavailable(tab)}</div>}
 
             {/* Live position panel */}
             {selectedOpportunity && (
@@ -507,7 +663,7 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
               value={amount}
               onChange={setAmount}
               unit={amountUnitLabel}
-              available={tab === 'deposit' ? walletAvailable : position ? position.withdrawable : undefined}
+              available={tab === 'deposit' ? walletAvailable : (withdrawable ?? undefined)}
             />
 
             {formError && <div className="pollar-modal-error">{formError}</div>}

@@ -1,6 +1,17 @@
 'use client';
 
-import { SolanaSwapQuote, SolanaSwapVenue, SwapProvider, SwapQuote, SwapQuoteParams, SwapToken, SwapVenue } from '@pollar/core';
+import {
+  fromBaseUnits as unitsToDecimal,
+  SolanaSwapQuote,
+  SolanaSwapVenue,
+  SwapDestinationChain,
+  SwapProvider,
+  SwapQuote,
+  SwapQuoteParams,
+  SwapSettlement,
+  SwapToken,
+  SwapVenue,
+} from '@pollar/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { useModalLanguage } from '../../language';
@@ -9,7 +20,7 @@ import '../transaction-modal/TransactionModal.css';
 import '../send-modal/SendModal.css';
 import './SwapModal.css';
 import { SWAP_COPY } from './swap-copy';
-import { SwapAssetOption, SwapChain, SwapModalTemplate, SwapQuoteView } from './SwapModalTemplate';
+import { SwapAssetOption, SwapChain, SwapModalTemplate, SwapQuoteView, SwapSettlementView } from './SwapModalTemplate';
 import { modalChrome } from '../modal-theme';
 import { byCode, oneOf, seededAmount, useSuccessReport } from '../../modal-options';
 import { PollarOverlay } from '../PollarOverlay';
@@ -22,6 +33,8 @@ export interface SwapModalOptions {
   /** Code of the asset bought, e.g. 'USDC'. */
   buy?: string;
   amount?: string;
+  /** Solana only: deliver to the user's own wallet on this chain, when the app offers it. */
+  destinationChain?: SwapDestinationChain;
   /** Called once the swap lands, with its transaction hash. */
   onSuccess?: (result: { hash: string }) => void;
 }
@@ -33,6 +46,29 @@ interface SwapModalProps {
 
 /** Debounce (ms) before re-quoting as the user edits the amount / assets. */
 const QUOTE_DEBOUNCE_MS = 400;
+
+/** How often a cross-chain swap's settlement is read while it is on its way. */
+const SETTLEMENT_POLL_MS = 5_000;
+const SETTLEMENT_FINAL = new Set<SwapSettlement['status']>(['COMPLETED', 'FAILED', 'REFUNDED', 'EXPIRED']);
+
+/** A fresh key per swap the user means to make, the one its status is read by. */
+function newSwapKey(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+/** A charge as the user reads it: in the asset when the venue says which, otherwise in USD. */
+function chargeText(charge: NonNullable<SolanaSwapQuote['feeBreakdown']>['charges'][number]): string | null {
+  if (charge.amount !== null && charge.decimals !== null && charge.symbol) {
+    try {
+      return `${unitsToDecimal(charge.amount, charge.decimals)} ${charge.symbol}`;
+    } catch {
+      /* fall through to the USD figure */
+    }
+  }
+  return charge.amountUsd !== null ? `$${charge.amountUsd.toFixed(2)}` : null;
+}
 
 type AssetLike = { type: 'native' | 'credit_alphanum4' | 'credit_alphanum12'; code: string; issuer?: string | undefined };
 
@@ -75,9 +111,10 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     getSwapTokens,
     getSwapQuote,
     swap,
-    getSolanaSwapConfig,
+    getSolanaSwapOptions,
     getSolanaSwapQuote,
     swapSolana,
+    getSwapStatus,
     walletBalance,
     refreshWalletBalance,
     enabledAssets,
@@ -107,6 +144,18 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   const [venues, setVenues] = useState<SwapVenue[] | null>(null); // null = config loading
   const [solanaVenues, setSolanaVenues] = useState<SolanaSwapVenue[] | null>(null);
   const [solanaQuotes, setSolanaQuotes] = useState<SolanaSwapQuote[]>([]);
+  // Chains other than Solana a Solana swap can deliver to, and the one picked.
+  const [destinationChains, setDestinationChains] = useState<SwapDestinationChain[]>([]);
+  const destinationSeed = useRef(initial?.destinationChain);
+  const [destination, setDestination] = useState<SwapDestinationChain>('SOLANA');
+  // Bumped when a quote's price lapses, so it is asked for again.
+  const [requote, setRequote] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+  const [settlement, setSettlement] = useState<{
+    key: string;
+    chain: SwapDestinationChain;
+    value: SwapSettlement | null;
+  } | null>(null);
   const [catalogTokens, setCatalogTokens] = useState<SwapToken[]>([]);
   // Tokens the user pasted by code+issuer (not in the app catalog). Local only.
   const [customTokens, setCustomTokens] = useState<SwapAssetOption[]>([]);
@@ -135,11 +184,25 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
       getSwapConfig()
         .then(setVenues)
         .catch(() => setVenues([])), // treat a failed config as "unavailable"
-      getSolanaSwapConfig()
-        .then(setSolanaVenues)
-        .catch(() => setSolanaVenues([])),
+      getSolanaSwapOptions()
+        .then((options) => {
+          setSolanaVenues(options.venues);
+          setDestinationChains(options.destinationChains);
+        })
+        .catch(() => {
+          setSolanaVenues([]);
+          setDestinationChains([]);
+        }),
     ]);
-  }, [getSwapConfig, getSolanaSwapConfig]);
+  }, [getSwapConfig, getSolanaSwapOptions]);
+
+  // The destination option applies once the app is known to offer it.
+  useEffect(() => {
+    const wanted = destinationSeed.current;
+    if (!wanted || solanaVenues === null) return;
+    destinationSeed.current = undefined;
+    if (wanted === 'SOLANA' || destinationChains.includes(wanted)) setDestination(wanted);
+  }, [solanaVenues, destinationChains]);
 
   useEffect(() => {
     void loadConfig();
@@ -271,8 +334,22 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
       })),
   ];
 
+  // Toward another chain: the app's tokens there, by contract address, with their decimals.
+  const crossChain = chain === 'SOLANA' && destination !== 'SOLANA';
+  const destinationBuy: SwapAssetOption[] = assetRecords
+    .filter((a) => a.chain === destination && a.type === 'token' && !!a.issuer && a.decimals !== undefined)
+    .map((a) => ({
+      code: a.code,
+      issuer: a.issuer,
+      decimals: a.decimals,
+      available:
+        balances.find((b) => b.chain === destination && b.issuer?.toLowerCase() === a.issuer!.toLowerCase())?.available ??
+        undefined,
+      enabledInApp: true,
+    }));
+
   const sellOptions = chain === 'SOLANA' ? solanaSell : stellarSell;
-  const buyOptions: SwapAssetOption[] = (chain === 'SOLANA' ? solanaBuy : stellarBuy).filter(
+  const buyOptions: SwapAssetOption[] = (chain === 'SOLANA' ? (crossChain ? destinationBuy : solanaBuy) : stellarBuy).filter(
     (o) => optKey(o) !== buyKeyOfSell || optKey(o) === (selectedBuy ? optKey(selectedBuy) : ''),
   );
 
@@ -338,22 +415,52 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     [venues, solanaVenues],
   );
   const swapUnavailable = !configLoading && chains.length === 0;
-  const chainVenues: string[] = (chain === 'SOLANA' ? solanaVenues : venues) ?? [];
+  // Only the venue that crosses chains routes toward another chain.
+  const chainVenues: string[] = ((chain === 'SOLANA' ? solanaVenues : venues) ?? []).filter(
+    (v) => !crossChain || v === 'multichain',
+  );
+  const destinations: SwapDestinationChain[] =
+    chain === 'SOLANA' && destinationChains.length > 0 ? ['SOLANA', ...destinationChains] : [];
+  // USDC between chains is a transfer: the backend refuses it as a swap.
+  const usdcAcross = crossChain && selectedSell?.code === 'USDC' && selectedBuy?.code === 'USDC';
   // Offer "Auto" (best of the enabled set) plus each configured venue.
   const providers: string[] = chainVenues.length > 0 ? ['auto', ...chainVenues] : [];
   const quote = quotes[0] ?? null;
-  const solanaQuote = solanaQuotes[0] ?? null;
+  const quotedSolana = solanaQuotes[0] ?? null;
+  // A lapsed price is no quote: the swap would be refused, and a new one is on its way.
+  const solanaQuote = quotedSolana?.expiresAt && Date.parse(quotedSolana.expiresAt) <= now ? null : quotedSolana;
+  const outDecimals = solanaQuote?.outputDecimals ?? selectedBuy?.decimals;
   const quoteView: SwapQuoteView | null =
     chain === 'SOLANA'
-      ? solanaQuote && selectedBuy?.decimals !== undefined
+      ? solanaQuote && outDecimals !== undefined
         ? {
             provider: solanaQuote.provider,
-            amountOut: fromBaseUnits(solanaQuote.outAmount, selectedBuy.decimals),
-            minReceived: fromBaseUnits(solanaQuote.minOut, selectedBuy.decimals),
+            amountOut: fromBaseUnits(solanaQuote.outAmount, outDecimals),
+            minReceived: fromBaseUnits(solanaQuote.minOut, outDecimals),
             priceImpactPct: solanaQuote.priceImpactPct,
+            fees: (solanaQuote.feeBreakdown?.charges ?? []).flatMap((charge) => {
+              const value = chargeText(charge);
+              return value ? [{ label: copy.fees[charge.kind] ?? copy.fees.other, value }] : [];
+            }),
+            totalFeesUsd: solanaQuote.feeBreakdown?.totalFeesUsd ?? null,
+            expiresInSeconds: solanaQuote.expiresAt
+              ? Math.max(0, Math.round((Date.parse(solanaQuote.expiresAt) - now) / 1000))
+              : null,
           }
         : null
       : quote;
+
+  // A quote with a price window is asked for again when it lapses; the countdown ticks once a second.
+  useEffect(() => {
+    const expiresAt = quotedSolana?.expiresAt ? Date.parse(quotedSolana.expiresAt) : NaN;
+    if (step !== 'form' || Number.isNaN(expiresAt)) return;
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    const lapse = setTimeout(() => setRequote((n) => n + 1), Math.max(0, expiresAt - Date.now()));
+    return () => {
+      clearInterval(tick);
+      clearTimeout(lapse);
+    };
+  }, [quotedSolana, step]);
 
   // Land on a chain the app offers swaps on; Stellar first when it offers both.
   useEffect(() => {
@@ -373,6 +480,15 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     setFormError('');
   }
 
+  function handleDestinationChange(next: SwapDestinationChain) {
+    buySeed.current = undefined;
+    setDestination(next);
+    setSelectedBuy(null);
+    setProvider('auto');
+    setSolanaQuotes([]);
+    setFormError('');
+  }
+
   // Re-quote (debounced) whenever the pair / amount / route changes.
   useEffect(() => {
     if (
@@ -382,7 +498,8 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
       !selectedSell ||
       !selectedBuy ||
       !amount ||
-      parseFloat(amount) <= 0
+      parseFloat(amount) <= 0 ||
+      usdcAcross
     ) {
       setQuotes([]);
       setSolanaQuotes([]);
@@ -404,6 +521,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
             amount: units,
             provider: provider as SolanaSwapQuote['provider'] | 'auto',
             slippageBps,
+            ...(crossChain && { destinationChain: destination }),
           });
           if (!cancelled) setSolanaQuotes(qs);
         } else {
@@ -443,7 +561,35 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     getSwapQuote,
     getSolanaSwapQuote,
     copy,
+    crossChain,
+    destination,
+    usdcAcross,
+    requote,
   ]);
+
+  // A cross-chain swap is read until its destination settles; HELD keeps being read, support is on it.
+  const settlementKey = settlement?.key ?? null;
+  const settlementDone = !!settlement?.value && SETTLEMENT_FINAL.has(settlement.value.status);
+  const originLanded = transaction.step === 'success';
+  useEffect(() => {
+    if (!settlementKey || settlementDone || !originLanded) return;
+    let cancelled = false;
+    const read = () =>
+      getSwapStatus(settlementKey)
+        .then((status) => {
+          if (!cancelled)
+            setSettlement((cur) => (cur && cur.key === settlementKey ? { ...cur, value: status.settlement } : cur));
+        })
+        .catch(() => {
+          /* the next read tries again */
+        });
+    void read();
+    const id = setInterval(read, SETTLEMENT_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [settlementKey, settlementDone, originLanded, getSwapStatus]);
 
   const hash = transaction.step === 'success' ? transaction.hash : null;
   useSuccessReport(transaction, step === 'tx', initial?.onSuccess);
@@ -460,6 +606,30 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     : chain === 'SOLANA'
       ? `https://solscan.io/tx/${hash}${network === 'testnet' ? '?cluster=devnet' : ''}`
       : `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}`;
+
+  const settlementView: SwapSettlementView | null = (() => {
+    if (!settlement || transaction.step !== 'success') return null;
+    const chainName = settlement.chain === 'POLYGON' ? 'Polygon' : 'Solana';
+    const status = settlement.value?.status ?? 'PENDING';
+    const kind =
+      status === 'COMPLETED'
+        ? 'completed'
+        : status === 'HELD'
+          ? 'held'
+          : status === 'REFUNDED'
+            ? 'refunded'
+            : status === 'FAILED' || status === 'EXPIRED'
+              ? 'failed'
+              : 'pending';
+    const destinationHash = settlement.value?.destinationTxHash ?? null;
+    const scan = network === 'testnet' ? 'https://amoy.polygonscan.com' : 'https://polygonscan.com';
+    return {
+      kind,
+      text: copy.settlement[kind](chainName),
+      address: settlement.value?.destinationAddress ?? null,
+      explorerUrl: destinationHash && settlement.chain === 'POLYGON' ? `${scan}/tx/${destinationHash}` : null,
+    };
+  })();
 
   const IN_FLIGHT_STEPS = [
     'building',
@@ -504,8 +674,11 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
         setFormError(copy.noRouteForPair);
         return;
       }
+      const key = newSwapKey();
+      const toward = solanaQuote.destinationChain;
+      setSettlement(toward && toward !== 'SOLANA' ? { key, chain: toward, value: null } : null);
       setStep('tx');
-      await swapSolana(solanaQuote, { slippageBps });
+      await swapSolana(solanaQuote, { slippageBps, idempotencyKey: key });
       return;
     }
     if (!quote) {
@@ -519,7 +692,11 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   async function handleRetry() {
     if (transaction.step !== 'error') return;
     if (chain === 'SOLANA') {
-      if (solanaQuote) await swapSolana(solanaQuote, { slippageBps });
+      if (!solanaQuote) return;
+      const key = newSwapKey();
+      const toward = solanaQuote.destinationChain;
+      setSettlement(toward && toward !== 'SOLANA' ? { key, chain: toward, value: null } : null);
+      await swapSolana(solanaQuote, { slippageBps, idempotencyKey: key });
       return;
     }
     if (quote) await swap(quote);
@@ -551,6 +728,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   }
 
   function handleBack() {
+    setSettlement(null);
     setStep('form');
     setShowXdr(false);
     setCopied(false);
@@ -571,6 +749,10 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
         amount={amount}
         chains={chains}
         chain={chain}
+        destinations={destinations}
+        destination={destination}
+        usdcAcross={usdcAcross}
+        settlement={settlementView}
         provider={provider}
         providers={providers}
         quote={quoteView}
@@ -606,6 +788,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
         onAddCustomToken={addCustomToken}
         onAmountChange={setAmount}
         onChainChange={handleChainChange}
+        onDestinationChange={handleDestinationChange}
         onProviderChange={setProvider}
         onSwap={() => void handleSwap()}
         onToggleXdr={() => setShowXdr((v) => !v)}

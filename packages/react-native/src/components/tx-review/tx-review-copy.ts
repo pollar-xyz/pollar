@@ -38,6 +38,8 @@ export const TX_REVIEW_COPY: Record<
       expiresIn: string;
       rawTx: string;
       txHash: string;
+      deliversTo: string;
+      call: (n: number) => string;
     };
     viewOnExplorer: string;
   }
@@ -76,6 +78,8 @@ export const TX_REVIEW_COPY: Record<
       expiresIn: 'Expires in',
       rawTx: 'Raw transaction',
       txHash: 'Transaction hash',
+      deliversTo: 'Delivers to',
+      call: (n) => `Call ${n}`,
     },
     viewOnExplorer: 'View on explorer',
   },
@@ -113,6 +117,8 @@ export const TX_REVIEW_COPY: Record<
       expiresIn: 'Vence en',
       rawTx: 'Transacción en bruto',
       txHash: 'Hash de la transacción',
+      deliversTo: 'Entrega en',
+      call: (n) => `Llamada ${n}`,
     },
     viewOnExplorer: 'Ver en el explorador',
   },
@@ -150,6 +156,8 @@ export const TX_REVIEW_COPY: Record<
       expiresIn: 'Expira em',
       rawTx: 'Transação bruta',
       txHash: 'Hash da transação',
+      deliversTo: 'Entrega em',
+      call: (n) => `Chamada ${n}`,
     },
     viewOnExplorer: 'Ver no explorador',
   },

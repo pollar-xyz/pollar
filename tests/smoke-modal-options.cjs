@@ -246,6 +246,144 @@ const assetShown = () => document.querySelector('.pollar-send-asset-selector')?.
     client.destroy();
   }
 
+  // --- Earn on Solana: the network option, APY after fees, an action the opportunity does not take ---
+  {
+    const withdrawals = [];
+    const { client } = fixture({
+      getSolanaEarnProviders: async () => ['aggregator'],
+      getSolanaEarnOpportunities: async () => [
+        {
+          chain: 'SOLANA',
+          provider: 'aggregator',
+          id: 'opp-1',
+          name: 'USDC vault',
+          kind: 'vault',
+          asset: { code: 'USDC', address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', decimals: 6 },
+          apy: 3.96,
+          actions: ['withdraw'],
+          paused: true,
+          metadata: { protocol: null },
+        },
+      ],
+      getSolanaEarnPosition: async () => ({
+        chain: 'SOLANA',
+        provider: 'aggregator',
+        opportunityId: 'opp-1',
+        address: SOLANA,
+        balance: '10',
+        principal: '9.5',
+        profit: '0.5',
+        withdrawUnit: 'asset',
+        withdrawable: '10',
+        apy: 3.9,
+        stale: false,
+      }),
+      earnSolanaWithdraw: async (params) => {
+        withdrawals.push(params);
+        return { status: 'success', hash: 'sig-earn' };
+      },
+    });
+    const ui = await mount(client);
+    await ui.open('openEarnModal', { chain: 'SOLANA', tab: 'deposit' });
+    assert.ok(document.querySelector('select option[value="SOLANA"]'), 'a network selector when both chains offer Earn');
+    assert.match(document.body.textContent, /APY after fees/);
+    assert.match(document.body.textContent, /3\.90%/, 'the position APY, after fees');
+    assert.match(document.body.textContent, /Earned after fees/);
+    assert.match(document.body.textContent, /does not take deposits right now/);
+    await ui.open('openEarnModal', { chain: 'SOLANA', tab: 'withdraw', amount: '1' });
+    await ui.click(document.querySelector('.pollar-modal-actions .pollar-btn-primary'));
+    assert.deepEqual(withdrawals, [{ opportunity: 'opp-1', amount: '1' }], 'a Solana withdrawal by opportunity and amount');
+    await ui.unmount();
+    client.destroy();
+  }
+
+  // --- Swap toward Polygon: the destination option, the fees, the delivery ---
+  {
+    const USDT_POLYGON = '0xc2132D05D31c914a87C6611C10748AEb04B58e8F';
+    const quotes = [];
+    const swaps = [];
+    let pushTx = () => {};
+    const { client } = fixture({
+      getSwapConfig: async () => [],
+      getSwapTokens: async () => [],
+      getSolanaSwapOptions: async () => ({ venues: ['jupiter', 'multichain'], destinationChains: ['POLYGON'] }),
+      getSolanaSwapQuote: async (params) => {
+        quotes.push(params);
+        return [
+          {
+            chain: 'SOLANA',
+            provider: 'multichain',
+            inputMint: params.inputMint,
+            outputMint: params.outputMint,
+            inAmount: params.amount,
+            outAmount: '149000000',
+            minOut: '148000000',
+            priceImpactPct: null,
+            route: { hops: [] },
+            destinationChain: 'POLYGON',
+            outputSymbol: 'USDT',
+            outputDecimals: 6,
+            feeBreakdown: {
+              charges: [{ kind: 'routing', amount: '5000', amountUsd: null, asset: 'input', symbol: 'USDC', decimals: 6 }],
+              totalFeesUsd: 0.01,
+              bridgeAndSlippageUsd: null,
+            },
+            expiresAt: new Date(Date.now() + 120_000).toISOString(),
+          },
+        ];
+      },
+      swapSolana: async (quote, opts) => {
+        swaps.push(opts);
+        pushTx({ step: 'success', hash: 'sig-swap' });
+        return { status: 'success', hash: 'sig-swap' };
+      },
+      getSwapStatus: async (key) => ({
+        idempotencyKey: key,
+        status: 'CONFIRMED',
+        phase: 'CONFIRMED',
+        txHash: 'sig-swap',
+        settlement: {
+          status: 'COMPLETED',
+          destinationChain: 'POLYGON',
+          destinationAddress: '0xAae901C9cC8A88611C041BB4C1EEE81a895CB943',
+          destinationToken: USDT_POLYGON,
+          destinationTxHash: '0xabc',
+          feeBreakdown: null,
+          resolvedAt: null,
+        },
+      }),
+    });
+    client.onTransactionStateChange = (cb) => {
+      pushTx = cb;
+      cb({ step: 'idle' });
+      return () => {};
+    };
+    client.onEnabledAssetsStateChange = (cb) => {
+      cb({
+        step: 'loaded',
+        data: {
+          assets: [{ chain: 'POLYGON', type: 'token', code: 'USDT', issuer: USDT_POLYGON, decimals: 6, enabledInApp: true }],
+        },
+      });
+      return () => {};
+    };
+    const ui = await mount(client);
+    await ui.open('openSwapModal', { chain: 'SOLANA', destinationChain: 'POLYGON', sell: 'SOL', buy: 'USDT', amount: '1' });
+    await act(async () => new Promise((r) => setTimeout(r, 500)));
+    assert.ok(document.querySelector('select option[value="POLYGON"]'), 'a Receive on selector');
+    const last = quotes.at(-1);
+    assert.equal(last.destinationChain, 'POLYGON', 'quoted toward Polygon');
+    assert.equal(last.outputMint, USDT_POLYGON, 'the ERC-20 address as the output');
+    assert.match(document.body.textContent, /Routing fee/);
+    assert.match(document.body.textContent, /Cross-chain route/);
+    await ui.click(document.querySelector('.pollar-modal-actions .pollar-btn-primary'));
+    await act(async () => new Promise((r) => setTimeout(r, 100)));
+    assert.ok(swaps[0]?.idempotencyKey, 'the swap carries the key its status is read by');
+    assert.match(document.body.textContent, /Delivered to your Polygon wallet/);
+    await ui.unmount();
+    client.destroy();
+  }
+
   // --- Card: the funding panel, its amount, and onFunded ---
   {
     const funding = { id: 'f1', status: 'PENDING', amount: '20', chain: 'STELLAR', createdAt: '2026-10-31T00:00:00Z' };
@@ -285,7 +423,7 @@ const assetShown = () => document.querySelector('.pollar-send-asset-selector')?.
   }
 
   console.log(
-    'Modal options: send (prefill, fallback, reset, onSuccess once), earn (provider, opportunity, tab, amount, fallback), receive and history (chain, fallback), swap (assets, late catalog, amount), card (fund panel, onFunded) passed.',
+    'Modal options: send (prefill, fallback, reset, onSuccess once), earn (provider, opportunity, tab, amount, fallback), receive and history (chain, fallback), swap (assets, late catalog, amount), Solana earn (network, APY after fees, actions), swap toward Polygon (destination, fees, delivery), card (fund panel, onFunded) passed.',
   );
 })().catch((error) => {
   console.error(error);

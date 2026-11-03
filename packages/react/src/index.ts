@@ -40,7 +40,7 @@ export { RampWidget } from './components/ramp-widget/RampWidget';
 export type { RampModalOptions } from './components/ramp-widget/RampWidget';
 export type { SendModalOptions } from './components/send-modal/SendModal';
 export type { SwapModalOptions } from './components/swap-modal/SwapModal';
-export type { EarnModalOptions } from './components/earn-modal/EarnModal';
+export type { EarnModalOptions, EarnNetwork } from './components/earn-modal/EarnModal';
 export type { ReceiveModalOptions } from './components/receive-modal/ReceiveModal';
 export type { TxHistoryModalOptions } from './components/tx-history-modal/TxHistoryModal';
 export type { CardModalOptions } from './components/card-modal/CardModal';
