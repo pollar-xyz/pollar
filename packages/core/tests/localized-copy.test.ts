@@ -152,9 +152,9 @@ test('the pending action screen reads in each language', () => {
   } as never;
   const en = describeRampAction(order);
   assert.equal(en.title, 'Pay 100 MXN');
-  assert.deepEqual(en.details, [{ label: 'Reference', value: 'R1' }]);
+  assert.deepEqual(en.details, [{ label: 'Reference (required)', value: 'R1' }]);
   const es = describeRampAction(order, 'es');
   assert.equal(es.title, 'Paga 100 MXN');
-  assert.deepEqual(es.details, [{ label: 'Referencia', value: 'R1' }]);
+  assert.deepEqual(es.details, [{ label: 'Referencia (obligatoria)', value: 'R1' }]);
   assert.equal(describeRampAction({ state: 'completed', pendingAction: null } as never, 'pt').title, 'Transferência concluída');
 });
