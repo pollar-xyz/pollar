@@ -13442,8 +13442,7 @@ export interface operations {
                             lastValidBlockHeight: number;
                             feeLamports: string;
                             feePayer: string;
-                            /** @constant */
-                            sponsored: false;
+                            sponsored: boolean;
                         };
                     };
                 };
