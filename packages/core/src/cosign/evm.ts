@@ -1,3 +1,4 @@
+import { keccak_256 } from '@noble/hashes/sha3';
 import { hexToBytes, bytesToHex } from './encoding';
 
 /**
@@ -153,7 +154,9 @@ export function polygonChainIdFor(networkPassphrase: string): bigint {
   return networkPassphrase.startsWith('Public Global Stellar Network') ? 137n : 80002n;
 }
 
-export type EvmRequestCheck = { ok: true; kind: EvmCallKind; tx: UnsignedEip1559 } | { ok: false; reason: string };
+export type EvmRequestCheck =
+  | { ok: true; kind: EvmCallKind | 'execute_batch'; tx: UnsignedEip1559 }
+  | { ok: false; reason: string };
 
 /**
  * Check a Polygon request's payload on its own terms: it decodes as an unsigned
@@ -166,6 +169,7 @@ export function checkEvmRequest(
   payload: string,
   details: Record<string, unknown> | undefined,
   expectedChainId: bigint,
+  signWith?: string,
 ): EvmRequestCheck {
   let tx: UnsignedEip1559;
   try {
@@ -177,7 +181,10 @@ export function checkEvmRequest(
     return { ok: false, reason: `the transaction is for chain ${tx.chainId}, not ${expectedChainId}` };
   }
   if (tx.accessListLength !== 0) return { ok: false, reason: 'an access list is never part of a platform transaction' };
-  const recognized = recognizeEvmCall(tx);
+  const recognized =
+    tx.data.startsWith(EXECUTE_BATCH_SELECTOR) || details?.calls !== undefined
+      ? checkExecuteBatch(tx, details, signWith)
+      : recognizeEvmCall(tx);
   if (!recognized.ok) return recognized;
 
   const to = typeof details?.to === 'string' ? details.to.toLowerCase() : null;
@@ -190,4 +197,160 @@ export function checkEvmRequest(
     return { ok: false, reason: 'the transaction does not make the call the request describes' };
   }
   return { ok: true, kind: recognized.kind, tx };
+}
+
+/**
+ * eth-infinitism Simple7702Account (account-abstraction v0.8), the one code a
+ * co-signed Polygon wallet delegates to for atomic batches. An authorization
+ * naming any other address hands the wallet's account to that code.
+ */
+export const BATCH_DELEGATE = '0x4cd241e8d1510e30b2076397afc7508ae59c66c9';
+
+/** The most calls one batch carries, custody's own cap. */
+export const MAX_BATCH_CALLS = 16;
+
+const EXECUTE_BATCH_SELECTOR = `0x${bytesToHex(
+  keccak_256(new TextEncoder().encode('executeBatch((address,uint256,bytes)[])')).subarray(0, 4),
+)}`;
+
+export interface EvmBatchCall {
+  /** Lowercase 0x address. */
+  to: string;
+  /** Wei, as a decimal string. */
+  value: string;
+  /** Lowercase 0x calldata. */
+  data: string;
+}
+
+const word = (value: bigint) => value.toString(16).padStart(64, '0');
+
+/** `executeBatch(Call[])` calldata in the ABI's canonical encoding, the one custody compiles. */
+export function encodeExecuteBatch(calls: readonly EvmBatchCall[]): string {
+  const heads: string[] = [];
+  const tails: string[] = [];
+  let offset = BigInt(32 * calls.length);
+  for (const call of calls) {
+    const data = call.data.replace(/^0x/i, '').toLowerCase();
+    const length = data.length / 2;
+    const padded = data.padEnd(Math.ceil(length / 32) * 64, '0');
+    const tuple = `${word(BigInt(call.to))}${word(BigInt(call.value))}${word(96n)}${word(BigInt(length))}${padded}`;
+    heads.push(word(offset));
+    tails.push(tuple);
+    offset += BigInt(tuple.length / 2);
+  }
+  return `${EXECUTE_BATCH_SELECTOR}${word(32n)}${word(BigInt(calls.length))}${heads.join('')}${tails.join('')}`;
+}
+
+/** The calls a request states (`details.calls`), normalized; null when they are not well formed. */
+function statedCalls(value: unknown): EvmBatchCall[] | null {
+  if (!Array.isArray(value)) return null;
+  const calls: EvmBatchCall[] = [];
+  for (const raw of value) {
+    const call = raw as { to?: unknown; value?: unknown; data?: unknown } | null;
+    if (!call || typeof call.to !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(call.to)) return null;
+    if (typeof call.value !== 'string' || !/^\d+$/.test(call.value)) return null;
+    if (typeof call.data !== 'string' || !/^0x([0-9a-fA-F]{2})*$/.test(call.data)) return null;
+    calls.push({ to: call.to.toLowerCase(), value: BigInt(call.value).toString(), data: call.data.toLowerCase() });
+  }
+  return calls;
+}
+
+/**
+ * An atomic batch: the wallet calls itself (its delegated code) with
+ * `executeBatch`, sends no POL with the call, and the calldata is exactly the
+ * calls the request states (`details.calls`), so the user is shown each call
+ * that runs. No call may target the wallet or the delegate, which would reach
+ * the account's own entry points around the checks on each call.
+ */
+function checkExecuteBatch(
+  tx: Pick<UnsignedEip1559, 'to' | 'value' | 'data'>,
+  details: Record<string, unknown> | undefined,
+  signWith: string | undefined,
+): { ok: true; kind: 'execute_batch' } | { ok: false; reason: string } {
+  const wallet = signWith?.toLowerCase();
+  if (!wallet || tx.to !== wallet) return { ok: false, reason: 'a batch is a call of the wallet to itself' };
+  if (!tx.data.startsWith(EXECUTE_BATCH_SELECTOR)) return { ok: false, reason: 'a self-call that is not executeBatch' };
+  if (tx.value !== 0n) return { ok: false, reason: 'a batch call that also sends POL is not recognized' };
+  const calls = statedCalls(details?.calls);
+  if (!calls) return { ok: false, reason: 'the request does not state the calls of the batch' };
+  if (calls.length === 0 || calls.length > MAX_BATCH_CALLS) {
+    return { ok: false, reason: `a batch carries 1 to ${MAX_BATCH_CALLS} calls, not ${calls.length}` };
+  }
+  if (calls.some((call) => call.to === wallet || call.to === BATCH_DELEGATE)) {
+    return { ok: false, reason: 'a batch call targets the wallet or its delegate' };
+  }
+  if (encodeExecuteBatch(calls) !== tx.data)
+    return { ok: false, reason: 'the batch does not make the calls the request states' };
+  return { ok: true, kind: 'execute_batch' };
+}
+
+function rlpLength(length: number, offset: number): Uint8Array {
+  if (length < 56) return Uint8Array.of(offset + length);
+  const bytes: number[] = [];
+  for (let n = length; n > 0; n = Math.floor(n / 256)) bytes.unshift(n % 256);
+  return Uint8Array.of(offset + 55 + bytes.length, ...bytes);
+}
+
+function rlpString(bytes: Uint8Array): Uint8Array {
+  if (bytes.length === 1 && bytes[0]! < 0x80) return bytes;
+  return Uint8Array.of(...rlpLength(bytes.length, 0x80), ...bytes);
+}
+
+/** A non-negative integer as RLP's minimal big-endian bytes (zero is the empty string). */
+function rlpUint(value: bigint): Uint8Array {
+  if (value === 0n) return rlpString(new Uint8Array(0));
+  const hex = value.toString(16);
+  return rlpString(hexToBytes(hex.length % 2 ? `0${hex}` : hex));
+}
+
+/** EIP-7702's authorization digest: keccak256(0x05 || rlp([chainId, address, nonce])), lowercase hex without 0x. */
+export function evmAuthorizationDigest(tuple: { chainId: bigint; address: string; nonce: bigint }): string {
+  const items = [rlpUint(tuple.chainId), rlpString(hexToBytes(tuple.address.replace(/^0x/i, ''))), rlpUint(tuple.nonce)];
+  const body = items.reduce((total, item) => total + item.length, 0);
+  const list = Uint8Array.of(...rlpLength(body, 0xc0), ...items.flatMap((item) => [...item]));
+  return bytesToHex(keccak_256(Uint8Array.of(0x05, ...list)));
+}
+
+export type EvmAuthorizationCheck = { ok: true; digest: string } | { ok: false; reason: string; digest?: string };
+
+/**
+ * Check an `EVM_AUTHORIZATION` request: its payload is the EIP-7702 tuple
+ * (`{ chainId, address, nonce }`), it delegates to the batch delegate and to
+ * nothing else, it is for this network's chain (never chain 0, which would be
+ * valid on every EVM chain), and the digest recomputed here is the one Pollar
+ * asks to sign.
+ */
+export function checkEvmAuthorizationRequest(
+  payload: string,
+  payloadHash: string,
+  expectedChainId: bigint,
+): EvmAuthorizationCheck {
+  let tuple: { chainId?: unknown; address?: unknown; nonce?: unknown };
+  try {
+    tuple = JSON.parse(payload) as typeof tuple;
+  } catch {
+    return { ok: false, reason: 'the authorization payload is not readable' };
+  }
+  const integer = (value: unknown) =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+      ? BigInt(value)
+      : typeof value === 'string' && /^\d+$/.test(value)
+        ? BigInt(value)
+        : null;
+  const chainId = integer(tuple?.chainId);
+  const nonce = integer(tuple?.nonce);
+  const address = typeof tuple?.address === 'string' ? tuple.address.toLowerCase() : null;
+  if (chainId === null || nonce === null || !address || !/^0x[0-9a-f]{40}$/.test(address)) {
+    return { ok: false, reason: 'the authorization payload is not an EIP-7702 tuple' };
+  }
+  if (address !== BATCH_DELEGATE)
+    return { ok: false, reason: `the authorization delegates to ${address}, not the batch delegate` };
+  if (chainId !== expectedChainId) {
+    return { ok: false, reason: `the authorization is for chain ${chainId}, not ${expectedChainId}` };
+  }
+  const digest = evmAuthorizationDigest({ chainId, address, nonce });
+  if (digest !== payloadHash.replace(/^0x/i, '').toLowerCase()) {
+    return { ok: false, reason: 'the authorization does not hash to what Pollar asks to sign', digest };
+  }
+  return { ok: true, digest };
 }

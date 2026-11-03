@@ -17,7 +17,7 @@ import { PollarApiError } from '../types';
 import { bytesToHex, compressedPublicKeyHex, encodeStamp, rawSignatureToDer } from './encoding';
 import { checkCustodySwitchStep, type CustodySwitchStep } from './custody';
 import { CosignRecovery } from './recovery';
-import { checkEvmRequest, polygonChainIdFor } from './evm';
+import { checkEvmAuthorizationRequest, checkEvmRequest, polygonChainIdFor } from './evm';
 import { checkSolanaRequest } from './solana';
 import { stellarAuthEntryHashHex } from './stellar-auth-entry';
 import { stellarTransactionHashHex } from './stellar-hash';
@@ -299,6 +299,30 @@ export class CosignManager {
       };
     }
 
+    if (request.kind === 'EVM_AUTHORIZATION') {
+      // The wallet's EIP-7702 delegation: secp256k1 over the digest recomputed here, never over Pollar's word for it.
+      if (request.network !== 'POLYGON') return { ok: false, reason: 'an EVM authorization for a chain that is not Polygon' };
+      const check = checkEvmAuthorizationRequest(
+        request.unsignedPayload,
+        request.payloadHash,
+        polygonChainIdFor(this.deps.networkPassphrase()),
+      );
+      if (!check.ok) return { ok: false, reason: check.reason, ...(check.digest ? { localHash: check.digest } : {}) };
+      return {
+        ok: true,
+        localHash: check.digest,
+        proposal: {
+          path: '/public/v1/submit/sign_raw_payload',
+          body: signed('ACTIVITY_TYPE_SIGN_RAW_PAYLOAD_V2', {
+            signWith: request.signWith,
+            payload: check.digest,
+            encoding: 'PAYLOAD_ENCODING_HEXADECIMAL',
+            hashFunction: 'HASH_FUNCTION_NO_OP',
+          }),
+        },
+      };
+    }
+
     if (request.network === 'STELLAR') {
       // An AUTH_ENTRY payload is a Soroban authorization entry, signed the same
       // way as a transaction: ed25519 over the hash recomputed here.
@@ -362,7 +386,12 @@ export class CosignManager {
     if (request.network === 'POLYGON') {
       // The payload is read here, not only compared: the call it makes must be
       // one the platform asks for, and the one the request says it is.
-      const check = checkEvmRequest(request.unsignedPayload, request.details, polygonChainIdFor(this.deps.networkPassphrase()));
+      const check = checkEvmRequest(
+        request.unsignedPayload,
+        request.details,
+        polygonChainIdFor(this.deps.networkPassphrase()),
+        request.signWith,
+      );
       if (!check.ok) return { ok: false, reason: check.reason };
       const localHash = request.unsignedPayload.replace(/^0x/i, '').toLowerCase();
       return {

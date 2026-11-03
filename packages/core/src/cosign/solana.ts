@@ -5,8 +5,9 @@ import { bytesToHex, hexToBytes } from './encoding';
 /**
  * The device's own reading of a Solana co-sign request: the unsigned
  * transaction decoded by hand (Solana's wire format, no Solana library), and
- * the CCTP burn, the SOL / SPL transfer or the aggregator swap it carries
- * checked against what the request says it is. A shape this reader does not
+ * the CCTP burn, the SOL / SPL transfer, the aggregator swap or the third
+ * party's Earn or swap transaction it carries checked against what the request
+ * says it is. A shape this reader does not
  * know is "not recognized", never guessed, and is not approved.
  */
 
@@ -438,9 +439,114 @@ function checkSolanaSwap(
   return { ok: true };
 }
 
+/** A decimal amount in base units; null when it is not a plain decimal within `decimals`. */
+function decimalUnits(amount: unknown, decimals: number): bigint | null {
+  if (typeof amount !== 'string' || !/^\d+(\.\d+)?$/.test(amount)) return null;
+  const [whole = '0', fraction = ''] = amount.split('.');
+  if (fraction.length > decimals) return null;
+  return BigInt(`${whole}${fraction.padEnd(decimals, '0')}`);
+}
+
 /**
- * Check a Solana request before voting. A request declared as a swap
- * (`operation: 'swap'`) is read as one, lookup tables allowed. A request declared as a CCTP burn
+ * Check a transaction a third party compiled for the user: an Earn deposit or
+ * withdrawal (`earn_deposit`, `earn_withdraw`) or a swap on the `multichain`
+ * venue. The programs it calls come from the platform's allowlist, which this
+ * device does not hold, and what they do inside is not readable here; custody
+ * simulates the transaction and bounds what it may take from the wallet before
+ * it reaches this device. What is checked is everything the top level can do:
+ * the fee is paid by the account the request names (`details.feePayer`, the
+ * wallet itself for Earn), the wallet and that payer are its only signers, it
+ * burns nothing over CCTP, and beside compute budget, memos and the protocol's
+ * own calls it may only create one of the wallet's own token accounts, wrap at
+ * most `maxWrap` lamports of the wallet's SOL into its own wrapped SOL account,
+ * sync it, and close one of the wallet's token accounts back to the wallet.
+ * Nothing at the top level may move SOL or tokens anywhere else.
+ */
+function checkThirdPartyTransaction(
+  tx: DecodedSolanaTransaction,
+  user: string,
+  payer: string,
+  maxWrap: bigint,
+): { ok: true } | { ok: false; reason: string } {
+  if (tx.feePayer !== payer) return { ok: false, reason: 'the fee is not paid by the account the request names' };
+  if (!tx.signers.includes(user)) return { ok: false, reason: 'the signing account does not sign the transaction' };
+  if (tx.signers.some((signer) => signer !== user && signer !== payer)) {
+    return { ok: false, reason: 'the transaction asks for a signer other than the user and the fee payer' };
+  }
+  const wrappedSol = associatedTokenAddress(user, WRAPPED_SOL_MINT);
+  let protocolCalls = 0;
+  let wrapped = 0n;
+  for (const ix of tx.instructions) {
+    if (ix.program === COMPUTE_BUDGET || MEMO_PROGRAMS.has(ix.program)) continue;
+    if (ix.program === TOKEN_MESSENGER_MINTER_V2) return { ok: false, reason: 'a CCTP burn the request does not declare' };
+    if (ix.program === ASSOCIATED_TOKEN_PROGRAM) {
+      // [payer, associated account, owner, mint, system program, token program]; Create or CreateIdempotent.
+      const createsOwn =
+        (ix.data.length === 0 || (ix.data.length === 1 && ix.data[0] === 1)) &&
+        ix.accounts[2] === user &&
+        (ix.accounts[0] === user || ix.accounts[0] === payer);
+      if (!createsOwn) return { ok: false, reason: "an account creation that is not one of the user's token accounts" };
+      continue;
+    }
+    if (ix.program === SYSTEM_PROGRAM) {
+      const wraps =
+        ix.data.length === 12 &&
+        u32le(ix.data.subarray(0, 4)) === SYSTEM_TRANSFER &&
+        ix.accounts[0] === user &&
+        ix.accounts[1] === wrappedSol;
+      if (!wraps) return { ok: false, reason: "a system instruction that is not wrapping the user's SOL" };
+      wrapped += u64le(ix.data.subarray(4, 12));
+      continue;
+    }
+    if (ix.program === TOKEN_PROGRAM) {
+      if (ix.data.length === 1 && ix.data[0] === TOKEN_SYNC_NATIVE && ix.accounts[0] === wrappedSol) continue;
+      // [account, destination, owner]
+      if (ix.data.length === 1 && ix.data[0] === TOKEN_CLOSE_ACCOUNT && ix.accounts[1] === user && ix.accounts[2] === user) {
+        continue;
+      }
+      return { ok: false, reason: 'a token instruction that moves funds at the top level' };
+    }
+    protocolCalls++;
+  }
+  if (protocolCalls === 0) return { ok: false, reason: 'the transaction calls no protocol' };
+  if (wrapped > maxWrap) return { ok: false, reason: 'the transaction wraps more SOL than the request moves' };
+  return { ok: true };
+}
+
+/** The Earn and `multichain` swap requests: decoded with lookup tables, fee-capped, then read as a third party's transaction. */
+function checkThirdPartyRequest(
+  unsignedPayload: string,
+  request: { operation?: string | undefined; details?: Record<string, unknown> | undefined; signWith: string },
+): { ok: true } | { ok: false; reason: string } {
+  let tx: DecodedSolanaTransaction;
+  try {
+    tx = decodeSolanaTransaction(unsignedPayload, { allowLookupTables: true });
+  } catch (err) {
+    return { ok: false, reason: `the transaction is not readable: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  const fee = checkSolanaFee(tx);
+  if (!fee.ok) return fee;
+  const details = request.details ?? {};
+  const payer = typeof details.feePayer === 'string' ? details.feePayer : null;
+  if (!payer) return { ok: false, reason: 'the request does not name who pays the fee' };
+  if (request.operation === 'swap') {
+    const inAmount = typeof details.inAmount === 'string' && /^\d+$/.test(details.inAmount) ? BigInt(details.inAmount) : null;
+    if (inAmount === null) return { ok: false, reason: 'the request does not state the swap it carries' };
+    return checkThirdPartyTransaction(tx, request.signWith, payer, inAmount);
+  }
+  // The wallet pays its own Earn fee: the provider's transaction fixes the fee payer.
+  if (payer !== request.signWith) return { ok: false, reason: 'an Earn transaction paid by another account' };
+  const amount =
+    request.operation === 'earn_deposit' && details.mint === WRAPPED_SOL_MINT ? decimalUnits(details.amount, 9) : 0n;
+  if (amount === null) return { ok: false, reason: 'the request does not state the amount it moves' };
+  return checkThirdPartyTransaction(tx, request.signWith, payer, amount);
+}
+
+/**
+ * Check a Solana request before voting. An Earn request (`earn_deposit`,
+ * `earn_withdraw`) and a swap on the `multichain` venue are a third party's
+ * transaction and read as one (see `checkThirdPartyTransaction`). Any other
+ * request declared as a swap (`operation: 'swap'`) is read as one, lookup tables allowed. A request declared as a CCTP burn
  * (`operation: 'cctp_burn'`) must hold exactly one deposit_for_burn and nothing
  * but compute-budget instructions beside it, burn from the signing account,
  * have the fee and the event account's rent paid by the account the request
@@ -452,6 +558,13 @@ export function checkSolanaRequest(
   unsignedPayload: string,
   request: { operation?: string | undefined; details?: Record<string, unknown> | undefined; signWith: string },
 ): { ok: true } | { ok: false; reason: string } {
+  if (
+    request.operation === 'earn_deposit' ||
+    request.operation === 'earn_withdraw' ||
+    (request.operation === 'swap' && request.details?.provider === 'multichain')
+  ) {
+    return checkThirdPartyRequest(unsignedPayload, request);
+  }
   if (request.operation === 'swap') {
     let swap: DecodedSolanaTransaction;
     try {
