@@ -2,6 +2,7 @@
 
 import {
   isPollarApiError,
+  isPollarNetworkError,
   type CardBalance,
   type CardDepositAddress,
   type CardFunding,
@@ -140,6 +141,7 @@ function errorText(e: unknown, fallback: string, copy: CardCopy): string {
     if (typeof message === 'string' && message) return message;
     return e.code;
   }
+  if (isPollarNetworkError(e)) return copy.networkError;
   return e instanceof Error && e.message ? e.message : fallback;
 }
 
@@ -162,6 +164,9 @@ export function CardModal({ onClose, initial }: CardModalProps) {
   const [deposit, setDeposit] = useState<CardDepositAddress[] | null>(null);
   const [fundings, setFundings] = useState<CardFunding[] | null>(null);
   const [fundAmount, setFundAmount] = useState(() => seededAmount(initial?.amount));
+  // Bumped by "Try again" after the first load failed: runs that load once more.
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadFailed, setLoadFailed] = useState(false);
   // One key per funding the user means to make: a double click or a retry after
   // a lost response gets that funding back instead of paying twice.
   const fundKey = useRef<string | null>(null);
@@ -242,13 +247,20 @@ export function CardModal({ onClose, initial }: CardModalProps) {
         if (!cancelled) {
           setProviders((cur) => cur ?? []);
           setError(errorText(e, copy.failed.load, copy));
+          setLoadFailed(true);
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [getClient, loadHolder, loadRequirements, loadCardData]);
+  }, [getClient, loadHolder, loadRequirements, loadCardData, loadAttempt]);
+
+  const retryLoad = () => {
+    setLoadFailed(false);
+    setError('');
+    setLoadAttempt((n) => n + 1);
+  };
 
   const stage = cardStage(holder, requirements);
 
@@ -1011,6 +1023,13 @@ export function CardModal({ onClose, initial }: CardModalProps) {
         )}
 
         {error && <div className="pollar-modal-error">{error}</div>}
+        {loadFailed && (
+          <div className="pollar-modal-actions">
+            <button type="button" className="pollar-btn-primary" onClick={retryLoad}>
+              {copy.retry}
+            </button>
+          </div>
+        )}
 
         <PollarModalFooter language={language} />
       </div>

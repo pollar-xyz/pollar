@@ -109,8 +109,8 @@ function rampFlow(details: Record<string, unknown>) {
     return out;
   };
   const from = { ...party(flow.from), self: true };
-  // A bridge and a swap land back in the user's own wallets.
-  const to = { ...party(flow.to), self: kind === 'bridge' || kind === 'swap' };
+  // A bridge and a swap land back in the user's own wallets, unless the step names who receives.
+  const to = { ...party(flow.to), self: (kind === 'bridge' || kind === 'swap') && !flow.to.label };
   return { kind: kind as 'bridge' | 'approve' | 'swap' | 'payment', from, to, via: asString(flow.via) };
 }
 

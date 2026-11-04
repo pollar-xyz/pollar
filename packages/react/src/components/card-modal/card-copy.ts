@@ -113,6 +113,9 @@ export interface CardCopy {
     crossing: string;
     noRoute: string;
   };
+  /** The server could not be reached, or did not answer in time. */
+  networkError: string;
+  retry: string;
 }
 
 export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
@@ -287,6 +290,8 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
       crossing: 'Your USDC crosses to the card network. It takes a few minutes, and the network fees are covered.',
       noRoute: 'Your wallets cannot fund this card right now.',
     },
+    networkError: 'We could not reach the card service. Check your connection and try again.',
+    retry: 'Try again',
   },
   es: {
     funding: {
@@ -459,6 +464,8 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
       crossing: 'Tus USDC cruzan a la red de la tarjeta. Toma unos minutos y las comisiones de red están cubiertas.',
       noRoute: 'Tus wallets no pueden fondear esta tarjeta por ahora.',
     },
+    networkError: 'No pudimos conectar con el servicio de la tarjeta. Revisa tu conexión e intenta de nuevo.',
+    retry: 'Intentar de nuevo',
   },
   pt: {
     funding: {
@@ -632,6 +639,8 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
       crossing: 'Seus USDC atravessam para a rede do cartão. Leva alguns minutos, e as taxas de rede estão cobertas.',
       noRoute: 'Suas carteiras não podem recarregar este cartão por enquanto.',
     },
+    networkError: 'Não conseguimos conectar ao serviço do cartão. Verifique sua conexão e tente novamente.',
+    retry: 'Tentar novamente',
   },
 };
 
@@ -650,6 +659,6 @@ export function fundingProblemText(error: string | null | undefined, copy: CardC
     return /token balance/i.test(raw) ? copy.fundingProblem.noBalance : copy.fundingProblem.noGas;
   }
   if (/insufficient_usdc/.test(raw)) return copy.fundingProblem.noBalance;
-  if (/^(payment_not_received|cosign_rejected|cosign_expired)/.test(raw)) return copy.fundingProblem.notPaid;
+  if (/^(payment_not_received|cosign_rejected|cosign_expired)/i.test(raw)) return copy.fundingProblem.notPaid;
   return copy.fundingProblem.failed;
 }

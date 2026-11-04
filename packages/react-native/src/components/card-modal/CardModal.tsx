@@ -1,5 +1,6 @@
 import {
   isPollarApiError,
+  isPollarNetworkError,
   type CardBalance,
   type CardDepositAddress,
   type CardFunding,
@@ -143,6 +144,7 @@ function errorText(e: unknown, fallback: string, copy: CardCopy): string {
     if (typeof message === 'string' && message) return message;
     return e.code;
   }
+  if (isPollarNetworkError(e)) return copy.networkError;
   return e instanceof Error && e.message ? e.message : fallback;
 }
 
@@ -209,6 +211,9 @@ export function CardModal({ onClose, initial }: CardModalProps) {
   const [transactions, setTransactions] = useState<CardTransaction[] | null>(null);
   const [deposit, setDeposit] = useState<CardDepositAddress[] | null>(null);
   const [fundings, setFundings] = useState<CardFunding[] | null>(null);
+  // Bumped by "Try again" after the first load failed: runs that load once more.
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [fundAmount, setFundAmount] = useState(
     /^\d+(\.\d+)?$/.test(initial?.amount?.trim() ?? '') ? initial!.amount!.trim() : '',
   );
@@ -302,9 +307,16 @@ export function CardModal({ onClose, initial }: CardModalProps) {
         if (!mounted.current) return;
         setProviders((cur) => cur ?? []);
         setError(errorText(e, copy.failed.load, copy));
+        setLoadFailed(true);
       }
     })();
-  }, [getClient, loadHolder, loadRequirements, loadCardData]);
+  }, [getClient, loadHolder, loadRequirements, loadCardData, loadAttempt]);
+
+  const retryLoad = () => {
+    setLoadFailed(false);
+    setError('');
+    setLoadAttempt((n) => n + 1);
+  };
 
   const stage = cardStage(holder, requirements);
 
@@ -1005,6 +1017,7 @@ export function CardModal({ onClose, initial }: CardModalProps) {
                 {error}
               </Text>
             )}
+            {loadFailed && primary(copy.retry, retryLoad)}
           </ScrollView>
           <PollarModalFooter language={language} />
         </View>

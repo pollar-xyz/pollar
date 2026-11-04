@@ -215,6 +215,10 @@
   chains and tells when the funding crosses. The app pays the network fees of
   every route. `CardFunding` carries `depositChain`, `route` and
   `bridgeTransferId`. Requires an sdk-api with `/v3/cards/funding/routes`.
+- `<CardModal>` opens from the stored card during a provider outage, says when
+  it cannot reach the service instead of showing a raw timeout, and offers
+  **Try again**. A funding's review names the card as the destination, not the
+  user's wallet, and a rejected funding reads as not sent.
 - `<CardModal>`, web and React Native, says why a funding failed in the
   user's language (no SOL for the network fee, not enough USDC, the payment
   not sent) instead of showing the wallet service's sentence, and a funding
