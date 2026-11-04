@@ -1590,14 +1590,27 @@ export type CardProviderParams = { cardProviderId?: string };
 export type CardFundingStatus = 'CREATED' | 'SENT' | 'BURNED' | 'ATTESTED' | 'MINTED' | 'CREDITED' | 'FAILED';
 
 /** The chain the user's wallet pays a card funding from. */
-export type CardFundingChain = 'STELLAR' | 'SOLANA';
+export type CardFundingChain = 'STELLAR' | 'SOLANA' | 'POLYGON';
+
+/** How a funding reaches the provider: a transfer on a chain it credits, or CCTP across to one. */
+export type CardFundingRouteKind = 'DIRECT' | 'CCTP';
+
+/** One chain the user can fund the card from, as {@link PollarClient.getCardFundingRoutes} lists it. */
+export interface CardFundingRoute {
+  source: CardFundingChain;
+  /** The chain the provider receives the USDC on. */
+  deposit: CardFundingChain;
+  route: CardFundingRouteKind;
+  /** The user's wallet that pays. */
+  wallet: string;
+}
 
 /**
  * One transfer from the user's wallet to the card's collateral. It moves on its
- * own once paid. From Stellar: CREATED (waiting for the payment) -> BURNED ->
- * ATTESTED -> MINTED -> CREDITED (the provider booked the deposit). From Solana,
- * straight to the provider's address: CREATED -> SENT -> CREDITED. FAILED
- * carries `error`.
+ * own once paid. Across chains (`route` CCTP): CREATED (waiting for the payment)
+ * -> BURNED -> ATTESTED -> MINTED -> CREDITED (the provider booked the deposit).
+ * Straight to the provider's address (`route` DIRECT): CREATED -> SENT ->
+ * CREDITED. FAILED carries `error`.
  */
 export interface CardFunding {
   id: string;
@@ -1605,10 +1618,15 @@ export interface CardFunding {
   amount: string;
   asset: string;
   /** The chain the user's wallet pays from. */
-  chain: CardFundingChain | 'POLYGON';
+  chain: CardFundingChain;
+  /** The chain of `depositAddress`. */
+  depositChain: CardFundingChain;
+  route: CardFundingRouteKind;
+  /** The bridge transfer that moves it, when it runs on one; follow it with {@link PollarClient.getBridgeTransfer}. */
+  bridgeTransferId: string | null;
   depositAddress: string;
   chainId: number;
-  /** SOLANA: the user's transfer signature. */
+  /** The user's transaction on `chain`, once there is one. */
   sourceTxHash: string | null;
   stellarTxHash: string | null;
   burnTxHash: string | null;

@@ -42,6 +42,7 @@ import {
   getCardBalance,
   getCardDepositAddresses,
   getCardFunding,
+  getCardFundingRoutes,
   getCardHolder,
   getCardOccupations,
   getCardProviders,
@@ -149,6 +150,7 @@ import {
   CardFunding,
   CardFundingChain,
   CardFundingOutcome,
+  CardFundingRoute,
   BridgeConfig,
   BridgeQuote,
   BridgeQuoteParams,
@@ -5589,13 +5591,32 @@ export class PollarClient {
    * when retrying it (a double click, a response that never arrived) and the
    * server returns the funding it already started instead of paying again;
    * a new funding needs a new key.
+   *
+   * With `chain`, Pollar finds the route to the provider from that chain
+   * ({@link getCardFundingRoutes}): a transfer on a chain it credits, or CCTP
+   * across to one. An external wallet signs that burn through `signBridgeStep`,
+   * by default {@link signBridgeStep} with the handlers the app registered.
    */
   async fundCard(
-    params: CardProviderParams & { amount: string; chain?: CardFundingChain; idempotencyKey?: string },
+    params: CardProviderParams & {
+      amount: string;
+      chain?: CardFundingChain;
+      idempotencyKey?: string;
+      signBridgeStep?: (transferId: string, actionId: string) => Promise<BridgeTransfer>;
+    },
   ): Promise<CardFundingOutcome> {
-    const started = await createCardFunding(this._api, params);
+    const { signBridgeStep, ...body } = params;
+    const started = await createCardFunding(this._api, body);
     const pending = started.pendingSignature;
     if (!pending) return { status: 'ok', funding: started.funding };
+
+    if (pending.kind === 'bridge') {
+      return this._settleCardTransfer(
+        started.funding,
+        pending.transferId,
+        signBridgeStep ?? ((transferId, actionId) => this.signBridgeStep(transferId, actionId)),
+      );
+    }
 
     if (pending.kind === 'cosign') {
       const { request } = pending;
@@ -5645,6 +5666,45 @@ export class PollarClient {
     if (signed.status !== 'signed') return { status: 'cancelled', funding: started.funding };
     const { funding } = await submitCardFundingSignature(this._api, started.funding.id, { signedXdr: signed.signedXdr });
     return { status: 'ok', funding };
+  }
+
+  /**
+   * Takes a funding's transfer through what it waits on from this device, every
+   * step of the burn: a co-signed wallet votes each request here, an external
+   * one signs each payload. Once the burn is out, the server moves it.
+   */
+  private async _settleCardTransfer(
+    funding: CardFunding,
+    transferId: string,
+    signStep: (transferId: string, actionId: string) => Promise<BridgeTransfer>,
+  ): Promise<CardFundingOutcome> {
+    let seen: string | null = null;
+    for (;;) {
+      const previous = seen;
+      const transfer = await pollBridgeTransfer(this._api, transferId, {
+        until: (t) => t.status !== 'PENDING' && (t.pendingAction?.actionId ?? null) !== previous,
+      });
+      if (transfer.status === 'FAILED') throw new Error(transfer.failure?.code ?? 'The funding payment failed');
+      const action = transfer.pendingAction;
+      if (!action) return { status: 'ok', funding: (await getCardFunding(this._api, funding.id)).funding };
+      seen = action.actionId;
+      if (action.kind === 'SIGNATURE') {
+        await signStep(transferId, action.actionId);
+        continue;
+      }
+      const request = await this.cosign.get(action.cosignRequestId);
+      const settled = await this._settleCosign(request, { intent: 'sign_and_send', phase: 'signing-submitting' });
+      if (settled.status === 'cosign_pending') return { status: 'cosign_pending', funding, request: settled.request };
+      if (settled.status === 'error') {
+        if (settled.code === 'SDK_COSIGN_REJECTED') return { status: 'cancelled', funding };
+        throw new Error(settled.message ?? settled.details ?? settled.code ?? 'Failed to send the funding payment');
+      }
+    }
+  }
+
+  /** The chains the user can fund the card from, and how each reaches the provider. Empty off mainnet. */
+  async getCardFundingRoutes(params: CardProviderParams = {}): Promise<CardFundingRoute[]> {
+    return (await getCardFundingRoutes(this._api, params.cardProviderId)).routes;
   }
 
   async getCardFunding(fundingId: string): Promise<CardFunding> {

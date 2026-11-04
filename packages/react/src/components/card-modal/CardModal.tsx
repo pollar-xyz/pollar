@@ -6,6 +6,7 @@ import {
   type CardDepositAddress,
   type CardFunding,
   type CardFundingChain,
+  type CardFundingRoute,
   type CardHolder,
   type CardIncomeRange,
   type CardInfo,
@@ -31,6 +32,8 @@ import { buildModalCssVars, modalChrome } from '../modal-theme';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
 import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
 import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
+import { BRIDGE_COPY } from '../bridge-modal/bridge-copy';
+import { signStepWithWallet } from '../bridge-modal/BridgeModal';
 import { CARD_COPY, CREDIT_DELAYED, fundingProblemText, type CardCopy } from './card-copy';
 import { blockedStepMessage, cardStage, pendingFromRequirement, requiredCardStep, type PendingCardStep } from './card-kyc';
 import '../shared.css';
@@ -68,14 +71,11 @@ function newFundingKey(): string {
   return `fund-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/** The states a funding in flight goes through, by the chain it is paid from: the step is the position. */
-const FUNDING_STEPS: Record<CardFundingChain, string[]> = {
-  STELLAR: ['CREATED', 'BURNED', 'ATTESTED', 'MINTED'],
-  SOLANA: ['CREATED', 'SENT'],
+/** The states a funding in flight goes through, by its route: the step is the position. */
+const FUNDING_STEPS: Record<CardFunding['route'], string[]> = {
+  CCTP: ['CREATED', 'BURNED', 'ATTESTED', 'MINTED'],
+  DIRECT: ['CREATED', 'SENT'],
 };
-/** The chains a card can be funded from. */
-const FUNDING_CHAINS: readonly CardFundingChain[] = ['STELLAR', 'SOLANA'];
-const isFundingChain = (chain: string): chain is CardFundingChain => (FUNDING_CHAINS as readonly string[]).includes(chain);
 
 const INCOME_RANGES: CardIncomeRange[] = ['0-1000', '1000-5000', '5000-10000', '10000+'];
 
@@ -166,6 +166,7 @@ export function CardModal({ onClose, initial }: CardModalProps) {
   // a lost response gets that funding back instead of paying twice.
   const fundKey = useRef<string | null>(null);
   const [fundChain, setFundChain] = useState<CardFundingChain | null>(initial?.chain ?? null);
+  const [fundRoutes, setFundRoutes] = useState<CardFundingRoute[] | null>(null);
   // Until the card loads: whether to open its funding panel then.
   const fundPanelSeed = useRef(initial?.panel === 'fund');
   const [showManual, setShowManual] = useState(false);
@@ -181,9 +182,11 @@ export function CardModal({ onClose, initial }: CardModalProps) {
 
   const provider = providers?.[0] ?? null;
   const fundingAsset = provider?.fundingAssets[0] ?? 'USDC';
-  // The chains the user holds a wallet on that a card can be funded from, in the app's order.
-  const fundChains = useChains().chains.filter(isFundingChain);
+  // The chains Pollar found a route from: a wallet of the user's, on a chain the app enabled.
+  const appOrder = useChains().chains;
+  const fundChains = (fundRoutes ?? []).map((route) => route.source).sort((a, b) => appOrder.indexOf(a) - appOrder.indexOf(b));
   const selectedFundChain = (fundChain && fundChains.includes(fundChain) ? fundChain : null) ?? fundChains[0] ?? 'STELLAR';
+  const selectedRoute = fundRoutes?.find((route) => route.source === selectedFundChain);
   const fundAvailable = useWalletAvailable(panel === 'fund' ? { chain: selectedFundChain, code: fundingAsset } : null);
   const card = cards?.[0] ?? null;
   const expiry = card?.expMonth && card.expYear ? `${card.expMonth}/${card.expYear.slice(-2)}` : null;
@@ -381,7 +384,9 @@ export function CardModal({ onClose, initial }: CardModalProps) {
     run(
       'fund',
       async () => {
-        setFundings(await getClient().listCardFundings());
+        const [list, routes] = await Promise.all([getClient().listCardFundings(), getClient().getCardFundingRoutes()]);
+        setFundings(list);
+        setFundRoutes(routes);
         setPanel('fund');
       },
       copy.failed.loadFundings,
@@ -401,10 +406,12 @@ export function CardModal({ onClose, initial }: CardModalProps) {
         fundKey.current ??= newFundingKey();
         let outcome;
         try {
-          outcome = await getClient().fundCard({
+          const client = getClient();
+          outcome = await client.fundCard({
             amount: fundAmount.trim(),
             chain: selectedFundChain,
             idempotencyKey: fundKey.current,
+            signBridgeStep: (transferId, actionId) => signStepWithWallet(client, transferId, actionId, BRIDGE_COPY[language]),
           });
         } catch (e) {
           // The server answered, so the next attempt is a new funding; without an answer it keeps the key.
@@ -910,6 +917,8 @@ export function CardModal({ onClose, initial }: CardModalProps) {
               disabled={busy !== null}
               language={language}
             />
+            {fundRoutes?.length === 0 && <p className="pollar-card-note">{copy.fundingProblem.noRoute}</p>}
+            {selectedRoute?.route === 'CCTP' && <p className="pollar-card-note">{copy.fundingProblem.crossing}</p>}
             <AmountField
               id="pollar-card-fund-amount"
               label={copy.amount}
@@ -925,7 +934,7 @@ export function CardModal({ onClose, initial }: CardModalProps) {
                 type="button"
                 className="pollar-btn-primary"
                 onClick={() => void fund()}
-                disabled={busy !== null || !(Number(fundAmount) >= 1)}
+                disabled={busy !== null || !selectedRoute || !(Number(fundAmount) >= 1)}
               >
                 {busy === 'fund-send' ? copy.sending : copy.fundFromWallet}
               </button>
@@ -935,8 +944,8 @@ export function CardModal({ onClose, initial }: CardModalProps) {
               <>
                 <p className="pollar-card-section-title">{copy.yourFundings}</p>
                 {fundings.map((f) => {
-                  const state = (f.chain === 'SOLANA' ? copy.fundingSolana[f.status] : undefined) ?? copy.funding[f.status];
-                  const steps = FUNDING_STEPS[isFundingChain(f.chain) ? f.chain : 'STELLAR'];
+                  const state = (f.route === 'DIRECT' ? copy.fundingSolana[f.status] : undefined) ?? copy.funding[f.status];
+                  const steps = FUNDING_STEPS[f.route];
                   const step = steps.indexOf(f.status) + 1;
                   const inflight = FUNDING_INFLIGHT.has(f.status);
                   return (

@@ -3,7 +3,9 @@ import type {
   CardBalance,
   CardDepositAddress,
   CardFunding,
+  BridgePendingAction,
   CardFundingChain,
+  CardFundingRoute,
   CardHolder,
   CardInfo,
   CardKycInput,
@@ -151,12 +153,25 @@ export async function getCardSecrets(
  * What the user still signs after POST /cards/funding: an external Stellar
  * wallet signs `unsignedXdr`; a co-signed wallet (answered 202) approves `request`;
  * an external Solana wallet signs `unsignedTransaction` and sends it to
- * /tx/submit with `idempotencyKey`.
+ * /tx/submit with `idempotencyKey`; a funding that runs on a bridge transfer
+ * answers the action that transfer waits on.
  */
 export type CardFundingPendingSignature =
   | { kind: 'xdr'; unsignedXdr: string }
   | { kind: 'cosign'; request: CosignRequest }
-  | { kind: 'solana'; unsignedTransaction: string; idempotencyKey: string; lastValidBlockHeight: number };
+  | { kind: 'solana'; unsignedTransaction: string; idempotencyKey: string; lastValidBlockHeight: number }
+  | { kind: 'bridge'; transferId: string; action: BridgePendingAction };
+
+/** GET /cards/funding/routes */
+export async function getCardFundingRoutes(
+  api: PollarApiClient,
+  cardProviderId?: string,
+): Promise<{ routes: CardFundingRoute[] }> {
+  return content(
+    await api.GET('/cards/funding/routes', { params: { query: byProvider(cardProviderId) } }),
+    'Failed to load the card funding routes',
+  );
+}
 
 /** POST /cards/funding */
 export async function createCardFunding(

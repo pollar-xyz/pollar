@@ -86,7 +86,7 @@ function solanaBurnSigner(client: PollarClient, copy: BridgeCopy): RampSigningHa
  * wallet shows the transaction and the user approves it there. A signer the app
  * registered itself for that chain keeps signing.
  */
-async function signStepWithWallet(client: PollarClient, transferId: string, actionId: string, copy: BridgeCopy) {
+export async function signStepWithWallet(client: PollarClient, transferId: string, actionId: string, copy: BridgeCopy) {
   const lent: Array<() => void> = [];
   const lend = (chain: 'STELLAR' | 'SOLANA', encoding: string, handler: RampSigningHandler) => {
     try {

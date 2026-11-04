@@ -4,6 +4,7 @@ import {
   type CardDepositAddress,
   type CardFunding,
   type CardFundingChain,
+  type CardFundingRoute,
   type CardHolder,
   type CardIncomeRange,
   type CardInfo,
@@ -36,6 +37,8 @@ import { KycModal } from '../kyc-modal/KycModal';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
 import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
 import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
+import { BRIDGE_COPY } from '../bridge-modal/bridge-copy';
+import { signStepWithWallet } from '../bridge-modal/BridgeModal';
 import { CARD_COPY, CREDIT_DELAYED, fundingProblemText, type CardCopy } from './card-copy';
 import { blockedStepMessage, cardStage, pendingFromRequirement, requiredCardStep, type PendingCardStep } from './card-kyc';
 
@@ -69,17 +72,17 @@ function newFundingKey(): string {
   return `fund-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/** The states a funding in flight goes through, by the chain it is paid from: the step is the position. */
-const FUNDING_STEPS: Record<CardFundingChain, string[]> = {
-  STELLAR: ['CREATED', 'BURNED', 'ATTESTED', 'MINTED'],
-  SOLANA: ['CREATED', 'SENT'],
+/** The states a funding in flight goes through, by its route: the step is the position. */
+const FUNDING_STEPS: Record<CardFunding['route'], string[]> = {
+  CCTP: ['CREATED', 'BURNED', 'ATTESTED', 'MINTED'],
+  DIRECT: ['CREATED', 'SENT'],
 };
 /** The chains a card can be funded from, with their names. */
 const FUNDING_CHAINS: { value: CardFundingChain; label: string }[] = [
   { value: 'STELLAR', label: 'Stellar' },
   { value: 'SOLANA', label: 'Solana' },
+  { value: 'POLYGON', label: 'Polygon' },
 ];
-const isFundingChain = (chain: string): chain is CardFundingChain => FUNDING_CHAINS.some((c) => c.value === chain);
 
 const INCOME_RANGES: CardIncomeRange[] = ['0-1000', '1000-5000', '5000-10000', '10000+'];
 
@@ -181,7 +184,7 @@ function CardCopyButton({
 }
 
 export function CardModal({ onClose, initial }: CardModalProps) {
-  const { getClient, copyText, styles: pollarStyles, wallets, appConfig } = usePollar();
+  const { getClient, copyText, styles: pollarStyles, appConfig } = usePollar();
   const language = useModalLanguage();
   const copy = CARD_COPY[language];
   const { theme = 'light', accentColor = '#005DB4' } = pollarStyles;
@@ -235,14 +238,16 @@ export function CardModal({ onClose, initial }: CardModalProps) {
 
   const provider = providers?.[0] ?? null;
   const fundingAsset = provider?.fundingAssets[0] ?? 'USDC';
-  // The chains the user holds a wallet on that a card can be funded from, in the app's order.
+  // The chains Pollar found a route from: a wallet of the user's, on a chain the app enabled.
   const appChains = (appConfig?.application?.chains ?? []) as string[];
-  const fundChains = FUNDING_CHAINS.filter(
-    (c) => wallets.some((w) => (w.chain ?? 'STELLAR') === c.value) && (appChains.length === 0 || appChains.includes(c.value)),
-  ).sort((a, b) => appChains.indexOf(a.value) - appChains.indexOf(b.value));
+  const [fundRoutes, setFundRoutes] = useState<CardFundingRoute[] | null>(null);
+  const fundChains = FUNDING_CHAINS.filter((c) => fundRoutes?.some((route) => route.source === c.value)).sort(
+    (a, b) => appChains.indexOf(a.value) - appChains.indexOf(b.value),
+  );
   const [fundChain, setFundChain] = useState<CardFundingChain | null>(null);
   const seededChain = fundChains.some((c) => c.value === initial?.chain) ? initial?.chain : undefined;
   const selectedFundChain = fundChain ?? seededChain ?? fundChains[0]?.value ?? 'STELLAR';
+  const selectedRoute = fundRoutes?.find((route) => route.source === selectedFundChain);
   const fundAvailable = useWalletAvailable(panel === 'fund' ? { chain: selectedFundChain, code: fundingAsset } : null);
   const card = cards?.[0] ?? null;
   const expiry = card?.expMonth && card.expYear ? `${card.expMonth}/${card.expYear.slice(-2)}` : null;
@@ -418,9 +423,10 @@ export function CardModal({ onClose, initial }: CardModalProps) {
     run(
       'fund',
       async () => {
-        const list = await getClient().listCardFundings();
+        const [list, routes] = await Promise.all([getClient().listCardFundings(), getClient().getCardFundingRoutes()]);
         if (!mounted.current) return;
         setFundings(list);
+        setFundRoutes(routes);
         setPanel('fund');
       },
       copy.failed.loadFundings,
@@ -442,10 +448,12 @@ export function CardModal({ onClose, initial }: CardModalProps) {
         fundKey.current ??= newFundingKey();
         let outcome;
         try {
-          outcome = await getClient().fundCard({
+          const client = getClient();
+          outcome = await client.fundCard({
             amount: fundAmount.trim(),
             chain: selectedFundChain,
             idempotencyKey: fundKey.current,
+            signBridgeStep: (transferId, actionId) => signStepWithWallet(client, transferId, actionId, BRIDGE_COPY[language]),
           });
         } catch (e) {
           // The server answered, so the next attempt is a new funding; without an answer it keeps the key.
@@ -896,6 +904,12 @@ export function CardModal({ onClose, initial }: CardModalProps) {
                 </Text>
                 {fundChains.length > 1 &&
                   choices(COMMONS_COPY[language].network, selectedFundChain, fundChains, (chain) => setFundChain(chain))}
+                {fundRoutes?.length === 0 && (
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>{copy.fundingProblem.noRoute}</Text>
+                )}
+                {selectedRoute?.route === 'CCTP' && (
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>{copy.fundingProblem.crossing}</Text>
+                )}
                 <AmountField
                   theme={theme}
                   accentColor={accentColor}
@@ -910,15 +924,15 @@ export function CardModal({ onClose, initial }: CardModalProps) {
                 {primary(
                   busy === 'fund-send' ? copy.sending : copy.fundFromWallet,
                   () => void fund(),
-                  busy !== null || !(Number(fundAmount) >= 1),
+                  busy !== null || !selectedRoute || !(Number(fundAmount) >= 1),
                 )}
 
                 {fundings && fundings.length > 0 && (
                   <View>
                     <Text style={[styles.section, { color: colors.muted }]}>{copy.yourFundings}</Text>
                     {fundings.map((f) => {
-                      const state = (f.chain === 'SOLANA' ? copy.fundingSolana[f.status] : undefined) ?? copy.funding[f.status];
-                      const steps = FUNDING_STEPS[isFundingChain(f.chain) ? f.chain : 'STELLAR'];
+                      const state = (f.route === 'DIRECT' ? copy.fundingSolana[f.status] : undefined) ?? copy.funding[f.status];
+                      const steps = FUNDING_STEPS[f.route];
                       const step = steps.indexOf(f.status) + 1;
                       const inflight = FUNDING_INFLIGHT.has(f.status);
                       return (

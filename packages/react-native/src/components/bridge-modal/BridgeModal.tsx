@@ -94,7 +94,7 @@ function solanaBurnSigner(client: PollarClient, copy: BridgeCopy): RampSigningHa
 }
 
 /** Signs a bridge step with the user's connected wallet (Stellar or Solana), lent as the signer while it does (as the ramp widget does). */
-async function signStepWithWallet(client: PollarClient, transferId: string, actionId: string, copy: BridgeCopy) {
+export async function signStepWithWallet(client: PollarClient, transferId: string, actionId: string, copy: BridgeCopy) {
   const lent: Array<() => void> = [];
   const handler: RampSigningHandler = async (action) => {
     const wallet = client.getWallet();

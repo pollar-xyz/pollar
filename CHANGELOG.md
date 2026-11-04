@@ -205,6 +205,16 @@
   and React Native, keeps one key per attempt and drops it once the server
   answers. Requires an sdk-api that accepts `idempotencyKey` on
   `POST /v3/cards/funding`.
+- **Pollar finds the funding route.** `getCardFundingRoutes()` lists the chains
+  the user can fund the card from and how each reaches the provider: `DIRECT` on
+  a chain it credits, `CCTP` across to one, without a wallet of the user's on
+  that chain. `fundCard({ amount, chain })` takes any of them, Polygon included,
+  and signs every step of the burn the way the wallet signs: a co-signed wallet
+  votes here, an external one signs through `signBridgeStep` (by default the
+  handlers of `registerRampSigningHandler`). `<CardModal>` offers only those
+  chains and tells when the funding crosses. The app pays the network fees of
+  every route. `CardFunding` carries `depositChain`, `route` and
+  `bridgeTransferId`. Requires an sdk-api with `/v3/cards/funding/routes`.
 - `<CardModal>`, web and React Native, says why a funding failed in the
   user's language (no SOL for the network fee, not enough USDC, the payment
   not sent) instead of showing the wallet service's sentence, and a funding

@@ -78,6 +78,7 @@ const funding = (overrides = {}) => ({
 
 (async () => {
   const calls = [];
+  let transferNow = () => null;
   let pending = { kind: 'solana', unsignedTransaction: UNSIGNED, idempotencyKey: KEY, lastValidBlockHeight: 100 };
   globalThis.fetch = async (req) => {
     const url = new URL(req.url);
@@ -103,6 +104,9 @@ const funding = (overrides = {}) => ({
         code: 'SDK_CARDS_FUNDING_STATUS',
         content: { funding: funding({ status: 'SENT', sourceTxHash: 'sig-1' }) },
       });
+    }
+    if (url.pathname.endsWith('/bridge/transfers/transfer-1')) {
+      return json(200, { success: true, code: 'SDK_BRIDGE_TRANSFER', content: { transfer: transferNow() } });
     }
     if (url.pathname.endsWith('/tx/submit')) {
       return json(200, {
@@ -170,6 +174,47 @@ const funding = (overrides = {}) => ({
   const paid = await custodial.fundCard({ amount: '1', chain: 'SOLANA' });
   check('fundCard returns the funding as created', paid.status === 'ok' && paid.funding.status === 'CREATED', paid);
   check('  without signing or submitting', !calls.some((c) => c.path.endsWith('/tx/submit')));
+
+  console.log('\n-- 4. A funding that crosses chains signs each step of its transfer, then the server moves it --');
+  const steps = ['approve', 'burn'].map((name) => ({
+    kind: 'SIGNATURE',
+    actionId: `action-${name}`,
+    chain: 'SOLANA',
+    payload: { encoding: 'solana-cctp-json', value: '{}' },
+    summary: name,
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  }));
+  let done = 0;
+  transferNow = () =>
+    done < steps.length
+      ? { id: 'transfer-1', status: 'AWAITING_ACTION', pendingAction: steps[done] }
+      : { id: 'transfer-1', status: 'BURNED', pendingAction: null };
+  pending = { kind: 'bridge', transferId: 'transfer-1', action: steps[0] };
+  const signed = [];
+  const crossed = await custodial.fundCard({
+    amount: '1',
+    chain: 'SOLANA',
+    signBridgeStep: async (transferId, actionId) => {
+      signed.push([transferId, actionId]);
+      done++;
+      return transferNow();
+    },
+  });
+  check(
+    'each step is signed once, in order',
+    JSON.stringify(signed) ===
+      JSON.stringify([
+        ['transfer-1', 'action-approve'],
+        ['transfer-1', 'action-burn'],
+      ]),
+    signed,
+  );
+  check('fundCard returns the funding read again once the burn is out', crossed.status === 'ok', crossed);
+
+  transferNow = () => ({ id: 'transfer-1', status: 'FAILED', pendingAction: null, failure: { code: 'CCTP_BURN_FAILED' } });
+  let failed = null;
+  await custodial.fundCard({ amount: '1', chain: 'SOLANA' }).catch((e) => (failed = e));
+  check('a transfer that failed is an error, not a funding under way', failed && failed.message === 'CCTP_BURN_FAILED', failed);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);

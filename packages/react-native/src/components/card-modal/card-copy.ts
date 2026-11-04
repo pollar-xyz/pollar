@@ -110,6 +110,8 @@ export interface CardCopy {
     notPaid: string;
     failed: string;
     delayed: string;
+    crossing: string;
+    noRoute: string;
   };
 }
 
@@ -118,11 +120,11 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
     funding: {
       CREATED: {
         title: 'Confirming your payment',
-        hint: 'Your USDC payment is being confirmed on Stellar. This takes a few seconds.',
+        hint: 'Your USDC payment is being confirmed. This takes a few seconds.',
       },
       BURNED: {
         title: 'Sending it to the card network',
-        hint: 'Your USDC left Stellar. Circle is confirming the transfer, usually in about a minute.',
+        hint: 'Your USDC left your wallet. Circle is confirming the transfer, usually within a few minutes.',
       },
       ATTESTED: {
         title: 'Crossing to the card network',
@@ -138,7 +140,7 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
     fundingSolana: {
       CREATED: {
         title: 'Confirming your payment',
-        hint: 'Your USDC payment is being confirmed on Solana. This takes a few seconds.',
+        hint: 'Your USDC payment is being confirmed. This takes a few seconds.',
       },
       SENT: {
         title: 'Arrived, crediting your card',
@@ -282,17 +284,19 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
       notPaid: 'The payment was not sent.',
       failed: 'The payment could not be completed. Please try again.',
       delayed: 'Taking longer than usual. We are following up with the card provider.',
+      crossing: 'Your USDC crosses to the card network. It takes a few minutes, and the network fees are covered.',
+      noRoute: 'Your wallets cannot fund this card right now.',
     },
   },
   es: {
     funding: {
       CREATED: {
         title: 'Confirmando tu pago',
-        hint: 'Tu pago en USDC se está confirmando en Stellar. Esto toma unos segundos.',
+        hint: 'Tu pago en USDC se está confirmando. Esto toma unos segundos.',
       },
       BURNED: {
         title: 'Enviándolo a la red de la tarjeta',
-        hint: 'Tus USDC salieron de Stellar. Circle está confirmando la transferencia, normalmente en un minuto.',
+        hint: 'Tus USDC salieron de tu wallet. Circle está confirmando la transferencia, normalmente en unos minutos.',
       },
       ATTESTED: {
         title: 'Cruzando a la red de la tarjeta',
@@ -308,7 +312,7 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
     fundingSolana: {
       CREATED: {
         title: 'Confirmando tu pago',
-        hint: 'Tu pago en USDC se está confirmando en Solana. Esto toma unos segundos.',
+        hint: 'Tu pago en USDC se está confirmando. Esto toma unos segundos.',
       },
       SENT: {
         title: 'Llegó, acreditando tu tarjeta',
@@ -452,17 +456,19 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
       notPaid: 'El pago no se envió.',
       failed: 'No se pudo completar el pago. Intenta de nuevo.',
       delayed: 'Está tardando más de lo normal. Estamos haciendo seguimiento con el emisor de la tarjeta.',
+      crossing: 'Tus USDC cruzan a la red de la tarjeta. Toma unos minutos y las comisiones de red están cubiertas.',
+      noRoute: 'Tus wallets no pueden fondear esta tarjeta por ahora.',
     },
   },
   pt: {
     funding: {
       CREATED: {
         title: 'Confirmando seu pagamento',
-        hint: 'Seu pagamento em USDC está sendo confirmado na Stellar. Isso leva alguns segundos.',
+        hint: 'Seu pagamento em USDC está sendo confirmado. Isso leva alguns segundos.',
       },
       BURNED: {
         title: 'Enviando para a rede do cartão',
-        hint: 'Seus USDC saíram da Stellar. A Circle está confirmando a transferência, normalmente em cerca de um minuto.',
+        hint: 'Seus USDC saíram da sua carteira. A Circle está confirmando a transferência, normalmente em alguns minutos.',
       },
       ATTESTED: {
         title: 'Atravessando para a rede do cartão',
@@ -478,7 +484,7 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
     fundingSolana: {
       CREATED: {
         title: 'Confirmando seu pagamento',
-        hint: 'Seu pagamento em USDC está sendo confirmado na Solana. Isso leva alguns segundos.',
+        hint: 'Seu pagamento em USDC está sendo confirmado. Isso leva alguns segundos.',
       },
       SENT: {
         title: 'Chegou, creditando seu cartão',
@@ -623,6 +629,8 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
       notPaid: 'O pagamento não foi enviado.',
       failed: 'Não foi possível concluir o pagamento. Tente novamente.',
       delayed: 'Está demorando mais que o normal. Estamos acompanhando com o emissor do cartão.',
+      crossing: 'Seus USDC atravessam para a rede do cartão. Leva alguns minutos, e as taxas de rede estão cobertas.',
+      noRoute: 'Suas carteiras não podem recarregar este cartão por enquanto.',
     },
   },
 };

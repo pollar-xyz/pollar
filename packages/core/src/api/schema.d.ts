@@ -878,6 +878,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cards/funding/routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get funding routes
+         * @description The chains the user can fund the card from, each with the wallet that pays and how it reaches the provider: `DIRECT` on a chain the provider credits, `CCTP` across to one. Send one of these as `chain` to POST /cards/funding.
+         */
+        get: operations["getCardsFundingRoutes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cards/funding": {
         parameters: {
             query?: never;
@@ -893,7 +913,7 @@ export interface paths {
         put?: never;
         /**
          * Fund the card from the wallet
-         * @description Moves USDC from the user's wallet on `chain` to the card collateral. STELLAR (default): to the provider's Polygon address through CCTP. SOLANA: straight to the provider's Solana address; the fee follows the app's sponsorship rules. Pollar's custodial wallet is paid at once (201). An external Stellar wallet receives `pendingSignature` `xdr` to sign and send to /funding/{fundingId}/signature (201). An external Solana wallet receives `pendingSignature` `solana`: sign `unsignedTransaction` and send it to /tx/submit with its `idempotencyKey` before `lastValidBlockHeight` (201). A co-signed wallet, on either chain, receives `pendingSignature` `cosign`, the request its device approves (202); the funding moves on once it is approved. With `idempotencyKey`, a retry returns the funding that key started, as it stands and without `pendingSignature` (200), and pays nothing; a failed funding stays failed, so a new attempt needs a new key.
+         * @description Moves USDC from the user's wallet on `chain` to the card collateral. STELLAR (default): to the provider's Polygon address through CCTP. SOLANA: straight to the provider's Solana address; the fee follows the app's sponsorship rules. Pollar's custodial wallet is paid at once (201). An external Stellar wallet receives `pendingSignature` `xdr` to sign and send to /funding/{fundingId}/signature (201). An external Solana wallet receives `pendingSignature` `solana`: sign `unsignedTransaction` and send it to /tx/submit with its `idempotencyKey` before `lastValidBlockHeight` (201). A co-signed wallet, on either chain, receives `pendingSignature` `cosign`, the request its device approves (202); the funding moves on once it is approved. With `chain` in the body Pollar finds the route: a funding that moves on a bridge transfer answers `pendingSignature` `bridge` when the wallet has to sign or approve (201). The app pays the network fees of every route. With `idempotencyKey`, a retry returns the funding that key started, as it stands and without `pendingSignature` (200), and pays nothing; a failed funding stays failed, so a new attempt needs a new key.
          */
         post: operations["postCardsFunding"];
         delete?: never;
@@ -8024,6 +8044,119 @@ export interface operations {
             };
         };
     };
+    getCardsFundingRoutes: {
+        parameters: {
+            query?: {
+                cardProviderId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_CARDS_FUNDING_ROUTES";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            routes: {
+                                /** @enum {string} */
+                                source: "STELLAR" | "POLYGON" | "SOLANA";
+                                /** @enum {string} */
+                                deposit: "STELLAR" | "POLYGON" | "SOLANA";
+                                /** @enum {string} */
+                                route: "DIRECT" | "CCTP";
+                                wallet: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider not configured or request rejected by it */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
     getCardsFunding: {
         parameters: {
             query?: {
@@ -8065,6 +8198,11 @@ export interface operations {
                                 /** @enum {string} */
                                 chain: "STELLAR" | "POLYGON" | "SOLANA";
                                 sourceTxHash: string | null;
+                                /** @enum {string} */
+                                depositChain: "STELLAR" | "POLYGON" | "SOLANA";
+                                /** @enum {string} */
+                                route: "DIRECT" | "CCTP";
+                                bridgeTransferId: string | null;
                             }[];
                         };
                     };
@@ -8160,7 +8298,7 @@ export interface operations {
                     cardProviderId?: string;
                     amount: string;
                     /** @enum {string} */
-                    chain?: "STELLAR" | "SOLANA";
+                    chain?: "STELLAR" | "SOLANA" | "POLYGON";
                     idempotencyKey?: string;
                 };
             };
@@ -8196,6 +8334,11 @@ export interface operations {
                                 /** @enum {string} */
                                 chain: "STELLAR" | "POLYGON" | "SOLANA";
                                 sourceTxHash: string | null;
+                                /** @enum {string} */
+                                depositChain: "STELLAR" | "POLYGON" | "SOLANA";
+                                /** @enum {string} */
+                                route: "DIRECT" | "CCTP";
+                                bridgeTransferId: string | null;
                             };
                         };
                     };
@@ -8231,6 +8374,11 @@ export interface operations {
                                 /** @enum {string} */
                                 chain: "STELLAR" | "POLYGON" | "SOLANA";
                                 sourceTxHash: string | null;
+                                /** @enum {string} */
+                                depositChain: "STELLAR" | "POLYGON" | "SOLANA";
+                                /** @enum {string} */
+                                route: "DIRECT" | "CCTP";
+                                bridgeTransferId: string | null;
                             };
                             pendingSignature?: {
                                 /** @constant */
@@ -8286,6 +8434,29 @@ export interface operations {
                                 unsignedTransaction: string;
                                 idempotencyKey: string;
                                 lastValidBlockHeight: number;
+                            } | {
+                                /** @constant */
+                                kind: "bridge";
+                                transferId: string;
+                                action: {
+                                    /** @constant */
+                                    kind: "SIGNATURE";
+                                    actionId: string;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "SOLANA" | "POLYGON";
+                                    payload: {
+                                        encoding: string;
+                                        value: string;
+                                    };
+                                    summary: string;
+                                    expiresAt: string;
+                                } | {
+                                    /** @constant */
+                                    kind: "COSIGN_APPROVAL";
+                                    actionId: string;
+                                    cosignRequestId: string;
+                                    summary: string;
+                                };
                             };
                         };
                     };
@@ -8321,6 +8492,11 @@ export interface operations {
                                 /** @enum {string} */
                                 chain: "STELLAR" | "POLYGON" | "SOLANA";
                                 sourceTxHash: string | null;
+                                /** @enum {string} */
+                                depositChain: "STELLAR" | "POLYGON" | "SOLANA";
+                                /** @enum {string} */
+                                route: "DIRECT" | "CCTP";
+                                bridgeTransferId: string | null;
                             };
                             pendingSignature?: {
                                 /** @constant */
@@ -8376,6 +8552,29 @@ export interface operations {
                                 unsignedTransaction: string;
                                 idempotencyKey: string;
                                 lastValidBlockHeight: number;
+                            } | {
+                                /** @constant */
+                                kind: "bridge";
+                                transferId: string;
+                                action: {
+                                    /** @constant */
+                                    kind: "SIGNATURE";
+                                    actionId: string;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "SOLANA" | "POLYGON";
+                                    payload: {
+                                        encoding: string;
+                                        value: string;
+                                    };
+                                    summary: string;
+                                    expiresAt: string;
+                                } | {
+                                    /** @constant */
+                                    kind: "COSIGN_APPROVAL";
+                                    actionId: string;
+                                    cosignRequestId: string;
+                                    summary: string;
+                                };
                             };
                         };
                     };
@@ -8499,6 +8698,11 @@ export interface operations {
                                 /** @enum {string} */
                                 chain: "STELLAR" | "POLYGON" | "SOLANA";
                                 sourceTxHash: string | null;
+                                /** @enum {string} */
+                                depositChain: "STELLAR" | "POLYGON" | "SOLANA";
+                                /** @enum {string} */
+                                route: "DIRECT" | "CCTP";
+                                bridgeTransferId: string | null;
                             };
                         };
                     };
@@ -8628,6 +8832,11 @@ export interface operations {
                                 /** @enum {string} */
                                 chain: "STELLAR" | "POLYGON" | "SOLANA";
                                 sourceTxHash: string | null;
+                                /** @enum {string} */
+                                depositChain: "STELLAR" | "POLYGON" | "SOLANA";
+                                /** @enum {string} */
+                                route: "DIRECT" | "CCTP";
+                                bridgeTransferId: string | null;
                             };
                         };
                     };
