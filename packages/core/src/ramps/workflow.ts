@@ -859,7 +859,7 @@ export function describeRampAction(
       const link = instructions.link ? safeRampUrl(instructions.link) : null;
       const page = { link, linkLabel: link ? (instructions.kind === 'qr' ? copy.openPaymentPage : copy.openStatusPage) : null };
       if (instructions.kind === 'qr') {
-        // Every EMV code starts 000201 and sdk-api reads them all as `pix`; only a real one pays in BRL.
+        // Every EMV code starts 000201; only a Pix one pays in BRL.
         const codeLabel = instructions.currency === 'BRL' ? copy.pixCopyPaste : copy.paymentCode;
         const scannable = instructions.scannable
           ? {

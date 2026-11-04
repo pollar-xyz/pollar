@@ -51,8 +51,7 @@ export async function getEarnPosition(
   api: PollarApiClient,
   query: { provider: EarnProviderId; opportunity: string; address: string },
 ): Promise<EarnPosition> {
-  // sdk-api takes `address` (or the older `publicKey`); its v3 document lists only `publicKey`.
-  const { data, error } = await api.GET('/earn/position', { params: { query: query as never } });
+  const { data, error } = await api.GET('/earn/position', { params: { query } });
   if (!data?.content || error) throw new Error(errMessage(error, 'Failed to load earn position'));
   return data.content as EarnPosition;
 }

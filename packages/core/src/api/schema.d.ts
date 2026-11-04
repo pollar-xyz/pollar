@@ -12235,7 +12235,7 @@ export interface operations {
                 };
             };
             /** @description Config error */
-            502: {
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12579,7 +12579,7 @@ export interface operations {
                 };
             };
             /** @description Quote error (RPC or aggregator) */
-            502: {
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12816,7 +12816,7 @@ export interface operations {
                 };
             };
             /** @description Aggregator or custody error */
-            502: {
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13215,8 +13215,8 @@ export interface operations {
                     };
                 };
             };
-            /** @description Provider error */
-            502: {
+            /** @description The provider or custody failed; try again in a moment */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13345,22 +13345,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Provider or RPC error */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description The provider is busy; try again in a moment */
+            /** @description The provider or custody failed; try again in a moment */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -13383,6 +13368,12 @@ export interface operations {
                 chain?: "SOLANA";
                 opportunity: string;
                 provider?: "blend" | "defindex";
+                /** @description Without `chain`, the Stellar address to read. */
+                address?: string;
+                /**
+                 * @deprecated
+                 * @description The older name of `address`, read when `address` is absent.
+                 */
                 publicKey?: string;
             };
             header?: never;
@@ -13509,22 +13500,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Provider or RPC error */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description The provider is busy; try again in a moment */
+            /** @description The provider or custody failed; try again in a moment */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -13807,22 +13783,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Build error */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description The provider is busy; try again in a moment */
+            /** @description The provider or custody failed; try again in a moment */
             503: {
                 headers: {
                     [name: string]: unknown;
