@@ -42,6 +42,10 @@ export const EARN_COPY: Record<
     profit: string;
     stale: string;
     actionUnavailable: (action: string) => string;
+    deposited: string;
+    depositDone: string;
+    withdrawDone: string;
+    positionNow: string;
   }
 > = {
   en: {
@@ -86,6 +90,10 @@ export const EARN_COPY: Record<
     stale: 'Last known figures; they refresh on their own.',
     actionUnavailable: (action) =>
       `This opportunity does not take ${action === 'deposit' ? 'deposits' : 'withdrawals'} right now.`,
+    deposited: 'Deposited',
+    depositDone: 'Deposit complete',
+    withdrawDone: 'Withdrawal complete',
+    positionNow: 'Your position now',
   },
   es: {
     title: 'Rendimientos',
@@ -129,6 +137,10 @@ export const EARN_COPY: Record<
     stale: 'Últimas cifras conocidas; se actualizan solas.',
     actionUnavailable: (action) =>
       `Esta oportunidad no acepta ${action === 'deposit' ? 'depósitos' : 'retiros'} en este momento.`,
+    deposited: 'Depositado',
+    depositDone: 'Depósito completado',
+    withdrawDone: 'Retiro completado',
+    positionNow: 'Tu posición ahora',
   },
   pt: {
     title: 'Rendimentos',
@@ -171,5 +183,9 @@ export const EARN_COPY: Record<
     profit: 'Ganho após taxas',
     stale: 'Últimos valores conhecidos; eles se atualizam sozinhos.',
     actionUnavailable: (action) => `Esta oportunidade não aceita ${action === 'deposit' ? 'depósitos' : 'saques'} no momento.`,
+    deposited: 'Depositado',
+    depositDone: 'Depósito concluído',
+    withdrawDone: 'Saque concluído',
+    positionNow: 'Sua posição agora',
   },
 };

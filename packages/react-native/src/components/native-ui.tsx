@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, Text, TextInput, View } from 'react-native';
 import type { TextInputProps } from 'react-native';
 import { usePollar } from '../context';
 import { useModalLanguage } from '../language';
@@ -141,6 +141,7 @@ export function ActionState({ action }: { action: ReturnType<typeof useAction> }
 }
 export function Choice<T extends string>({
   labels,
+  icons,
   label,
   options,
   value,
@@ -150,6 +151,8 @@ export function Choice<T extends string>({
   label: string;
   options: readonly T[];
   labels?: Partial<Record<T, string>>;
+  /** An image URL drawn before an option's label: a chain's logo. */
+  icons?: Partial<Record<T, string>>;
   value: T;
   onChange: (value: T) => void;
   disabled?: boolean;
@@ -175,8 +178,14 @@ export function Choice<T extends string>({
               borderRadius: 10,
               minHeight: 44,
               maxWidth: '100%',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
             }}
           >
+            {icons?.[option] ? (
+              <Image source={{ uri: icons[option] }} style={{ width: 18, height: 18, borderRadius: 9 }} />
+            ) : null}
             <Text style={{ color: option === value ? '#fff' : c.text }}>{labels?.[option] ?? option}</Text>
           </Pressable>
         ))}

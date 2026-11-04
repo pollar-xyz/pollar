@@ -259,7 +259,7 @@
   badge from it after the signature, and a co-sign outcome shows who paid.
 - `CosignRequest.appPaysFee` (a required boolean) is `true` when the fee payer
   of the payload is not the user (the Stellar source or fee-bump source, the
-  first Solana key). `<CosignModal>` then shows "Fee covered by the app" before
+  first Solana key). `<CosignModal>` then shows "The app pays the network fee" before
   the vote; any other request shows the badge only after the signature.
 - The email code input takes a one-time code the browser or keyboard
   autofills, and spreads it across the six boxes; a paste, or a code typed next
@@ -307,6 +307,31 @@
   it); on Solana it shows the APY after fees, the position and what it earned,
   and says when an opportunity does not take deposits or withdrawals right now.
   The React Native Earn panel gains the same network picker.
+- **Earn approvals and results say what moves.** A co-sign request or a
+  signature confirmation for `earn_deposit` or `earn_withdraw`, web and React
+  Native, reads "Deposit into USDC vault" or "Withdraw from USDC vault" (the
+  opportunity's name, in English, Spanish and Portuguese) instead of the raw
+  operation, and draws the asset with its logo moving between the wallet and
+  the opportunity on its chain, with the amount and asset, the network, and the
+  opportunity's APY after fees in the details. The name and APY come from the
+  last opportunities list the app read (`getSolanaEarnOpportunities`,
+  `getEarnOpportunities`); a request for one it has not read reads "Withdraw
+  0.2 USDC". The fee line follows the request's `details.sponsored` (or its fee
+  payer): "The app pays the network fee" or "You pay the network fee", and
+  nothing before the build has said. The protocol behind an opportunity is
+  never shown. Every fee badge now reads "The app pays the network fee" next to
+  "You pay the network fee".
+- `<EarnModal>` picks the network with the chains' logos, shows the asset's
+  logo next to the opportunity and the amount, and its position card gives the
+  opportunity's name, what was deposited, what it earned after fees, the
+  position and the APY after fees. Its result says what happened ("Deposited
+  1 USDC into the USDC vault on Solana", "Deposit complete" as the title),
+  draws the deposit as the approval does, shows the position read again after
+  it landed, who paid the network fee, and the explorer link with the chain's
+  logo. `TxStatusView` takes a `review`, a `successMessage` and a
+  `successExtra` for that. The React Native Earn panel shows the same: the
+  chains' logos, the opportunity with its asset's logo, the position in words
+  instead of raw JSON, and the result with its review and explorer link.
 - **Solana swaps that deliver to Polygon.** `getSolanaSwapOptions()` returns the
   Solana venues and `destinationChains`, the chains a swap can deliver to
   besides Solana. `getSolanaSwapQuote({ ..., destinationChain: 'POLYGON' })`

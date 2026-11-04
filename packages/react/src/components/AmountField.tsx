@@ -9,6 +9,7 @@
 
 import { useInheritedLanguage } from '../language-context';
 import type { PollarLanguage } from '@pollar/core';
+import type { ReactNode } from 'react';
 import { COMMONS_COPY } from './commons-copy';
 import './send-modal/SendModal.css';
 import './shared.css';
@@ -20,6 +21,8 @@ interface AmountFieldProps {
   onChange: (value: string) => void;
   /** The suffix inside the input: an asset code or a fiat currency. */
   unit?: string | undefined;
+  /** Drawn before `unit`: the asset's logo. */
+  unitIcon?: ReactNode;
   /**
    * What can be spent, in `unit`. Undefined hides the hint and Max (a fiat amount,
    * or a balance not read yet); null is a chain that could not be read.
@@ -45,6 +48,7 @@ export function AmountField({
   value,
   onChange,
   unit,
+  unitIcon,
   available,
   onMax,
   placeholder = '0.00',
@@ -91,6 +95,7 @@ export function AmountField({
               {copy.max}
             </button>
           )}
+          {unitIcon}
           {unit && <span>{unit}</span>}
         </div>
       </div>

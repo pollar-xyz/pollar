@@ -34,6 +34,10 @@ import { usePollar } from '../context';
 import { useModalLanguage } from '../language';
 import { FEATURE_COPY } from './feature-copy';
 import { ActionButton, ActionState, Card, Choice, Field, Label, ResultView, useAction } from './native-ui';
+import { CHAIN_LOGOS } from '../constants';
+import { InlineAssetLogo, TxExplorerLink, TxReview } from './tx-review/TxReview';
+import { TX_REVIEW_COPY } from './tx-review/tx-review-copy';
+import { earnOutcome, reviewForEarn, type EarnReviewParts } from './tx-review/tx-review-model';
 
 export type FeatureName =
   | 'authentication'
@@ -1156,10 +1160,30 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
     </Card>
   );
 }
+function earnExplorerUrl(chain: WalletChain, network: string, hash: string): string {
+  return chain === 'SOLANA'
+    ? `https://solscan.io/tx/${hash}${network === 'testnet' ? '?cluster=devnet' : ''}`
+    : `https://stellar.expert/explorer/${network === 'testnet' ? 'testnet' : 'public'}/tx/${hash}`;
+}
+/** The opportunity by its name, with the asset's logo next to it. */
+function EarnOpportunityName({ asset, name }: { asset: string; name: string }) {
+  const { theme = 'light', accentColor = '#005DB4' } = usePollar().styles;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <InlineAssetLogo asset={asset} theme={theme} accentColor={accentColor} />
+      <Label>{name}</Label>
+    </View>
+  );
+}
 export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined }) {
   const p = usePollar();
-  const copy = FEATURE_COPY[useModalLanguage()];
+  const language = useModalLanguage();
+  const copy = FEATURE_COPY[language];
+  const reviewCopy = TX_REVIEW_COPY[language];
+  const { theme = 'light', accentColor = '#005DB4' } = p.styles;
   const action = useAction();
+  // The operation sent, kept for its result once the form changes.
+  const [submission, setSubmission] = useState<EarnReviewParts | null>(null);
   const [providers, setProviders] = useState<EarnProviderId[]>([]);
   const [provider, setProvider] = useState<EarnProviderId>();
   const [opportunities, setOpportunities] = useState<EarnOpportunity[]>([]);
@@ -1178,6 +1202,7 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
   const seed = useRef(initial);
   const onSolana = earnChain === 'SOLANA';
   const selectedSolana = solanaOpportunities.find((o) => o.id === opportunity);
+  const selectedStellar = onSolana ? undefined : opportunities.find((o) => o.id === opportunity);
   const actionUnavailable = onSolana && !!selectedSolana && !selectedSolana.actions.includes(tab);
   async function refreshEarn() {
     setProvider(undefined);
@@ -1227,6 +1252,8 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
         <Choice
           label={copy.earn.network}
           disabled={action.busy}
+          labels={reviewCopy.chains}
+          icons={CHAIN_LOGOS}
           options={networks}
           value={earnChain}
           onChange={(v) => {
@@ -1289,21 +1316,27 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
             });
         }}
       />
-      {onSolana ? (
-        <>
-          <ResultView value={selectedSolana} />
-          <ResultView value={solanaPosition} />
-          {selectedSolana && <Label>{copy.earn.apyAfterFees((solanaPosition?.apy ?? selectedSolana.apy).toFixed(2))}</Label>}
-          {solanaPosition?.profit != null && (
-            <Label>{copy.earn.profit(`${solanaPosition.profit} ${selectedSolana?.asset.code ?? ''}`.trim())}</Label>
+      {onSolana
+        ? selectedSolana && (
+            <>
+              <EarnOpportunityName asset={selectedSolana.asset.code} name={selectedSolana.name} />
+              {solanaPosition && (
+                <Label>{copy.earn.deposited(`${solanaPosition.principal} ${selectedSolana.asset.code}`)}</Label>
+              )}
+              {solanaPosition?.profit != null && (
+                <Label>{copy.earn.profit(`${solanaPosition.profit} ${selectedSolana.asset.code}`)}</Label>
+              )}
+              {solanaPosition && <Label>{copy.earn.position(`${solanaPosition.balance} ${selectedSolana.asset.code}`)}</Label>}
+              <Label>{copy.earn.apyAfterFees((solanaPosition?.apy ?? selectedSolana.apy).toFixed(2))}</Label>
+            </>
+          )
+        : selectedStellar && (
+            <>
+              <EarnOpportunityName asset={selectedStellar.asset.code} name={selectedStellar.name} />
+              {position && <Label>{copy.earn.position(`${position.balance} ${selectedStellar.asset.code}`)}</Label>}
+              <Label>APY: {selectedStellar.apy.toFixed(2)}%</Label>
+            </>
           )}
-        </>
-      ) : (
-        <>
-          <ResultView value={opportunities.find((o) => o.id === opportunity)} />
-          <ResultView value={position} />
-        </>
-      )}
       <Field
         label={copy.amount}
         value={amount}
@@ -1344,6 +1377,18 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
             : void action.run(async () => {
                 setConfirmation(false);
                 arm();
+                const chosen = onSolana ? selectedSolana : selectedStellar;
+                setSubmission({
+                  action: tab,
+                  chain: earnChain,
+                  amount,
+                  // A DeFindex withdrawal is counted in shares, which are not the asset.
+                  asset: tab === 'withdraw' && position?.withdrawUnit === 'shares' ? undefined : chosen?.asset.code,
+                  name: chosen?.name,
+                  apy: onSolana ? (solanaPosition?.apy ?? selectedSolana?.apy) : selectedStellar?.apy,
+                  network: p.network,
+                  wallet: p.wallets.find((w) => (w.chain ?? 'STELLAR') === earnChain)?.address,
+                });
                 if (onSolana)
                   return tab === 'deposit'
                     ? p.earnSolanaDeposit({ opportunity, amount })
@@ -1355,6 +1400,31 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
         }
       />
       {!networks.length && <Label>{copy.earn.noProviders}</Label>}
+      {submission && p.tx.step === 'success' && (
+        <View style={{ gap: 12 }}>
+          <Label>{earnOutcome(submission, reviewCopy)}</Label>
+          <TxReview
+            data={reviewForEarn(
+              {
+                ...submission,
+                hash: { value: p.tx.hash, explorerUrl: earnExplorerUrl(submission.chain, p.network, p.tx.hash) },
+                ...(p.tx.sponsored !== undefined && { sponsored: p.tx.sponsored }),
+              },
+              reviewCopy,
+            )}
+            theme={theme}
+            accentColor={accentColor}
+            copyText={p.copyText}
+            language={language}
+          />
+          <TxExplorerLink
+            chain={submission.chain}
+            url={earnExplorerUrl(submission.chain, p.network, p.tx.hash)}
+            accentColor={accentColor}
+            language={language}
+          />
+        </View>
+      )}
       <TransactionStatus />
       <ActionState action={action} />
     </Card>

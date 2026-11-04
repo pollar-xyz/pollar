@@ -47,6 +47,8 @@ const reactNative = {
 };
 
 let ctx;
+// A Stellar Earn opportunity as getEarnOpportunities answers it.
+const opportunity = (id) => ({ id, name: `Pool ${id}`, apy: 4, asset: { code: 'USDC' } });
 function load(file) {
   const filename = path.resolve(__dirname, '..', file);
   const output = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
@@ -57,6 +59,8 @@ function load(file) {
     if (id === 'react-native') return reactNative;
     if (id === '@pollar/core') return core;
     if (id === 'react-native-qrcode-svg') return () => null;
+    if (id === 'react-native-svg')
+      return { __esModule: true, default: passthrough, Circle: () => null, Path: () => null, Rect: () => null };
     if (id === '../context' || id === '../../context' || id === './context') return { usePollar: () => ctx };
     if (id.startsWith('.')) {
       const base = path.join(path.dirname(file), id);
@@ -356,7 +360,7 @@ async function unmount() {
     const hashes = [];
     ctx = context({
       getEarnProviders: async () => ['defindex', 'blend'],
-      getEarnOpportunities: async () => [{ id: 'o1' }, { id: 'o2' }],
+      getEarnOpportunities: async () => [opportunity('o1'), opportunity('o2')],
       getEarnPosition: async () => ({ withdrawUnit: 'shares' }),
       earnDeposit: async () => {
         ctx.tx = { step: 'success', hash: 'e1' };
@@ -376,7 +380,7 @@ async function unmount() {
 
     ctx = context({
       getEarnProviders: async () => ['defindex', 'blend'],
-      getEarnOpportunities: async () => [{ id: 'o1' }],
+      getEarnOpportunities: async () => [opportunity('o1')],
       getEarnPosition: async () => ({}),
     });
     await mount();
@@ -392,7 +396,7 @@ async function unmount() {
     const withdrawn = [];
     ctx = context({
       getEarnProviders: async () => ['blend'],
-      getEarnOpportunities: async () => [{ id: 'o1' }],
+      getEarnOpportunities: async () => [opportunity('o1')],
       getEarnPosition: async () => ({ withdrawUnit: 'shares' }),
       earnWithdraw: async (params) => withdrawn.push(params),
     });

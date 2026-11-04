@@ -143,6 +143,8 @@ const EN = {
     network: 'Network',
     apyAfterFees: (apy: string) => `APY after fees: ${apy}%`,
     profit: (amount: string) => `Earned after fees: ${amount}`,
+    deposited: (amount: string) => `Deposited: ${amount}`,
+    position: (amount: string) => `Your position: ${amount}`,
     actionUnavailable: (action: 'deposit' | 'withdraw') =>
       `This opportunity does not take ${action === 'deposit' ? 'deposits' : 'withdrawals'} right now.`,
   },
@@ -341,6 +343,8 @@ export const FEATURE_COPY: Record<PollarLanguage, typeof EN> = {
       network: 'Red',
       apyAfterFees: (apy) => `APY después de comisiones: ${apy}%`,
       profit: (amount) => `Ganado después de comisiones: ${amount}`,
+      deposited: (amount) => `Depositado: ${amount}`,
+      position: (amount) => `Tu posición: ${amount}`,
       actionUnavailable: (action) =>
         `Esta oportunidad no acepta ${action === 'deposit' ? 'depósitos' : 'retiros'} en este momento.`,
     },
@@ -535,6 +539,8 @@ export const FEATURE_COPY: Record<PollarLanguage, typeof EN> = {
       network: 'Rede',
       apyAfterFees: (apy) => `APY após taxas: ${apy}%`,
       profit: (amount) => `Ganho após taxas: ${amount}`,
+      deposited: (amount) => `Depositado: ${amount}`,
+      position: (amount) => `Sua posição: ${amount}`,
       actionUnavailable: (action) =>
         `Esta oportunidade não aceita ${action === 'deposit' ? 'depósitos' : 'saques'} no momento.`,
     },
