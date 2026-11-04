@@ -386,7 +386,14 @@ const assetShown = () => document.querySelector('.pollar-send-asset-selector')?.
 
   // --- Card: the funding panel, its amount, and onFunded ---
   {
-    const funding = { id: 'f1', status: 'PENDING', amount: '20', chain: 'STELLAR', createdAt: '2026-10-31T00:00:00Z' };
+    const funding = {
+      id: 'f1',
+      status: 'PENDING',
+      amount: '20',
+      chain: 'STELLAR',
+      route: 'CCTP',
+      createdAt: '2026-10-31T00:00:00Z',
+    };
     const fundings = [];
     const { client } = fixture({
       getCardProviders: async () => [
@@ -403,6 +410,7 @@ const assetShown = () => document.querySelector('.pollar-send-asset-selector')?.
       getCardBalance: async () => ({ available: '0', currency: 'USD' }),
       getCardTransactions: async () => ({ transactions: [] }),
       listCardFundings: async () => [],
+      getCardFundingRoutes: async () => [{ source: 'STELLAR', deposit: 'POLYGON', route: 'CCTP', wallet: 'GTEST' }],
       fundCard: async (params) => {
         fundings.push(params);
         return { status: 'sent', funding };
