@@ -83,23 +83,62 @@ function ChainBadge({ chain, copy, colors }: { chain: TxParty['chain']; copy: Tx
   );
 }
 
-function AssetLogo({ asset, colors }: { asset: string; colors: Colors }) {
+function AssetLogo({ asset, colors, small = false }: { asset: string; colors: Colors; small?: boolean }) {
   const url = TOKEN_LOGOS[asset.toUpperCase()];
   const [failed, setFailed] = useState(false);
+  const size = small ? styles.logoSmall : null;
   if (url && !failed) {
     return (
       <Image
         source={{ uri: url }}
         accessibilityLabel={asset}
         onError={() => setFailed(true)}
-        style={[styles.logo, { backgroundColor: colors.bg }]}
+        style={[styles.logo, size, { backgroundColor: colors.bg }]}
       />
     );
   }
   return (
-    <View style={[styles.logo, { backgroundColor: `${colors.accent}1F` }]}>
-      <Text style={[styles.initial, { color: colors.accent }]}>{asset.slice(0, 1).toUpperCase()}</Text>
+    <View style={[styles.logo, size, { backgroundColor: `${colors.accent}1F` }]}>
+      <Text style={[styles.initial, small && styles.initialSmall, { color: colors.accent }]}>
+        {asset.slice(0, 1).toUpperCase()}
+      </Text>
     </View>
+  );
+}
+
+/** An asset's logo inline next to text, or its initial when there is none. */
+export function InlineAssetLogo({ asset, theme, accentColor }: { asset: string; theme: string; accentColor: string }) {
+  return <AssetLogo asset={asset} colors={reviewColors(theme, accentColor)} small />;
+}
+
+/** A chain's logo inline next to its name. */
+export function InlineChainLogo({ chain }: { chain: NonNullable<TxParty['chain']> }) {
+  return <Image source={{ uri: CHAIN_LOGOS[chain] }} accessibilityElementsHidden style={styles.chainInline} />;
+}
+
+/** The explorer link of a sent transaction, with the logo of the chain it landed on. */
+export function TxExplorerLink({
+  chain,
+  url,
+  accentColor,
+  language: languageProp,
+}: {
+  chain: NonNullable<TxParty['chain']>;
+  url: string;
+  accentColor: string;
+  language?: PollarLanguage | undefined;
+}) {
+  const copy = TX_REVIEW_COPY[useInheritedLanguage(languageProp)];
+  return (
+    <Pressable
+      accessibilityRole="link"
+      hitSlop={8}
+      onPress={() => void Linking.openURL(url).catch(() => undefined)}
+      style={styles.explorer}
+    >
+      <InlineChainLogo chain={chain} />
+      <Text style={[styles.toggleText, { color: accentColor }]}>{copy.viewOnExplorer}</Text>
+    </Pressable>
   );
 }
 
@@ -246,7 +285,12 @@ export function TxReview({
   const { from, to, kind } = data;
   // The receiving end repeats the amount only when it differs from what leaves.
   const toShowsAmount = !!to?.amount && (to.amount !== from?.amount || to.asset !== from?.asset);
-  const toGlyph = kind === 'approve' ? 'contract' : kind === 'bridge' || kind === 'swap' ? 'asset' : 'account';
+  const toGlyph =
+    kind === 'approve'
+      ? 'contract'
+      : kind === 'bridge' || kind === 'swap' || kind === 'deposit' || kind === 'withdraw'
+        ? 'asset'
+        : 'account';
   const copyButton = (value: string) =>
     copyText ? <CopyButton value={value} copyText={copyText} language={language} colors={colors} /> : null;
 
@@ -350,7 +394,11 @@ const styles = StyleSheet.create({
   avatar: { width: 44, height: 44, marginBottom: 2 },
   logo: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   glyph: { borderWidth: 1 },
+  logoSmall: { width: 20, height: 20, borderRadius: 10 },
   initial: { fontSize: 18, fontWeight: '700' },
+  initialSmall: { fontSize: 11 },
+  chainInline: { width: 16, height: 16, borderRadius: 8 },
+  explorer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   chain: { position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 9, borderWidth: 2 },
   amount: { fontSize: 15, fontWeight: '600', textAlign: 'center', fontVariant: ['tabular-nums'] },
   min: { fontWeight: '400' },

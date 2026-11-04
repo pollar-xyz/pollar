@@ -27,6 +27,8 @@ export const CONFIRM_COPY: Record<
       invoke_contract: 'Contract call',
       transfer: 'Authorize payment',
       manage_data: 'Manage data',
+      earn_deposit: 'Deposit',
+      earn_withdraw: 'Withdraw',
     },
   },
   es: {
@@ -44,6 +46,8 @@ export const CONFIRM_COPY: Record<
       invoke_contract: 'Llamada a contrato',
       transfer: 'Autorizar pago',
       manage_data: 'Gestionar datos',
+      earn_deposit: 'Depositar',
+      earn_withdraw: 'Retirar',
     },
   },
   pt: {
@@ -61,6 +65,8 @@ export const CONFIRM_COPY: Record<
       invoke_contract: 'Chamada de contrato',
       transfer: 'Autorizar pagamento',
       manage_data: 'Gerenciar dados',
+      earn_deposit: 'Depositar',
+      earn_withdraw: 'Sacar',
     },
   },
 };

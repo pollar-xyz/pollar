@@ -48,6 +48,21 @@
   background: color-mix(in srgb, var(--pollar-accent) 12%, var(--pollar-bg));
 }
 
+.pollar-txr-logo-sm {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+}
+
+.pollar-txr-chain-inline {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .pollar-txr-logo-glyph {
   color: var(--pollar-muted);
   border: 1px solid var(--pollar-border);
@@ -191,6 +206,12 @@
   font-size: 0.82rem;
   color: var(--pollar-accent);
   text-decoration: none;
+}
+
+.pollar-txr-explorer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .pollar-txr-link:hover {

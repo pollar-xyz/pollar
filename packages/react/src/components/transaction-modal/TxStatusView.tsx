@@ -2,6 +2,7 @@
 
 import { useInheritedLanguage } from '../../language-context';
 import { PollarLanguage, TransactionState, transactionErrorMessage, WalletId, WalletType } from '@pollar/core';
+import type { ReactNode } from 'react';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR_MARK_ON_DARK, LOGO_POLLAR_MARK_ON_LIGHT } from '../../constants';
 import { ModalStatusBanner } from '../commons';
 import { TxReview } from '../tx-review/TxReview';
@@ -49,6 +50,16 @@ export interface TxStatusViewProps {
   onDone: () => void;
   /** Language of the status text. Defaults to the user's device; the modals pass the resolved one. */
   language?: PollarLanguage | undefined;
+  /**
+   * The operation as the modal knows it (an Earn deposit names its opportunity),
+   * drawn instead of the build's summary. The hash and who paid the fee still
+   * come from the transaction.
+   */
+  review?: TxReviewData | null | undefined;
+  /** What the success says instead of the generic "sent" line. */
+  successMessage?: string | undefined;
+  /** Shown under the review once the transaction succeeds, above Done. */
+  successExtra?: ReactNode;
 }
 
 export function TxStatusView({
@@ -61,6 +72,9 @@ export function TxStatusView({
   onRetry,
   onDone,
   language: languageProp,
+  review: reviewProp,
+  successMessage,
+  successExtra,
 }: TxStatusViewProps) {
   const language = useInheritedLanguage(languageProp);
   const copy = TRANSACTION_COPY[language];
@@ -78,11 +92,17 @@ export function TxStatusView({
   const hashInfo = hash ? { value: hash, explorerUrl } : undefined;
   const sponsored = 'sponsored' in transaction ? transaction.sponsored : undefined;
   // A compound flow can finish without the build it ran: the hash still has a place in the details.
-  const review: TxReviewData | null = buildData
-    ? reviewFromBuild(buildData, reviewCopy, copy.title, hashInfo, sponsored)
-    : hashInfo
-      ? { title: copy.title, kind: 'other', rows: [], hash: hashInfo, ...(sponsored !== undefined && { fee: { sponsored } }) }
-      : null;
+  const review: TxReviewData | null = reviewProp
+    ? {
+        ...reviewProp,
+        ...(hashInfo && { hash: hashInfo }),
+        ...(sponsored !== undefined && { fee: { sponsored } }),
+      }
+    : buildData
+      ? reviewFromBuild(buildData, reviewCopy, copy.title, hashInfo, sponsored)
+      : hashInfo
+        ? { title: copy.title, kind: 'other', rows: [], hash: hashInfo, ...(sponsored !== undefined && { fee: { sponsored } }) }
+        : null;
 
   const walletImg =
     walletType === WalletType.FREIGHTER ? LOGO_FREIGHTER : walletType === WalletType.ALBEDO ? LOGO_ALBEDO : null;
@@ -90,14 +110,14 @@ export function TxStatusView({
   const walletAlt = walletType === WalletType.FREIGHTER ? 'Freighter' : walletType === WalletType.ALBEDO ? 'Albedo' : 'Pollar';
   const statusBanner = (
     <ModalStatusBanner
-      message={copy.status[transaction.step]}
+      message={isSuccess && successMessage ? successMessage : copy.status[transaction.step]}
       status={isError ? 'ERROR' : isInFlight ? 'LOADING' : isSuccess ? 'SUCCESS' : 'NONE'}
     />
   );
   const showSpinner = isInFlight || isSuccess || isError;
   const reviewBlock = showDetails && review && (
     <div className="pollar-tx-review">
-      {buildData && <p className="pollar-tx-review-title">{review.title}</p>}
+      {(buildData || reviewProp) && <p className="pollar-tx-review-title">{review.title}</p>}
       <TxReview data={review} open={showXdr} onToggle={onToggleXdr} language={language} />
     </div>
   );
@@ -178,6 +198,8 @@ export function TxStatusView({
       )}
 
       {isSuccess && reviewBlock}
+
+      {isSuccess && successExtra}
 
       {isSuccess && (
         <button className="pollar-btn-primary pollar-tx-sign-btn" onClick={onDone}>

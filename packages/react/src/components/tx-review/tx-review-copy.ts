@@ -13,6 +13,20 @@ export const TX_REVIEW_COPY: Record<
       payment: (amount: string, to: string) => string;
       createAccount: string;
     };
+    earn: {
+      deposit: string;
+      withdraw: string;
+      depositInto: (target: string) => string;
+      withdrawFrom: (source: string) => string;
+      depositAmount: (amount: string) => string;
+      withdrawAmount: (amount: string) => string;
+      /** The opportunity's place in the flow when its name is not known. */
+      fallbackName: string;
+      deposited: (amount: string, target: string, chain: string) => string;
+      withdrew: (amount: string, source: string, chain: string) => string;
+      depositedOn: (amount: string, chain: string) => string;
+      withdrewOn: (amount: string, chain: string) => string;
+    };
     yourWallet: string;
     newAccount: string;
     atLeast: string;
@@ -32,6 +46,9 @@ export const TX_REVIEW_COPY: Record<
       via: string;
       fee: string;
       feeCovered: string;
+      feeWallet: string;
+      opportunity: string;
+      apy: string;
       contract: string;
       method: string;
       asset: string;
@@ -53,11 +70,24 @@ export const TX_REVIEW_COPY: Record<
       payment: (amount, to) => `Pay ${amount} to ${to}`,
       createAccount: 'Create an account',
     },
+    earn: {
+      deposit: 'Deposit',
+      withdraw: 'Withdraw',
+      depositInto: (target) => `Deposit into ${target}`,
+      withdrawFrom: (source) => `Withdraw from ${source}`,
+      depositAmount: (amount) => `Deposit ${amount}`,
+      withdrawAmount: (amount) => `Withdraw ${amount}`,
+      fallbackName: 'Earn',
+      deposited: (amount, target, chain) => `Deposited ${amount} into the ${target} on ${chain}`,
+      withdrew: (amount, source, chain) => `Withdrew ${amount} from the ${source} on ${chain}`,
+      depositedOn: (amount, chain) => `Deposited ${amount} on ${chain}`,
+      withdrewOn: (amount, chain) => `Withdrew ${amount} on ${chain}`,
+    },
     yourWallet: 'Your wallet',
     newAccount: 'New account',
     atLeast: 'at least',
     approveNote: 'This only gives permission. Nothing moves yet.',
-    feeSponsored: 'Fee covered by the app',
+    feeSponsored: 'The app pays the network fee',
     feePaid: 'You pay the network fee',
     showDetails: 'Show details',
     hideDetails: 'Hide details',
@@ -72,6 +102,9 @@ export const TX_REVIEW_COPY: Record<
       via: 'Via',
       fee: 'Network fee',
       feeCovered: 'Covered by the app',
+      feeWallet: 'Paid by your wallet',
+      opportunity: 'Opportunity',
+      apy: 'APY after fees',
       contract: 'Contract',
       method: 'Method',
       asset: 'Asset',
@@ -92,11 +125,24 @@ export const TX_REVIEW_COPY: Record<
       payment: (amount, to) => `Pagar ${amount} a ${to}`,
       createAccount: 'Crear una cuenta',
     },
+    earn: {
+      deposit: 'Depositar',
+      withdraw: 'Retirar',
+      depositInto: (target) => `Depositar en ${target}`,
+      withdrawFrom: (source) => `Retirar de ${source}`,
+      depositAmount: (amount) => `Depositar ${amount}`,
+      withdrawAmount: (amount) => `Retirar ${amount}`,
+      fallbackName: 'Rendimientos',
+      deposited: (amount, target, chain) => `Depositaste ${amount} en ${target}, en ${chain}`,
+      withdrew: (amount, source, chain) => `Retiraste ${amount} de ${source}, en ${chain}`,
+      depositedOn: (amount, chain) => `Depositaste ${amount} en ${chain}`,
+      withdrewOn: (amount, chain) => `Retiraste ${amount} en ${chain}`,
+    },
     yourWallet: 'Tu billetera',
     newAccount: 'Cuenta nueva',
     atLeast: 'al menos',
     approveNote: 'Solo das permiso. Todavía no se mueve nada.',
-    feeSponsored: 'La app cubre la comisión',
+    feeSponsored: 'La app paga la comisión de red',
     feePaid: 'Tú pagas la comisión de red',
     showDetails: 'Ver detalles',
     hideDetails: 'Ocultar detalles',
@@ -111,6 +157,9 @@ export const TX_REVIEW_COPY: Record<
       via: 'Vía',
       fee: 'Comisión de red',
       feeCovered: 'La cubre la app',
+      feeWallet: 'La paga tu billetera',
+      opportunity: 'Oportunidad',
+      apy: 'APY después de comisiones',
       contract: 'Contrato',
       method: 'Método',
       asset: 'Activo',
@@ -131,11 +180,24 @@ export const TX_REVIEW_COPY: Record<
       payment: (amount, to) => `Pagar ${amount} para ${to}`,
       createAccount: 'Criar uma conta',
     },
+    earn: {
+      deposit: 'Depositar',
+      withdraw: 'Sacar',
+      depositInto: (target) => `Depositar em ${target}`,
+      withdrawFrom: (source) => `Sacar de ${source}`,
+      depositAmount: (amount) => `Depositar ${amount}`,
+      withdrawAmount: (amount) => `Sacar ${amount}`,
+      fallbackName: 'Rendimentos',
+      deposited: (amount, target, chain) => `Você depositou ${amount} em ${target}, na ${chain}`,
+      withdrew: (amount, source, chain) => `Você sacou ${amount} de ${source}, na ${chain}`,
+      depositedOn: (amount, chain) => `Você depositou ${amount} na ${chain}`,
+      withdrewOn: (amount, chain) => `Você sacou ${amount} na ${chain}`,
+    },
     yourWallet: 'Sua carteira',
     newAccount: 'Conta nova',
     atLeast: 'pelo menos',
     approveNote: 'Isto só dá permissão. Nada se move ainda.',
-    feeSponsored: 'O app cobre a taxa',
+    feeSponsored: 'O app paga a taxa de rede',
     feePaid: 'Você paga a taxa de rede',
     showDetails: 'Ver detalhes',
     hideDetails: 'Ocultar detalhes',
@@ -150,6 +212,9 @@ export const TX_REVIEW_COPY: Record<
       via: 'Via',
       fee: 'Taxa de rede',
       feeCovered: 'Coberta pelo app',
+      feeWallet: 'Paga pela sua carteira',
+      opportunity: 'Oportunidade',
+      apy: 'APY após taxas',
       contract: 'Contrato',
       method: 'Método',
       asset: 'Ativo',

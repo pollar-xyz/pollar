@@ -70,6 +70,13 @@ import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBala
 import { browserPasskeyCeremony, browserPasskeySigner, browserRecoveryPasskey } from './lib/passkey-ceremony';
 import type { PollarConfig, PollarStyles } from './types';
 import { ModalLanguageContext, useProviderLanguage } from './language-context';
+import { rememberEarnOpportunities } from './components/tx-review/tx-review-model';
+
+/** The opportunities as read, after the approvals learned their names. */
+function remembered<T extends Parameters<typeof rememberEarnOpportunities>[0]>(list: T): T {
+  rememberEarnOpportunities(list);
+  return list;
+}
 
 const DEFAULT_APP_CONFIG: PollarConfig = {
   application: { name: '', network: 'testnet', chains: [] },
@@ -921,12 +928,12 @@ export function PollarProvider({
       },
       // earn
       getEarnProviders: () => pollarClient.getEarnProviders(),
-      getEarnOpportunities: (provider) => pollarClient.getEarnOpportunities(provider),
+      getEarnOpportunities: (provider) => pollarClient.getEarnOpportunities(provider).then(remembered),
       getEarnPosition: (params) => pollarClient.getEarnPosition(params),
       earnDeposit: (params) => pollarClient.earnDeposit(params),
       earnWithdraw: (params) => pollarClient.earnWithdraw(params),
       getSolanaEarnProviders: () => pollarClient.getSolanaEarnProviders(),
-      getSolanaEarnOpportunities: () => pollarClient.getSolanaEarnOpportunities(),
+      getSolanaEarnOpportunities: () => pollarClient.getSolanaEarnOpportunities().then(remembered),
       getSolanaEarnPosition: (opportunity) => pollarClient.getSolanaEarnPosition(opportunity),
       earnSolanaDeposit: (params) => pollarClient.earnSolanaDeposit(params),
       earnSolanaWithdraw: (params) => pollarClient.earnSolanaWithdraw(params),

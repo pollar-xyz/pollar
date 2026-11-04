@@ -32,6 +32,12 @@ import { TxHistoryModal, type TxHistoryModalOptions } from './components/tx-hist
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 import { PollarUIProvider } from './components/layout';
 import { ModalLanguageContext, useProviderLanguage } from './language-context';
+import { rememberEarnOpportunities } from './components/tx-review/tx-review-model';
+
+function remembered<T extends Parameters<typeof rememberEarnOpportunities>[0]>(list: T): T {
+  rememberEarnOpportunities(list);
+  return list;
+}
 
 export interface NativePlatformAdapters {
   copyText?: (text: string) => Promise<void>;
@@ -433,10 +439,13 @@ function ClientProvider({
   // Stable per client: modals key their effects on it, and a new function each
   // render would re-run their requests on every client event.
   const getClient = useCallback(() => client, [client]);
-  const bound = useMemo(
-    () => Object.fromEntries(methods.map((name) => [name, client[name].bind(client)])) as Methods,
-    [client],
-  );
+  const bound = useMemo(() => {
+    const methodsOf = Object.fromEntries(methods.map((name) => [name, client[name].bind(client)])) as Methods;
+    // The approvals name an Earn opportunity from the last list read.
+    methodsOf.getEarnOpportunities = (provider) => client.getEarnOpportunities(provider).then(remembered);
+    methodsOf.getSolanaEarnOpportunities = () => client.getSolanaEarnOpportunities().then(remembered);
+    return methodsOf;
+  }, [client]);
   const value: PollarContextValue = {
     ...bound,
     buildTx: async (...args) => {

@@ -22,14 +22,40 @@ function ChainBadge({ chain, copy }: { chain: TxParty['chain']; copy: TxReviewCo
   return <img className="pollar-txr-chain" src={CHAIN_LOGOS[chain]} alt={copy.chains[chain]} title={copy.chains[chain]} />;
 }
 
-function AssetLogo({ asset }: { asset: string }) {
+/** An asset's logo, or its initial when there is none; `small` sits inline next to text. */
+export function AssetLogo({ asset, small = false }: { asset: string; small?: boolean }) {
   const url = TOKEN_LOGOS[asset.toUpperCase()];
   const [failed, setFailed] = useState(false);
-  if (url && !failed) return <img className="pollar-txr-logo" src={url} alt={asset} onError={() => setFailed(true)} />;
+  const size = small ? ' pollar-txr-logo-sm' : '';
+  if (url && !failed) return <img className={`pollar-txr-logo${size}`} src={url} alt={asset} onError={() => setFailed(true)} />;
   return (
-    <span className="pollar-txr-logo pollar-txr-logo-initial" aria-hidden>
+    <span className={`pollar-txr-logo pollar-txr-logo-initial${size}`} aria-hidden>
       {asset.slice(0, 1).toUpperCase()}
     </span>
+  );
+}
+
+/** A chain's logo, inline next to its name. */
+export function ChainLogo({ chain }: { chain: NonNullable<TxParty['chain']> }) {
+  return <img className="pollar-txr-chain-inline" src={CHAIN_LOGOS[chain]} alt="" aria-hidden />;
+}
+
+/** The explorer link of a sent transaction, with the logo of the chain it landed on. */
+export function TxExplorerLink({
+  chain,
+  url,
+  language: languageProp,
+}: {
+  chain: NonNullable<TxParty['chain']>;
+  url: string;
+  language?: PollarLanguage | undefined;
+}) {
+  const copy = TX_REVIEW_COPY[useInheritedLanguage(languageProp)];
+  return (
+    <a className="pollar-txr-link pollar-txr-explorer" href={url} target="_blank" rel="noopener noreferrer">
+      <ChainLogo chain={chain} />
+      {copy.viewOnExplorer}
+    </a>
   );
 }
 
@@ -162,7 +188,12 @@ export function TxReview({ data, open: openProp, onToggle, language: languagePro
   const { from, to, kind } = data;
   // The receiving end repeats the amount only when it differs from what leaves.
   const toShowsAmount = !!to?.amount && (to.amount !== from?.amount || to.asset !== from?.asset);
-  const toGlyph = kind === 'approve' ? 'contract' : kind === 'bridge' || kind === 'swap' ? 'asset' : 'account';
+  const toGlyph =
+    kind === 'approve'
+      ? 'contract'
+      : kind === 'bridge' || kind === 'swap' || kind === 'deposit' || kind === 'withdraw'
+        ? 'asset'
+        : 'account';
 
   return (
     <div className="pollar-txr">

@@ -7,8 +7,8 @@ signing, ramps, KYC, cards and the modals around them).
 
 Most files import the **built** packages (`packages/*/dist`), not `src/`. A few
 (`smoke-card-stage`, `smoke-registration-fix`, `smoke-form-fields`,
-`smoke-email-code-input`, `smoke-kyc-modal`, `smoke-cosign-modal`, `smoke-rn-kyc`,
-`smoke-rn-ramp`) transpile the component sources on the fly with `typescript`.
+`smoke-email-code-input`, `smoke-kyc-modal`, `smoke-cosign-modal`, `smoke-earn-review`,
+`smoke-rn-kyc`, `smoke-rn-ramp`) transpile the component sources on the fly with `typescript`.
 
 ## How to run
 
@@ -29,7 +29,7 @@ node tests/smoke-session-races.cjs
 ```
 
 `npm run test:smoke` runs, in order: `smoke-keys`, `smoke-client`, `smoke-api-v3`,
-`smoke-wallet-less`, `smoke-send-payment`, `smoke-solana-swap`,
+`smoke-wallet-less`, `smoke-send-payment`, `smoke-solana-swap`, `smoke-earn-review`,
 `smoke-card-funding-solana`, `smoke-send-create-account`, `smoke-cosign`,
 `smoke-cosign-modal`, `smoke-providers`, `smoke-session-races`, `smoke-resume`,
 `smoke-lifecycle` (with `--expose-gc`), `smoke-invariants`, `smoke-cross-document`,
@@ -304,6 +304,18 @@ The co-signed wallet prompt, web and React Native: the real modals, with the
 client faked the way core behaves. A refresh of the pending list hands back new
 objects for the same requests and lands before the slower Turnkey check; the
 check must survive it and enable Approve.
+
+#### `smoke-earn-review.cjs`
+
+The Earn approval and result, web and React Native. A co-sign request or a
+signature confirmation for `earn_deposit` or `earn_withdraw` reads as "Deposit
+into USDC vault" (or "Withdraw 0.2 USDC" for an opportunity the app has not
+listed), with the asset, the network and the opportunity's APY after fees, and
+never shows the raw operation or the protocol. The fee line follows the
+request: "The app pays the network fee" when it is sponsored, "You pay the
+network fee" when the wallet pays, nothing when nobody has said yet. The result
+says what happened ("Deposited 1 USDC into the USDC vault on Solana") in the
+three languages.
 
 ### Cards
 

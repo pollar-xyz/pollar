@@ -25,7 +25,7 @@ export interface TxDetailRow {
 export interface TxReviewData {
   /** The action in plain words: what a user without crypto background reads first. */
   title: string;
-  kind: 'send' | 'bridge' | 'approve' | 'swap' | 'payment' | 'create_account' | 'other';
+  kind: 'send' | 'bridge' | 'approve' | 'swap' | 'payment' | 'create_account' | 'deposit' | 'withdraw' | 'other';
   from?: TxParty;
   to?: TxParty;
   /**
@@ -145,9 +145,144 @@ export interface SigningRequestParts {
   appPaysFee?: boolean | undefined;
 }
 
+/** What the review knows of an Earn opportunity: its name, asset and APY after fees. */
+export interface EarnOpportunityLabel {
+  name: string;
+  asset?: string;
+  apy?: number;
+}
+
+// Display only: a request names its opportunity by id, and the name and APY come from the list the app read last.
+const earnOpportunities = new Map<string, EarnOpportunityLabel>();
+
+/** Keeps the name, asset and APY of each opportunity, so an approval for one of them can name it. */
+export function rememberEarnOpportunities(
+  list: ReadonlyArray<{ id: string; name: string; apy?: number | null; asset?: { code?: string } }>,
+): void {
+  for (const o of list) {
+    earnOpportunities.set(o.id, {
+      name: o.name,
+      ...(o.asset?.code ? { asset: o.asset.code } : {}),
+      ...(typeof o.apy === 'number' ? { apy: o.apy } : {}),
+    });
+  }
+}
+
+export function earnOpportunityLabel(id: string | undefined): EarnOpportunityLabel | undefined {
+  return id ? earnOpportunities.get(id) : undefined;
+}
+
+export interface EarnReviewParts {
+  action: 'deposit' | 'withdraw';
+  chain: WalletChain;
+  /** `mainnet` or `testnet`, shown next to the chain in the details. */
+  network?: string | undefined;
+  /** Decimal amount of `asset`. */
+  amount?: string | undefined;
+  asset?: string | undefined;
+  /** The opportunity's name; the review never shows the protocol behind it. */
+  name?: string | undefined;
+  /** APY after fees, as a percentage. */
+  apy?: number | null | undefined;
+  /** The user's wallet address on `chain`. */
+  wallet?: string | undefined;
+  /** Whether the app pays the network fee; unknown leaves the fee out rather than guess. */
+  sponsored?: boolean | undefined;
+  raw?: string | undefined;
+  hash?: { value: string; explorerUrl: string | null } | undefined;
+  extraRows?: TxDetailRow[];
+}
+
+/** An Earn deposit or withdrawal: the user's wallet and the opportunity, the asset moving between them. */
+export function reviewForEarn(parts: EarnReviewParts, copy: TxReviewCopy): TxReviewData {
+  const deposit = parts.action === 'deposit';
+  const asset = parts.asset ? { asset: parts.asset } : {};
+  const wallet: TxParty = { chain: parts.chain, self: true, ...asset, ...(parts.wallet ? { address: parts.wallet } : {}) };
+  const opportunity: TxParty = { chain: parts.chain, label: parts.name ?? copy.earn.fallbackName, ...asset };
+  const amount = parts.amount ? { amount: parts.amount } : {};
+  const from = deposit ? { ...wallet, ...amount } : { ...opportunity, ...amount };
+  const to = deposit ? opportunity : wallet;
+  const moved = withAsset(from);
+
+  const rows: TxDetailRow[] = [];
+  if (parts.name) rows.push({ label: copy.rows.opportunity, value: parts.name });
+  if (typeof parts.apy === 'number') rows.push({ label: copy.rows.apy, value: `${parts.apy.toFixed(2)}%` });
+  if (parts.amount) rows.push({ label: copy.rows.amount, value: moved });
+  rows.push({ label: copy.rows.network, value: [copy.chains[parts.chain], parts.network].filter(Boolean).join(' ') });
+  const walletRow = partyRow(deposit ? copy.rows.from : copy.rows.to, wallet, copy);
+  if (walletRow) rows.push(walletRow);
+  if (parts.sponsored !== undefined)
+    rows.push({ label: copy.rows.fee, value: parts.sponsored ? copy.rows.feeCovered : copy.rows.feeWallet });
+  rows.push(...(parts.extraRows ?? []));
+
+  const title = parts.name
+    ? deposit
+      ? copy.earn.depositInto(parts.name)
+      : copy.earn.withdrawFrom(parts.name)
+    : parts.amount
+      ? deposit
+        ? copy.earn.depositAmount(moved)
+        : copy.earn.withdrawAmount(moved)
+      : deposit
+        ? copy.earn.deposit
+        : copy.earn.withdraw;
+
+  return {
+    title,
+    kind: deposit ? 'deposit' : 'withdraw',
+    from,
+    to,
+    ...(parts.sponsored !== undefined ? { fee: { sponsored: parts.sponsored } } : {}),
+    rows,
+    ...(parts.raw ? { raw: parts.raw } : {}),
+    ...(parts.hash ? { hash: parts.hash } : {}),
+  };
+}
+
+/** What a finished Earn operation did, in one sentence: "Deposited 1 USDC into the USDC vault on Solana". */
+export function earnOutcome(
+  parts: Pick<EarnReviewParts, 'action' | 'chain' | 'amount' | 'asset' | 'name'>,
+  copy: TxReviewCopy,
+) {
+  const moved = [parts.amount, parts.asset].filter(Boolean).join(' ');
+  const chain = copy.chains[parts.chain];
+  if (parts.action === 'deposit') {
+    return parts.name ? copy.earn.deposited(moved, parts.name, chain) : copy.earn.depositedOn(moved, chain);
+  }
+  return parts.name ? copy.earn.withdrew(moved, parts.name, chain) : copy.earn.withdrewOn(moved, chain);
+}
+
 /** A cosign request or a confirmation prompt, as the review draws it. */
 export function reviewFromRequest(parts: SigningRequestParts, copy: TxReviewCopy): TxReviewData {
   const details = parts.details ?? {};
+  const earnAction = parts.operation === 'earn_deposit' ? 'deposit' : parts.operation === 'earn_withdraw' ? 'withdraw' : null;
+  if (earnAction) {
+    const known = earnOpportunityLabel(asString(details.opportunityId) ?? asString(details.opportunity));
+    const feePayer = asString(details.feePayer);
+    const sponsored =
+      typeof details.sponsored === 'boolean'
+        ? details.sponsored
+        : feePayer && parts.signWith
+          ? feePayer !== parts.signWith
+          : parts.appPaysFee;
+    return reviewForEarn(
+      {
+        action: earnAction,
+        chain: parts.chain,
+        network: parts.network,
+        amount: asString(details.amount),
+        asset: asString(details.assetCode) ?? known?.asset,
+        name: known?.name,
+        apy: known?.apy,
+        wallet: parts.signWith,
+        sponsored,
+        raw: parts.raw,
+        hash: parts.hash,
+        ...(parts.extraRows ? { extraRows: parts.extraRows } : {}),
+      },
+      copy,
+    );
+  }
   const flow = rampFlow(details);
   const rows: TxDetailRow[] = [];
   let data: Pick<TxReviewData, 'kind' | 'from' | 'to'>;
