@@ -135,8 +135,7 @@ export const REGISTRATION_COPY: Record<FormLanguage, RegistrationCopy> = {
     fix: 'Review my details',
     incomplete: 'Your registration with the provider did not finish. Register again to complete it.',
     providerDown: 'The provider is not responding right now. Please try again in a few minutes.',
-    ipNotSupported:
-      'The provider cannot accept your current connection (IPv6). Please try again from another network, for example Wi-Fi.',
+    ipNotSupported: 'We could not verify your connection with the provider. Please try again in a few minutes.',
     emailTaken:
       'This email is already registered with the provider through another app. Use a different email to register here.',
     loadError: 'Could not load the registration. Please try again.',
@@ -157,7 +156,7 @@ export const REGISTRATION_COPY: Record<FormLanguage, RegistrationCopy> = {
     fix: 'Revisar mis datos',
     incomplete: 'Tu registro con el proveedor no se completó. Regístrate de nuevo para terminarlo.',
     providerDown: 'El proveedor no responde en este momento. Intenta de nuevo en unos minutos.',
-    ipNotSupported: 'El proveedor no acepta tu conexión actual (IPv6). Intenta desde otra red, por ejemplo Wi-Fi.',
+    ipNotSupported: 'No pudimos verificar tu conexión con el proveedor. Intenta de nuevo en unos minutos.',
     emailTaken: 'Este email ya está registrado con el proveedor desde otra app. Usa otro email para registrarte aquí.',
     loadError: 'No se pudo cargar el registro. Intenta de nuevo.',
     submitError: 'No se pudo completar el registro. Intenta de nuevo.',
@@ -177,7 +176,7 @@ export const REGISTRATION_COPY: Record<FormLanguage, RegistrationCopy> = {
     fix: 'Revisar meus dados',
     incomplete: 'Seu cadastro no provedor não foi concluído. Cadastre-se novamente para terminá-lo.',
     providerDown: 'O provedor não está respondendo agora. Tente novamente em alguns minutos.',
-    ipNotSupported: 'O provedor não aceita sua conexão atual (IPv6). Tente de outra rede, por exemplo Wi-Fi.',
+    ipNotSupported: 'Não conseguimos verificar sua conexão com o provedor. Tente novamente em alguns minutos.',
     emailTaken: 'Este email já está cadastrado no provedor por outro app. Use outro email para se cadastrar aqui.',
     loadError: 'Não foi possível carregar o cadastro. Tente novamente.',
     submitError: 'Não foi possível concluir o cadastro. Tente novamente.',

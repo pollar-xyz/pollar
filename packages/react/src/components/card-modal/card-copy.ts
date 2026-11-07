@@ -180,7 +180,7 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
     errors: {
       SDK_CARDS_PROVIDER_ERROR: 'The card provider is not responding right now. Please try again in a few minutes.',
       SDK_CARDS_IP_NOT_SUPPORTED:
-        'The card provider cannot accept your current connection (IPv6). Please try again from another network, for example Wi-Fi.',
+        'We could not verify your connection with the card provider. Please try again in a few minutes.',
       SDK_CARDS_PROVIDER_USER_TAKEN:
         'This email is already registered with the card provider through another app. Use a different email to get a card here.',
     },
@@ -354,7 +354,7 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
     errors: {
       SDK_CARDS_PROVIDER_ERROR: 'El proveedor de la tarjeta no responde en este momento. Intenta de nuevo en unos minutos.',
       SDK_CARDS_IP_NOT_SUPPORTED:
-        'El proveedor de la tarjeta no acepta tu conexión actual (IPv6). Intenta de nuevo desde otra red, por ejemplo Wi-Fi.',
+        'No pudimos verificar tu conexión con el proveedor de la tarjeta. Intenta de nuevo en unos minutos.',
       SDK_CARDS_PROVIDER_USER_TAKEN:
         'Este correo ya está registrado con el proveedor de la tarjeta a través de otra app. Usa otro correo para obtener una tarjeta aquí.',
     },
@@ -528,7 +528,7 @@ export const CARD_COPY: Record<PollarLanguage, CardCopy> = {
     errors: {
       SDK_CARDS_PROVIDER_ERROR: 'O provedor do cartão não está respondendo agora. Tente de novo em alguns minutos.',
       SDK_CARDS_IP_NOT_SUPPORTED:
-        'O provedor do cartão não aceita sua conexão atual (IPv6). Tente de novo a partir de outra rede, por exemplo Wi-Fi.',
+        'Não conseguimos verificar sua conexão com o provedor do cartão. Tente de novo em alguns minutos.',
       SDK_CARDS_PROVIDER_USER_TAKEN:
         'Este e-mail já está cadastrado no provedor do cartão por meio de outro app. Use outro e-mail para obter um cartão aqui.',
     },

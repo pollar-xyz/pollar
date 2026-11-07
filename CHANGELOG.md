@@ -224,6 +224,16 @@
   not sent) instead of showing the wallet service's sentence, and a funding
   the card provider has not credited after two hours reads "Taking longer than
   usual" instead of crediting forever.
+- **Users on IPv6 accept the card provider's terms.** A provider that takes the
+  terms acceptance only from an IPv4 answers a request over IPv6 with
+  `SDK_CARDS_IP_NOT_SUPPORTED` and `ipv4BaseUrl`. `submitCardKyc` and the
+  registration step (`submitCardProviderRegistration`) then call
+  `GET /client-ip/attest` on that IPv4-only host, which signs the user's IPv4,
+  and send the acceptance once more with it in `x-pollar-ip-attestation`.
+  Nothing changes for the app. The error reaches it only when that host cannot
+  be reached, and the modals then say the connection could not be verified,
+  in place of the old advice to switch networks. Requires an sdk-api with
+  `/v3/client-ip/attest`.
 - **Move USDC between the user's own wallets on Stellar, Solana and Polygon.**
   `client.bridge({ fromChain, toChain, amount, idempotencyKey })` moves it by
   Circle CCTP in any direction between the three, on mainnet, about five
