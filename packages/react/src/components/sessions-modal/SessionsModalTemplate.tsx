@@ -1,8 +1,12 @@
 'use client';
 
-import type { SessionInfo, SessionsState } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { type PollarLanguage, type SessionInfo, type SessionsState } from '@pollar/core';
 import { PollarModalFooter, RefreshIcon } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
+import { SESSIONS_COPY } from './sessions-copy';
+
+type Copy = (typeof SESSIONS_COPY)['en'];
 
 export type { SessionsState };
 
@@ -19,15 +23,17 @@ export interface SessionsModalTemplateProps {
   onRevoke: (familyId: string) => void;
   onLogoutEverywhere: () => void;
   onClose: () => void;
+  /** Language of the modal's text. Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
 
 /**
  * Heuristic device label. Prefers the explicit `deviceLabel` set via
  * `PollarClientConfig`; falls back to a stripped User-Agent.
  */
-function describeDevice(s: SessionInfo): string {
+function describeDevice(s: SessionInfo, copy: Copy): string {
   if (s.deviceLabel) return normalizeDeviceLabel(s.deviceLabel);
-  if (!s.userAgent) return 'Unknown device';
+  if (!s.userAgent) return copy.unknownDevice;
   return parseUserAgent(s.userAgent);
 }
 
@@ -68,19 +74,19 @@ function parseUserAgent(ua: string): string {
   return ua.slice(0, 48);
 }
 
-function formatRelative(iso: string | null): string {
+function formatRelative(iso: string | null, copy: Copy): string {
   if (!iso) return '—';
   const ts = new Date(iso).getTime();
   if (!Number.isFinite(ts)) return '—';
   const diffSec = Math.round((Date.now() - ts) / 1000);
-  if (diffSec < 0) return 'just now';
-  if (diffSec < 60) return `${diffSec}s ago`;
+  if (diffSec < 0) return copy.justNow;
+  if (diffSec < 60) return copy.secondsAgo(diffSec);
   const diffMin = Math.round(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 60) return copy.minutesAgo(diffMin);
   const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffHr < 24) return copy.hoursAgo(diffHr);
   const diffDay = Math.round(diffHr / 24);
-  if (diffDay < 30) return `${diffDay}d ago`;
+  if (diffDay < 30) return copy.daysAgo(diffDay);
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
@@ -152,7 +158,10 @@ export function SessionsModalTemplate({
   onRevoke,
   onLogoutEverywhere,
   onClose,
+  language: languageProp,
 }: SessionsModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = SESSIONS_COPY[language];
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
   const isLoading = state.step === 'loading';
@@ -169,19 +178,19 @@ export function SessionsModalTemplate({
       onClick={(e) => e.stopPropagation()}
     >
       <div className="pollar-modal-header">
-        <h2 className="pollar-modal-title">Active sessions</h2>
+        <h2 className="pollar-modal-title">{copy.title}</h2>
         <div className="pollar-modal-header-actions">
           <button
             type="button"
             className="pollar-modal-close"
             onClick={onRefresh}
             disabled={isLoading}
-            aria-label="Refresh"
-            title="Refresh"
+            aria-label={copy.refresh}
+            title={copy.refresh}
           >
             <RefreshIcon spinning={isLoading} />
           </button>
-          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close" title="Close">
+          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close} title={copy.close}>
             <CloseIcon />
           </button>
         </div>
@@ -191,11 +200,11 @@ export function SessionsModalTemplate({
         {(state.step === 'idle' || isLoading) && (
           <div className="pollar-loading-block">
             <div className="pollar-spinner" />
-            <span>Loading…</span>
+            <span>{copy.loading}</span>
           </div>
         )}
         {state.step === 'error' && <div className="pollar-modal-empty">{state.message}</div>}
-        {state.step === 'loaded' && sessions.length === 0 && <div className="pollar-modal-empty">No active sessions.</div>}
+        {state.step === 'loaded' && sessions.length === 0 && <div className="pollar-modal-empty">{copy.empty}</div>}
         {state.step === 'loaded' && currentSession && (
           <div className="pollar-sessions-current-card">
             <div className="pollar-sessions-current-icon-wrap">
@@ -204,11 +213,11 @@ export function SessionsModalTemplate({
                 <CheckIcon />
               </span>
             </div>
-            <span className="pollar-sessions-current-label">This device</span>
-            <strong className="pollar-sessions-current-device">{describeDevice(currentSession)}</strong>
+            <span className="pollar-sessions-current-label">{copy.thisDevice}</span>
+            <strong className="pollar-sessions-current-device">{describeDevice(currentSession, copy)}</strong>
             <div className="pollar-sessions-current-status">
               <span className="pollar-sessions-status-dot" />
-              <span>Active now</span>
+              <span>{copy.activeNow}</span>
               {currentSession.ipHash && (
                 <>
                   <span>·</span>
@@ -221,7 +230,7 @@ export function SessionsModalTemplate({
         {state.step === 'loaded' && otherSessions.length > 0 && (
           <section className="pollar-sessions-other-section" aria-labelledby="pollar-other-devices-heading">
             <h3 id="pollar-other-devices-heading" className="pollar-sessions-section-title">
-              Other devices <span>{otherCount}</span>
+              {copy.otherDevices} <span>{otherCount}</span>
             </h3>
             <div className="pollar-sessions-grid">
               {otherSessions.map((s) => {
@@ -237,14 +246,14 @@ export function SessionsModalTemplate({
                         className="pollar-sessions-item-revoke"
                         onClick={() => onRevoke(s.familyId)}
                         disabled={isRevoking || signingOutEverywhere}
-                        aria-label={`Sign out ${describeDevice(s)}`}
-                        title={isRevoking ? 'Signing out…' : 'Sign out this device'}
+                        aria-label={copy.signOutDevice(describeDevice(s, copy))}
+                        title={isRevoking ? copy.signingOut : copy.signOutThisDevice}
                       >
                         {isRevoking ? <span className="pollar-spinner pollar-spinner-sm" /> : <CloseIcon />}
                       </button>
                     </div>
-                    <strong className="pollar-sessions-item-device">{describeDevice(s)}</strong>
-                    <span className="pollar-sessions-item-meta">{formatRelative(s.lastUsedAt ?? s.createdAt)}</span>
+                    <strong className="pollar-sessions-item-device">{describeDevice(s, copy)}</strong>
+                    <span className="pollar-sessions-item-meta">{formatRelative(s.lastUsedAt ?? s.createdAt, copy)}</span>
                   </div>
                 );
               })}
@@ -264,15 +273,15 @@ export function SessionsModalTemplate({
             className="pollar-sessions-logout-all"
             onClick={onLogoutEverywhere}
             disabled={signingOutEverywhere || otherCount === 0}
-            title={otherCount === 0 ? 'No other devices to sign out' : undefined}
+            title={otherCount === 0 ? copy.noOtherDevices : undefined}
           >
             {signingOutEverywhere ? (
               <>
                 <span className="pollar-spinner pollar-spinner-sm pollar-spinner-current" />
-                Signing out…
+                {copy.signingOut}
               </>
             ) : (
-              'Sign out everywhere'
+              copy.signOutEverywhere
             )}
           </button>
         </div>

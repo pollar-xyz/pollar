@@ -1,10 +1,14 @@
 'use client';
 
-import { fromBaseUnits, TxHistoryRecord, TxHistoryState, WalletChain } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { fromBaseUnits, PollarLanguage, TxHistoryRecord, TxHistoryState, WalletChain } from '@pollar/core';
 import { type ReactNode } from 'react';
 import { ChainSelect } from '../ChainSelect';
 import { CopyButton, cropAddress, explorerTxUrl, PollarModalFooter } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
+import { TX_HISTORY_COPY } from './tx-history-copy';
+
+type TxHistoryCopy = (typeof TX_HISTORY_COPY)['en'];
 
 const PAGE_SIZE = 10;
 
@@ -25,12 +29,14 @@ interface TxHistoryModalTemplateProps {
   onPrev: () => void;
   onNext: () => void;
   onClose: () => void;
+  /** Language of the modal. Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
 
-function StatusBadge({ status }: { status: TxHistoryRecord['status'] }) {
+function StatusBadge({ status, copy }: { status: TxHistoryRecord['status']; copy: TxHistoryCopy }) {
   return (
     <span className="pollar-hist-item-badge" data-status={status}>
-      {status}
+      {copy.status[status] ?? status}
     </span>
   );
 }
@@ -85,7 +91,7 @@ function AddressChip({ value, label }: { value: string; label: string }) {
  * Renders a summary string, swapping every full Stellar address (G... account or
  * C... contract) for an {@link AddressChip}. Plain-text runs are kept as-is.
  */
-function renderSummary(summary: string): ReactNode {
+function renderSummary(summary: string, copy: TxHistoryCopy): ReactNode {
   const parts: ReactNode[] = [];
   let last = 0;
   let key = 0;
@@ -94,7 +100,11 @@ function renderSummary(summary: string): ReactNode {
     if (m.index > last) parts.push(<span key={key++}>{summary.slice(last, m.index)}</span>);
     const address = m[0];
     parts.push(
-      <AddressChip key={key++} value={address} label={address[0] === 'C' ? 'Copy contract address' : 'Copy wallet address'} />,
+      <AddressChip
+        key={key++}
+        value={address}
+        label={address[0] === 'C' ? copy.copyContractAddress : copy.copyWalletAddress}
+      />,
     );
     last = m.index + address.length;
   }
@@ -117,8 +127,11 @@ export function TxHistoryModalTemplate({
   onPrev,
   onNext,
   onClose,
+  language: languageProp,
 }: TxHistoryModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
+  const copy = TX_HISTORY_COPY[language];
 
   const isLoading = txHistory.step === 'loading';
   const records = txHistory.step === 'loaded' ? txHistory.data.records : [];
@@ -135,15 +148,15 @@ export function TxHistoryModalTemplate({
       onClick={(e) => e.stopPropagation()}
     >
       <div className="pollar-modal-header">
-        <h2 className="pollar-modal-title">Transaction History</h2>
+        <h2 className="pollar-modal-title">{copy.title}</h2>
         <div className="pollar-modal-header-actions">
           <button
             type="button"
             className="pollar-modal-close"
             onClick={onRefresh}
             disabled={isLoading}
-            aria-label="Refresh"
-            title="Refresh"
+            aria-label={copy.refresh}
+            title={copy.refresh}
           >
             <svg
               className={isLoading ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
@@ -162,7 +175,7 @@ export function TxHistoryModalTemplate({
               />
             </svg>
           </button>
-          <button className="pollar-modal-close" onClick={onClose} aria-label="Close">
+          <button className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
               <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
@@ -170,25 +183,25 @@ export function TxHistoryModalTemplate({
         </div>
       </div>
 
-      <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoading} />
+      <ChainSelect label={copy.network} value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoading} />
 
       {walletAddress && (
         <div className="pollar-address-row">
           <span className="pollar-address">{cropAddress(walletAddress)}</span>
-          <CopyButton value={walletAddress} label="Copy wallet address" />
+          <CopyButton value={walletAddress} label={copy.copyWalletAddress} />
         </div>
       )}
 
       <div className="pollar-hist-list">
-        {txHistory.step === 'idle' && <div className="pollar-modal-empty">Click Refresh to load transactions.</div>}
+        {txHistory.step === 'idle' && <div className="pollar-modal-empty">{copy.idle}</div>}
         {isLoading && (
           <div className="pollar-loading-block">
             <div className="pollar-spinner" />
-            <span>Loading…</span>
+            <span>{copy.loading}</span>
           </div>
         )}
         {txHistory.step === 'error' && <div className="pollar-modal-empty">{txHistory.message}</div>}
-        {txHistory.step === 'loaded' && records.length === 0 && <div className="pollar-modal-empty">No transactions yet.</div>}
+        {txHistory.step === 'loaded' && records.length === 0 && <div className="pollar-modal-empty">{copy.empty}</div>}
         {records.map((record) => {
           const hash = typeof record.hash === 'string' && record.hash.length > 0 ? record.hash : undefined;
           // Each row carries its own chain (a filtered view is still per-chain),
@@ -223,25 +236,25 @@ export function TxHistoryModalTemplate({
                       <span className="pollar-hist-item-title">
                         {trustline.prefix}: {trustline.code}
                       </span>
-                      <AddressChip value={trustline.issuer} label="Copy issuer" />
+                      <AddressChip value={trustline.issuer} label={copy.copyIssuer} />
                     </>
                   ) : contract ? (
                     <>
-                      <span className="pollar-hist-item-title">Invoke {contract.method}() on</span>
-                      <AddressChip value={contract.contractId} label="Copy contract address" />
+                      <span className="pollar-hist-item-title">{copy.invoke.replace('{method}', contract.method)}</span>
+                      <AddressChip value={contract.contractId} label={copy.copyContractAddress} />
                     </>
                   ) : (
-                    renderSummary(record.summary)
+                    renderSummary(record.summary, copy)
                   )}
                 </span>
-                <StatusBadge status={record.status} />
+                <StatusBadge status={record.status} copy={copy} />
               </div>
 
               <span className="pollar-hist-item-meta">
-                <span>{record.operation}</span>
+                <span>{copy.operations[record.operation] ?? record.operation}</span>
                 {record.chain !== 'STELLAR' && formatAmount(record.details) && <span>· {formatAmount(record.details)}</span>}
                 {typeof record.details?.sponsored === 'boolean' && (
-                  <span>· {record.details.sponsored ? 'Sponsored' : 'Self-paid'}</span>
+                  <span>· {record.details.sponsored ? copy.sponsored : copy.selfPaid}</span>
                 )}
                 {record.fee && <span>· {formatFee(record.fee)}</span>}
               </span>
@@ -252,13 +265,13 @@ export function TxHistoryModalTemplate({
                   <>
                     <span className="pollar-hist-item-dot">·</span>
                     <span className="pollar-hist-item-hash">{truncateMiddle(hash, 6, 6)}</span>
-                    <CopyButton value={hash} label="Copy transaction hash" className="pollar-copy-btn-sm" />
+                    <CopyButton value={hash} label={copy.copyTxHash} className="pollar-copy-btn-sm" />
                     <a
                       className="pollar-hist-item-explorer"
                       href={explorerUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      aria-label="View on block explorer"
+                      aria-label={copy.viewOnExplorer}
                     >
                       <svg width="12" height="12" viewBox="0 0 13 13" fill="none" aria-hidden>
                         <path
@@ -287,14 +300,17 @@ export function TxHistoryModalTemplate({
       {showPagination && (
         <div className="pollar-hist-pagination">
           <span className="pollar-hist-pagination-info">
-            {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+            {copy.range
+              .replace('{from}', String(offset + 1))
+              .replace('{to}', String(Math.min(offset + PAGE_SIZE, total)))
+              .replace('{total}', String(total))}
           </span>
           <div className="pollar-hist-pagination-btns">
             <button className="pollar-hist-page-btn" onClick={onPrev} disabled={!hasPrev}>
-              ← Prev
+              {copy.prev}
             </button>
             <button className="pollar-hist-page-btn" onClick={onNext} disabled={!hasNext}>
-              Next →
+              {copy.next}
             </button>
           </div>
         </div>

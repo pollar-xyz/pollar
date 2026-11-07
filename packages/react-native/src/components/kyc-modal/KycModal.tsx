@@ -6,9 +6,13 @@ import {
   type KycStartResponse,
   type KycStatus as KycStatusValue,
   type KycStatusContent,
+  type PollarLanguage,
 } from '@pollar/core';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { PollarModalFooter, PollarOverlay } from '../commons';
+import { deviceLanguage } from '../commons-copy';
+import { KYC_COPY } from './kyc-copy';
 import { KycStatus as KycStatusBadge } from './KycStatus';
 import { kycErrorMessage, kycProcessingMessage, kycReviewMessage } from './kyc-messages';
 
@@ -39,6 +43,8 @@ export interface KycModalTemplateProps {
   onStartAgain?: (() => void) | undefined;
   onRefresh: () => void;
   onClose: () => void;
+  /** Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
 
 export function KycModalTemplate({
@@ -61,7 +67,9 @@ export function KycModalTemplate({
   onStartAgain,
   onRefresh,
   onClose,
+  language = deviceLanguage(),
 }: KycModalTemplateProps) {
+  const copy = KYC_COPY[language];
   const isDark = theme === 'dark';
   const busy = isLoading || startingProviderId !== null;
   const colors = {
@@ -75,37 +83,37 @@ export function KycModalTemplate({
 
   const subtitle =
     step === 'select_provider'
-      ? 'Choose your verification provider'
+      ? copy.subtitle.select
       : step === 'verifying'
-        ? `Complete the steps with ${selectedProvider?.name ?? 'the provider'}`
+        ? copy.subtitle.verifying(selectedProvider?.name ?? copy.theProvider)
         : step === 'polling'
-          ? 'Waiting for verification result'
+          ? copy.subtitle.polling
           : kycStatus === 'approved'
-            ? 'You are ready to continue'
-            : 'Your verification status';
+            ? copy.subtitle.ready
+            : copy.subtitle.status;
 
   const resultText =
     kycStatus === 'approved'
-      ? 'Your identity has been verified successfully.'
+      ? copy.result.approved
       : kycStatus === 'rejected'
-        ? 'Your verification was not approved. Contact support for the next steps.'
+        ? copy.result.rejected
         : kycStatus === 'expired'
-          ? 'Your verification expired. Start again to verify your identity.'
+          ? copy.result.expired
           : processing
-            ? kycProcessingMessage()
-            : kycReviewMessage(reviewReason);
+            ? kycProcessingMessage(language)
+            : kycReviewMessage(reviewReason, language);
 
   return (
     <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>Identity verification</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{copy.title}</Text>
         <Text style={[styles.subtitle, { color: colors.muted }]}>{subtitle}</Text>
       </View>
 
       <TouchableOpacity
         style={[styles.iconButton, styles.closeBtn, { borderColor: colors.border }]}
         onPress={onClose}
-        accessibilityLabel="Close"
+        accessibilityLabel={copy.close}
       >
         <Text style={{ color: colors.muted, fontSize: 16 }}>✕</Text>
       </TouchableOpacity>
@@ -123,19 +131,19 @@ export function KycModalTemplate({
           (startingProviderId !== null && directOpen ? (
             <View style={styles.loadingBox} accessibilityLiveRegion="polite">
               <ActivityIndicator size="large" color={accentColor} />
-              <Text style={{ color: colors.muted, marginTop: 12 }}>Opening {selectedProvider?.name ?? 'verification'}…</Text>
+              <Text style={{ color: colors.muted, marginTop: 12 }}>
+                {copy.opening(selectedProvider?.name ?? copy.verification)}
+              </Text>
             </View>
           ) : isLoading && providers.length === 0 ? (
             <View style={styles.loadingBox}>
               <ActivityIndicator size="large" color={accentColor} />
-              <Text style={{ color: colors.muted, marginTop: 12 }}>Loading providers…</Text>
+              <Text style={{ color: colors.muted, marginTop: 12 }}>{copy.loadingProviders}</Text>
             </View>
           ) : (
             <ScrollView style={{ maxHeight: 320 }}>
               {providers.length === 0 && (
-                <Text style={{ color: colors.muted, textAlign: 'center', marginBottom: 12 }}>
-                  No providers available for your country.
-                </Text>
+                <Text style={{ color: colors.muted, textAlign: 'center', marginBottom: 12 }}>{copy.noProviders}</Text>
               )}
               {providers.map((p) => (
                 <TouchableOpacity
@@ -149,10 +157,10 @@ export function KycModalTemplate({
                   {startingProviderId === p.id ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <ActivityIndicator size="small" color={accentColor} />
-                      <Text style={{ color: colors.muted, fontSize: 13 }}>Opening…</Text>
+                      <Text style={{ color: colors.muted, fontSize: 13 }}>{copy.openingShort}</Text>
                     </View>
                   ) : (
-                    <Text style={{ color: colors.muted, fontSize: 13 }}>Continue in the browser</Text>
+                    <Text style={{ color: colors.muted, fontSize: 13 }}>{copy.continueBrowser}</Text>
                   )}
                 </TouchableOpacity>
               ))}
@@ -161,25 +169,23 @@ export function KycModalTemplate({
                 onPress={onRefresh}
                 disabled={busy}
               >
-                <Text style={{ color: colors.text, fontWeight: '600' }}>Refresh</Text>
+                <Text style={{ color: colors.text, fontWeight: '600' }}>{copy.refresh}</Text>
               </TouchableOpacity>
             </ScrollView>
           ))}
 
         {step === 'verifying' && (
           <>
-            <Text style={[styles.description, { color: colors.muted }]}>
-              Verification opens in your browser. Finish the steps there, then come back here to check your status.
-            </Text>
+            <Text style={[styles.description, { color: colors.muted }]}>{copy.opensInBrowser}</Text>
             {session?.kycUrl ? (
               <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: accentColor }]} onPress={onOpenVerification}>
-                <Text style={styles.primaryBtnText}>Open verification</Text>
+                <Text style={styles.primaryBtnText}>{copy.openVerification}</Text>
               </TouchableOpacity>
             ) : (
-              <Text style={{ color: colors.muted, marginBottom: 12 }}>Identity verification will open here.</Text>
+              <Text style={{ color: colors.muted, marginBottom: 12 }}>{copy.opensHere}</Text>
             )}
             <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border }]} onPress={onDoneVerifying}>
-              <Text style={{ color: colors.text, fontWeight: '600' }}>Check status</Text>
+              <Text style={{ color: colors.text, fontWeight: '600' }}>{copy.checkStatus}</Text>
             </TouchableOpacity>
           </>
         )}
@@ -187,13 +193,13 @@ export function KycModalTemplate({
         {step === 'polling' && (
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color={accentColor} />
-            <Text style={{ color: colors.text, marginTop: 12 }}>Checking verification status…</Text>
+            <Text style={{ color: colors.text, marginTop: 12 }}>{copy.checking}</Text>
           </View>
         )}
 
         {step === 'done' && (
           <View style={styles.resultBox}>
-            <KycStatusBadge status={kycStatus} {...(processing ? { label: 'Approved' } : {})} />
+            <KycStatusBadge status={kycStatus} language={language} {...(processing ? { label: copy.approved } : {})} />
             <Text style={[styles.resultText, { color: kycStatus === 'approved' ? colors.successText : colors.text }]}>
               {resultText}
             </Text>
@@ -203,22 +209,22 @@ export function KycModalTemplate({
                 onPress={onStartAgain}
                 disabled={busy}
               >
-                <Text style={{ color: colors.text, fontWeight: '600' }}>Start again</Text>
+                <Text style={{ color: colors.text, fontWeight: '600' }}>{copy.startAgain}</Text>
               </TouchableOpacity>
             )}
             {kycStatus !== 'approved' && kycStatus !== 'rejected' && kycStatus !== 'expired' && (
               <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border }]} onPress={onDoneVerifying}>
-                <Text style={{ color: colors.text, fontWeight: '600' }}>Check again</Text>
+                <Text style={{ color: colors.text, fontWeight: '600' }}>{copy.checkAgain}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: accentColor }]} onPress={onClose}>
-              <Text style={styles.primaryBtnText}>Close</Text>
+              <Text style={styles.primaryBtnText}>{copy.close}</Text>
             </TouchableOpacity>
           </View>
         )}
       </View>
 
-      <PollarModalFooter />
+      <PollarModalFooter language={language} />
     </View>
   );
 }
@@ -236,6 +242,8 @@ export interface KycModalProps {
   providerId?: string | undefined;
   /** Called when KYC is successfully approved. */
   onApproved?: (() => void) | undefined;
+  /** Language of the modal, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
+  language?: string | undefined;
 }
 
 function newIdempotencyKey(): string {
@@ -256,8 +264,14 @@ export function KycModal({
   cardProviderId,
   providerId,
   onApproved,
+  language: languageProp,
 }: KycModalProps) {
   const { getClient, styles: pollarStyles } = usePollar();
+  const language = useModalLanguage(languageProp);
+  const copy = KYC_COPY[language];
+  // Read by the provider list's error: a language that settles later must not reload the list.
+  const languageRef = useRef(language);
+  languageRef.current = language;
   const { theme = 'light', accentColor = '#005DB4' } = pollarStyles;
 
   const [step, setStep] = useState<KycStep>('select_provider');
@@ -337,7 +351,7 @@ export function KycModal({
       }
       openedInBrowser.current = false;
       const { sessionId } = result;
-      if (sessionId === undefined) throw new Error('The KYC provider answered without a session.');
+      if (sessionId === undefined) throw new Error(copy.noSession);
       setSession({
         sessionId,
         ...(result.kycUrl !== undefined ? { kycUrl: result.kycUrl } : {}),
@@ -361,7 +375,7 @@ export function KycModal({
         return;
       }
       if (code === 'SDK_KYC_SESSION_EXPIRED') delete idempotencyKeys.current[provider.id];
-      setError(kycErrorMessage(e, 'start'));
+      setError(kycErrorMessage(e, 'start', language));
       setStep('select_provider');
     } finally {
       starting.current = false;
@@ -381,7 +395,7 @@ export function KycModal({
       .catch((e: unknown) => {
         if (mounted.current) {
           setProviders([]);
-          setError(kycErrorMessage(e, 'load'));
+          setError(kycErrorMessage(e, 'load', languageRef.current));
         }
         return [] as KycProvider[];
       })
@@ -401,10 +415,7 @@ export function KycModal({
       // country this list was filtered by must not hide it behind "no providers".
       if (target) void handleSelectProvider(target);
       else
-        void handleSelectProvider(
-          { id: providerId, name: 'Identity verification', flow: 'iframe', levels: [level] } as KycProvider,
-          false,
-        );
+        void handleSelectProvider({ id: providerId, name: copy.title, flow: 'iframe', levels: [level] } as KycProvider, false);
     });
     // handleSelectProvider reads the latest props on each call; listing it would reload providers every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -425,7 +436,7 @@ export function KycModal({
       finishWith(read);
     } catch {
       if (!mounted.current) return;
-      setError('We could not confirm your result yet. Check again shortly; this does not mean your verification was rejected.');
+      setError(copy.notConfirmed);
       setStep('verifying');
     }
   }
@@ -449,7 +460,7 @@ export function KycModal({
       await Linking.openURL(session.kycUrl);
       openedInBrowser.current = true;
     } catch {
-      setError('Could not open the verification page. Please try again.');
+      setError(copy.openPageFailed);
     }
   }
 
@@ -486,6 +497,7 @@ export function KycModal({
           onStartAgain={handleStartAgain}
           onRefresh={() => void loadProviders()}
           onClose={onClose}
+          language={language}
         />
       </View>
     </PollarOverlay>

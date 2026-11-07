@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import '../shared.css';
 import './SessionsModal.css';
 import { SessionsModalTemplate } from './SessionsModalTemplate';
+import { SESSIONS_COPY } from './sessions-copy';
 import { modalChrome } from '../modal-theme';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface SessionsModalProps {
   onClose: () => void;
@@ -14,6 +17,8 @@ interface SessionsModalProps {
 export function SessionsModal({ onClose }: SessionsModalProps) {
   const { getClient, styles, sessions } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
+  const language = useModalLanguage();
+  const copy = SESSIONS_COPY[language];
 
   // Only the per-action button spinners are local UI state. The list itself
   // (idle/loading/loaded/error) lives in the client's observable `sessions`
@@ -50,14 +55,14 @@ export function SessionsModal({ onClose }: SessionsModalProps) {
       try {
         await getClient().revokeSession(familyId);
       } catch {
-        setRevokeError('Could not sign out that device. Please try again.');
+        setRevokeError(copy.revokeFailed);
       } finally {
         setRevokingFamilyId(null);
         // Refresh from the server so the row disappears from the list.
         load();
       }
     },
-    [getClient, load],
+    [getClient, load, copy],
   );
 
   const handleLogoutEverywhere = useCallback(async () => {
@@ -75,7 +80,7 @@ export function SessionsModal({ onClose }: SessionsModalProps) {
   }, [getClient, onClose]);
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <SessionsModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -88,7 +93,8 @@ export function SessionsModal({ onClose }: SessionsModalProps) {
         onRevoke={(familyId) => void handleRevoke(familyId)}
         onLogoutEverywhere={() => void handleLogoutEverywhere()}
         onClose={onClose}
+        language={language}
       />
-    </div>
+    </PollarOverlay>
   );
 }

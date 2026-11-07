@@ -47,7 +47,10 @@ jobs:
           # An rc never satisfies a range on its own stable (0.12.0-rc.5 is outside ^0.12.0), so the
           # internal @pollar/core ranges have to name the rc, or npm goes to the registry for a
           # stable that is not published yet. Peer ranges keep their stable lines and gain the rc.
-          for pkg in $PACKAGES; do
+          # That holds for every workspace package, published or not: one left on an older rc
+          # range (privy-adapter's ^0.12.0-rc.1 does not take 0.12.1-rc.1) pulls a registry core
+          # whose peers fail to resolve.
+          for file in packages/*/package.json; do
             node -e '
               const fs = require("fs");
               const [file, version] = process.argv.slice(1);
@@ -59,7 +62,7 @@ jobs:
               const peer = pkg.peerDependencies?.["@pollar/core"];
               if (peer) pkg.peerDependencies["@pollar/core"] = `${peer} || ${range}`;
               fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + "\n");
-            ' "packages/$pkg/package.json" "$VERSION"
+            ' "$file" "$VERSION"
           done
           npm version "$VERSION" --no-git-tag-version --allow-same-version $(printf -- '-w packages/%s ' $PACKAGES)
 

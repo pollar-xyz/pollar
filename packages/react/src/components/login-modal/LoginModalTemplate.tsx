@@ -1,6 +1,7 @@
 'use client';
 
-import { AUTH_ERROR_CODES, AuthState, WalletId } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { AUTH_ERROR_CODES, AuthState, type PollarLanguage, WalletId } from '@pollar/core';
 
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 import { useState } from 'react';
@@ -9,6 +10,7 @@ import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
+import { LOGIN_COPY } from './login-copy';
 
 // Re-exported from its old home so consumers that imported it from this module
 // (the dashboard's branding preview, among others) keep working.
@@ -66,25 +68,6 @@ function WalletAdapterButtons({
     </div>
   );
 }
-
-const AUTH_STATE_MESSAGES: Record<AuthState['step'], string> = {
-  idle: '',
-  creating_session: 'Initializing…',
-  entering_email: '',
-  sending_email: 'Sending…',
-  entering_code: 'Code sent — check your inbox',
-  verifying_email_code: 'Verifying…',
-  opening_oauth: 'Redirecting…',
-  connecting_wallet: 'Connecting wallet…',
-  signing_wallet_challenge: 'Confirm in your wallet…',
-  wallet_not_installed: 'Wallet not installed',
-  authenticating_wallet: 'Signing in with wallet…',
-  creating_passkey: 'Waiting for passkey…',
-  deploying_smart_account: 'Creating your wallet…',
-  authenticating: 'Authenticating…',
-  authenticated: 'Welcome!',
-  error: '',
-};
 
 function authStateToStatus(step: AuthState['step']): StateStatus {
   const loading: AuthState['step'][] = [
@@ -144,6 +127,8 @@ interface LoginModalTemplateProps {
   onBack: () => void;
   onCancel: () => void;
   onRetry: () => void;
+  /** Language of the modal's text. Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
 
 export function LoginModalTemplate({
@@ -170,7 +155,10 @@ export function LoginModalTemplate({
   onBack,
   onCancel,
   onRetry,
+  language: languageProp,
 }: LoginModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = LOGIN_COPY[language];
   const [showPasskeyChooser, setShowPasskeyChooser] = useState(false);
   // Which wallet group's sub-picker is open (gateway label), or null for the root view.
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
@@ -201,10 +189,10 @@ export function LoginModalTemplate({
     (authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_EXPIRED ||
       authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_INVALID);
   const awaitingEmailCode = authState.step === 'entering_code' || authState.step === 'verifying_email_code' || isEmailCodeError;
-  const statusMessage = authState.step === 'error' ? authState.message : AUTH_STATE_MESSAGES[authState.step];
+  const statusMessage = authState.step === 'error' ? authState.message : copy.status[authState.step];
 
   const BackButton = ({ onClick }: { onClick: () => void }) => (
-    <button type="button" className="pollar-back-btn" onClick={onClick} aria-label="Back">
+    <button type="button" className="pollar-back-btn" onClick={onClick} aria-label={copy.back}>
       <svg
         width="20"
         height="20"
@@ -222,7 +210,7 @@ export function LoginModalTemplate({
 
   return (
     <div className="pollar-modal-card pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
-      <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label="Close">
+      <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label={copy.close}>
         <svg
           width="18"
           height="18"
@@ -241,13 +229,13 @@ export function LoginModalTemplate({
           <ModalLogo logoUrl={logoUrl} />
         </div>
         <h2 className="pollar-title">{appName}</h2>
-        <p className="pollar-subtitle">Log in or sign up</p>
+        <p className="pollar-subtitle">{copy.subtitle}</p>
       </div>
 
       {awaitingEmailCode ? (
         <>
           <BackButton onClick={onBack} />
-          <EmailCodeInput key={codeInputKey} email={email} onSubmit={onCodeSubmit ?? (() => {})} />
+          <EmailCodeInput key={codeInputKey} email={email} onSubmit={onCodeSubmit ?? (() => {})} language={language} />
         </>
       ) : activeGroup ? (
         <>
@@ -263,10 +251,10 @@ export function LoginModalTemplate({
           <BackButton onClick={() => setShowPasskeyChooser(false)} />
           <div className="pollar-wallet-section">
             <button type="button" disabled={isLoading} className="pollar-btn-primary" onClick={onCreateSmartWallet}>
-              Create a new wallet
+              {copy.createNewWallet}
             </button>
             <button type="button" disabled={isLoading} className="pollar-wallet-entry-btn" onClick={onLoginSmartWallet}>
-              Log in with an existing wallet
+              {copy.loginExistingWallet}
             </button>
           </div>
         </>
@@ -276,7 +264,7 @@ export function LoginModalTemplate({
             <div className="pollar-email-section">
               <input
                 type="email"
-                placeholder="you@email.com"
+                placeholder={copy.emailPlaceholder}
                 value={email}
                 disabled={isLoading}
                 className="pollar-input"
@@ -290,7 +278,7 @@ export function LoginModalTemplate({
                 style={{ marginTop: '0.75rem' }}
                 onClick={onEmailSubmit}
               >
-                Submit
+                {copy.submit}
               </button>
             </div>
           )}
@@ -299,7 +287,7 @@ export function LoginModalTemplate({
             <div className="pollar-divider">
               <div className="pollar-divider-line" />
               <div className="pollar-divider-label">
-                <span className="pollar-divider-text">or continue with</span>
+                <span className="pollar-divider-text">{copy.orContinueWith}</span>
               </div>
             </div>
           )}
@@ -405,6 +393,7 @@ export function LoginModalStatus({
   appName,
   onRetry,
   onCancel,
+  language: languageProp,
 }: {
   status: 'loading' | 'error';
   theme: string;
@@ -414,11 +403,14 @@ export function LoginModalStatus({
   appName: string;
   onRetry: () => void;
   onCancel: () => void;
+  language?: PollarLanguage | undefined;
 }) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = LOGIN_COPY[language];
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
   return (
     <div className="pollar-modal-card pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
-      <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label="Close">
+      <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label={copy.close}>
         <svg
           width="18"
           height="18"
@@ -437,19 +429,19 @@ export function LoginModalStatus({
           <ModalLogo logoUrl={logoUrl} />
         </div>
         <h2 className="pollar-title">{appName}</h2>
-        <p className="pollar-subtitle">Log in or sign up</p>
+        <p className="pollar-subtitle">{copy.subtitle}</p>
       </div>
 
       {status === 'loading' ? (
         <div className="pollar-loading-block">
           <div className="pollar-spinner" />
-          <span>Loading...</span>
+          <span>{copy.loading}</span>
         </div>
       ) : (
         <div className="pollar-wallet-section">
-          <p className="pollar-modal-error">Could not load sign-in options. Check your connection and try again.</p>
+          <p className="pollar-modal-error">{copy.loadError}</p>
           <button type="button" className="pollar-btn-primary" onClick={onRetry}>
-            Try again
+            {copy.tryAgain}
           </button>
         </div>
       )}

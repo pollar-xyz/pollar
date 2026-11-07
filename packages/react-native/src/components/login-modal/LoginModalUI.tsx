@@ -1,29 +1,12 @@
+import { useInheritedLanguage } from '../../language-context';
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ActivityIndicator } from 'react-native';
-import { AUTH_ERROR_CODES, AuthState } from '@pollar/core';
+import { AUTH_ERROR_CODES, AuthState, type PollarLanguage } from '@pollar/core';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR_MARK_ON_DARK, LOGO_POLLAR_MARK_ON_LIGHT } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter, PollarOverlay } from '../commons';
+import { LOGIN_COPY } from './login-copy';
 
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
-
-const AUTH_STATE_MESSAGES: Record<AuthState['step'], string> = {
-  idle: '',
-  creating_session: 'Initializing…',
-  entering_email: '',
-  sending_email: 'Sending…',
-  entering_code: 'Code sent — check your inbox',
-  verifying_email_code: 'Verifying…',
-  opening_oauth: 'Redirecting…',
-  connecting_wallet: 'Connecting wallet…',
-  signing_wallet_challenge: 'Confirm in your wallet…',
-  wallet_not_installed: 'Wallet not installed',
-  authenticating_wallet: 'Signing in with wallet…',
-  creating_passkey: 'Waiting for passkey…',
-  deploying_smart_account: 'Creating your wallet…',
-  authenticating: 'Authenticating…',
-  authenticated: 'Welcome!',
-  error: '',
-};
 
 function authStateToStatus(step: AuthState['step']): StateStatus {
   const loading: AuthState['step'][] = [
@@ -73,6 +56,8 @@ export interface LoginModalTemplateProps {
   onBack: () => void;
   onCancel: () => void;
   onRetry: () => void;
+  /** Language of the modal's text. Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
 
 export function LoginModalTemplate({
@@ -95,7 +80,10 @@ export function LoginModalTemplate({
   onBack,
   onCancel,
   onRetry,
+  language: languageProp,
 }: LoginModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = LOGIN_COPY[language];
   const [showWalletPicker, setShowWalletPicker] = useState(false);
   const [code, setCode] = useState('');
 
@@ -117,7 +105,7 @@ export function LoginModalTemplate({
     (authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_EXPIRED ||
       authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_INVALID);
   const awaitingEmailCode = authState.step === 'entering_code' || authState.step === 'verifying_email_code' || isEmailCodeError;
-  const statusMessage = authState.step === 'error' ? authState.message : AUTH_STATE_MESSAGES[authState.step];
+  const statusMessage = authState.step === 'error' ? authState.message : copy.status[authState.step];
 
   const BackButton = ({ onClick }: { onClick: () => void }) => (
     <TouchableOpacity style={[styles.iconButton, styles.backBtn, { borderColor: colors.border }]} onPress={onClick}>
@@ -140,7 +128,7 @@ export function LoginModalTemplate({
             />
           </View>
           <Text style={[styles.title, { color: colors.text }]}>{appName}</Text>
-          <Text style={[styles.subtitle, { color: colors.muted }]}>Log in or sign up</Text>
+          <Text style={[styles.subtitle, { color: colors.muted }]}>{copy.subtitle}</Text>
         </View>
 
         {awaitingEmailCode ? (
@@ -149,7 +137,7 @@ export function LoginModalTemplate({
             <TextInput
               key={codeInputKey}
               style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-              placeholder="Enter verification code"
+              placeholder={copy.codePlaceholder}
               placeholderTextColor={colors.muted}
               value={code}
               onChangeText={setCode}
@@ -161,7 +149,7 @@ export function LoginModalTemplate({
               onPress={() => onCodeSubmit && onCodeSubmit(code)}
               disabled={!code || isLoading}
             >
-              <Text style={styles.primaryBtnText}>Verify Code</Text>
+              <Text style={styles.primaryBtnText}>{copy.verifyCode}</Text>
             </TouchableOpacity>
           </View>
         ) : showWalletPicker ? (
@@ -191,7 +179,7 @@ export function LoginModalTemplate({
               <View style={styles.emailSection}>
                 <TextInput
                   style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-                  placeholder="you@email.com"
+                  placeholder={copy.emailPlaceholder}
                   placeholderTextColor={colors.muted}
                   value={email}
                   editable={!isLoading}
@@ -204,7 +192,7 @@ export function LoginModalTemplate({
                   disabled={isLoading || !email}
                   onPress={onEmailSubmit}
                 >
-                  <Text style={styles.primaryBtnText}>Submit</Text>
+                  <Text style={styles.primaryBtnText}>{copy.submit}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -212,7 +200,9 @@ export function LoginModalTemplate({
             {emailEnabled && enabledSocial.length > 0 && (
               <View style={styles.divider}>
                 <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-                <Text style={[styles.dividerText, { color: colors.muted, backgroundColor: colors.bg }]}>or continue with</Text>
+                <Text style={[styles.dividerText, { color: colors.muted, backgroundColor: colors.bg }]}>
+                  {copy.orContinueWith}
+                </Text>
                 <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
               </View>
             )}
@@ -247,7 +237,7 @@ export function LoginModalTemplate({
                   onPress={() => setShowWalletPicker(true)}
                   disabled={isLoading}
                 >
-                  <Text style={[styles.secondaryBtnText, { color: colors.muted }]}>Wallet</Text>
+                  <Text style={[styles.secondaryBtnText, { color: colors.muted }]}>{copy.wallet}</Text>
                 </TouchableOpacity>
               </View>
             )}

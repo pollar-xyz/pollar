@@ -1,4 +1,15 @@
-import type { SwapConfigContent, SwapQuoteBody, SwapQuoteContent, SwapTokensContent } from '../../types';
+import type {
+  SolanaSwapBuildBody,
+  SolanaSwapConfigContent,
+  SolanaSwapQuoteBody,
+  SolanaSwapQuoteContent,
+  SwapConfigContent,
+  SwapQuoteBody,
+  SwapQuoteContent,
+  SwapStatus,
+  SwapTokensContent,
+} from '../../types';
+import { PollarApiError } from '../../types';
 import type { PollarApiClient } from '../client';
 import { apiErrorFields } from '../error-fields';
 
@@ -12,7 +23,21 @@ export async function getSwapConfig(api: PollarApiClient): Promise<SwapConfigCon
   if (!data?.content || error) {
     throw new Error(apiErrorFields(error).code ?? apiErrorFields(error).error ?? 'Failed to load swap config');
   }
-  return data.content;
+  // Without `chain` the endpoint answers for Stellar.
+  return data.content as SwapConfigContent;
+}
+
+/**
+ * GET /swap/config?chain=SOLANA
+ * The Solana venues this app exposes (mainnet only) and, when a venue reaches
+ * other chains, `destinationChains`. Empty `venues` = no swap on Solana.
+ */
+export async function getSolanaSwapConfig(api: PollarApiClient): Promise<SolanaSwapConfigContent> {
+  const { data, error } = await api.GET('/swap/config', { params: { query: { chain: 'SOLANA' } } });
+  if (!data?.content || error) {
+    throw new Error(apiErrorFields(error).code ?? apiErrorFields(error).error ?? 'Failed to load swap config');
+  }
+  return data.content as SolanaSwapConfigContent;
 }
 
 /**
@@ -39,6 +64,47 @@ export async function quoteSwap(api: PollarApiClient, body: SwapQuoteBody): Prom
   const { data, error } = await api.POST('/swap/quote', { body });
   if (!data?.content || error) {
     throw new Error(apiErrorFields(error).code ?? apiErrorFields(error).error ?? 'Failed to quote swap');
+  }
+  // A body without `chain` is quoted on Stellar.
+  return data.content as SwapQuoteContent;
+}
+
+/**
+ * POST /swap/quote with `chain: 'SOLANA'`
+ * Prices a Solana swap on Jupiter and Titan for the session user's Solana
+ * wallet, best output first. Read-only; the quotes carry no transaction.
+ */
+export async function quoteSolanaSwap(api: PollarApiClient, body: SolanaSwapQuoteBody): Promise<SolanaSwapQuoteContent> {
+  const { data, error } = await api.POST('/swap/quote', { body });
+  if (!data?.content || error) {
+    throw new Error(apiErrorFields(error).code ?? apiErrorFields(error).error ?? 'Failed to quote swap');
+  }
+  return data.content as SolanaSwapQuoteContent;
+}
+
+/**
+ * POST /swap/build
+ * Builds the Solana swap the user picked. Answers 200 with the unsigned
+ * transaction for an external wallet, or 202 with the pending co-sign request
+ * for a co-signed one; the caller reads both off the raw response.
+ */
+export function buildSolanaSwap(api: PollarApiClient, body: SolanaSwapBuildBody) {
+  return api.POST('/swap/build', { body });
+}
+
+/**
+ * GET /swap/status?idempotencyKey=
+ * Where a swap built under that key stands; a cross-chain one carries its
+ * settlement on the destination chain.
+ */
+export async function getSwapStatus(api: PollarApiClient, idempotencyKey: string): Promise<SwapStatus> {
+  const { data, error, response } = await api.GET('/swap/status', { params: { query: { idempotencyKey } } });
+  if (!data?.content || error) {
+    const fields = apiErrorFields(error);
+    throw new PollarApiError(fields.code ?? 'SDK_SWAP_STATUS_FAILED', {
+      status: response.status,
+      ...(fields.message ? { message: fields.message } : {}),
+    });
   }
   return data.content;
 }

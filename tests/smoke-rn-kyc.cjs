@@ -59,7 +59,7 @@ function load(file) {
     if (id === '@pollar/core') return core;
     if (id === 'react-native-qrcode-svg') return () => null;
     if (id === 'react-native-safe-area-context') return { SafeAreaProvider: passthrough, SafeAreaView: passthrough };
-    if (id === '../../context' || id === '../context') return { usePollar: () => pollarContext };
+    if (id === '../../context' || id === '../context' || id === './context') return { usePollar: () => pollarContext };
     if (id === '../commons') return { PollarModalFooter: () => null, PollarOverlay: passthrough };
     if (id === './KycStatus') return { KycStatus: () => null };
     if (id === '../kyc-modal/KycModal') return load('packages/react-native/src/components/kyc-modal/KycModal.tsx');

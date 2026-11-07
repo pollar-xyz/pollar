@@ -16,19 +16,28 @@ import { ActivityIndicator, Text } from 'react-native';
 import type { PollarConfig, PollarStyles } from './types';
 import type { FeatureName } from './components/FeaturePanel';
 import { FeatureModal } from './components/FeatureModal';
+import type { EarnModalOptions, ReceiveModalOptions, SendModalOptions, SwapModalOptions } from './components/FeaturePanel';
 import { ModalErrorBoundary } from './components/commons';
 import { AppKycFlow } from './components/kyc-modal/AppKycFlow';
-import { CardModal } from './components/card-modal/CardModal';
+import { CardModal, type CardModalOptions } from './components/card-modal/CardModal';
+import { BridgeModal, type BridgeModalOptions } from './components/bridge-modal/BridgeModal';
 import { ConfirmModal } from './components/confirm-modal/ConfirmModal';
 import { CosignModal } from './components/cosign-modal/CosignModal';
 import { CustodyMigrationModal } from './components/custody-migration-modal/CustodyMigrationModal';
 import { LoginModal } from './components/login-modal/LoginModal';
 import { RecoveryModal } from './components/recovery-modal/RecoveryModal';
-import { RampWidget } from './components/ramp-widget/RampWidget';
+import { RampWidget, type RampModalOptions } from './components/ramp-widget/RampWidget';
 import { TransactionModal } from './components/transaction-modal/TransactionModal';
-import { TxHistoryModal } from './components/tx-history-modal/TxHistoryModal';
+import { TxHistoryModal, type TxHistoryModalOptions } from './components/tx-history-modal/TxHistoryModal';
 import { WalletBalanceModal } from './components/wallet-balance-modal/WalletBalanceModal';
 import { PollarUIProvider } from './components/layout';
+import { ModalLanguageContext, useProviderLanguage } from './language-context';
+import { rememberEarnOpportunities } from './components/tx-review/tx-review-model';
+
+function remembered<T extends Parameters<typeof rememberEarnOpportunities>[0]>(list: T): T {
+  rememberEarnOpportunities(list);
+  return list;
+}
 
 export interface NativePlatformAdapters {
   copyText?: (text: string) => Promise<void>;
@@ -39,6 +48,14 @@ export interface NativePlatformAdapters {
 export interface PollarProviderProps {
   /** Configuration changes replace and clean up the owned client. Memoize object-valued adapters. */
   config: PollarClientConfig;
+  /**
+   * Language of the modals, a BCP 47 tag such as `'es'` or `'pt-BR'`: typically
+   * the app's current language. Followed on every render without replacing the
+   * client, so open modals switch when it changes. It wins over `config.locale`;
+   * a language pinned in the dashboard wins over it, and a tag the modals have
+   * no translation for is skipped.
+   */
+  language?: string | undefined;
   appConfig?: PollarConfig;
   styles?: PollarStyles;
   adapters?: PollarAdapters;
@@ -63,11 +80,21 @@ const methods = [
   'getSwapTokens',
   'getSwapQuote',
   'swap',
+  'getSolanaSwapConfig',
+  'getSolanaSwapOptions',
+  'getSolanaSwapQuote',
+  'swapSolana',
+  'getSwapStatus',
   'getEarnProviders',
   'getEarnOpportunities',
   'getEarnPosition',
   'earnDeposit',
   'earnWithdraw',
+  'getSolanaEarnProviders',
+  'getSolanaEarnOpportunities',
+  'getSolanaEarnPosition',
+  'earnSolanaDeposit',
+  'earnSolanaWithdraw',
   'getRampRoutes',
   'quoteRamp',
   'createRampOrder',
@@ -91,6 +118,7 @@ type ModalMethods =
   | 'openRampModal'
   | 'openRampWidget'
   | 'openCardModal'
+  | 'openBridgeModal'
   | 'openTxHistoryModal'
   | 'openWalletBalanceModal'
   | 'openEnabledAssetsModal'
@@ -100,11 +128,24 @@ type ModalMethods =
   | 'openEarnModal'
   | 'openSessionsModal'
   | 'openDistributionRulesModal';
+/** The openers that take where their modal opens. */
+type SeededModalMethods = {
+  openRampModal: (options?: RampModalOptions) => void;
+  openRampWidget: (options?: RampModalOptions) => void;
+  openSendModal: (options?: SendModalOptions) => void;
+  openReceiveModal: (options?: ReceiveModalOptions) => void;
+  openSwapModal: (options?: SwapModalOptions) => void;
+  openEarnModal: (options?: EarnModalOptions) => void;
+  openCardModal: (options?: CardModalOptions) => void;
+  openTxHistoryModal: (options?: TxHistoryModalOptions) => void;
+  openBridgeModal: (options?: BridgeModalOptions) => void;
+};
 export type PollarContextValue = Methods &
   Record<
-    ModalMethods,
+    Exclude<ModalMethods, keyof SeededModalMethods>,
     (options?: { country?: string; level?: 'basic' | 'intermediate' | 'enhanced'; onApproved?: () => void }) => void
-  > & {
+  > &
+  SeededModalMethods & {
     getClient: () => PollarClient;
     wallet: ReturnType<PollarClient['getWallet']>;
     wallets: ReturnType<PollarClient['getWallets']>;
@@ -234,6 +275,7 @@ export function PollarProvider(props: PollarProviderProps) {
 function ClientProvider({
   runtime,
   children,
+  language,
   appConfig,
   styles: overrides,
   platform,
@@ -243,7 +285,11 @@ function ClientProvider({
 }) {
   const client = runtime.client;
   const [, update] = useState(0);
-  const [modal, setModal] = useState<FeatureName | 'cards' | null>(null);
+  const [modal, setModal] = useState<FeatureName | 'cards' | 'bridge' | null>(null);
+  // The options the open modal was opened on; the key remounts it when it opens on other options, or on none after some.
+  const [modalInitial, setModalInitial] = useState<object | undefined>(undefined);
+  const [modalKey, setModalKey] = useState(0);
+  const modalSeeded = useRef(false);
   const [kycOptions, setKycOptions] = useState<{
     country?: string;
     level?: 'basic' | 'intermediate' | 'enhanced';
@@ -319,6 +365,10 @@ function ClientProvider({
     if (cosign.pending.length > cosignPendingCount.current) setCosignModalOpen(true);
     cosignPendingCount.current = cosign.pending.length;
   }, [cosign.pending.length]);
+  // A co-signed signature this device cannot vote on: the recovery modal is
+  // where it gets added (another device, a passkey or the email).
+  useEffect(() => client.onCosignDeviceNotEnrolled(() => setRecoveryModalOpen(true)), [client]);
+  useEffect(() => client.onWalletRecoveryRequired(() => setRecoveryModalOpen(true)), [client]);
   // The recovery state of a Turnkey wallet, read once signed in and again when
   // the wallet changes, so a locked wallet says so before the user tries to
   // send. A user without a Turnkey wallet reads `required: false`.
@@ -374,8 +424,12 @@ function ClientProvider({
   const firstConfirmation = confirmations[0] ?? null;
   const wallet = client.getWallet();
   const tx = client.getTransactionState() ?? { step: 'idle' as const };
-  const open = (next: FeatureName | 'cards') => {
+  const open = (next: FeatureName | 'cards' | 'bridge', options?: object) => {
     if (modal === 'authentication' && next !== modal) client.cancelLogin();
+    const seeded = options !== undefined && Object.keys(options).length > 0;
+    if (seeded || modalSeeded.current) setModalKey((k) => k + 1);
+    modalSeeded.current = seeded;
+    setModalInitial(seeded ? options : undefined);
     setModal(next);
   };
   const close = () => {
@@ -385,10 +439,13 @@ function ClientProvider({
   // Stable per client: modals key their effects on it, and a new function each
   // render would re-run their requests on every client event.
   const getClient = useCallback(() => client, [client]);
-  const bound = useMemo(
-    () => Object.fromEntries(methods.map((name) => [name, client[name].bind(client)])) as Methods,
-    [client],
-  );
+  const bound = useMemo(() => {
+    const methodsOf = Object.fromEntries(methods.map((name) => [name, client[name].bind(client)])) as Methods;
+    // The approvals name an Earn opportunity from the last list read.
+    methodsOf.getEarnOpportunities = (provider) => client.getEarnOpportunities(provider).then(remembered);
+    methodsOf.getSolanaEarnOpportunities = () => client.getSolanaEarnOpportunities().then(remembered);
+    return methodsOf;
+  }, [client]);
   const value: PollarContextValue = {
     ...bound,
     buildTx: async (...args) => {
@@ -454,21 +511,22 @@ function ClientProvider({
     openLoginModal: () => open('authentication'),
     openTxModal: () => open('transactions'),
     openTransactionModal: () => open('transactions'),
-    openSendModal: () => open('send'),
-    openReceiveModal: () => open('receive'),
+    openSendModal: (options) => open('send', options),
+    openReceiveModal: (options) => open('receive', options),
     openWalletBalanceModal: () => open('wallet'),
     openEnabledAssetsModal: () => open('assets'),
-    openTxHistoryModal: () => open('history'),
+    openTxHistoryModal: (options) => open('history', options),
     openSessionsModal: () => open('sessions'),
     openKycModal: (options = {}) => {
       setKycOptions(options);
       open('kyc');
     },
-    openRampModal: () => open('ramp'),
-    openRampWidget: () => open('ramp'),
-    openCardModal: () => open('cards'),
-    openSwapModal: () => open('swap'),
-    openEarnModal: () => open('earn'),
+    openRampModal: (options) => open('ramp', options),
+    openRampWidget: (options) => open('ramp', options),
+    openCardModal: (options) => open('cards', options),
+    openBridgeModal: (options) => open('bridge', options),
+    openSwapModal: (options) => open('swap', options),
+    openEarnModal: (options) => open('earn', options),
     openDistributionRulesModal: () => open('distribution'),
     cosign,
     openCosignModal: () => setCosignModalOpen(true),
@@ -481,70 +539,75 @@ function ClientProvider({
     refreshCustodyMigration,
     confirmations,
   };
+  const modalLanguage = useProviderLanguage(client, value.styles?.language, language);
   return (
     <Context.Provider value={value}>
-      <PollarUIProvider theme={value.styles.theme === 'dark' ? 'dark' : 'light'}>
-        {children}
-        {modal && (
-          <ModalErrorBoundary onClose={close}>
-            {modal === 'authentication' ? (
-              <LoginModal onClose={close} />
-            ) : modal === 'kyc' ? (
-              <AppKycFlow onClose={close} {...kycOptions} />
-            ) : modal === 'ramp' ? (
-              <RampWidget onClose={close} />
-            ) : modal === 'cards' ? (
-              <CardModal key={wallet?.address ?? ''} onClose={close} />
-            ) : modal === 'transactions' ? (
-              <TransactionModal onClose={close} />
-            ) : modal === 'history' ? (
-              <TxHistoryModal onClose={close} />
-            ) : modal === 'wallet' ? (
-              <WalletBalanceModal onClose={close} />
-            ) : (
-              <FeatureModal feature={modal} onClose={close} />
-            )}
-          </ModalErrorBoundary>
-        )}
-        {cosignModalOpen && (
-          <ModalErrorBoundary onClose={() => setCosignModalOpen(false)}>
-            <CosignModal nextStep={cosignNextStep} onClose={() => setCosignModalOpen(false)} />
-          </ModalErrorBoundary>
-        )}
-        {custodyMigration?.required && !custodyMigrationLater && (
-          <ModalErrorBoundary onClose={refreshCustodyMigration}>
-            <CustodyMigrationModal
-              state={custodyMigration}
-              onMoved={() => {
-                refreshCustodyMigration();
-                refreshRecovery();
-                setRecoveryModalOpen(true);
-              }}
-              onLater={() => {
-                setCustodyMigrationLater(true);
-                refreshCustodyMigration();
-                refreshRecovery();
-              }}
-            />
-          </ModalErrorBoundary>
-        )}
-        {recoveryModalOpen && (
-          <ModalErrorBoundary onClose={() => setRecoveryModalOpen(false)}>
-            <RecoveryModal
-              onClose={() => {
-                setRecoveryModalOpen(false);
-                // A method added in the modal unlocks what waited on it (a held ramp order).
-                refreshRecovery();
-              }}
-            />
-          </ModalErrorBoundary>
-        )}
-        {firstConfirmation && (
-          <ModalErrorBoundary onClose={firstConfirmation.reject}>
-            <ConfirmModal key={firstConfirmation.id} confirmation={firstConfirmation} />
-          </ModalErrorBoundary>
-        )}
-      </PollarUIProvider>
+      <ModalLanguageContext.Provider value={modalLanguage}>
+        <PollarUIProvider theme={value.styles.theme === 'dark' ? 'dark' : 'light'}>
+          {children}
+          {modal && (
+            <ModalErrorBoundary key={modalKey} onClose={close}>
+              {modal === 'authentication' ? (
+                <LoginModal onClose={close} />
+              ) : modal === 'kyc' ? (
+                <AppKycFlow onClose={close} {...kycOptions} />
+              ) : modal === 'ramp' ? (
+                <RampWidget onClose={close} initial={modalInitial as RampModalOptions | undefined} />
+              ) : modal === 'bridge' ? (
+                <BridgeModal onClose={close} initial={modalInitial as BridgeModalOptions | undefined} />
+              ) : modal === 'cards' ? (
+                <CardModal key={wallet?.address ?? ''} onClose={close} initial={modalInitial as CardModalOptions | undefined} />
+              ) : modal === 'transactions' ? (
+                <TransactionModal onClose={close} />
+              ) : modal === 'history' ? (
+                <TxHistoryModal onClose={close} initial={modalInitial as TxHistoryModalOptions | undefined} />
+              ) : modal === 'wallet' ? (
+                <WalletBalanceModal onClose={close} />
+              ) : (
+                <FeatureModal feature={modal} onClose={close} initial={modalInitial ? { [modal]: modalInitial } : undefined} />
+              )}
+            </ModalErrorBoundary>
+          )}
+          {cosignModalOpen && (
+            <ModalErrorBoundary onClose={() => setCosignModalOpen(false)}>
+              <CosignModal nextStep={cosignNextStep} onClose={() => setCosignModalOpen(false)} />
+            </ModalErrorBoundary>
+          )}
+          {custodyMigration?.required && !custodyMigrationLater && (
+            <ModalErrorBoundary onClose={refreshCustodyMigration}>
+              <CustodyMigrationModal
+                state={custodyMigration}
+                onMoved={() => {
+                  refreshCustodyMigration();
+                  refreshRecovery();
+                  setRecoveryModalOpen(true);
+                }}
+                onLater={() => {
+                  setCustodyMigrationLater(true);
+                  refreshCustodyMigration();
+                  refreshRecovery();
+                }}
+              />
+            </ModalErrorBoundary>
+          )}
+          {recoveryModalOpen && (
+            <ModalErrorBoundary onClose={() => setRecoveryModalOpen(false)}>
+              <RecoveryModal
+                onClose={() => {
+                  setRecoveryModalOpen(false);
+                  // A method added in the modal unlocks what waited on it (a held ramp order).
+                  refreshRecovery();
+                }}
+              />
+            </ModalErrorBoundary>
+          )}
+          {firstConfirmation && (
+            <ModalErrorBoundary onClose={firstConfirmation.reject}>
+              <ConfirmModal key={firstConfirmation.id} confirmation={firstConfirmation} />
+            </ModalErrorBoundary>
+          )}
+        </PollarUIProvider>
+      </ModalLanguageContext.Provider>
     </Context.Provider>
   );
 }

@@ -1,10 +1,14 @@
 'use client';
 
-import { EnabledAssetRecord, EnabledAssetsState, WalletChain } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { EnabledAssetRecord, EnabledAssetsState, PollarLanguage, WalletChain } from '@pollar/core';
 import { useState } from 'react';
 import { ChainSelect, resolveChain } from '../ChainSelect';
 import { BusyOverlay, CopyButton, cropAddress, PollarModalFooter, Toggle, useStickyData } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
+import { ENABLED_ASSETS_COPY } from './enabled-assets-copy';
+
+type EnabledAssetsCopy = (typeof ENABLED_ASSETS_COPY)['en'];
 
 function assetKey(record: { code: string; issuer?: string }): string {
   return record.code + (record.issuer ?? '');
@@ -20,11 +24,13 @@ function AssetItem({
   busy,
   disabled,
   onToggle,
+  copy,
 }: {
   record: EnabledAssetRecord;
   busy: boolean;
   disabled: boolean;
   onToggle: (record: EnabledAssetRecord) => void;
+  copy: EnabledAssetsCopy;
 }) {
   // Absent means "not established": an unknown trustline must never render as
   // an on switch, which would read as already enabled.
@@ -39,24 +45,22 @@ function AssetItem({
       <div className="pollar-asset-info">
         <div className="pollar-asset-code-row">
           <span className="pollar-asset-code">{record.code}</span>
-          {record.enabledInApp && <span className="pollar-asset-tag">App</span>}
+          {record.enabledInApp && <span className="pollar-asset-tag">{copy.appTag}</span>}
         </div>
         {record.name && <span className="pollar-asset-name">{record.name}</span>}
         {record.issuer && (
           <span className="pollar-issuer">
             <span className="pollar-issuer-addr">{cropAddress(record.issuer)}</span>
-            <CopyButton value={record.issuer} label="Copy issuer address" className="pollar-copy-btn-sm" />
+            <CopyButton value={record.issuer} label={copy.copyIssuer} className="pollar-copy-btn-sm" />
           </span>
         )}
         {isStellar && !isNative && record.enabledInApp && (
-          <span className="pollar-asset-sponsor">
-            {record.sponsored ? 'Reserve sponsored by the app' : 'You pay the reserve (~0.5 XLM)'}
-          </span>
+          <span className="pollar-asset-sponsor">{record.sponsored ? copy.reserveSponsored : copy.reserveSelfPaid}</span>
         )}
       </div>
       {isStellar && (
         <div className="pollar-asset-actions">
-          <span className="pollar-asset-trustline-label">Trustline</span>
+          <span className="pollar-asset-trustline-label">{copy.trustline}</span>
           {/* Native XLM needs no trustline - it is implicit and can't be removed,
               so the switch shows the state but stays locked on. */}
           <Toggle
@@ -64,7 +68,7 @@ function AssetItem({
             busy={busy}
             disabled={isNative || disabled}
             onChange={() => onToggle(record)}
-            label={`${established ? 'Disable' : 'Enable'} ${record.code} trustline`}
+            label={(established ? copy.disableTrustlineFor : copy.enableTrustlineFor).replace('{code}', record.code)}
           />
         </div>
       )}
@@ -91,6 +95,8 @@ export interface EnabledAssetsModalTemplateProps {
   onClose: () => void;
   onToggleTrustline: (record: EnabledAssetRecord) => void;
   onAddCustom: () => void;
+  /** Language of the modal. Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
 
 export function EnabledAssetsModalTemplate({
@@ -108,8 +114,11 @@ export function EnabledAssetsModalTemplate({
   onClose,
   onToggleTrustline,
   onAddCustom,
+  language: languageProp,
 }: EnabledAssetsModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
+  const copy = ENABLED_ASSETS_COPY[language];
 
   const isLoading = enabledAssets.step === 'loading';
   // Keep the previous payload on screen while refreshing; the overlay below
@@ -130,18 +139,18 @@ export function EnabledAssetsModalTemplate({
       style={cssVars}
       onClick={(e) => e.stopPropagation()}
     >
-      {isLoading && data && <BusyOverlay label="Refreshing assets…" />}
+      {isLoading && data && <BusyOverlay label={copy.refreshing} />}
 
       <div className="pollar-modal-header">
-        <h2 className="pollar-modal-title">Assets</h2>
+        <h2 className="pollar-modal-title">{copy.title}</h2>
         <div className="pollar-modal-header-actions">
           <button
             type="button"
             className="pollar-modal-close"
             onClick={onRefresh}
             disabled={isLoading || busy}
-            aria-label="Refresh"
-            title="Refresh"
+            aria-label={copy.refresh}
+            title={copy.refresh}
           >
             <svg
               className={isLoading ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
@@ -160,7 +169,7 @@ export function EnabledAssetsModalTemplate({
               />
             </svg>
           </button>
-          <button className="pollar-modal-close" onClick={onClose} aria-label="Close">
+          <button className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
               <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
@@ -168,12 +177,18 @@ export function EnabledAssetsModalTemplate({
         </div>
       </div>
 
-      <ChainSelect value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoading || busy} />
+      <ChainSelect
+        label={copy.network}
+        value={selectedChain}
+        options={chains}
+        onChange={onSelectChain}
+        disabled={isLoading || busy}
+      />
 
       {walletAddress && (
         <div className="pollar-address-row">
           <span className="pollar-address">{cropAddress(walletAddress)}</span>
-          <CopyButton value={walletAddress} label="Copy wallet address" />
+          <CopyButton value={walletAddress} label={copy.copyWalletAddress} />
         </div>
       )}
 
@@ -181,7 +196,7 @@ export function EnabledAssetsModalTemplate({
       {isLoading && !data && (
         <div className="pollar-loading-block">
           <div className="pollar-spinner" />
-          <span>Loading…</span>
+          <span>{copy.loading}</span>
         </div>
       )}
 
@@ -189,9 +204,11 @@ export function EnabledAssetsModalTemplate({
 
       {actionError && <div className="pollar-modal-action-error">{actionError}</div>}
 
-      {data && !data.exists && <div className="pollar-modal-empty">Account not found on {data.network}.</div>}
+      {data && !data.exists && (
+        <div className="pollar-modal-empty">{copy.accountNotFound.replace('{network}', data.network)}</div>
+      )}
 
-      {data && assets.length === 0 && <div className="pollar-modal-empty">No assets found on this network.</div>}
+      {data && assets.length === 0 && <div className="pollar-modal-empty">{copy.empty}</div>}
 
       {data && assets.length > 0 && (
         <div className="pollar-asset-list">
@@ -202,6 +219,7 @@ export function EnabledAssetsModalTemplate({
               busy={busyKey === assetKey(a)}
               disabled={busy && busyKey !== assetKey(a)}
               onToggle={onToggleTrustline}
+              copy={copy}
             />
           ))}
         </div>
@@ -209,7 +227,7 @@ export function EnabledAssetsModalTemplate({
 
       {isStellarSelected && (
         <button className="pollar-asset-add-custom" onClick={onAddCustom} disabled={busy}>
-          + Add custom trustline
+          {copy.addCustom}
         </button>
       )}
 
@@ -228,6 +246,8 @@ export interface CustomTrustlineModalTemplateProps {
   onBack: () => void;
   onClose: () => void;
   onSubmit: (input: { code: string; issuer: string; limit?: string }) => void;
+  /** Language of the form. Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
 
 function isValidIssuer(issuer: string): boolean {
@@ -243,8 +263,11 @@ export function CustomTrustlineModalTemplate({
   onBack,
   onClose,
   onSubmit,
+  language: languageProp,
 }: CustomTrustlineModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
+  const copy = ENABLED_ASSETS_COPY[language];
 
   const [code, setCode] = useState('');
   const [issuer, setIssuer] = useState('');
@@ -269,27 +292,25 @@ export function CustomTrustlineModalTemplate({
     >
       <div className="pollar-modal-header">
         <div className="pollar-modal-header-actions">
-          <button className="pollar-modal-close" onClick={onBack} disabled={busy} aria-label="Back">
+          <button className="pollar-modal-close" onClick={onBack} disabled={busy} aria-label={copy.back}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
               <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          <h2 className="pollar-modal-title">Add custom trustline</h2>
+          <h2 className="pollar-modal-title">{copy.customTitle}</h2>
         </div>
-        <button className="pollar-modal-close" onClick={onClose} aria-label="Close">
+        <button className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
             <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </button>
       </div>
 
-      <p className="pollar-asset-custom-hint">
-        Custom trustlines aren&apos;t sponsored — your wallet pays the 0.5 XLM reserve and the transaction fee.
-      </p>
+      <p className="pollar-asset-custom-hint">{copy.customHint}</p>
 
       <div className="pollar-field">
         <label className="pollar-label" htmlFor="pollar-trustline-code">
-          Asset code
+          {copy.assetCode}
         </label>
         <input
           id="pollar-trustline-code"
@@ -306,7 +327,7 @@ export function CustomTrustlineModalTemplate({
 
       <div className="pollar-field">
         <label className="pollar-label" htmlFor="pollar-trustline-issuer">
-          Issuer
+          {copy.issuer}
         </label>
         <input
           id="pollar-trustline-issuer"
@@ -318,21 +339,19 @@ export function CustomTrustlineModalTemplate({
           spellCheck={false}
           disabled={busy}
         />
-        {issuer.trim().length > 0 && !issuerOk && (
-          <span className="pollar-field-error">Issuer must be a 56-character Stellar address starting with G.</span>
-        )}
+        {issuer.trim().length > 0 && !issuerOk && <span className="pollar-field-error">{copy.issuerInvalid}</span>}
       </div>
 
       <div className="pollar-field">
         <label className="pollar-label" htmlFor="pollar-trustline-limit">
-          Limit <span className="pollar-label-optional">(optional)</span>
+          {copy.limit} <span className="pollar-label-optional">{copy.optional}</span>
         </label>
         <input
           id="pollar-trustline-limit"
           className="pollar-input"
           value={limit}
           onChange={(e) => setLimit(e.target.value)}
-          placeholder="Maximum"
+          placeholder={copy.limitPlaceholder}
           inputMode="decimal"
           autoComplete="off"
           spellCheck={false}
@@ -347,10 +366,10 @@ export function CustomTrustlineModalTemplate({
           {busy ? (
             <>
               <span className="pollar-spinner pollar-spinner-sm" />
-              Enabling…
+              {copy.enabling}
             </>
           ) : (
-            'Enable trustline'
+            copy.enableTrustline
           )}
         </button>
       </div>

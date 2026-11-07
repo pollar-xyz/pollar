@@ -17,12 +17,17 @@ import { PollarApiError } from '../types';
 import { bytesToHex, compressedPublicKeyHex, encodeStamp, rawSignatureToDer } from './encoding';
 import { checkCustodySwitchStep, type CustodySwitchStep } from './custody';
 import { CosignRecovery } from './recovery';
-import { checkEvmRequest, polygonChainIdFor } from './evm';
+import { checkEvmAuthorizationRequest, checkEvmRequest, polygonChainIdFor } from './evm';
 import { checkSolanaRequest } from './solana';
+import { stellarAuthEntryHashHex } from './stellar-auth-entry';
 import { stellarTransactionHashHex } from './stellar-hash';
 import { isRecord, stringField } from '../api/error-fields';
 
 const REQUEST_VOTE_TIMEOUT_MS = 60_000;
+/** Refreshes asked before a vote while a ramp step's network fee is on its way; sdk-api waits about 5s on each. */
+const GAS_PENDING_ATTEMPTS = 6;
+/** A refresh rebuilds the transaction and can wait for its network fee: more than the 10s default. */
+const REFRESH_TIMEOUT_MS = 20_000;
 
 /**
  * The user's half of a Turnkey wallet, headless: no UI, only promises and the
@@ -240,10 +245,30 @@ export class CosignManager {
    */
   async refresh(target: CosignRequest | string): Promise<CosignRequest> {
     const id = typeof target === 'string' ? target : target.id;
-    const res = await this.deps.api.POST('/cosign/requests/{id}/refresh', { params: { path: { id } } });
+    const res = await this.deps.api.POST('/cosign/requests/{id}/refresh', {
+      params: { path: { id } },
+      headers: { 'x-pollar-timeout-ms': String(REFRESH_TIMEOUT_MS) },
+    });
     const request = content(res, 'SDK_COSIGN_REQUEST_NOT_FOUND').request;
     this.deps.onRequest(request);
     return request;
+  }
+
+  /**
+   * {@link refresh} before a vote. A ramp step on Polygon is voted once its
+   * network fee reached the wallet; sdk-api waits a few seconds for it, and
+   * answers `SDK_COSIGN_GAS_PENDING` when it is still on its way at the end of
+   * that wait. The refresh is asked again before that reaches the user.
+   */
+  private async refreshForVote(request: CosignRequest): Promise<CosignRequest> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.refresh(request);
+      } catch (err) {
+        if (!(err instanceof PollarApiError && err.code === 'SDK_COSIGN_GAS_PENDING') || attempt >= GAS_PENDING_ATTEMPTS)
+          throw err;
+      }
+    }
   }
 
   /**
@@ -274,15 +299,49 @@ export class CosignManager {
       };
     }
 
+    if (request.kind === 'EVM_AUTHORIZATION') {
+      // The wallet's EIP-7702 delegation: secp256k1 over the digest recomputed here, never over Pollar's word for it.
+      if (request.network !== 'POLYGON') return { ok: false, reason: 'an EVM authorization for a chain that is not Polygon' };
+      const check = checkEvmAuthorizationRequest(
+        request.unsignedPayload,
+        request.payloadHash,
+        polygonChainIdFor(this.deps.networkPassphrase()),
+      );
+      if (!check.ok) return { ok: false, reason: check.reason, ...(check.digest ? { localHash: check.digest } : {}) };
+      return {
+        ok: true,
+        localHash: check.digest,
+        proposal: {
+          path: '/public/v1/submit/sign_raw_payload',
+          body: signed('ACTIVITY_TYPE_SIGN_RAW_PAYLOAD_V2', {
+            signWith: request.signWith,
+            payload: check.digest,
+            encoding: 'PAYLOAD_ENCODING_HEXADECIMAL',
+            hashFunction: 'HASH_FUNCTION_NO_OP',
+          }),
+        },
+      };
+    }
+
     if (request.network === 'STELLAR') {
+      // An AUTH_ENTRY payload is a Soroban authorization entry, signed the same
+      // way as a transaction: ed25519 over the hash recomputed here.
+      const what = request.kind === 'AUTH_ENTRY' ? 'auth entry' : 'transaction';
       let localHash: string;
       try {
-        localHash = await stellarTransactionHashHex(request.unsignedPayload, this.deps.networkPassphrase());
+        localHash =
+          request.kind === 'AUTH_ENTRY'
+            ? await stellarAuthEntryHashHex(
+                request.unsignedPayload,
+                this.deps.networkPassphrase(),
+                request.account ?? request.signWith,
+              )
+            : await stellarTransactionHashHex(request.unsignedPayload, this.deps.networkPassphrase());
       } catch (err) {
-        return { ok: false, reason: `could not hash the transaction: ${err instanceof Error ? err.message : String(err)}` };
+        return { ok: false, reason: `could not hash the ${what}: ${err instanceof Error ? err.message : String(err)}` };
       }
       if (localHash !== request.payloadHash.toLowerCase()) {
-        return { ok: false, reason: 'the transaction does not hash to what Pollar asks to sign', localHash };
+        return { ok: false, reason: `the ${what} does not hash to what Pollar asks to sign`, localHash };
       }
       return {
         ok: true,
@@ -327,7 +386,12 @@ export class CosignManager {
     if (request.network === 'POLYGON') {
       // The payload is read here, not only compared: the call it makes must be
       // one the platform asks for, and the one the request says it is.
-      const check = checkEvmRequest(request.unsignedPayload, request.details, polygonChainIdFor(this.deps.networkPassphrase()));
+      const check = checkEvmRequest(
+        request.unsignedPayload,
+        request.details,
+        polygonChainIdFor(this.deps.networkPassphrase()),
+        request.signWith,
+      );
       if (!check.ok) return { ok: false, reason: check.reason };
       const localHash = request.unsignedPayload.replace(/^0x/i, '').toLowerCase();
       return {
@@ -360,7 +424,7 @@ export class CosignManager {
     if (request.status !== 'PENDING') throw new PollarApiError('SDK_COSIGN_REQUEST_NOT_PENDING', { status: request.status });
     // Rebuild first, so the payload this device verifies and proposes is
     // seconds old; see {@link refresh} for what goes stale while the user decides.
-    if (request.refreshable) request = await this.refresh(request);
+    if (request.refreshable) request = await this.refreshForVote(request);
     if (request.status !== 'PENDING') return request;
     // Already proposed (by this device or another of the user's): only the
     // approver's vote is outstanding, and sdk-api reads it back from Turnkey.
@@ -462,11 +526,27 @@ export class CosignManager {
   }
 
   /**
+   * Whether this device's key is one of the user's devices, the only keys that
+   * can vote on a request. Each browser origin and each app install holds its
+   * own key, so the same user on another site or device starts out not
+   * enrolled until an enrolled device, a passkey or the email adds it.
+   */
+  async isDeviceEnrolled(): Promise<boolean> {
+    return this.isEnrolledIn((await this.devices()).devices);
+  }
+
+  private async isEnrolledIn(devices: CosignDevicesContent['devices']): Promise<boolean> {
+    const own = (await this.publicKeyHex()).toLowerCase();
+    return devices.some((d) => d.publicKey.toLowerCase() === own);
+  }
+
+  /**
    * Read the sub-organization back with the device key and report whether it
    * is the quorum the wallet's custody promises: two root users at threshold 2
    * (co-signed) or the user alone at threshold 1 (self-custody), with this
    * device among the user's credentials. Run once after the wallet is created,
-   * before the first deposit.
+   * before the first deposit. A device that is not enrolled reports
+   * `code: 'DEVICE_NOT_ENROLLED'` without reading Turnkey.
    */
   async inspectQuorum(options?: { report?: boolean }): Promise<CosignQuorumReport> {
     const report = await this.readQuorum();
@@ -565,8 +645,20 @@ export class CosignManager {
   }
 
   private async readQuorum(): Promise<CosignQuorumReport> {
-    const { subOrgId, custody } = await this.devices();
+    const { subOrgId, custody, devices } = await this.devices();
     if (!subOrgId || !custody) return { ok: false, reason: 'this user has no Turnkey wallet' };
+    // The relay forwards only an enrolled device's stamp, so a device that is
+    // not enrolled cannot read the quorum. No threshold in the report keeps
+    // inspectQuorum from recording the sub-org as BROKEN over it.
+    if (!(await this.isEnrolledIn(devices))) {
+      return {
+        ok: false,
+        code: 'DEVICE_NOT_ENROLLED',
+        reason: 'this device is not one of the wallet devices',
+        custody,
+        deviceRegistered: false,
+      };
+    }
     // What the sub-org must look like for this custody: the root users and the
     // threshold are what make the wallet the user's.
     const expected = custody === 'SELF_CUSTODY' ? { threshold: 1, rootUsers: 1 } : { threshold: 2, rootUsers: 2 };

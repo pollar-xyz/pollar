@@ -4,3 +4,33 @@
   color: var(--pollar-accent);
   font-weight: 600;
 }
+
+.pollar-earn-network {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.pollar-earn-networks {
+  margin-bottom: 0;
+}
+
+.pollar-earn-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.pollar-earn-card-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pollar-earn-card {
+  margin-bottom: 0.75rem;
+}

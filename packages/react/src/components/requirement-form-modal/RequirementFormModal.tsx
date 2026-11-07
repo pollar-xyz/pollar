@@ -1,7 +1,7 @@
 'use client';
 
 import type { RequirementForm, RequirementFormField } from '@pollar/core';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
@@ -10,16 +10,18 @@ import {
   COPY,
   fieldErrorMessage,
   fieldErrorsOf,
-  formLanguage,
   initialValues,
   localFieldError,
   localFieldErrors,
   localized,
+  visibleFields,
   type FormLanguage,
   type FormValues,
 } from './form-fields';
+import { useModalLanguage } from '../../language';
 import '../shared.css';
 import './RequirementFormModal.css';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface RequirementFormModalProps {
   formId: string;
@@ -28,6 +30,8 @@ interface RequirementFormModalProps {
   onClose: () => void;
   /** Called once the answers are stored. */
   onSubmitted: () => void;
+  /** Language of the modal, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
+  language?: string | undefined;
 }
 
 function FieldInput({
@@ -111,12 +115,18 @@ function FieldInput({
 }
 
 /** One FORM requirement step: the form a route asks for, prefilled with the user's previous answers. */
-export function RequirementFormModal({ formId, progress, onClose, onSubmitted }: RequirementFormModalProps) {
+export function RequirementFormModal({
+  formId,
+  progress,
+  onClose,
+  onSubmitted,
+  language: languageProp,
+}: RequirementFormModalProps) {
   const { getClient, styles } = usePollar();
   const client = getClient();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
-  const language = useMemo(formLanguage, []);
+  const language = useModalLanguage(languageProp);
   const copy = COPY[language];
 
   const [form, setForm] = useState<RequirementForm | null>(null);
@@ -173,12 +183,13 @@ export function RequirementFormModal({ formId, progress, onClose, onSubmitted }:
   async function submit() {
     if (!form) return;
     setError(null);
-    const local = localFieldErrors(form.fields, values);
+    const shown = visibleFields(form.fields, values);
+    const local = localFieldErrors(shown, values);
     if (Object.keys(local).length) return setFieldErrors(local);
     setSubmitting(true);
     setFieldErrors({});
     try {
-      await client.submitRequirementForm(form.formId, answersOf(form.fields, values));
+      await client.submitRequirementForm(form.formId, answersOf(shown, values));
       if (mounted.current) onSubmitted();
     } catch (e) {
       if (!mounted.current) return;
@@ -191,7 +202,7 @@ export function RequirementFormModal({ formId, progress, onClose, onSubmitted }:
   }
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <div
         className="pollar-modal-card pollar-form-modal"
         role="dialog"
@@ -238,7 +249,7 @@ export function RequirementFormModal({ formId, progress, onClose, onSubmitted }:
             }}
           >
             {form.description && <p className="pollar-form-description">{form.description}</p>}
-            {form.fields.map((field) => {
+            {visibleFields(form.fields, values).map((field) => {
               const fieldError = fieldErrors[field.key];
               const help = localized(field.help, language);
               return (
@@ -291,6 +302,6 @@ export function RequirementFormModal({ formId, progress, onClose, onSubmitted }:
         )}
         <PollarModalFooter />
       </div>
-    </div>
+    </PollarOverlay>
   );
 }

@@ -38,10 +38,15 @@ const reactNative = {
   ScrollView: passthrough,
   Text: passthrough,
   TouchableOpacity: (props) => React.createElement('button', { disabled: props.disabled }, props.children),
+  Pressable: (props) => React.createElement('button', { disabled: props.disabled }, props.children),
+  Image: () => null,
   ActivityIndicator: () => null,
   Modal: passthrough,
+  Linking: { openURL: () => Promise.resolve() },
+  Platform: { OS: 'ios', select: (options) => options.ios ?? options.default },
   StyleSheet: { create: (s) => s, absoluteFillObject: {}, hairlineWidth: 1 },
 };
+const reactNativeSvg = { __esModule: true, default: passthrough, Circle: () => null, Path: () => null, Rect: () => null };
 
 function loader(mocks) {
   return function load(file) {
@@ -49,7 +54,7 @@ function loader(mocks) {
     const output = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
     }).outputText;
-    const scope = { exports: {}, setInterval, clearInterval, setTimeout, clearTimeout, globalThis };
+    const scope = { exports: {}, setInterval, clearInterval, setTimeout, clearTimeout, globalThis, document };
     scope.require = (id) => {
       if (id in mocks) return mocks[id];
       if (id.endsWith('.css')) return {};
@@ -66,7 +71,7 @@ function loader(mocks) {
 }
 
 /** A client whose cosign store refreshes like core's: same requests, new objects. */
-function fakeClient() {
+function fakeClient({ quorum = { ok: true } } = {}) {
   const listeners = new Set();
   let state = { pending: [] };
   const emit = () => listeners.forEach((cb) => cb({ ...state, pending: [...state.pending] }));
@@ -96,7 +101,7 @@ function fakeClient() {
       },
       inspectQuorum: async () => {
         client.calls.inspectQuorum++;
-        return { ok: true };
+        return quorum;
       },
       verify: async () => {
         client.calls.verify++;
@@ -124,9 +129,17 @@ async function settle() {
 
 async function mount(element) {
   const container = document.createElement('div');
+  document.body.appendChild(container);
   const root = createRoot(container);
   await React.act(async () => root.render(element));
-  return { container, unmount: () => React.act(async () => root.unmount()) };
+  // The web modals portal into body, so that is where their content is.
+  return {
+    container: document.body,
+    unmount: async () => {
+      await React.act(async () => root.unmount());
+      container.remove();
+    },
+  };
 }
 
 (async () => {
@@ -160,7 +173,9 @@ async function mount(element) {
     const context = { getClient, styles: {}, cosign: client.getCosignState() };
     const load = loader({
       'react-native': reactNative,
+      'react-native-svg': reactNativeSvg,
       '../../context': { usePollar: () => context },
+      './context': { usePollar: () => context },
       '../commons': { PollarOverlay: passthrough, PollarModalFooter: () => null },
     });
     const { CosignModal } = load('packages/react-native/src/components/cosign-modal/CosignModal.tsx');
@@ -223,7 +238,10 @@ async function mount(element) {
         const context = { getClient: () => client, styles: {}, cosign: client.getCosignState() };
         ({ CosignModal } = loader({
           'react-native': reactNative,
+          'react-native-svg': reactNativeSvg,
+          'react-native-svg': reactNativeSvg,
           '../../context': { usePollar: () => context },
+          './context': { usePollar: () => context },
           '../commons': { PollarOverlay: passthrough, PollarModalFooter: () => null },
         })('packages/react-native/src/components/cosign-modal/CosignModal.tsx'));
         Host = () => {
@@ -251,6 +269,157 @@ async function mount(element) {
       check(`${name}: closes on its own`, () => assert.equal(closed, 1));
       await view.unmount();
     }
+  }
+
+  // ── 4. A device that is not enrolled ────────────────────────────
+  // Another origin or install of the same user: its key is not among the
+  // wallet's devices, so it is told to add itself and Approve stays off.
+  const notEnrolled = { ok: false, code: 'DEVICE_NOT_ENROLLED', reason: 'not enrolled', deviceRegistered: false };
+  console.log('\n── 4. web, device not enrolled ───────────────────────────');
+  {
+    const client = fakeClient({ quorum: notEnrolled });
+    let closed = 0;
+    let recoveryOpened = 0;
+    const context = {
+      getClient: () => client,
+      isAuthenticated: true,
+      styles: {},
+      openRecoveryModal: () => recoveryOpened++,
+    };
+    const { CosignModal } = loader({
+      '../../context': { usePollar: () => context },
+      './context': { usePollar: () => context },
+      '../commons': { CopyButton: () => null, cropAddress: (s) => s, PollarModalFooter: () => null },
+    })('packages/react/src/components/cosign-modal/CosignModal.tsx');
+    await React.act(async () => client.arrive(request));
+    const view = await mount(React.createElement(CosignModal, { onClose: () => closed++ }));
+    await settle();
+    const buttons = () => [...view.container.querySelectorAll('button')];
+    check('it says the device is not linked', () => assert.match(view.container.textContent, /isn't linked to your wallet/));
+    check('it does not claim the request is verified', () => assert.doesNotMatch(view.container.textContent, /Verified/));
+    const approve = buttons().find((b) => b.textContent.trim() === 'Approve');
+    check('Approve is disabled', () => assert.ok(approve && approve.disabled, 'Approve missing or enabled'));
+    const reject = buttons().find((b) => b.textContent.trim() === 'Reject');
+    check('Reject stays available', () => assert.ok(reject && !reject.disabled, 'Reject missing or disabled'));
+    const link = buttons().find((b) => b.textContent.trim() === 'Link this device');
+    await React.act(async () => link?.click());
+    check('Link this device opens recovery and closes the prompt', () => {
+      assert.equal(recoveryOpened, 1);
+      assert.equal(closed, 1);
+    });
+    await view.unmount();
+  }
+  console.log('\n── 4. react-native, device not enrolled ──────────────────');
+  {
+    const client = fakeClient({ quorum: notEnrolled });
+    const context = {
+      getClient: () => client,
+      styles: {},
+      cosign: client.getCosignState(),
+      openRecoveryModal: () => undefined,
+    };
+    const { CosignModal } = loader({
+      'react-native': reactNative,
+      'react-native-svg': reactNativeSvg,
+      '../../context': { usePollar: () => context },
+      './context': { usePollar: () => context },
+      '../commons': { PollarOverlay: passthrough, PollarModalFooter: () => null },
+    })('packages/react-native/src/components/cosign-modal/CosignModal.tsx');
+    await React.act(async () => client.arrive(request));
+    context.cosign = client.getCosignState();
+    const view = await mount(React.createElement(CosignModal, { onClose: () => undefined }));
+    await settle();
+    check('it says the device is not linked', () => assert.match(view.container.textContent, /isn't linked to your wallet/));
+    check('it does not claim the request is verified', () => assert.doesNotMatch(view.container.textContent, /Verified/));
+    const approve = [...view.container.querySelectorAll('button')].find((b) => /Approve/.test(b.textContent));
+    check('Approve is disabled', () => assert.ok(approve && approve.disabled, 'Approve missing or enabled'));
+    check('it offers to link the device', () => assert.match(view.container.textContent, /Link this device/));
+    await view.unmount();
+  }
+
+  // ── 5. Recovery: asking another device ──────────────────────────
+  // The approval happens on the other device; the modal must notice it on its
+  // own instead of telling the user this device is still not part of the wallet.
+  console.log('\n── 5. web RecoveryModal, waiting for another device ──────');
+  {
+    const THIS_KEY = '03' + 'cd'.repeat(32);
+    const OTHER_KEY = '02' + 'ab'.repeat(32);
+    const device = (id, publicKey) => ({
+      id,
+      publicKey,
+      tkApiKeyId: `tk-${id}`,
+      label: id,
+      enrolledVia: 'ONBOARDING',
+      lastSeenAt: null,
+      createdAt: '',
+    });
+    let approved = false;
+    let enrollmentRequests = 0;
+    let deviceReads = 0;
+    const client = {
+      onAuthStateChange: () => () => undefined,
+      cosign: {
+        publicKeyHex: async () => THIS_KEY,
+        devices: async () => {
+          deviceReads++;
+          return {
+            subOrgId: 'sub-1',
+            endUserId: 'tk-user',
+            custody: 'COSIGNED',
+            quorumState: 'VERIFIED',
+            devices: approved ? [device('d0', OTHER_KEY), device('d1', THIS_KEY)] : [device('d0', OTHER_KEY)],
+            enrollments: [],
+          };
+        },
+        recovery: {
+          passkeyAvailable: false,
+          status: async () => ({
+            required: true,
+            configured: true,
+            subOrgId: 'sub-1',
+            endUserId: 'tk-user',
+            walletId: 'w-1',
+            authProxyConfigId: 'cfg',
+            email: { address: null, verified: false },
+            passkeys: [],
+            devices: [{ apiKeyId: 'k0', name: 'phone', publicKey: OTHER_KEY, createdAt: '' }],
+          }),
+          requestDeviceEnrollment: async () => {
+            enrollmentRequests++;
+            return { id: 'e1', expiresAt: new Date(Date.now() + 900_000).toISOString() };
+          },
+        },
+      },
+    };
+    const context = { getClient: () => client, styles: {}, refreshRecovery: () => undefined, appConfig: {} };
+    const { RecoveryModal } = loader({
+      '../../context': { usePollar: () => context },
+      './context': { usePollar: () => context },
+      '../commons': { PollarModalFooter: () => null },
+    })('packages/react/src/components/recovery-modal/RecoveryModal.tsx');
+    const view = await mount(React.createElement(RecoveryModal, { onClose: () => undefined }));
+    await settle();
+    check('a device that is not part of the wallet is told so', () =>
+      assert.match(view.container.textContent, /isn't part of your wallet yet/),
+    );
+    const ask = [...view.container.querySelectorAll('button')].find((b) => /Ask another device/.test(b.textContent));
+    await React.act(async () => ask?.click());
+    await settle();
+    check('asking sends one enrollment request', () => assert.equal(enrollmentRequests, 1));
+    check('it says the request was sent', () => assert.match(view.container.textContent, /Request sent/));
+    const readsBeforeApproval = deviceReads;
+    approved = true;
+    await React.act(() => new Promise((resolve) => setTimeout(resolve, 3_300)));
+    await settle();
+    check('it reads the devices again while it waits', () => assert.ok(deviceReads > readsBeforeApproval));
+    check('it notices the approval on its own', () => assert.match(view.container.textContent, /Device added/));
+    check('it no longer says the device is not part of the wallet', () =>
+      assert.doesNotMatch(view.container.textContent, /isn't part of your wallet yet/),
+    );
+    const readsAfterAdded = deviceReads;
+    await React.act(() => new Promise((resolve) => setTimeout(resolve, 3_300)));
+    check('it stops reading once the device is in', () => assert.equal(deviceReads, readsAfterAdded));
+    await view.unmount();
   }
 
   console.log(`\n${passed} pass, ${failed} fail`);

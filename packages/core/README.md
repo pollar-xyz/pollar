@@ -1,6 +1,6 @@
 # @pollar/core
 
-Core SDK for [Pollar](https://pollar.xyz) — authentication and transaction utilities for Stellar and Solana applications.
+Core SDK for [Pollar](https://pollar.xyz) - authentication and transaction utilities for Stellar and Solana applications.
 
 ## Solana
 
@@ -9,97 +9,20 @@ Pollar runs on Solana end to end for wallets and payments:
 - **Sign in** with Phantom, Solflare or Backpack (Sign In With Solana, via `@pollar/solana-wallet-standard-adapter`), or
   with email / Google / GitHub to get a **Pollar-managed Solana wallet**, with no seed phrase.
 - **Turnkey co-signed wallets** (mainnet): every signature is a 2-of-2 vote between the user's device and Pollar, and the
-  device verifies the transaction, including Solana CCTP burns, before it votes.
+  device verifies the transaction, including Solana CCTP burns and swaps, before it votes.
 - **Hold, send and receive SOL and SPL tokens** with `sendPayment()` and the drop-in React modals, with **app-sponsored
   fees** and token accounts created for the recipient.
+- **Swap on Solana** through Jupiter and Titan (mainnet) with `getSolanaSwapQuote()` and `swapSolana()`.
+- **Fund a card from Solana** with `fundCard({ amount, chain: 'SOLANA' })`.
 - **Fiat on/off-ramps to Solana**: Bolivia (BOB, via Stereum + CCTP) and Brazil (BRL via Pix, PagFinance).
 
-> **0.12.0** calls sdk-api **`/v3`** (`baseUrl` stays an origin) and warns once on a `Deprecation` header.
-> **Ramps are orders**: `getRampRoutes(direction)`, `quoteRamp`, `rampQuoteFields`, `createRampOrder`,
-> `getRampOrder`, `listRampOrders`, `pollRampOrder` and `signRampLeg` replace the 0.11.x ramp methods, a ramp leg
-> is signed only through a handler the app registers (`registerRampSigningHandler`, `assertRampStellarSigner`),
-> and `@pollar/core/ramps` defines a server-side ramp provider adapter. **Wallets the user holds**:
-> `createWallet({ custody })`, `client.cosign.switchCustody()`, `client.cosign.recovery` (passkeys, email code,
-> device enrollment, phrase export) and `client.cosign.migrateWallets()` for a custodial wallet moving to
-> Turnkey. The device proposes each co-signed activity (`verify()` returns `proposal`). `confirmation`
-> defaults to `'prompt'` and follows the app's dashboard; the stricter policy wins. **Breaking**; see
-> [UPGRADE.md](../../UPGRADE.md).
+> This README describes **0.12.1**. The SDK calls sdk-api **`/v3`** (`baseUrl` stays an origin) and warns once when a
+> response carries a `Deprecation` header. Every request carries **`x-pollar-sdk`** (`core/<version> <web|rn|node>`),
+> which needs an sdk-api that lists it in CORS `allowHeaders`.
 >
-> Earlier: **0.11.5**. **Turnkey co-signed wallets** and a
-> **confirmation policy**: `config.confirmation` `'auto'` (default; a co-signed wallet's device verifies
-> against Turnkey and votes on its own) or `'prompt'` (every signature waits for the user, through
-> `onConfirmationRequest()`); `config.cosignManual` keeps the raw `{ status: 'cosign_pending', request }`
-> flow; `client.cosign` verifies Stellar, Solana and Polygon requests on the device before voting. Also
-> `retryRampTransaction()`, `transactionErrorMessage()`, and Solana sends from a wallet the user signs
-> with. See [UPGRADE.md](../../UPGRADE.md).
->
-> Earlier: **0.11.4**. **KYC by ramp corridor**: the v2 ramp quote
-> types `requirementsRequired` (the first step a route still needs) and `unavailable` (providers that
-> failed to quote just now); new requirement methods (`getAppRequirements`, `getRequirementForm` /
-> `submitRequirementForm`, `getRegistryCheck` / `submitRegistryCheck`, `getProviderRegistration` /
-> `submitProviderRegistration`); corridor-scoped KYC (`corridorId` on the status, providers and
-> resolve calls); typed KYC errors (`PollarApiError`), `KycStatus` gains `'expired'`, and
-> `pollKycDecision()` returns the settled read. **Behaviour change:** `pollKycStatus()` now also returns
-> on manual review (`'pending'`) and on expiry (`'expired'`) - see [UPGRADE.md](../../UPGRADE.md).
-> Licensed under Apache-2.0 from this release.
->
-> **Wallet provisioning** (non-breaking). The platform now creates an end-user's Stellar account
-> **in the background** instead of inside `POST /auth/login`, so a login returns before the
-> account is on the ledger. New API for that window: `wallet.provisioning`
-> (`'READY' | 'CREATING' | 'FAILED'`) on `getWallet()` / `getWallets()` and the persisted session
->
-> - the ACCOUNT only, never trustlines; `onWalletStateChange(cb)`, which fires on the transition
->   and replays the current value on subscribe, the same contract as `onAuthStateChange`;
->   `refreshWalletState()` for a host that knows better than a timer; and `isWalletNotReady()` +
->   `WALLET_NOT_READY_CODE`, which name the `SDK_WALLET_NOT_READY` (409) the server returns for an
->   on-chain operation attempted before the account lands. The client polls `GET /v3/wallet/state`
->   while a wallet is `CREATING` and stops on `READY`/`FAILED`, on logout and on `destroy()`.
->   Also: **a DPoP proof the server rejects over clock skew is re-signed instead of clearing the
->   session** - an `iat-skew` 401 on `/auth/refresh` was logging the user out even though the same
->   response had just taught the client the right offset; the learned offset is now persisted next
->   to the nonce. Every request carries **`x-pollar-sdk`** (`core/<version> <web|rn|node>`), which
->   needs an sdk-api that lists it in CORS `allowHeaders`. New config: `loginTimeoutMs` (45s),
->   replacing the 10s `requestTimeoutMs` on login alone.
->
-> **Cards** (additive): `getCardProviders()`, `getCardRequirements()`, `createCardHolder()`,
-> `submitCardKyc()`, `issueCard()`, `getCards()`, `getCardBalance()`, `getCardTransactions()`,
-> `fundCard()` and the rest of the card methods. `revealCardSecrets()` decrypts the card number and
-> CVC on the device with a one-shot key the server never sees, on WebCrypto or in plain JavaScript
-> on React Native. **Wallets on demand**: for an app that creates wallets on demand or never, a
-> session without a wallet restores as signed in (`provisioning: 'NONE'`), `hasWallet()` says
-> whether there is one on any chain, `createWallet()` creates it, and `isWalletRequired()` names the
-> `SDK_WALLET_REQUIRED` a signing call returns without one.
->
-> Earlier: **0.11.3** was a patch focused on session resilience. A session
-> **survives reloads when the DPoP keypair fails to persist**: the persisted session records
-> the thumbprint of the key its tokens are bound to (`dpopJkt`), a mismatch is detected
-> locally instead of looping through 401s, and clearing a session no longer destroys the
-> keypair. `logout()` cancels a login still in flight, never destroys a session created while
-> it runs, rotates the keypair only when it still owns the teardown, and propagates to
-> sibling clients in the same document. Shared session-row writes are serialized and
-> ownership-gated, and the last server-issued `DPoP-Nonce` is persisted. New public API:
-> `setPasskeyDefaults()` on `PollarClient`, and `isPollarClient(value)`, a type guard that
-> recognizes a client even across duplicate copies of this package (`instanceof` cannot).
->
-> Earlier: **0.11.2** added `client.stellar` — **SEP-53 message** and **SEP-10 challenge** ownership
-> proofs. External wallets sign client-side through their adapter (new optional
-> `signStellarMessage` on `WalletAdapter`; Freighter implements it, Albedo has no SEP-53
-> support), embedded wallets sign server-side, and both return the same `sep53` scheme so a
-> verifier treats them alike. Also: `@stellar/freighter-api` bumped to 6.0.0. Non-breaking.
-> New exported types: `StellarSepApi`, `StellarMessageProof`, `Sep10SignParams`, `Sep10Proof`,
-> `SignMessageOptions`, `SignMessageResponse`.
->
-> Earlier: **0.11.1** reworked the multichain wallet responses. **Breaking:**
-> `WalletBalanceRecord.balance` and `.available` are `string | null` - `null` means the chain
-> could not be read, and must render as unavailable rather than as `0`. Every chain reports its
-> native coin plus each token the app enabled (0.11.0 reported only the native token off
-> Stellar), and balances gained `decimals`, `limit` and `sponsored`. `signTx` accepts
-> `skipSponsorship`. **0.11.0** went multichain
-> (Solana joins Stellar) and moved every request to the `/v2` API. **0.10.0** unified external wallets into `walletAdapters: WalletAdapter[]` and
-> removed the singular `walletAdapter` resolver and `client.loginWallet()`.
->
-> See [UPGRADE.md](../../UPGRADE.md) for migration steps and the
-> [CHANGELOG](../../CHANGELOG.md) for the full version history before upgrading.
+> See [UPGRADE.md](https://github.com/pollar-xyz/pollar/blob/main/UPGRADE.md) for migration steps and the [CHANGELOG](https://github.com/pollar-xyz/pollar/blob/main/CHANGELOG.md) for the full version
+> history before upgrading. `signAuthEntry` passes the signature confirmation like every other signature; see
+> [UPGRADE.md](https://github.com/pollar-xyz/pollar/blob/main/UPGRADE.md) if your app signs Soroban auth entries.
 
 ## Installation
 
@@ -114,7 +37,7 @@ yarn add @pollar/core
 For React Native / Expo, also install one of the storage adapter peer deps:
 
 ```bash
-# Expo (works in Expo Go — no native module required)
+# Expo (works in Expo Go - no native module required)
 npx expo install expo-secure-store react-native-get-random-values
 npm i react-native-polyfill-globals
 
@@ -122,17 +45,17 @@ npm i react-native-polyfill-globals
 npm i react-native-keychain react-native-get-random-values react-native-polyfill-globals
 ```
 
-> **`react-native-quick-crypto` is optional.** SHA-256 and the ECDSA P-256 keypair now run on pure-JS
+> **`react-native-quick-crypto` is optional.** SHA-256 and the ECDSA P-256 keypair run on pure-JS
 > [`@noble/hashes`](https://github.com/paulmillr/noble-hashes) / [`@noble/curves`](https://github.com/paulmillr/noble-curves)
-> (`NobleKeyManager`), so the SDK no longer needs `crypto.subtle` on React Native — it runs in Expo Go. Installing
-> `react-native-quick-crypto` (a native module → Expo **dev build**, not Expo Go) is only a security upgrade: when
+> (`NobleKeyManager`), so the SDK does not need `crypto.subtle` on React Native - it runs in Expo Go. Installing
+> `react-native-quick-crypto` (a native module -> Expo **dev build**, not Expo Go) is only a security upgrade: when
 > `crypto.subtle` is present the SDK uses `WebCryptoKeyManager`, whose private key is **non-extractable**. With Noble
 > the private scalar is held in JS and persisted through the storage adapter. Both produce valid DPoP proofs.
 
 > **React Native runtime requirements.** The SDK builds a DPoP proof (RFC 9449) for **every** authenticated request.
 > That path uses three standard Web primitives that React Native / Hermes does **not** all ship by default. Register
 > them at the very top of your entry file, **before** any `@pollar/core` import. If any is missing, DPoP proof
-> construction fails and **no authenticated request works** — the SDK is not at fault, the runtime is.
+> construction fails and **no authenticated request works** - the SDK is not at fault, the runtime is.
 >
 > | Primitive                     | Used by                                                          | Polyfill                                                                                                                             |
 > | ----------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -140,13 +63,13 @@ npm i react-native-keychain react-native-get-random-values react-native-polyfill
 > | `TextEncoder` / `TextDecoder` | DPoP proof encoding, base64url, JWK thumbprint                   | bundled in [`react-native-polyfill-globals`](https://github.com/acostalima/react-native-polyfill-globals) (or `text-encoding`)       |
 > | `URL` (spec-compliant)        | DPoP `htu` normalization (`new URL(request.url)` on every proof) | bundled in `react-native-polyfill-globals` (or [`react-native-url-polyfill`](https://github.com/charpeni/react-native-url-polyfill)) |
 >
-> SHA-256 no longer needs `crypto.subtle.digest` — it runs on `@noble/hashes`, so no `react-native-quick-crypto` is
+> SHA-256 does not need `crypto.subtle.digest` - it runs on `@noble/hashes`, so no `react-native-quick-crypto` is
 > required (see the note above).
 >
-> `react-native-polyfill-globals/auto` is the pragmatic one-liner — it installs `TextEncoder`/`TextDecoder` **and**
+> `react-native-polyfill-globals/auto` is the pragmatic one-liner - it installs `TextEncoder`/`TextDecoder` **and**
 > `URL` together (plus base64 / fetch-streaming you don't strictly need). The SDK does **not** rely on `fetch` response
 > streaming on React Native: it polls the non-streaming `/auth/session/status/{id}/poll` endpoint instead, so you do
-> **not** need a fetch-streaming polyfill for auth — but you still need TextEncoder + URL from that same package.
+> **not** need a fetch-streaming polyfill for auth - but you still need TextEncoder + URL from that same package.
 
 Entry-file setup (e.g. `index.js`), **before importing `@pollar/core`**:
 
@@ -160,17 +83,21 @@ import 'react-native-polyfill-globals/auto'; // TextEncoder/TextDecoder + URL
 
 `@pollar/core` provides the `PollarClient` class and utilities to:
 
-- Authenticate users via **Google**, **GitHub**, **OIDC**, **Email (OTP)**, **passkey** (smart wallets), **Stellar
-  wallets** (Freighter, Albedo) or **Solana wallets** (SIWS)
+- Authenticate users via **Google**, **GitHub**, **Email (OTP)**, **passkey** (smart wallets), **Stellar wallets**
+  (Freighter, Albedo, Stellar Wallets Kit) or **Solana wallets** (SIWS)
 - Sign every authenticated request with **DPoP** (RFC 9449), making stolen tokens useless to an attacker without the
   per-session keypair
-- Build and submit Stellar transactions
-- Fetch wallet balances via `PollarClient` (`refreshBalance()` / `getWalletBalance()`) - v2 balances are **multichain**,
+- Build, sign and submit Stellar transactions, and send payments on Stellar, Solana and Polygon
+- Sign Soroban authorization entries, including **x402** payments, through `client.stellar.authEntrySigner()`
+- Hold the user's keys with **Turnkey co-signed wallets** (`client.cosign`) under a **signature confirmation** policy
+- Fetch wallet balances via `PollarClient` (`refreshBalance()` / `getWalletBalance()`) - balances are **multichain**,
   tagged by `chain`; every chain reports its native coin plus each token the app enabled. A balance is `null` when the
   chain could not be read, which must render as unavailable rather than as zero
 - **Solana**: log in with **Sign In With Solana (SIWS)** and sign Solana transactions for sponsored external transfers
   (external-wallet connect via `@pollar/solana-wallet-standard-adapter`, preview)
-- Swap assets across venues (SDEX / Soroswap / Aquarius) and run fiat on/off-ramps, routed across providers, swaps and bridges
+- Swap assets across venues (SDEX / Soroswap / Aquarius on Stellar, Jupiter / Titan on Solana), earn yield, issue and
+  fund cards, and run fiat on/off-ramps, routed across providers, swaps and bridges
+- Write user-facing texts in English, Spanish or Portuguese
 - React to real-time authentication state changes
 
 ## Quick Start (web)
@@ -180,14 +107,14 @@ import { PollarClient } from '@pollar/core';
 
 const client = new PollarClient({ apiKey: 'your-api-key' });
 // Storage and KeyManager autodetect:
-//   storage  → localStorage with in-memory fallback
-//   keypair  → WebCrypto ECDSA P-256, non-extractable, persisted in IndexedDB
+//   storage  -> localStorage with in-memory fallback
+//   keypair  -> WebCrypto ECDSA P-256, non-extractable, persisted in IndexedDB
 ```
 
 ## React Native (Expo)
 
 ```ts
-// At your app entry, BEFORE importing @pollar/core — runtime polyfills (see table above):
+// At your app entry, BEFORE importing @pollar/core - runtime polyfills (see table above):
 import 'react-native-get-random-values'; // crypto.getRandomValues
 import 'react-native-polyfill-globals/auto'; // TextEncoder/TextDecoder + URL
 // Optional: import 'react-native-quick-crypto' to upgrade to non-extractable WebCrypto keys (needs an Expo dev build).
@@ -202,7 +129,7 @@ const storage = await createSecureStoreAdapter({
 });
 
 const client = new PollarClient({ apiKey: 'your-api-key', storage });
-// KeyManager autodetects → NobleKeyManager (pure-JS @noble/curves p256).
+// KeyManager autodetects -> NobleKeyManager (pure-JS @noble/curves p256).
 ```
 
 ## React Native (`react-native-keychain`)
@@ -218,16 +145,19 @@ const storage = await createKeychainAdapter();
 const client = new PollarClient({ apiKey: 'your-api-key', storage });
 ```
 
+For the silent-refresh scheduler on React Native, inject `createAppStateVisibilityProvider()` from
+`@pollar/core/adapters/react-native-appstate` as `visibilityProvider`.
+
 ## Framework integration
 
 `@pollar/core` is framework-agnostic: `PollarClient` is a plain class and the `on*StateChange` methods are
 callback subscriptions. To render reactively, bridge those callbacks into your framework's state primitive. The
-client instance should be a singleton (module scope, context, or DI) — never recreate it on every render.
+client instance should be a singleton (module scope, context, or DI) - never recreate it on every render.
 
 ### React / Next.js
 
-`useSyncExternalStore` is the idiomatic bridge. In Next.js, only instantiate in Client Components (`'use client'`)
-— server-side, the SDK degrades to a no-op and warns.
+`useSyncExternalStore` is the idiomatic bridge. In Next.js, only instantiate in Client Components (`'use client'`);
+server-side, the SDK degrades to a no-op and warns.
 
 ```tsx
 'use client';
@@ -310,11 +240,11 @@ const client = new PollarClient({
 ```
 
 Levels are ordered `silent` < `error` < `warn` < `info` < `debug`; setting one emits that level and every more
-important one. `silent` disables all SDK logging. State-transition chatter (`auth:…`, `transaction:…`, `network:…`)
+important one. `silent` disables all SDK logging. State-transition chatter (`auth:...`, `transaction:...`, `network:...`)
 and retry warnings live at `debug`, so the default `info` keeps the console quiet while still showing lifecycle events
 (Initialized, Session stored/restored, Tokens refreshed) and all warnings/errors.
 
-Route logs to your own sink (pino, Sentry breadcrumbs, a test spy…) with `logger` — filtering by `logLevel` still
+Route logs to your own sink (pino, Sentry breadcrumbs, a test spy...) with `logger` - filtering by `logLevel` still
 applies on top:
 
 ```ts
@@ -341,6 +271,7 @@ The session persists exactly:
 clientSessionId, userId, status,
 token { accessToken, refreshToken, expiresAt },
 user { id?, ready },
+dpopJkt?                                // thumbprint of the DPoP key the tokens are bound to
 wallet   PollarPersistedWallet          // back-compat: always the Stellar one
 wallets? PollarPersistedWallet[]        // every wallet the user holds, one per chain
 ```
@@ -354,12 +285,15 @@ where `PollarPersistedWallet` is:
 
 > The persisted wallet exposes only `address` (G-address for `internal`,
 > C-address for `smart`, the connected pubkey for `external`), and it is
-> `string | null` — null when the wallet has no address yet. `chain` is the
+> `string | null` - null when the wallet has no address yet. `chain` is the
 > chain the address lives on, **not** testnet-vs-mainnet, which is `network`;
-> it is absent on sessions minted before multi-chain, which are always Stellar.
-> `wallets` is likewise absent on older sessions: treat that as "only `wallet`
-> is known", not as "the user has no wallets". Sessions written by older SDKs
-> are migrated transparently on read.
+> when it is absent the wallet is a Stellar one.
+> When `wallets` is absent, treat that as "only `wallet` is known", not as
+> "the user has no wallets". Sessions written by older SDKs are migrated
+> transparently on read.
+
+`dpopJkt` lets the client detect locally that the stored keypair is not the one the tokens are bound to, instead of
+looping through 401s.
 
 PII (`mail`, `first_name`, `last_name`, `avatar`, `providers.*`) lives **in memory only** on the `PollarClient` instance
 and is fetched after auth. Reach it via:
@@ -376,7 +310,8 @@ Two keys sit beside the session and deliberately survive `logout()`, because the
 SERVER rather than the user and grant nothing on their own: `pollar:<hash>:dpopNonce` (the last
 nonce the server issued) and `pollar:<hash>:dpopClockOffset` (the learned `serverTime - localTime`,
 in seconds, so only a genuine cold start pays one proof rejected for clock skew before the offset
-is known).
+is known). The offset is learned only from answers that cannot come from the browser cache: a
+non-GET/HEAD request, or a 401.
 
 ## End-to-end example
 
@@ -387,7 +322,7 @@ const client = new PollarClient({ apiKey: 'your-api-key' });
 
 // React to auth state
 const unsubscribe = client.onAuthStateChange((state) => {
-  console.log(state.step, state.errorCode ?? '');
+  console.log(state.step, state.step === 'error' ? state.errorCode : '');
 });
 
 // Wait until the keypair is ready and any persisted session has been restored
@@ -396,7 +331,7 @@ await client.ready();
 // Start an email login
 client.login({ provider: 'email', email: 'user@example.com' });
 
-// Submit the OTP — clientSessionId is tracked internally
+// Submit the OTP - clientSessionId is tracked internally
 client.verifyEmailCode('123456');
 
 // After success
@@ -408,25 +343,33 @@ const sessions = await client.listSessions();
 
 ### `new PollarClient(config)`
 
-| Option               | Type                     | Required | Description                                                                                                                                    |
-| -------------------- | ------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apiKey`             | `string`                 | Yes      | Your Pollar API key                                                                                                                            |
-| `baseUrl`            | `string`                 | No       | Override the default API endpoint                                                                                                              |
-| `stellarNetwork`     | `'mainnet' \| 'testnet'` | No       | Target Stellar network (default: `testnet`)                                                                                                    |
-| `storage`            | `Storage`                | No       | Pluggable storage adapter. Web autodetects `localStorage` with in-memory fallback; RN must inject one                                          |
-| `keyManager`         | `KeyManager`             | No       | Pluggable DPoP key manager. Web picks `WebCryptoKeyManager`; otherwise `NobleKeyManager`                                                       |
-| `walletAdapters`     | `WalletAdapter[]`        | No       | Extra wallet adapter instances. Built-in `FreighterAdapter`/`AlbedoAdapter` auto-register; an entry overrides a built-in by reusing its `type` |
-| `requestTimeoutMs`   | `number`                 | No       | Max ms a single SDK HTTP attempt waits before aborting with `PollarNetworkError`. Default `10000`; `0` disables                                |
-| `loginTimeoutMs`     | `number`                 | No       | Same, for `POST /auth/login` alone - the one call that does real server-side work. Default `45000`; `0` disables                               |
-| `retry`              | `PollarRetryConfig`      | No       | Retry-with-backoff for idempotent transport failures (refresh + GETs). Default `{ attempts: 2, baseDelayMs: 300 }`                             |
-| `deviceLabel`        | `string`                 | No       | UI-friendly device label sent at `/auth/login` time and shown in `listSessions()` rows                                                         |
-| `onStorageDegrade`   | `OnStorageDegrade`       | No       | Notified the first time `localStorage` falls back to in-memory mode (SSR, private browsing, quota, …)                                          |
-| `visibilityProvider` | `VisibilityProvider`     | No       | Foreground-detection signal for the silent-refresh scheduler. Web default; RN should inject an `AppState` provider                             |
-| `maxIdleMs`          | `number`                 | No       | Stop proactive refreshes after this many ms of no client HTTP activity. Default `undefined` (refresh while visible)                            |
-| `openAuthUrl`        | `AuthUrlOpener`          | No       | Strategy for opening the hosted OAuth URL. Web defaults to a popup; RN must provide one                                                        |
-| `oauthRedirectUri`   | `string`                 | No       | `redirect_uri` sent to the backend for hosted OAuth. Web defaults to `window.location.origin`; RN = deep link                                  |
-| `passkey`            | `PasskeyCeremony`        | No       | WebAuthn ceremony for Smart Wallet login (injected by `@pollar/react`). Required for `loginSmartWallet()`                                      |
-| `passkeySign`        | `PasskeySigner`          | No       | Signs smart-account (C-address) transactions with the user's passkey. Required to send from a smart wallet                                     |
+| Option               | Type                      | Required | Description                                                                                                                                    |
+| -------------------- | ------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiKey`             | `string`                  | Yes      | Your Pollar API key                                                                                                                            |
+| `baseUrl`            | `string`                  | No       | Override the default API origin (no version path; the SDK calls `/v3`)                                                                         |
+| `stellarNetwork`     | `'mainnet' \| 'testnet'`  | No       | Target Stellar network (default: `testnet`)                                                                                                    |
+| `locale`             | `string`                  | No       | BCP 47 tag (`'es'`, `'pt-BR'`, `'en'`) for the SDK's modals. A language pinned in the dashboard wins; see [Languages](#languages)              |
+| `storage`            | `Storage`                 | No       | Pluggable storage adapter. Web autodetects `localStorage` with in-memory fallback; RN must inject one                                          |
+| `keyManager`         | `KeyManager`              | No       | Pluggable DPoP key manager. Web picks `WebCryptoKeyManager`; otherwise `NobleKeyManager`                                                       |
+| `walletAdapters`     | `WalletAdapter[]`         | No       | Extra wallet adapter instances. Built-in `FreighterAdapter`/`AlbedoAdapter` auto-register; an entry overrides a built-in by reusing its `type` |
+| `requestTimeoutMs`   | `number`                  | No       | Max ms a single SDK HTTP attempt waits before aborting with `PollarNetworkError`. Default `10000`; `0` disables                                |
+| `submitTimeoutMs`    | `number`                  | No       | Same, for the submit-family calls (`submitTx`, `signAndSubmitTx`, `buildAndSignAndSubmitTx`). Default `30000`                                  |
+| `loginTimeoutMs`     | `number`                  | No       | Same, for `POST /auth/login` alone - the one call that does real server-side work. Default `45000`; `0` disables                               |
+| `retry`              | `PollarRetryConfig`       | No       | Retry-with-backoff for idempotent transport failures (refresh + GETs). Default `{ attempts: 2, baseDelayMs: 300 }`                             |
+| `logLevel`           | `LogLevel`                | No       | Minimum severity the SDK logs (default `'info'`). See [Logging](#logging)                                                                      |
+| `logger`             | `PollarLogger`            | No       | Sink the SDK writes logs to (default `console`)                                                                                                |
+| `deviceLabel`        | `string`                  | No       | UI-friendly device label sent at `/auth/login` time and shown in `listSessions()` rows                                                         |
+| `onStorageDegrade`   | `OnStorageDegrade`        | No       | Notified the first time `localStorage` falls back to in-memory mode (SSR, private browsing, quota, ...)                                        |
+| `visibilityProvider` | `VisibilityProvider`      | No       | Foreground-detection signal for the silent-refresh scheduler. Web default; RN should inject an `AppState` provider                             |
+| `maxIdleMs`          | `number`                  | No       | Stop proactive refreshes after this many ms of no client HTTP activity. Default `undefined` (refresh while visible)                            |
+| `openAuthUrl`        | `AuthUrlOpener`           | No       | Strategy for opening the hosted OAuth URL. Web defaults to a popup; RN must provide one                                                        |
+| `oauthRedirectUri`   | `string`                  | No       | `redirect_uri` sent to the backend for hosted OAuth. Web defaults to `window.location.origin`; RN = deep link                                  |
+| `passkey`            | `PasskeyCeremony`         | No       | WebAuthn ceremony for Smart Wallet login (injected by `@pollar/react`). Required for `loginSmartWallet()`                                      |
+| `passkeySign`        | `PasskeySigner`           | No       | Signs smart-account (C-address) transactions with the user's passkey. Required to send from a smart wallet                                     |
+| `confirmation`       | `ConfirmationPolicy`      | No       | `'prompt'`, `'auto'` or `{ window: { seconds, maxUsd } }`. Unset, the dashboard setting applies; set, the stricter of the two wins             |
+| `cosignManual`       | `boolean`                 | No       | Signing calls on a co-signed wallet return `cosign_pending` and the app approves through `client.cosign`. Default `false`                      |
+| `cosignKeyManager`   | `KeyManager`              | No       | Device key of a Turnkey co-signed wallet. Defaults to a second `defaultKeyManager` under the `cosign` namespace, kept across logouts           |
+| `recoveryPasskey`    | `RecoveryPasskeyCeremony` | No       | Passkey ceremonies for a Turnkey wallet's recovery (injected by `@pollar/react`)                                                               |
 
 ---
 
@@ -458,7 +401,7 @@ client.login({ provider: 'xbull' });
 
 #### `client.verifyEmailCode(code)`
 
-Submits the OTP code for email authentication. The active `clientSessionId` is tracked internally — no need to pass it.
+Submits the OTP code for email authentication. The active `clientSessionId` is tracked internally - no need to pass it.
 
 #### `client.providerAction(provider, action, payload?): void`
 
@@ -489,16 +432,26 @@ Shorthand for `logout({ everywhere: true })`.
 
 #### `client.getWallet(): WalletInfo | null`
 
-Returns the authenticated user's wallet as a discriminated union over `custody` (`'internal' | 'smart' | 'external'`),
+Returns the authenticated user's Stellar wallet as a discriminated union over `custody` (`'internal' | 'smart' | 'external'`),
 each carrying `address` and a `provider`, or `null` when there is no wallet. To check whether a session exists, read
 `getAuthState()` (`step === 'authenticated'`) or `getWallet()` - there is no `isAuthenticated()` helper. A
 platform-managed Stellar wallet also carries `provisioning` - see
 [Wallet provisioning](#wallet-provisioning) before offering any on-chain operation on a fresh session.
 
+#### `client.hasWallet(): boolean` / `client.createWallet(options?): Promise<WalletInfo>`
+
+For an app whose wallet creation is set to "on demand" in the dashboard (or never), or whose custody is left to the
+user, a login creates no wallet: the session restores as signed in with `provisioning: 'NONE'`. `hasWallet()` says
+whether the user has a wallet on any chain, and `createWallet({ custody })` creates it (`custody` is
+`'COSIGNED' | 'SELF_CUSTODY'` when the user picks). It is idempotent, and throws `PollarApiError`
+(`SDK_WALLET_PROVISIONING_DISABLED`, `SDK_WALLET_PROVISIONING_UNSUPPORTED`) when the app or the user cannot get one. A
+signing call made without a wallet returns `SDK_WALLET_REQUIRED`; detect it with `isWalletRequired()` /
+`WALLET_REQUIRED_CODE`.
+
 #### `client.getUserProfile(): PollarUserProfile | null`
 
 Returns the in-memory profile (`mail`, `first_name`, `last_name`, `avatar`, `providers`). `null` until `/auth/login`
-completes. **This is the only way to read PII** — PII is not persisted to storage.
+completes. **This is the only way to read PII** - PII is not persisted to storage.
 
 #### `client.ready(): Promise<void>`
 
@@ -514,8 +467,14 @@ environments that re-instantiate `PollarClient`.
 
 Forces an access-token refresh. Race-safe: concurrent calls coalesce into a single `/v3/auth/refresh` request.
 Request middleware calls this automatically on a **token-expiry 401**, then retries idempotent GET/HEAD requests. A
-**DPoP-Nonce challenge** or a **replayed-proof 401** does not refresh — it is retried with a freshly re-signed proof
-carrying the new nonce, so a polling loop can't burn the refresh rate limit on nonce rotation.
+**DPoP-Nonce challenge**, a **replayed-proof 401** or a proof rejected for **clock skew** does not refresh - it is
+retried with a freshly re-signed proof, so a polling loop can't burn the refresh rate limit on nonce rotation.
+
+#### `isPollarClient(value)` / `client.setPasskeyDefaults(defaults)`
+
+`isPollarClient(value)` is a type guard that recognizes a client even across duplicate copies of this package
+(`instanceof` cannot). `setPasskeyDefaults({ passkey?, passkeySign?, recoveryPasskey? })` lets the UI layer supply the
+passkey ceremonies after construction; it only fills gaps and never replaces a ceremony passed in the config.
 
 ---
 
@@ -540,7 +499,7 @@ interface SessionInfo {
 
 #### `client.revokeSession(familyId): Promise<void>`
 
-Revokes a specific refresh-token family. Revoking the **current** family does not immediately clear local state — the
+Revokes a specific refresh-token family. Revoking the **current** family does not immediately clear local state - the
 next 401 triggers an auto-refresh, which fails (family revoked) and clears the session. Call `logout()` for an
 immediate teardown.
 
@@ -553,10 +512,11 @@ before the account is on the ledger. These four describe that window. Only the A
 described - trustlines are added incrementally over an app's life, so a wallet does not leave
 `READY` because a token was enabled yesterday (per-asset state is `getEnabledAssetsState()`).
 
-#### `wallet.provisioning: 'READY' | 'CREATING' | 'FAILED'`
+#### `wallet.provisioning: 'READY' | 'CREATING' | 'FAILED' | 'NONE'`
 
-On `getWallet()`, `getWallets()` and the persisted session. **Absent** on a session minted
-before 0.11.4 - read `undefined` as "not reported", not as a problem.
+On `getWallet()`, `getWallets()` and the persisted session. `'NONE'` is a session without a wallet (see
+[`createWallet()`](#clienthaswallet-boolean--clientcreatewalletoptions-promisewalletinfo)). **Absent** on a session
+minted before 0.11.4 - read `undefined` as "not reported", not as a problem.
 
 #### `client.onWalletStateChange(cb): () => void`
 
@@ -606,6 +566,9 @@ if (isWalletNotReady(outcome)) {
 
 ### Transactions
 
+Every signing call passes the [signature confirmation](#co-signed-wallets-and-confirmation) first. A transaction-state
+listener that throws is isolated and its error logged; it never fails the transaction.
+
 #### `client.buildTx(operation, params, options?)`
 
 Builds a Stellar transaction via the Pollar API.
@@ -614,7 +577,7 @@ Builds a Stellar transaction via the Pollar API.
 await client.buildTx('payment', {
   destination: 'G...',
   amount: '10',
-  asset: 'XLM',
+  asset: { type: 'native' },
 });
 ```
 
@@ -645,7 +608,7 @@ await client.submitTx(signedXdr);
 Puts an **external** wallet's classic account on the Stellar network when it doesn't exist yet. The server builds a
 sponsored `createAccount` (the new account starts at "0" balance; the app's sponsor wallet pays the base reserve and
 fee) and signs only the sponsor; this client adds the new-account signature with the user's own wallet and broadcasts
-via the submit path. Not applicable to embedded (internal) wallets — created on the server at login — nor to smart
+via the submit path. Not applicable to embedded (internal) wallets - created on the server - nor to smart
 (C-address) wallets. Trustlines are a separate step (`setTrustline`). The wallet exposes `existsOnStellar` +
 `fundingMode` so a UI can decide whether to offer this.
 
@@ -657,37 +620,72 @@ sessions can call it too.
 
 #### `client.buildAndSignAndSubmitTx(operation, params, options?): Promise<SubmitOutcome>`
 
-Build + sign + submit in one call. External and passkey wallets keep the granular `building → built → signing →
-submitting → success` transitions (each composed call emits its own); embedded wallets take a single round-trip to
-`/tx/build-sign-submit` and emit the compound `building-signing-submitting` step. For separate "Building…" / "Signing…"
-/ "Submitting…" indicators on an embedded flow, call `buildTx` / `signTx` / `submitTx` yourself instead.
+Build + sign + submit in one call. External and passkey wallets keep the granular `building -> built -> signing ->
+submitting -> success` transitions (each composed call emits its own); embedded wallets take a single round-trip to
+`/tx/build-sign-submit` and emit the compound `building-signing-submitting` step. For separate "Building..." /
+"Signing..." / "Submitting..." indicators on an embedded flow, call `buildTx` / `signTx` / `submitTx` yourself instead.
 
 `client.runTx(...)` is an alias with the same signature - a shorter "just do the thing" name.
 
 #### `client.sendPayment(params): Promise<SubmitOutcome>`
 
-One entry point for a payment on Stellar or Solana. A Stellar payment routes through `buildAndSignAndSubmitTx` (so
-external adapters and passkey wallets keep the split flow); a Solana payment is a single server-side call and is
-**embedded-only** for now. `SendPaymentParams` is a per-chain union - a Stellar member with a decimal `amount` and an
-`asset`, a Solana member with an integer base-unit `amount` and an optional `mint`. The union also carries a `POLYGON`
-member for the shape, but there is no transfer path for it yet: the call returns
-`{ status: 'error', details: 'Sending on POLYGON is not supported yet.' }`.
+One entry point for a payment on Stellar, Solana or Polygon. A Stellar payment routes through `buildAndSignAndSubmitTx`
+(so external adapters and passkey wallets keep the split flow). A Solana payment is a single server-side call for an
+embedded or co-signed wallet, and an external Solana wallet (Phantom, Solflare) signs the transfer the backend built.
+A Polygon payment runs from an embedded or co-signed wallet; an external Polygon wallet signs its own transactions and
+is refused. `SendPaymentParams` is a per-chain union - a Stellar member with a decimal `amount`, an `asset` and
+optional build `options`, and Solana / Polygon members with an integer base-unit `amount` and an optional `mint` (the
+SPL mint, or the ERC-20 contract on Polygon).
 
 ```ts
 // Stellar
 await client.sendPayment({ destination: 'G...', amount: '1.5', asset: { type: 'native' } });
-// Solana (embedded): amount in lamports; omit `mint` for native SOL
+// Stellar with a memo: 'text', 'id' or 'hash' (32 bytes as 64 hex characters, e.g. a SHA-256 receipt)
+await client.sendPayment({
+  destination: 'G...',
+  amount: '1.5',
+  asset: { type: 'native' },
+  options: { memo: { type: 'hash', value: sha256Hex } },
+});
+// Solana: amount in lamports; omit `mint` for native SOL
 await client.sendPayment({ chain: 'SOLANA', destination: '...', amount: '1500000000' });
 ```
 
-#### `client.getTxStatus(hash): Promise<{ hash; status; resultCode? }>`
+#### `client.getTxStatus(hash): Promise<{ hash; status; resultCode?; operationCodes?; ... }>`
 
 Polls the network status of a submitted transaction - `status` is `'PENDING' | 'SUCCESS' | 'FAILED'`.
+`transactionErrorMessage(code, details?, language?)` turns a failure into text for the user.
 
 #### `client.signAuthEntry(entryXdr, { validUntilLedger }): Promise<SignAuthEntryOutcome>`
 
-Signs a Soroban authorization entry (external adapters sign it directly). Emits no transaction state, so a UI subscribed
-to `onTransactionStateChange` is not stranded on `signing`.
+Signs a Soroban authorization entry (`SorobanAuthorizationEntry`, base64 XDR) for a transaction someone else submits:
+a contract that sponsors the gas, an x402 facilitator. External adapters sign it directly; embedded wallets are signed
+by the backend, which first checks the entry against the app's contract/function allowlist and caps the validity
+window; a co-signed wallet passes the same checks, then the device recomputes the entry's hash and votes
+(`cosign_pending` under `cosignManual`). Smart (passkey) wallets cannot sign auth entries.
+
+It passes the signature confirmation like every other signature. A token `transfer` on the Stellar asset contract of a
+priced asset shows its destination, amount and asset (`kind: 'sign_auth_entry'`, `operation: 'transfer'`) and counts
+its USD value against a window; any other entry asks. An agent that pays unattended sets the app to `AUTO`, or `WINDOW`
+with a USD cap; a headless client under `'prompt'` with no `onConfirmationRequest` subscriber gets
+`SDK_CONFIRMATION_UNAVAILABLE`. Emits no transaction state, so a UI subscribed to `onTransactionStateChange` is not
+stranded on `signing`.
+
+#### x402 and SEP-43: `client.stellar.authEntrySigner(options?)`
+
+A SEP-43 signer over the user's wallet, the one stellar-sdk's contract client and x402's `ExactStellarScheme` take.
+Each signature goes through `signAuthEntry`, so the allowlist, the validity window, the confirmation and a co-signed
+wallet's vote all apply. It refuses a preimage for another network, an entry signed to another expiration, and a
+wallet whose signing key is not its address (a wallet moved to Turnkey).
+
+```ts
+// ExactStellarScheme comes from your x402 client package
+const scheme = new ExactStellarScheme(client.stellar.authEntrySigner(), { url });
+```
+
+`createAuthEntrySigner(deps, options?)` builds the same signer for a client built elsewhere. A
+[custom adapter](#custom-adapters-adapterfn--pollaradapter) can return an auth-entry step instead of a transaction
+(`isAuthEntryAdapterStep`, `completeAuthEntryStep`).
 
 ---
 
@@ -696,8 +694,8 @@ to `onTransactionStateChange` is not stranded on `signing`.
 #### `client.refreshBalance(): Promise<void>`
 
 Refreshes the authenticated user's OWN multichain balances and pushes the result to `WalletBalanceState`
-(`onWalletBalanceStateChange`). No argument - always the current session's wallets. See the multichain notes on
-`WalletBalanceRecord` above (a `null` balance is an unreadable chain, not zero).
+(`onWalletBalanceStateChange`). No argument - always the current session's wallets. See the multichain notes in the
+[Overview](#overview) (a `null` balance is an unreadable chain, not zero).
 
 #### `client.getWalletBalance(publicKey, network?): Promise<WalletBalanceContent>`
 
@@ -707,7 +705,7 @@ General-purpose balance lookup for ANY wallet on ANY network - not scoped to thi
 #### `client.getWallets(): WalletInfo[]`
 
 Every wallet the user holds, one per chain (`getWallet()` returns only the primary Stellar one). Returns `[]` when there
-is no session, or when the session predates the backend's multichain `wallets[]`.
+is no session; when the backend reports no multichain `wallets[]`, it falls back to the single Stellar wallet.
 
 #### `client.refreshAssets(): Promise<void>` / `client.getEnabledAssetsState()`
 
@@ -725,7 +723,7 @@ self-pays, then submits), external wallets co-sign whichever XDR `/wallet/assets
 
 ### Swaps
 
-Quote and execute asset swaps across multiple venues (SDEX, Soroswap, Aquarius). `getSwapQuote` returns one priced
+Quote and execute Stellar asset swaps across multiple venues (SDEX, Soroswap, Aquarius). `getSwapQuote` returns one priced
 route per venue (each with a ready-to-run `build` payload); pass the chosen quote to `swap`, which establishes any
 missing trustline for the buy asset (unless `autoTrustline: false`) and then executes. It dispatches on the quote's
 build shape: a prebuilt XDR (Soroswap) is signed and submitted directly, while an operation + params quote (Aquarius,
@@ -734,10 +732,10 @@ wallets are not supported yet.
 
 ```ts
 const quotes = await client.getSwapQuote({
-  sellAsset: 'XLM',
-  buyAsset: 'USDC:GA5Z...',
+  sellAsset: { type: 'native' },
+  buyAsset: { type: 'credit_alphanum4', code: 'USDC', issuer: 'GA5Z...' },
   amount: '25',
-  provider: 'auto', // or a concrete venue; defaults server-side
+  provider: 'auto', // or a concrete venue: 'sdex' | 'soroswap' | 'aquarius'
   slippageBps: 50,
 });
 
@@ -747,12 +745,39 @@ const outcome = await client.swap(quotes[0]); // SubmitOutcome
 Method signatures:
 
 ```ts
+client.getSwapConfig(): Promise<SwapVenue[]>; // the app's Stellar venues
+client.getSwapTokens(): Promise<SwapToken[]>;
 client.getSwapQuote(params: SwapQuoteParams): Promise<SwapQuote[]>;
 client.swap(quote: SwapQuote, opts?: { autoTrustline?: boolean }): Promise<SubmitOutcome>;
 ```
 
 The standalone `quoteSwap(api, body): Promise<SwapQuoteContent>` export is available for advanced callers that already
 hold a `PollarApiClient`.
+
+On Solana, `getSolanaSwapQuote` quotes from the user's Solana wallet on Jupiter and Titan (mainnet). Amounts are integer
+base units of each mint, quotes come best output first, and they carry no transaction: `swapSolana` asks for the
+signature confirmation, then has the backend build the picked route for the wallet, refusing one whose simulation pays
+less than its minimum. A co-signed wallet approves it on the device (which checks the swap calls a known router), an
+external wallet signs it in the connected wallet; custodial wallets cannot swap on Solana.
+
+```ts
+const venues = await client.getSolanaSwapConfig(); // [] means no swap on Solana for this app
+
+const [best] = await client.getSolanaSwapQuote({
+  inputMint: 'So11111111111111111111111111111111111111112', // wrapped SOL for SOL
+  outputMint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+  amount: '100000000', // 0.1 SOL in lamports
+  slippageBps: 50,
+});
+
+const outcome = await client.swapSolana(best); // SubmitOutcome
+```
+
+```ts
+client.getSolanaSwapConfig(): Promise<SolanaSwapVenue[]>;
+client.getSolanaSwapQuote(params: SolanaSwapQuoteParams): Promise<SolanaSwapQuote[]>;
+client.swapSolana(quote: SolanaSwapQuote, opts?: { slippageBps?: number }): Promise<SubmitOutcome>;
+```
 
 ---
 
@@ -787,14 +812,23 @@ await client.pollRampOrder(order.id, { onUpdate: (o) => render(describeRampActio
   and stops once the order settles.
 - A failure carries `resolutionAction`; `rampResolutionText(failure)` turns it
   into what the user can do. `rampLegTitle` and `rampLegStatus` describe each leg.
+- A route refused for its amount (`LIMIT_BELOW_MINIMUM`, `LIMIT_ABOVE_MAXIMUM`)
+  carries `failure.limit` (`RampQuoteLimit`: `min`, `max`, `side`, `currency`),
+  and `rampResolutionText` words it ("This route takes at least 1,450 ARS. Try a
+  larger amount."). `rampNoRouteText(rejected)` says why no route quoted.
 - A payee the provider would refuse answers `400 VALIDATION_ERROR` with the
-  reason in `body.message`; a quote with no route answers `422
-SDK_RAMPS_NO_ROUTE` with `body.rejected`.
-- `listRampOrders({ pending: 'true' })` returns the orders waiting on the user.
+  reason in `body.message`; a quote with no route answers `422 SDK_RAMPS_NO_ROUTE`
+  with `body.rejected`.
+- `listRampOrders({ pending: 'true' })` returns the orders waiting on the user,
+  `listRampOrders({ open: 'true' })` every one not final yet.
+- `checkRampOrder(id)` asks about the fiat payment now, for a user who says they
+  paid; `retryRampOrder(id)` runs a held order again from where it stopped.
+- Every ramp text helper takes a trailing optional language (`'en'` by default);
+  see [Languages](#languages).
 
 ### Ramp adapters
 
-To build a provider package for Pollar's backend, use `RampAdapter`, `defineRampAdapter` and `defineRampAdapterRegistration` from `@pollar/core` or `@pollar/core/ramps`. Install its server registration in the backend; its rails then appear in the routes above. Pollar retains credentials, persistence, lifecycle and reconciliation. See the [server registration guide](../../docs/development/custom-ramp-adapters.md), [provider implementation](../../examples/custom-ramp/adapter.ts) and [application example](../../examples/custom-ramp/client.ts).
+To build a provider package for Pollar's backend, use `RampAdapter`, `defineRampAdapter` and `defineRampAdapterRegistration` from `@pollar/core` or `@pollar/core/ramps`. Install its server registration in the backend; its rails then appear in the routes above. Pollar retains credentials, persistence, lifecycle and reconciliation. See the [server registration guide](https://github.com/pollar-xyz/pollar/blob/main/docs/development/custom-ramp-adapters.md), [provider implementation](https://github.com/pollar-xyz/pollar/blob/main/examples/custom-ramp/adapter.ts) and [application example](https://github.com/pollar-xyz/pollar/blob/main/examples/custom-ramp/client.ts).
 
 `RampChain` is a closed enum (`STELLAR`, `POLYGON`, `SOLANA`), independent of
 wallet networks. Use `RampChain.POLYGON` or `'POLYGON'` for a quote filter,
@@ -803,7 +837,7 @@ lowercase names, unknown chains and CAIP-2 identifiers are rejected. Adding
 another chain requires a backend enum migration and an updated SDK contract.
 Exact amount strings keep their precision and formatting.
 
-Register a signer for each chain/encoding pair a leg may ask for with `registerRampSigningHandler(chain, encoding, async action => signedPayload)`, `STELLAR`/`xdr` included: core has no built-in ramp signer. In a Stellar signer, `assertRampStellarSigner(action, address)` refuses a transaction that does not spend from `address` (or a SEP-10 login that is not the anchor's challenge for it). Handlers must validate the payload and authorized wallet account, chain and network before returning a signed payload without broadcasting it. Polling never invokes signing.
+Register a signer for each chain/encoding pair a leg may ask for with `client.registerRampSigningHandler(chain, encoding, async (action) => signedPayload)`, `STELLAR`/`xdr` included: core has no built-in ramp signer. In a Stellar signer, `assertRampStellarSigner(action, address)` refuses a transaction that does not spend from `address` (or a SEP-10 login that is not the anchor's challenge for it). Handlers must validate the payload and authorized wallet account, chain and network before returning a signed payload without broadcasting it. Polling never invokes signing, and a ramp leg always asks for the user's confirmation, whatever the policy.
 
 The backend lists only the routes its configured rails, venues and bridges can run.
 
@@ -812,7 +846,7 @@ The backend lists only the routes its configured rails, venues and bridges can r
 ### Earn (yield vaults + lending)
 
 Unified access to DeFindex vaults and Blend pools behind one provider-selected API. `getEarnProviders()` returns the
-yield providers this app exposes (an empty array means Earn is disabled — hide any Earn UI); `getEarnOpportunities()`
+yield providers this app exposes (an empty array means Earn is disabled - hide any Earn UI); `getEarnOpportunities()`
 lists a provider's vaults/pools with their live APY; `getEarnPosition()` returns the connected wallet's balance + APY
 and a `withdrawUnit` (asset amount for Blend, share count for DeFindex). `earnDeposit` / `earnWithdraw` build the
 provider's XDR server-side (contract-direct for Blend, via the DeFindex API for DeFindex) and then sign + submit it
@@ -821,7 +855,7 @@ the underlying asset amount; the withdraw `amount` is in the position's `withdra
 supported yet.
 
 ```ts
-const providers = await client.getEarnProviders(); // e.g. ['blend', 'defindex'] — [] means Earn is off
+const providers = await client.getEarnProviders(); // e.g. ['blend', 'defindex'] - [] means Earn is off
 const opportunities = await client.getEarnOpportunities('blend'); // each carries a live APY
 const position = await client.getEarnPosition({ provider: 'blend', opportunity: opportunities[0].id });
 
@@ -841,19 +875,59 @@ client.earnWithdraw(params: EarnTxParams): Promise<SubmitOutcome>;
 
 ---
 
-### KYC
+### Cards
 
-Fetch KYC status/providers and start or resolve a KYC flow. Pass `corridorId` when a ramp route asks for KYC: the
-read then answers for the corridor's KYC step, whichever of its options the user passed. With neither id,
-`getKycStatus()` answers for the app's own KYC steps and names the `pendingStep`.
+Issue and fund cards from the providers the app enabled. `getCardProviders()` returns them (an empty array means Cards
+is off - hide any card UI); `cardProviderId` can be left out of every other card call while there is exactly one.
 
 ```ts
-client.getKycStatus(providerId?: string, corridorId?: string): Promise<KycStatusContent>;
-client.getKycProviders(country: string, corridorId?: string): Promise<{ providers: KycProvider[] }>;
-client.startKyc(body: KycStartBody): Promise<KycStartResponse>;
-client.resolveKyc(providerId: string, level?: KycLevel, country?: string, corridorId?: string, idempotencyKey?: string);
-client.pollKycDecision(providerId: string, opts?: { intervalMs?: number; timeoutMs?: number; corridorId?: string }): Promise<KycStatusContent>;
-client.pollKycStatus(providerId: string, opts?: { intervalMs?: number; timeoutMs?: number; corridorId?: string }): Promise<KycStatus>;
+client.getCardProviders(): Promise<CardProvider[]>;
+client.getCardRequirements(params?): Promise<CardRequirements>;
+client.getCardHolder(params?): Promise<CardHolder | null>;
+client.createCardHolder(params?): Promise<CardHolder>;
+client.submitCardKyc(params: { termsAccepted: boolean; kyc: CardKycInput; cardProviderId? }): Promise<CardHolder>;
+client.issueCard(params?): Promise<CardInfo>;
+client.getCards(params?): Promise<CardInfo[]>; // never includes card numbers
+client.getCardBalance(params?): Promise<CardBalance | null>;
+client.getCardTransactions(params?): Promise<CardTransactionsPage>;
+client.fundCard(params: {
+  amount: string;
+  chain?: 'STELLAR' | 'SOLANA';
+  idempotencyKey?: string;
+  cardProviderId?;
+}): Promise<CardFundingOutcome>;
+client.getCardFunding(fundingId: string): Promise<CardFunding>;
+client.listCardFundings(params?): Promise<CardFunding[]>;
+client.revealCardSecrets(cardId: string, params?): Promise<CardSecrets>;
+```
+
+- `fundCard` moves USDC from the user's wallet on `chain` (Stellar by default) to the card's collateral. A custodial
+  wallet pays on the server; an external wallet (Freighter, Phantom, Solflare) signs the transfer the backend built; a
+  co-signed wallet votes on the device (`cosign_pending` under `cosignManual`). The outcome is `ok`, `cancelled` (the
+  user declined) or `cosign_pending`, each with the `funding`. On Solana the USDC goes straight to the provider's Solana
+  address, with no bridge, and the funding goes `CREATED`, `SENT`, `CREDITED`. Co-signed funding requires sdk-api with
+  the v3 funding routes.
+- `idempotencyKey` names one funding the user means to make. A retry with the same key (a double click, a response
+  that never arrived) returns the funding the key already started instead of paying again; a new funding needs a new
+  key.
+- `revealCardSecrets()` decrypts the card number and CVC on the device with a one-shot key the server never sees, on
+  WebCrypto or in plain JavaScript on React Native. Show them and drop them: never store or log the result.
+
+---
+
+### KYC
+
+Fetch KYC status/providers and start or resolve a KYC flow. Pass `corridorId` when a ramp route asks for KYC, or
+`cardProviderId` for a card provider's KYC: the read then answers for that step, whichever of its options the user
+passed. With neither id, `getKycStatus()` answers for the app's own KYC steps and names the `pendingStep`.
+
+```ts
+client.getKycStatus(providerId?: string, corridorId?: string, cardProviderId?: string): Promise<KycStatusContent>;
+client.getKycProviders(country: string, corridorId?: string, cardProviderId?: string): Promise<{ providers: KycProvider[] }>;
+client.startKyc(body: KycStartBody & { cardProviderId?: string }): Promise<KycStartResponse>;
+client.resolveKyc(providerId: string, level?: KycLevel, country?: string, corridorId?: string, idempotencyKey?: string, cardProviderId?: string);
+client.pollKycDecision(providerId: string, opts?: { intervalMs?: number; timeoutMs?: number; corridorId?: string; cardProviderId?: string }): Promise<KycStatusContent>;
+client.pollKycStatus(providerId: string, opts?: { intervalMs?: number; timeoutMs?: number; corridorId?: string; cardProviderId?: string }): Promise<KycStatus>;
 ```
 
 - `KycStatus` is `'none' | 'pending' | 'approved' | 'rejected' | 'expired'`. A read also carries `decisionStatus`
@@ -865,12 +939,12 @@ client.pollKycStatus(providerId: string, opts?: { intervalMs?: number; timeoutMs
 - The status, providers and start calls throw `PollarApiError` with the backend code (`SDK_KYC_UNDER_REVIEW`,
   `SDK_KYC_ALREADY_APPROVED`, ...). `resolveKyc()` treats `SDK_KYC_ALREADY_APPROVED` as approved, and reusing the same
   `idempotencyKey` after a vendor failure returns the session already created instead of billing a new one.
-- `startKyc()` gets a 30 s budget instead of the 10 s request default, since creating a session waits on the vendor.
+- `startKyc()` gets a 30s budget instead of the 10s request default, since creating a session waits on the vendor.
 
 #### Requirement steps
 
 A ramp corridor, and an app's own KYC, can require ordered steps: every step is required, in order, and each accepts any
-of its equivalent options. A v2 ramp quote reports the first pending step of a locked route in `requirementsRequired`
+of its equivalent options. A ramp quote reports the first pending step of a locked route in `requirementsRequired`
 (`RampQuoteRequirement`: `type`, `optionId`, `corridorId`, `position`, `completed` of `total`, `status`, `reviewReason`)
 instead of quoting it; complete that step, then quote again.
 
@@ -887,9 +961,11 @@ client.getProviderRegistration(corridorId: string): Promise<ProviderRegistration
 client.submitProviderRegistration(corridorId: string): Promise<ProviderRegistrationSubmitted>;
 ```
 
-For a `KYC` step, open the option the step names (`optionId`) with the step's `corridorId`. The v2 quote also lists, in
-`unavailable`, the providers that serve the route but failed to quote it just now (`{ provider, code }`), so an empty
-`quotes` is not always "no provider serves this country". These need an sdk-api that serves `/v3/requirements`.
+For a `KYC` step, open the option the step names (`optionId`) with the step's `corridorId`. A form field's label, help
+and option labels may carry `pt` (Portuguese) next to the Spanish and English ones, and a field with
+`showIf: { key, in }` is asked only while the earlier select, multiselect or checkbox it names answers one of those
+values (`'true'` or `'false'` for a checkbox); a hidden field is neither checked nor sent. These need an sdk-api that
+serves `/v3/requirements`.
 
 ---
 
@@ -917,11 +993,77 @@ client.createSmartWallet(): void; // new user (WebAuthn create + sponsored deplo
 
 ---
 
+### Co-signed wallets and confirmation
+
+A Turnkey co-signed wallet (`custody: 'COSIGNED'`) signs only with a vote from the user's device; a self-custody one
+(`'SELF_CUSTODY'`) is the user's alone. `client.cosign` (a `CosignManager`) holds the device key and verifies each
+Stellar, Solana and Polygon request on the device before voting. By default the SDK settles a request itself; with
+`cosignManual: true` the signing calls return `{ status: 'cosign_pending', request }` and the app drives
+`client.cosign.verify()` (which returns the device's `proposal`), `approve()`, `reject()` and `pending()`.
+
+- `client.cosign.switchCustody(to)` moves the wallet between co-signed and self-custody, and
+  `client.cosign.migrateWallets(custody?)` moves the wallets Pollar still holds to Turnkey.
+- `client.cosign.recovery` adds and uses recovery methods (passkeys, email code, device enrollment, phrase export).
+- `getCosignState()` / `onCosignStateChange()` report the co-sign state.
+- `request.appPaysFee` is `true` when the fee payer of the payload is not the user, so a prompt can say the app covers
+  the fee before the vote. Once a transaction is signed or submitted, `TransactionState` carries `sponsored` from the
+  platform's answer.
+
+Every signature, whatever the wallet's custody, first passes the confirmation policy: `'prompt'` waits for the user,
+`{ window: { seconds, maxUsd } }` lets the signatures after a confirmed one sign without asking up to a USD cap, and
+`'auto'` signs without a prompt. The dashboard setting applies when `confirmation` is unset (it defaults to
+`'prompt'`), and the stricter of the two wins when it is set. `@pollar/react` and `@pollar/react-native` render the
+prompt; a headless app subscribes:
+
+```ts
+client.onConfirmationRequest((pending) => {
+  for (const request of pending) {
+    // request.kind, request.network, request.operation, request.details
+    showPrompt(request, { onConfirm: request.confirm, onReject: request.reject });
+  }
+});
+```
+
+Under `'prompt'` a signing call fails with `SDK_CONFIRMATION_UNAVAILABLE` while nothing is subscribed, rather than
+signing unasked. `getPendingConfirmations()` returns the current list. `cosignRefusalMessage()` and
+`appUnavailableMessage()` turn a refused co-sign or an unavailable app into text for the user.
+
+---
+
+### Languages
+
+The SDK's user-facing texts come in English, Spanish and Portuguese (`PollarLanguage`: `'en' | 'es' | 'pt'`). The
+language a modal shows is, strongest first: the one the app pins in the dashboard (Branding > Language), the one the
+code asks for (a component's `language` prop, then the client's `locale`), then the browser or device language;
+English when none is one the SDK has. `client.setLocale(tag)` changes the `locale` at runtime (`undefined` clears it),
+and `client.onLocaleChange(cb)` tells a UI layer to follow it; the React provider's modals do.
+
+```ts
+import { PollarClient, resolveLanguage, transactionErrorMessage } from '@pollar/core';
+
+const client = new PollarClient({ apiKey: 'pk_...', locale: 'pt-BR' }); // any BCP 47 tag
+const language = resolveLanguage({ code: [client.getLocale()], device: navigator.language }); // 'pt'
+
+transactionErrorMessage(outcome.code, outcome.details, language);
+```
+
+`countryName(code, language)` names an ISO 3166-1 alpha-2 country (`'BO'` is `'Bolívia'` in `'pt'`), on engines without
+`Intl.DisplayNames` (Hermes) too. `languageFromTag(tag)` maps a BCP 47 tag to a `PollarLanguage` (or `null`), and `localizedText()` picks a text in the
+language asked, falling back to the closest one. The functions that write user-facing text take a trailing optional
+language (`'en'` by default): `transactionErrorMessage`, `cosignRefusalMessage`, `appUnavailableMessage`, every ramp
+text (`rampLegTitle`, `rampStepTitle`, `rampStepStatusText`, `rampNextApproval`, `rampFieldError`,
+`rampResolutionText`, `rampOrderResolutionText`, `rampRequirementCopy`, `rampTrustlineErrorText`, `rampNoRouteText`,
+`describeRampAction`, `rampWalletStep`, `rampLegNote`), and `authErrorMessage(code, language)` gives the text of a
+backend auth error code.
+
+---
+
 ### Stellar ownership proofs (SEP-53 / SEP-10)
 
 `client.stellar` namespaces the Stellar-specific proof standards so the multichain client stays clean. Each method
 dispatches by wallet type: external wallets sign client-side through their adapter, embedded wallets sign server-side
-through the API, and smart (passkey) wallets yield an error outcome — a C-address has no classic ed25519 key to prove.
+through the API, and smart (passkey) wallets yield an error outcome - a C-address has no classic ed25519 key to prove.
+`client.stellar.authEntrySigner()` is covered under [Transactions](#x402-and-sep-43-clientstellarauthentrysigneroptions).
 
 ```ts
 // SEP-53: prove ownership by signing an arbitrary message
@@ -938,12 +1080,12 @@ const auth = await client.stellar.sep10.sign({
 ```
 
 `signature` is base64 ed25519 over the SEP-53 digest (`SHA-256("Stellar Signed Message:\n" + message)`), produced
-identically by external wallets and the embedded signer — `scheme` is always `sep53`, so the two proof paths are
+identically by external wallets and the embedded signer - `scheme` is always `sep53`, so the two proof paths are
 interchangeable for a verifier.
 
 For external wallets, SEP-53 needs an adapter that implements the optional `signStellarMessage` method: the built-in
 `FreighterAdapter` does (native v6 `signMessage`), and `@pollar/stellar-wallets-kit-adapter` does via
-`kit.signMessage`. Albedo does not support SEP-53 message signing and yields an error outcome — use a SEP-10 challenge
+`kit.signMessage`. Albedo does not support SEP-53 message signing and yields an error outcome - use a SEP-10 challenge
 instead. SEP-10 reuses the adapter's existing `signTransaction`, so every Stellar adapter supports it.
 
 ---
@@ -951,9 +1093,10 @@ instead. SEP-10 reuses the adapter's existing `signTransaction`, so every Stella
 ### Network resilience
 
 Every SDK HTTP attempt is bounded by `requestTimeoutMs` (default `10000`; `0` disables) so a stalled connection
-fails fast instead of hanging forever. Idempotent transport failures (token refresh + GETs) are retried per `retry`
-(default `{ attempts: 2, baseDelayMs: 300 }`); HTTP responses (including 4xx/5xx) are never retried. On timeout the
-call rejects with a `PollarNetworkError` (`code: 'SDK_NETWORK_TIMEOUT'`):
+fails fast instead of hanging forever; the submit-family calls use `submitTimeoutMs` (default `30000`) and
+`POST /auth/login` uses `loginTimeoutMs` (default `45000`). Idempotent transport failures (token refresh + GETs) are
+retried per `retry` (default `{ attempts: 2, baseDelayMs: 300 }`); HTTP responses (including 4xx/5xx) are never
+retried. On timeout the call rejects with a `PollarNetworkError` (`code: 'SDK_NETWORK_TIMEOUT'`):
 
 ```ts
 import { isPollarNetworkError } from '@pollar/core';
@@ -967,6 +1110,9 @@ try {
 }
 ```
 
+API errors that are thrown (KYC, requirements, wallet creation, ...) are `PollarApiError`s carrying the backend
+code; detect them with `isPollarApiError()`.
+
 ---
 
 ### State
@@ -975,22 +1121,22 @@ Each state domain has its own typed subscriber. All `on*StateChange` methods ret
 
 ```ts
 const unsubAuth = client.onAuthStateChange((state) => {
-  // state.step — one of:
+  // state.step - one of:
   //   'idle' | 'creating_session' | 'entering_email' | 'sending_email' |
   //   'entering_code' | 'verifying_email_code' | 'opening_oauth' |
   //   'connecting_wallet' | 'signing_wallet_challenge' | 'wallet_not_installed' |
   //   'authenticating_wallet' | 'creating_passkey' | 'deploying_smart_account' |
   //   'authenticating' | 'authenticated' | 'error'
-  // state.session  — PollarPersistedSession (when step === 'authenticated')
-  // state.verified — boolean            (when step === 'authenticated')
+  // state.session  - PollarPersistedSession (when step === 'authenticated')
+  // state.verified - boolean            (when step === 'authenticated')
   // state.errorCode / .message / .previousStep   (when step === 'error')
 });
 
 const unsubTx = client.onTransactionStateChange((s) => {
-  /* build → sign → submit */
+  /* build -> sign -> submit */
 });
 const unsubHistory = client.onTxHistoryStateChange((s) => {
-  /* paginated rows */
+  /* paginated rows, loaded with fetchTxHistory() */
 });
 const unsubBalance = client.onWalletBalanceStateChange((s) => {
   /* balances */
@@ -1009,7 +1155,9 @@ unsubAuth();
 ```
 
 Snapshot getters are also available: `getAuthState()`, `getTransactionState()`, `getTxHistoryState()`,
-`getWalletBalanceState()`, `getEnabledAssetsState()`, `getSessionsState()`, `getNetworkState()`, `getLogger()`.
+`getWalletBalanceState()`, `getEnabledAssetsState()`, `getSessionsState()`, `getNetworkState()`, `getCosignState()`,
+`getPendingConfirmations()`, `getLogger()`, `getLocale()`. `onLocaleChange(cb)` is called on each `setLocale()`
+that changes the locale; unlike the state subscribers it does not replay the current value.
 
 `fetchSessions()` refreshes `SessionsState` from the server (the same data `listSessions()` returns, pushed through the
 subscriber instead of returned).
@@ -1023,7 +1171,7 @@ import { AUTH_ERROR_CODES, type AuthErrorCode } from '@pollar/core';
 // AUTH_ERROR_CODES.EMAIL_CODE_EXPIRED
 // AUTH_ERROR_CODES.SESSION_CREATE_FAILED
 // AUTH_ERROR_CODES.WALLET_CONNECT_FAILED
-// …see types.ts for the full list
+// ...see types.ts for the full list
 ```
 
 ---
@@ -1031,7 +1179,7 @@ import { AUTH_ERROR_CODES, type AuthErrorCode } from '@pollar/core';
 ### `StellarClient`
 
 Lightweight helper to submit a signed transaction straight to Horizon (bypassing the Pollar API). Balance fetching
-lives on `PollarClient` now (`refreshBalance()` / `getWalletBalance(publicKey, network?)`).
+lives on `PollarClient` (`refreshBalance()` / `getWalletBalance(publicKey, network?)`).
 
 ```ts
 import { StellarClient } from '@pollar/core';
@@ -1083,7 +1231,7 @@ const client = new PollarClient({
 client.login({ provider: 'xbull' }); // any adapter type the kit registers
 ```
 
-To introspect what is registered: `client.listWalletAdapters()` returns `{ id, meta }[]` (meta sanitized),
+To introspect what is registered: `client.listWalletAdapters()` returns `{ id, meta, chain }[]` (meta sanitized),
 `client.getWalletAdapter(id)` returns one adapter instance, and `client.getWalletType()` returns the connected wallet's
 id (or `null`).
 
@@ -1105,6 +1253,12 @@ const trustlessWork: PollarAdapter = {
 const adapters: PollarAdapters = { trustlessWork };
 ```
 
+An adapter function can instead return an `AuthEntryAdapterStep` (`{ unsignedAuthEntry, validUntilLedger, complete }`)
+when someone else submits the transaction and pays the fee (an x402 facilitator, a contract that sponsors the gas).
+`completeAuthEntryStep(step, client.signAuthEntry.bind(client))` signs the entry without submitting anything and passes
+it to `complete`; its result is `{ status: 'completed', result }` or the reason nothing was signed.
+`isAuthEntryAdapterStep(value)` tells the two shapes apart.
+
 ## TypeScript
 
 `@pollar/core` is written in TypeScript and ships full type declarations.
@@ -1123,6 +1277,7 @@ import type {
   AuthErrorCode,
   LogLevel,
   PollarLogger,
+  PollarLanguage,
 
   // Storage / keys / DPoP
   Storage,
@@ -1138,6 +1293,7 @@ import type {
   // Wallets
   WalletId,
   WalletInfo,
+  WalletProvisioning,
   WalletAdapter,
   WalletAdapterMeta,
   ConnectWalletResponse,
@@ -1145,8 +1301,17 @@ import type {
   SignTransactionResponse,
   SignAuthEntryOptions,
   SignAuthEntryResponse,
+  SignMessageOptions,
+  SignMessageResponse,
 
-  // Multichain wallet state (v2)
+  // Transactions
+  SignOutcome,
+  SubmitOutcome,
+  SignAuthEntryOutcome,
+  TrustlineOutcome,
+  TransactionState,
+
+  // Multichain wallet state
   WalletChain,
   PollarPersistedWallet,
   WalletBalanceRecord,
@@ -1157,6 +1322,13 @@ import type {
   EnabledAssetsState,
   SendPaymentParams,
 
+  // Co-signed wallets + confirmation
+  CosignCustody,
+  CosignRequest,
+  ConfirmationPolicy,
+  ConfirmationRequest,
+  PendingConfirmation,
+
   // Solana wallet adapters (SIWS)
   SolanaSignInInput,
   SolanaSignInOutput,
@@ -1166,12 +1338,25 @@ import type {
   AdapterFn,
   PollarAdapter,
   PollarAdapters,
+  AuthEntryAdapterStep,
+  AuthEntryAdapterOutcome,
+
+  // Stellar ownership proofs + SEP-43
+  StellarSepApi,
+  StellarMessageProof,
+  Sep10SignParams,
+  Sep10Proof,
+  Sep43AuthEntrySigner,
+  AuthEntrySignerOptions,
 
   // Swaps
   SwapQuoteParams,
   SwapQuote,
   SwapProvider,
   SwapVenue,
+  SolanaSwapQuoteParams,
+  SolanaSwapQuote,
+  SolanaSwapVenue,
 
   // Earn (yield vaults + lending)
   EarnProviderId,
@@ -1181,17 +1366,29 @@ import type {
   EarnTxParams,
   EarnWithdrawUnit,
 
-  // Ramps (SEP-24)
-  RampsQuoteQuery,
-  RampsQuoteResponse,
-  RampsOnrampBody,
-  RampsOnrampResponse,
-  RampsOfframpBody,
-  RampsOfframpResponse,
-  RampsTransactionResponse,
-  RampsSignatureBody,
-  RampsSignatureResponse,
-  RampsCompleteResponse,
+  // Ramps
+  RampDirection,
+  RampRoutesResponse,
+  RampQuoteRequest,
+  RampQuotesResponse,
+  RampQuote,
+  RampQuoteLimit,
+  RampOrderRequest,
+  RampOrder,
+  RampOrdersQuery,
+  RampOrdersPage,
+  RampSigningHandler,
+  RampAdapter,
+
+  // Cards
+  CardProvider,
+  CardHolder,
+  CardInfo,
+  CardBalance,
+  CardFunding,
+  CardFundingChain,
+  CardFundingOutcome,
+  CardSecrets,
 
   // KYC
   KycLevel,
@@ -1224,14 +1421,29 @@ import type {
   StellarBalance,
 } from '@pollar/core';
 
-// Runtime values (NOT type-only — `WalletType` is an enum, so it cannot be
-// imported with `import type` and then used as `WalletType.FREIGHTER`).
+// Runtime values (NOT type-only - `WalletType` is an enum and `RampChain` a frozen object, so they
+// cannot be imported with `import type` and then used as `WalletType.FREIGHTER`).
 import {
   WalletType,
+  RampChain,
   POLLAR_CORE_VERSION,
   AUTH_ERROR_CODES,
   PollarNetworkError,
   isPollarNetworkError,
+  PollarApiError,
+  isPollarApiError,
+  isPollarClient,
+  WALLET_NOT_READY_CODE,
+  isWalletNotReady,
+  WALLET_REQUIRED_CODE,
+  isWalletRequired,
+  createAuthEntrySigner,
+  isAuthEntryAdapterStep,
+  completeAuthEntryStep,
+  resolveLanguage,
+  languageFromTag,
+  localizedText,
+  transactionErrorMessage,
   toBaseUnits,
   fromBaseUnits,
 } from '@pollar/core';

@@ -2,9 +2,12 @@
 
 import {
   isPollarApiError,
+  isPollarNetworkError,
   type CardBalance,
   type CardDepositAddress,
   type CardFunding,
+  type CardFundingChain,
+  type CardFundingRoute,
   type CardHolder,
   type CardIncomeRange,
   type CardInfo,
@@ -14,24 +17,45 @@ import {
   type CardRequirements,
   type CardSecrets,
   type CardTransaction,
+  type PollarLanguage,
 } from '@pollar/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
+import { useChains } from '../../useChains';
 import { useWalletAvailable } from '../../useWalletAvailable';
+import { seededAmount } from '../../modal-options';
 import { AmountField } from '../AmountField';
+import { ChainSelect } from '../ChainSelect';
 import { CopyButton, PollarModalFooter } from '../commons';
 import { KycModal } from '../kyc-modal/KycModal';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
 import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
 import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
+import { BRIDGE_COPY } from '../bridge-modal/bridge-copy';
+import { signStepWithWallet } from '../bridge-modal/BridgeModal';
+import { CARD_COPY, CREDIT_DELAYED, fundingProblemText, type CardCopy } from './card-copy';
 import { blockedStepMessage, cardStage, pendingFromRequirement, requiredCardStep, type PendingCardStep } from './card-kyc';
 import '../shared.css';
 import '../send-modal/SendModal.css';
 import './CardModal.css';
+import { PollarOverlay } from '../PollarOverlay';
+
+/** Where the card modal opens: a starting point the user can change. An option the user cannot use is left out. */
+export interface CardModalOptions {
+  /** 'fund' opens the funding panel once the user's card has loaded; a user without a card stays on the card screen. */
+  panel?: 'fund';
+  amount?: string;
+  /** Network to fund from, when it is one the user can fund from. */
+  chain?: CardFundingChain;
+  /** Called with each funding the user sends from the modal. */
+  onFunded?: (funding: CardFunding) => void;
+}
 
 interface CardModalProps {
   onClose: () => void;
+  initial?: CardModalOptions | undefined;
 }
 
 /** How often the holder is re-read while the provider's identity verification is pending. */
@@ -41,65 +65,23 @@ const REVEAL_MS = 30_000;
 const TX_LIMIT = 10;
 /** How often fundings in flight are re-read while the funding panel is open. */
 const FUNDING_POLL_MS = 5_000;
-const FUNDING_INFLIGHT = new Set(['CREATED', 'BURNED', 'ATTESTED', 'MINTED']);
+const FUNDING_INFLIGHT = new Set(['CREATED', 'SENT', 'BURNED', 'ATTESTED', 'MINTED']);
 
-/** What each funding state means to the user: a title, and for one in flight its step and what it waits on. */
-const FUNDING_COPY: Record<string, { title: string; step?: number; hint?: string }> = {
-  CREATED: {
-    title: 'Confirming your payment',
-    step: 1,
-    hint: 'Your USDC payment is being confirmed on Stellar. This takes a few seconds.',
-  },
-  BURNED: {
-    title: 'Sending it to the card network',
-    step: 2,
-    hint: 'Your USDC left Stellar. Circle is confirming the transfer, usually in about a minute.',
-  },
-  ATTESTED: {
-    title: 'Crossing to the card network',
-    step: 3,
-    hint: 'Transfer confirmed. Delivering the USDC to the card network.',
-  },
-  MINTED: {
-    title: 'Arrived, crediting your card',
-    step: 4,
-    hint: 'The USDC reached the card provider, which is adding it to your card. This can take a few minutes.',
-  },
-  CREDITED: { title: 'Credited to your card' },
-  FAILED: { title: 'Failed' },
-};
-const FUNDING_STEPS = 4;
+/** Only unique among the user's fundings, which is all the server compares it against; not a secret. */
+function newFundingKey(): string {
+  return `fund-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
-const INCOME_RANGES: { value: CardIncomeRange; label: string }[] = [
-  { value: '0-1000', label: 'Up to 1,000 USD' },
-  { value: '1000-5000', label: '1,000 to 5,000 USD' },
-  { value: '5000-10000', label: '5,000 to 10,000 USD' },
-  { value: '10000+', label: 'More than 10,000 USD' },
-];
-
-const TX_LABELS: Record<string, string> = {
-  deposit: 'Deposit',
-  transactionTransfer: 'Bank deposit',
-  spend: 'Purchase',
-  spend_adjustment: 'Adjustment',
-  fee: 'Fee',
-  fee_refund: 'Fee refund',
-  withdrawal: 'Withdrawal',
-  card_insurance: 'Card issuance',
+/** The states a funding in flight goes through, by its route: the step is the position. */
+const FUNDING_STEPS: Record<CardFunding['route'], string[]> = {
+  CCTP: ['CREATED', 'BURNED', 'ATTESTED', 'MINTED'],
+  DIRECT: ['CREATED', 'SENT'],
 };
 
-const KYC_PENDING_COPY: Record<string, string> = {
-  PENDING: 'Your information is being reviewed.',
-  NEEDS_ACTION:
-    'Finish verifying your identity with the card provider: you will be asked for a photo of your document and a selfie.',
-  IN_REVIEW: 'Your verification is under manual review. This can take a while.',
-};
+const INCOME_RANGES: CardIncomeRange[] = ['0-1000', '1000-5000', '5000-10000', '10000+'];
 
-const KYC_FINAL_COPY: Record<string, string> = {
-  DENIED: 'Your verification was denied.',
-  LOCKED: 'Your account is locked.',
-  CANCELED: 'Your verification was canceled.',
-};
+const KYC_PENDING = new Set(['PENDING', 'NEEDS_ACTION', 'IN_REVIEW']);
+const KYC_FINAL = new Set(['DENIED', 'LOCKED', 'CANCELED']);
 
 const emptyKyc: CardKycInput = {
   firstName: '',
@@ -116,15 +98,15 @@ const emptyKyc: CardKycInput = {
   address: { line1: '', line2: '', city: '', region: '', postalCode: '', countryCode: '' },
 };
 
-function usd(cents: number | null | undefined): string {
+function usd(cents: number | null | undefined, language: PollarLanguage): string {
   if (cents === null || cents === undefined) return '-';
-  return (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  return (cents / 100).toLocaleString(language, { style: 'currency', currency: 'USD' });
 }
 
-function money(amount: string, currency: string): string {
+function money(amount: string, currency: string, language: PollarLanguage): string {
   const n = Number(amount);
   try {
-    return n.toLocaleString('en-US', { style: 'currency', currency });
+    return n.toLocaleString(language, { style: 'currency', currency });
   } catch {
     return `${n.toFixed(2)} ${currency}`;
   }
@@ -138,30 +120,35 @@ function groupPan(pan: string): string {
 }
 
 /** The provider's own words when it rejected something; our code otherwise. */
-/** Errors whose cause the user can act on, said plainly instead of the provider's raw message. */
-const CARD_ERROR_COPY: Record<string, string> = {
-  SDK_CARDS_PROVIDER_ERROR: 'The card provider is not responding right now. Please try again in a few minutes.',
-  SDK_CARDS_IP_NOT_SUPPORTED:
-    'The card provider cannot accept your current connection (IPv6). Please try again from another network, for example Wi-Fi.',
-  SDK_CARDS_PROVIDER_USER_TAKEN:
-    'This email is already registered with the card provider through another app. Use a different email to get a card here.',
-};
-
-function errorText(e: unknown, fallback: string): string {
+function errorText(e: unknown, fallback: string, copy: CardCopy): string {
   if (isPollarApiError(e)) {
-    const known = CARD_ERROR_COPY[e.code];
+    const known = copy.errors[e.code];
     if (known) return known;
+    // A funding custody refused or the wallet cannot pay: its reason, not custody's sentence.
+    if (e.code === 'SDK_CARDS_FUNDING_WALLET_NOT_READY') {
+      const { reason, code, message } = e.body;
+      if (reason === 'insufficient_usdc') return copy.fundingProblem.noBalance;
+      if (reason === 'build_failed' || reason === 'payment_rejected') {
+        return fundingProblemText(
+          `${typeof code === 'string' ? code : ''}: ${typeof message === 'string' ? message : ''}`,
+          copy,
+        );
+      }
+    }
     const providerMessage = e.body.providerMessage;
     if (typeof providerMessage === 'string' && providerMessage) return providerMessage;
     const message = e.body.message;
     if (typeof message === 'string' && message) return message;
     return e.code;
   }
+  if (isPollarNetworkError(e)) return copy.networkError;
   return e instanceof Error && e.message ? e.message : fallback;
 }
 
-export function CardModal({ onClose }: CardModalProps) {
+export function CardModal({ onClose, initial }: CardModalProps) {
   const { getClient, styles, wallet } = usePollar();
+  const language = useModalLanguage();
+  const copy = CARD_COPY[language];
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
 
@@ -176,7 +163,17 @@ export function CardModal({ onClose }: CardModalProps) {
   const [transactions, setTransactions] = useState<CardTransaction[] | null>(null);
   const [deposit, setDeposit] = useState<CardDepositAddress[] | null>(null);
   const [fundings, setFundings] = useState<CardFunding[] | null>(null);
-  const [fundAmount, setFundAmount] = useState('');
+  const [fundAmount, setFundAmount] = useState(() => seededAmount(initial?.amount));
+  // Bumped by "Try again" after the first load failed: runs that load once more.
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadFailed, setLoadFailed] = useState(false);
+  // One key per funding the user means to make: a double click or a retry after
+  // a lost response gets that funding back instead of paying twice.
+  const fundKey = useRef<string | null>(null);
+  const [fundChain, setFundChain] = useState<CardFundingChain | null>(initial?.chain ?? null);
+  const [fundRoutes, setFundRoutes] = useState<CardFundingRoute[] | null>(null);
+  // Until the card loads: whether to open its funding panel then.
+  const fundPanelSeed = useRef(initial?.panel === 'fund');
   const [showManual, setShowManual] = useState(false);
   const [occupations, setOccupations] = useState<CardOccupation[]>([]);
   const [kyc, setKyc] = useState<CardKycInput>(emptyKyc);
@@ -190,9 +187,14 @@ export function CardModal({ onClose }: CardModalProps) {
 
   const provider = providers?.[0] ?? null;
   const fundingAsset = provider?.fundingAssets[0] ?? 'USDC';
-  // Funding signs a Stellar payment from the wallet, so its balance is the Stellar one.
-  const fundAvailable = useWalletAvailable(panel === 'fund' ? { chain: 'STELLAR', code: fundingAsset } : null);
+  // The chains Pollar found a route from: a wallet of the user's, on a chain the app enabled.
+  const appOrder = useChains().chains;
+  const fundChains = (fundRoutes ?? []).map((route) => route.source).sort((a, b) => appOrder.indexOf(a) - appOrder.indexOf(b));
+  const selectedFundChain = (fundChain && fundChains.includes(fundChain) ? fundChain : null) ?? fundChains[0] ?? 'STELLAR';
+  const selectedRoute = fundRoutes?.find((route) => route.source === selectedFundChain);
+  const fundAvailable = useWalletAvailable(panel === 'fund' ? { chain: selectedFundChain, code: fundingAsset } : null);
   const card = cards?.[0] ?? null;
+  const expiry = card?.expMonth && card.expYear ? `${card.expMonth}/${card.expYear.slice(-2)}` : null;
 
   // --- Loading ----------------------------------------------------------------
   const loadHolder = useCallback(async () => {
@@ -244,14 +246,21 @@ export function CardModal({ onClose }: CardModalProps) {
       } catch (e) {
         if (!cancelled) {
           setProviders((cur) => cur ?? []);
-          setError(errorText(e, 'Could not load your card'));
+          setError(errorText(e, copy.failed.load, copy));
+          setLoadFailed(true);
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [getClient, loadHolder, loadRequirements, loadCardData]);
+  }, [getClient, loadHolder, loadRequirements, loadCardData, loadAttempt]);
+
+  const retryLoad = () => {
+    setLoadFailed(false);
+    setError('');
+    setLoadAttempt((n) => n + 1);
+  };
 
   const stage = cardStage(holder, requirements);
 
@@ -271,7 +280,7 @@ export function CardModal({ onClose }: CardModalProps) {
   }, [stage, getClient]);
 
   // The provider's verification in progress: re-read the holder until it settles.
-  const kycPending = holder ? holder.kycStatus in KYC_PENDING_COPY : false;
+  const kycPending = holder ? KYC_PENDING.has(holder.kycStatus) : false;
   useEffect(() => {
     if (!kycPending) return;
     const id = setInterval(() => {
@@ -309,7 +318,7 @@ export function CardModal({ onClose }: CardModalProps) {
       // A step the platform asks for opens in place of the modal; anything else is shown.
       const step = requiredCardStep(e);
       if (step) openStep(step);
-      else setError(errorText(e, fallback));
+      else setError(errorText(e, fallback, copy));
     } finally {
       setBusy(null);
     }
@@ -320,7 +329,7 @@ export function CardModal({ onClose }: CardModalProps) {
     if (!provider) return;
     const [h, r] = await Promise.all([loadHolder(), loadRequirements(provider.id)]);
     if (h?.kycStatus === 'APPROVED') await loadCardData();
-    if (r?.next && !blockedStepMessage(r.next)) openStep(pendingFromRequirement(provider.id, r.next));
+    if (r?.next && !blockedStepMessage(r.next, copy.blocked)) openStep(pendingFromRequirement(provider.id, r.next));
   }
 
   /** The user's first move: the next platform step when one is pending, else the provider sign-up. */
@@ -337,7 +346,7 @@ export function CardModal({ onClose }: CardModalProps) {
         if (holder) return afterStep();
         setHolder(await getClient().createCardHolder());
       },
-      'Could not start your card application',
+      copy.failed.start,
     );
 
   const sendKyc = () =>
@@ -348,7 +357,7 @@ export function CardModal({ onClose }: CardModalProps) {
         if (!address.line2) delete address.line2;
         setHolder(await getClient().submitCardKyc({ termsAccepted: terms, kyc: { ...kyc, address } }));
       },
-      'Could not submit your information',
+      copy.failed.submit,
     );
 
   const issue = () =>
@@ -358,7 +367,7 @@ export function CardModal({ onClose }: CardModalProps) {
         await getClient().issueCard(nickname.trim() ? { nickname: nickname.trim() } : {});
         await loadCardData();
       },
-      'Could not issue your card',
+      copy.failed.issue,
     );
 
   const refresh = () =>
@@ -367,7 +376,7 @@ export function CardModal({ onClose }: CardModalProps) {
       async () => {
         await loadCardData();
       },
-      'Could not refresh your card',
+      copy.failed.refresh,
     );
 
   const reveal = () =>
@@ -380,32 +389,57 @@ export function CardModal({ onClose }: CardModalProps) {
         if (revealTimer.current) clearTimeout(revealTimer.current);
         revealTimer.current = setTimeout(() => setSecrets(null), REVEAL_MS);
       },
-      'Could not show the card details',
+      copy.failed.reveal,
     );
 
   const openFund = () =>
     run(
       'fund',
       async () => {
-        setFundings(await getClient().listCardFundings());
+        const [list, routes] = await Promise.all([getClient().listCardFundings(), getClient().getCardFundingRoutes()]);
+        setFundings(list);
+        setFundRoutes(routes);
         setPanel('fund');
       },
-      'Could not load your fundings',
+      copy.failed.loadFundings,
     );
+
+  useEffect(() => {
+    if (!card || !fundPanelSeed.current) return;
+    fundPanelSeed.current = false;
+    void openFund();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, when the card arrives
+  }, [card]);
 
   const fund = () =>
     run(
       'fund-send',
       async () => {
-        const outcome = await getClient().fundCard({ amount: fundAmount.trim() });
+        fundKey.current ??= newFundingKey();
+        let outcome;
+        try {
+          const client = getClient();
+          outcome = await client.fundCard({
+            amount: fundAmount.trim(),
+            chain: selectedFundChain,
+            idempotencyKey: fundKey.current,
+            signBridgeStep: (transferId, actionId) => signStepWithWallet(client, transferId, actionId, BRIDGE_COPY[language]),
+          });
+        } catch (e) {
+          // The server answered, so the next attempt is a new funding; without an answer it keeps the key.
+          if (isPollarApiError(e)) fundKey.current = null;
+          throw e;
+        }
+        fundKey.current = null;
         if (outcome.status === 'cancelled') {
-          setError('The payment was not signed.');
+          setError(copy.notSigned);
           return;
         }
         setFundings((cur) => [outcome.funding, ...(cur ?? []).filter((f) => f.id !== outcome.funding.id)]);
         setFundAmount('');
+        initial?.onFunded?.(outcome.funding);
       },
-      'Could not fund the card',
+      copy.failed.fund,
     );
 
   const showManualAddress = () =>
@@ -415,7 +449,7 @@ export function CardModal({ onClose }: CardModalProps) {
         if (!deposit) setDeposit(await getClient().getCardDepositAddresses());
         setShowManual(true);
       },
-      'Could not load the deposit address',
+      copy.failed.loadDeposit,
     );
 
   // Fundings move on their own server-side; keep the panel honest while any is in flight.
@@ -482,9 +516,9 @@ export function CardModal({ onClose }: CardModalProps) {
         value={kyc[key]}
         onChange={(e) => setKyc((k) => ({ ...k, [key]: e.target.value as CardIncomeRange }))}
       >
-        {INCOME_RANGES.map((r) => (
-          <option key={r.value} value={r.value}>
-            {r.label}
+        {INCOME_RANGES.map((range) => (
+          <option key={range} value={range}>
+            {copy.incomeRanges[range]}
           </option>
         ))}
       </select>
@@ -553,12 +587,12 @@ export function CardModal({ onClose }: CardModalProps) {
     providers === null ||
     (providers.length > 0 && (holder === undefined || requirements === undefined)) ||
     (holder?.kycStatus === 'APPROVED' && cards === null && !error);
-  const blocked = requirements?.next ? blockedStepMessage(requirements.next) : null;
+  const blocked = requirements?.next ? blockedStepMessage(requirements.next, copy.blocked) : null;
   const stepsPending = !!requirements?.next;
-  const title = panel === 'fund' ? 'Add funds' : card ? (card.nickname ?? 'Your card') : 'Get a card';
+  const title = panel === 'fund' ? copy.title.addFunds : card ? (card.nickname ?? copy.title.yourCard) : copy.title.getCard;
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <div
         className="pollar-modal-card pollar-card-modal"
         data-theme={theme}
@@ -568,7 +602,7 @@ export function CardModal({ onClose }: CardModalProps) {
         <div className="pollar-modal-header">
           <div className="pollar-send-header-left">
             {panel === 'fund' && (
-              <button type="button" className="pollar-modal-close" onClick={() => setPanel('card')} aria-label="Back">
+              <button type="button" className="pollar-modal-close" onClick={() => setPanel('card')} aria-label={copy.back}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                   <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -583,7 +617,7 @@ export function CardModal({ onClose }: CardModalProps) {
                 className="pollar-modal-close"
                 onClick={() => void refresh()}
                 disabled={busy !== null}
-                aria-label="Refresh"
+                aria-label={copy.refresh}
               >
                 <svg
                   className={busy === 'refresh' ? 'pollar-modal-refresh-icon pollar-spinning' : 'pollar-modal-refresh-icon'}
@@ -603,7 +637,7 @@ export function CardModal({ onClose }: CardModalProps) {
                 </svg>
               </button>
             )}
-            <button type="button" className="pollar-modal-close" onClick={onClose} aria-label="Close">
+            <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                 <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
@@ -617,22 +651,15 @@ export function CardModal({ onClose }: CardModalProps) {
           </div>
         )}
 
-        {!loading && providers?.length === 0 && <div className="pollar-modal-error">Cards are not available for this app.</div>}
-        {!loading && provider && !provider.available && (
-          <div className="pollar-modal-error">Cards are not available right now.</div>
-        )}
+        {!loading && providers?.length === 0 && <div className="pollar-modal-error">{copy.unavailableForApp}</div>}
+        {!loading && provider && !provider.available && <div className="pollar-modal-error">{copy.unavailableNow}</div>}
 
         {/* Step 1: the platform's steps, then the provider sign-up */}
         {!loading && provider && provider.available && stage === 'steps' && (
           <>
-            <p>
-              Get {provider.cardLabel ?? `a ${provider.name} card`} funded from your wallet{wallet ? '' : ' once you sign in'}.
-              You will verify your identity first; it takes a few minutes.
-            </p>
+            <p>{copy.intro(provider.cardLabel ?? copy.defaultCardName(provider.name), !!wallet)}</p>
             {requirements && requirements.total > 0 && (
-              <p className="pollar-card-note">
-                {requirements.completed} of {requirements.total} steps done
-              </p>
+              <p className="pollar-card-note">{copy.stepsDone(requirements.completed, requirements.total)}</p>
             )}
             {blocked && <div className="pollar-modal-error">{blocked}</div>}
             <div className="pollar-modal-actions">
@@ -642,7 +669,7 @@ export function CardModal({ onClose }: CardModalProps) {
                 onClick={() => void start()}
                 disabled={busy !== null || !wallet || !!blocked}
               >
-                {busy === 'start' ? 'Starting...' : stepsPending ? 'Continue' : 'Start'}
+                {busy === 'start' ? copy.starting : stepsPending ? copy.continue : copy.start}
               </button>
             </div>
           </>
@@ -651,21 +678,21 @@ export function CardModal({ onClose }: CardModalProps) {
         {/* Step 2: the provider's own KYC form, when no PROVIDER_REGISTRATION step sends it for the user */}
         {!loading && provider && stage === 'provider-form' && (
           <>
-            <p className="pollar-card-section-title">About you</p>
+            <p className="pollar-card-section-title">{copy.aboutYou}</p>
             <div className="pollar-card-grid">
-              {field('firstName', 'First name', { autoComplete: 'given-name' })}
-              {field('lastName', 'Last name', { autoComplete: 'family-name' })}
-              {field('birthDate', 'Birth date', { placeholder: 'YYYY-MM-DD', autoComplete: 'bday' })}
-              {field('nationalId', 'ID number')}
-              {field('countryOfIssue', 'ID country (2 letters)', { maxLength: 2, placeholder: 'AR' })}
+              {field('firstName', copy.firstName, { autoComplete: 'given-name' })}
+              {field('lastName', copy.lastName, { autoComplete: 'family-name' })}
+              {field('birthDate', copy.birthDate, { placeholder: copy.datePlaceholder, autoComplete: 'bday' })}
+              {field('nationalId', copy.nationalId)}
+              {field('countryOfIssue', copy.idCountry, { maxLength: 2, placeholder: 'AR' })}
               <label className="pollar-send-field">
-                <span className="pollar-send-label">Occupation</span>
+                <span className="pollar-send-label">{copy.occupation}</span>
                 <select
                   className="pollar-input pollar-send-select"
                   value={kyc.occupation}
                   onChange={(e) => setKyc((k) => ({ ...k, occupation: e.target.value }))}
                 >
-                  <option value="">Select...</option>
+                  <option value="">{copy.selectOccupation}</option>
                   {occupations.map((o) => (
                     <option key={o.code} value={o.code}>
                       {o.label}
@@ -673,35 +700,35 @@ export function CardModal({ onClose }: CardModalProps) {
                   ))}
                 </select>
               </label>
-              {field('phoneCountryCode', 'Phone country code', { placeholder: '54', inputMode: 'numeric' })}
-              {field('phoneNumber', 'Phone number', { placeholder: '91155551234', inputMode: 'numeric' })}
-              {rangeField('annualSalary', 'Annual income')}
-              {rangeField('expectedMonthlyVolume', 'Expected monthly spend')}
-              <div className="pollar-card-grid-full">{field('accountPurpose', 'What will you use the card for?')}</div>
+              {field('phoneCountryCode', copy.phoneCountryCode, { placeholder: '54', inputMode: 'numeric' })}
+              {field('phoneNumber', copy.phoneNumber, { placeholder: '91155551234', inputMode: 'numeric' })}
+              {rangeField('annualSalary', copy.annualIncome)}
+              {rangeField('expectedMonthlyVolume', copy.monthlySpend)}
+              <div className="pollar-card-grid-full">{field('accountPurpose', copy.accountPurpose)}</div>
             </div>
 
-            <p className="pollar-card-section-title">Address</p>
+            <p className="pollar-card-section-title">{copy.address}</p>
             <div className="pollar-card-grid">
               <div className="pollar-card-grid-full">
-                {addressField('line1', 'Street and number', { autoComplete: 'address-line1' })}
+                {addressField('line1', copy.line1, { autoComplete: 'address-line1' })}
               </div>
               <div className="pollar-card-grid-full">
-                {addressField('line2', 'Apartment, floor (optional)', { autoComplete: 'address-line2' })}
+                {addressField('line2', copy.line2, { autoComplete: 'address-line2' })}
               </div>
-              {addressField('city', 'City', { autoComplete: 'address-level2' })}
-              {addressField('region', 'State or province', { autoComplete: 'address-level1' })}
-              {addressField('postalCode', 'Postal code', { autoComplete: 'postal-code' })}
-              {addressField('countryCode', 'Country (2 letters)', { maxLength: 2, placeholder: 'AR' })}
+              {addressField('city', copy.city, { autoComplete: 'address-level2' })}
+              {addressField('region', copy.region, { autoComplete: 'address-level1' })}
+              {addressField('postalCode', copy.postalCode, { autoComplete: 'postal-code' })}
+              {addressField('countryCode', copy.country, { maxLength: 2, placeholder: 'AR' })}
             </div>
 
             <label className="pollar-card-terms">
               <input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)} />
               <span>
-                I have read and accept the{' '}
+                {copy.termsPrefix}
                 <a className="pollar-card-link" href={provider.termsUrl ?? '#'} target="_blank" rel="noreferrer">
-                  {provider.name} terms of service
+                  {copy.termsLink(provider.name)}
                 </a>
-                {provider.termsUrl ? '' : ' (demo: the final terms link is pending)'}.
+                {provider.termsUrl ? '' : copy.termsPending}.
               </span>
             </label>
 
@@ -712,35 +739,35 @@ export function CardModal({ onClose }: CardModalProps) {
                 onClick={() => void sendKyc()}
                 disabled={busy !== null || !terms || !kycComplete}
               >
-                {busy === 'kyc' ? 'Sending...' : 'Continue'}
+                {busy === 'kyc' ? copy.sending : copy.continue}
               </button>
             </div>
           </>
         )}
 
         {/* Step 3: the provider's verification pending */}
-        {!loading && holder && holder.kycStatus in KYC_PENDING_COPY && (
+        {!loading && holder && KYC_PENDING.has(holder.kycStatus) && (
           <>
-            <p>{KYC_PENDING_COPY[holder.kycStatus]}</p>
+            <p>{copy.kycPending[holder.kycStatus]}</p>
             {holder.kycReason && <p className="pollar-card-note">{holder.kycReason}</p>}
             <div className="pollar-modal-actions">
               {holder.verificationLink && (
                 <a className="pollar-btn-primary" href={holder.verificationLink} target="_blank" rel="noreferrer">
-                  Verify my identity
+                  {copy.verifyIdentity}
                 </a>
               )}
               <button type="button" className="pollar-btn-secondary" onClick={() => void loadHolder().catch(() => {})}>
-                I am done
+                {copy.done}
               </button>
             </div>
-            <p className="pollar-card-note">This screen updates on its own once the verification comes back.</p>
+            <p className="pollar-card-note">{copy.autoUpdate}</p>
           </>
         )}
 
         {/* Terminal failures */}
-        {!loading && holder && holder.kycStatus in KYC_FINAL_COPY && (
+        {!loading && holder && KYC_FINAL.has(holder.kycStatus) && (
           <div className="pollar-modal-error">
-            {KYC_FINAL_COPY[holder.kycStatus]}
+            {copy.kycFinal[holder.kycStatus]}
             {holder.kycReason ? ` ${holder.kycReason}` : ''}
           </div>
         )}
@@ -748,20 +775,20 @@ export function CardModal({ onClose }: CardModalProps) {
         {/* Step 4: approved, no card yet */}
         {!loading && provider && holder?.kycStatus === 'APPROVED' && cards !== null && !card && (
           <>
-            <p>Your identity is verified. Issue your virtual card to start.</p>
+            <p>{copy.verified}</p>
             <label className="pollar-send-field">
-              <span className="pollar-send-label">Card name (optional)</span>
+              <span className="pollar-send-label">{copy.cardName}</span>
               <input
                 className="pollar-input"
                 value={nickname}
                 maxLength={40}
                 onChange={(e) => setNickname(e.target.value)}
-                placeholder="Everyday card"
+                placeholder={copy.cardNamePlaceholder}
               />
             </label>
             <div className="pollar-modal-actions">
               <button type="button" className="pollar-btn-primary" onClick={() => void issue()} disabled={busy !== null}>
-                {busy === 'issue' ? 'Issuing...' : 'Issue my card'}
+                {busy === 'issue' ? copy.issuing : copy.issueCard}
               </button>
             </div>
           </>
@@ -779,17 +806,45 @@ export function CardModal({ onClose }: CardModalProps) {
                 <span className="pollar-card-status">{card.status.toLowerCase()}</span>
               </div>
               <div className="pollar-card-visual-chip" />
-              <div className="pollar-card-visual-number">
+              <div className="pollar-card-visual-number pollar-card-copy-row">
                 {secrets ? groupPan(secrets.pan) : `•••• •••• •••• ${card.last4 ?? '••••'}`}
+                {secrets && (
+                  <CopyButton
+                    value={secrets.pan}
+                    label={copy.copyCardNumber}
+                    className="pollar-copy-btn-sm pollar-card-copy"
+                    language={language}
+                  />
+                )}
               </div>
               <div className="pollar-card-visual-bottom">
                 <div>
-                  <span>Expires</span>
-                  <strong>{card.expMonth && card.expYear ? `${card.expMonth}/${card.expYear.slice(-2)}` : '--/--'}</strong>
+                  <span>{copy.expires}</span>
+                  <div className="pollar-card-copy-row">
+                    <strong>{expiry ?? '--/--'}</strong>
+                    {expiry && (
+                      <CopyButton
+                        value={expiry}
+                        label={copy.copyExpiry}
+                        className="pollar-copy-btn-sm pollar-card-copy"
+                        language={language}
+                      />
+                    )}
+                  </div>
                 </div>
                 <div>
                   <span>CVC</span>
-                  <strong>{secrets ? secrets.cvc : '•••'}</strong>
+                  <div className="pollar-card-copy-row">
+                    <strong>{secrets ? secrets.cvc : '•••'}</strong>
+                    {secrets && (
+                      <CopyButton
+                        value={secrets.cvc}
+                        label={copy.copyCvc}
+                        className="pollar-copy-btn-sm pollar-card-copy"
+                        language={language}
+                      />
+                    )}
+                  </div>
                 </div>
                 <div>
                   <span>{card.type.toLowerCase()}</span>
@@ -800,16 +855,16 @@ export function CardModal({ onClose }: CardModalProps) {
 
             <div className="pollar-card-balance">
               <div>
-                <span>Available</span>
-                <strong>{usd(balance?.spendingPowerCents)}</strong>
+                <span>{copy.available}</span>
+                <strong>{usd(balance?.spendingPowerCents, language)}</strong>
               </div>
               <div>
-                <span>Limit</span>
-                <strong>{usd(balance?.creditLimitCents)}</strong>
+                <span>{copy.limit}</span>
+                <strong>{usd(balance?.creditLimitCents, language)}</strong>
               </div>
               <div>
-                <span>To pay</span>
-                <strong>{usd(balance?.balanceDueCents)}</strong>
+                <span>{copy.toPay}</span>
+                <strong>{usd(balance?.balanceDueCents, language)}</strong>
               </div>
             </div>
 
@@ -817,42 +872,44 @@ export function CardModal({ onClose }: CardModalProps) {
               {provider.supports.revealSecrets &&
                 (secrets ? (
                   <button type="button" className="pollar-btn-secondary" onClick={() => setSecrets(null)}>
-                    Hide details
+                    {copy.hideDetails}
                   </button>
                 ) : (
                   <button type="button" className="pollar-btn-secondary" onClick={() => void reveal()} disabled={busy !== null}>
-                    {busy === 'reveal' ? 'Loading...' : 'Show details'}
+                    {busy === 'reveal' ? copy.loading : copy.showDetails}
                   </button>
                 ))}
               <button type="button" className="pollar-btn-primary" onClick={() => void openFund()} disabled={busy !== null}>
-                Add funds
+                {copy.addFunds}
               </button>
             </div>
-            {secrets && <p className="pollar-card-note">The details hide on their own in 30 seconds. Do not share them.</p>}
+            {secrets && <p className="pollar-card-note">{copy.detailsHide}</p>}
 
-            <p className="pollar-card-section-title">Recent activity</p>
-            {transactions === null && <p className="pollar-card-note">Loading...</p>}
-            {transactions?.length === 0 && <p className="pollar-card-note">No movements yet.</p>}
+            <p className="pollar-card-section-title">{copy.recentActivity}</p>
+            {transactions === null && <p className="pollar-card-note">{copy.loading}</p>}
+            {transactions?.length === 0 && <p className="pollar-card-note">{copy.noMovements}</p>}
             {transactions?.map((tx) => {
               // `purchase` is the provider's own record, passed through as is.
               const localAmount = typeof tx.purchase?.localAmount === 'number' ? tx.purchase.localAmount : null;
               const localCurrency = typeof tx.purchase?.localCurrency === 'string' ? tx.purchase.localCurrency : null;
               const purchaseStatus = typeof tx.purchase?.status === 'string' ? tx.purchase.status : null;
               const local =
-                localAmount && localCurrency && localCurrency !== 'USD' ? money(String(localAmount), localCurrency) : null;
+                localAmount && localCurrency && localCurrency !== 'USD'
+                  ? money(String(localAmount), localCurrency, language)
+                  : null;
               return (
                 <div key={tx.id} className="pollar-card-tx">
                   <div>
-                    {tx.merchantName ?? TX_LABELS[tx.type] ?? tx.type}
+                    {tx.merchantName ?? copy.txLabels[tx.type] ?? tx.type}
                     <span className="pollar-card-tx-meta">
                       {new Date(tx.occurredAt).toLocaleDateString()}
-                      {tx.merchantName ? ` · ${TX_LABELS[tx.type] ?? tx.type}` : ''}
+                      {tx.merchantName ? ` · ${copy.txLabels[tx.type] ?? tx.type}` : ''}
                       {purchaseStatus && purchaseStatus !== 'completed' ? ` · ${purchaseStatus}` : ''}
                     </span>
                   </div>
                   <div className="pollar-card-tx-amount" data-direction={tx.direction ?? undefined}>
                     {tx.direction === 'credit' ? '+' : tx.direction === 'debit' ? '-' : ''}
-                    {money(tx.amount, tx.currency)}
+                    {money(tx.amount, tx.currency, language)}
                     {local && <span className="pollar-card-tx-meta">{local}</span>}
                   </div>
                 </div>
@@ -864,98 +921,101 @@ export function CardModal({ onClose }: CardModalProps) {
         {/* Funding */}
         {!loading && provider && card && panel === 'fund' && (
           <>
-            <p>
-              Move {provider.fundingAssets.join(' or ') || 'USDC'} from your wallet to your card. It takes a few minutes to
-              cross to the card network.
-            </p>
+            <p>{copy.fundIntro(provider.fundingAssets.join(` ${copy.or} `) || 'USDC')}</p>
+            <ChainSelect
+              value={selectedFundChain}
+              options={fundChains}
+              onChange={(chain) => setFundChain(chain as CardFundingChain)}
+              disabled={busy !== null}
+              language={language}
+            />
+            {fundRoutes?.length === 0 && <p className="pollar-card-note">{copy.fundingProblem.noRoute}</p>}
+            {selectedRoute?.route === 'CCTP' && <p className="pollar-card-note">{copy.fundingProblem.crossing}</p>}
             <AmountField
               id="pollar-card-fund-amount"
-              label="Amount"
+              label={copy.amount}
               value={fundAmount}
               onChange={(value) => setFundAmount(value.replace(/[^0-9.]/g, ''))}
               unit={fundingAsset}
               available={fundAvailable}
               placeholder="10"
+              language={language}
             />
             <div className="pollar-modal-actions">
               <button
                 type="button"
                 className="pollar-btn-primary"
                 onClick={() => void fund()}
-                disabled={busy !== null || !(Number(fundAmount) >= 1)}
+                disabled={busy !== null || !selectedRoute || !(Number(fundAmount) >= 1)}
               >
-                {busy === 'fund-send' ? 'Sending...' : 'Fund from my wallet'}
+                {busy === 'fund-send' ? copy.sending : copy.fundFromWallet}
               </button>
             </div>
 
             {fundings && fundings.length > 0 && (
               <>
-                <p className="pollar-card-section-title">Your fundings</p>
+                <p className="pollar-card-section-title">{copy.yourFundings}</p>
                 {fundings.map((f) => {
-                  const copy = FUNDING_COPY[f.status];
+                  const state = (f.route === 'DIRECT' ? copy.fundingSolana[f.status] : undefined) ?? copy.funding[f.status];
+                  const steps = FUNDING_STEPS[f.route];
+                  const step = steps.indexOf(f.status) + 1;
                   const inflight = FUNDING_INFLIGHT.has(f.status);
                   return (
                     <div key={f.id} className="pollar-card-tx" aria-busy={inflight}>
                       <div>
                         <span className="pollar-card-funding-title">
                           {inflight && <span className="pollar-spinner pollar-spinner-sm" aria-hidden />}
-                          {copy?.title ?? f.status}
+                          {state?.title ?? f.status}
                         </span>
-                        {inflight && copy?.step && (
+                        {inflight && step > 0 && (
                           <span className="pollar-card-tx-meta" role="status">
-                            Step {copy.step} of {FUNDING_STEPS} · {copy.hint}
+                            {copy.stepOf(step, steps.length)} ·{' '}
+                            {f.error === CREDIT_DELAYED ? copy.fundingProblem.delayed : state?.hint}
                           </span>
                         )}
                         <span className="pollar-card-tx-meta">
                           {new Date(f.createdAt).toLocaleString()}
-                          {f.status === 'FAILED' && f.error ? ` · ${f.error}` : ''}
+                          {f.status === 'FAILED' ? ` · ${fundingProblemText(f.error, copy)}` : ''}
                         </span>
                       </div>
                       <div className="pollar-card-tx-amount" data-direction={f.status === 'CREDITED' ? 'credit' : undefined}>
-                        {money(f.amount, 'USD')}
+                        {money(f.amount, 'USD', language)}
                       </div>
                     </div>
                   );
                 })}
-                {fundingsInflight && (
-                  <p className="pollar-card-note">
-                    You can close this window: the funding keeps going and your card is credited when it finishes.
-                  </p>
-                )}
+                {fundingsInflight && <p className="pollar-card-note">{copy.canClose}</p>}
               </>
             )}
 
             {!showManual && (
               <p className="pollar-card-note">
-                Prefer to send from another wallet?{' '}
+                {copy.preferOtherWallet}{' '}
                 <button
                   type="button"
                   className="pollar-card-link"
                   onClick={() => void showManualAddress()}
                   disabled={busy !== null}
                 >
-                  Show the deposit address
+                  {copy.showDeposit}
                 </button>
               </p>
             )}
             {showManual &&
               deposit?.map((d) => (
                 <div key={d.network} className="pollar-card-deposit">
-                  <strong>{d.network}</strong> (chain {d.chainId})<code>{d.address}</code>
-                  <CopyButton value={d.address} label="Copy address" />
+                  <strong>{d.network}</strong> ({copy.chain(d.chainId)})<code>{d.address}</code>
+                  <CopyButton value={d.address} label={copy.copyAddress} language={language} />
                   <p className="pollar-card-note">
-                    Send only {d.tokens.map((t) => (t.currency ?? 'token').toUpperCase()).join(' or ')} on {d.network}; anything
-                    else can be lost.
+                    {copy.sendOnly(d.tokens.map((t) => (t.currency ?? 'token').toUpperCase()).join(` ${copy.or} `), d.network)}
                   </p>
                 </div>
               ))}
-            {showManual && deposit?.length === 0 && (
-              <div className="pollar-modal-error">The provider returned no deposit address.</div>
-            )}
+            {showManual && deposit?.length === 0 && <div className="pollar-modal-error">{copy.noDeposit}</div>}
             {showManual && (
               <p className="pollar-card-note">
                 <button type="button" className="pollar-card-link" onClick={() => setShowManual(false)}>
-                  Hide the deposit address
+                  {copy.hideDeposit}
                 </button>
               </p>
             )}
@@ -963,9 +1023,16 @@ export function CardModal({ onClose }: CardModalProps) {
         )}
 
         {error && <div className="pollar-modal-error">{error}</div>}
+        {loadFailed && (
+          <div className="pollar-modal-actions">
+            <button type="button" className="pollar-btn-primary" onClick={retryLoad}>
+              {copy.retry}
+            </button>
+          </div>
+        )}
 
-        <PollarModalFooter />
+        <PollarModalFooter language={language} />
       </div>
-    </div>
+    </PollarOverlay>
   );
 }

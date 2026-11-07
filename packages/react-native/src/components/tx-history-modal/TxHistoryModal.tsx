@@ -1,19 +1,36 @@
-import React, { useEffect } from 'react';
+import type { WalletChain } from '@pollar/core';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableWithoutFeedback } from 'react-native';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { TxHistoryModalTemplate } from './TxHistoryModalUI';
+
+/** Where the history opens: the network whose transactions it lists. A network the app does not offer is left out. */
+export interface TxHistoryModalOptions {
+  chain?: WalletChain;
+}
 
 export interface TxHistoryModalProps {
   onClose: () => void;
+  initial?: TxHistoryModalOptions | undefined;
 }
 
-export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
-  const { styles, txHistory, getClient } = usePollar();
+export function TxHistoryModal({ onClose, initial }: TxHistoryModalProps) {
+  const { styles, txHistory, getClient, wallets, appConfig } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
+  const language = useModalLanguage();
+  // The networks the user holds a wallet on, in the app's order when it sets one.
+  const held = [...new Set(wallets.map((w) => w.chain ?? 'STELLAR'))];
+  const order = appConfig.application?.chains as WalletChain[] | undefined;
+  const chains = order && order.length > 0 ? order.filter((c) => held.includes(c)) : held;
+  const [selected, setSelected] = useState<WalletChain | null>(null);
+  const chain = selected ?? (initial?.chain && chains.includes(initial.chain) ? initial.chain : (chains[0] ?? null));
 
+  // The chain filter is a server query param, so every fetch carries the network shown.
+  const load = () => (chain ? getClient().fetchTxHistory({ chain }) : getClient().fetchTxHistory());
   useEffect(() => {
-    getClient().fetchTxHistory();
-  }, []);
+    void load();
+  }, [chain]);
 
   return (
     <TouchableWithoutFeedback onPress={onClose}>
@@ -25,7 +42,11 @@ export function TxHistoryModal({ onClose }: TxHistoryModalProps) {
               accentColor={accentColor}
               txHistory={txHistory}
               onClose={onClose}
-              onRefresh={() => getClient().fetchTxHistory()}
+              onRefresh={() => void load()}
+              chains={chains}
+              chain={chain}
+              onChainChange={setSelected}
+              language={language}
             />
           </View>
         </TouchableWithoutFeedback>

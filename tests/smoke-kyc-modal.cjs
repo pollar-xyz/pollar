@@ -13,6 +13,8 @@ function load(relativePath, overrides = {}) {
   }).outputText;
   // tsup defines the version at build time; the footer reads it.
   const scope = { exports: {}, setTimeout, clearTimeout, globalThis, __POLLAR_VERSION__: 'test' };
+  // Read on use: jsdom is set up after the modules load.
+  Object.defineProperty(scope, 'document', { get: () => globalThis.document });
   // Theme is a .ts utility rather than a React component.
   scope.require = (id) => {
     if (id in overrides) return overrides[id];
@@ -91,6 +93,7 @@ const { KycModal } = load('packages/react/src/components/kyc-modal/KycModal.tsx'
   '@pollar/core': core,
   // The provider memoizes getClient; a fresh function per render would reload the list forever.
   '../../context': { usePollar: () => pollarContext },
+  './context': { usePollar: () => pollarContext },
   './KycModalTemplate': {
     KycModalTemplate: (p) => {
       view = p;

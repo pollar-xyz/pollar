@@ -1,3 +1,4 @@
+import { useInheritedLanguage } from '../language-context';
 import React, { Component, ReactNode } from 'react';
 import {
   View,
@@ -9,7 +10,9 @@ import {
   Modal,
   TouchableWithoutFeedback,
 } from 'react-native';
+import type { PollarLanguage } from '@pollar/core';
 import { LOGO_POLLAR_WORDMARK_ON_LIGHT } from '../constants';
+import { COMMONS_COPY } from './commons-copy';
 
 declare const __POLLAR_VERSION__: string;
 
@@ -39,10 +42,11 @@ export class ModalErrorBoundary extends Component<{ children: ReactNode; onClose
   }
 }
 
-export const PollarModalFooter = () => {
+export const PollarModalFooter = ({ language: languageProp }: { language?: PollarLanguage | undefined }) => {
+  const language = useInheritedLanguage(languageProp);
   return (
     <View style={styles.footerContainer}>
-      <Text style={styles.protectedText}>Protected by</Text>
+      <Text style={styles.protectedText}>{COMMONS_COPY[language].protectedBy}</Text>
       <Image
         style={styles.footerLogo}
         source={{ uri: LOGO_POLLAR_WORDMARK_ON_LIGHT }}
@@ -75,9 +79,11 @@ interface ModalStatusBannerProps {
   status: StateStatus;
   onCancel?: (() => void) | undefined;
   onRetry?: (() => void) | undefined;
+  language?: PollarLanguage | undefined;
 }
 
-export function ModalStatusBanner({ message, status, onCancel, onRetry }: ModalStatusBannerProps) {
+export function ModalStatusBanner({ message, status, onCancel, onRetry, language: languageProp }: ModalStatusBannerProps) {
+  const language = useInheritedLanguage(languageProp);
   if (!message && status === 'NONE') {
     return <View style={styles.statusEmptyContainer} />;
   }
@@ -106,12 +112,12 @@ export function ModalStatusBanner({ message, status, onCancel, onRetry }: ModalS
       <View style={styles.statusActions}>
         {isLoading && onCancel && (
           <TouchableOpacity onPress={onCancel} style={styles.statusButton}>
-            <Text style={styles.statusButtonText}>Cancel</Text>
+            <Text style={styles.statusButtonText}>{COMMONS_COPY[language].cancel}</Text>
           </TouchableOpacity>
         )}
         {status === 'ERROR' && onRetry && (
           <TouchableOpacity onPress={onRetry} style={styles.statusButton}>
-            <Text style={styles.statusButtonText}>Retry</Text>
+            <Text style={styles.statusButtonText}>{COMMONS_COPY[language].retry}</Text>
           </TouchableOpacity>
         )}
       </View>

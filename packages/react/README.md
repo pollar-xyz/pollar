@@ -1,95 +1,26 @@
 # @pollar/react
 
-React bindings for [Pollar](https://pollar.xyz) — drop-in authentication UI, transaction modals, and hooks for
+React bindings for [Pollar](https://pollar.xyz) - drop-in authentication UI, transaction modals, and hooks for
 Stellar and Solana applications.
 
-> **0.12.0** (requires `@pollar/core@^0.12.0`). `<RampWidget>` runs on the v3 ramps API: routes, quotes leg by
-> leg, the fields a quote asks for, the order's progress and its pending action; it signs a leg with the connected
-> Stellar or Solana wallet only when the leg was built for it. **Wallets the user holds**: the wallet button lets the
-> user pick co-signed or self-custody when the app leaves it to them, `<RecoveryModal>` manages passkeys, email,
-> devices and the recovery phrase (`recoveryLocked`, `openRecoveryModal()`), and `<CustodyMigrationModal>` moves a
-> custodial wallet to Turnkey after login. `<SendModal>` offers to create a Stellar account that does not exist.
-> Branding yields to the host stylesheet, with `--pollar-font-family` and `--pollar-font-family-mono`;
-> `WalletButtonTemplateProps` takes `theme`, `accentColor` and `styleOverrides`. **Breaking**; see
-> [UPGRADE.md](../../UPGRADE.md).
+> **0.12.1** (requires `@pollar/core@^0.12.1`). Every modal and exported template speaks English, Spanish and
+> Portuguese (see [Language](#language)). `<SwapModal>` swaps on Solana too, with a Network selector when the app has
+> venues on both chains. `<SendModal>` offers a Hash memo next to Text and ID. `<ConfirmModal>` shows a Soroban token
+> transfer (`kind: 'sign_auth_entry'`) with its destination, amount and asset. `<ConfirmModal>`, `<CosignModal>` and
+> every transaction status view share one review: what moves, a fee badge when who pays is known, and "Show details"
+> with the addresses, network, fee, raw transaction and hash. `<RequirementFormModal>` asks a field
+> with `showIf` only while the answer it depends on matches. `<CardModal>` copies the number, expiry date and CVC,
+> offers a network picker when the user holds a wallet on Stellar and Solana, and funds the card from a co-signed
+> wallet too. The email code input takes an autofilled one-time code. The ramp widget says a route's minimum or
+> maximum and offers "Change amount", and an order whose price changed before anything moved offers "Get a new quote".
+> `openRampModal(options)` opens the ramp widget on a direction, country, fiat, asset and amount; the send, swap, earn,
+> receive, history and card modals take options too, with `onSuccess` / `onFunded` callbacks.
+> `<PollarProvider language>` and `client.setLocale()` switch the modals' language at runtime, open ones included. The
+> ramp widget names each country in the modal's language.
+> A hook built with `createPollarAdapterHook` signs the auth entry an adapter answers with, without submitting
+> anything, and hands it to the adapter's `complete`.
 >
-> Earlier: **0.11.5** (requires `@pollar/core@^0.11.5`).
-> **Turnkey co-signed wallets**: `<CosignModal>` opens for a request the device did not settle and enables
-> Approve only after it verifies against Turnkey; `useCosign()` exposes the pending requests.
-> `<ConfirmModal>` shows every signature first under `confirmation: 'prompt'`. The ramp widget links the
-> chain a ramp settles on and retries funds in transit; Send takes a Stellar memo (`SendMemoType`). See
-> [UPGRADE.md](../../UPGRADE.md).
->
-> Earlier: **0.11.4** (requires `@pollar/core@^0.11.4`).
-> **KYC by ramp corridor**: `<RampWidget>` lists routes locked by a requirement step and opens that
-> step - `<KycModal>`, `<RequirementFormModal>`, `<RegistryCheckModal>` or `<ProviderRegistrationModal>`
-> (all exported) - then quotes again; `openKycModal()` without a corridor walks the app's own KYC
-> steps. **Redesign**: Send, Swap, Receive, Sessions and Wallet balance follow the new design, keeping the
-> network picker (a multichain app) and Swap's custom buy token. A template you
-> mount yourself gains required handlers (`onMax`, `onPaste`, `onReverse`, `revokeError`,
-> `kycRequired`, `onVerifyRoute`) - see [UPGRADE.md](../../UPGRADE.md). Licensed under Apache-2.0
-> from this release.
->
-> **Wallet provisioning** (requires `@pollar/core@^0.11.4`, no breaking change). The platform now creates an
-> end-user's Stellar account **in the background**, so a login returns before the account is on
-> the ledger and the first payment in that window is refused by the server. Two things changed
-> here. **A wallet that finishes provisioning now reaches the UI**: `sessionsEqual` did not
-> compare `provisioning` and the context memo's dependency list did not include it, and either
-> one alone froze every screen built on the transition. And the modals say what is happening -
-> **Send** refuses to build a payment while the account is off the ledger and gives the reason
-> (kept apart from the "no transfer path on this network" message, which would otherwise tell
-> someone waiting on a brand-new wallet that Stellar cannot send), **Receive** warns while the
-> address is still unbacked, and the **wallet button** carries the same reason as a banner in its
-> dropdown. `walletNotReadyReason(wallet, chain)` is exported so a custom template phrases the
-> wait the way the built-ins do; `SendModalTemplateProps`, `ReceiveModalTemplateProps` and
-> `WalletButtonTemplateProps` each gain an **optional** `notReadyReason`, so a custom template
-> written before this keeps compiling untouched. In the **ramp widget**: a user whose provider
-> setup is still pending is no longer asked to verify an identity they already verified
-> (`onboardingStatus: 'awaiting_provider'` says the account is being set up and stops the
-> pointless KYC poll), and three failures that printed as raw error codes get sentences.
-> `RampWidgetTemplateProps` gains an optional `onboardingStatus`.
->
-> **Cards**: `<CardModal>`, opened with `openCardModal()` from `usePollar()`, walks the user through
-> the card provider's steps, sign-up and issuing, then shows the card with the app's logo and card
-> label, its balance and movements, funding from the wallet (each funding's step while it is in
-> flight) and the number revealed on the device. **Wallets on demand**: `usePollar()` exposes
-> `hasWallet` and `createWallet`, and signed in without a wallet `<WalletButton>` offers Create wallet
-> to an app that creates wallets on demand. The modals that act on the session close when it ends,
-> and form fields are checked before sending.
->
-> Earlier: **0.11.3** required `@pollar/core@^0.11.3`. A **pre-built `PollarClient`
-> passed to `PollarProvider` no longer loses passkey support**: the provider installs the
-> browser passkey ceremony on every path (via core's new `setPasskeyDefaults()`), and an
-> explicit `passkey: undefined` no longer wipes the default. `browserPasskeyCeremony` and
-> `browserPasskeySigner` are now exported for consumers who build their own client or want
-> to wrap the ceremony. Also, **StrictMode no longer leaves an orphaned `PollarClient`
-> running**: the provider keys the client it builds on the config object, so StrictMode's
-> second render pass reuses the first pass's instance instead of constructing a second
-> client whose refresh loop could clear the session the real login just wrote (dev only,
-> no API change). Packaging: **`@pollar/core` moved from `dependencies` to
-> `peerDependencies`**, so npm no longer installs a package-local duplicate of core (the
-> configuration that broke `instanceof` and split the live-client registry); the provider
-> now discriminates with core's new `isPollarClient()` guard, which works across copies.
-> npm 7+ installs peers automatically; on npm 6, Yarn 1 or `--legacy-peer-deps`, add
-> `@pollar/core` to your own dependencies. If you pin exact versions, keep both packages
-> on the same version.
->
-> Earlier: **0.11.2** required `@pollar/core@^0.11.2`. The **Transaction History modal
-> goes multichain**: the same network picker and address chip as the Balance /
-> Send modals, a server-side chain filter (pagination is server-side, so
-> switching networks refetches and resets to page 1), per-chain explorer links
-> (stellar.expert for Stellar, explorer.solana.com for Solana), and the unified
-> `{ amount, unit }` fee, so a Solana row reads "5000 lamports". The picker
-> hides itself on a single-chain app. Non-breaking.
->
-> Earlier: **0.11.1** added the network picker (`<ChainSelect>`) across the
-> wallet-balance, enabled-assets, send and receive modals - each scopes its rows
-> to the selected chain instead of tagging every row, with a local filter (the
-> backend returns every chain in one payload). Balances format against each
-> token's own `decimals`, and a `null` balance renders as a dash rather than as
-> `0`, because `null` means the chain could not be read. See the
-> [CHANGELOG](../../CHANGELOG.md) and [UPGRADE.md](../../UPGRADE.md) for the full
-> version history before upgrading.
+> See the [CHANGELOG](https://github.com/pollar-xyz/pollar/blob/main/CHANGELOG.md) for earlier releases and [UPGRADE.md](https://github.com/pollar-xyz/pollar/blob/main/UPGRADE.md) before upgrading.
 
 ## Installation
 
@@ -101,7 +32,8 @@ pnpm add @pollar/react @pollar/core
 yarn add @pollar/react @pollar/core
 ```
 
-**Peer dependencies:** `react >= 18`, `react-dom >= 18`. Node ≥ 20 in toolchains.
+**Peer dependencies:** `@pollar/core ^0.12.1`, `react >= 18`, `react-dom >= 18`. Node >= 20 in toolchains. npm 7+
+installs peers automatically; on npm 6, Yarn 1 or `--legacy-peer-deps`, list `@pollar/core` in your own dependencies.
 
 ## Quick Start
 
@@ -149,17 +81,20 @@ Context provider that initialises the Pollar client and makes it available to ch
 <PollarProvider
   client={{
     apiKey: 'your-api-key',
-    baseUrl: 'https://sdk.api.pollar.xyz', // optional, origin only — the SDK appends /v3
+    baseUrl: 'https://sdk.api.pollar.xyz', // optional, origin only - the SDK appends /v3
     stellarNetwork: 'testnet', // optional, default: 'testnet'
+    locale: 'pt-BR', // optional, BCP 47 tag for the modals' language (see Language below)
     storage, // optional, RN apps inject this
     keyManager, // optional, autodetects on web
-    walletAdapters, // optional, WalletAdapter[] — external wallet stacks
-    deviceLabel: 'iPhone — Safari', // optional, shown in SessionsModal
+    walletAdapters, // optional, WalletAdapter[] - external wallet stacks
+    deviceLabel: 'iPhone - Safari', // optional, shown in SessionsModal
     onStorageDegrade, // optional, telemetry hook
   }}
-  // Optional: pass `appConfig` (even `{}`) to skip the remote
-  // `/applications/config` fetch and use local-only styles/branding.
+  // Optional: pass `appConfig` to skip the remote `/applications/config` fetch
+  // and use a local config instead. `application` is required; `styles` may be partial,
+  // but a login method it leaves out (emailEnabled, providers, ...) is off.
   appConfig={{
+    application: { name: 'My app', network: 'testnet', chains: ['STELLAR'] },
     styles: {
       /* optional style overrides */
     },
@@ -174,35 +109,39 @@ Context provider that initialises the Pollar client and makes it available to ch
 </PollarProvider>
 ```
 
-| Prop        | Type                                 | Required | Description                                                                                                                                                                                                                                                                                                                                   |
-| ----------- | ------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `client`    | `PollarClient \| PollarClientConfig` | Yes      | Either a pre-built `PollarClient` (testing, reuse outside React) or a `PollarClientConfig` the provider will construct one from. **Locked at first render** — swapping after mount is ignored                                                                                                                                                 |
-| `appConfig` | `PollarConfig`                       | No       | Local override of `/applications/config`. **Presence is the opt-out switch**: pass it (even `{}`) and the remote fetch is skipped. Omit it to keep the existing remote-fetch-on-mount behaviour. Unlike `client`, it can be added or swapped after mount — the context re-applies it (compared by value, so an inline object literal is fine) |
-| `adapters`  | `PollarAdapters`                     | No       | Named set of `PollarAdapter` objects (e.g. Trustless Work). See below                                                                                                                                                                                                                                                                         |
+| Prop               | Type                                 | Required | Description                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------ | ------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `client`           | `PollarClient \| PollarClientConfig` | Yes      | Either a pre-built `PollarClient` (testing, reuse outside React) or a `PollarClientConfig` the provider will construct one from. **Locked at first render** - swapping after mount is ignored                                                                                                                                                                                                                                  |
+| `language`         | `string`                             | No       | The modals' language, a BCP 47 tag (`'es'`, `'pt-BR'`): typically the app's current language. Followed on every render, so open modals switch when it changes. See [Language](#language)                                                                                                                                                                                                                                       |
+| `appConfig`        | `PollarConfig`                       | No       | Local replacement for `/applications/config`, used verbatim and never merged with the server's answer. **Presence is the opt-out switch**: pass it and the remote fetch is skipped. Omit it to fetch the config on mount, which keeps branding, login methods and chains current. Unlike `client`, it can be added or swapped after mount - the context re-applies it (compared by value, so an inline object literal is fine) |
+| `adapters`         | `PollarAdapters`                     | No       | Named set of `PollarAdapter` objects (e.g. Trustless Work). See [Custom adapters](#custom-adapters)                                                                                                                                                                                                                                                                                                                            |
+| `onStorageDegrade` | `OnStorageDegrade`                   | No       | Called once when persistent storage falls back to in-memory mode (Safari private browsing, sandboxed iframes), so the session will not survive a reload                                                                                                                                                                                                                                                                        |
 
 ---
 
 ### `usePollar()`
 
-Returns the full Pollar context. Every modal opener returned here renders an already-wired modal — no extra mounting
+Returns the full Pollar context. Every modal opener returned here renders an already-wired modal - no extra mounting
 needed.
 
 ```ts
 const {
   // Session
-  isAuthenticated, // boolean - true when a wallet address is present
+  isAuthenticated, // boolean - true while a session exists, with or without a wallet
   wallet, // WalletInfo | null - read wallet?.address for the on-chain address
   wallets, // WalletInfo[] - every wallet the user holds, one per chain. To drive
   //          a network picker, prefer the useChains() hook (below) over reading
   //          this directly - it applies the app's configured chain order
   verified, // boolean - true once the server has confirmed the session
+  hasWallet, // boolean - false until createWallet() runs on an app that creates wallets on demand
+  createWallet, // (options?: { custody? }) => Promise<WalletInfo>  (custody: the user's pick under USER_CHOICE)
 
   // App config (the remote /config fetch behind the login modal)
   configStatus, // 'loading' | 'ready' | 'error'
   retryConfig, // () => void - re-runs the fetch after an error
 
   // Client escape hatch
-  getClient, // () => PollarClient - for getUserProfile(), listSessions(), …
+  getClient, // () => PollarClient - for getUserProfile(), listSessions(), ...
 
   // Auth
   login, // (options: PollarLoginOptions) => void
@@ -212,6 +151,20 @@ const {
   // Sessions
   sessions, // SessionsState
   openSessionsModal, // () => void
+
+  // Co-signed wallets (Turnkey)
+  cosign, // CosignState - requests waiting for this device's vote
+  openCosignModal, // () => void  (also opens by itself when a request arrives)
+  setCosignNextStep, // (next: string | null) => void - keeps the prompt open for a flow's next approval
+  recovery, // RecoveryState | null
+  recoveryLocked, // boolean - true while the wallet cannot be recovered without this device
+  refreshRecovery, // () => void
+  openRecoveryModal, // () => void  (passkeys, email, devices, recovery phrase)
+  custodyMigration, // CustodyMigrationState | null - while `required`, the provider shows the move to Turnkey
+  refreshCustodyMigration, // () => void
+
+  // Signature confirmation
+  confirmations, // PendingConfirmation[] - signing calls waiting under confirmation: 'prompt'; the provider shows the first
 
   // Transactions
   tx, // TransactionState
@@ -226,7 +179,7 @@ const {
 
   // Transaction history
   txHistory, // TxHistoryState
-  openTxHistoryModal, // () => void
+  openTxHistoryModal, // (options?: TxHistoryModalOptions) => void
 
   // Wallet balance
   walletBalance, // WalletBalanceState
@@ -241,25 +194,31 @@ const {
 
   // Swap (DEX/AMM)
   getSwapQuote, // (params: SwapQuoteParams) => Promise<SwapQuote[]>
-  swap, // (quote: SwapQuote, opts?) => Promise<SubmitOutcome>
+  swap, // (quote: SwapQuote, opts?: { autoTrustline? }) => Promise<SubmitOutcome>
   getSwapConfig, // () => Promise<SwapVenue[]>  (which venues this app offers)
   getSwapTokens, // () => Promise<SwapToken[]>
-  openSwapModal, // () => void
+  getSolanaSwapConfig, // () => Promise<SolanaSwapVenue[]>  (Jupiter, Titan; mainnet)
+  getSolanaSwapQuote, // (params: SolanaSwapQuoteParams) => Promise<SolanaSwapQuote[]>
+  swapSolana, // (quote: SolanaSwapQuote, opts?: { slippageBps? }) => Promise<SubmitOutcome>
+  openSwapModal, // (options?: SwapModalOptions) => void
 
-  // Earn (yield vaults + lending — DeFindex + Blend)
+  // Earn (yield vaults + lending - DeFindex + Blend)
   getEarnProviders, // () => Promise<EarnProviderId[]>  ([] means Earn is disabled)
   getEarnOpportunities, // (provider: EarnProviderId) => Promise<EarnOpportunity[]>
   getEarnPosition, // (params: EarnPositionParams) => Promise<EarnPosition>
   earnDeposit, // (params: EarnTxParams) => Promise<SubmitOutcome>
   earnWithdraw, // (params: EarnTxParams) => Promise<SubmitOutcome>
-  openEarnModal, // () => void
+  openEarnModal, // (options?: EarnModalOptions) => void
+
+  // Cards (the card calls live on getClient(): getCardProviders, issueCard, fundCard, ...)
+  openCardModal, // (options?: CardModalOptions) => void
 
   // Distribution rules
   openDistributionRulesModal, // () => void
 
   // Send / Receive
-  openSendModal, // () => void
-  openReceiveModal, // () => void
+  openSendModal, // (options?: SendModalOptions) => void
+  openReceiveModal, // (options?: ReceiveModalOptions) => void
 
   // Network
   network, // StellarNetwork - 'mainnet' | 'testnet'
@@ -269,7 +228,7 @@ const {
   openKycModal, // (options?: { corridorId?, providerId?, country?, level?, onApproved? }) => void
 
   // Ramp (fiat on/off-ramps on the v3 ramps API, wired through core)
-  openRampModal, // () => void
+  openRampModal, // (options?: RampModalOptions) => void
 
   // App config / styles served by the Pollar API
   appConfig, // PollarConfig
@@ -283,6 +242,60 @@ const {
 Custody is derived from `wallet`, not a separate field - e.g.
 `wallet?.custody === 'external' ? wallet.provider : null`.
 
+#### Ramp options
+
+`openRampModal()` opens the ramp widget on its defaults. `openRampModal(options)` opens it on a direction, country,
+fiat, asset and amount; the user can still change each one.
+
+```ts
+import type { RampModalOptions } from '@pollar/react';
+
+openRampModal({ country: 'BR', direction: flow === 'withdraw' ? 'sell' : 'buy' });
+openRampModal({ direction: 'buy', country: 'MX', fiat: 'MXN', asset: 'USDC', amount: '500' });
+```
+
+| Option      | Type              | Description                                                          |
+| ----------- | ----------------- | -------------------------------------------------------------------- |
+| `direction` | `'buy' \| 'sell'` | Buy (on-ramp) or sell (off-ramp). Defaults to `'buy'`                |
+| `country`   | `string`          | ISO 3166-1 alpha-2, e.g. `'BR'`                                      |
+| `fiat`      | `string`          | Currency code, e.g. `'BRL'`. Defaults to the country's first fiat    |
+| `asset`     | `string`          | Asset code, e.g. `'USDC'`. Defaults to the first asset for that fiat |
+| `amount`    | `string`          | A plain decimal, e.g. `'100'` or `'12.5'`; anything else is left out |
+
+A country that does not route in the requested direction, or that the app does not offer, opens on the widget's default
+country, without the fiat, asset or amount; a fiat or asset the country does not offer opens on the country's first one.
+Nothing is thrown. The options wait for the routes when they are still loading. Each call starts over: opening again
+with other options, or with none, drops the earlier ones. `<RampWidget initial={options}>` takes the same options.
+
+#### Modal options
+
+The other `open*Modal` actions take options the same way: the modal opens on them and the user can still change each
+one. An option the app or wallet cannot use (a network the app does not offer, an asset the wallet does not hold, a
+provider that is not enabled, an amount that is not a plain decimal) is left out and that field opens on its default;
+nothing is thrown. An option whose data is still loading is applied when it arrives. Each call starts over: opening
+again with other options, or with none, drops the earlier ones. Every type is exported from `@pollar/react`, and each
+modal takes the same options as its `initial` prop.
+
+```ts
+openSendModal({ asset: 'USDC', destination: 'G...', amount: '25', memo: 'order-1042', onSuccess: ({ hash }) => save(hash) });
+openSwapModal({ sell: 'XLM', buy: 'USDC', amount: '100' });
+openEarnModal({ provider: 'blend', tab: 'withdraw' });
+openReceiveModal({ chain: 'SOLANA' });
+openCardModal({ panel: 'fund', amount: '50', onFunded: (funding) => track(funding.id) });
+```
+
+| Action               | Options                                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `openSendModal`      | `chain`, `asset` (code), `destination`, `amount`, `memo`, `memoType` (`'text' \| 'id' \| 'hash'`), `onSuccess({ hash })` |
+| `openSwapModal`      | `chain` (`'STELLAR' \| 'SOLANA'`), `sell` (code), `buy` (code), `amount`, `onSuccess({ hash })`                          |
+| `openEarnModal`      | `provider`, `opportunityId`, `tab` (`'deposit' \| 'withdraw'`), `amount`, `onSuccess({ hash })`                          |
+| `openReceiveModal`   | `chain`                                                                                                                  |
+| `openTxHistoryModal` | `chain`                                                                                                                  |
+| `openCardModal`      | `panel: 'fund'` (opens the funding panel once the user's card loads), `amount`, `chain`, `onFunded(funding)`             |
+
+`onSuccess` is called once per transaction that lands while the modal is open; `onFunded` with each funding the user
+sends from the card modal. A Solana or Polygon send takes `amount` in the asset's decimals, as the form shows it.
+
 #### Login options
 
 ```ts
@@ -290,7 +303,7 @@ Custody is derived from `wallet`, not a separate field - e.g.
 login({ provider: 'google' });
 login({ provider: 'github' });
 
-// Email OTP
+// Email OTP (the code input accepts a code the browser or keyboard autofills, or a paste)
 login({ provider: 'email', email: 'user@example.com' });
 
 // Built-in Stellar wallet adapters (the adapter's `type` IS the provider)
@@ -311,7 +324,7 @@ The login modal is gated on the remote app-config fetch. While it runs the modal
 driving `<LoginModalTemplate>` yourself. Passing `appConfig` to `<PollarProvider>` opts out of the fetch entirely, so
 neither state can occur.
 
-#### Self-driving interactive adapters (Privy, …)
+#### Self-driving interactive adapters (Privy, ...)
 
 Registered adapters that opt into the interactive-auth contract
 (`isInteractiveAuthAdapter` + `onProviderAuthChange`) are auto-driven by the
@@ -334,7 +347,7 @@ provider:
 The single source of truth for "which chains, in what order, and which address to
 show". Every built-in component (`<WalletButton>`, the network pickers) reads from
 it, so they can never disagree about which chain leads. Use it when you build your
-own wallet button or picker instead of calling `chainsOf(wallets)` yourself —
+own wallet button or picker instead of calling `chainsOf(wallets)` yourself -
 `chainsOf` alone cannot know the app's configured order.
 
 ```ts
@@ -348,7 +361,7 @@ const { chains, primaryChain, primaryAddress, ready } = useChains();
 | `chains`         | `WalletChain[]`       | Chains to offer, in the app's configured order: those the app serves **and** the user holds. `[]` until config resolves |
 | `primaryChain`   | `WalletChain \| null` | The app's first configured chain the user holds. `null` until ready                                                     |
 | `primaryAddress` | `string`              | The address on `primaryChain`. Falls back to the session's first wallet while config is in flight                       |
-| `ready`          | `boolean`             | `false` while `/config` is loading or failed — gate any chain UI on it                                                  |
+| `ready`          | `boolean`             | `false` while `/config` is loading or failed - gate any chain UI on it                                                  |
 
 The order and membership come from the app's `/applications/config`
 (`appConfig.application.chains`), not from the session's `wallets`: a chain the app
@@ -357,32 +370,70 @@ session still carries it.
 
 ---
 
+### Language
+
+Every modal, shared block (footer, copy button, amount field, pickers) and exported template speaks English (`en`),
+Spanish (`es`) and Portuguese (`pt`). The language is, in this order:
+
+1. The language the app pins in the dashboard (Branding > Language, served as `styles.language`).
+2. The `language` prop of `<RampWidget>`, `<KycModal>`, `<RequirementFormModal>`, `<RegistryCheckModal>` or
+   `<ProviderRegistrationModal>`, a BCP 47 tag.
+3. The `language` prop of `<PollarProvider>`, a BCP 47 tag.
+4. The client's `locale` (`client={{ apiKey, locale: 'pt-BR' }}`, or `client.setLocale(tag)` later), any BCP 47 tag.
+5. The browser language.
+
+An app whose language changes at runtime passes it to the provider, and every open or later modal follows it without
+remounting anything:
+
+```tsx
+<PollarProvider client={{ apiKey }} language={i18n.language}>
+```
+
+`getClient().setLocale(tag)` does the same from outside React; `config.locale` is the starting value.
+
+A tag the modals have no translation for is skipped, and English is the fallback. Every exported template takes a
+`language` prop (`PollarLanguage` from `@pollar/core`: `'en' | 'es' | 'pt'`); a template rendered inside the provider
+follows the provider's language, and one rendered outside it uses the browser's.
+
+---
+
 ### Components
 
-Every modal mounts itself when its `openXModal()` action is called. You don't need to render these directly — they're
-already wired inside `<PollarProvider>` — and most are exported in case you want to mount them yourself.
+Every modal mounts itself when its `openXModal()` action is called. You don't need to render these directly - they're
+already wired inside `<PollarProvider>` - and most are exported in case you want to mount them yourself.
 
 > Two wrappers are **not** exported: `<TxHistoryModal>` and `<TransactionModal>`. Only their templates
 > (`TxHistoryModalTemplate` / `TransactionModalTemplate`) are public. Mount those instead if you need to drive them
 > yourself.
+>
+> The provider also shows three prompts by itself, with no opener: `<ConfirmModal>` (internal) for a signing call
+> waiting under `confirmation: 'prompt'`, including a Soroban token transfer (`kind: 'sign_auth_entry'`) with its
+> destination, amount and asset; `<CosignModal>` when a co-signed wallet has a request for this device; and
+> `<CustodyMigrationModal>` while `custodyMigration.required` asks to move a custodial wallet to Turnkey.
 
-| Component                     | Purpose                                                                                                                                                                                                                                                                                                                                                                                                              |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<WalletButton>`              | Drop-in button. Opens login when signed out; signed in, shows the wallet address with a dropdown (Send, Receive, copy address, balance, history, ramp, KYC, distribution rules, sessions, sign out, plus a "Create account" action when the external wallet has no on-chain account yet). Inline arc spinner during in-progress transactions                                                                         |
-| `<SendModal>`                 | Full send flow: network picker (shown when the app has more than one chain), asset picker, amount with Max (from the available balance), destination with Paste, inline build > sign > success/error. Sending is available on Stellar and Solana; Polygon can be browsed but not sent from                                                                                                                           |
-| `<SwapModal>`                 | On-chain asset-to-asset swap: pick from/to assets and amount, quote across venues, execute (auto-trustline on the buy asset when needed); paste a custom buy token (code + issuer)                                                                                                                                                                                                                                   |
-| `<EarnModal>`                 | Deposit/withdraw across DeFindex vaults and Blend pools: provider + opportunity selection with live APY, wallet balance, over-spend guards, and auto-trustline on deposit                                                                                                                                                                                                                                            |
-| `<ReceiveModal>`              | Wallet address as QR code with copy-to-clipboard (no external QR dependency required)                                                                                                                                                                                                                                                                                                                                |
-| `<TxHistoryModal>`            | Paginated multichain transaction history with auto-fetch on open. A `<ChainSelect>` in the header filters server-side (switching networks refetches and resets to page 1); rows link to their own chain's explorer (stellar.expert for Stellar, explorer.solana.com for Solana) and show the unified `{ amount, unit }` fee                                                                                          |
-| `<WalletBalanceModal>`        | Multichain wallet balances (Stellar, Polygon, Solana). A `<ChainSelect>` picks the network and the rows are filtered to it; shows that chain's address plus a refresh button, and each row's issuer with a copy action. An unreadable chain's balance renders as a dash, never as `0`. On Solana testnet each row offers a faucet hint — a devnet SOL faucet on the native row, Circle's USDC faucet on the USDC row |
-| `<EnabledAssetsModal>`        | The application's dashboard-enabled assets for the network picked in the header, with per-asset trustline state; establish/remove trustlines (Stellar only - other chains are informational)                                                                                                                                                                                                                         |
-| `<DistributionRulesModal>`    | Manage the wallet's distribution rules                                                                                                                                                                                                                                                                                                                                                                               |
-| `<SessionsModal>`             | Lists every active refresh-token family for the current user with device metadata, marks the local session, per-row revoke, and a "Sign out everywhere" button                                                                                                                                                                                                                                                       |
-| `<KycModal>`                  | Identity verification: hosted (iframe or redirect) flow per option, corridor-scoped when a ramp route asks for it (`corridorId`), or started on one option (`providerId`). Shows review, expiry and retry states; without either id it walks the app's own KYC steps                                                                                                                                                 |
-| `<RampWidget>`                | Buy/sell crypto: direction tabs, country, fiat and asset pickers, route comparison leg by leg, the fields a route asks for, then the order's progress with its pending action (payment QR or bank details, Authorize, co-sign approval, verification link) and what to do when a leg fails. Orders waiting on the user can be resumed.                                                                               |
-| `<RequirementFormModal>`      | One `FORM` requirement step of a ramp route: renders the form the backend names (`formId`), prefilled with the user's previous answers, and stores the answers encrypted. `<RampWidget>` opens it itself; exported for consumers who build their own route list from `requirementsRequired`                                                                                                                          |
-| `<RegistryCheckModal>`        | One `REGISTRY_CHECK` step (SEGIP through Stereum, `optionId`): the verified identity prefilled and read-only except the surname split and the CI complement; a check the registry did not confirm shows the review state with nothing to retry                                                                                                                                                                       |
-| `<ProviderRegistrationModal>` | One `PROVIDER_REGISTRATION` step (`corridorId`): lists what the ramp provider receives and registers the user with it on consent; an already registered user is passed through                                                                                                                                                                                                                                       |
+| Component                                   | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `<WalletButton>`                            | Drop-in button. Opens login when signed out; signed in, shows the wallet address with a dropdown (Send, Receive, copy address, balance, history, ramp, KYC, distribution rules, sessions, recovery methods, sign out, plus a "Create account" action when the external wallet has no on-chain account yet). Inline arc spinner during in-progress transactions                                                                                                                                                     |
+| `<SendModal>`                               | Full send flow: network picker (shown when the app has more than one chain), asset picker, amount with Max (from the available balance), destination with Paste, a Stellar memo (Text, ID or Hash: 64 hex characters), inline build > sign > success/error. A Stellar destination with no account offers to create it with the XLM being sent. Sending is available on Stellar and Solana; Polygon can be browsed but not sent from                                                                                |
+| `<SwapModal>`                               | On-chain asset-to-asset swap on Stellar and Solana (a Network selector when the app has venues on both): pick from/to assets and amount, quote across venues, execute (auto-trustline on the buy asset when needed); paste a custom Stellar buy token (code + issuer). On Solana it sells what the Solana wallet holds, buys SOL or a token the app enabled, shows the route's output and minimum, and links the swap to Solscan                                                                                   |
+| `<EarnModal>`                               | Deposit/withdraw across DeFindex vaults and Blend pools: provider + opportunity selection with live APY, wallet balance, over-spend guards, and auto-trustline on deposit                                                                                                                                                                                                                                                                                                                                          |
+| `<ReceiveModal>`                            | Wallet address as QR code with copy-to-clipboard (no external QR dependency required)                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `<TxHistoryModal>`                          | Paginated multichain transaction history with auto-fetch on open. A `<ChainSelect>` in the header filters server-side (switching networks refetches and resets to page 1); rows link to their own chain's explorer (stellar.expert for Stellar, explorer.solana.com for Solana) and show the unified `{ amount, unit }` fee                                                                                                                                                                                        |
+| `<WalletBalanceModal>`                      | Multichain wallet balances (Stellar, Polygon, Solana). A `<ChainSelect>` picks the network and the rows are filtered to it; shows that chain's address plus a refresh button, and each row's issuer with a copy action. An unreadable chain's balance renders as a dash, never as `0`. On Solana testnet each row offers a faucet hint - a devnet SOL faucet on the native row, Circle's USDC faucet on the USDC row                                                                                               |
+| `<EnabledAssetsModal>`                      | The application's dashboard-enabled assets for the network picked in the header, with per-asset trustline state; establish/remove trustlines (Stellar only - other chains are informational)                                                                                                                                                                                                                                                                                                                       |
+| `<DistributionRulesModal>`                  | Manage the wallet's distribution rules                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `<SessionsModal>`                           | Lists every active refresh-token family for the current user with device metadata, marks the local session, per-row revoke, and a "Sign out everywhere" button                                                                                                                                                                                                                                                                                                                                                     |
+| `<KycModal>`                                | Identity verification: hosted (iframe or redirect) flow per option, corridor-scoped when a ramp route asks for it (`corridorId`), or started on one option (`providerId`). Shows review, expiry and retry states; without either id it walks the app's own KYC steps                                                                                                                                                                                                                                               |
+| `<RampWidget>`                              | Buy/sell crypto: direction tabs, country, fiat and asset pickers, route comparison leg by leg, the fields a route asks for, then the order's progress with its pending action (payment QR or bank details, Authorize, co-sign approval, verification link) and what to do when a leg fails. A route refused for its amount says the minimum or maximum it takes and offers "Change amount"; an order whose price changed before anything moved offers "Get a new quote". Orders waiting on the user can be resumed |
+| `<RequirementFormModal>`                    | One `FORM` requirement step of a ramp route: renders the form the backend names (`formId`), prefilled with the user's previous answers, and stores the answers encrypted. A field with `showIf: { key, in }` is shown only while the earlier select, multiselect or checkbox it names answers one of those values, and is neither checked nor sent while hidden. `<RampWidget>` opens it itself; exported for consumers who build their own route list from `requirementsRequired`                                 |
+| `<RegistryCheckModal>`                      | One `REGISTRY_CHECK` step (SEGIP through Stereum, `optionId`): the verified identity prefilled and read-only except the surname split and the CI complement; a check the registry did not confirm shows the review state with nothing to retry                                                                                                                                                                                                                                                                     |
+| `<ProviderRegistrationModal>`               | One `PROVIDER_REGISTRATION` step (`corridorId`): lists what the ramp provider receives and registers the user with it on consent; an already registered user is passed through                                                                                                                                                                                                                                                                                                                                     |
+| `<CardModal>`                               | Opened with `openCardModal()`: the card provider's sign-up, identity verification and issuing, then the card with the app's logo and label, its balance and movements, and the number revealed on the device. Copy buttons next to the number and CVC while the details are shown, and next to the expiry date always. Funds the card from the wallet, including a co-signed one, with a network picker when the user holds a wallet on Stellar and Solana, and shows each funding's steps                         |
+| `<RecoveryModal>`                           | Opened with `openRecoveryModal()`: the recovery methods of a Turnkey wallet (passkeys, email, devices, recovery phrase)                                                                                                                                                                                                                                                                                                                                                                                            |
+| `<CosignModal>`                             | The approval prompt of a co-signed wallet. Enables Approve only after the request verifies against Turnkey                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `<CustodyMigrationModal>`                   | Moves a custodial wallet to Turnkey after login when the app keeps its wallets there (`state`, `onMoved`, `onLater` props)                                                                                                                                                                                                                                                                                                                                                                                         |
+| `<KycStatus>`                               | A KYC status badge (`status`, optional `label`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `<RouteDisplay>` / `<RejectedRouteDisplay>` | One ramp route, offered or refused, as the ramp widget lists it                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ```tsx
 import { WalletButton } from '@pollar/react';
@@ -396,9 +447,9 @@ export function Header() {
 
 ### Template components
 
-Almost every modal ships a pure presentational "template" companion — same name with a `Template` suffix. Use these when
-you want to swap the chrome but keep the data wiring from `usePollar()`. (`<EarnModal>`, `<RequirementFormModal>`,
-`<RegistryCheckModal>` and `<ProviderRegistrationModal>` are the exceptions: they have no template yet.)
+Almost every modal ships a pure presentational "template" companion - same name with a `Template` suffix. Use these when
+you want to swap the chrome but keep the data wiring from `usePollar()`. (`<EarnModal>`, `<CardModal>`, `<RequirementFormModal>`,
+`<RegistryCheckModal>` and `<ProviderRegistrationModal>` are the exceptions: they have no template.)
 
 > The enabled-assets template requires `chains`, `selectedChain` and `onSelectChain`; the wallet-balance, send and
 > receive templates require `selectedChain` and take `chains` / `onSelectChain` as optional - pass both to show the
@@ -422,16 +473,19 @@ you want to swap the chrome but keep the data wiring from `usePollar()`. (`<Earn
 | `<KycModal>`               | `<KycModalTemplate>`               |
 | `<RampWidget>`             | `<RampWidgetTemplate>`             |
 | `<SessionsModal>`          | `<SessionsModalTemplate>`          |
+| `<CosignModal>`            | `<CosignModalTemplate>`            |
+| `<RecoveryModal>`          | `<RecoveryModalTemplate>`          |
+| `<CustodyMigrationModal>`  | `<CustodyMigrationModalTemplate>`  |
 
-`<TxStatusView>` is the shared status component (build → sign → success/error) reused by `TransactionModal` and
-`SendModal`; it's exported on its own for consumers that want to embed the lifecycle elsewhere.
+`<TxStatusView>` is the shared status component (build -> sign -> success/error) reused by `TransactionModal` and
+`SendModal`; it's exported on its own for consumers that want to embed the lifecycle elsewhere. It shows the same
+review as `<ConfirmModal>` and `<CosignModal>`: the asset and chain logos with the sender and recipient, the fee badge
+once the platform reports who paid, and "Show details".
 
 > `onWalletConnect` is **optional** on `<LoginModalTemplate>` (defaults to a no-op).
 
 > `notReadyReason` is **optional** on `<SendModalTemplate>`, `<ReceiveModalTemplate>` and
-> `<WalletButtonTemplate>`, and `onboardingStatus` is optional on `<RampWidgetTemplate>` - a custom
-> template written before 0.11.4 keeps compiling and keeps its old wording. Render `notReadyReason`
-> when it is present: it is the sentence for a Stellar account the platform is still creating, and
+> `<WalletButtonTemplate>`. Render it when it is present: it is the sentence for a Stellar account the platform is still creating, and
 > without it a custom Send lets the user build a payment the server will refuse
 > (`SDK_WALLET_NOT_READY`). To phrase it yourself, call the exported
 > `walletNotReadyReason(wallet, chain)`. It gates on `STELLAR` and on the ACCOUNT only, so a
@@ -443,41 +497,72 @@ you want to swap the chrome but keep the data wiring from `usePollar()`. (`<Earn
 ### Custom adapters
 
 The `adapters` prop on `<PollarProvider>` accepts any named set of `PollarAdapter` objects. Each adapter function
-receives params, returns an unsigned XDR, and Pollar handles signing and submission automatically.
+receives params and returns either an unsigned transaction or a Soroban auth entry to sign; Pollar handles the
+signing (and, for a transaction, the submission).
 
 ```tsx
 import type { PollarAdapter } from '@pollar/core';
 
-const trustlessWork: PollarAdapter = {
-  initialize: async (params) => ({ unsignedTransaction: '…' }),
-  release: async (params) => ({ unsignedTransaction: '…' }),
-};
+const trustlessWork = {
+  initialize: async (params: InitializeParams) => ({ unsignedTransaction: '...' }),
+  release: async (params: ReleaseParams) => ({ unsignedTransaction: '...' }),
+} satisfies PollarAdapter;
 
 <PollarProvider client={{ apiKey }} adapters={{ trustlessWork }}>
-  …
+  ...
 </PollarProvider>;
 ```
 
 #### `createPollarAdapterHook(key)`
 
-Factory that generates a fully-typed hook mirroring an adapter's API with automatic XDR signing built in:
+Factory that generates a fully-typed hook mirroring an adapter's API with signing built in:
 
-```ts
+```tsx
 import { createPollarAdapterHook } from '@pollar/react';
 
 const useTrustlessWork = createPollarAdapterHook<typeof trustlessWork>('trustlessWork');
 
-function MyComponent() {
+function ReleaseButton() {
   const tw = useTrustlessWork();
-  await tw.initialize({
-    /* … */
-  }); // unsigned XDR is built, signed, and submitted automatically
+  // The adapter builds the XDR; the hook signs and submits it and resolves with a SubmitOutcome.
+  return (
+    <button
+      onClick={() =>
+        tw.release({
+          /* ... */
+        })
+      }
+    >
+      Release
+    </button>
+  );
 }
 ```
 
+#### Auth-entry steps
+
+When someone else submits the call and pays its fee (an x402 facilitator, a contract that sponsors the gas), an
+adapter function answers `{ unsignedAuthEntry, validUntilLedger, complete }` instead of `{ unsignedTransaction }`.
+The hook signs the entry with the user's wallet through `signAuthEntry` (the app's allowlist, the validity window,
+the signature confirmation, a co-signed wallet's vote), submits nothing, and passes the signed entry to `complete`.
+The call resolves with `{ status: 'completed', result }`, where `result` is what `complete` returned, or with the
+signing outcome that stopped it (`{ status: 'cosign_pending', request }` or `{ status: 'error', code?, details? }`).
+
+```ts
+const x402 = {
+  pay: async (params: PayParams) => ({
+    unsignedAuthEntry: entryXdr, // base64 XDR of the unsigned SorobanAuthorizationEntry
+    validUntilLedger, // within the app's validity window
+    complete: async (signedAuthEntry: string) => submitToFacilitator(signedAuthEntry),
+  }),
+} satisfies PollarAdapter;
+```
+
+`isAuthEntryAdapterStep` and `completeAuthEntryStep` (from `@pollar/core`) run the same step outside React.
+
 ---
 
-### External wallet stacks (Stellar Wallets Kit, …)
+### External wallet stacks (Stellar Wallets Kit, ...)
 
 Register adapters for wallets that live outside `@pollar/core` by passing a
 `walletAdapters: WalletAdapter[]` array. `LoginModal` auto-renders one button per
@@ -504,7 +589,7 @@ import { Networks } from '@creit.tech/stellar-wallets-kit';
 
 Each adapter's `meta.group` controls placement: adapters sharing a group label
 collapse behind one gateway button (the kit wallets default to `'Wallet'`),
-while adapters with no group — e.g. Privy — render as their own button in the
+while adapters with no group - e.g. Privy - render as their own button in the
 root view. Pass `picker.groupLabel` to give the kit wallets a distinct gateway.
 
 ---
@@ -536,13 +621,20 @@ import type {
   PollarAuthProvider,
   AuthProviderContext,
 
-  // Network picker
+  // Network picker and co-signing
   ChainSelectProps,
   UseChainsResult,
+  UseCosignResult,
+
+  // Modal theming
+  ModalStyleOverrides,
+  ModalVariant,
+  ModalChrome,
 
   // Template props
   WalletButtonTemplateProps,
   SendModalTemplateProps,
+  SendMemoType,
   SwapModalTemplateProps,
   SwapAssetOption,
   ReceiveModalTemplateProps,
@@ -550,8 +642,13 @@ import type {
   TxStatusViewProps,
   WalletBalanceModalTemplateProps,
   EnabledAssetsModalTemplateProps,
+  CustomTrustlineModalTemplateProps,
   SessionsModalTemplateProps,
   SessionsState,
+  CosignModalTemplateProps,
+  RecoveryModalTemplateProps,
+  RecoveryView,
+  CustodyMigrationModalTemplateProps,
 
   // Step unions
   KycStep,
@@ -560,7 +657,8 @@ import type {
 ```
 
 The state types (`TransactionState`, `TxHistoryState`, `WalletBalanceState`, `NetworkState`, `AuthState`,
-`PollarPersistedSession`, `PollarUserProfile`, `SessionInfo`, …) are re-exported from `@pollar/core`.
+`CosignState`, `RecoveryState`, `PendingConfirmation`, `PollarPersistedSession`, `PollarUserProfile`, `SessionInfo`,
+`PollarLanguage`, ...) are exported by `@pollar/core`; import them from there.
 
 ---
 

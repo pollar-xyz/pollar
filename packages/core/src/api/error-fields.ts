@@ -37,3 +37,15 @@ export function apiErrorFields(value: unknown): ApiErrorFields {
   }
   return out;
 }
+
+/**
+ * The `code` of an error response, read from a clone so the caller still gets
+ * the body. Undefined for a body that is not the JSON envelope (a CDN's HTML page).
+ */
+export async function responseErrorCode(response: Response): Promise<string | undefined> {
+  try {
+    return stringField(await response.clone().json(), 'code');
+  } catch {
+    return undefined;
+  }
+}

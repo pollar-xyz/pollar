@@ -2,6 +2,7 @@ import { AUTH_ERROR_CODES, AuthState, WalletType } from '@pollar/core';
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, TouchableWithoutFeedback } from 'react-native';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { LoginModalTemplate } from './LoginModalUI';
 
 interface LoginModalProps {
@@ -12,6 +13,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
   const [email, setEmail] = useState('');
   const { getClient, styles, config } = usePollar();
   const [authState, setAuthState] = useState<AuthState>(() => getClient().getAuthState());
+  const language = useModalLanguage();
   const [codeInputKey, setCodeInputKey] = useState(0);
   const pendingEmail = useRef<string | null>(null);
 
@@ -100,6 +102,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
               onBack={handleBack}
               onCancel={handleClose}
               onRetry={handleRetry}
+              language={language}
             />
           </View>
         </TouchableWithoutFeedback>
