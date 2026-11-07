@@ -391,6 +391,27 @@ npm install @pollar/solana-wallet-standard-adapter @pollar/core
 
 ---
 
+## Community integrations
+
+Packages built by other teams on top of the public Pollar SDK.
+
+> **Community-maintained.** These packages are written, published and supported by their own authors. Pollar does not
+> audit, maintain or support them, and listing one here is not an endorsement. Review the code and its scope before
+> you use it, and report issues to its repository.
+
+### [`@sub-rosa/pollar-adapter`](https://github.com/karagozemin/Sub-Rosa)
+
+**Registry:** [npm](https://www.npmjs.com/package/@sub-rosa/pollar-adapter) &nbsp;|&nbsp; **License:** MIT
+
+Connects a Pollar Stellar wallet to the Sub Rosa SDK: it signs Sub Rosa sealed-round transactions and auth entries with
+`PollarClient.signTx` and `signAuthEntry`. Current scope: Stellar testnet, classic `G...` accounts, `ReceiptOnly` rounds.
+
+```bash
+npm install @sub-rosa/pollar-adapter @pollar/core @sub-rosa/sdk
+```
+
+---
+
 ## Repository Structure
 
 ```
