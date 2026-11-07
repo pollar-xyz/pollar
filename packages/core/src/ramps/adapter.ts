@@ -368,6 +368,14 @@ export interface RampAdapter {
   mapInputs?(input: Record<string, unknown>): Record<string, string>;
   quotePolicy?(input: { route: RampAdapterRoute; saved: RampAdapterOffer; refreshed: RampAdapterOffer }): boolean;
   continue?(input: RampAdapterContinuation): Promise<RampAdapterSubmission>;
+  /**
+   * Version 2. A sign-in (`sign_transaction`, purpose `authentication`) that renews
+   * the provider session an open order is read with, before it lapses; null while it
+   * does not lapse soon, or when the adapter renews it without the user. Pollar asks
+   * the user for it while it keeps reading the order with the current session, and
+   * hands the signature back through `continue` with the order's reference.
+   */
+  renewal?(input: { providerOrderRef: string; user: RampAdapterUserContext }): Promise<RampAdapterAction | null>;
   verifyAndNormalizeCallback?(input: {
     rawBody: Uint8Array;
     headers: Record<string, string>;
