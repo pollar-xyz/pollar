@@ -245,9 +245,7 @@ export function CosignModalTemplate({
           </div>
           <TxReview key={current.id} data={review} language={language} />
 
-          {verified && verifiedOpen && (
-            <div className="pollar-cosign-verify pollar-cosign-verify-ok">{copy.checkedAgainstTurnkey}</div>
-          )}
+          {verified && verifiedOpen && <div className="pollar-cosign-verify pollar-cosign-verify-ok">{copy.checkedExact}</div>}
           {/* A failed check stays spelled out: it is the only place the user learns why Approve is off. */}
           {deviceNotLinked ? (
             <div className="pollar-cosign-verify pollar-cosign-verify-bad">

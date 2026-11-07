@@ -343,14 +343,20 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
 
   // A co-signed step of the order waits on the user's device: bring its request up the moment it appears.
   const approval = order?.pendingAction?.kind === 'COSIGN_APPROVAL' ? order.pendingAction.actionId : null;
+  const approvalRequest = order?.pendingAction?.kind === 'COSIGN_APPROVAL' ? order.pendingAction.cosignRequestId : null;
   useEffect(() => {
     if (!approval || promptedApproval.current === approval) return;
     promptedApproval.current = approval;
     void client.cosign
       .pending()
-      .catch(() => undefined)
-      .then(() => openCosignModal());
-  }, [approval, client, openCosignModal]);
+      .catch(() => [])
+      .then(async (requests) => {
+        // The provider's sign-in moves nothing: under the app's 'auto' confirmation it is approved without the prompt.
+        const request = requests.find((r) => r.id === approvalRequest);
+        if (request && (await client.autoApproveSignIn(request))) return;
+        openCosignModal();
+      });
+  }, [approval, approvalRequest, client, openCosignModal]);
 
   // The approval prompt stays up between two approvals of the order instead of closing and reopening.
   const nextApproval = step === 'status' && order ? rampNextApproval(order, language) : null;

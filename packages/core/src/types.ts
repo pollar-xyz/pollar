@@ -367,8 +367,9 @@ export interface PollarClientConfig {
    *
    * Unset, the app's dashboard setting applies, and that defaults to
    * `'prompt'`. Set, the stricter of this and the dashboard setting applies.
-   * A ramp leg always asks, whatever the policy. The same code works on
-   * testnet and mainnet.
+   * A ramp leg always asks, whatever the policy, except a provider's sign-in,
+   * which moves nothing: `'auto'` approves it (`autoApproveSignIn`). The same
+   * code works on testnet and mainnet.
    */
   confirmation?: ConfirmationPolicy;
   /**

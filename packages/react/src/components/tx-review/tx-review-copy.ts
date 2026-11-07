@@ -12,6 +12,13 @@ export const TX_REVIEW_COPY: Record<
       swap: (from: string, to: string) => string;
       payment: (amount: string, to: string) => string;
       createAccount: string;
+      signIn: string;
+    };
+    /** A provider's sign-in: it proves the account is the user's, and moves nothing. */
+    signIn: {
+      body: string;
+      noMoney: string;
+      nothingSent: string;
     };
     earn: {
       deposit: string;
@@ -69,6 +76,12 @@ export const TX_REVIEW_COPY: Record<
       swap: (from, to) => `Swap ${from} for ${to}`,
       payment: (amount, to) => `Pay ${amount} to ${to}`,
       createAccount: 'Create an account',
+      signIn: "Confirm it's you",
+    },
+    signIn: {
+      body: 'The payment provider needs to confirm this account is yours before it can process your order.',
+      noMoney: 'No money moves',
+      nothingSent: 'Nothing is sent',
     },
     earn: {
       deposit: 'Deposit',
@@ -124,6 +137,12 @@ export const TX_REVIEW_COPY: Record<
       swap: (from, to) => `Cambiar ${from} por ${to}`,
       payment: (amount, to) => `Pagar ${amount} a ${to}`,
       createAccount: 'Crear una cuenta',
+      signIn: 'Confirma que eres tú',
+    },
+    signIn: {
+      body: 'El proveedor de pagos necesita confirmar que esta cuenta es tuya antes de procesar tu orden.',
+      noMoney: 'No se mueve dinero',
+      nothingSent: 'No se envía nada',
     },
     earn: {
       deposit: 'Depositar',
@@ -179,6 +198,12 @@ export const TX_REVIEW_COPY: Record<
       swap: (from, to) => `Trocar ${from} por ${to}`,
       payment: (amount, to) => `Pagar ${amount} para ${to}`,
       createAccount: 'Criar uma conta',
+      signIn: 'Confirme que é você',
+    },
+    signIn: {
+      body: 'O provedor de pagamentos precisa confirmar que esta conta é sua antes de processar seu pedido.',
+      noMoney: 'Nenhum dinheiro se move',
+      nothingSent: 'Nada é enviado',
     },
     earn: {
       deposit: 'Depositar',

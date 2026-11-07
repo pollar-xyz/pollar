@@ -121,6 +121,53 @@
   text-align: center;
 }
 
+.pollar-txr-signin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem 0.75rem;
+  border-radius: var(--pollar-card-border-radius, 10px);
+  background: var(--pollar-input-bg);
+  text-align: center;
+}
+
+.pollar-txr-signin-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  color: var(--pollar-accent);
+  background: color-mix(in srgb, var(--pollar-accent) 12%, var(--pollar-bg));
+}
+
+.pollar-txr-signin-body {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: var(--pollar-text);
+}
+
+.pollar-txr-assurances {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pollar-txr-assurance {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--pollar-success-text, #15803d);
+}
+
 .pollar-txr-bar {
   display: flex;
   align-items: center;

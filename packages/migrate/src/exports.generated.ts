@@ -411,6 +411,7 @@ export const TARGET_EXPORTS: Record<string, readonly string[]> = {
     'rampWalletStep',
     'rawSignatureToDer',
     'recognizedSetupRequest',
+    'recognizedSignInRequest',
     'resolveKyc',
     'resolveLanguage',
     'startKyc',

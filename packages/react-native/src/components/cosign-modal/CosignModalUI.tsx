@@ -210,7 +210,7 @@ export function CosignModalTemplate({
 
             {verified && verifiedOpen && (
               <View style={[styles.verify, { borderColor: colors.okText }]}>
-                <Text style={{ color: colors.okText, flexShrink: 1 }}>{copy.checkedAgainstTurnkey}</Text>
+                <Text style={{ color: colors.okText, flexShrink: 1 }}>{copy.checkedExact}</Text>
               </View>
             )}
             {/* A failed check stays spelled out: it is the only place the user learns why Approve is off. */}

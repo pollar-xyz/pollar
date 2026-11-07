@@ -20,7 +20,7 @@ export const COSIGN_COPY: Record<
     expiresIn: string;
     checking: string;
     verified: string;
-    checkedAgainstTurnkey: string;
+    checkedExact: string;
     notVerified: string;
     reject: string;
     rejecting: string;
@@ -50,8 +50,8 @@ export const COSIGN_COPY: Record<
     expired: 'expired',
     expiresIn: 'Expires in',
     checking: 'Checking...',
-    verified: 'Verified',
-    checkedAgainstTurnkey: 'Checked against Turnkey: this is exactly what will be signed.',
+    verified: 'Checked',
+    checkedExact: "We checked this is exactly what you're approving.",
     notVerified: 'Not verified:',
     reject: 'Reject',
     rejecting: 'Rejecting...',
@@ -77,6 +77,8 @@ export const COSIGN_COPY: Record<
       earn_deposit: 'Deposit',
       earn_withdraw: 'Withdraw',
       evm_delegation: 'Enable atomic transactions',
+      provider_sign_in: "Confirm it's you",
+      sep10: "Confirm it's you",
     },
   },
   es: {
@@ -96,8 +98,8 @@ export const COSIGN_COPY: Record<
     expired: 'vencida',
     expiresIn: 'Vence en',
     checking: 'Verificando...',
-    verified: 'Verificada',
-    checkedAgainstTurnkey: 'Verificada con Turnkey: esto es exactamente lo que se firmará.',
+    verified: 'Comprobada',
+    checkedExact: 'Comprobamos que esto es exactamente lo que estás aprobando.',
     notVerified: 'Sin verificar:',
     reject: 'Rechazar',
     rejecting: 'Rechazando...',
@@ -123,6 +125,8 @@ export const COSIGN_COPY: Record<
       earn_deposit: 'Depositar',
       earn_withdraw: 'Retirar',
       evm_delegation: 'Activar transacciones atómicas',
+      provider_sign_in: 'Confirma que eres tú',
+      sep10: 'Confirma que eres tú',
     },
   },
   pt: {
@@ -142,8 +146,8 @@ export const COSIGN_COPY: Record<
     expired: 'expirada',
     expiresIn: 'Expira em',
     checking: 'Verificando...',
-    verified: 'Verificada',
-    checkedAgainstTurnkey: 'Conferida com a Turnkey: isto é exatamente o que será assinado.',
+    verified: 'Conferida',
+    checkedExact: 'Conferimos que isto é exatamente o que você está aprovando.',
     notVerified: 'Não verificada:',
     reject: 'Rejeitar',
     rejecting: 'Rejeitando...',
@@ -169,6 +173,8 @@ export const COSIGN_COPY: Record<
       earn_deposit: 'Depositar',
       earn_withdraw: 'Sacar',
       evm_delegation: 'Ativar transações atômicas',
+      provider_sign_in: 'Confirme que é você',
+      sep10: 'Confirme que é você',
     },
   },
 };

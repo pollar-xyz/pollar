@@ -120,6 +120,7 @@ class XdrReader {
 
 const OP_CREATE_ACCOUNT = 0;
 const OP_CHANGE_TRUST = 6;
+const OP_MANAGE_DATA = 10;
 const OP_BEGIN_SPONSORING = 16;
 const OP_END_SPONSORING = 17;
 
@@ -130,12 +131,12 @@ interface ParsedOp {
   sponsored?: Uint8Array;
 }
 
-/** The source and operations of a v1 transaction envelope; throws on anything this reader does not know. */
-function parseTransaction(envelopeXdrBase64: string): { source: Uint8Array; ops: ParsedOp[] } {
+/** The source, sequence and operations of a v1 transaction envelope; throws on anything this reader does not know. */
+function parseTransaction(envelopeXdrBase64: string): { source: Uint8Array; sequenceZero: boolean; ops: ParsedOp[] } {
   const r = new XdrReader(transactionBodyOf(envelopeXdrBase64));
   const source = r.muxedAccount();
   r.u32(); // fee
-  r.skip(8); // sequence number
+  const sequenceZero = r.take(8).every((byte) => byte === 0);
   const cond = r.u32();
   if (cond === 1) r.skip(16);
   else if (cond === 2) {
@@ -182,11 +183,15 @@ function parseTransaction(envelopeXdrBase64: string): { source: Uint8Array; ops:
       ops.push({ type, source: opSource, sponsored: r.accountId() });
     } else if (type === OP_END_SPONSORING) {
       ops.push({ type, source: opSource });
+    } else if (type === OP_MANAGE_DATA) {
+      r.opaque(); // data name
+      if (r.u32() === 1) r.opaque(); // data value
+      ops.push({ type, source: opSource });
     } else {
-      throw new Error(`xdr: operation type ${type} is not a setup operation`);
+      throw new Error(`xdr: operation type ${type} is not a setup or sign-in operation`);
     }
   }
-  return { source, ops };
+  return { source, sequenceZero, ops };
 }
 
 function same(a: Uint8Array | null | undefined, b: Uint8Array): boolean {
@@ -237,11 +242,40 @@ export function recognizedSetupRequest(request: CosignRequest): SetupRecognition
     } else if (op.type === OP_CREATE_ACCOUNT) {
       if (!same(op.destination, me)) return { ok: false, reason: 'creating another account' };
       setupOps++;
-    } else {
+    } else if (op.type === OP_CHANGE_TRUST) {
       if (!same(op.source ?? parsed.source, me)) return { ok: false, reason: 'a trustline on another account' };
       setupOps++;
+    } else {
+      return { ok: false, reason: 'an operation that is not setup' };
     }
   }
   if (setupOps === 0) return { ok: false, reason: 'no setup operation in the transaction' };
   return { ok: true, kind: setupKind };
+}
+
+/**
+ * Whether a request is a provider's sign-in for this wallet (SEP-10), read from
+ * the transaction itself: sequence number 0, so the network can never accept
+ * it, and data entries only, the first one this account's. Signing it proves
+ * the account is the user's to the provider that asked; it moves nothing and
+ * nothing is sent. The provider gets a session to act for the user in its own
+ * system (the order the user started), which is why only the app's `'auto'`
+ * confirmation approves it without a prompt (`PollarClient.autoApproveSignIn`).
+ */
+export function recognizedSignInRequest(request: CosignRequest): { ok: true } | { ok: false; reason: string } {
+  if (request.status !== 'PENDING') return { ok: false, reason: 'not pending' };
+  if (request.network !== 'STELLAR' || request.kind !== 'SEP10') return { ok: false, reason: 'not a Stellar sign-in' };
+  const me = stellarAccountBytes(request.account ?? request.signWith);
+  if (!me) return { ok: false, reason: 'the account is not a Stellar address' };
+  let parsed: ReturnType<typeof parseTransaction>;
+  try {
+    parsed = parseTransaction(request.unsignedPayload);
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  }
+  if (!parsed.sequenceZero) return { ok: false, reason: 'a transaction the network could accept' };
+  if (parsed.ops.length === 0 || parsed.ops.some((op) => op.type !== OP_MANAGE_DATA))
+    return { ok: false, reason: 'not only data entries' };
+  if (!same(parsed.ops[0]!.source, me)) return { ok: false, reason: 'a sign-in for another account' };
+  return { ok: true };
 }

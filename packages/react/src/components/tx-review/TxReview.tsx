@@ -86,6 +86,36 @@ function ContractGlyph() {
   );
 }
 
+/** A key in a shield: proving who the user is, not sending anything. */
+function SignInGlyph() {
+  return (
+    <span className="pollar-txr-signin-glyph" aria-hidden>
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+        <path
+          d="M12 2.75 4.75 5.5v5.25c0 4.6 3.05 8.55 7.25 10 4.2-1.45 7.25-5.4 7.25-10V5.5L12 2.75Z"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+        />
+        <circle cx="12" cy="10" r="2.25" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M12 12.25v3.5M12 14.25h1.75" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    </span>
+  );
+}
+
+function Assurance({ text }: { text: string }) {
+  return (
+    <li className="pollar-txr-assurance">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+        <circle cx="7" cy="7" r="7" fill="currentColor" />
+        <path d="M3.5 7l2.5 2.5 4.5-5" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      {text}
+    </li>
+  );
+}
+
 function Node({
   party,
   showAmount,
@@ -205,6 +235,16 @@ export function TxReview({ data, open: openProp, onToggle, language: languagePro
         </div>
       )}
       {kind === 'approve' && <p className="pollar-txr-note">{copy.approveNote}</p>}
+      {kind === 'sign_in' && (
+        <div className="pollar-txr-signin">
+          <SignInGlyph />
+          <p className="pollar-txr-signin-body">{copy.signIn.body}</p>
+          <ul className="pollar-txr-assurances">
+            <Assurance text={copy.signIn.noMoney} />
+            <Assurance text={copy.signIn.nothingSent} />
+          </ul>
+        </div>
+      )}
 
       <div className="pollar-txr-bar">
         {data.fee?.sponsored !== undefined ? <FeeBadge sponsored={data.fee.sponsored} copy={copy} /> : <span />}

@@ -113,7 +113,7 @@ import { bytesToHex, hexToBytes } from '../cosign/encoding';
 import { base64urlDecode, base64urlEncode } from '../lib/base64url';
 import { createAuthEntrySigner } from '../stellar/auth-entry-signer';
 import { authEntryTransfer, formatStroops, stellarAssetContractId } from '../stellar/auth-entry-value';
-import { encodeStellarAddress } from '../cosign/recognize';
+import { encodeStellarAddress, recognizedSignInRequest } from '../cosign/recognize';
 import { StellarNetwork } from '../stellar/StellarClient';
 import { defaultStorage } from '../storage/autodetect';
 import type { OnStorageDegrade, Storage, StorageDegradeReason } from '../storage/types';
@@ -3550,6 +3550,31 @@ export class PollarClient {
     const answer = await this._askUser(input);
     if (answer.ok && policy !== 'prompt') this._confirmWindow.open(Date.now());
     return answer;
+  }
+
+  /**
+   * Approve a provider's sign-in on this device without a prompt, when the
+   * app's confirmation is `'auto'` (the stricter of the code's and the
+   * dashboard's). Only a request `recognizedSignInRequest` reads as a sign-in
+   * qualifies: it moves nothing and nothing is sent. It is the one step of a
+   * ramp that `'auto'` covers; every other ramp signature asks. Resolves true
+   * once the device voted, false when the request is left for the prompt
+   * (another policy, `cosignManual`, not a sign-in, or a vote that failed).
+   */
+  async autoApproveSignIn(request: CosignRequest): Promise<boolean> {
+    if (this._cosignManual || !recognizedSignInRequest(request).ok) return false;
+    if (effectivePolicy(this._confirmation, await this._appSignConfirmation()) !== 'auto') return false;
+    this._autoHandling.add(request.id);
+    try {
+      await this._assertDeviceEnrolled();
+      await this.cosign.settle(await this.cosign.approve(request));
+      return true;
+    } catch (err) {
+      this._log.warn('[PollarClient] a sign-in was not approved automatically; it is left for the prompt', err);
+      return false;
+    } finally {
+      this._autoHandling.delete(request.id);
+    }
   }
 
   private _askUser(input: Omit<ConfirmationRequest, 'id' | 'createdAt'>): Promise<ConfirmationAnswer> {

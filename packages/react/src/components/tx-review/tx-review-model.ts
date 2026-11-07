@@ -25,7 +25,7 @@ export interface TxDetailRow {
 export interface TxReviewData {
   /** The action in plain words: what a user without crypto background reads first. */
   title: string;
-  kind: 'send' | 'bridge' | 'approve' | 'swap' | 'payment' | 'create_account' | 'deposit' | 'withdraw' | 'other';
+  kind: 'send' | 'bridge' | 'approve' | 'swap' | 'payment' | 'create_account' | 'deposit' | 'withdraw' | 'sign_in' | 'other';
   from?: TxParty;
   to?: TxParty;
   /**
@@ -84,6 +84,8 @@ function titleOf(data: Pick<TxReviewData, 'kind' | 'from' | 'to'>, fallback: str
       return from?.amount && to?.label ? copy.titles.payment(withAsset(from), displayName(to.label)) : fallback;
     case 'create_account':
       return copy.titles.createAccount;
+    case 'sign_in':
+      return copy.titles.signIn;
     default:
       return fallback;
   }
@@ -253,6 +255,30 @@ export function earnOutcome(
 }
 
 /** A cosign request or a confirmation prompt, as the review draws it. */
+/**
+ * A provider's sign-in (sdk-api `provider_sign_in`; `sep10` on requests opened
+ * before it had that name). What it signs moves nothing, so it reads as proving
+ * who the user is, not as a transaction.
+ */
+function isSignIn(operation: string | undefined, details: Record<string, unknown>): boolean {
+  return operation === 'provider_sign_in' || operation === 'sep10' || details.purpose === 'sign_in';
+}
+
+function reviewForSignIn(parts: SigningRequestParts, copy: TxReviewCopy): TxReviewData {
+  const rows: TxDetailRow[] = [
+    { label: copy.rows.network, value: [copy.chains[parts.chain], parts.network].filter(Boolean).join(' ') },
+  ];
+  if (parts.signWith) rows.push({ label: copy.yourWallet, value: shortAddress(parts.signWith), copyValue: parts.signWith });
+  rows.push(...(parts.extraRows ?? []));
+  return {
+    kind: 'sign_in',
+    title: copy.titles.signIn,
+    rows,
+    ...(parts.raw ? { raw: parts.raw } : {}),
+    ...(parts.hash ? { hash: parts.hash } : {}),
+  };
+}
+
 export function reviewFromRequest(parts: SigningRequestParts, copy: TxReviewCopy): TxReviewData {
   const details = parts.details ?? {};
   const earnAction = parts.operation === 'earn_deposit' ? 'deposit' : parts.operation === 'earn_withdraw' ? 'withdraw' : null;
@@ -283,6 +309,7 @@ export function reviewFromRequest(parts: SigningRequestParts, copy: TxReviewCopy
       copy,
     );
   }
+  if (isSignIn(parts.operation, details)) return reviewForSignIn(parts, copy);
   const flow = rampFlow(details);
   const rows: TxDetailRow[] = [];
   let data: Pick<TxReviewData, 'kind' | 'from' | 'to'>;

@@ -32,7 +32,7 @@ export { buildProof, normalizeHtu } from './dpop';
 export { CosignManager } from './cosign/manager';
 export { compressedPublicKeyHex, rawSignatureToDer, encodeStamp } from './cosign/encoding';
 export { stellarTransactionHashHex } from './cosign/stellar-hash';
-export { recognizedSetupRequest, stellarAccountBytes } from './cosign/recognize';
+export { recognizedSetupRequest, recognizedSignInRequest, stellarAccountBytes } from './cosign/recognize';
 export type { SetupRecognition } from './cosign/recognize';
 export type { BuildProofArgs } from './dpop';
 

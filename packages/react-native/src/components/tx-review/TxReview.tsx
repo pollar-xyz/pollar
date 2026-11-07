@@ -167,6 +167,38 @@ function Glyph({ kind, colors }: { kind: 'account' | 'contract'; colors: Colors 
   );
 }
 
+/** A key in a shield: proving who the user is, not sending anything. */
+function SignIn({ copy, colors }: { copy: TxReviewCopy; colors: Colors }) {
+  return (
+    <View style={[styles.signIn, { backgroundColor: colors.inputBg }]}>
+      <View style={[styles.logo, { backgroundColor: `${colors.accent}1F` }]}>
+        <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+          <Path
+            d="M12 2.75 4.75 5.5v5.25c0 4.6 3.05 8.55 7.25 10 4.2-1.45 7.25-5.4 7.25-10V5.5L12 2.75Z"
+            stroke={colors.accent}
+            strokeWidth={1.6}
+            strokeLinejoin="round"
+          />
+          <Circle cx={12} cy={10} r={2.25} stroke={colors.accent} strokeWidth={1.6} />
+          <Path d="M12 12.25v3.5M12 14.25h1.75" stroke={colors.accent} strokeWidth={1.6} strokeLinecap="round" />
+        </Svg>
+      </View>
+      <Text style={[styles.signInBody, { color: colors.text }]}>{copy.signIn.body}</Text>
+      <View style={styles.assurances}>
+        {[copy.signIn.noMoney, copy.signIn.nothingSent].map((text) => (
+          <View key={text} style={styles.assurance}>
+            <Svg width={14} height={14} viewBox="0 0 14 14" fill="none">
+              <Circle cx={7} cy={7} r={7} fill={colors.okText} />
+              <Path d="M3.5 7l2.5 2.5 4.5-5" stroke="white" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+            <Text style={[styles.assuranceText, { color: colors.okText }]}>{text}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function Node({
   party,
   showAmount,
@@ -304,6 +336,7 @@ export function TxReview({
         </View>
       )}
       {kind === 'approve' && <Text style={[styles.note, { color: colors.muted }]}>{copy.approveNote}</Text>}
+      {kind === 'sign_in' && <SignIn copy={copy} colors={colors} />}
 
       <View style={styles.bar}>
         {data.fee?.sponsored !== undefined ? <FeeBadge sponsored={data.fee.sponsored} copy={copy} colors={colors} /> : <View />}
@@ -405,6 +438,11 @@ const styles = StyleSheet.create({
   caption: { fontSize: 13, textAlign: 'center', maxWidth: '100%' },
   arrow: { flexDirection: 'row', alignItems: 'center', height: 44, minWidth: 40, maxWidth: 72, flexBasis: 56, flexShrink: 1 },
   note: { fontSize: 13, textAlign: 'center' },
+  signIn: { alignItems: 'center', gap: 10, paddingVertical: 16, paddingHorizontal: 12, borderRadius: 10 },
+  signInBody: { fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  assurances: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: 16, rowGap: 6 },
+  assurance: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  assuranceText: { fontSize: 13 },
   bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 24 },
   fee: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
   feeText: { fontSize: 13, flexShrink: 1 },

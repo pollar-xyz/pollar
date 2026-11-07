@@ -159,10 +159,27 @@ async function mount(element) {
     const view = await mount(React.createElement(CosignModal, { onClose: () => undefined }));
     await settle();
     check('the check against Turnkey ran once', () => assert.equal(client.calls.verify, 1));
-    check('the request was verified', () => assert.match(view.container.textContent, /Verified/));
+    check('the request was verified', () => assert.match(view.container.textContent, /Checked/));
     const approve = [...view.container.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Approve');
     check('Approve is enabled', () => assert.ok(approve && !approve.disabled, 'Approve missing or disabled'));
     await view.unmount();
+
+    // A provider's sign-in reads as proving who the user is, never as its protocol's name.
+    await React.act(async () => client.arrive({ ...request, id: 'sign-in', kind: 'SEP10', operation: 'provider_sign_in' }));
+    const signIn = await mount(React.createElement(CosignModal, { onClose: () => undefined }));
+    await settle();
+    check("a sign-in is titled as confirming it's the user", () =>
+      assert.match(signIn.container.textContent, /Confirm it's you/),
+    );
+    check('it says why the provider asks', () => assert.match(signIn.container.textContent, /confirm this account is yours/));
+    check('it says no money moves and nothing is sent', () => {
+      assert.match(signIn.container.textContent, /No money moves/);
+      assert.match(signIn.container.textContent, /Nothing is sent/);
+    });
+    check('the protocol name is not shown', () => assert.doesNotMatch(signIn.container.textContent, /sep10|provider_sign_in/i));
+    const approveSignIn = [...signIn.container.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Approve');
+    check('a checked sign-in can be approved', () => assert.ok(approveSignIn && !approveSignIn.disabled));
+    await signIn.unmount();
   }
 
   // ── 2. React Native ─────────────────────────────────────────────
@@ -199,7 +216,7 @@ async function mount(element) {
     check('the pending list was read once', () => assert.equal(client.calls.pending, 1));
     check('the quorum was inspected once', () => assert.equal(client.calls.inspectQuorum, 1));
     check('the check against Turnkey ran once', () => assert.equal(client.calls.verify, 1));
-    check('the request was verified', () => assert.match(view.container.textContent, /Verified/));
+    check('the request was verified', () => assert.match(view.container.textContent, /Checked/));
     const approve = [...view.container.querySelectorAll('button')].find((b) => /Approve/.test(b.textContent));
     check('Approve is enabled', () => assert.ok(approve && !approve.disabled, 'Approve missing or disabled'));
     await view.unmount();
@@ -296,7 +313,7 @@ async function mount(element) {
     await settle();
     const buttons = () => [...view.container.querySelectorAll('button')];
     check('it says the device is not linked', () => assert.match(view.container.textContent, /isn't linked to your wallet/));
-    check('it does not claim the request is verified', () => assert.doesNotMatch(view.container.textContent, /Verified/));
+    check('it does not claim the request is verified', () => assert.doesNotMatch(view.container.textContent, /Checked/));
     const approve = buttons().find((b) => b.textContent.trim() === 'Approve');
     check('Approve is disabled', () => assert.ok(approve && approve.disabled, 'Approve missing or enabled'));
     const reject = buttons().find((b) => b.textContent.trim() === 'Reject');
@@ -330,7 +347,7 @@ async function mount(element) {
     const view = await mount(React.createElement(CosignModal, { onClose: () => undefined }));
     await settle();
     check('it says the device is not linked', () => assert.match(view.container.textContent, /isn't linked to your wallet/));
-    check('it does not claim the request is verified', () => assert.doesNotMatch(view.container.textContent, /Verified/));
+    check('it does not claim the request is verified', () => assert.doesNotMatch(view.container.textContent, /Checked/));
     const approve = [...view.container.querySelectorAll('button')].find((b) => /Approve/.test(b.textContent));
     check('Approve is disabled', () => assert.ok(approve && approve.disabled, 'Approve missing or enabled'));
     check('it offers to link the device', () => assert.match(view.container.textContent, /Link this device/));
