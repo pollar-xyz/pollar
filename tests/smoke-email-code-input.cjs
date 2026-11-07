@@ -52,6 +52,19 @@ eq(applyEmailCodeInput(seven, 0, '4829137', 6).digits, filled('482913'));
 eq(applyEmailCodeInput(seven, 0, '7482913', 7).digits, filled('482913'));
 eq(applyEmailCodeInput(['3', '', '', '', '', ''], 0, '4829133', 6).digits, filled('482913'));
 eq(applyEmailCodeInput(['3', '', '', '', '', ''], 0, '3482913', 7).digits, filled('482913'));
+// Autofill can also replace the digit instead of inserting beside it; the whole code is kept.
+eq(applyEmailCodeInput(seven, 0, '482913', 6), { digits: filled('482913'), focus: 5 });
+eq(applyEmailCodeInput(seven, 0, '482913').digits, filled('482913'));
+eq(applyEmailCodeInput(seven, 0, '712345', 6).digits, filled('712345'));
+// When the box knows its selection, a code beside the old digit and one replacing it differ.
+eq(applyEmailCodeInput(seven, 0, '712345', 6, false).digits, ['1', '2', '3', '4', '5', '']);
+eq(applyEmailCodeInput(seven, 0, '712345', 6, true).digits, filled('712345'));
+eq(applyEmailCodeInput(seven, 0, '7482913', 7, false).digits, filled('482913'));
+eq(applyEmailCodeInput(seven, 0, '482913', 6, true).digits, filled('482913'));
+// A replacement the box did not see as a selection is still caught: the old digit is gone.
+eq(applyEmailCodeInput(seven, 0, '482913', 6, false).digits, filled('482913'));
+// Replaced by a shorter run: every digit is new, filled from the box.
+eq(applyEmailCodeInput(seven, 0, '48', 2).digits, ['4', '8', '', '', '', '']);
 // ...or with separators some providers include.
 eq(applyEmailCodeInput(empty, 0, '482 913').digits, filled('482913'));
 
@@ -83,4 +96,65 @@ assert.equal((html.match(/<input/g) || []).length, 6);
 assert.equal((html.match(/autoComplete="one-time-code"|autocomplete="one-time-code"/g) || []).length, 1);
 assert.doesNotMatch(html, /maxlength/i);
 
-console.log('Email code input: autofill, keystrokes, overtype, partial runs and paste passed');
+// Mounted: the beforeinput listener really records the selection, so a code
+// replacing the old digit and one typed beside it reach different results.
+// (The cases above pass `replacedPrevious` by hand; static markup never runs it.)
+const { JSDOM } = require('jsdom');
+const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://test.invalid/' });
+globalThis.window = dom.window;
+globalThis.document = dom.window.document;
+// Node 20, the CI runtime, has no global navigator; react-dom reads it on load.
+globalThis.navigator = dom.window.navigator;
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+const { createRoot } = require('react-dom/client');
+const setValue = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set;
+
+async function mount() {
+  const submitted = [];
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  await React.act(async () =>
+    root.render(React.createElement(EmailCodeInput, { email: 'a@b.c', onSubmit: (code) => submitted.push(code) })),
+  );
+  const boxes = () => Array.from(container.querySelectorAll('input'));
+  // What a browser does for one input: beforeinput with the selection as it
+  // was, then the new value (caret at its end) and an input event.
+  const input = async (index, value, selection) => {
+    const el = boxes()[index];
+    await React.act(async () => {
+      el.focus();
+      el.setSelectionRange(selection[0], selection[1]);
+      el.dispatchEvent(new dom.window.Event('beforeinput', { bubbles: true, cancelable: true }));
+      setValue.call(el, value);
+      el.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    });
+  };
+  const values = () => boxes().map((el) => el.value);
+  const unmount = () => React.act(async () => root.unmount()).then(() => container.remove());
+  return { input, values, submitted, unmount };
+}
+
+(async () => {
+  // Autofill replaces the selected 7 with 712345: the whole code is kept and submitted.
+  let view = await mount();
+  await view.input(0, '7', [0, 0]);
+  assert.deepEqual(view.values(), ['7', '', '', '', '', '']);
+  await view.input(0, '712345', [0, 1]);
+  assert.deepEqual(view.values(), filled('712345'));
+  assert.deepEqual(view.submitted, ['712345']);
+  await view.unmount();
+
+  // 12345 typed after the 7 (caret after it, nothing selected): only the new digits count.
+  view = await mount();
+  await view.input(0, '7', [0, 0]);
+  await view.input(0, '712345', [1, 1]);
+  assert.deepEqual(view.values(), ['1', '2', '3', '4', '5', '']);
+  assert.deepEqual(view.submitted, []);
+  await view.unmount();
+
+  console.log('Email code input: autofill, keystrokes, overtype, partial runs, paste and mounted selection passed');
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
