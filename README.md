@@ -361,9 +361,9 @@ npx @pollar/migrate --fix      # apply the mechanical changes
 
 Packages built by other teams on top of the public Pollar SDK.
 
-> **Community-maintained.** These packages are written, published and supported by their own authors. Pollar does not
-> audit, maintain or support them, and listing one here is not an endorsement. Review the code and its scope before
-> you use it, and report issues to its repository.
+> **Built by the community.** These integrations are created and maintained by their own authors, and we're glad to
+> share them here. They aren't reviewed or supported by Pollar, so please check each project's scope before using it,
+> and reach out to its authors through their repository with any questions or issues.
 
 ### [`@sub-rosa/pollar-adapter`](https://github.com/karagozemin/Sub-Rosa)
 
