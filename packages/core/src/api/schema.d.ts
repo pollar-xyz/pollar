@@ -1037,7 +1037,7 @@ export interface paths {
         put?: never;
         /**
          * Submit KYC
-         * @description Sends the user's identity data to the provider with the provider's terms accepted. Returns a `verificationLink` the user opens to finish (document and selfie). Accepted once per user.
+         * @description Sends the user's identity data to the provider with the provider's terms accepted. Returns a `verificationLink` the user opens to finish (document and selfie). Accepted once per user. A provider that takes only IPv4 answers a request over IPv6 with 422 `SDK_CARDS_IP_NOT_SUPPORTED` and `ipv4BaseUrl`; retry with the `x-pollar-ip-attestation` header.
          */
         post: operations["postCardsHolderKyc"];
         delete?: never;
@@ -1955,9 +1955,29 @@ export interface paths {
         put?: never;
         /**
          * Register with the card provider
-         * @description Signs the user up with the card provider and sends its KYC from the verified identity and the route's form answers. Sending this is the user's consent to share the fields listed and to the provider's terms. 409 `KYC_REGISTRATION_STEPS_PENDING` while an earlier step is open; 422 `KYC_REGISTRATION_MISSING_DATA` lists what the identity and forms did not supply.
+         * @description Signs the user up with the card provider and sends its KYC from the verified identity and the route's form answers. Sending this is the user's consent to share the fields listed and to the provider's terms. 409 `KYC_REGISTRATION_STEPS_PENDING` while an earlier step is open; 422 `KYC_REGISTRATION_MISSING_DATA` lists what the identity and forms did not supply. A provider that takes only IPv4 answers a request over IPv6 with 422 `SDK_CARDS_IP_NOT_SUPPORTED` and `ipv4BaseUrl`: get a token from its GET /client-ip/attest and retry with it as `x-pollar-ip-attestation`.
          */
         post: operations["postRequirementsCardRegistrationByCardProviderId"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/client-ip/attest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Attest the user's IPv4
+         * @description Call it on the IPv4-only host named by `ipv4BaseUrl` in a 422 `SDK_CARDS_IP_NOT_SUPPORTED`. Signs the IPv4 the request came from, for this user, for two minutes. Send the token as the `x-pollar-ip-attestation` header when retrying the request that accepts the provider's terms. 422 `SDK_CARDS_IP_NOT_SUPPORTED` when the request still arrived over IPv6.
+         */
+        get: operations["getClientIpAttest"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -9428,7 +9448,10 @@ export interface operations {
     postCardsHolderKyc: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A token from GET /client-ip/attest, for a user whose request arrives over IPv6. */
+                "x-pollar-ip-attestation"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9552,7 +9575,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Provider not configured or request rejected by it */
+            /** @description Provider not configured or request rejected by it. `SDK_CARDS_IP_NOT_SUPPORTED` carries `ipv4BaseUrl`: get a token from its GET /client-ip/attest and send it as `x-pollar-ip-attestation`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -15357,7 +15380,10 @@ export interface operations {
     postRequirementsCardRegistrationByCardProviderId: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A token from GET /client-ip/attest, for a user whose request arrives over IPv6. */
+                "x-pollar-ip-attestation"?: string;
+            };
             path: {
                 cardProviderId: string;
             };
@@ -15476,6 +15502,69 @@ export interface operations {
             };
             /** @description Not configured */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getClientIpAttest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The IPv4, signed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_CLIENT_IP_ATTESTED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            /** @description Send it as the `x-pollar-ip-attestation` header of the request that accepts the terms. */
+                            token: string;
+                            /** @description The IPv4 this request came from. */
+                            ip: string;
+                            /** @description ISO 8601. The token is refused after it. */
+                            expiresAt: string;
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unprocessable */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

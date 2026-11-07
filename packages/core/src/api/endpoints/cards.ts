@@ -43,6 +43,36 @@ function content<T>(res: { data?: { content?: T }; error?: unknown }, fallback: 
   return res.data.content;
 }
 
+/**
+ * Send a terms acceptance, and once more with the user's attested IPv4 when the
+ * provider takes only IPv4 and the request went out over IPv6: the server then
+ * names its IPv4-only host, where `GET /client-ip/attest` signs the IPv4 the
+ * device reaches it from. When that host cannot be reached, the first refusal
+ * stands.
+ */
+async function withIpv4Attestation<T>(
+  api: PollarApiClient,
+  send: (attestation?: string) => Promise<{ data?: { content?: T }; error?: unknown }>,
+  fallback: string,
+): Promise<T> {
+  const first = await send();
+  const baseUrl = ipv4BaseUrl(first.error);
+  if (!baseUrl) return content(first, fallback);
+  const attested = await api.GET('/client-ip/attest', { baseUrl }).catch(() => null);
+  const token = attested?.data?.content?.token;
+  if (!token) return content(first, fallback);
+  return content(await send(token), fallback);
+}
+
+function ipv4BaseUrl(error: unknown): string | null {
+  if (!isRecord(error) || stringField(error, 'code') !== 'SDK_CARDS_IP_NOT_SUPPORTED') return null;
+  const url = stringField(error, 'ipv4BaseUrl');
+  return url && /^https?:\/\//.test(url) ? url : null;
+}
+
+const attestationHeader = (attestation?: string): { 'x-pollar-ip-attestation'?: string } =>
+  attestation ? { 'x-pollar-ip-attestation': attestation } : {};
+
 /** `cardProviderId` may be omitted while the app has a single card provider. */
 const byProvider = (cardProviderId?: string) => (cardProviderId ? { cardProviderId } : {});
 
@@ -72,7 +102,11 @@ export async function submitCardKyc(
   api: PollarApiClient,
   body: { cardProviderId?: string; termsAccepted: boolean; kyc: CardKycInput },
 ): Promise<{ holder: CardHolder }> {
-  return content(await api.POST('/cards/holder/kyc', { body }), 'Failed to submit card KYC');
+  return withIpv4Attestation(
+    api,
+    (attestation) => api.POST('/cards/holder/kyc', { body, params: { header: attestationHeader(attestation) } }),
+    'Failed to submit card KYC',
+  );
 }
 
 /** GET /cards/kyc/occupations */
@@ -234,10 +268,13 @@ export async function submitCardProviderRegistration(
   api: PollarApiClient,
   cardProviderId: string,
 ): Promise<CardProviderRegistrationSubmitted> {
-  const { data, error } = await api.POST('/requirements/card-registration/{cardProviderId}', {
-    params: { path: { cardProviderId } },
-    headers: { 'x-pollar-timeout-ms': String(REGISTRATION_TIMEOUT_MS) },
-  });
-  if (error || !data?.content) throw cardsApiError(error, 'Failed to register with the card provider');
-  return data.content;
+  return withIpv4Attestation(
+    api,
+    (attestation) =>
+      api.POST('/requirements/card-registration/{cardProviderId}', {
+        params: { path: { cardProviderId }, header: attestationHeader(attestation) },
+        headers: { 'x-pollar-timeout-ms': String(REGISTRATION_TIMEOUT_MS) },
+      }),
+    'Failed to register with the card provider',
+  );
 }
