@@ -1,7 +1,7 @@
 'use client';
 
 import { useInheritedLanguage } from '../../language-context';
-import { AUTH_ERROR_CODES, AuthState, type PollarLanguage, WalletId } from '@pollar/core';
+import { AUTH_ERROR_CODES, AuthState, authErrorMessage, type PollarLanguage, WalletId } from '@pollar/core';
 
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 import { useState } from 'react';
@@ -189,7 +189,11 @@ export function LoginModalTemplate({
     (authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_EXPIRED ||
       authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_INVALID);
   const awaitingEmailCode = authState.step === 'entering_code' || authState.step === 'verifying_email_code' || isEmailCodeError;
-  const statusMessage = authState.step === 'error' ? authState.message : copy.status[authState.step];
+  // The catalog's text in the modal's language when the backend named the reason.
+  const statusMessage =
+    authState.step === 'error'
+      ? (authErrorMessage(authState.code, language) ?? authState.message)
+      : copy.status[authState.step];
 
   const BackButton = ({ onClick }: { onClick: () => void }) => (
     <button type="button" className="pollar-back-btn" onClick={onClick} aria-label={copy.back}>

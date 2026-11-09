@@ -26,6 +26,23 @@ interface CatalogEntry {
 const appUnavailable = (language: PollarLanguage) => appUnavailableMessage({ code: 'SDK_CREDITS_INSUFFICIENT' }, language)!;
 
 const CATALOG: Record<string, CatalogEntry> = {
+  // -- Email sign-in refused by the app ---------------------------------------
+  EMAIL_DISPOSABLE_NOT_ALLOWED: {
+    message: {
+      en: "This app doesn't accept temporary email addresses. Use a permanent email or another sign-in method.",
+      es: 'Esta app no acepta correos temporales. Usa un correo permanente u otro método de inicio de sesión.',
+      pt: 'Este app não aceita e-mails temporários. Use um e-mail permanente ou outro método de login.',
+    },
+    errorCode: AUTH_ERROR_CODES.EMAIL_NOT_ALLOWED,
+  },
+  EMAIL_BLOCKED: {
+    message: {
+      en: "This email can't be used to sign in to this app. Use another email or another sign-in method.",
+      es: 'Este correo no puede usarse para iniciar sesión en esta app. Usa otro correo u otro método de inicio de sesión.',
+      pt: 'Este e-mail não pode ser usado para entrar neste app. Use outro e-mail ou outro método de login.',
+    },
+    errorCode: AUTH_ERROR_CODES.EMAIL_NOT_ALLOWED,
+  },
   // -- Smart-account deploy / sponsor wallet ----------------------------------
   SPONSOR_NOT_FUNDED: {
     message: {

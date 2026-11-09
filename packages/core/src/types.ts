@@ -901,6 +901,8 @@ export const AUTH_ERROR_CODES = {
    *  abandoned OAuth popup, or the session stuck in a non-terminal state). */
   LOGIN_TIMEOUT: 'LOGIN_TIMEOUT',
   EMAIL_SEND_FAILED: 'EMAIL_SEND_FAILED',
+  /** The app refuses this address: a throwaway-inbox service, or on Pollar's or the app's blocklist. */
+  EMAIL_NOT_ALLOWED: 'EMAIL_NOT_ALLOWED',
   EMAIL_VERIFY_FAILED: 'EMAIL_VERIFY_FAILED',
   EMAIL_CODE_EXPIRED: 'EMAIL_CODE_EXPIRED',
   EMAIL_CODE_INVALID: 'EMAIL_CODE_INVALID',
@@ -951,6 +953,8 @@ export type AuthState =
       previousStep: string;
       message: string;
       errorCode: AuthErrorCode;
+      /** The backend's own error code when it sent one (e.g. `EMAIL_DISPOSABLE_NOT_ALLOWED`). */
+      code?: string;
       clientSessionId?: string;
       email?: string;
     };

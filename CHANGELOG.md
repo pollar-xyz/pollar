@@ -393,6 +393,14 @@
   description. A verification the provider is reviewing, with nothing to open,
   is titled as in review. `rampQuoteFields(quote, language)` labels the Pix key
   a sale pays out to in that language.
+- **An email the app refuses says why.** When sdk-api refuses the address on
+  `sendEmailCode` (a throwaway-inbox service on an app that blocks them, or an
+  address or domain on the blocklist), the auth state ends in the new
+  `EMAIL_NOT_ALLOWED` bucket with the backend `code`
+  (`EMAIL_DISPOSABLE_NOT_ALLOWED`, `EMAIL_BLOCKED`) instead of the generic
+  `EMAIL_SEND_FAILED`, and the login modals show the reason in their language:
+  use a permanent email or another sign-in method. Every other failure stays
+  `EMAIL_SEND_FAILED`, now also with its `code`.
 - `@pollar/core`'s types are regenerated from sdk-api's v3 document.
 - `@pollar/react` and `@pollar/react-native` require `@pollar/core@^0.12.1`.
 

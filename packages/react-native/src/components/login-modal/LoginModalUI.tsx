@@ -1,7 +1,7 @@
 import { useInheritedLanguage } from '../../language-context';
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ActivityIndicator } from 'react-native';
-import { AUTH_ERROR_CODES, AuthState, type PollarLanguage } from '@pollar/core';
+import { AUTH_ERROR_CODES, AuthState, authErrorMessage, type PollarLanguage } from '@pollar/core';
 import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR_MARK_ON_DARK, LOGO_POLLAR_MARK_ON_LIGHT } from '../../constants';
 import { ModalStatusBanner, PollarModalFooter, PollarOverlay } from '../commons';
 import { LOGIN_COPY } from './login-copy';
@@ -105,7 +105,11 @@ export function LoginModalTemplate({
     (authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_EXPIRED ||
       authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_INVALID);
   const awaitingEmailCode = authState.step === 'entering_code' || authState.step === 'verifying_email_code' || isEmailCodeError;
-  const statusMessage = authState.step === 'error' ? authState.message : copy.status[authState.step];
+  // The catalog's text in the modal's language when the backend named the reason.
+  const statusMessage =
+    authState.step === 'error'
+      ? (authErrorMessage(authState.code, language) ?? authState.message)
+      : copy.status[authState.step];
 
   const BackButton = ({ onClick }: { onClick: () => void }) => (
     <TouchableOpacity style={[styles.iconButton, styles.backBtn, { borderColor: colors.border }]} onPress={onClick}>
