@@ -11,6 +11,7 @@ import {
   rampStepStatusText,
   rampStepTitle,
   rampNoRouteText,
+  rampRequirementCopy,
   rampOrderReceive,
   rampOrderResolutionText,
   rampOrderStopped,
@@ -244,6 +245,17 @@ test('no route: a verification the user cannot act on says it waits, never asks 
   );
   assert.equal(rampNoRouteText([kyc('none'), kyc('pending', 'DUPLICATE_DOCUMENT')]), verify);
   assert.equal(rampNoRouteText([{ failure } as never]), verify);
+});
+
+test('an amount beyond the tier cap prompts for the verification that raises it', () => {
+  const requirement = { type: 'KYC', status: 'expired', purpose: 'TIER_UPGRADE' } as const;
+  assert.deepEqual(rampRequirementCopy(requirement), {
+    message: 'Verify more to send this amount',
+    action: 'Verify again',
+  });
+  const failure = { code: 'KYC_TIER_LIMIT_EXCEEDED', resolutionAction: 'change_amount' };
+  assert.equal(rampNoRouteText([{ failure, requirement } as never]), 'Verify more to send this amount.');
+  assert.equal(rampNoRouteText([{ failure } as never]), 'This amount exceeds your verification limit. Try a smaller amount.');
 });
 
 const usdtPolygon = { kind: 'asset' as const, code: 'USDT', identifier: '0xc213', chain: 'POLYGON' as const };

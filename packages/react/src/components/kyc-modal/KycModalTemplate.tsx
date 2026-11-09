@@ -27,6 +27,7 @@ interface KycModalTemplateProps {
   /** The option whose session is opening: it shows a spinner and every option waits on it. */
   startingProviderId?: string | null;
   /** The option was named for the user (a ramp's step), so it opens without showing the list. */
+  tierUpgrade?: boolean;
   directOpen?: boolean;
   error?: string | null;
   onSelectProvider: (provider: KycProvider) => void;
@@ -51,6 +52,7 @@ export function KycModalTemplate({
   isLoading,
   startingProviderId = null,
   directOpen = false,
+  tierUpgrade = false,
   error,
   onSelectProvider,
   onDoneVerifying,
@@ -72,7 +74,9 @@ export function KycModalTemplate({
     >
       <div className="pollar-modal-header">
         <div className="pollar-kyc-header-text">
-          <h2 className="pollar-modal-title">Identity verification</h2>
+          <h2 className="pollar-modal-title">
+            {tierUpgrade && step !== 'done' ? 'Verify more to send this amount' : 'Identity verification'}
+          </h2>
           <p className="pollar-kyc-subtitle">
             {step === 'select_provider' && 'Choose your verification provider'}
             {step === 'verifying' && `Complete the steps below with ${selectedProvider?.name}`}

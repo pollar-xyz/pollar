@@ -31,6 +31,7 @@ export interface KycModalTemplateProps {
   /** The option whose session is opening: it shows a spinner and every option waits on it. */
   startingProviderId?: string | null | undefined;
   /** The option was named for the user (a ramp's step), so it opens without showing the list. */
+  tierUpgrade?: boolean;
   directOpen?: boolean | undefined;
   error?: string | null | undefined;
   onSelectProvider: (provider: KycProvider) => void;
@@ -54,6 +55,7 @@ export function KycModalTemplate({
   isLoading,
   startingProviderId = null,
   directOpen = false,
+  tierUpgrade = false,
   error,
   onSelectProvider,
   onOpenVerification,
@@ -98,7 +100,9 @@ export function KycModalTemplate({
   return (
     <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>Identity verification</Text>
+        <Text style={[styles.title, { color: colors.text }]}>
+          {tierUpgrade && step !== 'done' ? 'Verify more to send this amount' : 'Identity verification'}
+        </Text>
         <Text style={[styles.subtitle, { color: colors.muted }]}>{subtitle}</Text>
       </View>
 
@@ -225,6 +229,7 @@ export function KycModalTemplate({
 
 export interface KycModalProps {
   onClose: () => void;
+  tierUpgrade?: boolean;
   /** ISO 3166-1 alpha-2 country code to filter providers. Defaults to 'MX'. */
   country?: string | undefined;
   /** Legacy fallback for older backends. Named options select their own workflow. */
@@ -255,6 +260,7 @@ export function KycModal({
   corridorId,
   cardProviderId,
   providerId,
+  tierUpgrade = false,
   onApproved,
 }: KycModalProps) {
   const { getClient, styles: pollarStyles } = usePollar();
@@ -479,6 +485,7 @@ export function KycModal({
           isLoading={isLoading}
           startingProviderId={startingProviderId}
           directOpen={directOpen}
+          tierUpgrade={tierUpgrade}
           error={error}
           onSelectProvider={handleSelectProvider}
           onOpenVerification={handleOpenVerification}

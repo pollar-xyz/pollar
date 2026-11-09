@@ -319,10 +319,13 @@ export function rampOrderResolutionText(order: Pick<RampOrder, 'failure' | 'legs
  * the step. A step under review or refused has nothing the user can do from the
  * widget, so it offers no button.
  */
-export function rampRequirementCopy(requirement: Pick<RampQuoteRequirement, 'type' | 'status' | 'reviewReason'>): {
+export function rampRequirementCopy(requirement: Pick<RampQuoteRequirement, 'type' | 'status' | 'reviewReason' | 'purpose'>): {
   message: string;
   action: string | null;
 } {
+  if (requirement.purpose === 'TIER_UPGRADE') {
+    return { message: 'Verify more to send this amount', action: requirement.status === 'expired' ? 'Verify again' : 'Verify' };
+  }
   if (requirement.type === 'FORM') return { message: 'Answer a few questions to see this route', action: 'Continue' };
   if (requirement.type === 'PROVIDER_REGISTRATION')
     return { message: 'Register with the provider to see this route', action: 'Continue' };
@@ -383,6 +386,10 @@ export function rampNoRouteText(
   rejected: Array<Pick<RampQuoteRejection, 'failure'> & Partial<Pick<RampQuoteRejection, 'requirement'>>>,
 ): string {
   const requirements = rejected.map((r) => r.requirement);
+  if (requirements.some((req) => req?.purpose === 'TIER_UPGRADE')) return 'Verify more to send this amount.';
+  if (rejected.length && rejected.every((r) => r.failure.code === 'KYC_TIER_LIMIT_EXCEEDED')) {
+    return 'This amount exceeds your verification limit. Try a smaller amount.';
+  }
   if (requirements.length && requirements.every((req) => req && rampRequirementCopy(req).action === null)) {
     return requirements.every((req) => req!.status === 'rejected')
       ? 'Your identity verification was not approved, so no route is available.'
