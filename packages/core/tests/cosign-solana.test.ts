@@ -242,6 +242,41 @@ test('the transfers the platform builds are recognized', () => {
   assert.deepEqual(transferRequest([transferCheckedIx()], { decimals: undefined, symbol: undefined }), { ok: true });
 });
 
+// USDG is a Token-2022 mint: its accounts and its transfer live under that program.
+const TOKEN_2022 = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+const USDG = '2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH';
+const DEST_USDG = associatedTokenAddress(DEST, USDG, TOKEN_2022);
+const usdgCreateIx = (o: { ata?: string; program?: string } = {}): Ix => ({
+  program: ATA_PROGRAM,
+  accounts: [GAS, o.ata ?? DEST_USDG, DEST, USDG, SYSTEM, o.program ?? TOKEN_2022],
+  data: [1],
+});
+const usdgTransferIx = (o: { to?: string; extra?: string[] } = {}): Ix => ({
+  program: TOKEN_2022,
+  accounts: [associatedTokenAddress(USER, USDG, TOKEN_2022), USDG, o.to ?? DEST_USDG, USER, ...(o.extra ?? [])],
+  data: [12, ...le(1_500_000n, 8), 6],
+});
+const usdgRequest = (instructions: Ix[]) => transferRequest(instructions, { mint: USDG, symbol: 'USDG' });
+
+test('the associated token address under Token-2022 is the PDA that program derives', () => {
+  // Computed with @solana/spl-token's getAssociatedTokenAddressSync(USDG, DEST, true, TOKEN_2022_PROGRAM_ID).
+  assert.equal(DEST_USDG, '8p4hpAKDmCWoMEDN5mdQmr5i3E29brcEtN692KQNFuSV');
+});
+
+test('a Token-2022 transfer is recognized, transfer hook accounts and all', () => {
+  assert.deepEqual(usdgRequest([budgetIx, usdgCreateIx(), usdgTransferIx(), memoIx]), { ok: true });
+  assert.deepEqual(usdgRequest([usdgTransferIx({ extra: [key(40), key(41)] })]), { ok: true });
+});
+
+test('a Token-2022 transfer under the wrong program or to the wrong account is refused', () => {
+  // The recipient account derived under SPL Token while the transfer runs under Token-2022.
+  const splAccount = associatedTokenAddress(DEST, USDG);
+  assert.equal(usdgRequest([usdgTransferIx({ to: splAccount })]).ok, false);
+  // The account created under one program and the transfer run under the other.
+  assert.equal(usdgRequest([usdgCreateIx({ program: TOKEN }), usdgTransferIx()]).ok, false);
+  assert.equal(usdgRequest([usdgCreateIx({ ata: splAccount, program: TOKEN }), usdgTransferIx()]).ok, false);
+});
+
 test('a SOL transfer that differs from what the request states is refused', () => {
   const cases: Array<[string, Ix[]]> = [
     ['destination', [solIx({ to: OTHER })]],

@@ -16,6 +16,8 @@ export const TOKEN_MESSENGER_MINTER_V2 = 'CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJ
 const COMPUTE_BUDGET = 'ComputeBudget111111111111111111111111111111';
 const SYSTEM_PROGRAM = '11111111111111111111111111111111';
 const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+/** Token-2022: the program of USDG, PYUSD and other mints with extensions. */
+const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
 const ASSOCIATED_TOKEN_PROGRAM = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
 const MEMO_PROGRAMS = new Set(['MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr', 'Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo']);
 const WRAPPED_SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -88,8 +90,8 @@ export function base58Decode(address: string): Uint8Array {
  * program: the program-derived address of [owner, token program, mint], found
  * the way the runtime does (highest bump whose hash is off the ed25519 curve).
  */
-export function associatedTokenAddress(owner: string, mint: string): string {
-  const seeds = [base58Decode(owner), base58Decode(TOKEN_PROGRAM), base58Decode(mint)];
+export function associatedTokenAddress(owner: string, mint: string, tokenProgram: string = TOKEN_PROGRAM): string {
+  const seeds = [base58Decode(owner), base58Decode(tokenProgram), base58Decode(mint)];
   const program = base58Decode(ASSOCIATED_TOKEN_PROGRAM);
   const marker = new TextEncoder().encode('ProgramDerivedAddress');
   for (let bump = 255; bump >= 0; bump--) {
@@ -313,10 +315,14 @@ function checkSolanaTransfer(
     return { ok: false, reason: 'the request does not state the transfer it carries' };
   }
 
+  // The mint's program (SPL Token or Token-2022) is the one its transfer calls; the
+  // recipient's account is derived under it. A mismatch with the mint fails on-chain.
+  const tokenProgram =
+    tx.instructions.find((ix) => ix.program === TOKEN_PROGRAM || ix.program === TOKEN_2022_PROGRAM)?.program ?? TOKEN_PROGRAM;
   let destinationAccount = destination;
   if (mint !== null) {
     try {
-      destinationAccount = associatedTokenAddress(destination, mint);
+      destinationAccount = associatedTokenAddress(destination, mint, tokenProgram);
     } catch {
       return { ok: false, reason: 'the request does not state the transfer it carries' };
     }
@@ -333,7 +339,7 @@ function checkSolanaTransfer(
         ix.accounts[1] === destinationAccount &&
         ix.accounts[2] === destination &&
         ix.accounts[3] === mint &&
-        ix.accounts[5] === TOKEN_PROGRAM;
+        ix.accounts[5] === tokenProgram;
       if (!createsRecipient) return { ok: false, reason: "an account creation that is not the recipient's token account" };
       continue;
     }
@@ -348,8 +354,9 @@ function checkSolanaTransfer(
       transfers++;
       continue;
     }
-    if (ix.program === TOKEN_PROGRAM && mint !== null) {
-      // [source, mint, destination, authority]; data: discriminator, u64 amount, u8 decimals.
+    if (ix.program === tokenProgram && mint !== null) {
+      // [source, mint, destination, authority, ...a transfer hook's extra accounts];
+      // data: discriminator, u64 amount, u8 decimals.
       if (ix.data.length !== 10 || ix.data[0] !== TOKEN_TRANSFER_CHECKED) {
         return { ok: false, reason: 'a token instruction that is not a transferChecked' };
       }
