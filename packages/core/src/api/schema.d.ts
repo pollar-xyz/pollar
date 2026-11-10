@@ -14426,6 +14426,22 @@ export interface operations {
                                     resolutionAction: string;
                                     detail?: string;
                                 };
+                                tierLimit?: {
+                                    version: number;
+                                    tier: string;
+                                    amount: string;
+                                    currency: string;
+                                    /** @enum {string|null} */
+                                    window: "operation" | "day" | "month" | null;
+                                    cap?: string;
+                                    upgrade?: {
+                                        optionId: string;
+                                        optionName: string;
+                                        tier: string;
+                                        /** @enum {string} */
+                                        status: "expired" | "none";
+                                    };
+                                };
                                 requirement?: {
                                     corridorId: string;
                                     position: number;
@@ -14437,6 +14453,8 @@ export interface operations {
                                     /** @enum {string} */
                                     status: "none" | "pending" | "rejected" | "expired";
                                     reviewReason?: string;
+                                    /** @constant */
+                                    purpose?: "TIER_UPGRADE";
                                 };
                             }[];
                         };
@@ -14473,7 +14491,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description Unprocessable */
+            /** @description A route could not proceed. Amount-limit rejections include the current limit and any available verification upgrade. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -14484,7 +14502,7 @@ export interface operations {
                         success: false;
                         code: string;
                         message?: string;
-                        resultCode?: string;
+                        rejected?: operations["postRampsQuotes"]["responses"][200]["content"]["application/json"]["content"]["rejected"];
                     };
                 };
             };
@@ -14971,21 +14989,8 @@ export interface operations {
                     };
                 };
             };
-            /** @description Unprocessable */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
+            /** @description A route could not proceed. Amount-limit rejections include the current limit and any available verification upgrade. */
+            422: operations["postRampsQuotes"]["responses"][422];
         };
     };
     getRampsOrdersById: {
@@ -15681,6 +15686,8 @@ export interface operations {
                     };
                 };
             };
+            /** @description A route could not proceed. Amount-limit rejections include the current limit and any available verification upgrade. */
+            422: operations["postRampsQuotes"]["responses"][422];
         };
     };
     postRampsOrdersByIdRetry: {

@@ -23,6 +23,7 @@ interface KycModalProps {
   /** Open this option directly instead of listing the choices (the one a ramp's KYC gate names). */
   providerId?: string;
   onClose: () => void;
+  tierUpgrade?: boolean;
   /** ISO 3166-1 alpha-2 country code to filter providers. Defaults to 'MX'. */
   country?: string;
   /** Legacy fallback for older backends. Named options select their own workflow. */
@@ -45,6 +46,7 @@ export function KycModal({
   corridorId,
   cardProviderId,
   providerId,
+  tierUpgrade = false,
 }: KycModalProps) {
   const { getClient, styles } = usePollar();
 
@@ -222,6 +224,7 @@ export function KycModal({
         isLoading={isLoading}
         startingProviderId={startingProviderId}
         directOpen={directOpen}
+        tierUpgrade={tierUpgrade}
         error={error}
         onSelectProvider={handleSelectProvider}
         onDoneVerifying={handleDoneVerifying}

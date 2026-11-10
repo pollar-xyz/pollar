@@ -462,6 +462,12 @@ export function RampWidget({ onClose }: RampWidgetProps) {
       setOrder(created);
       setStep('status');
     } catch (error) {
+      if (isPollarApiError(error) && error.code === 'SDK_RAMPS_TIER_LIMIT_EXCEEDED') {
+        setQuotes([]);
+        setRejected(Array.isArray(error.body.rejected) ? (error.body.rejected as RampQuoteRejection[]) : []);
+        setStep('select_route');
+        return;
+      }
       // The route's wallet on another chain waits on the user's approval: bring that request up.
       // Not a failure while the request is there: the route starts again once it is approved.
       if (isPollarApiError(error) && error.code === 'SDK_RAMPS_WALLET_NOT_READY') {
@@ -632,7 +638,8 @@ export function RampWidget({ onClose }: RampWidgetProps) {
     return (
       <KycModal
         country={country}
-        corridorId={verifying.corridorId}
+        tierUpgrade={verifying.purpose === 'TIER_UPGRADE'}
+        {...(verifying.purpose === 'TIER_UPGRADE' ? {} : { corridorId: verifying.corridorId })}
         providerId={verifying.optionId}
         onClose={closeVerification}
         onApproved={done}
