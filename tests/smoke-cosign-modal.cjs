@@ -316,8 +316,23 @@ async function mount(element) {
     check('it does not claim the request is verified', () => assert.doesNotMatch(view.container.textContent, /Checked/));
     const approve = buttons().find((b) => b.textContent.trim() === 'Approve');
     check('Approve is disabled', () => assert.ok(approve && approve.disabled, 'Approve missing or enabled'));
-    const reject = buttons().find((b) => b.textContent.trim() === 'Reject');
-    check('Reject stays available', () => assert.ok(reject && !reject.disabled, 'Reject missing or disabled'));
+    const toggle = buttons().find((b) => b.textContent.trim() === 'Show details');
+    await React.act(async () => toggle?.click());
+    const reject = buttons().find((b) => b.textContent.trim() === 'Reject this request');
+    check('Reject stays available in the details', () => assert.ok(reject && !reject.disabled, 'Reject missing or disabled'));
+    await React.act(async () => view.container.querySelector('.pollar-overlay')?.click());
+    check('a click outside does not close it', () => assert.equal(closed, 0));
+    await React.act(async () => view.container.querySelector('button[aria-label="Close"]')?.click());
+    check('the X asks before leaving the request unsigned', () => {
+      assert.match(view.container.textContent, /Close without signing\?/);
+      assert.equal(closed, 0);
+    });
+    await React.act(async () =>
+      buttons()
+        .find((b) => b.textContent.trim() === 'Go back and sign')
+        ?.click(),
+    );
+    check('going back shows the request again', () => assert.match(view.container.textContent, /isn't linked to your wallet/));
     const link = buttons().find((b) => b.textContent.trim() === 'Link this device');
     await React.act(async () => link?.click());
     check('Link this device opens recovery and closes the prompt', () => {

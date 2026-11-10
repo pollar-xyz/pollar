@@ -3,8 +3,18 @@ import type { PollarLanguage } from '@pollar/core';
 export const COSIGN_COPY: Record<
   PollarLanguage,
   {
+    /** The header when no single request names the action. */
     title: string;
+    manyPending: (count: number) => string;
     close: string;
+    whyTitle: string;
+    whyBody: string;
+    rejectRequest: string;
+    closeTitle: string;
+    closeBody: string;
+    backToSign: string;
+    closeAnyway: string;
+    activateWallet: string;
     status: Record<string, string>;
     sentTransaction: string;
     copy: string;
@@ -34,8 +44,17 @@ export const COSIGN_COPY: Record<
   }
 > = {
   en: {
-    title: 'Confirm with your device',
+    title: 'Approvals',
+    manyPending: (count) => `${count} approvals waiting`,
     close: 'Close',
+    whyTitle: 'Why am I seeing this?',
+    whyBody: "Your wallet needs this device's signature. Neither the app nor Pollar can approve this without you.",
+    rejectRequest: 'Reject this request',
+    closeTitle: 'Close without signing?',
+    closeBody: "The request stays pending. The app can't continue until you approve it.",
+    backToSign: 'Go back and sign',
+    closeAnyway: 'Close anyway',
+    activateWallet: 'Activate wallet',
     status: { APPROVED: 'Approved', REJECTED: 'Rejected', EXPIRED: 'Expired', FAILED: 'Failed', PENDING: 'Pending' },
     sentTransaction: 'Sent. Transaction',
     copy: 'Copy',
@@ -82,8 +101,17 @@ export const COSIGN_COPY: Record<
     },
   },
   es: {
-    title: 'Confirma con tu dispositivo',
+    title: 'Aprobaciones',
+    manyPending: (count) => `${count} aprobaciones pendientes`,
     close: 'Cerrar',
+    whyTitle: '¿Por qué ves esto?',
+    whyBody: 'Tu billetera necesita la firma de este dispositivo. Ni la app ni Pollar pueden aprobar esto sin ti.',
+    rejectRequest: 'Rechazar esta solicitud',
+    closeTitle: '¿Cerrar sin firmar?',
+    closeBody: 'La solicitud queda pendiente. La app no puede seguir hasta que la apruebes.',
+    backToSign: 'Volver y firmar',
+    closeAnyway: 'Cerrar igual',
+    activateWallet: 'Activar billetera',
     status: { APPROVED: 'Aprobada', REJECTED: 'Rechazada', EXPIRED: 'Vencida', FAILED: 'Fallida', PENDING: 'Pendiente' },
     sentTransaction: 'Enviada. Transacción',
     copy: 'Copiar',
@@ -130,8 +158,17 @@ export const COSIGN_COPY: Record<
     },
   },
   pt: {
-    title: 'Confirme no seu dispositivo',
+    title: 'Aprovações',
+    manyPending: (count) => `${count} aprovações pendentes`,
     close: 'Fechar',
+    whyTitle: 'Por que estou vendo isto?',
+    whyBody: 'Sua carteira precisa da assinatura deste dispositivo. Nem o app nem a Pollar podem aprovar isto sem você.',
+    rejectRequest: 'Rejeitar esta solicitação',
+    closeTitle: 'Fechar sem assinar?',
+    closeBody: 'A solicitação fica pendente. O app não pode continuar até você aprová-la.',
+    backToSign: 'Voltar e assinar',
+    closeAnyway: 'Fechar mesmo assim',
+    activateWallet: 'Ativar carteira',
     status: { APPROVED: 'Aprovada', REJECTED: 'Rejeitada', EXPIRED: 'Expirada', FAILED: 'Falhou', PENDING: 'Pendente' },
     sentTransaction: 'Enviada. Transação',
     copy: 'Copiar',

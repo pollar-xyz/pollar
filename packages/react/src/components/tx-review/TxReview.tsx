@@ -14,6 +14,10 @@ export interface TxReviewProps {
   /** Whether the details are unfolded; the review keeps its own state when not given. */
   open?: boolean;
   onToggle?: () => void;
+  /** Opens the details: why the prompt shows up at all. */
+  detailsIntro?: { title: string; body: string } | undefined;
+  /** A secondary action kept out of the way, at the end of the details (declining the request). */
+  detailsAction?: { label: string; onClick: () => void; disabled?: boolean } | undefined;
   language?: PollarLanguage | undefined;
 }
 
@@ -168,7 +172,7 @@ function Arrow() {
   );
 }
 
-function FeeBadge({ sponsored, copy }: { sponsored: boolean; copy: TxReviewCopy }) {
+function FeeBadge({ sponsored, free = false, copy }: { sponsored: boolean; free?: boolean; copy: TxReviewCopy }) {
   return (
     <span className={`pollar-txr-fee${sponsored ? ' pollar-txr-fee-sponsored' : ''}`}>
       {sponsored ? (
@@ -187,7 +191,7 @@ function FeeBadge({ sponsored, copy }: { sponsored: boolean; copy: TxReviewCopy 
           <path d="M8.5 1.5 3.5 9H8l-.5 5.5 5-7.5H8l.5-5.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
         </svg>
       )}
-      {sponsored ? copy.feeSponsored : copy.feePaid}
+      {free ? copy.feeFree : sponsored ? copy.feeSponsored : copy.feePaid}
     </span>
   );
 }
@@ -209,7 +213,14 @@ export function TxFeeBadge({
  * flow, with the network fee as one badge. Addresses, chains, fees and the
  * raw transaction live behind "Show details".
  */
-export function TxReview({ data, open: openProp, onToggle, language: languageProp }: TxReviewProps) {
+export function TxReview({
+  data,
+  open: openProp,
+  onToggle,
+  detailsIntro,
+  detailsAction,
+  language: languageProp,
+}: TxReviewProps) {
   const language = useInheritedLanguage(languageProp);
   const copy = TX_REVIEW_COPY[language];
   const [openState, setOpenState] = useState(false);
@@ -247,7 +258,11 @@ export function TxReview({ data, open: openProp, onToggle, language: languagePro
       )}
 
       <div className="pollar-txr-bar">
-        {data.fee?.sponsored !== undefined ? <FeeBadge sponsored={data.fee.sponsored} copy={copy} /> : <span />}
+        {data.fee?.sponsored !== undefined ? (
+          <FeeBadge sponsored={data.fee.sponsored} free={data.fee.free === true} copy={copy} />
+        ) : (
+          <span />
+        )}
         <button type="button" className="pollar-txr-toggle" aria-expanded={open} onClick={toggle}>
           {open ? copy.hideDetails : copy.showDetails}
           <svg
@@ -265,6 +280,12 @@ export function TxReview({ data, open: openProp, onToggle, language: languagePro
 
       {open && (
         <div className="pollar-txr-details">
+          {detailsIntro && (
+            <div className="pollar-txr-why">
+              <p className="pollar-txr-why-title">{detailsIntro.title}</p>
+              <p className="pollar-txr-why-body">{detailsIntro.body}</p>
+            </div>
+          )}
           <dl className="pollar-txr-rows">
             {data.rows.map((row, i) => (
               <div key={`${row.label}-${i}`} className="pollar-txr-row">
@@ -298,6 +319,16 @@ export function TxReview({ data, open: openProp, onToggle, language: languagePro
               </div>
               <pre>{data.raw}</pre>
             </div>
+          )}
+          {detailsAction && (
+            <button
+              type="button"
+              className="pollar-txr-action"
+              disabled={detailsAction.disabled}
+              onClick={detailsAction.onClick}
+            >
+              {detailsAction.label}
+            </button>
           )}
         </div>
       )}

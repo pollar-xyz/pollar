@@ -58,11 +58,23 @@ export const PollarModalFooter = ({ language: languageProp }: { language?: Polla
   );
 };
 
-export function PollarOverlay({ children, onCancel }: { children: ReactNode; onCancel: () => void }) {
+/**
+ * `onCancel` runs on Android's back button, and on a tap on the backdrop
+ * unless `dismissOnBackdrop` is false (a signing prompt only closes from its X).
+ */
+export function PollarOverlay({
+  children,
+  onCancel,
+  dismissOnBackdrop = true,
+}: {
+  children: ReactNode;
+  onCancel: () => void;
+  dismissOnBackdrop?: boolean;
+}) {
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onCancel}>
       <View style={StyleSheet.absoluteFill}>
-        <TouchableWithoutFeedback onPress={onCancel}>
+        <TouchableWithoutFeedback onPress={dismissOnBackdrop ? onCancel : undefined}>
           <View
             style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
           >

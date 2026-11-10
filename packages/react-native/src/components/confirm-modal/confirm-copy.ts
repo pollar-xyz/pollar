@@ -3,21 +3,31 @@ import type { PollarLanguage } from '@pollar/core';
 export const CONFIRM_COPY: Record<
   PollarLanguage,
   {
-    title: string;
-    intro: string;
-    cancel: string;
+    whyTitle: string;
+    whyBody: string;
+    cancelAction: string;
     confirm: string;
+    activateWallet: string;
     close: string;
+    closeTitle: string;
+    closeBody: string;
+    backToSign: string;
+    closeAndCancel: string;
     transaction: string;
     operations: Record<string, string>;
   }
 > = {
   en: {
-    title: 'Confirm transaction',
-    intro: 'The app asks you to sign this transaction with your wallet.',
-    cancel: 'Cancel',
+    whyTitle: 'Why am I seeing this?',
+    whyBody: 'The app asks you to sign this with your wallet. Nothing is signed until you confirm.',
+    cancelAction: 'Cancel this action',
     confirm: 'Confirm',
+    activateWallet: 'Activate wallet',
     close: 'Close',
+    closeTitle: 'Close without signing?',
+    closeBody: "If you close, the app's action is canceled.",
+    backToSign: 'Go back and sign',
+    closeAndCancel: 'Close and cancel',
     transaction: 'Transaction',
     operations: {
       payment: 'Send',
@@ -32,11 +42,16 @@ export const CONFIRM_COPY: Record<
     },
   },
   es: {
-    title: 'Confirmar transacción',
-    intro: 'La app te pide firmar esta transacción con tu billetera.',
-    cancel: 'Cancelar',
+    whyTitle: '¿Por qué ves esto?',
+    whyBody: 'La app te pide firmar esto con tu billetera. No se firma nada hasta que confirmes.',
+    cancelAction: 'Cancelar esta acción',
     confirm: 'Confirmar',
+    activateWallet: 'Activar billetera',
     close: 'Cerrar',
+    closeTitle: '¿Cerrar sin firmar?',
+    closeBody: 'Si cierras, la acción de la app se cancela.',
+    backToSign: 'Volver y firmar',
+    closeAndCancel: 'Cerrar y cancelar',
     transaction: 'Transacción',
     operations: {
       payment: 'Enviar',
@@ -51,11 +66,16 @@ export const CONFIRM_COPY: Record<
     },
   },
   pt: {
-    title: 'Confirmar transação',
-    intro: 'O app pede que você assine esta transação com sua carteira.',
-    cancel: 'Cancelar',
+    whyTitle: 'Por que estou vendo isto?',
+    whyBody: 'O app pede que você assine isto com sua carteira. Nada é assinado até você confirmar.',
+    cancelAction: 'Cancelar esta ação',
     confirm: 'Confirmar',
+    activateWallet: 'Ativar carteira',
     close: 'Fechar',
+    closeTitle: 'Fechar sem assinar?',
+    closeBody: 'Se você fechar, a ação do app é cancelada.',
+    backToSign: 'Voltar e assinar',
+    closeAndCancel: 'Fechar e cancelar',
     transaction: 'Transação',
     operations: {
       payment: 'Enviar',

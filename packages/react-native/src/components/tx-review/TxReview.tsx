@@ -17,6 +17,10 @@ export interface TxReviewProps {
   onToggle?: () => void;
   /** Puts a value on the clipboard; the details show no copy buttons without it. */
   copyText?: ((text: string) => Promise<void>) | undefined;
+  /** Opens the details: why the prompt shows up at all. */
+  detailsIntro?: { title: string; body: string } | undefined;
+  /** A secondary action kept out of the way, at the end of the details (declining the request). */
+  detailsAction?: { label: string; onPress: () => void; disabled?: boolean } | undefined;
   language?: PollarLanguage | undefined;
 }
 
@@ -31,6 +35,7 @@ function reviewColors(theme: string, accentColor: string) {
     muted: isDark ? '#9ca3af' : '#6b7280',
     inputBg: isDark ? '#374151' : '#f9fafb',
     okText: isDark ? '#4ade80' : '#15803d',
+    errorText: isDark ? '#f87171' : '#b91c1c',
     accent: accentColor,
   };
 }
@@ -253,7 +258,17 @@ function Arrow({ colors }: { colors: Colors }) {
   );
 }
 
-function FeeBadge({ sponsored, copy, colors }: { sponsored: boolean; copy: TxReviewCopy; colors: Colors }) {
+function FeeBadge({
+  sponsored,
+  free = false,
+  copy,
+  colors,
+}: {
+  sponsored: boolean;
+  free?: boolean;
+  copy: TxReviewCopy;
+  colors: Colors;
+}) {
   const color = sponsored ? colors.okText : colors.muted;
   return (
     <View style={styles.fee}>
@@ -273,7 +288,7 @@ function FeeBadge({ sponsored, copy, colors }: { sponsored: boolean; copy: TxRev
           <Path d="M8.5 1.5 3.5 9H8l-.5 5.5 5-7.5H8l.5-5.5Z" stroke={color} strokeWidth={1.4} strokeLinejoin="round" />
         )}
       </Svg>
-      <Text style={[styles.feeText, { color }]}>{sponsored ? copy.feeSponsored : copy.feePaid}</Text>
+      <Text style={[styles.feeText, { color }]}>{free ? copy.feeFree : sponsored ? copy.feeSponsored : copy.feePaid}</Text>
     </View>
   );
 }
@@ -306,6 +321,8 @@ export function TxReview({
   open: openProp,
   onToggle,
   copyText,
+  detailsIntro,
+  detailsAction,
   language: languageProp,
 }: TxReviewProps) {
   const language = useInheritedLanguage(languageProp);
@@ -339,7 +356,11 @@ export function TxReview({
       {kind === 'sign_in' && <SignIn copy={copy} colors={colors} />}
 
       <View style={styles.bar}>
-        {data.fee?.sponsored !== undefined ? <FeeBadge sponsored={data.fee.sponsored} copy={copy} colors={colors} /> : <View />}
+        {data.fee?.sponsored !== undefined ? (
+          <FeeBadge sponsored={data.fee.sponsored} free={data.fee.free === true} copy={copy} colors={colors} />
+        ) : (
+          <View />
+        )}
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ expanded: open }}
@@ -362,6 +383,12 @@ export function TxReview({
 
       {open && (
         <View style={[styles.details, { borderTopColor: colors.border }]}>
+          {detailsIntro ? (
+            <View style={styles.why}>
+              <Text style={[styles.whyTitle, { color: colors.text }]}>{detailsIntro.title}</Text>
+              <Text style={[styles.whyBody, { color: colors.muted }]}>{detailsIntro.body}</Text>
+            </View>
+          ) : null}
           {data.rows.map((row, i) => (
             <View key={`${row.label}-${i}`} style={styles.row}>
               <Text style={[styles.rowLabel, { color: colors.muted }]}>{row.label}</Text>
@@ -407,6 +434,17 @@ export function TxReview({
               </ScrollView>
             </View>
           ) : null}
+          {detailsAction ? (
+            <Pressable
+              accessibilityRole="button"
+              hitSlop={8}
+              disabled={detailsAction.disabled}
+              onPress={detailsAction.onPress}
+              style={[styles.action, detailsAction.disabled && { opacity: 0.55 }]}
+            >
+              <Text style={[styles.toggleText, { color: colors.errorText }]}>{detailsAction.label}</Text>
+            </Pressable>
+          ) : null}
         </View>
       )}
     </View>
@@ -449,6 +487,10 @@ const styles = StyleSheet.create({
   toggle: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   toggleText: { fontSize: 13, fontWeight: '500' },
   details: { gap: 10, paddingTop: 10, borderTopWidth: 1 },
+  why: { gap: 3 },
+  whyTitle: { fontSize: 13, fontWeight: '600' },
+  whyBody: { fontSize: 13, lineHeight: 18 },
+  action: { alignSelf: 'flex-start' },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   rowLabel: { fontSize: 13, minWidth: 88 },
   rowValue: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'flex-start', gap: 6 },

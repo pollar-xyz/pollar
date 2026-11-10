@@ -38,6 +38,12 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
 
   const current = pending.find((r) => r.id === selectedId) ?? pending[0] ?? null;
 
+  // A request left unsigned holds up the app's flow, so closing over one asks first: the X and
+  // Android's back button get there, a tap on the backdrop does nothing. With nothing waiting, they just close.
+  const [askedToClose, setAskedToClose] = useState(false);
+  const confirmingClose = askedToClose && pending.length > 0;
+  const requestClose = () => (pending.length > 0 ? setAskedToClose(true) : onClose());
+
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     void getClient()
@@ -165,7 +171,7 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
   );
 
   return (
-    <PollarOverlay onCancel={onClose}>
+    <PollarOverlay onCancel={requestClose} dismissOnBackdrop={false}>
       <CosignModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -190,7 +196,10 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         onSelect={(r) => setSelectedId(r.id)}
         onApprove={(r) => void run('approving', r)}
         onReject={(r) => void run('rejecting', r)}
-        onClose={onClose}
+        onClose={requestClose}
+        confirmingClose={confirmingClose}
+        onKeepOpen={() => setAskedToClose(false)}
+        onCloseAnyway={onClose}
       />
     </PollarOverlay>
   );

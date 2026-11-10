@@ -12,6 +12,8 @@ export const TX_REVIEW_COPY: Record<
       swap: (from: string, to: string) => string;
       payment: (amount: string, to: string) => string;
       createAccount: string;
+      activateWallet: string;
+      addAsset: (asset: string) => string;
       signIn: string;
     };
     /** A provider's sign-in: it proves the account is the user's, and moves nothing. */
@@ -40,6 +42,9 @@ export const TX_REVIEW_COPY: Record<
     approveNote: string;
     feeSponsored: string;
     feePaid: string;
+    /** The app covers everything the action costs, the account's reserve included. */
+    feeFree: string;
+    leads: { activateWallet: string; addAsset: string };
     showDetails: string;
     hideDetails: string;
     chains: Record<'STELLAR' | 'POLYGON' | 'SOLANA', string>;
@@ -76,6 +81,8 @@ export const TX_REVIEW_COPY: Record<
       swap: (from, to) => `Swap ${from} for ${to}`,
       payment: (amount, to) => `Pay ${amount} to ${to}`,
       createAccount: 'Create an account',
+      activateWallet: 'Activate your wallet',
+      addAsset: (asset) => `Add ${asset} to your wallet`,
       signIn: "Confirm it's you",
     },
     signIn: {
@@ -102,6 +109,8 @@ export const TX_REVIEW_COPY: Record<
     approveNote: 'This only gives permission. Nothing moves yet.',
     feeSponsored: 'The app pays the network fee',
     feePaid: 'You pay the network fee',
+    feeFree: 'Free, the app covers it',
+    leads: { activateWallet: 'One step, done only once.', addAsset: 'So your wallet can receive it.' },
     showDetails: 'Show details',
     hideDetails: 'Hide details',
     chains: { STELLAR: 'Stellar', POLYGON: 'Polygon', SOLANA: 'Solana' },
@@ -137,6 +146,8 @@ export const TX_REVIEW_COPY: Record<
       swap: (from, to) => `Cambiar ${from} por ${to}`,
       payment: (amount, to) => `Pagar ${amount} a ${to}`,
       createAccount: 'Crear una cuenta',
+      activateWallet: 'Activa tu billetera',
+      addAsset: (asset) => `Agrega ${asset} a tu billetera`,
       signIn: 'Confirma que eres tú',
     },
     signIn: {
@@ -163,6 +174,8 @@ export const TX_REVIEW_COPY: Record<
     approveNote: 'Solo das permiso. Todavía no se mueve nada.',
     feeSponsored: 'La app paga la comisión de red',
     feePaid: 'Tú pagas la comisión de red',
+    feeFree: 'Gratis, la app lo cubre',
+    leads: { activateWallet: 'Un solo paso. Solo se hace una vez.', addAsset: 'Para que tu billetera pueda recibirlo.' },
     showDetails: 'Ver detalles',
     hideDetails: 'Ocultar detalles',
     chains: { STELLAR: 'Stellar', POLYGON: 'Polygon', SOLANA: 'Solana' },
@@ -198,6 +211,8 @@ export const TX_REVIEW_COPY: Record<
       swap: (from, to) => `Trocar ${from} por ${to}`,
       payment: (amount, to) => `Pagar ${amount} para ${to}`,
       createAccount: 'Criar uma conta',
+      activateWallet: 'Ative sua carteira',
+      addAsset: (asset) => `Adicione ${asset} à sua carteira`,
       signIn: 'Confirme que é você',
     },
     signIn: {
@@ -224,6 +239,8 @@ export const TX_REVIEW_COPY: Record<
     approveNote: 'Isto só dá permissão. Nada se move ainda.',
     feeSponsored: 'O app paga a taxa de rede',
     feePaid: 'Você paga a taxa de rede',
+    feeFree: 'Grátis, o app cobre',
+    leads: { activateWallet: 'Um passo só, feito uma única vez.', addAsset: 'Para que sua carteira possa recebê-lo.' },
     showDetails: 'Ver detalhes',
     hideDetails: 'Ocultar detalhes',
     chains: { STELLAR: 'Stellar', POLYGON: 'Polygon', SOLANA: 'Solana' },

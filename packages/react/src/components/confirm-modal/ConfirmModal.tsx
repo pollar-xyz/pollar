@@ -1,7 +1,7 @@
 'use client';
 
 import type { PendingConfirmation } from '@pollar/core';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { useModalLanguage } from '../../language';
 import { CONFIRM_COPY } from './confirm-copy';
@@ -14,6 +14,7 @@ import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
 import { reviewFromBuild, reviewFromRequest } from '../tx-review/tx-review-model';
 import '../shared.css';
 import '../cosign-modal/CosignModal.css';
+import { ChainMark } from '../cosign-modal/CosignModalTemplate';
 import { PollarOverlay } from '../PollarOverlay';
 
 interface ConfirmModalProps {
@@ -36,8 +37,9 @@ function CloseIcon() {
 /**
  * The prompt a signing call waits on under `confirmation: 'prompt'`, the same
  * for every custody: the wallet signs only after the user confirms here.
- * Closing it declines. The provider shows it while the client has a
- * confirmation pending, so it needs no open state of its own.
+ * Closing it declines, so the X asks first and a click outside does nothing.
+ * The provider shows it while the client has a confirmation pending, so it
+ * needs no open state of its own.
  */
 export function ConfirmModal({ confirmation }: ConfirmModalProps) {
   const { getClient, styles, network } = usePollar();
@@ -71,8 +73,10 @@ export function ConfirmModal({ confirmation }: ConfirmModalProps) {
     });
   }, [getClient]);
 
+  const [confirmingClose, setConfirmingClose] = useState(false);
+
   return (
-    <PollarOverlay style={overlayStyle} onClick={confirmation.reject}>
+    <PollarOverlay style={overlayStyle}>
       <div
         className="pollar-modal-card pollar-cosign-modal"
         data-theme={theme}
@@ -80,34 +84,53 @@ export function ConfirmModal({ confirmation }: ConfirmModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="pollar-modal-header">
-          <h2 className="pollar-modal-title">{copy.title}</h2>
-          <div className="pollar-modal-header-actions">
+          <h2 className="pollar-modal-title pollar-cosign-heading">
+            {!confirmingClose && <ChainMark chain={confirmation.network} />}
+            <span>{confirmingClose ? copy.closeTitle : review.title}</span>
+          </h2>
+          {!confirmingClose && (
+            <div className="pollar-modal-header-actions">
+              <button
+                type="button"
+                className="pollar-modal-close"
+                onClick={() => setConfirmingClose(true)}
+                aria-label={copy.close}
+                title={copy.close}
+              >
+                <CloseIcon />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {confirmingClose ? (
+          <div className="pollar-cosign-leave">
+            <p className="pollar-cosign-muted">{copy.closeBody}</p>
             <button
               type="button"
-              className="pollar-modal-close"
-              onClick={confirmation.reject}
-              aria-label={copy.close}
-              title={copy.close}
+              className="pollar-cosign-btn pollar-cosign-btn-primary"
+              onClick={() => setConfirmingClose(false)}
             >
-              <CloseIcon />
+              {copy.backToSign}
+            </button>
+            <button type="button" className="pollar-cosign-text-btn" onClick={confirmation.reject}>
+              {copy.closeAndCancel}
             </button>
           </div>
-        </div>
-
-        <div className="pollar-cosign-detail">
-          <p className="pollar-cosign-detail-title">{review.title}</p>
-          <p className="pollar-cosign-muted">{copy.intro}</p>
-          <TxReview data={review} language={language} />
-
-          <div className="pollar-cosign-actions">
-            <button type="button" className="pollar-cosign-btn pollar-cosign-btn-secondary" onClick={confirmation.reject}>
-              {copy.cancel}
-            </button>
+        ) : (
+          <div className="pollar-cosign-detail">
+            {review.lead && <p className="pollar-cosign-muted pollar-cosign-lead">{review.lead}</p>}
+            <TxReview
+              data={review}
+              language={language}
+              detailsIntro={{ title: copy.whyTitle, body: copy.whyBody }}
+              detailsAction={{ label: copy.cancelAction, onClick: confirmation.reject }}
+            />
             <button type="button" className="pollar-cosign-btn pollar-cosign-btn-primary" onClick={confirmation.confirm}>
-              {copy.confirm}
+              {review.kind === 'activate_wallet' ? copy.activateWallet : copy.confirm}
             </button>
           </div>
-        </div>
+        )}
 
         <PollarModalFooter />
       </div>

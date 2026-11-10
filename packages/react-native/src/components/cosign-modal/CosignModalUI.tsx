@@ -1,7 +1,8 @@
 import { useInheritedLanguage } from '../../language-context';
 import { type CosignRequest, type CosignVerification, type PollarLanguage, type StellarNetwork } from '@pollar/core';
 import React, { useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { CHAIN_LOGOS } from '../../constants';
 import { PollarModalFooter } from '../commons';
 import { TxFeeBadge, TxReview } from '../tx-review/TxReview';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
@@ -39,7 +40,25 @@ export interface CosignModalTemplateProps {
   onSelect: (request: CosignRequest) => void;
   onApprove: (request: CosignRequest) => void;
   onReject: (request: CosignRequest) => void;
+  /** The user asked to close (the X): the container closes or asks first. */
   onClose: () => void;
+  /** Closing was asked while a request waits: the modal asks before leaving it unsigned. */
+  confirmingClose?: boolean;
+  onKeepOpen?: () => void;
+  onCloseAnyway?: () => void;
+}
+
+/** The chain's logo next to the title, so the user sees where the action happens. */
+export function ChainMark({ chain, size = 22 }: { chain: string | undefined; size?: number }) {
+  const uri = chain ? CHAIN_LOGOS[chain as keyof typeof CHAIN_LOGOS] : undefined;
+  return uri ? (
+    <Image
+      source={{ uri }}
+      style={{ width: size, height: size, borderRadius: size / 2 }}
+      accessibilityElementsHidden
+      importantForAccessibility="no"
+    />
+  ) : null;
 }
 
 function labelOf(request: CosignRequest, copy: CosignCopy): string {
@@ -81,6 +100,9 @@ export function CosignModalTemplate({
   onApprove,
   onReject,
   onClose,
+  confirmingClose = false,
+  onKeepOpen,
+  onCloseAnyway,
 }: CosignModalTemplateProps) {
   const language = useInheritedLanguage(languageProp);
   const copy = COSIGN_COPY[language];
@@ -116,153 +138,199 @@ export function CosignModalTemplate({
       TX_REVIEW_COPY[language],
     );
   const review = current ? reviewOf(current) : null;
+  const grouped = pending.length > 1;
+  // One request: the header is the action itself. Several: how many wait, and each names itself below.
+  const shown = grouped ? null : (current ?? (pending.length === 0 ? lastResolved : undefined) ?? null);
+  const shownReview = shown ? (shown === current ? review : reviewOf(shown)) : null;
+  const heading = confirmingClose
+    ? copy.closeTitle
+    : grouped
+      ? copy.manyPending(pending.length)
+      : (shownReview?.title ?? copy.title);
+
+  const chip =
+    current && !confirmingClose ? (
+      <>
+        {!verification && !deviceNotLinked && (
+          <View style={[styles.chip, { borderColor: colors.border }]}>
+            <ActivityIndicator size="small" color={accentColor} />
+            <Text style={{ color: colors.muted, fontSize: 12 }}>{copy.checking}</Text>
+          </View>
+        )}
+        {verified && (
+          <TouchableOpacity
+            onPress={() => setVerifiedOpenFor(verifiedOpen ? null : current.id)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: verifiedOpen }}
+            style={[styles.chip, { borderColor: colors.okText }]}
+          >
+            <View style={[styles.okDot, { backgroundColor: colors.okText }]}>
+              <View style={styles.okMark} />
+            </View>
+            <Text style={{ color: colors.okText, fontSize: 12, fontWeight: '600' }}>{copy.verified}</Text>
+          </TouchableOpacity>
+        )}
+      </>
+    ) : null;
 
   return (
     <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>{copy.title}</Text>
-        <TouchableOpacity onPress={onClose} accessibilityLabel={copy.close}>
-          <Text style={{ color: colors.muted, fontSize: 18 }}>x</Text>
-        </TouchableOpacity>
+        <View style={styles.heading}>
+          {!confirmingClose && <ChainMark chain={shown?.network} />}
+          <Text style={[styles.title, { color: colors.text }]}>{heading}</Text>
+        </View>
+        <View style={styles.headerActions}>
+          {!grouped && chip}
+          {!confirmingClose && (
+            <TouchableOpacity onPress={onClose} accessibilityLabel={copy.close} hitSlop={8}>
+              <Text style={{ color: colors.muted, fontSize: 18 }}>x</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
-      <ScrollView style={{ maxHeight: 460 }}>
-        {pending.length === 0 && (
-          <View style={styles.empty}>
-            <Text style={{ color: colors.text, fontWeight: '600' }}>
-              {lastResolved ? (copy.status[lastResolved.status] ?? lastResolved.status.toLowerCase()) : copy.nothingWaiting}
-            </Text>
-            {lastResolved?.submit?.hash && (
-              <View style={styles.hashRow}>
-                <Text style={{ color: colors.muted }}>
-                  {copy.sentTransaction} {crop(lastResolved.submit.hash)}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => onCopyHash(lastResolved.submit!.hash)}
-                  accessibilityLabel={copied ? copy.copied : copy.copyHash}
-                >
-                  <Text style={{ color: accentColor, fontWeight: '600' }}>{copied ? copy.copied : copy.copy}</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            {lastResolved?.submit?.sponsored !== undefined && (
-              <TxFeeBadge
-                sponsored={lastResolved.submit.sponsored}
+      {confirmingClose ? (
+        <View style={styles.leave}>
+          <Text style={{ color: colors.muted }}>{copy.closeBody}</Text>
+          <TouchableOpacity
+            onPress={onKeepOpen}
+            style={[styles.btn, { backgroundColor: accentColor, borderColor: accentColor }]}
+          >
+            <Text style={{ color: '#fff', fontWeight: '600' }}>{copy.backToSign}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onCloseAnyway} style={styles.textBtn} hitSlop={8}>
+            <Text style={{ color: colors.muted }}>{copy.closeAnyway}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <ScrollView style={{ maxHeight: 460 }}>
+          {pending.length === 0 && (
+            <View style={styles.empty}>
+              <Text style={{ color: colors.text, fontWeight: '600' }}>
+                {lastResolved ? (copy.status[lastResolved.status] ?? lastResolved.status.toLowerCase()) : copy.nothingWaiting}
+              </Text>
+              {lastResolved?.submit?.hash && (
+                <View style={styles.hashRow}>
+                  <Text style={{ color: colors.muted }}>
+                    {copy.sentTransaction} {crop(lastResolved.submit.hash)}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => onCopyHash(lastResolved.submit!.hash)}
+                    accessibilityLabel={copied ? copy.copied : copy.copyHash}
+                  >
+                    <Text style={{ color: accentColor, fontWeight: '600' }}>{copied ? copy.copied : copy.copy}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {lastResolved?.submit?.sponsored !== undefined && (
+                <TxFeeBadge
+                  sponsored={lastResolved.submit.sponsored}
+                  theme={theme}
+                  accentColor={accentColor}
+                  language={language}
+                />
+              )}
+              {nextStep && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <ActivityIndicator size="small" color={accentColor} />
+                  <Text style={{ color: colors.text, fontSize: 13 }}>{copy.next(nextStep)}</Text>
+                </View>
+              )}
+              {closesIn !== null && <Text style={{ color: colors.muted, fontSize: 12 }}>{copy.closingIn(closesIn)}</Text>}
+            </View>
+          )}
+
+          {grouped &&
+            pending.map((r) => (
+              <TouchableOpacity
+                key={r.id}
+                onPress={() => onSelect(r)}
+                style={[styles.item, { borderColor: current?.id === r.id ? accentColor : colors.border }]}
+              >
+                <View style={[styles.heading, { flexShrink: 1 }]}>
+                  <ChainMark chain={r.network} size={18} />
+                  <Text style={{ color: colors.text, flexShrink: 1 }}>{reviewOf(r).title}</Text>
+                </View>
+                <Text style={{ color: colors.muted }}>{expiresIn(r, copy)}</Text>
+              </TouchableOpacity>
+            ))}
+
+          {current && review && (
+            <View style={[styles.detail, grouped && [styles.detailGrouped, { borderColor: colors.border }]]}>
+              {grouped && (
+                <View style={styles.detailHead}>
+                  <Text style={[styles.detailTitle, { color: colors.text, flexShrink: 1 }]}>{review.title}</Text>
+                  {chip}
+                </View>
+              )}
+              {review.lead ? <Text style={{ color: colors.muted }}>{review.lead}</Text> : null}
+              <TxReview
+                key={current.id}
+                data={review}
                 theme={theme}
                 accentColor={accentColor}
+                copyText={copyText}
                 language={language}
+                detailsIntro={{ title: copy.whyTitle, body: copy.whyBody }}
+                detailsAction={{
+                  label: busy === 'rejecting' ? copy.rejecting : copy.rejectRequest,
+                  onPress: () => onReject(current),
+                  disabled: !!busy,
+                }}
               />
-            )}
-            {nextStep && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <ActivityIndicator size="small" color={accentColor} />
-                <Text style={{ color: colors.text, fontSize: 13 }}>{copy.next(nextStep)}</Text>
-              </View>
-            )}
-            {closesIn !== null && <Text style={{ color: colors.muted, fontSize: 12 }}>{copy.closingIn(closesIn)}</Text>}
-          </View>
-        )}
 
-        {pending.length > 1 &&
-          pending.map((r) => (
-            <TouchableOpacity
-              key={r.id}
-              onPress={() => onSelect(r)}
-              style={[styles.item, { borderColor: current?.id === r.id ? accentColor : colors.border }]}
-            >
-              <Text style={{ color: colors.text, flexShrink: 1 }}>{reviewOf(r).title}</Text>
-              <Text style={{ color: colors.muted }}>{expiresIn(r, copy)}</Text>
-            </TouchableOpacity>
-          ))}
-
-        {current && review && (
-          <View style={[styles.detail, pending.length > 1 && [styles.detailGrouped, { borderColor: colors.border }]]}>
-            <View style={styles.detailHead}>
-              <Text style={[styles.detailTitle, { color: colors.text, flexShrink: 1 }]}>{review.title}</Text>
-              {!verification && !deviceNotLinked && (
-                <View style={[styles.chip, { borderColor: colors.border }]}>
-                  <ActivityIndicator size="small" color={accentColor} />
-                  <Text style={{ color: colors.muted, fontSize: 12 }}>{copy.checking}</Text>
+              {verified && verifiedOpen && (
+                <View style={[styles.verify, { borderColor: colors.okText }]}>
+                  <Text style={{ color: colors.okText, flexShrink: 1 }}>{copy.checkedExact}</Text>
                 </View>
               )}
-              {verified && (
-                <TouchableOpacity
-                  onPress={() => setVerifiedOpenFor(verifiedOpen ? null : current.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: verifiedOpen }}
-                  style={[styles.chip, { borderColor: colors.okText }]}
-                >
-                  <View style={[styles.okDot, { backgroundColor: colors.okText }]}>
-                    <View style={styles.okMark} />
-                  </View>
-                  <Text style={{ color: colors.okText, fontSize: 12, fontWeight: '600' }}>{copy.verified}</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            <TxReview
-              key={current.id}
-              data={review}
-              theme={theme}
-              accentColor={accentColor}
-              copyText={copyText}
-              language={language}
-            />
-
-            {verified && verifiedOpen && (
-              <View style={[styles.verify, { borderColor: colors.okText }]}>
-                <Text style={{ color: colors.okText, flexShrink: 1 }}>{copy.checkedExact}</Text>
-              </View>
-            )}
-            {/* A failed check stays spelled out: it is the only place the user learns why Approve is off. */}
-            {deviceNotLinked ? (
-              <View style={[styles.verify, { backgroundColor: colors.errorBg, borderColor: colors.errorText }]}>
-                <Text style={{ color: colors.errorText, flexShrink: 1 }}>{copy.deviceNotLinked}</Text>
-                {onLinkDevice && (
-                  <TouchableOpacity onPress={onLinkDevice} accessibilityRole="button" style={{ marginTop: 6 }}>
-                    <Text style={{ color: colors.errorText, fontWeight: '600', textDecorationLine: 'underline' }}>
-                      {copy.linkDevice}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ) : (
-              verification &&
-              !verification.ok && (
+              {/* A failed check stays spelled out: it is the only place the user learns why Approve is off. */}
+              {deviceNotLinked ? (
                 <View style={[styles.verify, { backgroundColor: colors.errorBg, borderColor: colors.errorText }]}>
-                  <Text style={{ color: colors.errorText, flexShrink: 1 }}>
-                    {copy.notVerified} {verification.reason}
-                  </Text>
+                  <Text style={{ color: colors.errorText, flexShrink: 1 }}>{copy.deviceNotLinked}</Text>
+                  {onLinkDevice && (
+                    <TouchableOpacity onPress={onLinkDevice} accessibilityRole="button" style={{ marginTop: 6 }}>
+                      <Text style={{ color: colors.errorText, fontWeight: '600', textDecorationLine: 'underline' }}>
+                        {copy.linkDevice}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-              )
-            )}
+              ) : (
+                verification &&
+                !verification.ok && (
+                  <View style={[styles.verify, { backgroundColor: colors.errorBg, borderColor: colors.errorText }]}>
+                    <Text style={{ color: colors.errorText, flexShrink: 1 }}>
+                      {copy.notVerified} {verification.reason}
+                    </Text>
+                  </View>
+                )
+              )}
 
-            {error ? (
-              <View style={[styles.verify, { backgroundColor: colors.errorBg, borderColor: colors.errorText }]}>
-                <Text style={{ color: colors.errorText }}>{error}</Text>
-              </View>
-            ) : null}
+              {error ? (
+                <View style={[styles.verify, { backgroundColor: colors.errorBg, borderColor: colors.errorText }]}>
+                  <Text style={{ color: colors.errorText }}>{error}</Text>
+                </View>
+              ) : null}
 
-            <View style={styles.actions}>
-              <TouchableOpacity
-                disabled={!!busy}
-                onPress={() => onReject(current)}
-                style={[styles.btn, { borderColor: colors.border }]}
-              >
-                <Text style={{ color: colors.text, fontWeight: '600' }}>
-                  {busy === 'rejecting' ? copy.rejecting : copy.reject}
-                </Text>
-              </TouchableOpacity>
               <TouchableOpacity
                 disabled={!canVote}
                 onPress={() => onApprove(current)}
                 style={[styles.btn, { backgroundColor: accentColor, borderColor: accentColor, opacity: canVote ? 1 : 0.55 }]}
               >
-                <Text style={{ color: '#fff', fontWeight: '600' }}>{busy === 'approving' ? copy.approving : copy.approve}</Text>
+                <Text style={{ color: '#fff', fontWeight: '600' }}>
+                  {busy === 'approving'
+                    ? copy.approving
+                    : review.kind === 'activate_wallet'
+                      ? copy.activateWallet
+                      : copy.approve}
+                </Text>
               </TouchableOpacity>
             </View>
-          </View>
-        )}
-      </ScrollView>
+          )}
+        </ScrollView>
+      )}
       <PollarModalFooter />
     </View>
   );
@@ -270,8 +338,12 @@ export function CosignModalTemplate({
 
 const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 420, borderRadius: 16, borderWidth: 1, padding: 16 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  title: { fontSize: 17, fontWeight: '600' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 12 },
+  heading: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  title: { fontSize: 17, fontWeight: '600', flexShrink: 1 },
+  leave: { gap: 12, paddingBottom: 4 },
+  textBtn: { alignSelf: 'center', paddingVertical: 4 },
   empty: { paddingVertical: 24, alignItems: 'center', gap: 6 },
   hashRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   item: {
@@ -306,6 +378,5 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '45deg' }],
   },
   verify: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, padding: 10 },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 4 },
-  btn: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 10, borderWidth: 1 },
+  btn: { alignItems: 'center', paddingVertical: 11, borderRadius: 10, borderWidth: 1, marginTop: 4 },
 });

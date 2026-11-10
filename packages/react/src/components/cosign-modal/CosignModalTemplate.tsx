@@ -3,6 +3,7 @@
 import { useInheritedLanguage } from '../../language-context';
 import { type CosignRequest, type CosignVerification, type PollarLanguage, type StellarNetwork } from '@pollar/core';
 import { useState } from 'react';
+import { CHAIN_LOGOS } from '../../constants';
 import { CopyButton, cropAddress, PollarModalFooter } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { TxFeeBadge, TxReview } from '../tx-review/TxReview';
@@ -46,7 +47,12 @@ export interface CosignModalTemplateProps {
   onSelect: (request: CosignRequest) => void;
   onApprove: (request: CosignRequest) => void;
   onReject: (request: CosignRequest) => void;
+  /** The user asked to close (the X): the container closes or asks first. */
   onClose: () => void;
+  /** Closing was asked while a request waits: the modal asks before leaving it unsigned. */
+  confirmingClose?: boolean;
+  onKeepOpen?: () => void;
+  onCloseAnyway?: () => void;
 }
 
 function labelOf(request: CosignRequest, copy: CosignCopy): string {
@@ -60,6 +66,12 @@ function expiresIn(request: CosignRequest, copy: CosignCopy): string {
   const h = Math.floor(ms / 3_600_000);
   const m = Math.floor((ms % 3_600_000) / 60_000);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/** The chain's logo next to the title, so the user sees where the action happens. */
+export function ChainMark({ chain }: { chain: string | undefined }) {
+  const src = chain ? CHAIN_LOGOS[chain as keyof typeof CHAIN_LOGOS] : undefined;
+  return src ? <img className="pollar-cosign-chain" src={src} alt="" aria-hidden /> : null;
 }
 
 function CloseIcon() {
@@ -101,6 +113,9 @@ export function CosignModalTemplate({
   onApprove,
   onReject,
   onClose,
+  confirmingClose = false,
+  onKeepOpen,
+  onCloseAnyway,
 }: CosignModalTemplateProps) {
   const language = useInheritedLanguage(languageProp);
   const copy = COSIGN_COPY[language];
@@ -127,6 +142,37 @@ export function CosignModalTemplate({
       TX_REVIEW_COPY[language],
     );
   const review = current ? reviewOf(current) : null;
+  const grouped = pending.length > 1;
+  // One request: the header is the action itself. Several: how many wait, and each names itself below.
+  const shown = grouped ? null : (current ?? (pending.length === 0 ? lastResolved : undefined) ?? null);
+  const shownReview = shown ? (shown === current ? review : reviewOf(shown)) : null;
+  const heading = confirmingClose
+    ? copy.closeTitle
+    : grouped
+      ? copy.manyPending(pending.length)
+      : (shownReview?.title ?? copy.title);
+
+  const chip = current && !confirmingClose && (
+    <>
+      {!verification && !deviceNotLinked && (
+        <span className="pollar-cosign-chip">
+          <span className="pollar-spinner pollar-spinner-sm" aria-hidden />
+          {copy.checking}
+        </span>
+      )}
+      {verified && (
+        <button
+          type="button"
+          className="pollar-cosign-chip pollar-cosign-chip-ok"
+          aria-expanded={verifiedOpen}
+          onClick={() => setVerifiedOpenFor(verifiedOpen ? null : current.id)}
+        >
+          <VerifiedIcon />
+          {copy.verified}
+        </button>
+      )}
+    </>
+  );
 
   return (
     <div
@@ -136,156 +182,175 @@ export function CosignModalTemplate({
       onClick={(e) => e.stopPropagation()}
     >
       <div className="pollar-modal-header">
-        <h2 className="pollar-modal-title">{copy.title}</h2>
+        <h2 className="pollar-modal-title pollar-cosign-heading">
+          {!confirmingClose && <ChainMark chain={shown?.network} />}
+          <span>{heading}</span>
+        </h2>
         <div className="pollar-modal-header-actions">
-          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close} title={copy.close}>
-            <CloseIcon />
-          </button>
+          {!grouped && chip}
+          {!confirmingClose && (
+            <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close} title={copy.close}>
+              <CloseIcon />
+            </button>
+          )}
         </div>
       </div>
 
-      {pending.length === 0 && (
-        <div className="pollar-cosign-empty">
-          {lastResolved ? (
-            <>
-              {lastResolved.status === 'APPROVED' && (
-                <svg className="pollar-cosign-approved-icon" width="44" height="44" viewBox="0 0 14 14" fill="none" aria-hidden>
-                  <circle cx="7" cy="7" r="7" fill="currentColor" />
-                  <path
-                    d="M3.5 7l2.5 2.5 4.5-5"
-                    stroke="white"
-                    strokeWidth="1.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              )}
-              <p className="pollar-cosign-empty-title">
-                {copy.status[lastResolved.status] ?? lastResolved.status.toLowerCase()}
-              </p>
-              <p className="pollar-cosign-muted">
-                {lastResolved.submit?.hash ? (
-                  <>
-                    {copy.sentTransaction}{' '}
-                    {explorerUrl ? (
-                      <a className="pollar-cosign-tx-link" href={explorerUrl} target="_blank" rel="noopener noreferrer">
-                        {cropAddress(lastResolved.submit.hash)}
-                      </a>
+      {confirmingClose ? (
+        <div className="pollar-cosign-leave">
+          <p className="pollar-cosign-muted">{copy.closeBody}</p>
+          <button type="button" className="pollar-cosign-btn pollar-cosign-btn-primary" onClick={onKeepOpen}>
+            {copy.backToSign}
+          </button>
+          <button type="button" className="pollar-cosign-text-btn" onClick={onCloseAnyway}>
+            {copy.closeAnyway}
+          </button>
+        </div>
+      ) : (
+        <>
+          {pending.length === 0 && (
+            <div className="pollar-cosign-empty">
+              {lastResolved ? (
+                <>
+                  {lastResolved.status === 'APPROVED' && (
+                    <svg
+                      className="pollar-cosign-approved-icon"
+                      width="44"
+                      height="44"
+                      viewBox="0 0 14 14"
+                      fill="none"
+                      aria-hidden
+                    >
+                      <circle cx="7" cy="7" r="7" fill="currentColor" />
+                      <path
+                        d="M3.5 7l2.5 2.5 4.5-5"
+                        stroke="white"
+                        strokeWidth="1.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  )}
+                  <p className="pollar-cosign-empty-title">
+                    {copy.status[lastResolved.status] ?? lastResolved.status.toLowerCase()}
+                  </p>
+                  <p className="pollar-cosign-muted">
+                    {lastResolved.submit?.hash ? (
+                      <>
+                        {copy.sentTransaction}{' '}
+                        {explorerUrl ? (
+                          <a className="pollar-cosign-tx-link" href={explorerUrl} target="_blank" rel="noopener noreferrer">
+                            {cropAddress(lastResolved.submit.hash)}
+                          </a>
+                        ) : (
+                          cropAddress(lastResolved.submit.hash)
+                        )}
+                        <CopyButton
+                          value={lastResolved.submit.hash}
+                          label={copy.copyHash}
+                          className="pollar-copy-btn-sm pollar-cosign-copy"
+                        />
+                      </>
+                    ) : lastResolved.signedXdr ? (
+                      copy.signedAppSends
                     ) : (
-                      cropAddress(lastResolved.submit.hash)
+                      copy.nothingSigned
                     )}
-                    <CopyButton
-                      value={lastResolved.submit.hash}
-                      label={copy.copyHash}
-                      className="pollar-copy-btn-sm pollar-cosign-copy"
-                    />
-                  </>
-                ) : lastResolved.signedXdr ? (
-                  copy.signedAppSends
-                ) : (
-                  copy.nothingSigned
-                )}
-              </p>
-              {lastResolved.submit?.sponsored !== undefined && (
-                <p className="pollar-cosign-fee">
-                  <TxFeeBadge sponsored={lastResolved.submit.sponsored} language={language} />
+                  </p>
+                  {lastResolved.submit?.sponsored !== undefined && (
+                    <p className="pollar-cosign-fee">
+                      <TxFeeBadge sponsored={lastResolved.submit.sponsored} language={language} />
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="pollar-cosign-muted">{copy.nothingWaiting}</p>
+              )}
+              {nextStep && (
+                <p className="pollar-cosign-next">
+                  <span className="pollar-spinner pollar-spinner-sm" aria-hidden /> {copy.next(nextStep)}
                 </p>
               )}
-            </>
-          ) : (
-            <p className="pollar-cosign-muted">{copy.nothingWaiting}</p>
-          )}
-          {nextStep && (
-            <p className="pollar-cosign-next">
-              <span className="pollar-spinner pollar-spinner-sm" aria-hidden /> {copy.next(nextStep)}
-            </p>
-          )}
-          {closesIn !== null && <p className="pollar-cosign-muted pollar-cosign-closing">{copy.closingIn(closesIn)}</p>}
-        </div>
-      )}
-
-      {pending.length > 1 && (
-        <ul className="pollar-cosign-list">
-          {pending.map((r) => (
-            <li key={r.id}>
-              <button
-                type="button"
-                className={`pollar-cosign-item${current?.id === r.id ? ' pollar-cosign-item-active' : ''}`}
-                onClick={() => onSelect(r)}
-              >
-                <span>{reviewOf(r).title}</span>
-                <span className="pollar-cosign-muted">{expiresIn(r, copy)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {current && review && (
-        <div className={`pollar-cosign-detail${pending.length > 1 ? ' pollar-cosign-detail-grouped' : ''}`}>
-          <div className="pollar-cosign-detail-head">
-            <p className="pollar-cosign-detail-title">{review.title}</p>
-            {!verification && !deviceNotLinked && (
-              <span className="pollar-cosign-chip">
-                <span className="pollar-spinner pollar-spinner-sm" aria-hidden />
-                {copy.checking}
-              </span>
-            )}
-            {verified && (
-              <button
-                type="button"
-                className="pollar-cosign-chip pollar-cosign-chip-ok"
-                aria-expanded={verifiedOpen}
-                onClick={() => setVerifiedOpenFor(verifiedOpen ? null : current.id)}
-              >
-                <VerifiedIcon />
-                {copy.verified}
-              </button>
-            )}
-          </div>
-          <TxReview key={current.id} data={review} language={language} />
-
-          {verified && verifiedOpen && <div className="pollar-cosign-verify pollar-cosign-verify-ok">{copy.checkedExact}</div>}
-          {/* A failed check stays spelled out: it is the only place the user learns why Approve is off. */}
-          {deviceNotLinked ? (
-            <div className="pollar-cosign-verify pollar-cosign-verify-bad">
-              {copy.deviceNotLinked}
-              {onLinkDevice && (
-                <button type="button" className="pollar-cosign-link" onClick={onLinkDevice}>
-                  {copy.linkDevice}
-                </button>
-              )}
+              {closesIn !== null && <p className="pollar-cosign-muted pollar-cosign-closing">{copy.closingIn(closesIn)}</p>}
             </div>
-          ) : (
-            verification &&
-            !verification.ok && (
-              <div className="pollar-cosign-verify pollar-cosign-verify-bad">
-                {copy.notVerified} {verification.reason}
-              </div>
-            )
           )}
 
-          {error && <div className="pollar-cosign-error">{error}</div>}
+          {grouped && (
+            <ul className="pollar-cosign-list">
+              {pending.map((r) => (
+                <li key={r.id}>
+                  <button
+                    type="button"
+                    className={`pollar-cosign-item${current?.id === r.id ? ' pollar-cosign-item-active' : ''}`}
+                    onClick={() => onSelect(r)}
+                  >
+                    <span className="pollar-cosign-heading">
+                      <ChainMark chain={r.network} />
+                      {reviewOf(r).title}
+                    </span>
+                    <span className="pollar-cosign-muted">{expiresIn(r, copy)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
 
-          <div className="pollar-cosign-actions">
-            <button
-              type="button"
-              className="pollar-cosign-btn pollar-cosign-btn-secondary"
-              disabled={!!busy}
-              onClick={() => onReject(current)}
-            >
-              {busy === 'rejecting' ? copy.rejecting : copy.reject}
-            </button>
-            <button
-              type="button"
-              className="pollar-cosign-btn pollar-cosign-btn-primary"
-              disabled={!canVote}
-              onClick={() => onApprove(current)}
-            >
-              {busy === 'approving' ? copy.approving : copy.approve}
-            </button>
-          </div>
-        </div>
+          {current && review && (
+            <div className={`pollar-cosign-detail${grouped ? ' pollar-cosign-detail-grouped' : ''}`}>
+              {grouped && (
+                <div className="pollar-cosign-detail-head">
+                  <p className="pollar-cosign-detail-title">{review.title}</p>
+                  {chip}
+                </div>
+              )}
+              {review.lead && <p className="pollar-cosign-muted pollar-cosign-lead">{review.lead}</p>}
+              <TxReview
+                key={current.id}
+                data={review}
+                language={language}
+                detailsIntro={{ title: copy.whyTitle, body: copy.whyBody }}
+                detailsAction={{
+                  label: busy === 'rejecting' ? copy.rejecting : copy.rejectRequest,
+                  onClick: () => onReject(current),
+                  disabled: !!busy,
+                }}
+              />
+
+              {verified && verifiedOpen && (
+                <div className="pollar-cosign-verify pollar-cosign-verify-ok">{copy.checkedExact}</div>
+              )}
+              {/* A failed check stays spelled out: it is the only place the user learns why Approve is off. */}
+              {deviceNotLinked ? (
+                <div className="pollar-cosign-verify pollar-cosign-verify-bad">
+                  {copy.deviceNotLinked}
+                  {onLinkDevice && (
+                    <button type="button" className="pollar-cosign-link" onClick={onLinkDevice}>
+                      {copy.linkDevice}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                verification &&
+                !verification.ok && (
+                  <div className="pollar-cosign-verify pollar-cosign-verify-bad">
+                    {copy.notVerified} {verification.reason}
+                  </div>
+                )
+              )}
+
+              {error && <div className="pollar-cosign-error">{error}</div>}
+
+              <button
+                type="button"
+                className="pollar-cosign-btn pollar-cosign-btn-primary"
+                disabled={!canVote}
+                onClick={() => onApprove(current)}
+              >
+                {busy === 'approving' ? copy.approving : review.kind === 'activate_wallet' ? copy.activateWallet : copy.approve}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       <PollarModalFooter />

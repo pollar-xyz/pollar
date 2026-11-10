@@ -67,6 +67,12 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
 
   const current = pending.find((r) => r.id === selectedId) ?? pending[0] ?? null;
 
+  // A request left unsigned holds up the app's flow, so closing over one asks first and only
+  // the X gets there: a click outside does nothing. With nothing waiting, the X just closes.
+  const [askedToClose, setAskedToClose] = useState(false);
+  const confirmingClose = askedToClose && pending.length > 0;
+  const requestClose = () => (pending.length > 0 ? setAskedToClose(true) : onClose());
+
   // Verify whenever the shown request changes; a stale result must never
   // enable Approve for a different request. Keyed by id: every refresh of the
   // pending list hands back new objects for the same requests, and re-running
@@ -155,7 +161,7 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
   );
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle}>
       <CosignModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -180,7 +186,10 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         onSelect={(r) => setSelectedId(r.id)}
         onApprove={(r) => void run('approving', r, approve)}
         onReject={(r) => void run('rejecting', r, reject)}
-        onClose={onClose}
+        onClose={requestClose}
+        confirmingClose={confirmingClose}
+        onKeepOpen={() => setAskedToClose(false)}
+        onCloseAnyway={onClose}
       />
     </PollarOverlay>
   );

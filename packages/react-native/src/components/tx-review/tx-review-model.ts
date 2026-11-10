@@ -25,14 +25,28 @@ export interface TxDetailRow {
 export interface TxReviewData {
   /** The action in plain words: what a user without crypto background reads first. */
   title: string;
-  kind: 'send' | 'bridge' | 'approve' | 'swap' | 'payment' | 'create_account' | 'deposit' | 'withdraw' | 'sign_in' | 'other';
+  kind:
+    | 'send'
+    | 'bridge'
+    | 'approve'
+    | 'swap'
+    | 'payment'
+    | 'create_account'
+    | 'activate_wallet'
+    | 'add_asset'
+    | 'deposit'
+    | 'withdraw'
+    | 'sign_in'
+    | 'other';
+  /** One line under the title that says what the action is for, when the title alone does not. */
+  lead?: string;
   from?: TxParty;
   to?: TxParty;
   /**
    * Who pays the network fee: after the signature, as the platform reported it;
    * before, only when the transaction itself makes the app pay (`appPaysFee`).
    */
-  fee?: { sponsored: boolean };
+  fee?: { sponsored: boolean; free?: boolean };
   rows: TxDetailRow[];
   raw?: string;
   hash?: { value: string; explorerUrl: string | null };
@@ -84,11 +98,21 @@ function titleOf(data: Pick<TxReviewData, 'kind' | 'from' | 'to'>, fallback: str
       return from?.amount && to?.label ? copy.titles.payment(withAsset(from), displayName(to.label)) : fallback;
     case 'create_account':
       return copy.titles.createAccount;
+    case 'activate_wallet':
+      return copy.titles.activateWallet;
+    case 'add_asset':
+      return to?.asset ? copy.titles.addAsset(to.asset) : fallback;
     case 'sign_in':
       return copy.titles.signIn;
     default:
       return fallback;
   }
+}
+
+function leadOf(kind: TxReviewData['kind'], copy: TxReviewCopy): string | undefined {
+  if (kind === 'activate_wallet') return copy.leads.activateWallet;
+  if (kind === 'add_asset') return copy.leads.addAsset;
+  return undefined;
 }
 
 /** The ramp step's `details.flow` (sdk-api `RampStepFlow`), when the request carries a well-formed one. */
@@ -324,7 +348,13 @@ export function reviewFromRequest(parts: SigningRequestParts, copy: TxReviewCopy
     const asset = readable?.symbol ?? asString(details.asset) ?? asString(details.assetCode) ?? asString(details.symbol);
     const amount = readable?.amount ?? asString(details.amount);
     const isTransfer = parts.operation === 'payment' || parts.operation === 'transfer';
-    if (isTransfer && destination) {
+    const code = asString(details.code) ?? asset?.split(':')[0];
+    if (parts.operation === 'create_account' && (!destination || destination === parts.signWith)) {
+      data = { kind: 'activate_wallet' };
+    } else if (parts.operation === 'change_trust' && code) {
+      data = { kind: 'add_asset', to: { chain: parts.chain, self: true, asset: code } };
+      if (asset) rows.push({ label: copy.rows.asset, value: asset });
+    } else if (isTransfer && destination) {
       data = {
         kind: 'send',
         from: {
@@ -386,11 +416,15 @@ export function reviewFromRequest(parts: SigningRequestParts, copy: TxReviewCopy
 
   if (parts.appPaysFee) rows.push({ label: copy.rows.fee, value: copy.rows.feeCovered });
   rows.push(...(parts.extraRows ?? []));
+  // The account's reserve and the fee both on the app: nothing at all comes out of the user's wallet.
+  const free = data.kind === 'activate_wallet' || (data.kind === 'add_asset' && details.sponsored === true) ? true : undefined;
+  const lead = leadOf(data.kind, copy);
 
   return {
     ...data,
     title: titleOf(data, parts.fallbackTitle, copy),
-    ...(parts.appPaysFee ? { fee: { sponsored: true } } : {}),
+    ...(lead ? { lead } : {}),
+    ...(parts.appPaysFee ? { fee: free ? { sponsored: true, free } : { sponsored: true } } : {}),
     rows,
     ...(parts.raw ? { raw: parts.raw } : {}),
     ...(parts.hash ? { hash: parts.hash } : {}),

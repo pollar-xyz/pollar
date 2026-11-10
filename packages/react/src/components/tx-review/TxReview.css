@@ -214,6 +214,41 @@
   border-top: 1px solid var(--pollar-border);
 }
 
+.pollar-txr-why-title {
+  margin: 0 0 0.2rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--pollar-text);
+}
+
+.pollar-txr-why-body {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--pollar-muted);
+}
+
+.pollar-txr-action {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--pollar-error-text, #b91c1c);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pollar-txr-action:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.pollar-txr-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .pollar-txr-rows {
   margin: 0;
   display: flex;
