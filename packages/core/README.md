@@ -776,7 +776,30 @@ const outcome = await client.swapSolana(best); // SubmitOutcome
 ```ts
 client.getSolanaSwapConfig(): Promise<SolanaSwapVenue[]>;
 client.getSolanaSwapQuote(params: SolanaSwapQuoteParams): Promise<SolanaSwapQuote[]>;
-client.swapSolana(quote: SolanaSwapQuote, opts?: { slippageBps?: number }): Promise<SubmitOutcome>;
+client.swapSolana(quote: SolanaSwapQuote, opts?: { slippageBps?: number; idempotencyKey?: string }): Promise<SubmitOutcome>;
+client.getSolanaSwapOptions(): Promise<SolanaSwapOptions>; // { venues, destinationChains }
+client.getSwapStatus(idempotencyKey: string): Promise<SwapStatus>;
+```
+
+A Solana swap can deliver to the user's own Polygon wallet when the app enables a venue that crosses chains:
+`getSolanaSwapOptions()` lists it in `destinationChains`, and `getSolanaSwapQuote({ ..., destinationChain: 'POLYGON' })`
+quotes it with the ERC-20 address as `outputMint`. Such a quote carries `feeBreakdown` (each charge by kind) and
+`expiresAt`; `swapSolana` refuses a quote past it with `SDK_SWAP_QUOTE_EXPIRED` before anything is built. Pass an
+`idempotencyKey` and follow the delivery with `getSwapStatus(idempotencyKey)`: `status` stays `BUILT` after the Solana
+transaction lands and turns `CONFIRMED` once the Polygon wallet is paid, or `FAILED`; a settlement `HELD` is being
+checked by support. A route the wallet cannot sign answers `SDK_SWAP_SIGNER_UNSUPPORTED` (400), one the platform refuses
+`SDK_SWAP_ROUTE_REFUSED` (422).
+
+```ts
+const quotes = await client.getSolanaSwapQuote({
+  inputMint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC on Solana
+  outputMint: '0x...', // the ERC-20 on Polygon
+  amount: '5000000',
+  destinationChain: 'POLYGON',
+});
+const idempotencyKey = crypto.randomUUID();
+await client.swapSolana(quotes[0], { idempotencyKey });
+const status = await client.getSwapStatus(idempotencyKey);
 ```
 
 ---
@@ -839,7 +862,55 @@ Exact amount strings keep their precision and formatting.
 
 Register a signer for each chain/encoding pair a leg may ask for with `client.registerRampSigningHandler(chain, encoding, async (action) => signedPayload)`, `STELLAR`/`xdr` included: core has no built-in ramp signer. In a Stellar signer, `assertRampStellarSigner(action, address)` refuses a transaction that does not spend from `address` (or a SEP-10 login that is not the anchor's challenge for it). Handlers must validate the payload and authorized wallet account, chain and network before returning a signed payload without broadcasting it. Polling never invokes signing, and a ramp leg always asks for the user's confirmation, whatever the policy.
 
+An adapter on contract version 2 may implement `renewal`: it returns the sign-in that renews the provider session an
+open order is read with, before it lapses. Pollar asks the user for that signature while it keeps reading the order, and
+hands it back through `continue` with the order's reference.
+
 The backend lists only the routes its configured rails, venues and bridges can run.
+
+---
+
+### Bridge (USDC between the user's own wallets)
+
+Move USDC by Circle CCTP between the user's own wallets on Stellar, Solana and Polygon, in any direction, on mainnet.
+`getBridgeConfig()` lists the directions the user can bridge in now (both chains on the app and a wallet on each;
+`available` is false off mainnet). `quoteBridge()` shows what arrives, Pollar's fee to the app and how the source wallet
+signs, and moves nothing. `bridge()` starts the transfer, and the mint on the destination follows about five minutes
+later.
+
+```ts
+const config = await client.getBridgeConfig();
+const quote = await client.quoteBridge({ fromChain: 'STELLAR', toChain: 'SOLANA', amount: '25' });
+
+const idempotencyKey = crypto.randomUUID(); // one per transfer the user means to make
+let transfer = await client.bridge({ fromChain: 'STELLAR', toChain: 'SOLANA', amount: '25', idempotencyKey });
+transfer = await client.pollBridgeTransfer(transfer.id, { onUpdate: render });
+if (transfer.pendingAction?.kind === 'SIGNATURE') {
+  // from the user's explicit Authorize
+  transfer = await client.signBridgeStep(transfer.id, transfer.pendingAction.actionId);
+}
+```
+
+```ts
+client.getBridgeConfig(): Promise<BridgeConfig>;
+client.quoteBridge(params: { fromChain: BridgeChain; toChain: BridgeChain; amount: string }): Promise<BridgeQuote>;
+client.bridge(params: { fromChain; toChain; amount; idempotencyKey?: string }): Promise<BridgeTransfer>;
+client.getBridgeTransfer(transferId: string): Promise<BridgeTransfer>;
+client.listBridgeTransfers(): Promise<BridgeTransfer[]>; // newest first
+client.pollBridgeTransfer(transferId, opts?: { signal?; onUpdate?; onError?; until? }): Promise<BridgeTransfer>;
+client.signBridgeStep(transferId: string, actionId: string): Promise<BridgeTransfer>;
+```
+
+- A custodial wallet burns at once. A co-signed wallet's transfer waits on `COSIGN_APPROVAL`, the request its device
+  approves. An external wallet's waits on a `SIGNATURE` action: `signBridgeStep` signs it with the handler registered
+  through `registerRampSigningHandler` for its chain and encoding, the same as a ramp leg, and the action must still be
+  the one the user saw. An external Solana wallet signs the burn the server built, and Pollar adds the fee payer's
+  signature.
+- A transfer goes `PENDING`, `AWAITING_ACTION` when it waits on the user, `BURNED`, `ATTESTED`, `COMPLETED`. `FAILED`
+  means nothing moved; `HELD` means the USDC was burned and what followed failed, and Pollar resolves it.
+- `idempotencyKey` names one transfer the user means to make: a retry with it returns the transfer it already started
+  and moves nothing.
+- `@pollar/react` and `@pollar/react-native` run the whole flow in `<BridgeModal>` (`openBridgeModal()`).
 
 ---
 
@@ -873,6 +944,33 @@ client.earnDeposit(params: EarnTxParams): Promise<SubmitOutcome>;
 client.earnWithdraw(params: EarnTxParams): Promise<SubmitOutcome>;
 ```
 
+On Solana, Earn runs from the user's Solana wallet. The backend builds the transaction; an external wallet signs it in
+the connected wallet, and a co-signed wallet approves it on the device, which checks it only deposits into or withdraws
+from the protocol. Custodial and contract wallets are refused with `SDK_EARN_WALLET_UNSUPPORTED`. An opportunity's `apy`
+is the expected APY after fees, as a percentage, and its `actions` say what it takes right now (a paused one may take
+only `withdraw`). Amounts are decimals of the opportunity's asset, the withdraw one at most the position's
+`withdrawable`.
+
+```ts
+const providers = await client.getSolanaEarnProviders(); // [] means no Earn on Solana
+const [vault] = await client.getSolanaEarnOpportunities();
+const position = await client.getSolanaEarnPosition(vault.id); // balance, principal, profit, apy, withdrawable
+
+await client.earnSolanaDeposit({ opportunity: vault.id, amount: '10' });
+await client.earnSolanaWithdraw({ opportunity: vault.id, amount: position.withdrawable });
+```
+
+```ts
+client.getSolanaEarnProviders(): Promise<SolanaEarnProviderId[]>;
+client.getSolanaEarnOpportunities(): Promise<SolanaEarnOpportunity[]>;
+client.getSolanaEarnPosition(opportunity: string): Promise<SolanaEarnPosition>;
+client.earnSolanaDeposit(params: { opportunity: string; amount: string; idempotencyKey?: string }): Promise<SubmitOutcome>;
+client.earnSolanaWithdraw(params: { opportunity: string; amount: string; idempotencyKey?: string }): Promise<SubmitOutcome>;
+```
+
+An opportunity that does not take the action right now answers `SDK_EARN_ACTION_UNAVAILABLE`, and an amount it does not
+take `SDK_EARN_AMOUNT_INVALID`.
+
 ---
 
 ### Cards
@@ -890,10 +988,12 @@ client.issueCard(params?): Promise<CardInfo>;
 client.getCards(params?): Promise<CardInfo[]>; // never includes card numbers
 client.getCardBalance(params?): Promise<CardBalance | null>;
 client.getCardTransactions(params?): Promise<CardTransactionsPage>;
+client.getCardFundingRoutes(params?): Promise<CardFundingRoute[]>; // the chains the user can fund from
 client.fundCard(params: {
   amount: string;
-  chain?: 'STELLAR' | 'SOLANA';
+  chain?: CardFundingChain; // 'STELLAR' | 'SOLANA' | 'POLYGON'
   idempotencyKey?: string;
+  signBridgeStep?: (transferId: string, actionId: string) => Promise<BridgeTransfer>;
   cardProviderId?;
 }): Promise<CardFundingOutcome>;
 client.getCardFunding(fundingId: string): Promise<CardFunding>;
@@ -907,6 +1007,11 @@ client.revealCardSecrets(cardId: string, params?): Promise<CardSecrets>;
   user declined) or `cosign_pending`, each with the `funding`. On Solana the USDC goes straight to the provider's Solana
   address, with no bridge, and the funding goes `CREATED`, `SENT`, `CREDITED`. Co-signed funding requires sdk-api with
   the v3 funding routes.
+- `getCardFundingRoutes()` lists each chain the user can fund from (`source`), the chain the provider receives on
+  (`deposit`), how it gets there (`route`: `DIRECT`, a transfer on a chain the provider credits, or `CCTP` across to
+  one) and the wallet that pays; it is empty off mainnet. `fundCard` takes any of those chains. A `CCTP` funding goes
+  `CREATED`, `BURNED`, `ATTESTED`, `MINTED`, `CREDITED`, and an external wallet signs its burn through `signBridgeStep`,
+  by default `client.signBridgeStep` with the handlers the app registered.
 - `idempotencyKey` names one funding the user means to make. A retry with the same key (a double click, a response
   that never arrived) returns the funding the key already started instead of paying again; a new funding needs a new
   key.
@@ -1005,6 +1110,14 @@ Stellar, Solana and Polygon request on the device before voting. By default the 
   `client.cosign.migrateWallets(custody?)` moves the wallets Pollar still holds to Turnkey.
 - `client.cosign.recovery` adds and uses recovery methods (passkeys, email code, device enrollment, phrase export).
 - `getCosignState()` / `onCosignStateChange()` report the co-sign state.
+- Each browser origin and each app install holds its own device key, so the same user on another site or install starts
+  out not enrolled. `client.cosign.isDeviceEnrolled()` says whether this device is one of the wallet's devices. A
+  co-signed signature from a device that is not enrolled stops before stamping and ends in
+  `SDK_COSIGN_DEVICE_NOT_ENROLLED`, and `client.onCosignDeviceNotEnrolled(cb)` fires: the cue to add the device through
+  `client.cosign.recovery`.
+- A co-signed wallet without a recovery method is refused every signature but its setup with `409
+SDK_WALLET_RECOVERY_REQUIRED`; `client.onWalletRecoveryRequired(cb)` fires on it. The React and React Native providers
+  open the recovery modal on both outcomes.
 - `request.appPaysFee` is `true` when the fee payer of the payload is not the user, so a prompt can say the app covers
   the fee before the vote. Once a transaction is signed or submitted, `TransactionState` carries `sponsored` from the
   platform's answer.
@@ -1136,7 +1249,7 @@ const unsubTx = client.onTransactionStateChange((s) => {
   /* build -> sign -> submit */
 });
 const unsubHistory = client.onTxHistoryStateChange((s) => {
-  /* paginated rows, loaded with fetchTxHistory() */
+  /* paginated rows, loaded with fetchTxHistory(); ramp orders come in as kind: 'ramp' rows unless includeRamps: 'false' */
 });
 const unsubBalance = client.onWalletBalanceStateChange((s) => {
   /* balances */

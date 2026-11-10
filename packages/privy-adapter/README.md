@@ -24,7 +24,8 @@ Your code is the same on both - `createPrivyAdapter` + `PrivyAdapterProvider`.
 There is no Privy SDK for Angular or Vue, so the adapter can't run there. If you use
 it in a non-React host it throws a clear `PrivyAdapterUnsupportedError` on first use.
 
-`@pollar/core` (`^0.11.2 || ^0.12.0-rc.1`), `@stellar/stellar-sdk` (`^15.1.0`) and
+`@pollar/core` (`^0.11.1` in the published `0.11.1`; this source declares `^0.11.2 || ^0.12.0-rc.1` for its
+next release), `@stellar/stellar-sdk` (`^15.1.0`) and
 `react` (`^18 || ^19`) are required peers. `react-dom`, `@privy-io/react-auth`,
 `@privy-io/expo` and `react-native-webview` are optional peers, so each platform
 installs only its own.

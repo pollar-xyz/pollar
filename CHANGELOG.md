@@ -401,6 +401,70 @@
   `EMAIL_SEND_FAILED`, and the login modals show the reason in their language:
   use a permanent email or another sign-in method. Every other failure stays
   `EMAIL_SEND_FAILED`, now also with its `code`.
+- **A device that is not enrolled is told to link itself.** Each browser origin
+  and app install holds its own co-signing key, so the same user on another
+  site or install starts out not enrolled. `client.cosign.isDeviceEnrolled()`
+  says whether this device's key is one of the wallet's devices, and
+  `inspectQuorum` answers `DEVICE_NOT_ENROLLED` without relaying and without
+  marking the sub-organization `BROKEN`. A co-signed signature from such a
+  device stops before stamping and ends in `SDK_COSIGN_DEVICE_NOT_ENROLLED`;
+  `client.onCosignDeviceNotEnrolled(cb)` fires on it. `<CosignModal>` disables
+  Approve and offers "Link this device", and the React and React Native
+  providers open the recovery modal on that outcome, for every modal that signs
+  and for direct app calls. Only co-signed signatures pay the extra read of the
+  devices.
+- **A wallet without a recovery method opens recovery.** sdk-api answers `409
+SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
+  method is asked for any signature but its setup, or for an on-ramp.
+  `client.onWalletRecoveryRequired(cb)` fires on it, and the React and React
+  Native providers open the recovery modal. Needs sdk-api from
+  pollar-platform#70.
+- After "Ask another device to add this one", the recovery modal (web and React
+  Native) reads the devices every 3 seconds while the request is open (15
+  minutes) and says "Device added." once this device is in.
+- Requirement forms answer `too_short` locally when a text answer is shorter
+  than `validation.minLength`, in the three languages, as the server does.
+- **A ramp adapter can renew a provider session.** `RampAdapter.renewal`
+  (optional, ramp adapter contract version 2) returns the sign-in that renews
+  the session an open order is read with, before it lapses. Pollar asks the
+  user for it while it keeps reading the order with the current session, and
+  hands the signature back through `continue` with the order's reference.
+- **A ramp provider's sign-in reads as "Confirm it's you".** A request for a
+  provider's sign-in (operation `provider_sign_in`, or `sep10` on requests
+  opened before) shows a shield and key, "Confirm it's you", why the payment
+  provider asks, and "No money moves", in en, es and pt, web and React Native.
+  Under the app's `'auto'` confirmation the device approves it itself, once it
+  has checked the transaction is a sign-in (sequence 0, data entries only, the
+  first one on the wallet's own account); every other ramp signature still
+  asks. The check badge reads "Checked" and no longer names the custody
+  provider.
+- **Signing prompts name the action.** The co-sign and confirmation prompts are
+  titled with the action and the logo of the asset with its chain in the
+  corner, instead of "Confirm with your device". A wallet activation reads
+  "Activate your wallet" and its fee badge says it is free. An approve request
+  reads "Allow moving 0.74 USDC", with a lead saying it is a permission and
+  nothing moves yet; the spender and its address are in the details. There is
+  one primary button, and rejecting sits at the end of the details after a "Why
+  am I seeing this?" note. A click outside does nothing, and the X (or Android
+  back) asks before leaving a request unsigned.
+- A co-signed device approves a Solana transfer of a Token-2022 mint (USDG,
+  PYUSD): the check follows the token program the transfer calls and derives
+  the recipient's account under it.
+- `<CardModal>` (web and React Native) says the service could not be reached
+  and offers Try again when its load fails. A funding step names the card as
+  its destination, and a rejected funding reads as not sent.
+- **The history shows ramp orders.** `fetchTxHistory` asks for
+  `includeRamps: 'true'` unless the caller passes `'false'`, so ramp orders come
+  in as `kind: 'ramp'` rows. The history modal shows a ramp row's fiat side,
+  says when it was refunded, and links to the explorer once it has a hash.
+- **One themed select.** `PollarSelect` replaces every native `<select>` in the
+  web modals (ramp, swap, send, earn, bridge, card, requirement forms, asset and
+  chain pickers): it follows the modal theme, groups options, shows a flag or a
+  logo per option and works from the keyboard. The ramp's step bar starts at
+  Route, with a back button to the amount, and the ramp shows the Pollar footer
+  like the other modals, web and React Native.
+- The custody migration intro speaks of account security and signing from this
+  device.
 - `@pollar/core`'s types are regenerated from sdk-api's v3 document.
 - `@pollar/react` and `@pollar/react-native` require `@pollar/core@^0.12.1`.
 

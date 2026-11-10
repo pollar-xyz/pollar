@@ -150,12 +150,21 @@ const {
   signAndSubmitTx, // (unsignedXdr?: string) => Promise<SubmitOutcome>
   sendPayment, // (params: SendPaymentParams) => Promise<SubmitOutcome>
 
-  // swaps: Stellar, and Solana (Jupiter and Titan, mainnet)
+  // swaps: Stellar, and Solana (Jupiter and Titan, mainnet), with Solana swaps that deliver to Polygon
   getSwapQuote,
   swap,
   getSolanaSwapConfig,
+  getSolanaSwapOptions, // () => Promise<SolanaSwapOptions>, the venues and destinationChains
   getSolanaSwapQuote,
   swapSolana,
+  getSwapStatus, // (idempotencyKey) => Promise<SwapStatus>, a cross-chain swap's delivery
+
+  // earn on Solana (the Stellar earn methods are on the context too)
+  getSolanaEarnProviders,
+  getSolanaEarnOpportunities,
+  getSolanaEarnPosition,
+  earnSolanaDeposit,
+  earnSolanaWithdraw,
 
   // balances and history
   walletBalance, // WalletBalanceState
@@ -185,6 +194,7 @@ const {
   openReceiveModal, // (options?: ReceiveModalOptions) => void
   openSwapModal, // (options?: SwapModalOptions) => void
   openEarnModal, // (options?: EarnModalOptions) => void
+  openBridgeModal, // (options?: BridgeModalOptions) => void, USDC between the user's own wallets (mainnet)
   openCardModal, // (options?: CardModalOptions) => void, the card flow, for an app with a card provider
   openRecoveryModal,
 } = usePollar();
@@ -196,7 +206,7 @@ co-sign state (`cosign`, `openCosignModal`), the recovery state (`recovery`, `re
 
 ### Modal options
 
-The ramp, send, receive, swap, earn, history and card openers take where their modal opens, with the same fields as
+The ramp, send, receive, swap, earn, bridge, history and card openers take where their modal opens, with the same fields as
 `@pollar/react`. The options are a starting point
 the user can change. An option that matches nothing the modal offers (a chain without a wallet, an asset code that is
 not listed, a provider the app lacks, an amount that is not a plain decimal such as `'100'` or `'12.5'`) is left out
@@ -245,23 +255,34 @@ dropped.
 
 `SwapModalOptions`
 
-| Option      | Type                                 | Description                                                 |
-| ----------- | ------------------------------------ | ----------------------------------------------------------- |
-| `chain`     | `'STELLAR' \| 'SOLANA'`              | A network the app has swap venues on; the first otherwise   |
-| `sell`      | `string`                             | Code of an asset the wallet holds, e.g. `'XLM'`             |
-| `buy`       | `string`                             | Code of an asset the swap can buy, e.g. `'USDC'`            |
-| `amount`    | `string`                             | A plain decimal                                             |
-| `onSuccess` | `(result: { hash: string }) => void` | Called once for each transaction the modal sends that lands |
+| Option             | Type                                 | Description                                                                                       |
+| ------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `chain`            | `'STELLAR' \| 'SOLANA'`              | A network the app has swap venues on; the first otherwise                                         |
+| `sell`             | `string`                             | Code of an asset the wallet holds, e.g. `'XLM'`                                                   |
+| `buy`              | `string`                             | Code of an asset the swap can buy, e.g. `'USDC'`                                                  |
+| `amount`           | `string`                             | A plain decimal                                                                                   |
+| `destinationChain` | `SwapDestinationChain`               | Solana only: deliver to the user's own wallet on this chain (`'POLYGON'`), when the app offers it |
+| `onSuccess`        | `(result: { hash: string }) => void` | Called once for each transaction the modal sends that lands                                       |
 
 `EarnModalOptions`
 
-| Option          | Type                                 | Description                                                    |
-| --------------- | ------------------------------------ | -------------------------------------------------------------- |
-| `provider`      | `EarnProviderId`                     | A provider the app enables, e.g. `'blend'`                     |
-| `opportunityId` | `string`                             | One of that provider's opportunities; its position is read too |
-| `tab`           | `'deposit' \| 'withdraw'`            | The operation. Defaults to `'deposit'`                         |
-| `amount`        | `string`                             | A plain decimal                                                |
-| `onSuccess`     | `(result: { hash: string }) => void` | Called once for each transaction the modal sends that lands    |
+| Option          | Type                                 | Description                                                                    |
+| --------------- | ------------------------------------ | ------------------------------------------------------------------------------ |
+| `chain`         | `'STELLAR' \| 'SOLANA'`              | The network, when the app offers Earn on both; the first one offered otherwise |
+| `provider`      | `EarnProviderId`                     | A provider the app enables, e.g. `'blend'`                                     |
+| `opportunityId` | `string`                             | One of that provider's opportunities; its position is read too                 |
+| `tab`           | `'deposit' \| 'withdraw'`            | The operation. Defaults to `'deposit'`                                         |
+| `amount`        | `string`                             | A plain decimal                                                                |
+| `onSuccess`     | `(result: { hash: string }) => void` | Called once for each transaction the modal sends that lands                    |
+
+`BridgeModalOptions`
+
+| Option      | Type                                 | Description                                                                  |
+| ----------- | ------------------------------------ | ---------------------------------------------------------------------------- |
+| `fromChain` | `'STELLAR' \| 'SOLANA' \| 'POLYGON'` | Used only when the user can bridge from that chain                           |
+| `toChain`   | `'STELLAR' \| 'SOLANA' \| 'POLYGON'` | Used only when the user can bridge to it from the chain the modal opens on   |
+| `amount`    | `string`                             | USDC, a plain decimal such as `'25'`                                         |
+| `onSuccess` | `(transfer: BridgeTransfer) => void` | Called once the USDC arrives on the destination, with the completed transfer |
 
 `TxHistoryModalOptions`
 
@@ -283,9 +304,11 @@ characters) and hides it on other chains. The swap modal swaps on Solana too (Ju
 token's decimals, SOL as wrapped SOL), with a network picker when the app has venues on both chains. It sells what the
 wallet holds, with **Max** filling what the wallet can spend, and on Stellar buys the app's enabled assets, the curated
 catalog and a token the user adds by code and issuer, saying when the swap creates a trustline first. A route picker
-quotes with the best price (`auto`) or one venue. The earn modal
-has deposit and withdraw tabs. The history has a network picker when the user holds wallets on more than one chain,
-and each row opens its own chain's explorer.
+quotes with the best price (`auto`) or one venue. On Solana it offers a destination picker when the app has a venue that
+crosses chains, and a Check delivery button that follows the swap until the Polygon wallet is paid. The earn modal
+has a network picker when the app offers Earn on Stellar and Solana, deposit and withdraw tabs, and a position in words.
+The history has a network picker when the user holds wallets on more than one chain, shows ramp orders as rows with
+their fiat side, and each row opens its own chain's explorer once it has a hash.
 
 ### Login options
 
@@ -306,15 +329,22 @@ the same ids through `walletAdapters` in the client config.
   balance, transaction history and logout.
 - `<KycModal>`, `<KycStatus>`, `<RampWidget>`, `<RouteDisplay>`, `<RejectedRouteDisplay>`, `<WalletBalanceModal>`,
   `<CosignModal>`, `<RecoveryModal>`, `<CustodyMigrationModal>`, `<SendModal>`, `<ReceiveModal>`, `<SwapModal>`,
-  `<EarnModal>`, `<SessionsModal>`, `<EnabledAssetsModal>`, `<DistributionRulesModal>`: the modals, for when you want
-  to mount one yourself.
+  `<EarnModal>`, `<BridgeModal>`, `<SessionsModal>`, `<EnabledAssetsModal>`, `<DistributionRulesModal>`: the modals,
+  for when you want to mount one yourself.
+- `<BridgeModal>`: USDC between the user's own wallets on Stellar, Solana and Polygon by Circle CCTP (mainnet), signed
+  the way the source wallet signs (an external Solana wallet signs the burn in the connected wallet), followed until the
+  USDC arrives.
+- The provider opens `<RecoveryModal>` by itself when a co-signed signature fails with `SDK_WALLET_RECOVERY_REQUIRED` or
+  `SDK_COSIGN_DEVICE_NOT_ENROLLED`; `<CosignModal>` on a device that is not enrolled disables Approve and offers Link
+  this device.
 - `<CosignModal>`, the confirmation prompt and the transaction status views share one review: the asset and chain
   logos with the sender and recipient, a fee badge when who pays is known, and "Show details" with the addresses,
   network, fee, raw transaction and hash.
 - `<RequirementFormModal>`, `<RegistryCheckModal>`, `<ProviderRegistrationModal>`: the requirement steps a ramp route
   can ask for (see below).
 - `<CardModal>`: cards from the app's card providers - the provider's steps, sign-up, issuing, the card with its
-  balance and movements, funding from the wallet on Stellar or Solana (a network picker when the user holds both), and
+  balance and movements, funding from the wallet on the chains `getCardFundingRoutes()` lists (a network picker when
+  there is more than one), and
   the number, decrypted on the device without WebCrypto. The number, the CVC and the expiry date each have a copy
   button; the number is copied without spaces and the expiry as `MM/YY`.
 - `LoginModalTemplate`, `TransactionModalTemplate`, `KycModalTemplate`, `RampWidgetTemplate`,

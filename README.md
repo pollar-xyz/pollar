@@ -21,25 +21,11 @@ Pollar runs on Solana end to end for wallets and payments:
 
 ## Packages
 
-> **0.12.1** (`@pollar/core`, `@pollar/react`, `@pollar/react-native`) is additive on 0.12.0. Soroban auth entries
-> are signed by the Pollar wallet for **x402** and other sponsored-fee flows (`client.stellar.authEntrySigner()`, a
-> SEP-43 signer for x402's `ExactStellarScheme`), co-signed wallets sign those entries, and Stellar sends take hash
-> memos. It adds **swaps on Solana** (Jupiter and Titan: `getSolanaSwapConfig`, `getSolanaSwapQuote`, `swapSolana`,
-> and a Network selector in the web `<SwapModal>`), every modal in **English, Spanish and Portuguese**, conditional
-> KYC form fields, ramp texts that name a route's minimum or maximum, card funding from Solana and from co-signed
-> wallets, and a transaction review with a fee badge in every approval and status screen. One existing call changes behavior: `signAuthEntry` asks for the signature confirmation like every other
-> signature; see [UPGRADE.md](./UPGRADE.md). The Stellar Wallets Kit and Solana Wallet Standard adapters stay at
-> `0.12.0`; their `^0.12.0` core range accepts 0.12.1.
->
-> **0.12** runs on the sdk-api **`/v3`** API and has breaking changes. **Ramps are orders** (`getRampRoutes`,
-> `quoteRamp`, `createRampOrder`, `pollRampOrder`, `signRampLeg`), and Pollar runs each leg (the provider, a swap, a
-> bridge) server-side. A Turnkey wallet is self-custody or co-signed, is recovered with a passkey, an email code or
-> another device (`<RecoveryModal>`), and a custodial wallet moves to Turnkey from the device
-> (`<CustodyMigrationModal>`). Every signature asks the user by default, and the app's dashboard sets a window of
-> minutes and USD.
->
-> Before upgrading from an earlier release, read [UPGRADE.md](./UPGRADE.md) for the migration steps (or run
-> `npx @pollar/migrate`) and the [CHANGELOG](./CHANGELOG.md) for the full version history.
+> **0.12.1** is the current release of `@pollar/core`, `@pollar/react` and `@pollar/react-native`, additive on 0.12.0:
+> x402 signing with the Pollar wallet, swaps and Earn on Solana, USDC between the user's own wallets, card funding
+> from Solana, and every modal in English, Spanish and Portuguese. One call changes behavior: `signAuthEntry` asks for
+> the signature confirmation. Coming from 0.11.x or earlier, 0.12 has breaking changes (API v3, ramps as orders): read
+> [UPGRADE.md](./UPGRADE.md) or run `npx @pollar/migrate`. The [CHANGELOG](./CHANGELOG.md) has every release.
 
 ### [`@pollar/core`](./packages/core)
 

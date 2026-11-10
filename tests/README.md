@@ -29,9 +29,10 @@ node tests/smoke-session-races.cjs
 ```
 
 `npm run test:smoke` runs, in order: `smoke-keys`, `smoke-client`, `smoke-api-v3`,
-`smoke-wallet-less`, `smoke-send-payment`, `smoke-solana-swap`, `smoke-earn-review`,
-`smoke-card-funding-solana`, `smoke-send-create-account`, `smoke-cosign`,
-`smoke-cosign-modal`, `smoke-providers`, `smoke-session-races`, `smoke-resume`,
+`smoke-wallet-less`, `smoke-send-payment`, `smoke-solana-swap`, `smoke-solana-earn-swap`,
+`smoke-earn-review`, `smoke-card-funding-solana`, `smoke-bridge`, `smoke-bridge-modal`,
+`smoke-rn-bridge-modal`, `smoke-send-create-account`, `smoke-cosign`,
+`smoke-cosign-third-party`, `smoke-cosign-modal`, `smoke-providers`, `smoke-session-races`, `smoke-resume`,
 `smoke-lifecycle` (with `--expose-gc`), `smoke-invariants`, `smoke-cross-document`,
 `smoke-react`, `smoke-card-secrets`, `smoke-card-stage`, `smoke-registration-fix`,
 `smoke-form-fields`, `smoke-kyc`, `smoke-kyc-modal`, `smoke-email-code-input`,
@@ -278,6 +279,18 @@ external wallet's swap is built by the backend (`/swap/build`), signed in the
 connected wallet and submitted under the same idempotency key (`/tx/submit`); a
 co-signed wallet's build answers with a co-sign request instead.
 
+#### `smoke-solana-earn-swap.cjs`
+
+Earn on Solana and Solana swaps that deliver to another chain. The Earn reads
+ask with `chain=SOLANA` and a busy provider (503) is asked again; an external
+wallet signs the build and submits it under the build key, a co-signed wallet's
+build is its co-sign request, and a refusal comes back as its code. The swap
+options carry the destination chains, a quote and its build carry
+`destinationChain`, an expired quote is refused before anything is built, and a
+swap's status is read by its idempotency key. It also checks how a ramp screen
+words a Pix code, a transfer reference, a Pix key and a verification the
+provider is reviewing.
+
 #### `smoke-send-create-account.cjs`
 
 The Send modal's step for a Stellar destination with no account. The modal looks
@@ -297,6 +310,19 @@ payload and proposes the Turnkey request, reject closes it; by default the clien
 settles the vote itself, approves recognized setup at login and rejects a
 mismatching payload; card funding from a co-signed wallet; `confirmation: 'prompt'`
 asks before any signature.
+
+#### `smoke-cosign-third-party.cjs`
+
+What a co-signed device reads before it votes on a request a third party built:
+each shape is accepted as built and refused once tampered with. An
+`EVM_AUTHORIZATION` is the EIP-7702 tuple delegating to Simple7702Account on the
+network's chain, with its digest recomputed; an EVM batch is the wallet calling
+itself with `executeBatch`, exactly the calls the request states; an Earn
+transaction on Solana and a cross-chain swap are paid by the account the request
+names, signed by the user and that payer alone, and move nothing at the top
+level anywhere but into the protocol; a ramp sale paid by the app's fee wallet
+is still the one token transfer the request states. The EVM vectors are viem's
+output, so no network is needed.
 
 #### `smoke-cosign-modal.cjs`
 
@@ -340,6 +366,30 @@ WebCrypto.
 `cardStage` in `@pollar/react` and `@pollar/react-native`: which stage the card
 modal shows (the steps, the provider form, or nothing) for each combination of
 card holder and onboarding steps.
+
+### Bridge
+
+#### `smoke-bridge.cjs`
+
+The USDC bridge between the user's own wallets. `bridge()` starts a transfer
+with its idempotency key; `signBridgeStep` signs the SIGNATURE action through
+the handler registered for its chain and encoding and sends it for the action
+the user saw; an action that changed is refused before anything is signed; and
+`pollBridgeTransfer` reads until the transfer settles.
+
+#### `smoke-bridge-modal.cjs`
+
+The options `openBridgeModal` takes in `@pollar/react`: the modal opens on the
+direction and amount given, a direction the user cannot bridge in falls back to
+the first one offered, opening on none after some leaves nothing behind, and
+`onSuccess` hears the USDC arrive once.
+
+#### `smoke-rn-bridge-modal.cjs`
+
+The same options on the React Native `<BridgeModal>`: the direction and amount
+given, a direction the user cannot move in falling back to the first one
+offered, an amount that is not a plain decimal left out, and `onSuccess` heard
+once when the USDC arrives.
 
 ### KYC and requirement forms
 

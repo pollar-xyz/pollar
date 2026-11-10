@@ -2,8 +2,13 @@
 
 ## 0.12.0 -> 0.12.1
 
-0.12.1 adds `client.stellar.authEntrySigner()`, the auth-entry adapter step,
-hash memos and swaps on Solana. Upgrade `@pollar/core`, `@pollar/react` and
+0.12.1 is additive on 0.12.0: x402 signing with the Pollar wallet
+(`client.stellar.authEntrySigner()`, the auth-entry adapter step), hash memos,
+swaps on Solana (and toward Polygon), Earn on Solana, USDC between the user's
+own wallets (`client.bridge`, `<BridgeModal>`), card funding from Solana and
+from co-signed wallets, modals in English, Spanish and Portuguese that open on
+options, and one transaction review in every approval and status screen. The
+[CHANGELOG](./CHANGELOG.md#0121) lists everything. Upgrade `@pollar/core`, `@pollar/react` and
 `@pollar/react-native` together: `@pollar/react@0.12.1` and
 `@pollar/react-native@0.12.1` require `@pollar/core@^0.12.1`. The adapters stay
 at `0.12.0`.
@@ -34,6 +39,26 @@ An app that calls `fundCard` itself passes an `idempotencyKey`, one per funding
 the user means to make, and sends the same key when it retries that funding;
 without it a retry after a lost response can pay twice. `<CardModal>` already
 does this.
+
+`fetchTxHistory` asks for the user's ramp orders too (`includeRamps: 'true'`),
+so `txHistory` carries `kind: 'ramp'` rows (`operation` `onramp` or `offramp`,
+`id` the order id) next to the transactions, counted in `total`. A ramp row may
+have no hash yet, so key rows by `id`. An app that renders the history itself
+and wants transactions only passes `fetchTxHistory({ includeRamps: 'false' })`.
+
+A refused email on `sendEmailCode` ends in the new `EMAIL_NOT_ALLOWED` auth
+error code (with the backend `code`, `EMAIL_DISPOSABLE_NOT_ALLOWED` or
+`EMAIL_BLOCKED`) instead of `EMAIL_SEND_FAILED`. A `switch` over the auth error
+codes that checks it covers every case needs the new one.
+
+The React and React Native providers open the recovery modal on two outcomes:
+`SDK_WALLET_RECOVERY_REQUIRED` (a co-signed wallet without a recovery method,
+asked to sign) and `SDK_COSIGN_DEVICE_NOT_ENROLLED` (this browser origin or app
+install is not one of the wallet's devices). An app that already opens its own
+recovery screen on those codes drops it, or the user sees two. A headless app
+listens with `client.onWalletRecoveryRequired(cb)` and
+`client.onCosignDeviceNotEnrolled(cb)`, and can ask
+`client.cosign.isDeviceEnrolled()` before it offers to sign.
 
 ## 0.11.5 -> 0.12.0
 
