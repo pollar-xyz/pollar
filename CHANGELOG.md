@@ -500,6 +500,14 @@ SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
   click while a transfer, an order or a funding is under way. The web assets
   modal does the same for a trustline: Confirm inside it, then a strip saying
   the asset is being added or removed, added, removed, or why it was not.
+- **A Solana swap's confirmation shows what is swapped.** `swapSolana` adds each
+  side's `inputSymbol`/`inputDecimals` and `outputSymbol`/`outputDecimals` to
+  the confirmation, from the balances and app assets the client already read
+  (wrapped SOL is SOL), and the review draws it as a swap: "Swap SOL for USDC",
+  1 SOL to at least 148.4 USDC with each token's logo and chain, the venue,
+  and both mints in the details. Prompts titled `swap`, `cctp_burn`,
+  `ramp_payment` and the other co-sign operations now have their names in
+  `<ConfirmModal>` too.
 - **A shorter swap form.** Each panel puts the amount and its asset on one row,
   with the balance and Max as a small line under them; the rate stays in view,
   and the route picker, minimum received, price impact and fees are behind

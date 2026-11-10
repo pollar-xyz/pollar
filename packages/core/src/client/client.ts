@@ -407,6 +407,14 @@ function toPersistedWallet(w: PollarApplicationConfigContent['wallet']): PollarP
   };
 }
 
+/** Wrapped SOL: the mint a Solana swap sells or buys SOL as. */
+const WRAPPED_SOL_MINT = 'So11111111111111111111111111111111111111112';
+
+/** A swap side's `{side}Symbol` and `{side}Decimals` for the confirmation, when the client knows the token. */
+function tokenLabel(side: 'input' | 'output', token: { symbol: string; decimals: number } | undefined) {
+  return token ? { [`${side}Symbol`]: token.symbol, [`${side}Decimals`]: token.decimals } : {};
+}
+
 /** How far apart a transaction past its confirmation window is read: soon at first, then every 30s. */
 const SLOW_TX_POLL_MS = [5_000, 5_000, 10_000, 15_000, 30_000];
 /** Past this a pending transaction can no longer land: the longest validity window the server builds is 5 min. */
@@ -5331,6 +5339,8 @@ export class PollarClient {
         outAmount: quote.outAmount,
         minOut: quote.minOut,
         ...(destinationChain && { destinationChain }),
+        ...tokenLabel('input', this._tokenOf(quote.inputMint)),
+        ...tokenLabel('output', this._tokenOf(quote.outputMint)),
       },
     });
     if (!answer.ok) return this._declined('building', undefined, answer);
@@ -6591,6 +6601,21 @@ export class PollarClient {
         this._log.warn('[PollarClient] could not read the pending co-sign requests', err);
       });
     }
+  }
+
+  /**
+   * A token's symbol and decimals by its mint (or contract address), from the
+   * balances and app assets the client already read: what a confirmation needs
+   * to show `1 SOL` instead of a mint and base units. Wrapped SOL is SOL.
+   */
+  private _tokenOf(address: string): { symbol: string; decimals: number } | undefined {
+    if (address === WRAPPED_SOL_MINT) return { symbol: 'SOL', decimals: 9 };
+    const same = (issuer: string | undefined) =>
+      !!issuer && (issuer === address || (address.startsWith('0x') && issuer.toLowerCase() === address.toLowerCase()));
+    const balances = this._walletBalanceState.step === 'loaded' ? this._walletBalanceState.data.balances : [];
+    const assets = this._enabledAssetsState.step === 'loaded' ? this._enabledAssetsState.data.assets : [];
+    const found = [...balances, ...assets].find((record) => same(record.issuer) && typeof record.decimals === 'number');
+    return found ? { symbol: found.code, decimals: found.decimals! } : undefined;
   }
 
   private _setTransactionState(next: TransactionState): void {
