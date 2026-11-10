@@ -124,7 +124,12 @@ const MESSAGES: Record<FormLanguage, Record<string, string>> = {
     too_large: 'This value is too large.',
     pattern: 'This does not have the expected format.',
     invalid_format: 'This does not have the expected format.',
-    refused: 'Check this value and correct it.',
+    refused: 'This value was not accepted. Check it and correct it.',
+    review: 'Please review this value.',
+    invalid_cpf: 'This CPF is not valid. Check its digits.',
+    invalid_postal_code: 'The CEP must have 8 digits.',
+    invalid_state: 'Use your state code, such as SP or RJ.',
+    invalid_country: 'Choose a country from the list.',
   },
   es: {
     required: 'Este campo es obligatorio.',
@@ -136,7 +141,12 @@ const MESSAGES: Record<FormLanguage, Record<string, string>> = {
     too_large: 'Este valor es demasiado alto.',
     pattern: 'No tiene el formato esperado.',
     invalid_format: 'No tiene el formato esperado.',
-    refused: 'Revisa este dato y corrígelo.',
+    refused: 'Este dato no fue aceptado. Revísalo y corrígelo.',
+    review: 'Revisa este dato, por favor.',
+    invalid_cpf: 'Este CPF no es válido. Revisa sus dígitos.',
+    invalid_postal_code: 'El CEP debe tener 8 dígitos.',
+    invalid_state: 'Usa el código de tu estado, como SP o RJ.',
+    invalid_country: 'Elige un país de la lista.',
   },
   pt: {
     required: 'Este campo é obrigatório.',
@@ -148,7 +158,12 @@ const MESSAGES: Record<FormLanguage, Record<string, string>> = {
     too_large: 'Este valor é alto demais.',
     pattern: 'Não tem o formato esperado.',
     invalid_format: 'Não tem o formato esperado.',
-    refused: 'Revise este dado e corrija.',
+    refused: 'Este dado não foi aceito. Revise e corrija.',
+    review: 'Revise este dado, por favor.',
+    invalid_cpf: 'Este CPF não é válido. Confira os dígitos.',
+    invalid_postal_code: 'O CEP deve ter 8 dígitos.',
+    invalid_state: 'Use a sigla do seu estado, como SP ou RJ.',
+    invalid_country: 'Escolha um país da lista.',
   },
 };
 
@@ -156,9 +171,10 @@ export function fieldErrorMessage(code: string, language: FormLanguage): string 
   return MESSAGES[language][code] ?? MESSAGES[language].invalid_type!;
 }
 
-/** The answers the form comes back to correct, each marked as refused until the user changes it. */
+/** The answers the form comes back to correct, each marked with why until the user changes it. */
 export function correctionErrors(form: RequirementForm): Record<string, string> {
-  return Object.fromEntries((form.corrections?.keys ?? []).map((key) => [key, 'refused']));
+  const codes = form.corrections?.codes ?? {};
+  return Object.fromEntries((form.corrections?.keys ?? []).map((key) => [key, codes[key] ?? 'refused']));
 }
 
 /** The per-field errors of a KYC_FORM_INVALID_ANSWERS error, by key; null when it names none. */

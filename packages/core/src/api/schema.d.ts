@@ -15004,7 +15004,10 @@ export interface operations {
                             missing: string[];
                             corrections?: {
                                 keys: string[];
-                                reason: string | null;
+                                codes: {
+                                    [key: string]: "invalid_cpf" | "invalid_postal_code" | "invalid_state" | "invalid_country" | "refused" | "review";
+                                };
+                                note: string | null;
                             } | null;
                         };
                     };

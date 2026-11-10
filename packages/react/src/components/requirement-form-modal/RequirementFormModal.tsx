@@ -257,7 +257,7 @@ export function RequirementFormModal({
             {form.corrections && (
               <div className="pollar-form-error pollar-form-corrections" role="status">
                 <p>{copy.corrections}</p>
-                {form.corrections.reason && <p className="pollar-form-corrections-reason">{form.corrections.reason}</p>}
+                {form.corrections.note && <p className="pollar-form-corrections-note">{form.corrections.note}</p>}
               </div>
             )}
             {visibleFields(form.fields, values).map((field) => {

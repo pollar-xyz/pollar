@@ -89,7 +89,7 @@
 .pollar-form-corrections p {
   margin: 0;
 }
-.pollar-form-corrections .pollar-form-corrections-reason {
+.pollar-form-corrections .pollar-form-corrections-note {
   margin-top: 0.25rem;
   color: var(--pollar-muted);
 }

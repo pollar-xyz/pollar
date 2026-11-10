@@ -283,9 +283,9 @@ export function RequirementFormModal({
               {!!form.corrections && (
                 <View style={[styles.errorBox, { borderColor: colors.border, borderLeftColor: accentColor }]}>
                   <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }}>{copy.corrections}</Text>
-                  {!!form.corrections.reason && (
+                  {!!form.corrections.note && (
                     <Text style={{ color: colors.muted, fontSize: 14, lineHeight: 20, marginTop: 4 }}>
-                      {form.corrections.reason}
+                      {form.corrections.note}
                     </Text>
                   )}
                 </View>

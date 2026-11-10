@@ -28,12 +28,25 @@ for (const pkg of ['packages/react', 'packages/react-native']) {
   assert.equal(localFieldError(amount, '11'), 'too_large', `${pkg}: number range is checked`);
   assert.equal(localFieldError(broken, 'x'), null, `${pkg}: a pattern the engine cannot compile is left to the server`);
   assert.deepEqual(
-    { ...correctionErrors({ corrections: { keys: ['tax_residence_country'], reason: 'Not a country.' } }) },
-    { tax_residence_country: 'refused' },
-    `${pkg}: answers sent back to correct open marked`,
+    {
+      ...correctionErrors({
+        corrections: {
+          keys: ['tax_residence_country', 'cpf'],
+          codes: { tax_residence_country: 'invalid_country' },
+          note: null,
+        },
+      }),
+    },
+    { tax_residence_country: 'invalid_country', cpf: 'refused' },
+    `${pkg}: answers sent back open marked with their code, refused when none came`,
   );
   assert.deepEqual({ ...correctionErrors({ corrections: null }) }, {}, `${pkg}: nothing is marked without corrections`);
-  assert.equal(fieldErrorMessage('refused', 'es'), 'Revisa este dato y corrígelo.', `${pkg}: a refused answer says so`);
+  assert.equal(fieldErrorMessage('invalid_country', 'es'), 'Elige un país de la lista.', `${pkg}: a code is translated`);
+  assert.equal(
+    fieldErrorMessage('invalid_cpf', 'pt'),
+    'Este CPF não é válido. Confira os dígitos.',
+    `${pkg}: in each language`,
+  );
   assert.deepEqual(
     JSON.parse(JSON.stringify(localFieldErrors([code, amount], { phone_country_code: '+591', amount: '5' }))),
     { phone_country_code: 'pattern' },

@@ -179,11 +179,14 @@
   values (`'true'` or `'false'` for a checkbox): `<RequirementFormModal>` shows
   and hides it as the user answers, and neither checks nor sends it while
   hidden.
-- **A form sent back to correct says why.** When a provider refuses an answer,
-  or Pollar asks the user to correct one, `getRequirementForm` carries
-  `corrections: { keys, reason }`. `<RequirementFormModal>` (web and React
-  Native) opens with a notice and the reason above the fields, and marks each
-  refused field until the user changes it.
+- **A form sent back to correct says why, in the user's language.** When a
+  provider refuses an answer, or Pollar asks the user to correct one,
+  `getRequirementForm` carries `corrections: { keys, codes, note }`: a code per
+  field (`invalid_cpf`, `invalid_postal_code`, `invalid_state`,
+  `invalid_country`, `refused`, `review`) and, when Pollar wrote one, a note.
+  `<RequirementFormModal>` (web and React Native) opens with a notice and the
+  note above the fields, and shows each field's code as a translated message
+  until the user changes it.
 - **The card modal copies the card details.** Next to the card number and the
   CVC while the details are shown, and next to the expiry date always; the
   number is copied without spaces and the expiry as `MM/YY`.
