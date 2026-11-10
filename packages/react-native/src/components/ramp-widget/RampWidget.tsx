@@ -15,6 +15,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { SvgXml } from 'react-native-svg';
 import type {
   CosignCustody,
+  PendingConfirmation,
   PollarClient,
   RampAsset,
   RampSigningHandler,
@@ -27,6 +28,8 @@ import type {
   RampQuoteRejection,
   RampQuoteRequirement,
   RampRoute,
+  StellarNetwork,
+  WalletChain,
 } from '@pollar/core';
 import {
   countryName,
@@ -65,6 +68,23 @@ import { KycModal } from '../kyc-modal/KycModal';
 import { RequirementFormModal } from '../requirement-form-modal/RequirementFormModal';
 import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
+import { useInlineConfirmation } from '../../useInlineConfirmation';
+import { InlineConfirm } from '../confirm-modal/InlineConfirm';
+import { explorerTxUrl } from '../explorer';
+import { TxReview } from '../tx-review/TxReview';
+import type { TxDetailRow } from '../tx-review/tx-review-model';
+
+/** The chain a leg's on-chain transaction ran on: where its funds left from, else where they arrived. */
+function legChain(leg: RampOrder['legs'][number]): WalletChain {
+  if (leg.from.kind === 'asset') return leg.from.chain as WalletChain;
+  return leg.to.kind === 'asset' ? (leg.to.chain as WalletChain) : 'STELLAR';
+}
+
+/** The chain a step's transaction is on: a mint lands on the destination, the rest leave from the source. */
+function stepChain(kind: string, leg: RampOrder['legs'][number]): WalletChain {
+  if (kind === 'mint' && leg.to.kind === 'asset') return leg.to.chain as WalletChain;
+  return legChain(leg);
+}
 
 export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 'status' | 'error';
 
@@ -276,6 +296,12 @@ export interface RampWidgetTemplateProps {
   onStepSelect?: ((label: string) => void) | undefined;
   onRetry: () => void;
   onClose: () => void;
+  /** A leg's signature waiting for the user's yes, answered in the status view. */
+  confirmation?: PendingConfirmation | null | undefined;
+  /** The app's network, for the explorer links in the order's details. */
+  network?: StellarNetwork | undefined;
+  /** Puts a value on the clipboard, for the copy buttons in the details. */
+  copyText?: ((text: string) => Promise<void>) | undefined;
 }
 
 /** The current time, every second while `running`: what a countdown reads. */
@@ -358,6 +384,9 @@ export function RampWidgetTemplate({
   onRetry,
   onClose,
   language: languageProp,
+  confirmation = null,
+  network = 'mainnet',
+  copyText,
 }: RampWidgetTemplateProps) {
   const language = useInheritedLanguage(languageProp);
   const copy = RAMP_COPY[language];
@@ -373,6 +402,37 @@ export function RampWidgetTemplate({
   const onramp = direction === 'ONRAMP';
   const view = order ? describeRampAction(order, language) : null;
   const settled = order ? ['completed', 'failed', 'refunded'].includes(order.state) : false;
+  const shortHash = (hash: string) => `${hash.slice(0, 8)}…${hash.slice(-6)}`;
+  // Every transaction hash and the order id are details: the legs only say how far the order got.
+  const orderRows: TxDetailRow[] = order
+    ? [
+        ...order.legs.flatMap((leg): TxDetailRow[] => [
+          ...(leg.onchainTxHash
+            ? [
+                {
+                  label: rampLegTitle(leg, language),
+                  value: shortHash(leg.onchainTxHash),
+                  href: explorerTxUrl(legChain(leg), leg.onchainTxHash, network),
+                  copyValue: leg.onchainTxHash,
+                },
+              ]
+            : []),
+          ...(leg.steps ?? []).flatMap((st): TxDetailRow[] =>
+            st.hash
+              ? [
+                  {
+                    label: rampStepTitle(st, leg, language),
+                    value: shortHash(st.hash),
+                    href: explorerTxUrl(stepChain(st.kind, leg), st.hash, network),
+                    copyValue: st.hash,
+                  },
+                ]
+              : [],
+          ),
+        ]),
+        { label: copy.order, value: order.id, copyValue: order.id, mono: true },
+      ]
+    : [];
   // A leg running on its own (not waiting on the user) counts down its quoted time.
   const running = order?.legs.find((leg) => rampLegStatus(leg) === 'active' && order.pendingAction?.legIndex !== leg.index);
   const now = useNowEverySecond(step === 'status' && !settled && !!running && running.etaSeconds !== null);
@@ -749,6 +809,23 @@ export function RampWidgetTemplate({
                 </View>
               );
             })}
+            {confirmation && (
+              <InlineConfirm
+                confirmation={confirmation}
+                language={language}
+                theme={theme}
+                accentColor={accentColor}
+                network={network}
+                copyText={copyText}
+              />
+            )}
+            <TxReview
+              data={{ title: '', kind: 'other', rows: orderRows }}
+              theme={theme}
+              accentColor={accentColor}
+              copyText={copyText}
+              language={language}
+            />
             {nextApproval && !order.pendingAction && (
               <Text style={[styles.note, { color: colors.muted }]}>{copy.next(nextApproval)}</Text>
             )}
@@ -761,7 +838,6 @@ export function RampWidgetTemplate({
             {order.failure && (
               <>
                 <Text style={[styles.note, { color: colors.text }]}>{rampOrderResolutionText(order, language)}</Text>
-                {copyRow(copy.order, order.id)}
                 {stopped &&
                   !settled &&
                   waitsOnRecovery &&
@@ -862,6 +938,7 @@ export function RampWidget({
   const {
     getClient,
     copyText,
+    network,
     ramp: saved,
     setRamp: save,
     styles: pollarStyles,
@@ -880,6 +957,8 @@ export function RampWidget({
   const client = getClient();
 
   const [step, setStep] = useState<RampStep>(saved ? 'status' : 'input');
+  // A leg's signature is confirmed in the status view, not in a prompt over the widget.
+  const confirmation = useInlineConfirmation(step === 'status');
   const seededDirection: RampDirection = initial?.direction === 'sell' ? 'OFFRAMP' : 'ONRAMP';
   const [direction, setDirection] = useState<RampDirection>(saved?.direction ?? seededDirection);
   // Applied to the first routes that load for the seeded direction, then dropped; the user moving first drops it too.
@@ -1351,9 +1430,12 @@ export function RampWidget({
   }
 
   return (
-    <PollarOverlay onCancel={onClose}>
+    <PollarOverlay onCancel={onClose} dismissOnBackdrop={step !== 'status'}>
       <View style={styles.modalWrapper}>
         <RampWidgetTemplate
+          confirmation={confirmation}
+          network={network}
+          copyText={copyText}
           language={language}
           theme={theme}
           accentColor={accentColor}

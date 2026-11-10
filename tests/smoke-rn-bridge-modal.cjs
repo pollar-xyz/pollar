@@ -41,7 +41,12 @@ const reactNative = {
   },
   ActivityIndicator: () => null,
   Linking: { openURL: async () => {} },
+  Image: () => null,
+  TouchableOpacity: passthrough,
+  StyleSheet: { create: (styles) => styles, absoluteFill: {}, hairlineWidth: 1 },
 };
+// The transfer view draws its review with react-native-svg icons.
+const reactNativeSvg = { __esModule: true, default: passthrough, Circle: () => null, Path: () => null, Rect: () => null };
 
 let ctx;
 function load(file) {
@@ -52,9 +57,10 @@ function load(file) {
   const scope = { exports: {}, setInterval, clearInterval, setTimeout, clearTimeout, globalThis, AbortController };
   scope.require = (id) => {
     if (id === 'react-native') return reactNative;
+    if (id === 'react-native-svg') return reactNativeSvg;
     if (id === 'react-native-safe-area-context') return { SafeAreaProvider: passthrough, SafeAreaView: passthrough };
     if (id === '@pollar/core') return core;
-    if (id === '../context' || id === '../../context') return { usePollar: () => ctx };
+    if (id === './context' || id === '../context' || id === '../../context') return { usePollar: () => ctx };
     if (id === '../language' || id === '../../language') return { useModalLanguage: () => 'en' };
     if (id === '../commons') return { PollarModalFooter: () => null };
     if (id === '../layout') return { useSurfaceColors: () => ({ bg: '#fff' }) };
@@ -137,6 +143,9 @@ ctx = {
   },
   refreshWalletBalance: async () => {},
   openCosignModal: () => {},
+  copyText: async () => {},
+  confirmations: [],
+  registerConfirmationHost: () => () => {},
 };
 
 let root;

@@ -42,6 +42,8 @@ import { BRIDGE_COPY } from '../bridge-modal/bridge-copy';
 import { signStepWithWallet } from '../bridge-modal/BridgeModal';
 import { CARD_COPY, CREDIT_DELAYED, fundingProblemText, type CardCopy } from './card-copy';
 import { blockedStepMessage, cardStage, pendingFromRequirement, requiredCardStep, type PendingCardStep } from './card-kyc';
+import { useInlineConfirmation } from '../../useInlineConfirmation';
+import { InlineConfirm } from '../confirm-modal/InlineConfirm';
 
 /** Where the card modal opens: a starting point the user can change, never a lock. */
 export interface CardModalOptions {
@@ -228,6 +230,10 @@ export function CardModal({ onClose, initial }: CardModalProps) {
   const [secrets, setSecrets] = useState<CardSecrets | null>(null);
   const [panel, setPanel] = useState<'card' | 'fund'>('card');
   const [busy, setBusy] = useState<string | null>(null);
+  // The funding's signature is confirmed in the panel that sends it, not in a prompt over the modal.
+  const confirmation = useInlineConfirmation(busy === 'fund-send');
+  // The funding sent from this panel: its outcome strip sits under the button that sent it.
+  const [sentFundingId, setSentFundingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mounted = useRef(true);
@@ -479,6 +485,7 @@ export function CardModal({ onClose, initial }: CardModalProps) {
           return;
         }
         setFundings((cur) => [outcome.funding, ...(cur ?? []).filter((f) => f.id !== outcome.funding.id)]);
+        setSentFundingId(outcome.funding.id);
         setFundAmount('');
         initial?.onFunded?.(outcome.funding);
       },
@@ -671,6 +678,8 @@ export function CardModal({ onClose, initial }: CardModalProps) {
     </TouchableOpacity>
   );
 
+  const sentFunding = fundings?.find((f) => f.id === sentFundingId) ?? null;
+  const earlierFundings = (fundings ?? []).filter((f) => f.id !== sentFundingId);
   return (
     <View style={styles.overlay}>
       <View style={styles.modalWrapper}>
@@ -939,10 +948,54 @@ export function CardModal({ onClose, initial }: CardModalProps) {
                   busy !== null || !selectedRoute || !(Number(fundAmount) >= 1),
                 )}
 
-                {fundings && fundings.length > 0 && (
+                {confirmation && (
+                  <InlineConfirm
+                    confirmation={confirmation}
+                    language={language}
+                    theme={theme}
+                    accentColor={accentColor}
+                    copyText={copyText}
+                  />
+                )}
+                {!confirmation &&
+                  sentFunding &&
+                  (() => {
+                    const f = sentFunding;
+                    const state = (f.route === 'DIRECT' ? copy.fundingSolana[f.status] : undefined) ?? copy.funding[f.status];
+                    const steps = FUNDING_STEPS[f.route];
+                    const step = steps.indexOf(f.status) + 1;
+                    const inflight = FUNDING_INFLIGHT.has(f.status);
+                    const failed = f.status === 'FAILED';
+                    const tone = failed ? '#dc2626' : inflight ? colors.text : '#15803d';
+                    return (
+                      <View
+                        style={[styles.outcome, { borderColor: inflight ? colors.border : tone }]}
+                        accessibilityLiveRegion="polite"
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          {inflight && <ActivityIndicator size="small" color={accentColor} />}
+                          <Text style={{ color: tone, fontWeight: '600', flexShrink: 1 }}>
+                            {inflight ? '' : failed ? '✕ ' : '✓ '}
+                            {state?.title ?? f.status} · {money(f.amount, 'USD')}
+                          </Text>
+                        </View>
+                        {inflight && step > 0 && (
+                          <Text style={{ color: colors.muted, fontSize: 12 }}>
+                            {copy.stepOf(step, steps.length)} ·{' '}
+                            {f.error === CREDIT_DELAYED ? copy.fundingProblem.delayed : state?.hint}
+                          </Text>
+                        )}
+                        {failed && (
+                          <Text style={{ color: colors.muted, fontSize: 12 }}>{fundingProblemText(f.error, copy)}</Text>
+                        )}
+                      </View>
+                    );
+                  })()}
+
+                {earlierFundings.length > 0 && (
                   <View>
                     <Text style={[styles.section, { color: colors.muted }]}>{copy.yourFundings}</Text>
-                    {fundings.map((f) => {
+                    {earlierFundings.map((f) => {
                       const state = (f.route === 'DIRECT' ? copy.fundingSolana[f.status] : undefined) ?? copy.funding[f.status];
                       const steps = FUNDING_STEPS[f.route];
                       const step = steps.indexOf(f.status) + 1;
@@ -1027,6 +1080,7 @@ export function CardModal({ onClose, initial }: CardModalProps) {
 }
 
 const styles = StyleSheet.create({
+  outcome: { gap: 6, borderWidth: 1, borderRadius: 10, padding: 12, marginTop: 10 },
   overlay: {
     position: 'absolute',
     top: 0,

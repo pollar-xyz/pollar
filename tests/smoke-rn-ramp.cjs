@@ -42,6 +42,9 @@ const reactNative = {
   ActivityIndicator: () => null,
   StyleSheet: { create: (s) => s, absoluteFillObject: {} },
   Linking: { openURL: async () => {} },
+  // The order's details panel is a TxReview.
+  Platform: { OS: 'ios', select: (o) => o.ios ?? o.default },
+  Pressable: passthrough,
 };
 
 let client;
@@ -49,6 +52,8 @@ let saved = null;
 const pollarContext = {
   getClient: () => client,
   styles: {},
+  confirmations: [],
+  registerConfirmationHost: () => () => {},
   appConfig: { application: { name: 'Fixture', network: 'mainnet', chains: ['STELLAR'] } },
   copyText: async () => {},
   cosign: { pending: [] },
@@ -78,7 +83,15 @@ function load(file) {
         qrCodes.push(props.value);
         return null;
       };
-    if (id === 'react-native-svg') return { SvgXml: () => null };
+    if (id === 'react-native-svg')
+      return {
+        __esModule: true,
+        default: passthrough,
+        SvgXml: () => null,
+        Circle: () => null,
+        Path: () => null,
+        Rect: () => null,
+      };
     if (id === '../../context' || id === './context') return { usePollar: () => pollarContext };
     if (id === '../commons') return { PollarModalFooter: () => null, PollarOverlay: passthrough };
     if (id.startsWith('.')) {
