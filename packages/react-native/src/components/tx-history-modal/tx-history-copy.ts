@@ -19,6 +19,8 @@ export const TX_HISTORY_COPY: Record<
     invoke: string;
     sponsored: string;
     selfPaid: string;
+    /** Beside a ramp order the history shows as FAILED because it was refunded. */
+    refunded: string;
     copyTxHash: string;
     viewOnExplorer: string;
     range: string;
@@ -47,6 +49,7 @@ export const TX_HISTORY_COPY: Record<
     invoke: 'Invoke {method}() on',
     sponsored: 'Sponsored',
     selfPaid: 'Self-paid',
+    refunded: 'Refunded',
     copyTxHash: 'Copy transaction hash',
     viewOnExplorer: 'View on block explorer',
     range: '{from}–{to} of {total}',
@@ -74,6 +77,7 @@ export const TX_HISTORY_COPY: Record<
     invoke: 'Llamar a {method}() en',
     sponsored: 'Patrocinada',
     selfPaid: 'Pagada por ti',
+    refunded: 'Reembolsada',
     copyTxHash: 'Copiar hash de la transacción',
     viewOnExplorer: 'Ver en el explorador de bloques',
     range: '{from}–{to} de {total}',
@@ -88,6 +92,8 @@ export const TX_HISTORY_COPY: Record<
       create_account: 'crear cuenta',
       invoke_contract: 'llamada a contrato',
       manage_data: 'gestionar datos',
+      onramp: 'compra',
+      offramp: 'venta',
     },
   },
   pt: {
@@ -107,6 +113,7 @@ export const TX_HISTORY_COPY: Record<
     invoke: 'Chamar {method}() em',
     sponsored: 'Patrocinada',
     selfPaid: 'Paga por você',
+    refunded: 'Reembolsada',
     copyTxHash: 'Copiar hash da transação',
     viewOnExplorer: 'Ver no explorador de blocos',
     range: '{from}–{to} de {total}',
@@ -121,6 +128,8 @@ export const TX_HISTORY_COPY: Record<
       create_account: 'criar conta',
       invoke_contract: 'chamada de contrato',
       manage_data: 'gerenciar dados',
+      onramp: 'compra',
+      offramp: 'venda',
     },
   },
 };

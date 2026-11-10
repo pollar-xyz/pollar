@@ -2425,7 +2425,9 @@ export class PollarClient {
     return () => this._txHistoryStateListeners.delete(cb);
   }
 
-  async fetchTxHistory(params: TxHistoryParams = {}): Promise<void> {
+  /** Ramp orders come in as `kind: 'ramp'` rows unless `includeRamps: 'false'` is passed. */
+  async fetchTxHistory(input: TxHistoryParams = {}): Promise<void> {
+    const params: TxHistoryParams = { includeRamps: 'true', ...input };
     const gen = ++this._txHistoryGen;
     this._setTxHistoryState({ step: 'loading', params });
     try {

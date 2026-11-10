@@ -161,7 +161,7 @@ export interface paths {
         };
         /**
          * Get transaction history (multichain)
-         * @description Every chain by default; pass `?chain=` to narrow. Each row is tagged with its `chain` and a `{ amount, unit }` fee.
+         * @description Every chain by default; pass `?chain=` to narrow. Each row is tagged with its `chain`, its `kind` and a `{ amount, unit }` fee. With `includeRamps=true` the user's ramp orders come in the same list as `kind: ramp` rows (`operation` `onramp` or `offramp`, `id` the order id), counted in `total`; `chain` keeps the orders with a leg on that chain. A refunded order is `FAILED` with `resultCode: refunded`.
          */
         get: operations["getTxHistory"];
         put?: never;
@@ -3745,6 +3745,7 @@ export interface operations {
                 limit?: number;
                 offset?: number;
                 chain?: "STELLAR" | "POLYGON" | "SOLANA";
+                includeRamps?: "true" | "false";
             };
             header?: never;
             path?: never;
@@ -3784,6 +3785,8 @@ export interface operations {
                                 };
                                 summary: string;
                                 createdAt: string;
+                                /** @enum {string} */
+                                kind: "tx" | "ramp";
                             }[];
                             total: number;
                             limit: number;

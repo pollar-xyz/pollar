@@ -1,5 +1,5 @@
 import { useInheritedLanguage } from '../../language-context';
-import { PollarLanguage, TxHistoryState, WalletChain } from '@pollar/core';
+import { PollarLanguage, TxHistoryRecord, TxHistoryState, WalletChain } from '@pollar/core';
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, Linking } from 'react-native';
 import { ModalStatusBanner, PollarModalFooter, PollarOverlay } from '../commons';
@@ -25,6 +25,12 @@ function explorerTxUrl(chain: WalletChain | undefined, hash: string, network: st
   if (chain === 'SOLANA') return `https://explorer.solana.com/tx/${hash}${testnet ? '?cluster=devnet' : ''}`;
   if (chain === 'POLYGON') return `https://${testnet ? 'amoy.' : ''}polygonscan.com/tx/${hash}`;
   return `https://stellar.expert/explorer/${testnet ? 'testnet' : 'public'}/tx/${hash}`;
+}
+
+/** A ramp row's fiat side (`70 BOB`); its amounts are decimal strings, not base units. */
+function rampFiat(details: TxHistoryRecord['details']): string | null {
+  const { fiatAmount, fiatCurrency } = details ?? {};
+  return typeof fiatAmount === 'string' && typeof fiatCurrency === 'string' ? `${fiatAmount} ${fiatCurrency}` : null;
 }
 
 export function TxHistoryModalTemplate({
@@ -102,17 +108,25 @@ export function TxHistoryModalTemplate({
         {isLoaded && transactions.length > 0 && (
           <FlatList
             data={transactions}
-            keyExtractor={(item) => item.hash}
+            keyExtractor={(item) => item.id}
             style={styles.list}
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={[styles.txRow, { backgroundColor: colors.itemBg, borderColor: colors.border }]}
+                disabled={!item.hash}
                 onPress={() => Linking.openURL(explorerTxUrl(item.chain ?? chain ?? undefined, item.hash, item.network))}
               >
                 <View style={styles.txRowLeft}>
                   <Text style={[styles.txType, { color: colors.text }]}>
                     {item.operation ? (copy.operations[item.operation] ?? item.operation) : copy.transaction}
                   </Text>
+                  {item.kind === 'ramp' && (
+                    <Text style={{ color: colors.muted, fontSize: 12 }}>
+                      {[rampFiat(item.details), item.resultCode === 'refunded' ? copy.refunded : null]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                  )}
                   <Text style={{ color: colors.muted, fontSize: 12 }}>{new Date(item.createdAt).toLocaleDateString()}</Text>
                 </View>
                 <View style={styles.txRowRight}>

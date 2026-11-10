@@ -74,6 +74,12 @@ function formatAmount(details: TxHistoryRecord['details']): string | null {
   }
 }
 
+/** A ramp row's fiat side (`70 BOB`); its amounts are decimal strings, not base units. */
+function formatRampFiat(details: TxHistoryRecord['details']): string | null {
+  const { fiatAmount, fiatCurrency } = details ?? {};
+  return typeof fiatAmount === 'string' && typeof fiatCurrency === 'string' ? `${fiatAmount} ${fiatCurrency}` : null;
+}
+
 // Stellar account (G) and contract (C) strkeys are 56 base32 chars.
 const STELLAR_ADDRESS = /\b[GC][A-Z2-7]{55}\b/g;
 
@@ -252,7 +258,11 @@ export function TxHistoryModalTemplate({
 
               <span className="pollar-hist-item-meta">
                 <span>{copy.operations[record.operation] ?? record.operation}</span>
-                {record.chain !== 'STELLAR' && formatAmount(record.details) && <span>· {formatAmount(record.details)}</span>}
+                {record.kind === 'ramp' && formatRampFiat(record.details) && <span>· {formatRampFiat(record.details)}</span>}
+                {record.kind === 'ramp' && record.resultCode === 'refunded' && <span>· {copy.refunded}</span>}
+                {record.kind !== 'ramp' && record.chain !== 'STELLAR' && formatAmount(record.details) && (
+                  <span>· {formatAmount(record.details)}</span>
+                )}
                 {typeof record.details?.sponsored === 'boolean' && (
                   <span>· {record.details.sponsored ? copy.sponsored : copy.selfPaid}</span>
                 )}
