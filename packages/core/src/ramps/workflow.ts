@@ -135,6 +135,7 @@ const EN = {
     `This route ${side === 'in' ? 'takes' : 'pays out'} at most ${amount}. Try a smaller amount.`,
   trustAsset: (code: string) =>
     `Your Stellar wallet must trust ${code} to receive it. Add the ${code} trustline and try again.`,
+  linkWallet: (chain: string) => `This route needs a ${chain} wallet. Connect one to this account or choose another network.`,
   walletSteps: {
     create_wallet: ['Create wallet', 'Creating…'],
     set_up_wallet: ['Set up wallet', 'Setting up…'],
@@ -216,6 +217,7 @@ const COPY: Record<PollarLanguage, typeof EN> = {
       `Esta ruta ${side === 'in' ? 'acepta' : 'paga'} como máximo ${amount}. Prueba con un monto menor.`,
     trustAsset: (code) =>
       `Tu billetera Stellar debe confiar en ${code} para recibirlo. Agrega la trustline de ${code} e intenta de nuevo.`,
+    linkWallet: (chain) => `Esta ruta necesita una billetera de ${chain}. Conecta una a esta cuenta o elige otra red.`,
     walletSteps: {
       create_wallet: ['Crear billetera', 'Creando…'],
       set_up_wallet: ['Configurar billetera', 'Configurando…'],
@@ -293,6 +295,7 @@ const COPY: Record<PollarLanguage, typeof EN> = {
     limitMax: (side, amount) => `Esta rota ${side === 'in' ? 'aceita' : 'paga'} no máximo ${amount}. Tente um valor menor.`,
     trustAsset: (code) =>
       `Sua carteira Stellar precisa confiar em ${code} para recebê-lo. Adicione a trustline de ${code} e tente novamente.`,
+    linkWallet: (chain) => `Esta rota precisa de uma carteira ${chain}. Conecte uma a esta conta ou escolha outra rede.`,
     walletSteps: {
       create_wallet: ['Criar carteira', 'Criando…'],
       set_up_wallet: ['Configurar carteira', 'Configurando…'],
@@ -638,7 +641,7 @@ function trustlineCode(action: string, detail: string | null | undefined): strin
 /**
  * The text for a failure's `resolutionAction`; anything unknown asks the user to contact support.
  * An amount out of a route's limits names the bound when the failure carries it (`limit`), and a
- * missing trustline names its asset.
+ * missing trustline names its asset, and a missing wallet its network.
  */
 export function rampResolutionText(
   failure: Pick<RampFailure, 'resolutionAction'> & {
@@ -650,6 +653,8 @@ export function rampResolutionText(
 ): string {
   const trust = trustlineCode(failure.resolutionAction, failure.detail);
   if (trust) return COPY[language].trustAsset(trust);
+  const missingOn = failure.resolutionAction === 'link_wallet' && failure.detail ? CHAIN_NAME[failure.detail] : undefined;
+  if (missingOn) return COPY[language].linkWallet(missingOn);
   const resolution = RESOLUTION[language];
   return limitText(failure.code, failure.limit, language) ?? resolution[failure.resolutionAction] ?? resolution.contact_pollar!;
 }

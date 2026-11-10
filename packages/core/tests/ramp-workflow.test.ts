@@ -342,3 +342,17 @@ test('a missing trustline names the asset the route delivers; a detail that is n
     rampResolutionText({ resolutionAction: 'add_trustline', detail: ars }),
   );
 });
+
+test('a missing wallet names the network it is missing on; an unknown or absent detail keeps the generic text', () => {
+  assert.equal(
+    rampResolutionText({ code: 'WALLET_MISSING', resolutionAction: 'link_wallet', detail: 'STELLAR' }),
+    'This route needs a Stellar wallet. Connect one to this account or choose another network.',
+  );
+  assert.equal(
+    rampResolutionText({ code: 'WALLET_MISSING', resolutionAction: 'link_wallet', detail: 'SOLANA' }, 'es'),
+    'Esta ruta necesita una billetera de Solana. Conecta una a esta cuenta o elige otra red.',
+  );
+  const generic = 'This route needs a wallet on another network.';
+  assert.equal(rampResolutionText({ resolutionAction: 'link_wallet', detail: 'no STELLAR wallet' }), generic);
+  assert.equal(rampResolutionText({ resolutionAction: 'link_wallet' }), generic);
+});
