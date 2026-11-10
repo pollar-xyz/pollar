@@ -1,8 +1,13 @@
 'use client';
 
-import type { BridgeChain, BridgeQuote, BridgeTransfer, PollarLanguage } from '@pollar/core';
+import type { BridgeChain, BridgeQuote, BridgeTransfer, PendingConfirmation, PollarLanguage } from '@pollar/core';
 import { useInheritedLanguage } from '../../language-context';
 import { PollarModalFooter } from '../commons';
+import { InlineConfirm } from '../confirm-modal/InlineConfirm';
+import { OutcomeIcon, TitleMark } from '../signing-marks';
+import { TxReview } from '../tx-review/TxReview';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
+import type { TxReviewData } from '../tx-review/tx-review-model';
 import { PollarSelect } from '../PollarSelect';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { BRIDGE_COPY } from './bridge-copy';
@@ -56,6 +61,8 @@ export interface BridgeModalTemplateProps {
   onNewBridge: () => void;
   onClose: () => void;
   language?: PollarLanguage | undefined;
+  /** The signature waiting for the user's yes, answered in the transfer view. */
+  confirmation?: PendingConfirmation | null | undefined;
 }
 
 const fill = (text: string, values: Record<string, string>) =>
@@ -88,18 +95,26 @@ function ChainPicker({
   );
 }
 
-/** Burn, Circle's attestation, mint: how far the transfer got. */
+/** Burn, Circle's attestation, mint: how far the transfer got, as lines of its outcome strip. */
 function Progress({ transfer, labels }: { transfer: BridgeTransfer; labels: { burn: string; attest: string; mint: string } }) {
   const reached = {
     burn: !!transfer.burnTxHash,
     attest: transfer.status === 'ATTESTED' || transfer.status === 'COMPLETED' || !!transfer.mintTxHash,
     mint: transfer.status === 'COMPLETED',
   };
+  const order = ['burn', 'attest', 'mint'] as const;
+  const current = order.find((key) => !reached[key]);
   return (
     <ol className="pollar-bridge-steps">
-      {(['burn', 'attest', 'mint'] as const).map((key) => (
+      {order.map((key) => (
         <li key={key} className={reached[key] ? 'pollar-bridge-step pollar-bridge-step-done' : 'pollar-bridge-step'}>
-          <span className="pollar-bridge-step-dot" aria-hidden />
+          {reached[key] ? (
+            <OutcomeIcon ok />
+          ) : key === current && transfer.status !== 'FAILED' ? (
+            <span className="pollar-spinner pollar-spinner-sm" aria-hidden />
+          ) : (
+            <span className="pollar-bridge-step-dot" aria-hidden />
+          )}
           {labels[key]}
         </li>
       ))}
@@ -112,6 +127,40 @@ export function BridgeModalTemplate(props: BridgeModalTemplateProps) {
   const copy = BRIDGE_COPY[language];
   const cssVars = buildModalCssVars(props.theme, props.accentColor, props.styleOverrides);
   const { transfer, quote } = props;
+  const reviewCopy = TX_REVIEW_COPY[language];
+  // The transfer as every transaction modal draws it: USDC leaving one wallet for the user's own on the other chain,
+  // with each chain's transaction in the details.
+  const transferReview: TxReviewData | null = transfer
+    ? {
+        kind: 'bridge',
+        title: reviewCopy.titles.bridge(`${transfer.amount} USDC`, BRIDGE_CHAIN_LABEL[transfer.toChain]),
+        from: { chain: transfer.fromChain, asset: 'USDC', amount: transfer.amount, self: true },
+        to: { chain: transfer.toChain, asset: 'USDC', amount: transfer.amountOut ?? transfer.amount, self: true },
+        rows: [
+          ...(transfer.burnTxHash
+            ? [
+                {
+                  label: fill(copy.viewBurn, { chain: BRIDGE_CHAIN_LABEL[transfer.fromChain] }),
+                  value: `${transfer.burnTxHash.slice(0, 8)}…${transfer.burnTxHash.slice(-6)}`,
+                  href: EXPLORER[transfer.fromChain](transfer.burnTxHash),
+                  copyValue: transfer.burnTxHash,
+                },
+              ]
+            : []),
+          ...(transfer.mintTxHash
+            ? [
+                {
+                  label: fill(copy.viewMint, { chain: BRIDGE_CHAIN_LABEL[transfer.toChain] }),
+                  value: `${transfer.mintTxHash.slice(0, 8)}…${transfer.mintTxHash.slice(-6)}`,
+                  href: EXPLORER[transfer.toChain](transfer.mintTxHash),
+                  copyValue: transfer.mintTxHash,
+                },
+              ]
+            : []),
+        ],
+      }
+    : null;
+  const inTransfer = props.step === 'transfer' && !!transfer;
   const busy = props.submitting || props.quoting;
   const toName = props.toChain ? BRIDGE_CHAIN_LABEL[props.toChain] : '';
   const signingNote =
@@ -129,7 +178,14 @@ export function BridgeModalTemplate(props: BridgeModalTemplateProps) {
       onClick={(event) => event.stopPropagation()}
     >
       <div className="pollar-modal-header">
-        <h2 className="pollar-modal-title">{copy.title}</h2>
+        {inTransfer && transferReview ? (
+          <h2 className="pollar-modal-title pollar-cosign-heading">
+            <TitleMark chain={transfer!.fromChain} asset="USDC" />
+            <span>{transferReview.title}</span>
+          </h2>
+        ) : (
+          <h2 className="pollar-modal-title">{copy.title}</h2>
+        )}
         <div className="pollar-modal-header-actions">
           <button type="button" className="pollar-modal-close" onClick={props.onClose} aria-label={copy.close}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -228,28 +284,46 @@ export function BridgeModalTemplate(props: BridgeModalTemplateProps) {
         </div>
       )}
 
-      {props.step === 'transfer' && transfer && (
+      {inTransfer && transfer && transferReview && (
         <div className="pollar-bridge-transfer">
-          <div className={`pollar-bridge-status pollar-bridge-status-${transfer.status.toLowerCase()}`}>
-            <strong>{copy.statusTitle[transfer.status]}</strong>
-            <p>
-              {fill(copy.statusBody[transfer.status], {
-                from: BRIDGE_CHAIN_LABEL[transfer.fromChain],
-                to: BRIDGE_CHAIN_LABEL[transfer.toChain],
-                amount: transfer.amountOut ?? transfer.amount,
-              })}
-            </p>
-          </div>
-          <Progress
-            transfer={transfer}
-            labels={{
-              burn: fill(copy.steps.burn, { from: BRIDGE_CHAIN_LABEL[transfer.fromChain] }),
-              attest: copy.steps.attest,
-              mint: fill(copy.steps.mint, { to: BRIDGE_CHAIN_LABEL[transfer.toChain] }),
-            }}
-          />
+          <TxReview data={transferReview} language={language} />
 
-          {transfer.pendingAction?.kind === 'SIGNATURE' && (
+          {props.confirmation ? (
+            <InlineConfirm confirmation={props.confirmation} language={language} />
+          ) : (
+            <div
+              className={`pollar-outcome${transfer.status === 'FAILED' ? ' pollar-outcome-bad' : ''}${
+                transfer.status === 'COMPLETED' || transfer.status === 'FAILED' ? '' : ' pollar-outcome-busy'
+              }`}
+            >
+              <p className="pollar-outcome-main">
+                {transfer.status === 'COMPLETED' || transfer.status === 'FAILED' ? (
+                  <OutcomeIcon ok={transfer.status === 'COMPLETED'} />
+                ) : (
+                  <span className="pollar-spinner pollar-spinner-sm" aria-hidden />
+                )}
+                {copy.statusTitle[transfer.status]}
+              </p>
+              <p className="pollar-outcome-note">
+                {fill(copy.statusBody[transfer.status], {
+                  from: BRIDGE_CHAIN_LABEL[transfer.fromChain],
+                  to: BRIDGE_CHAIN_LABEL[transfer.toChain],
+                  amount: transfer.amountOut ?? transfer.amount,
+                })}
+              </p>
+              <Progress
+                transfer={transfer}
+                labels={{
+                  burn: fill(copy.steps.burn, { from: BRIDGE_CHAIN_LABEL[transfer.fromChain] }),
+                  attest: copy.steps.attest,
+                  mint: fill(copy.steps.mint, { to: BRIDGE_CHAIN_LABEL[transfer.toChain] }),
+                }}
+              />
+              {props.pollTrouble && <p className="pollar-outcome-note">{copy.pollTrouble}</p>}
+            </div>
+          )}
+
+          {!props.confirmation && transfer.pendingAction?.kind === 'SIGNATURE' && (
             <button type="button" className="pollar-btn-primary" disabled={props.signing} onClick={props.onAuthorize}>
               {props.signing ? copy.waitingWallet : copy.authorize}
             </button>
@@ -260,20 +334,6 @@ export function BridgeModalTemplate(props: BridgeModalTemplateProps) {
             </button>
           )}
           {props.actionError && <div className="pollar-modal-error">{props.actionError}</div>}
-          {props.pollTrouble && <div className="pollar-bridge-note">{copy.pollTrouble}</div>}
-
-          <div className="pollar-bridge-links">
-            {transfer.burnTxHash && (
-              <a href={EXPLORER[transfer.fromChain](transfer.burnTxHash)} target="_blank" rel="noopener noreferrer">
-                {fill(copy.viewBurn, { chain: BRIDGE_CHAIN_LABEL[transfer.fromChain] })}
-              </a>
-            )}
-            {transfer.mintTxHash && (
-              <a href={EXPLORER[transfer.toChain](transfer.mintTxHash)} target="_blank" rel="noopener noreferrer">
-                {fill(copy.viewMint, { chain: BRIDGE_CHAIN_LABEL[transfer.toChain] })}
-              </a>
-            )}
-          </div>
 
           {(transfer.status === 'COMPLETED' || transfer.status === 'FAILED') && (
             <div className="pollar-modal-actions">

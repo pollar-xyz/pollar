@@ -680,3 +680,19 @@
   font-size: 0.8rem;
   color: var(--pollar-muted);
 }
+
+/* --- A signature's yes asked inside the modal that started it ------------------ */
+.pollar-inline-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid var(--pollar-accent);
+  border-radius: var(--pollar-card-border-radius, 10px);
+}
+
+.pollar-inline-confirm-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--pollar-text);
+}

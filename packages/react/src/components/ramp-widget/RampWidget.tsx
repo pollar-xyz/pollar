@@ -38,6 +38,7 @@ import { ProviderRegistrationModal } from '../provider-registration-modal/Provid
 import { useModalLanguage } from '../../language';
 import { RAMP_COPY, type RampCopy } from './ramp-copy';
 import { PollarOverlay } from '../PollarOverlay';
+import { useInlineConfirmation } from '../../useInlineConfirmation';
 
 /** Where the ramp widget opens: a starting point the user can change, never a lock. */
 export interface RampModalOptions {
@@ -180,6 +181,8 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<RampStep>('input');
+  // A leg's signature is confirmed in the status view, not in a prompt over the widget.
+  const confirmation = useInlineConfirmation(step === 'status');
   const [direction, setDirection] = useState<RampDirection>(initial?.direction === 'sell' ? 'OFFRAMP' : 'ONRAMP');
   // Applied to the first routes that load for the seeded direction, then dropped; the user moving first drops it too.
   const seedRef = useRef<{ direction: RampDirection; options: RampModalOptions } | null>(
@@ -748,7 +751,7 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={step === 'status' ? undefined : onClose}>
       <RampWidgetTemplate
         language={language}
         theme={theme}
@@ -828,6 +831,7 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
         }}
         onRefresh={() => void handleRefresh()}
         onClose={onClose}
+        confirmation={confirmation}
       />
     </PollarOverlay>
   );

@@ -4,6 +4,7 @@ import { useInheritedLanguage } from '../../language-context';
 import { useEffect, useState } from 'react';
 import type {
   CosignCustody,
+  PendingConfirmation,
   PollarLanguage,
   RampAsset,
   RampDirection,
@@ -41,7 +42,9 @@ import { RejectedRouteDisplay, RouteDisplay } from './RouteDisplay';
 import { AmountField } from '../AmountField';
 import { CopyButton, PollarModalFooter } from '../commons';
 import { PollarSelect } from '../PollarSelect';
-import { AssetLogo } from '../tx-review/TxReview';
+import { AssetLogo, TxReview } from '../tx-review/TxReview';
+import type { TxDetailRow } from '../tx-review/tx-review-model';
+import { InlineConfirm } from '../confirm-modal/InlineConfirm';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 'status' | 'error';
@@ -217,6 +220,8 @@ interface RampWidgetTemplateProps {
   onRetry: () => void;
   onRefresh: () => void;
   onClose: () => void;
+  /** A leg's signature waiting for the user's yes, answered in the status view. */
+  confirmation?: PendingConfirmation | null | undefined;
 }
 
 /** The trustline a dropped route asks for, as the widget tracks it while it is added. */
@@ -299,6 +304,7 @@ export function RampWidgetTemplate({
   onRefresh,
   onClose,
   language: languageProp,
+  confirmation = null,
 }: RampWidgetTemplateProps) {
   const language = useInheritedLanguage(languageProp);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
@@ -307,6 +313,36 @@ export function RampWidgetTemplate({
   const sendUnit = onramp ? fiat?.currency : asset?.code;
   const view = order ? describeRampAction(order, language) : null;
   const settled = order ? ['completed', 'failed', 'refunded'].includes(order.state) : false;
+  const shortHash = (hash: string) => `${hash.slice(0, 8)}…${hash.slice(-6)}`;
+  const orderRows: TxDetailRow[] = order
+    ? [
+        ...order.legs.flatMap((leg): TxDetailRow[] => [
+          ...(leg.onchainTxHash
+            ? [
+                {
+                  label: rampLegTitle(leg, language),
+                  value: shortHash(leg.onchainTxHash),
+                  href: explorerTxUrl(legChain(leg), leg.onchainTxHash, network),
+                  copyValue: leg.onchainTxHash,
+                },
+              ]
+            : []),
+          ...(leg.steps ?? []).flatMap((st): TxDetailRow[] =>
+            st.hash
+              ? [
+                  {
+                    label: rampStepTitle(st, leg, language),
+                    value: shortHash(st.hash),
+                    href: explorerTxUrl(stepChain(st.kind, leg), st.hash, network),
+                    copyValue: st.hash,
+                  },
+                ]
+              : [],
+          ),
+        ]),
+        { label: copy.order, value: order.id, copyValue: order.id, mono: true },
+      ]
+    : [];
   // A leg running on its own (not waiting on the user) counts down its quoted time.
   const running = order?.legs.find((leg) => rampLegStatus(leg) === 'active' && order.pendingAction?.legIndex !== leg.index);
   const now = useNowEverySecond(step === 'status' && !settled && !!running && running.etaSeconds !== null);
@@ -671,7 +707,6 @@ export function RampWidgetTemplate({
           <ol className="pollar-ramp-legs" aria-label={copy.progress}>
             {order.legs.map((leg) => {
               const status = rampLegStatus(leg);
-              const hash = leg.onchainTxHash;
               const note = rampLegNote(leg, language);
               return (
                 <li key={leg.index} className="pollar-ramp-leg" data-status={status}>
@@ -679,16 +714,6 @@ export function RampWidgetTemplate({
                   <span className="pollar-ramp-leg-title">{rampLegTitle(leg, language)}</span>
                   {status === 'active' && !settled && (
                     <span className="pollar-spinner pollar-spinner-sm" aria-label={copy.inProgress} />
-                  )}
-                  {hash && (
-                    <a
-                      className="pollar-ramp-leg-link"
-                      href={explorerTxUrl(legChain(leg), hash, network)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {hash.slice(0, 6)}…{hash.slice(-4)}
-                    </a>
                   )}
                   {note && <span className="pollar-ramp-leg-note">{note}</span>}
                   {status === 'active' && !settled && !!leg.steps?.length && (
@@ -698,18 +723,7 @@ export function RampWidgetTemplate({
                           <span className="pollar-ramp-step-title">{rampStepTitle(s, leg, language)}</span>
                           <span className="pollar-ramp-step-state">
                             {s.status === 'confirming' && <span className="pollar-spinner pollar-spinner-sm" aria-hidden />}
-                            {s.hash ? (
-                              <a
-                                className="pollar-ramp-leg-link"
-                                href={explorerTxUrl(stepChain(s.kind, leg), s.hash, network)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                {rampStepStatusText(s, language)}
-                              </a>
-                            ) : (
-                              rampStepStatusText(s, language)
-                            )}
+                            {rampStepStatusText(s, language)}
                           </span>
                         </li>
                       ))}
@@ -722,6 +736,11 @@ export function RampWidgetTemplate({
               );
             })}
           </ol>
+
+          {confirmation && <InlineConfirm confirmation={confirmation} language={language} network={network} />}
+
+          {/* Every transaction hash and the order id are details: the legs above only say how far the order got. */}
+          <TxReview data={{ title: '', kind: 'other', rows: orderRows }} language={language} />
 
           {nextApproval && !order.pendingAction && <p className="pollar-ramp-next">{copy.next(nextApproval)}</p>}
 
@@ -770,12 +789,6 @@ export function RampWidgetTemplate({
                   )}
                 </button>
               )}
-              <div className="pollar-ramp-payment-value" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <code style={{ flex: 1, wordBreak: 'break-all' }}>
-                  {copy.order} {order.id}
-                </code>
-                <CopyButton value={order.id} label={copy.copyOrderId} language={language} />
-              </div>
             </div>
           )}
 
