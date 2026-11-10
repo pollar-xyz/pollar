@@ -463,6 +463,42 @@ SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
   logo per option and works from the keyboard. The ramp's step bar starts at
   Route, with a back button to the amount, and the ramp shows the Pollar footer
   like the other modals, web and React Native.
+- **A signed approval stays in the same view.** The co-sign prompt no longer
+  swaps to a separate "Approved" screen: the request stays as it was, with a
+  strip under it saying signed and sent, signed for the app to send, or
+  rejected or expired, plus the next step and the countdown. A flow's earlier
+  approvals stay above the current one as one-line rows marked signed; each
+  opens its own details, where the transaction hash and the explorer link
+  live. The hash is never shown outside the details.
+- **Transaction modals confirm and finish in one view.** Send, swap, earn and
+  the transaction modal answer the signature's confirmation themselves, with a
+  Confirm button under the review and the reason and "Cancel this action" in
+  the details, instead of a `ConfirmModal` over them. A modal registers for
+  this while it signs (`registerConfirmationHost` in the provider's context,
+  `useInlineConfirmation` inside the SDK). `TxStatusView` keeps the review on
+  screen from the yes to the outcome: one strip under it says sending, sent or
+  failed with the reason, in place of the spinner ring and the repeated
+  review, and the header names the action with the asset and chain logo. A
+  cross-chain swap's delivery address and destination explorer are detail
+  rows; detail rows can be links (`href`). An outside click no longer closes a
+  modal once its transaction step starts.
+- **Bridge, ramp and card funding follow the same format**, web and React
+  Native. The bridge's transfer is titled with the action, drawn as a review,
+  and reports burn, attestation and mint inside the outcome strip, with both
+  transactions in the details. The ramp's status view keeps the order id and
+  every leg and step hash in one details panel under the legs. A card funding
+  sent from the panel gets its outcome strip under the button. The three
+  confirm a signature inline (`InlineConfirm`), and none closes on an outside
+  click while a transfer, an order or a funding is under way.
+- **A shorter swap form.** Each panel puts the amount and its asset on one row,
+  with the balance and Max as a small line under them; the rate stays in view,
+  and the route picker, minimum received, price impact and fees are behind
+  Show details.
+- **React Native's send, swap and earn panels show their transaction like the
+  modals** (`TxStatusBody`, shared with the transaction modal): the action's
+  title, the review, Confirm when the signature asks for a yes, then the
+  outcome strip, with the hash in the details. The raw state, the copy-hash
+  button and "Check confirmation" are gone.
 - **A transaction past its confirmation window keeps being read.** The submit
   flow still answers `pending` after about 40 seconds without a ledger
   confirmation, and the transaction is now read on in the background (5s, 5s,
