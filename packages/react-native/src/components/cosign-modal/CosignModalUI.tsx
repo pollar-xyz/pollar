@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { CHAIN_LOGOS } from '../../constants';
 import { PollarModalFooter } from '../commons';
-import { InlineAssetLogo, TxFeeBadge, TxReview } from '../tx-review/TxReview';
+import { InlineAssetLogo, TxReview } from '../tx-review/TxReview';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
 import { headlineAsset, reviewFromRequest } from '../tx-review/tx-review-model';
 import { COSIGN_COPY } from './cosign-copy';
@@ -28,15 +28,16 @@ export interface CosignModalTemplateProps {
   closesIn?: number | null;
   /** The approval coming next in the same flow, shown while the modal waits for it. */
   nextStep?: string | null;
-  /** The transaction hash was just copied. */
-  copied?: boolean;
+  /** The requests resolved while the modal is open, oldest first: the steps of the flow already signed. */
+  history?: CosignRequest[];
+  /** The explorer page of a sent request's transaction. */
+  explorerUrlOf?: (request: CosignRequest) => string | null;
   /** Language of the modal's text; the device's when not given. */
   language?: PollarLanguage | undefined;
   /** The app's network, shown next to the chain in the details. */
   network?: StellarNetwork | undefined;
   /** Puts a value on the clipboard, for the copy buttons in the details. */
   copyText?: ((text: string) => Promise<void>) | undefined;
-  onCopyHash: (hash: string) => void;
   onSelect: (request: CosignRequest) => void;
   onApprove: (request: CosignRequest) => void;
   onReject: (request: CosignRequest) => void;
@@ -102,8 +103,70 @@ function labelOf(request: CosignRequest, copy: CosignCopy): string {
   return copy.operations[op] ?? (op ? op.replace(/_/g, ' ') : copy.transaction);
 }
 
-function crop(value: string): string {
-  return value.length > 16 ? `${value.slice(0, 6)}...${value.slice(-6)}` : value;
+type Colors = { text: string; muted: string; border: string; okText: string; errorText: string; errorBg: string };
+
+/** What a resolved request did, in one line: signed and sent, signed for the app to send, or why nothing was. */
+function outcomeText(request: CosignRequest, copy: CosignCopy): string {
+  if (request.status !== 'APPROVED')
+    return `${copy.status[request.status] ?? request.status.toLowerCase()}. ${copy.nothingSigned}`;
+  if (request.submit?.hash) return copy.signedSent;
+  if (request.signedXdr) return copy.signedAppSends;
+  return copy.status.APPROVED ?? 'Approved';
+}
+
+function OutcomeIcon({ ok, color }: { ok: boolean; color: string }) {
+  return (
+    <View style={[styles.okDot, { backgroundColor: color }]}>
+      {ok ? <View style={styles.okMark} /> : <Text style={styles.badMark}>×</Text>}
+    </View>
+  );
+}
+
+/** A step of the flow already resolved: one line, and its own details when opened. */
+function StepRow({
+  request,
+  review,
+  copy,
+  colors,
+  theme,
+  accentColor,
+  copyText,
+  language,
+}: {
+  request: CosignRequest;
+  review: ReturnType<typeof reviewFromRequest>;
+  copy: CosignCopy;
+  colors: Colors;
+  theme: string;
+  accentColor: string;
+  copyText?: ((text: string) => Promise<void>) | undefined;
+  language: PollarLanguage;
+}) {
+  const [open, setOpen] = useState(false);
+  const ok = request.status === 'APPROVED';
+  const tone = ok ? colors.okText : colors.errorText;
+  return (
+    <View style={[styles.step, { borderBottomColor: colors.border }]}>
+      <TouchableOpacity
+        style={styles.stepHead}
+        onPress={() => setOpen((v) => !v)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+      >
+        <OutcomeIcon ok={ok} color={tone} />
+        <Text style={[styles.stepTitle, { color: colors.text }]} numberOfLines={1}>
+          {review.title}
+        </Text>
+        <Text style={{ color: tone, fontSize: 12, fontWeight: '600' }}>
+          {ok ? copy.signed : (copy.status[request.status] ?? request.status)}
+        </Text>
+        <Text style={{ color: colors.muted, fontSize: 12 }}>{open ? '▴' : '▾'}</Text>
+      </TouchableOpacity>
+      {open && (
+        <TxReview data={review} theme={theme} accentColor={accentColor} copyText={copyText} language={language} detailsOnly />
+      )}
+    </View>
+  );
 }
 
 function expiresIn(request: CosignRequest, copy: CosignCopy): string {
@@ -127,11 +190,11 @@ export function CosignModalTemplate({
   lastResolved,
   closesIn = null,
   nextStep = null,
-  copied = false,
+  history = [],
+  explorerUrlOf,
   language: languageProp,
   network,
   copyText,
-  onCopyHash,
   onSelect,
   onApprove,
   onReject,
@@ -168,8 +231,11 @@ export function CosignModalTemplate({
         signWith: request.account ?? request.signWith,
         raw: request.unsignedPayload,
         fallbackTitle: labelOf(request, copy),
-        extraRows: [{ label: copy.expiresIn, value: expiresIn(request, copy) }],
-        appPaysFee: request.appPaysFee,
+        ...(request.status === 'PENDING' ? { extraRows: [{ label: copy.expiresIn, value: expiresIn(request, copy) }] } : {}),
+        appPaysFee: request.submit?.sponsored ?? request.appPaysFee,
+        ...(request.submit?.hash
+          ? { hash: { value: request.submit.hash, explorerUrl: explorerUrlOf?.(request) ?? null } }
+          : {}),
       },
       TX_REVIEW_COPY[language],
     );
@@ -178,6 +244,9 @@ export function CosignModalTemplate({
   // One request: the header is the action itself. Several: how many wait, and each names itself below.
   const shown = grouped ? null : (current ?? (pending.length === 0 ? lastResolved : undefined) ?? null);
   const shownReview = shown ? (shown === current ? review : reviewOf(shown)) : null;
+  // The steps already signed stay on screen, so the user sees what they approved; the last one, once
+  // nothing waits, is the main view instead of a row.
+  const doneSteps = history.filter((r) => !(pending.length === 0 && r.id === lastResolved?.id));
   const heading = confirmingClose
     ? copy.closeTitle
     : grouped
@@ -248,41 +317,59 @@ export function CosignModalTemplate({
         </View>
       ) : (
         <ScrollView style={{ maxHeight: 460 }}>
-          {pending.length === 0 && (
-            <View style={styles.empty}>
-              <Text style={{ color: colors.text, fontWeight: '600' }}>
-                {lastResolved ? (copy.status[lastResolved.status] ?? lastResolved.status.toLowerCase()) : copy.nothingWaiting}
-              </Text>
-              {lastResolved?.submit?.hash && (
-                <View style={styles.hashRow}>
-                  <Text style={{ color: colors.muted }}>
-                    {copy.sentTransaction} {crop(lastResolved.submit.hash)}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => onCopyHash(lastResolved.submit!.hash)}
-                    accessibilityLabel={copied ? copy.copied : copy.copyHash}
-                  >
-                    <Text style={{ color: accentColor, fontWeight: '600' }}>{copied ? copy.copied : copy.copy}</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-              {lastResolved?.submit?.sponsored !== undefined && (
-                <TxFeeBadge
-                  sponsored={lastResolved.submit.sponsored}
+          {doneSteps.map((r) => (
+            <StepRow
+              key={r.id}
+              request={r}
+              review={reviewOf(r)}
+              copy={copy}
+              colors={colors}
+              theme={theme}
+              accentColor={accentColor}
+              copyText={copyText}
+              language={language}
+            />
+          ))}
+
+          {pending.length === 0 &&
+            (lastResolved && shownReview ? (
+              <View style={styles.detail}>
+                <TxReview
+                  key={lastResolved.id}
+                  data={shownReview}
                   theme={theme}
                   accentColor={accentColor}
+                  copyText={copyText}
                   language={language}
                 />
-              )}
-              {nextStep && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <ActivityIndicator size="small" color={accentColor} />
-                  <Text style={{ color: colors.text, fontSize: 13 }}>{copy.next(nextStep)}</Text>
-                </View>
-              )}
-              {closesIn !== null && <Text style={{ color: colors.muted, fontSize: 12 }}>{copy.closingIn(closesIn)}</Text>}
-            </View>
-          )}
+                {(() => {
+                  const ok = lastResolved.status === 'APPROVED';
+                  const tone = ok ? colors.okText : colors.errorText;
+                  return (
+                    <View style={[styles.outcome, { borderColor: tone, backgroundColor: ok ? 'transparent' : colors.errorBg }]}>
+                      <View style={styles.outcomeMain}>
+                        <OutcomeIcon ok={ok} color={tone} />
+                        <Text style={{ color: tone, fontWeight: '600', flexShrink: 1 }}>{outcomeText(lastResolved, copy)}</Text>
+                      </View>
+                      {nextStep && (
+                        <View style={styles.outcomeMain}>
+                          <ActivityIndicator size="small" color={accentColor} />
+                          <Text style={{ color: colors.muted, fontSize: 13, flexShrink: 1 }}>{copy.next(nextStep)}</Text>
+                        </View>
+                      )}
+                      {closesIn !== null && (
+                        <Text style={{ color: colors.muted, fontSize: 12 }}>{copy.closingIn(closesIn)}</Text>
+                      )}
+                    </View>
+                  );
+                })()}
+              </View>
+            ) : (
+              <View style={styles.empty}>
+                <Text style={{ color: colors.muted }}>{copy.nothingWaiting}</Text>
+                {closesIn !== null && <Text style={{ color: colors.muted, fontSize: 12 }}>{copy.closingIn(closesIn)}</Text>}
+              </View>
+            ))}
 
           {grouped &&
             pending.map((r) => (
@@ -393,7 +480,12 @@ const styles = StyleSheet.create({
   leave: { gap: 12, paddingBottom: 4 },
   textBtn: { alignSelf: 'center', paddingVertical: 4 },
   empty: { paddingVertical: 24, alignItems: 'center', gap: 6 },
-  hashRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  outcome: { gap: 6, borderWidth: 1, borderRadius: 10, padding: 12 },
+  outcomeMain: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  step: { gap: 8, marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1 },
+  stepHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  stepTitle: { flex: 1, fontSize: 14 },
+  badMark: { color: '#fff', fontSize: 11, lineHeight: 13, fontWeight: '700' },
   item: {
     flexDirection: 'row',
     justifyContent: 'space-between',

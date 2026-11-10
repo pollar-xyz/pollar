@@ -1,15 +1,15 @@
 import type { CosignRequest, CosignVerification } from '@pollar/core';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
 import { usePollar } from '../../context';
 import { useModalLanguage } from '../../language';
 import { PollarOverlay } from '../commons';
 import { COSIGN_COPY } from './cosign-copy';
 import { CosignModalTemplate } from './CosignModalUI';
+import { explorerTxUrl } from '../explorer';
 
 /** How long an outcome that needs nothing from the user stays up before the modal closes. */
 const CLOSE_AFTER_SECONDS = 3;
-/** A sent transaction stays up longer, so its hash can be read or copied. */
+/** A sent transaction stays up longer, so its details can be opened. */
 const CLOSE_AFTER_SENT_SECONDS = 5;
 /** How often the prompt looks for the next request while a flow says one is coming. */
 const NEXT_REQUEST_EVERY_MS = 2_000;
@@ -93,21 +93,14 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
     return () => clearInterval(timer);
   }, [closeAfter, lastResolved?.id]);
 
-  const [copied, setCopied] = useState(false);
-  const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(copiedTimer.current), []);
-  const copyHash = useCallback(
-    (hash: string) => {
-      copyText(hash)
-        .then(() => {
-          setCopied(true);
-          clearTimeout(copiedTimer.current);
-          copiedTimer.current = setTimeout(() => setCopied(false), 1500);
-        })
-        .catch((err: unknown) => Alert.alert(copy.copyFailed, String(err)));
-    },
-    [copyText, copy],
-  );
+  // Every request resolved while the prompt is open: a flow's earlier steps stay listed as signed.
+  // One resolved before it opened belongs to another flow and is left out.
+  const [history, setHistory] = useState<CosignRequest[]>([]);
+  const resolvedBeforeOpen = useRef(lastResolved?.id);
+  useEffect(() => {
+    if (!lastResolved || lastResolved.id === resolvedBeforeOpen.current) return;
+    setHistory((list) => [...list.filter((r) => r.id !== lastResolved.id), lastResolved]);
+  }, [lastResolved]);
 
   // The quorum as this device read it from Turnkey, once per open; a bad
   // reading fails every verification so nothing is approved on it.
@@ -191,8 +184,8 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         language={language}
         network={network}
         copyText={copyText}
-        copied={copied}
-        onCopyHash={copyHash}
+        history={history}
+        explorerUrlOf={(r) => (r.submit?.hash ? explorerTxUrl(r.network, r.submit.hash, network ?? 'mainnet') : null)}
         onSelect={(r) => setSelectedId(r.id)}
         onApprove={(r) => void run('approving', r)}
         onReject={(r) => void run('rejecting', r)}

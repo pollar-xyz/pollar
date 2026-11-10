@@ -21,6 +21,8 @@ export interface TxReviewProps {
   detailsIntro?: { title: string; body: string } | undefined;
   /** A secondary action kept out of the way, at the end of the details (declining the request). */
   detailsAction?: { label: string; onPress: () => void; disabled?: boolean } | undefined;
+  /** Only the details, unfolded: a step already signed, opened from its row. */
+  detailsOnly?: boolean;
   language?: PollarLanguage | undefined;
 }
 
@@ -314,13 +316,14 @@ export function TxReview({
   copyText,
   detailsIntro,
   detailsAction,
+  detailsOnly = false,
   language: languageProp,
 }: TxReviewProps) {
   const language = useInheritedLanguage(languageProp);
   const copy = TX_REVIEW_COPY[language];
   const colors = reviewColors(theme, accentColor);
   const [openState, setOpenState] = useState(false);
-  const open = openProp ?? openState;
+  const open = detailsOnly || (openProp ?? openState);
   const toggle = onToggle ?? (() => setOpenState((v) => !v));
   const { from, to, kind } = data;
   // The receiving end repeats the amount only when it differs from what leaves.
@@ -331,43 +334,46 @@ export function TxReview({
 
   return (
     <View style={styles.root}>
-      {data.lead ? <Text style={[styles.lead, { color: colors.muted }]}>{data.lead}</Text> : null}
-      {/* A permission moves nothing: an arrow from the wallet would say otherwise. */}
-      {from && to && kind !== 'approve' && (
-        <View style={[styles.flow, { backgroundColor: colors.inputBg }]}>
-          <Node party={from} showAmount glyph={from.asset ? 'asset' : 'account'} copy={copy} colors={colors} />
-          <Arrow colors={colors} />
-          <Node party={to} showAmount={toShowsAmount} glyph={toGlyph} copy={copy} colors={colors} />
-        </View>
+      {!detailsOnly && (
+        <>
+          {data.lead ? <Text style={[styles.lead, { color: colors.muted }]}>{data.lead}</Text> : null}
+          {/* A permission moves nothing: an arrow from the wallet would say otherwise. */}
+          {from && to && kind !== 'approve' && (
+            <View style={[styles.flow, { backgroundColor: colors.inputBg }]}>
+              <Node party={from} showAmount glyph={from.asset ? 'asset' : 'account'} copy={copy} colors={colors} />
+              <Arrow colors={colors} />
+              <Node party={to} showAmount={toShowsAmount} glyph={toGlyph} copy={copy} colors={colors} />
+            </View>
+          )}
+          {kind === 'sign_in' && <SignIn copy={copy} colors={colors} />}
+
+          <View style={styles.bar}>
+            {data.fee?.sponsored !== undefined ? (
+              <FeeBadge sponsored={data.fee.sponsored} free={data.fee.free === true} copy={copy} colors={colors} />
+            ) : (
+              <View />
+            )}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: open }}
+              hitSlop={8}
+              onPress={toggle}
+              style={styles.toggle}
+            >
+              <Text style={[styles.toggleText, { color: colors.accent }]}>{open ? copy.hideDetails : copy.showDetails}</Text>
+              <Svg
+                width={10}
+                height={10}
+                viewBox="0 0 12 12"
+                fill="none"
+                style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}
+              >
+                <Path d="M2 4l4 4 4-4" stroke={colors.accent} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </Pressable>
+          </View>
+        </>
       )}
-      {kind === 'sign_in' && <SignIn copy={copy} colors={colors} />}
-
-      <View style={styles.bar}>
-        {data.fee?.sponsored !== undefined ? (
-          <FeeBadge sponsored={data.fee.sponsored} free={data.fee.free === true} copy={copy} colors={colors} />
-        ) : (
-          <View />
-        )}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ expanded: open }}
-          hitSlop={8}
-          onPress={toggle}
-          style={styles.toggle}
-        >
-          <Text style={[styles.toggleText, { color: colors.accent }]}>{open ? copy.hideDetails : copy.showDetails}</Text>
-          <Svg
-            width={10}
-            height={10}
-            viewBox="0 0 12 12"
-            fill="none"
-            style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}
-          >
-            <Path d="M2 4l4 4 4-4" stroke={colors.accent} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
-          </Svg>
-        </Pressable>
-      </View>
-
       {open && (
         <View style={[styles.details, { borderTopColor: colors.border }]}>
           {detailsIntro ? (

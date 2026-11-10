@@ -4,9 +4,9 @@ import { useInheritedLanguage } from '../../language-context';
 import { type CosignRequest, type CosignVerification, type PollarLanguage, type StellarNetwork } from '@pollar/core';
 import { useState } from 'react';
 import { CHAIN_LOGOS } from '../../constants';
-import { CopyButton, cropAddress, PollarModalFooter } from '../commons';
+import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
-import { AssetLogo, TxFeeBadge, TxReview } from '../tx-review/TxReview';
+import { AssetLogo, TxReview } from '../tx-review/TxReview';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
 import { headlineAsset, reviewFromRequest } from '../tx-review/tx-review-model';
 import { COSIGN_COPY } from './cosign-copy';
@@ -34,8 +34,10 @@ export interface CosignModalTemplateProps {
   onLinkDevice?: () => void;
   /** The last request that reached a final state, shown once the list is empty. */
   lastResolved?: CosignRequest;
-  /** Explorer page of {@link lastResolved}'s transaction, when it was sent. */
-  explorerUrl?: string | null;
+  /** The requests resolved while the modal is open, oldest first: the steps of the flow already signed. */
+  history?: CosignRequest[];
+  /** The explorer page of a sent request's transaction. */
+  explorerUrlOf?: (request: CosignRequest) => string | null;
   /** Seconds until the modal closes on its own, while what it shows needs nothing from the user. */
   closesIn?: number | null;
   /** The approval coming next in the same flow, shown while the modal waits for it. */
@@ -83,6 +85,64 @@ export function TitleMark({ chain, asset }: { chain: string | undefined; asset?:
   );
 }
 
+/** What a resolved request did, in one line: signed and sent, signed for the app to send, or why nothing was. */
+function outcomeText(request: CosignRequest, copy: CosignCopy): string {
+  if (request.status !== 'APPROVED')
+    return `${copy.status[request.status] ?? request.status.toLowerCase()}. ${copy.nothingSigned}`;
+  if (request.submit?.hash) return copy.signedSent;
+  if (request.signedXdr) return copy.signedAppSends;
+  return copy.status.APPROVED ?? 'Approved';
+}
+
+function OutcomeIcon({ ok }: { ok: boolean }) {
+  return (
+    <svg className="pollar-cosign-outcome-icon" width="16" height="16" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <circle cx="7" cy="7" r="7" fill="currentColor" />
+      {ok ? (
+        <path d="M3.5 7l2.5 2.5 4.5-5" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      ) : (
+        <path d="m4.5 4.5 5 5m0-5-5 5" stroke="white" strokeWidth="1.4" strokeLinecap="round" />
+      )}
+    </svg>
+  );
+}
+
+/** A step of the flow already resolved: one line, and its own details when opened. */
+function StepRow({
+  request,
+  review,
+  copy,
+  language,
+}: {
+  request: CosignRequest;
+  review: ReturnType<typeof reviewFromRequest>;
+  copy: CosignCopy;
+  language: PollarLanguage;
+}) {
+  const [open, setOpen] = useState(false);
+  const ok = request.status === 'APPROVED';
+  return (
+    <div className={`pollar-cosign-step${ok ? '' : ' pollar-cosign-step-bad'}`}>
+      <button type="button" className="pollar-cosign-step-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <OutcomeIcon ok={ok} />
+        <span className="pollar-cosign-step-title">{review.title}</span>
+        <span className="pollar-cosign-step-status">{ok ? copy.signed : (copy.status[request.status] ?? request.status)}</span>
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 12 12"
+          fill="none"
+          aria-hidden
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}
+        >
+          <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && <TxReview data={review} language={language} detailsOnly />}
+    </div>
+  );
+}
+
 function CloseIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
@@ -113,7 +173,8 @@ export function CosignModalTemplate({
   deviceNotLinked = false,
   onLinkDevice,
   lastResolved,
-  explorerUrl,
+  history = [],
+  explorerUrlOf,
   closesIn = null,
   nextStep = null,
   language: languageProp,
@@ -145,8 +206,11 @@ export function CosignModalTemplate({
         signWith: request.account ?? request.signWith,
         raw: request.unsignedPayload,
         fallbackTitle: labelOf(request, copy),
-        extraRows: [{ label: copy.expiresIn, value: expiresIn(request, copy) }],
-        appPaysFee: request.appPaysFee,
+        ...(request.status === 'PENDING' ? { extraRows: [{ label: copy.expiresIn, value: expiresIn(request, copy) }] } : {}),
+        appPaysFee: request.submit?.sponsored ?? request.appPaysFee,
+        ...(request.submit?.hash
+          ? { hash: { value: request.submit.hash, explorerUrl: explorerUrlOf?.(request) ?? null } }
+          : {}),
       },
       TX_REVIEW_COPY[language],
     );
@@ -155,6 +219,9 @@ export function CosignModalTemplate({
   // One request: the header is the action itself. Several: how many wait, and each names itself below.
   const shown = grouped ? null : (current ?? (pending.length === 0 ? lastResolved : undefined) ?? null);
   const shownReview = shown ? (shown === current ? review : reviewOf(shown)) : null;
+  // The steps already signed stay on screen, so the user sees what they approved; the last one, once
+  // nothing waits, is the main view instead of a row.
+  const doneSteps = history.filter((r) => !(pending.length === 0 && r.id === lastResolved?.id));
   const heading = confirmingClose
     ? copy.closeTitle
     : grouped
@@ -219,72 +286,35 @@ export function CosignModalTemplate({
         </div>
       ) : (
         <>
-          {pending.length === 0 && (
-            <div className="pollar-cosign-empty">
-              {lastResolved ? (
-                <>
-                  {lastResolved.status === 'APPROVED' && (
-                    <svg
-                      className="pollar-cosign-approved-icon"
-                      width="44"
-                      height="44"
-                      viewBox="0 0 14 14"
-                      fill="none"
-                      aria-hidden
-                    >
-                      <circle cx="7" cy="7" r="7" fill="currentColor" />
-                      <path
-                        d="M3.5 7l2.5 2.5 4.5-5"
-                        stroke="white"
-                        strokeWidth="1.2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  )}
-                  <p className="pollar-cosign-empty-title">
-                    {copy.status[lastResolved.status] ?? lastResolved.status.toLowerCase()}
+          {doneSteps.map((r) => (
+            <StepRow key={r.id} request={r} review={reviewOf(r)} copy={copy} language={language} />
+          ))}
+
+          {pending.length === 0 &&
+            (lastResolved && shownReview ? (
+              <div className="pollar-cosign-detail">
+                <TxReview key={lastResolved.id} data={shownReview} language={language} />
+                <div
+                  className={`pollar-cosign-outcome${lastResolved.status === 'APPROVED' ? '' : ' pollar-cosign-outcome-bad'}`}
+                >
+                  <p className="pollar-cosign-outcome-main">
+                    <OutcomeIcon ok={lastResolved.status === 'APPROVED'} />
+                    {outcomeText(lastResolved, copy)}
                   </p>
-                  <p className="pollar-cosign-muted">
-                    {lastResolved.submit?.hash ? (
-                      <>
-                        {copy.sentTransaction}{' '}
-                        {explorerUrl ? (
-                          <a className="pollar-cosign-tx-link" href={explorerUrl} target="_blank" rel="noopener noreferrer">
-                            {cropAddress(lastResolved.submit.hash)}
-                          </a>
-                        ) : (
-                          cropAddress(lastResolved.submit.hash)
-                        )}
-                        <CopyButton
-                          value={lastResolved.submit.hash}
-                          label={copy.copyHash}
-                          className="pollar-copy-btn-sm pollar-cosign-copy"
-                        />
-                      </>
-                    ) : lastResolved.signedXdr ? (
-                      copy.signedAppSends
-                    ) : (
-                      copy.nothingSigned
-                    )}
-                  </p>
-                  {lastResolved.submit?.sponsored !== undefined && (
-                    <p className="pollar-cosign-fee">
-                      <TxFeeBadge sponsored={lastResolved.submit.sponsored} language={language} />
+                  {nextStep && (
+                    <p className="pollar-cosign-outcome-note">
+                      <span className="pollar-spinner pollar-spinner-sm" aria-hidden /> {copy.next(nextStep)}
                     </p>
                   )}
-                </>
-              ) : (
+                  {closesIn !== null && <p className="pollar-cosign-outcome-note">{copy.closingIn(closesIn)}</p>}
+                </div>
+              </div>
+            ) : (
+              <div className="pollar-cosign-empty">
                 <p className="pollar-cosign-muted">{copy.nothingWaiting}</p>
-              )}
-              {nextStep && (
-                <p className="pollar-cosign-next">
-                  <span className="pollar-spinner pollar-spinner-sm" aria-hidden /> {copy.next(nextStep)}
-                </p>
-              )}
-              {closesIn !== null && <p className="pollar-cosign-muted pollar-cosign-closing">{copy.closingIn(closesIn)}</p>}
-            </div>
-          )}
+                {closesIn !== null && <p className="pollar-cosign-muted pollar-cosign-closing">{copy.closingIn(closesIn)}</p>}
+              </div>
+            ))}
 
           {grouped && (
             <ul className="pollar-cosign-list">

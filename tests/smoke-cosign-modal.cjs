@@ -288,6 +288,48 @@ async function mount(element) {
     }
   }
 
+  // ── 3b. A flow of two approvals ─────────────────────────────────
+  // The step already signed stays on screen as a row; its hash lives in that row's details.
+  console.log('\n── 3b. web, a flow of two approvals ──────────────────────');
+  {
+    const client = fakeClient();
+    const context = { getClient: () => client, isAuthenticated: true, styles: {}, network: 'mainnet' };
+    const { CosignModal } = loader({
+      '../../context': { usePollar: () => context },
+      './context': { usePollar: () => context },
+      '../commons': {
+        CopyButton: () => null,
+        cropAddress: (s) => s,
+        PollarModalFooter: () => null,
+        explorerTxUrl: () => null,
+      },
+    })('packages/react/src/components/cosign-modal/CosignModal.tsx');
+    const first = { ...request, id: 'step-1', operation: 'change_trust', details: { code: 'USDC', asset: 'USDC:GA5Z' } };
+    const hash = 'a'.repeat(64);
+    await React.act(async () => client.arrive(first));
+    const view = await mount(React.createElement(CosignModal, { nextStep: 'Send', onClose: () => undefined }));
+    await settle();
+    await React.act(async () => client.resolve({ ...first, status: 'APPROVED', submit: { hash } }));
+    await settle();
+    check('the signed step stays in the same view, said signed and sent', () => {
+      assert.match(view.container.textContent, /Add USDC to your wallet/);
+      assert.match(view.container.textContent, /Signed and sent/);
+    });
+    check('its hash is not on screen', () => assert.doesNotMatch(view.container.textContent, new RegExp(hash)));
+    await React.act(async () => client.arrive({ ...request, id: 'step-2' }));
+    await settle();
+    const row = [...view.container.querySelectorAll('.pollar-cosign-step-head')].find((b) =>
+      /Add USDC to your wallet/.test(b.textContent),
+    );
+    check('the next request shows under a row for the step already signed', () => {
+      assert.ok(row, 'no row for the signed step');
+      assert.match(row.textContent, /Signed/);
+    });
+    await React.act(async () => row?.click());
+    check("opening the row shows that step's hash", () => assert.match(view.container.textContent, new RegExp(hash)));
+    await view.unmount();
+  }
+
   // ── 4. A device that is not enrolled ────────────────────────────
   // Another origin or install of the same user: its key is not among the
   // wallet's devices, so it is told to add itself and Approve stays off.
