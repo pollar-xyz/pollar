@@ -37,7 +37,10 @@ import { ActionButton, ActionState, Card, Choice, Field, Label, ResultView, useA
 import { CHAIN_LOGOS } from '../constants';
 import { InlineAssetLogo, TxExplorerLink, TxReview } from './tx-review/TxReview';
 import { TX_REVIEW_COPY } from './tx-review/tx-review-copy';
-import { earnOutcome, reviewForEarn, type EarnReviewParts } from './tx-review/tx-review-model';
+import { earnOutcome, reviewForEarn, type EarnReviewParts, type TxReviewData } from './tx-review/tx-review-model';
+import { useInlineConfirmation } from '../useInlineConfirmation';
+import { explorerTxUrl } from './explorer';
+import { TxStatusBody } from './transaction-modal/TxStatusBody';
 
 export type FeatureName =
   | 'authentication'
@@ -514,37 +517,44 @@ export function SendPanel({ initial }: { initial?: SendModalOptions | undefined 
     </Card>
   );
 }
-export function TransactionStatus() {
+/**
+ * Where the panel's transaction stands, as every transaction modal shows it: the
+ * review, Confirm when the signature asks for a yes, then a strip with the
+ * outcome. The hash is in the review's details.
+ */
+export function TransactionStatus({
+  review,
+  successMessage,
+  explorerUrl: explorerProp,
+}: {
+  review?: TxReviewData | undefined;
+  successMessage?: string | undefined;
+  explorerUrl?: string | undefined;
+} = {}) {
   const p = usePollar();
-  const copy = FEATURE_COPY[useModalLanguage()];
-  const action = useAction();
-  const hash = 'hash' in p.tx ? p.tx.hash : undefined;
+  const language = useModalLanguage();
+  // The signature's yes is asked here, under the review, not in a prompt over the panel.
+  const confirmation = useInlineConfirmation(true);
+  const { theme = 'light', accentColor = '#005DB4' } = p.styles;
+  if (p.tx.step === 'idle' && !confirmation) return null;
+  const hash = p.tx.step === 'success' ? p.tx.hash : null;
+  const buildChain = 'buildData' in p.tx ? (p.tx.buildData as { chain?: WalletChain } | undefined)?.chain : undefined;
+  const explorerUrl = explorerProp ?? (hash ? explorerTxUrl(buildChain ?? review?.from?.chain, hash, p.network) : null);
   return (
-    <View style={{ gap: 8 }}>
-      <Label>
-        {copy.transaction}: {p.tx.step}
-      </Label>
-      <ResultView value={p.tx} />
-      {hash && (
-        <>
-          <ActionButton
-            title={copy.copyHash}
-            onPress={() =>
-              void action.run(async () => {
-                await p.copyText(hash);
-                return copy.copied;
-              })
-            }
-          />
-          <ActionButton
-            title={copy.checkConfirmation}
-            disabled={action.busy}
-            onPress={() => void action.run(() => p.getClient().getTxStatus(hash))}
-          />
-        </>
-      )}
-      <ActionState action={action} />
-    </View>
+    <TxStatusBody
+      transaction={p.tx}
+      theme={theme}
+      accentColor={accentColor}
+      explorerUrl={explorerUrl}
+      walletType={p.walletType}
+      confirmation={confirmation}
+      review={review}
+      successMessage={successMessage}
+      showTitle
+      network={p.network}
+      copyText={p.copyText}
+      language={language}
+    />
   );
 }
 export function TransactionPanel() {
@@ -1400,32 +1410,13 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
         }
       />
       {!networks.length && <Label>{copy.earn.noProviders}</Label>}
-      {submission && p.tx.step === 'success' && (
-        <View style={{ gap: 12 }}>
-          <Label>{earnOutcome(submission, reviewCopy)}</Label>
-          <TxReview
-            data={reviewForEarn(
-              {
-                ...submission,
-                hash: { value: p.tx.hash, explorerUrl: earnExplorerUrl(submission.chain, p.network, p.tx.hash) },
-                ...(p.tx.sponsored !== undefined && { sponsored: p.tx.sponsored }),
-              },
-              reviewCopy,
-            )}
-            theme={theme}
-            accentColor={accentColor}
-            copyText={p.copyText}
-            language={language}
-          />
-          <TxExplorerLink
-            chain={submission.chain}
-            url={earnExplorerUrl(submission.chain, p.network, p.tx.hash)}
-            accentColor={accentColor}
-            language={language}
-          />
-        </View>
-      )}
-      <TransactionStatus />
+      <TransactionStatus
+        review={submission ? reviewForEarn(submission, reviewCopy) : undefined}
+        successMessage={submission ? earnOutcome(submission, reviewCopy) : undefined}
+        explorerUrl={
+          submission && p.tx.step === 'success' ? earnExplorerUrl(submission.chain, p.network, p.tx.hash) : undefined
+        }
+      />
       <ActionState action={action} />
     </Card>
   );

@@ -93,6 +93,8 @@ function context(patch = {}) {
     refreshWalletBalance: async () => {},
     getSolanaSwapConfig: async () => [],
     tx: { step: 'idle' },
+    confirmations: [],
+    registerConfirmationHost: () => () => {},
     copyText: async () => {},
     getClient: () => ({ getTxStatus: async () => null }),
     getSolanaEarnProviders: async () => [],
