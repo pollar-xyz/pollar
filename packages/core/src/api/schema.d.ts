@@ -15002,6 +15002,10 @@ export interface operations {
                                 [key: string]: string | number | boolean | string[];
                             };
                             missing: string[];
+                            corrections?: {
+                                keys: string[];
+                                reason: string | null;
+                            } | null;
                         };
                     };
                 };

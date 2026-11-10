@@ -86,3 +86,10 @@
 .pollar-form-body .pollar-modal-actions {
   align-self: stretch;
 }
+.pollar-form-corrections p {
+  margin: 0;
+}
+.pollar-form-corrections .pollar-form-corrections-reason {
+  margin-top: 0.25rem;
+  color: var(--pollar-muted);
+}

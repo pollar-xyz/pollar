@@ -6,6 +6,7 @@ import { PollarModalFooter } from '../commons';
 import {
   answersOf,
   COPY,
+  correctionErrors,
   fieldErrorMessage,
   fieldErrorsOf,
   initialValues,
@@ -186,6 +187,7 @@ export function RequirementFormModal({
         if (!mounted.current) return;
         setForm(loaded);
         setValues(initialValues(loaded.fields, loaded.answers));
+        setFieldErrors(correctionErrors(loaded));
       })
       .catch(() => {
         if (mounted.current) setError(copy.loadError);
@@ -277,6 +279,16 @@ export function RequirementFormModal({
             <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
               {!!form.description && (
                 <Text style={{ color: colors.muted, fontSize: 14, marginBottom: 12 }}>{form.description}</Text>
+              )}
+              {!!form.corrections && (
+                <View style={[styles.errorBox, { borderColor: colors.border, borderLeftColor: accentColor }]}>
+                  <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }}>{copy.corrections}</Text>
+                  {!!form.corrections.reason && (
+                    <Text style={{ color: colors.muted, fontSize: 14, lineHeight: 20, marginTop: 4 }}>
+                      {form.corrections.reason}
+                    </Text>
+                  )}
+                </View>
               )}
               {visibleFields(form.fields, values).map((field) => {
                 const fieldError = fieldErrors[field.key];

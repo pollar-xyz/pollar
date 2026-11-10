@@ -8,6 +8,7 @@ import { buildModalCssVars, modalChrome } from '../modal-theme';
 import {
   answersOf,
   COPY,
+  correctionErrors,
   fieldErrorMessage,
   fieldErrorsOf,
   initialValues,
@@ -154,6 +155,7 @@ export function RequirementFormModal({
         if (!mounted.current) return;
         setForm(loaded);
         setValues(initialValues(loaded.fields, loaded.answers));
+        setFieldErrors(correctionErrors(loaded));
       })
       .catch(() => mounted.current && setError(copy.loadError));
     // The client instance and the copy do not change while the modal is open.
@@ -252,6 +254,12 @@ export function RequirementFormModal({
             }}
           >
             {form.description && <p className="pollar-form-description">{form.description}</p>}
+            {form.corrections && (
+              <div className="pollar-form-error pollar-form-corrections" role="status">
+                <p>{copy.corrections}</p>
+                {form.corrections.reason && <p className="pollar-form-corrections-reason">{form.corrections.reason}</p>}
+              </div>
+            )}
             {visibleFields(form.fields, values).map((field) => {
               const fieldError = fieldErrors[field.key];
               const help = localized(field.help, language);

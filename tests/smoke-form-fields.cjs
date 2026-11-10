@@ -18,7 +18,7 @@ const amount = { key: 'amount', type: 'number', validation: { min: 1, max: 10 } 
 const broken = { key: 'odd', type: 'text', validation: { pattern: '(?<' } };
 
 for (const pkg of ['packages/react', 'packages/react-native']) {
-  const { localFieldError, localFieldErrors, visibleFields } = load(
+  const { correctionErrors, fieldErrorMessage, localFieldError, localFieldErrors, visibleFields } = load(
     `${pkg}/src/components/requirement-form-modal/form-fields.ts`,
   );
   assert.equal(localFieldError(code, '+591'), 'pattern', `${pkg}: the field's pattern is checked before sending`);
@@ -27,6 +27,13 @@ for (const pkg of ['packages/react', 'packages/react-native']) {
   assert.equal(localFieldError(code, '  '), null, `${pkg}: empty is left to the server's required`);
   assert.equal(localFieldError(amount, '11'), 'too_large', `${pkg}: number range is checked`);
   assert.equal(localFieldError(broken, 'x'), null, `${pkg}: a pattern the engine cannot compile is left to the server`);
+  assert.deepEqual(
+    { ...correctionErrors({ corrections: { keys: ['tax_residence_country'], reason: 'Not a country.' } }) },
+    { tax_residence_country: 'refused' },
+    `${pkg}: answers sent back to correct open marked`,
+  );
+  assert.deepEqual({ ...correctionErrors({ corrections: null }) }, {}, `${pkg}: nothing is marked without corrections`);
+  assert.equal(fieldErrorMessage('refused', 'es'), 'Revisa este dato y corrígelo.', `${pkg}: a refused answer says so`);
   assert.deepEqual(
     JSON.parse(JSON.stringify(localFieldErrors([code, amount], { phone_country_code: '+591', amount: '5' }))),
     { phone_country_code: 'pattern' },
@@ -60,5 +67,5 @@ for (const pkg of ['packages/react', 'packages/react-native']) {
 }
 
 console.log(
-  "Form fields: the field's pattern, length and range are checked before sending, and showIf hides fields, in web and React Native",
+  "Form fields: the field's pattern, length and range are checked before sending, showIf hides fields and refused answers open marked, in web and React Native",
 );
