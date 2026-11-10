@@ -41,6 +41,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tx/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get transaction history (multichain)
+         * @description Every chain by default; pass `?chain=` to narrow. Each row is tagged with its `chain`, its `kind` and a `{ amount, unit }` fee. With `includeRamps=true` the user's ramp orders come in the same list as `kind: ramp` rows (`operation` `onramp` or `offramp`, `id` the order id), counted in `total`; `chain` keeps the orders with a leg on that chain. A refunded order is `FAILED` with `resultCode: refunded`.
+         */
+        get: operations["getTxHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tx/build": {
         parameters: {
             query?: never;
@@ -152,20 +172,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/tx/history": {
+    "/wallet/signer/build": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get transaction history (multichain)
-         * @description Every chain by default; pass `?chain=` to narrow. Each row is tagged with its `chain`, its `kind` and a `{ amount, unit }` fee. With `includeRamps=true` the user's ramp orders come in the same list as `kind: ramp` rows (`operation` `onramp` or `offramp`, `id` the order id), counted in `total`; `chain` keeps the orders with a leg on that chain. A refunded order is `FAILED` with `resultCode: refunded`.
-         */
-        get: operations["getTxHistory"];
+        get?: never;
         put?: never;
-        post?: never;
+        /**
+         * Build a sponsored signer rotation
+         * @description Builds the rotation of the session's Stellar wallet under the user's active rotation grant. The app's sponsor pays the fee and the 0.5 XLM reserve of the new signer. An EXTERNAL wallet gets the rotation v1 builds: it adds `signer`, optionally sets the master key weight and removes signers; the wallet adds its signature and broadcasts via POST /tx/submit before `expiresAt`. A wallet Pollar custodies is handed to `signer`, a key of the user's own: `signerWeight` 1, no `masterWeight` other than 0 and no `removeSigners`, and `signerProof` is the new key's SEP-53 signature (base64) of "Pollar signer rotation\nAccount: <wallet address>\nSigner: <signer>". That rotation comes back signed by the sponsor and by Pollar; send it unchanged to POST /wallet/signer/submit before `expiresAt`. 409 SIGNER_ROTATION_DONE when the wallet was already handed over.
+         */
+        post: operations["postWalletSignerBuild"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/wallet/signer/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit the rotation of a wallet Pollar custodies
+         * @description Sends the rotation POST /wallet/signer/build returned for a wallet Pollar custodies, unchanged, and waits for the ledger. Once the ledger shows the new key in control, the wallet is the user's own (EXTERNAL) at the same address, for the same user: their next login is a wallet login (SEP-10) signed with the new key. `released` says whether that happened; a PENDING submit is completed by the next build or wallet login. A Pollar session still open can read but no longer sign (EXTERNAL_WALLET_SERVER_SIGN). External wallets submit their rotation via POST /tx/submit.
+         */
+        post: operations["postWalletSignerSubmit"];
         delete?: never;
         options?: never;
         head?: never;
@@ -321,26 +361,6 @@ export interface paths {
          * @description Builds a sponsored createAccount (the new account is created with a "0" starting balance; the app sponsor wallet pays the base reserve and the fee) and signs ONLY the sponsor, returning the partially-signed XDR. Use this for EXTERNAL wallets (Freighter / client-side Privy) whose key the platform does not hold: the caller adds the new-account signature client-side and broadcasts via POST /tx/submit. Embedded wallets are created on the server during login. Trustlines are a separate step — request each via POST /wallet/assets/trustline/build. The wallet and network are derived from the session.
          */
         post: operations["postWalletAccountCreateBuild"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/wallet/signer/build": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Build a sponsored signer rotation for an external wallet
-         * @description Builds a setOptions rotation for the session's EXTERNAL wallet: adds `signer`, optionally sets the master key weight and removes existing signers. The app's sponsor pays the fee and the 0.5 XLM reserve of the new signer, and has already signed. The wallet adds its signature and broadcasts via POST /tx/submit before `expiresAt`. Requires the app to sponsor signer rotations and the user to hold an active rotation grant, which is spent once the rotation lands.
-         */
-        post: operations["postWalletSignerBuild"];
         delete?: never;
         options?: never;
         head?: never;
@@ -592,7 +612,7 @@ export interface paths {
         put?: never;
         /**
          * Authenticate with a Stellar wallet
-         * @description Verifies the SEP-10 counter-signed challenge (from /auth/wallet/challenge) and sets the session ready. A request without the signed challenge is accepted and logged as deprecated while SDK_WALLET_REQUIRE_SIGNATURE is false, and rejected with WALLET_SIGNATURE_REQUIRED when it is true.
+         * @description Verifies the SEP-10 counter-signed challenge (from /auth/wallet/challenge) and sets the session ready. A request without the signed challenge is rejected with WALLET_SIGNATURE_REQUIRED, and an address whose key Pollar or Turnkey holds with WALLET_NOT_EXTERNAL.
          */
         post: operations["postAuthWallet"];
         delete?: never;
@@ -962,6 +982,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cards/holder/kyc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit KYC
+         * @description Sends the user's identity data to the provider with the provider's terms accepted. Returns a `verificationLink` the user opens to finish (document and selfie). Accepted once per user. A provider that takes only IPv4 answers a request over IPv6 with 422 `SDK_CARDS_IP_NOT_SUPPORTED` and `ipv4BaseUrl`; retry with the `x-pollar-ip-attestation` header.
+         */
+        post: operations["postCardsHolderKyc"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cards/providers": {
         parameters: {
             query?: never;
@@ -1020,26 +1060,6 @@ export interface paths {
          * @description Signs the user up with the provider. Name and email default to the user profile. Idempotent.
          */
         post: operations["postCardsHolder"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/cards/holder/kyc": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Submit KYC
-         * @description Sends the user's identity data to the provider with the provider's terms accepted. Returns a `verificationLink` the user opens to finish (document and selfie). Accepted once per user. A provider that takes only IPv4 answers a request over IPv6 with 422 `SDK_CARDS_IP_NOT_SUPPORTED` and `ipv4BaseUrl`; retry with the `x-pollar-ip-attestation` header.
-         */
-        post: operations["postCardsHolderKyc"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1848,6 +1868,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/requirements/card-registration/{cardProviderId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Card provider registration: status and consent
+         * @description The confirmation screen of a card provider's PROVIDER_REGISTRATION step: whether the user is registered, whether every earlier step is complete (`ready`), the fields the registration shares and the provider's terms. A 404 `KYC_REGISTRATION_NOT_FOUND` means the provider has no registration step for this app.
+         */
+        get: operations["getRequirementsCardRegistrationByCardProviderId"];
+        put?: never;
+        /**
+         * Register with the card provider
+         * @description Signs the user up with the card provider and sends its KYC from the verified identity and the route's form answers. Sending this is the user's consent to share the fields listed and to the provider's terms. 409 `KYC_REGISTRATION_STEPS_PENDING` while an earlier step is open; 422 `KYC_REGISTRATION_MISSING_DATA` lists what the identity and forms did not supply. A provider that takes only IPv4 answers a request over IPv6 with 422 `SDK_CARDS_IP_NOT_SUPPORTED` and `ipv4BaseUrl`: get a token from its GET /client-ip/attest and retry with it as `x-pollar-ip-attestation`.
+         */
+        post: operations["postRequirementsCardRegistrationByCardProviderId"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/requirements": {
         parameters: {
             query?: never;
@@ -1934,30 +1978,6 @@ export interface paths {
          * @description The user's consent: their verified identity, the route's form answers and the registry validation are sent to the ramp provider, and its orders carry the user from then on. 409 `KYC_REGISTRATION_STEPS_PENDING` while an earlier step is open; 422 `KYC_REGISTRATION_MISSING_DATA` lists in `missing` each field the identity or the forms lack. Quote again afterwards.
          */
         post: operations["postRequirementsRegistrationByCorridorId"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/requirements/card-registration/{cardProviderId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Card provider registration: status and consent
-         * @description The confirmation screen of a card provider's PROVIDER_REGISTRATION step: whether the user is registered, whether every earlier step is complete (`ready`), the fields the registration shares and the provider's terms. A 404 `KYC_REGISTRATION_NOT_FOUND` means the provider has no registration step for this app.
-         */
-        get: operations["getRequirementsCardRegistrationByCardProviderId"];
-        put?: never;
-        /**
-         * Register with the card provider
-         * @description Signs the user up with the card provider and sends its KYC from the verified identity and the route's form answers. Sending this is the user's consent to share the fields listed and to the provider's terms. 409 `KYC_REGISTRATION_STEPS_PENDING` while an earlier step is open; 422 `KYC_REGISTRATION_MISSING_DATA` lists what the identity and forms did not supply. A provider that takes only IPv4 answers a request over IPv6 with 422 `SDK_CARDS_IP_NOT_SUPPORTED` and `ipv4BaseUrl`: get a token from its GET /client-ip/attest and retry with it as `x-pollar-ip-attestation`.
-         */
-        post: operations["postRequirementsCardRegistrationByCardProviderId"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2324,6 +2344,94 @@ export interface operations {
                             ledger?: number;
                             message?: string;
                             operationCodes?: string[];
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getTxHistory: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                chain?: "STELLAR" | "POLYGON" | "SOLANA";
+                includeRamps?: "true" | "false";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description History */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_TX_HISTORY";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            records: {
+                                id: string;
+                                /** @enum {string} */
+                                chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                hash: string;
+                                /** @enum {string} */
+                                network: "testnet" | "mainnet";
+                                /** @enum {string} */
+                                status: "PENDING" | "SUCCESS" | "FAILED";
+                                operation: string;
+                                fee?: {
+                                    amount: string;
+                                    unit: string;
+                                };
+                                resultCode?: string;
+                                details: {
+                                    [key: string]: unknown;
+                                };
+                                summary: string;
+                                createdAt: string;
+                                /** @enum {string} */
+                                kind: "tx" | "ramp";
+                            }[];
+                            total: number;
+                            limit: number;
+                            offset: number;
                         };
                     };
                 };
@@ -3739,21 +3847,28 @@ export interface operations {
             };
         };
     };
-    getTxHistory: {
+    postWalletSignerBuild: {
         parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-                chain?: "STELLAR" | "POLYGON" | "SOLANA";
-                includeRamps?: "true" | "false";
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    signer: string;
+                    /** @default 1 */
+                    signerWeight?: number;
+                    masterWeight?: number;
+                    /** @default [] */
+                    removeSigners?: string[];
+                    signerProof?: string;
+                };
+            };
+        };
         responses: {
-            /** @description History */
+            /** @description The rotation, signed by the sponsor (and by Pollar for a wallet it custodies) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3761,36 +3876,13 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** @constant */
-                        code: "SDK_TX_HISTORY";
+                        code: "SDK_WALLET_SIGNER_ROTATION_BUILD";
                         /** @constant */
                         success: true;
                         content: {
-                            records: {
-                                id: string;
-                                /** @enum {string} */
-                                chain: "STELLAR" | "POLYGON" | "SOLANA";
-                                hash: string;
-                                /** @enum {string} */
-                                network: "testnet" | "mainnet";
-                                /** @enum {string} */
-                                status: "PENDING" | "SUCCESS" | "FAILED";
-                                operation: string;
-                                fee?: {
-                                    amount: string;
-                                    unit: string;
-                                };
-                                resultCode?: string;
-                                details: {
-                                    [key: string]: unknown;
-                                };
-                                summary: string;
-                                createdAt: string;
-                                /** @enum {string} */
-                                kind: "tx" | "ramp";
-                            }[];
-                            total: number;
-                            limit: number;
-                            offset: number;
+                            sponsorSignedXdr: string;
+                            hash: string;
+                            expiresAt: number;
                         };
                     };
                 };
@@ -3812,6 +3904,210 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unprocessable */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postWalletSignerSubmit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    signedXdr: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Submitted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_WALLET_SIGNER_ROTATION_SUBMIT";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            hash: string;
+                            /** @enum {string} */
+                            status: "PENDING" | "SUCCESS" | "FAILED";
+                            resultCode?: string;
+                            message?: string;
+                            released: boolean;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unprocessable */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Upstream provider error */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4642,137 +4938,6 @@ export interface operations {
             };
             /** @description Not found */
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-        };
-    };
-    postWalletSignerBuild: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    signer: string;
-                    /** @default 1 */
-                    signerWeight?: number;
-                    masterWeight?: number;
-                    /** @default [] */
-                    removeSigners?: string[];
-                };
-            };
-        };
-        responses: {
-            /** @description Sponsor-signed rotation awaiting the wallet signature */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_WALLET_SIGNER_ROTATION_BUILD";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            sponsorSignedXdr: string;
-                            hash: string;
-                            expiresAt: number;
-                        };
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Unprocessable */
-            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8468,7 +8633,8 @@ export interface operations {
                                     /** @enum {string} */
                                     chain: "STELLAR" | "SOLANA" | "POLYGON";
                                     payload: {
-                                        encoding: string;
+                                        /** @enum {string} */
+                                        encoding: "xdr" | "evm-eip1559-json" | "solana-v0-json" | "solana-cctp-json" | "solana-wire-base64";
                                         value: string;
                                     };
                                     summary: string;
@@ -8586,7 +8752,8 @@ export interface operations {
                                     /** @enum {string} */
                                     chain: "STELLAR" | "SOLANA" | "POLYGON";
                                     payload: {
-                                        encoding: string;
+                                        /** @enum {string} */
+                                        encoding: "xdr" | "evm-eip1559-json" | "solana-v0-json" | "solana-cctp-json" | "solana-wire-base64";
                                         value: string;
                                     };
                                     summary: string;
@@ -8926,6 +9093,168 @@ export interface operations {
                 };
             };
             /** @description Provider not configured or request rejected by it */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postCardsHolderKyc: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description A token from GET /client-ip/attest, for a user whose request arrives over IPv6. */
+                "x-pollar-ip-attestation"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    cardProviderId?: string;
+                    termsAccepted: boolean;
+                    kyc: {
+                        firstName: string;
+                        lastName: string;
+                        birthDate: string;
+                        nationalId: string;
+                        countryOfIssue: string;
+                        /** Format: email */
+                        email?: string;
+                        phoneCountryCode: string;
+                        phoneNumber: string;
+                        occupation: string;
+                        /** @enum {string} */
+                        annualSalary: "0-1000" | "1000-5000" | "5000-10000" | "10000+";
+                        accountPurpose: string;
+                        /** @enum {string} */
+                        expectedMonthlyVolume: "0-1000" | "1000-5000" | "5000-10000" | "10000+";
+                        address: {
+                            line1: string;
+                            line2?: string;
+                            city: string;
+                            region: string;
+                            postalCode: string;
+                            countryCode: string;
+                        };
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_CARDS_KYC_SUBMITTED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            holder: {
+                                id: string;
+                                cardProviderId: string;
+                                /** @enum {string} */
+                                kycStatus: "NOT_STARTED" | "PENDING" | "NEEDS_ACTION" | "IN_REVIEW" | "APPROVED" | "DENIED" | "LOCKED" | "CANCELED";
+                                kycReason: string | null;
+                                verificationLink: string | null;
+                                termsAcceptedAt: string | null;
+                                createdAt: string;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider not configured or request rejected by it. `SDK_CARDS_IP_NOT_SUPPORTED` carries `ipv4BaseUrl`: get a token from its GET /client-ip/attest and send it as `x-pollar-ip-attestation`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9417,168 +9746,6 @@ export interface operations {
                 };
             };
             /** @description Provider not configured or request rejected by it */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Provider error */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-        };
-    };
-    postCardsHolderKyc: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description A token from GET /client-ip/attest, for a user whose request arrives over IPv6. */
-                "x-pollar-ip-attestation"?: string;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    cardProviderId?: string;
-                    termsAccepted: boolean;
-                    kyc: {
-                        firstName: string;
-                        lastName: string;
-                        birthDate: string;
-                        nationalId: string;
-                        countryOfIssue: string;
-                        /** Format: email */
-                        email?: string;
-                        phoneCountryCode: string;
-                        phoneNumber: string;
-                        occupation: string;
-                        /** @enum {string} */
-                        annualSalary: "0-1000" | "1000-5000" | "5000-10000" | "10000+";
-                        accountPurpose: string;
-                        /** @enum {string} */
-                        expectedMonthlyVolume: "0-1000" | "1000-5000" | "5000-10000" | "10000+";
-                        address: {
-                            line1: string;
-                            line2?: string;
-                            city: string;
-                            region: string;
-                            postalCode: string;
-                            countryCode: string;
-                        };
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_CARDS_KYC_SUBMITTED";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            holder: {
-                                id: string;
-                                cardProviderId: string;
-                                /** @enum {string} */
-                                kycStatus: "NOT_STARTED" | "PENDING" | "NEEDS_ACTION" | "IN_REVIEW" | "APPROVED" | "DENIED" | "LOCKED" | "CANCELED";
-                                kycReason: string | null;
-                                verificationLink: string | null;
-                                termsAcceptedAt: string | null;
-                                createdAt: string;
-                            };
-                        };
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Provider not configured or request rejected by it. `SDK_CARDS_IP_NOT_SUPPORTED` carries `ipv4BaseUrl`: get a token from its GET /client-ip/attest and send it as `x-pollar-ip-attestation`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -14456,6 +14623,241 @@ export interface operations {
             };
         };
     };
+    getRequirementsCardRegistrationByCardProviderId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardProviderId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Registration status, readiness and the fields shared */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_REQUIREMENT_CARD_REGISTRATION";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            cardProviderId: string;
+                            /** @enum {string} */
+                            status: "none" | "incomplete" | "registered";
+                            ready: boolean;
+                            fields: string[];
+                            termsUrl: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postRequirementsCardRegistrationByCardProviderId: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description A token from GET /client-ip/attest, for a user whose request arrives over IPv6. */
+                "x-pollar-ip-attestation"?: string;
+            };
+            path: {
+                cardProviderId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Registered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_REQUIREMENT_CARD_REGISTRATION_SUBMITTED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            cardProviderId: string;
+                            /** @enum {string} */
+                            status: "none" | "registered";
+                        };
+                    };
+                };
+            };
+            /** @description Validation error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Unprocessable */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Provider error */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
     getRequirements: {
         parameters: {
             query?: never;
@@ -15285,241 +15687,6 @@ export interface operations {
             };
         };
     };
-    getRequirementsCardRegistrationByCardProviderId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                cardProviderId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Registration status, readiness and the fields shared */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_REQUIREMENT_CARD_REGISTRATION";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            cardProviderId: string;
-                            /** @enum {string} */
-                            status: "none" | "incomplete" | "registered";
-                            ready: boolean;
-                            fields: string[];
-                            termsUrl: string | null;
-                        };
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Not configured */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-        };
-    };
-    postRequirementsCardRegistrationByCardProviderId: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description A token from GET /client-ip/attest, for a user whose request arrives over IPv6. */
-                "x-pollar-ip-attestation"?: string;
-            };
-            path: {
-                cardProviderId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Registered */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        code: "SDK_REQUIREMENT_CARD_REGISTRATION_SUBMITTED";
-                        /** @constant */
-                        success: true;
-                        content: {
-                            cardProviderId: string;
-                            /** @enum {string} */
-                            status: "none" | "registered";
-                        };
-                    };
-                };
-            };
-            /** @description Validation error */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Unprocessable */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Provider error */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-            /** @description Not configured */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: false;
-                        code: string;
-                        message?: string;
-                        resultCode?: string;
-                    };
-                };
-            };
-        };
-    };
     getClientIpAttest: {
         parameters: {
             query?: never;
@@ -15766,7 +15933,8 @@ export interface operations {
                                         /** @enum {string} */
                                         chain: "STELLAR" | "POLYGON" | "SOLANA";
                                         address: string;
-                                        mode: string;
+                                        /** @enum {string} */
+                                        mode: "COSIGNED" | "EXTERNAL" | "APP_CUSTODY" | "SELF_CUSTODY" | "INTERNAL";
                                         signs: boolean;
                                     } | null;
                                     requiredFields: {
@@ -15825,11 +15993,14 @@ export interface operations {
                                     };
                                 }[];
                                 failure: {
-                                    code: string;
+                                    /** @enum {string} */
+                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                     legIndex: number | null;
                                     retryable: boolean;
-                                    resolutionOwner: string;
-                                    resolutionAction: string;
+                                    /** @enum {string} */
+                                    resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                    /** @enum {string} */
+                                    resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
                                     detail?: string;
                                     limit?: {
                                         min: string | null;
@@ -15935,14 +16106,16 @@ export interface operations {
                                 id: string;
                                 /** @enum {string} */
                                 direction: "ONRAMP" | "OFFRAMP";
-                                state: string;
+                                /** @enum {string} */
+                                state: "created" | "awaiting_payment" | "processing" | "settling_onchain" | "completed" | "failed" | "refunded";
                                 createdAt: string;
                                 updatedAt: string;
                                 legs: {
                                     index: number;
                                     /** @enum {string} */
                                     kind: "PROVIDER_ONRAMP" | "PROVIDER_OFFRAMP" | "SWAP" | "BRIDGE";
-                                    status: string;
+                                    /** @enum {string} */
+                                    status: "PENDING" | "ACTIVE" | "AWAITING_ACTION" | "COMPLETED" | "HELD" | "FAILED" | "CANCELLED";
                                     from: {
                                         /** @constant */
                                         kind: "asset";
@@ -15978,7 +16151,7 @@ export interface operations {
                                     amountInActual: string | null;
                                     amountOutActual: string | null;
                                     onchainTxHash: string | null;
-                                    signingMode: string | null;
+                                    signingMode: ("COSIGNED" | "EXTERNAL" | "APP_CUSTODY" | "SELF_CUSTODY") | null;
                                     fundsLocation: {
                                         /** @enum {string} */
                                         chain: "STELLAR" | "POLYGON" | "SOLANA";
@@ -15988,10 +16161,13 @@ export interface operations {
                                     } | null;
                                     failure: {
                                         legIndex: number;
-                                        code: string;
+                                        /** @enum {string} */
+                                        code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                         retryable: boolean;
-                                        resolutionOwner: string;
-                                        resolutionAction: string;
+                                        /** @enum {string} */
+                                        resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                        /** @enum {string} */
+                                        resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
                                         detail: string | null;
                                     } | null;
                                     steps: {
@@ -16058,7 +16234,8 @@ export interface operations {
                                     /** @enum {string} */
                                     chain: "STELLAR" | "POLYGON" | "SOLANA";
                                     payload: {
-                                        encoding: string;
+                                        /** @enum {string} */
+                                        encoding: "xdr" | "evm-eip1559-json" | "solana-v0-json" | "solana-cctp-json" | "solana-wire-base64";
                                         value: string;
                                     };
                                     summary: string;
@@ -16085,10 +16262,13 @@ export interface operations {
                                 }) | null;
                                 failure: {
                                     legIndex: number;
-                                    code: string;
+                                    /** @enum {string} */
+                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                     retryable: boolean;
-                                    resolutionOwner: string;
-                                    resolutionAction: string;
+                                    /** @enum {string} */
+                                    resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                    /** @enum {string} */
+                                    resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
                                     detail: string | null;
                                 } | null;
                                 nextPollAfter: string | null;
@@ -16163,14 +16343,16 @@ export interface operations {
                             id: string;
                             /** @enum {string} */
                             direction: "ONRAMP" | "OFFRAMP";
-                            state: string;
+                            /** @enum {string} */
+                            state: "created" | "awaiting_payment" | "processing" | "settling_onchain" | "completed" | "failed" | "refunded";
                             createdAt: string;
                             updatedAt: string;
                             legs: {
                                 index: number;
                                 /** @enum {string} */
                                 kind: "PROVIDER_ONRAMP" | "PROVIDER_OFFRAMP" | "SWAP" | "BRIDGE";
-                                status: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "ACTIVE" | "AWAITING_ACTION" | "COMPLETED" | "HELD" | "FAILED" | "CANCELLED";
                                 from: {
                                     /** @constant */
                                     kind: "asset";
@@ -16206,7 +16388,7 @@ export interface operations {
                                 amountInActual: string | null;
                                 amountOutActual: string | null;
                                 onchainTxHash: string | null;
-                                signingMode: string | null;
+                                signingMode: ("COSIGNED" | "EXTERNAL" | "APP_CUSTODY" | "SELF_CUSTODY") | null;
                                 fundsLocation: {
                                     /** @enum {string} */
                                     chain: "STELLAR" | "POLYGON" | "SOLANA";
@@ -16216,10 +16398,13 @@ export interface operations {
                                 } | null;
                                 failure: {
                                     legIndex: number;
-                                    code: string;
+                                    /** @enum {string} */
+                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                     retryable: boolean;
-                                    resolutionOwner: string;
-                                    resolutionAction: string;
+                                    /** @enum {string} */
+                                    resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                    /** @enum {string} */
+                                    resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
                                     detail: string | null;
                                 } | null;
                                 steps: {
@@ -16286,7 +16471,8 @@ export interface operations {
                                 /** @enum {string} */
                                 chain: "STELLAR" | "POLYGON" | "SOLANA";
                                 payload: {
-                                    encoding: string;
+                                    /** @enum {string} */
+                                    encoding: "xdr" | "evm-eip1559-json" | "solana-v0-json" | "solana-cctp-json" | "solana-wire-base64";
                                     value: string;
                                 };
                                 summary: string;
@@ -16313,10 +16499,13 @@ export interface operations {
                             }) | null;
                             failure: {
                                 legIndex: number;
-                                code: string;
+                                /** @enum {string} */
+                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                 retryable: boolean;
-                                resolutionOwner: string;
-                                resolutionAction: string;
+                                /** @enum {string} */
+                                resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                /** @enum {string} */
+                                resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
                                 detail: string | null;
                             } | null;
                             nextPollAfter: string | null;
@@ -16427,14 +16616,16 @@ export interface operations {
                             id: string;
                             /** @enum {string} */
                             direction: "ONRAMP" | "OFFRAMP";
-                            state: string;
+                            /** @enum {string} */
+                            state: "created" | "awaiting_payment" | "processing" | "settling_onchain" | "completed" | "failed" | "refunded";
                             createdAt: string;
                             updatedAt: string;
                             legs: {
                                 index: number;
                                 /** @enum {string} */
                                 kind: "PROVIDER_ONRAMP" | "PROVIDER_OFFRAMP" | "SWAP" | "BRIDGE";
-                                status: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "ACTIVE" | "AWAITING_ACTION" | "COMPLETED" | "HELD" | "FAILED" | "CANCELLED";
                                 from: {
                                     /** @constant */
                                     kind: "asset";
@@ -16470,7 +16661,7 @@ export interface operations {
                                 amountInActual: string | null;
                                 amountOutActual: string | null;
                                 onchainTxHash: string | null;
-                                signingMode: string | null;
+                                signingMode: ("COSIGNED" | "EXTERNAL" | "APP_CUSTODY" | "SELF_CUSTODY") | null;
                                 fundsLocation: {
                                     /** @enum {string} */
                                     chain: "STELLAR" | "POLYGON" | "SOLANA";
@@ -16480,10 +16671,13 @@ export interface operations {
                                 } | null;
                                 failure: {
                                     legIndex: number;
-                                    code: string;
+                                    /** @enum {string} */
+                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                     retryable: boolean;
-                                    resolutionOwner: string;
-                                    resolutionAction: string;
+                                    /** @enum {string} */
+                                    resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                    /** @enum {string} */
+                                    resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
                                     detail: string | null;
                                 } | null;
                                 steps: {
@@ -16550,7 +16744,8 @@ export interface operations {
                                 /** @enum {string} */
                                 chain: "STELLAR" | "POLYGON" | "SOLANA";
                                 payload: {
-                                    encoding: string;
+                                    /** @enum {string} */
+                                    encoding: "xdr" | "evm-eip1559-json" | "solana-v0-json" | "solana-cctp-json" | "solana-wire-base64";
                                     value: string;
                                 };
                                 summary: string;
@@ -16577,10 +16772,13 @@ export interface operations {
                             }) | null;
                             failure: {
                                 legIndex: number;
-                                code: string;
+                                /** @enum {string} */
+                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                 retryable: boolean;
-                                resolutionOwner: string;
-                                resolutionAction: string;
+                                /** @enum {string} */
+                                resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                /** @enum {string} */
+                                resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
                                 detail: string | null;
                             } | null;
                             nextPollAfter: string | null;
@@ -16646,14 +16844,16 @@ export interface operations {
                             id: string;
                             /** @enum {string} */
                             direction: "ONRAMP" | "OFFRAMP";
-                            state: string;
+                            /** @enum {string} */
+                            state: "created" | "awaiting_payment" | "processing" | "settling_onchain" | "completed" | "failed" | "refunded";
                             createdAt: string;
                             updatedAt: string;
                             legs: {
                                 index: number;
                                 /** @enum {string} */
                                 kind: "PROVIDER_ONRAMP" | "PROVIDER_OFFRAMP" | "SWAP" | "BRIDGE";
-                                status: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "ACTIVE" | "AWAITING_ACTION" | "COMPLETED" | "HELD" | "FAILED" | "CANCELLED";
                                 from: {
                                     /** @constant */
                                     kind: "asset";
@@ -16689,7 +16889,7 @@ export interface operations {
                                 amountInActual: string | null;
                                 amountOutActual: string | null;
                                 onchainTxHash: string | null;
-                                signingMode: string | null;
+                                signingMode: ("COSIGNED" | "EXTERNAL" | "APP_CUSTODY" | "SELF_CUSTODY") | null;
                                 fundsLocation: {
                                     /** @enum {string} */
                                     chain: "STELLAR" | "POLYGON" | "SOLANA";
@@ -16699,10 +16899,13 @@ export interface operations {
                                 } | null;
                                 failure: {
                                     legIndex: number;
-                                    code: string;
+                                    /** @enum {string} */
+                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                     retryable: boolean;
-                                    resolutionOwner: string;
-                                    resolutionAction: string;
+                                    /** @enum {string} */
+                                    resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                    /** @enum {string} */
+                                    resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
                                     detail: string | null;
                                 } | null;
                                 steps: {
@@ -16769,7 +16972,8 @@ export interface operations {
                                 /** @enum {string} */
                                 chain: "STELLAR" | "POLYGON" | "SOLANA";
                                 payload: {
-                                    encoding: string;
+                                    /** @enum {string} */
+                                    encoding: "xdr" | "evm-eip1559-json" | "solana-v0-json" | "solana-cctp-json" | "solana-wire-base64";
                                     value: string;
                                 };
                                 summary: string;
@@ -16796,10 +17000,13 @@ export interface operations {
                             }) | null;
                             failure: {
                                 legIndex: number;
-                                code: string;
+                                /** @enum {string} */
+                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                 retryable: boolean;
-                                resolutionOwner: string;
-                                resolutionAction: string;
+                                /** @enum {string} */
+                                resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                /** @enum {string} */
+                                resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
                                 detail: string | null;
                             } | null;
                             nextPollAfter: string | null;
@@ -16873,14 +17080,16 @@ export interface operations {
                             id: string;
                             /** @enum {string} */
                             direction: "ONRAMP" | "OFFRAMP";
-                            state: string;
+                            /** @enum {string} */
+                            state: "created" | "awaiting_payment" | "processing" | "settling_onchain" | "completed" | "failed" | "refunded";
                             createdAt: string;
                             updatedAt: string;
                             legs: {
                                 index: number;
                                 /** @enum {string} */
                                 kind: "PROVIDER_ONRAMP" | "PROVIDER_OFFRAMP" | "SWAP" | "BRIDGE";
-                                status: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "ACTIVE" | "AWAITING_ACTION" | "COMPLETED" | "HELD" | "FAILED" | "CANCELLED";
                                 from: {
                                     /** @constant */
                                     kind: "asset";
@@ -16916,7 +17125,7 @@ export interface operations {
                                 amountInActual: string | null;
                                 amountOutActual: string | null;
                                 onchainTxHash: string | null;
-                                signingMode: string | null;
+                                signingMode: ("COSIGNED" | "EXTERNAL" | "APP_CUSTODY" | "SELF_CUSTODY") | null;
                                 fundsLocation: {
                                     /** @enum {string} */
                                     chain: "STELLAR" | "POLYGON" | "SOLANA";
@@ -16926,10 +17135,13 @@ export interface operations {
                                 } | null;
                                 failure: {
                                     legIndex: number;
-                                    code: string;
+                                    /** @enum {string} */
+                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                     retryable: boolean;
-                                    resolutionOwner: string;
-                                    resolutionAction: string;
+                                    /** @enum {string} */
+                                    resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                    /** @enum {string} */
+                                    resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
                                     detail: string | null;
                                 } | null;
                                 steps: {
@@ -16996,7 +17208,8 @@ export interface operations {
                                 /** @enum {string} */
                                 chain: "STELLAR" | "POLYGON" | "SOLANA";
                                 payload: {
-                                    encoding: string;
+                                    /** @enum {string} */
+                                    encoding: "xdr" | "evm-eip1559-json" | "solana-v0-json" | "solana-cctp-json" | "solana-wire-base64";
                                     value: string;
                                 };
                                 summary: string;
@@ -17023,10 +17236,13 @@ export interface operations {
                             }) | null;
                             failure: {
                                 legIndex: number;
-                                code: string;
+                                /** @enum {string} */
+                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                 retryable: boolean;
-                                resolutionOwner: string;
-                                resolutionAction: string;
+                                /** @enum {string} */
+                                resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                /** @enum {string} */
+                                resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
                                 detail: string | null;
                             } | null;
                             nextPollAfter: string | null;
@@ -17122,14 +17338,16 @@ export interface operations {
                             id: string;
                             /** @enum {string} */
                             direction: "ONRAMP" | "OFFRAMP";
-                            state: string;
+                            /** @enum {string} */
+                            state: "created" | "awaiting_payment" | "processing" | "settling_onchain" | "completed" | "failed" | "refunded";
                             createdAt: string;
                             updatedAt: string;
                             legs: {
                                 index: number;
                                 /** @enum {string} */
                                 kind: "PROVIDER_ONRAMP" | "PROVIDER_OFFRAMP" | "SWAP" | "BRIDGE";
-                                status: string;
+                                /** @enum {string} */
+                                status: "PENDING" | "ACTIVE" | "AWAITING_ACTION" | "COMPLETED" | "HELD" | "FAILED" | "CANCELLED";
                                 from: {
                                     /** @constant */
                                     kind: "asset";
@@ -17165,7 +17383,7 @@ export interface operations {
                                 amountInActual: string | null;
                                 amountOutActual: string | null;
                                 onchainTxHash: string | null;
-                                signingMode: string | null;
+                                signingMode: ("COSIGNED" | "EXTERNAL" | "APP_CUSTODY" | "SELF_CUSTODY") | null;
                                 fundsLocation: {
                                     /** @enum {string} */
                                     chain: "STELLAR" | "POLYGON" | "SOLANA";
@@ -17175,10 +17393,13 @@ export interface operations {
                                 } | null;
                                 failure: {
                                     legIndex: number;
-                                    code: string;
+                                    /** @enum {string} */
+                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                     retryable: boolean;
-                                    resolutionOwner: string;
-                                    resolutionAction: string;
+                                    /** @enum {string} */
+                                    resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                    /** @enum {string} */
+                                    resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
                                     detail: string | null;
                                 } | null;
                                 steps: {
@@ -17245,7 +17466,8 @@ export interface operations {
                                 /** @enum {string} */
                                 chain: "STELLAR" | "POLYGON" | "SOLANA";
                                 payload: {
-                                    encoding: string;
+                                    /** @enum {string} */
+                                    encoding: "xdr" | "evm-eip1559-json" | "solana-v0-json" | "solana-cctp-json" | "solana-wire-base64";
                                     value: string;
                                 };
                                 summary: string;
@@ -17272,10 +17494,13 @@ export interface operations {
                             }) | null;
                             failure: {
                                 legIndex: number;
-                                code: string;
+                                /** @enum {string} */
+                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                 retryable: boolean;
-                                resolutionOwner: string;
-                                resolutionAction: string;
+                                /** @enum {string} */
+                                resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                /** @enum {string} */
+                                resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
                                 detail: string | null;
                             } | null;
                             nextPollAfter: string | null;
@@ -17674,7 +17899,8 @@ export interface operations {
                                     /** @enum {string} */
                                     chain: "STELLAR" | "SOLANA" | "POLYGON";
                                     payload: {
-                                        encoding: string;
+                                        /** @enum {string} */
+                                        encoding: "xdr" | "evm-eip1559-json" | "solana-v0-json" | "solana-cctp-json" | "solana-wire-base64";
                                         value: string;
                                     };
                                     summary: string;
@@ -17785,7 +18011,8 @@ export interface operations {
                                     /** @enum {string} */
                                     chain: "STELLAR" | "SOLANA" | "POLYGON";
                                     payload: {
-                                        encoding: string;
+                                        /** @enum {string} */
+                                        encoding: "xdr" | "evm-eip1559-json" | "solana-v0-json" | "solana-cctp-json" | "solana-wire-base64";
                                         value: string;
                                     };
                                     summary: string;
@@ -17844,7 +18071,8 @@ export interface operations {
                                     /** @enum {string} */
                                     chain: "STELLAR" | "SOLANA" | "POLYGON";
                                     payload: {
-                                        encoding: string;
+                                        /** @enum {string} */
+                                        encoding: "xdr" | "evm-eip1559-json" | "solana-v0-json" | "solana-cctp-json" | "solana-wire-base64";
                                         value: string;
                                     };
                                     summary: string;
@@ -17976,7 +18204,8 @@ export interface operations {
                                     /** @enum {string} */
                                     chain: "STELLAR" | "SOLANA" | "POLYGON";
                                     payload: {
-                                        encoding: string;
+                                        /** @enum {string} */
+                                        encoding: "xdr" | "evm-eip1559-json" | "solana-v0-json" | "solana-cctp-json" | "solana-wire-base64";
                                         value: string;
                                     };
                                     summary: string;
@@ -18100,7 +18329,8 @@ export interface operations {
                                     /** @enum {string} */
                                     chain: "STELLAR" | "SOLANA" | "POLYGON";
                                     payload: {
-                                        encoding: string;
+                                        /** @enum {string} */
+                                        encoding: "xdr" | "evm-eip1559-json" | "solana-v0-json" | "solana-cctp-json" | "solana-wire-base64";
                                         value: string;
                                     };
                                     summary: string;
