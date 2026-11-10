@@ -377,6 +377,9 @@ const assetShown = () => document.querySelector('.pollar-send-asset-selector')?.
     const last = quotes.at(-1);
     assert.equal(last.destinationChain, 'POLYGON', 'quoted toward Polygon');
     assert.equal(last.outputMint, USDT_POLYGON, 'the ERC-20 address as the output');
+    // The route's fees are details: they show once the details open.
+    assert.doesNotMatch(document.body.textContent, /Routing fee/, 'the fees wait behind Show details');
+    await ui.click(ui.button('Show details'));
     assert.match(document.body.textContent, /Routing fee/);
     assert.match(document.body.textContent, /Cross-chain route/);
     await ui.click(document.querySelector('.pollar-modal-actions .pollar-btn-primary'));
