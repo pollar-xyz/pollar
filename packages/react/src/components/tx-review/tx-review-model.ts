@@ -58,6 +58,11 @@ const asChain = (value: unknown): WalletChain | undefined =>
 const asString = (value: unknown): string | undefined =>
   typeof value === 'string' && value !== '' ? value : typeof value === 'number' ? String(value) : undefined;
 
+/** The asset the action is about, for the logo next to its title; none when it moves no asset. */
+export function headlineAsset(data: Pick<TxReviewData, 'from' | 'to'>): string | undefined {
+  return data.from?.asset ?? data.to?.asset;
+}
+
 export function shortAddress(address: string): string {
   return address.length <= 12 ? address : `${address.slice(0, 4)}...${address.slice(-4)}`;
 }
@@ -91,7 +96,11 @@ function titleOf(data: Pick<TxReviewData, 'kind' | 'from' | 'to'>, fallback: str
     case 'bridge':
       return from?.amount && to?.chain ? copy.titles.bridge(withAsset(from), copy.chains[to.chain]) : fallback;
     case 'approve':
-      return from?.asset && to?.label ? copy.titles.approve(from.asset, displayName(to.label)) : fallback;
+      return from?.amount
+        ? copy.titles.approveAmount(withAsset(from))
+        : from?.asset
+          ? copy.titles.approveAll(from.asset)
+          : fallback;
     case 'swap':
       return from?.asset && to?.asset ? copy.titles.swap(from.asset, to.asset) : fallback;
     case 'payment':
@@ -112,6 +121,7 @@ function titleOf(data: Pick<TxReviewData, 'kind' | 'from' | 'to'>, fallback: str
 function leadOf(kind: TxReviewData['kind'], copy: TxReviewCopy): string | undefined {
   if (kind === 'activate_wallet') return copy.leads.activateWallet;
   if (kind === 'add_asset') return copy.leads.addAsset;
+  if (kind === 'approve') return copy.leads.approve;
   return undefined;
 }
 
@@ -386,7 +396,8 @@ export function reviewFromRequest(parts: SigningRequestParts, copy: TxReviewCopy
   });
   const fromRow = partyRow(copy.rows.from, data.from ?? (parts.signWith ? { address: parts.signWith } : undefined), copy);
   if (fromRow) rows.push(fromRow);
-  const toRow = partyRow(copy.rows.to, data.to, copy);
+  // What an approval names is the contract the permission goes to, not someone who receives.
+  const toRow = partyRow(data.kind === 'approve' ? copy.rows.contract : copy.rows.to, data.to, copy);
   if (toRow) rows.push(toRow);
   if (data.kind !== 'other' && data.from?.amount) rows.push({ label: copy.rows.amount, value: withAsset(data.from) });
   if (data.kind === 'swap' && data.to?.amount)

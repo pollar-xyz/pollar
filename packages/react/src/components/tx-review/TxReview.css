@@ -114,11 +114,11 @@
   margin-left: -4px;
 }
 
-.pollar-txr-note {
-  margin: 0;
-  font-size: 0.82rem;
+.pollar-txr-lead {
+  margin: -0.35rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
   color: var(--pollar-muted);
-  text-align: center;
 }
 
 .pollar-txr-signin {

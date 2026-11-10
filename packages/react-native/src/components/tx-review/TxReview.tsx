@@ -147,26 +147,17 @@ export function TxExplorerLink({
   );
 }
 
-function Glyph({ kind, colors }: { kind: 'account' | 'contract'; colors: Colors }) {
+function AccountGlyph({ colors }: { colors: Colors }) {
   return (
     <View style={[styles.logo, styles.glyph, { backgroundColor: colors.bg, borderColor: colors.border }]}>
       <Svg width={18} height={18} viewBox="0 0 20 20" fill="none">
-        {kind === 'account' ? (
-          <>
-            <Circle cx={10} cy={7} r={3.25} stroke={colors.muted} strokeWidth={1.6} />
-            <Path
-              d="M3.75 16.5c.9-3 3.3-4.5 6.25-4.5s5.35 1.5 6.25 4.5"
-              stroke={colors.muted}
-              strokeWidth={1.6}
-              strokeLinecap="round"
-            />
-          </>
-        ) : (
-          <>
-            <Rect x={4.5} y={9} width={11} height={7.5} rx={1.75} stroke={colors.muted} strokeWidth={1.6} />
-            <Path d="M7 9V6.75a3 3 0 0 1 6 0V9" stroke={colors.muted} strokeWidth={1.6} strokeLinecap="round" />
-          </>
-        )}
+        <Circle cx={10} cy={7} r={3.25} stroke={colors.muted} strokeWidth={1.6} />
+        <Path
+          d="M3.75 16.5c.9-3 3.3-4.5 6.25-4.5s5.35 1.5 6.25 4.5"
+          stroke={colors.muted}
+          strokeWidth={1.6}
+          strokeLinecap="round"
+        />
       </Svg>
     </View>
   );
@@ -213,7 +204,7 @@ function Node({
 }: {
   party: TxParty;
   showAmount: boolean;
-  glyph: 'asset' | 'account' | 'contract';
+  glyph: 'asset' | 'account';
   copy: TxReviewCopy;
   colors: Colors;
 }) {
@@ -226,7 +217,7 @@ function Node({
         {glyph === 'asset' && party.asset ? (
           <AssetLogo key={party.asset} asset={party.asset} colors={colors} />
         ) : (
-          <Glyph kind={glyph === 'contract' ? 'contract' : 'account'} colors={colors} />
+          <AccountGlyph colors={colors} />
         )}
         <ChainBadge chain={party.chain} copy={copy} colors={colors} />
       </View>
@@ -334,25 +325,21 @@ export function TxReview({
   const { from, to, kind } = data;
   // The receiving end repeats the amount only when it differs from what leaves.
   const toShowsAmount = !!to?.amount && (to.amount !== from?.amount || to.asset !== from?.asset);
-  const toGlyph =
-    kind === 'approve'
-      ? 'contract'
-      : kind === 'bridge' || kind === 'swap' || kind === 'deposit' || kind === 'withdraw'
-        ? 'asset'
-        : 'account';
+  const toGlyph = kind === 'bridge' || kind === 'swap' || kind === 'deposit' || kind === 'withdraw' ? 'asset' : 'account';
   const copyButton = (value: string) =>
     copyText ? <CopyButton value={value} copyText={copyText} language={language} colors={colors} /> : null;
 
   return (
     <View style={styles.root}>
-      {from && to && (
+      {data.lead ? <Text style={[styles.lead, { color: colors.muted }]}>{data.lead}</Text> : null}
+      {/* A permission moves nothing: an arrow from the wallet would say otherwise. */}
+      {from && to && kind !== 'approve' && (
         <View style={[styles.flow, { backgroundColor: colors.inputBg }]}>
           <Node party={from} showAmount glyph={from.asset ? 'asset' : 'account'} copy={copy} colors={colors} />
           <Arrow colors={colors} />
-          <Node party={to} showAmount={kind !== 'approve' && toShowsAmount} glyph={toGlyph} copy={copy} colors={colors} />
+          <Node party={to} showAmount={toShowsAmount} glyph={toGlyph} copy={copy} colors={colors} />
         </View>
       )}
-      {kind === 'approve' && <Text style={[styles.note, { color: colors.muted }]}>{copy.approveNote}</Text>}
       {kind === 'sign_in' && <SignIn copy={copy} colors={colors} />}
 
       <View style={styles.bar}>
@@ -475,7 +462,7 @@ const styles = StyleSheet.create({
   min: { fontWeight: '400' },
   caption: { fontSize: 13, textAlign: 'center', maxWidth: '100%' },
   arrow: { flexDirection: 'row', alignItems: 'center', height: 44, minWidth: 40, maxWidth: 72, flexBasis: 56, flexShrink: 1 },
-  note: { fontSize: 13, textAlign: 'center' },
+  lead: { fontSize: 14, lineHeight: 20, marginTop: -4 },
   signIn: { alignItems: 'center', gap: 10, paddingVertical: 16, paddingHorizontal: 12, borderRadius: 10 },
   signInBody: { fontSize: 14, lineHeight: 20, textAlign: 'center' },
   assurances: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: 16, rowGap: 6 },

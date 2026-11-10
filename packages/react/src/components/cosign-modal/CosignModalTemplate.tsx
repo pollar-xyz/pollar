@@ -6,9 +6,9 @@ import { useState } from 'react';
 import { CHAIN_LOGOS } from '../../constants';
 import { CopyButton, cropAddress, PollarModalFooter } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
-import { TxFeeBadge, TxReview } from '../tx-review/TxReview';
+import { AssetLogo, TxFeeBadge, TxReview } from '../tx-review/TxReview';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
-import { reviewFromRequest } from '../tx-review/tx-review-model';
+import { headlineAsset, reviewFromRequest } from '../tx-review/tx-review-model';
 import { COSIGN_COPY } from './cosign-copy';
 
 type CosignCopy = (typeof COSIGN_COPY)[PollarLanguage];
@@ -68,10 +68,19 @@ function expiresIn(request: CosignRequest, copy: CosignCopy): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-/** The chain's logo next to the title, so the user sees where the action happens. */
-export function ChainMark({ chain }: { chain: string | undefined }) {
+/**
+ * The logo next to the title: the asset the action moves with its chain in the
+ * corner, or the chain alone when it moves no asset.
+ */
+export function TitleMark({ chain, asset }: { chain: string | undefined; asset?: string | undefined }) {
   const src = chain ? CHAIN_LOGOS[chain as keyof typeof CHAIN_LOGOS] : undefined;
-  return src ? <img className="pollar-cosign-chain" src={src} alt="" aria-hidden /> : null;
+  if (!asset) return src ? <img className="pollar-cosign-chain" src={src} alt="" aria-hidden /> : null;
+  return (
+    <span className="pollar-cosign-mark" aria-hidden>
+      <AssetLogo key={asset} asset={asset} small />
+      {src && <img className="pollar-cosign-mark-chain" src={src} alt="" />}
+    </span>
+  );
 }
 
 function CloseIcon() {
@@ -183,7 +192,9 @@ export function CosignModalTemplate({
     >
       <div className="pollar-modal-header">
         <h2 className="pollar-modal-title pollar-cosign-heading">
-          {!confirmingClose && <ChainMark chain={shown?.network} />}
+          {!confirmingClose && (
+            <TitleMark chain={shown?.network} asset={shownReview ? headlineAsset(shownReview) : undefined} />
+          )}
           <span>{heading}</span>
         </h2>
         <div className="pollar-modal-header-actions">
@@ -285,7 +296,7 @@ export function CosignModalTemplate({
                     onClick={() => onSelect(r)}
                   >
                     <span className="pollar-cosign-heading">
-                      <ChainMark chain={r.network} />
+                      <TitleMark chain={r.network} asset={headlineAsset(reviewOf(r))} />
                       {reviewOf(r).title}
                     </span>
                     <span className="pollar-cosign-muted">{expiresIn(r, copy)}</span>
@@ -303,7 +314,6 @@ export function CosignModalTemplate({
                   {chip}
                 </div>
               )}
-              {review.lead && <p className="pollar-cosign-muted pollar-cosign-lead">{review.lead}</p>}
               <TxReview
                 key={current.id}
                 data={review}

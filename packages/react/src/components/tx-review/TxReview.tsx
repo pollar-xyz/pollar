@@ -79,17 +79,6 @@ function AccountGlyph() {
   );
 }
 
-function ContractGlyph() {
-  return (
-    <span className="pollar-txr-logo pollar-txr-logo-glyph" aria-hidden>
-      <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-        <rect x="4.5" y="9" width="11" height="7.5" rx="1.75" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M7 9V6.75a3 3 0 0 1 6 0V9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    </span>
-  );
-}
-
 /** A key in a shield: proving who the user is, not sending anything. */
 function SignInGlyph() {
   return (
@@ -128,7 +117,7 @@ function Node({
 }: {
   party: TxParty;
   showAmount: boolean;
-  glyph: 'asset' | 'account' | 'contract';
+  glyph: 'asset' | 'account';
   copy: TxReviewCopy;
 }) {
   const caption = party.self
@@ -137,13 +126,7 @@ function Node({
   return (
     <div className="pollar-txr-node">
       <span className="pollar-txr-avatar">
-        {glyph === 'asset' && party.asset ? (
-          <AssetLogo key={party.asset} asset={party.asset} />
-        ) : glyph === 'contract' ? (
-          <ContractGlyph />
-        ) : (
-          <AccountGlyph />
-        )}
+        {glyph === 'asset' && party.asset ? <AssetLogo key={party.asset} asset={party.asset} /> : <AccountGlyph />}
         <ChainBadge chain={party.chain} copy={copy} />
       </span>
       {showAmount && party.amount && (
@@ -229,23 +212,19 @@ export function TxReview({
   const { from, to, kind } = data;
   // The receiving end repeats the amount only when it differs from what leaves.
   const toShowsAmount = !!to?.amount && (to.amount !== from?.amount || to.asset !== from?.asset);
-  const toGlyph =
-    kind === 'approve'
-      ? 'contract'
-      : kind === 'bridge' || kind === 'swap' || kind === 'deposit' || kind === 'withdraw'
-        ? 'asset'
-        : 'account';
+  const toGlyph = kind === 'bridge' || kind === 'swap' || kind === 'deposit' || kind === 'withdraw' ? 'asset' : 'account';
 
   return (
     <div className="pollar-txr">
-      {from && to && (
+      {data.lead && <p className="pollar-txr-lead">{data.lead}</p>}
+      {/* A permission moves nothing: an arrow from the wallet would say otherwise. */}
+      {from && to && kind !== 'approve' && (
         <div className="pollar-txr-flow">
           <Node party={from} showAmount glyph={from.asset ? 'asset' : 'account'} copy={copy} />
           <Arrow />
-          <Node party={to} showAmount={kind !== 'approve' && toShowsAmount} glyph={toGlyph} copy={copy} />
+          <Node party={to} showAmount={toShowsAmount} glyph={toGlyph} copy={copy} />
         </div>
       )}
-      {kind === 'approve' && <p className="pollar-txr-note">{copy.approveNote}</p>}
       {kind === 'sign_in' && (
         <div className="pollar-txr-signin">
           <SignInGlyph />

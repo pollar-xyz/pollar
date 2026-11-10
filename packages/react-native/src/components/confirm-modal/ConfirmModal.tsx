@@ -7,10 +7,10 @@ import { CONFIRM_COPY } from './confirm-copy';
 
 type Copy = (typeof CONFIRM_COPY)['en'];
 import { PollarModalFooter, PollarOverlay } from '../commons';
-import { ChainMark } from '../cosign-modal/CosignModalUI';
+import { TitleMark } from '../cosign-modal/CosignModalUI';
 import { TxReview } from '../tx-review/TxReview';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
-import { reviewFromBuild, reviewFromRequest } from '../tx-review/tx-review-model';
+import { headlineAsset, reviewFromBuild, reviewFromRequest } from '../tx-review/tx-review-model';
 
 interface ConfirmModalProps {
   confirmation: PendingConfirmation;
@@ -72,7 +72,9 @@ export function ConfirmModal({ confirmation }: ConfirmModalProps) {
       <View style={[localStyles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
         <View style={localStyles.header}>
           <View style={localStyles.heading}>
-            {!confirmingClose && <ChainMark chain={confirmation.network} />}
+            {!confirmingClose && (
+              <TitleMark chain={confirmation.network} asset={headlineAsset(review)} theme={theme} accentColor={accentColor} />
+            )}
             <Text style={[localStyles.title, { color: colors.text }]}>{confirmingClose ? copy.closeTitle : review.title}</Text>
           </View>
           {!confirmingClose && (
@@ -97,7 +99,6 @@ export function ConfirmModal({ confirmation }: ConfirmModalProps) {
           </View>
         ) : (
           <View style={localStyles.detail}>
-            {review.lead ? <Text style={{ color: colors.muted }}>{review.lead}</Text> : null}
             <TxReview
               data={review}
               theme={theme}

@@ -8,7 +8,8 @@ export const TX_REVIEW_COPY: Record<
     titles: {
       send: (amount: string) => string;
       bridge: (amount: string, chain: string) => string;
-      approve: (asset: string, spender: string) => string;
+      approveAmount: (amount: string) => string;
+      approveAll: (asset: string) => string;
       swap: (from: string, to: string) => string;
       payment: (amount: string, to: string) => string;
       createAccount: string;
@@ -39,12 +40,11 @@ export const TX_REVIEW_COPY: Record<
     yourWallet: string;
     newAccount: string;
     atLeast: string;
-    approveNote: string;
     feeSponsored: string;
     feePaid: string;
     /** The app covers everything the action costs, the account's reserve included. */
     feeFree: string;
-    leads: { activateWallet: string; addAsset: string };
+    leads: { activateWallet: string; addAsset: string; approve: string };
     showDetails: string;
     hideDetails: string;
     chains: Record<'STELLAR' | 'POLYGON' | 'SOLANA', string>;
@@ -77,7 +77,8 @@ export const TX_REVIEW_COPY: Record<
     titles: {
       send: (amount) => `Send ${amount}`,
       bridge: (amount, chain) => `Move ${amount} to ${chain}`,
-      approve: (asset, spender) => `Allow ${spender} to use your ${asset}`,
+      approveAmount: (amount) => `Allow moving ${amount}`,
+      approveAll: (asset) => `Allow moving your ${asset}`,
       swap: (from, to) => `Swap ${from} for ${to}`,
       payment: (amount, to) => `Pay ${amount} to ${to}`,
       createAccount: 'Create an account',
@@ -106,11 +107,14 @@ export const TX_REVIEW_COPY: Record<
     yourWallet: 'Your wallet',
     newAccount: 'New account',
     atLeast: 'at least',
-    approveNote: 'This only gives permission. Nothing moves yet.',
     feeSponsored: 'The app pays the network fee',
     feePaid: 'You pay the network fee',
     feeFree: 'Free, the app covers it',
-    leads: { activateWallet: 'One step, done only once.', addAsset: 'So your wallet can receive it.' },
+    leads: {
+      activateWallet: 'One step, done only once.',
+      addAsset: 'So your wallet can receive it.',
+      approve: "It's a permission for the next step. No money moves yet.",
+    },
     showDetails: 'Show details',
     hideDetails: 'Hide details',
     chains: { STELLAR: 'Stellar', POLYGON: 'Polygon', SOLANA: 'Solana' },
@@ -142,7 +146,8 @@ export const TX_REVIEW_COPY: Record<
     titles: {
       send: (amount) => `Enviar ${amount}`,
       bridge: (amount, chain) => `Mover ${amount} a ${chain}`,
-      approve: (asset, spender) => `Permitir que ${spender} use tu ${asset}`,
+      approveAmount: (amount) => `Permite mover ${amount}`,
+      approveAll: (asset) => `Permite mover tus ${asset}`,
       swap: (from, to) => `Cambiar ${from} por ${to}`,
       payment: (amount, to) => `Pagar ${amount} a ${to}`,
       createAccount: 'Crear una cuenta',
@@ -171,11 +176,14 @@ export const TX_REVIEW_COPY: Record<
     yourWallet: 'Tu billetera',
     newAccount: 'Cuenta nueva',
     atLeast: 'al menos',
-    approveNote: 'Solo das permiso. Todavía no se mueve nada.',
     feeSponsored: 'La app paga la comisión de red',
     feePaid: 'Tú pagas la comisión de red',
     feeFree: 'Gratis, la app lo cubre',
-    leads: { activateWallet: 'Un solo paso. Solo se hace una vez.', addAsset: 'Para que tu billetera pueda recibirlo.' },
+    leads: {
+      activateWallet: 'Un solo paso. Solo se hace una vez.',
+      addAsset: 'Para que tu billetera pueda recibirlo.',
+      approve: 'Es un permiso para el siguiente paso. Todavía no se mueve dinero.',
+    },
     showDetails: 'Ver detalles',
     hideDetails: 'Ocultar detalles',
     chains: { STELLAR: 'Stellar', POLYGON: 'Polygon', SOLANA: 'Solana' },
@@ -207,7 +215,8 @@ export const TX_REVIEW_COPY: Record<
     titles: {
       send: (amount) => `Enviar ${amount}`,
       bridge: (amount, chain) => `Mover ${amount} para ${chain}`,
-      approve: (asset, spender) => `Permitir que ${spender} use seu ${asset}`,
+      approveAmount: (amount) => `Permita mover ${amount}`,
+      approveAll: (asset) => `Permita mover seus ${asset}`,
       swap: (from, to) => `Trocar ${from} por ${to}`,
       payment: (amount, to) => `Pagar ${amount} para ${to}`,
       createAccount: 'Criar uma conta',
@@ -236,11 +245,14 @@ export const TX_REVIEW_COPY: Record<
     yourWallet: 'Sua carteira',
     newAccount: 'Conta nova',
     atLeast: 'pelo menos',
-    approveNote: 'Isto só dá permissão. Nada se move ainda.',
     feeSponsored: 'O app paga a taxa de rede',
     feePaid: 'Você paga a taxa de rede',
     feeFree: 'Grátis, o app cobre',
-    leads: { activateWallet: 'Um passo só, feito uma única vez.', addAsset: 'Para que sua carteira possa recebê-lo.' },
+    leads: {
+      activateWallet: 'Um passo só, feito uma única vez.',
+      addAsset: 'Para que sua carteira possa recebê-lo.',
+      approve: 'É uma permissão para o próximo passo. Nenhum dinheiro se move ainda.',
+    },
     showDetails: 'Ver detalhes',
     hideDetails: 'Ocultar detalhes',
     chains: { STELLAR: 'Stellar', POLYGON: 'Polygon', SOLANA: 'Solana' },

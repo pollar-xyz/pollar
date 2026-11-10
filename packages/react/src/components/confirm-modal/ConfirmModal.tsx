@@ -11,10 +11,10 @@ import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
 import { TxReview } from '../tx-review/TxReview';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
-import { reviewFromBuild, reviewFromRequest } from '../tx-review/tx-review-model';
+import { headlineAsset, reviewFromBuild, reviewFromRequest } from '../tx-review/tx-review-model';
 import '../shared.css';
 import '../cosign-modal/CosignModal.css';
-import { ChainMark } from '../cosign-modal/CosignModalTemplate';
+import { TitleMark } from '../cosign-modal/CosignModalTemplate';
 import { PollarOverlay } from '../PollarOverlay';
 
 interface ConfirmModalProps {
@@ -85,7 +85,7 @@ export function ConfirmModal({ confirmation }: ConfirmModalProps) {
       >
         <div className="pollar-modal-header">
           <h2 className="pollar-modal-title pollar-cosign-heading">
-            {!confirmingClose && <ChainMark chain={confirmation.network} />}
+            {!confirmingClose && <TitleMark chain={confirmation.network} asset={headlineAsset(review)} />}
             <span>{confirmingClose ? copy.closeTitle : review.title}</span>
           </h2>
           {!confirmingClose && (
@@ -119,7 +119,6 @@ export function ConfirmModal({ confirmation }: ConfirmModalProps) {
           </div>
         ) : (
           <div className="pollar-cosign-detail">
-            {review.lead && <p className="pollar-cosign-muted pollar-cosign-lead">{review.lead}</p>}
             <TxReview
               data={review}
               language={language}

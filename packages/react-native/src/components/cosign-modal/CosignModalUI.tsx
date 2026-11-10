@@ -4,9 +4,9 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { CHAIN_LOGOS } from '../../constants';
 import { PollarModalFooter } from '../commons';
-import { TxFeeBadge, TxReview } from '../tx-review/TxReview';
+import { InlineAssetLogo, TxFeeBadge, TxReview } from '../tx-review/TxReview';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
-import { reviewFromRequest } from '../tx-review/tx-review-model';
+import { headlineAsset, reviewFromRequest } from '../tx-review/tx-review-model';
 import { COSIGN_COPY } from './cosign-copy';
 
 type CosignCopy = (typeof COSIGN_COPY)[PollarLanguage];
@@ -48,17 +48,53 @@ export interface CosignModalTemplateProps {
   onCloseAnyway?: () => void;
 }
 
-/** The chain's logo next to the title, so the user sees where the action happens. */
-export function ChainMark({ chain, size = 22 }: { chain: string | undefined; size?: number }) {
+/**
+ * The logo next to the title: the asset the action moves with its chain in the
+ * corner, or the chain alone when it moves no asset.
+ */
+export function TitleMark({
+  chain,
+  asset,
+  theme,
+  accentColor,
+  size = 22,
+}: {
+  chain: string | undefined;
+  asset?: string | undefined;
+  theme: string;
+  accentColor: string;
+  size?: number;
+}) {
   const uri = chain ? CHAIN_LOGOS[chain as keyof typeof CHAIN_LOGOS] : undefined;
-  return uri ? (
-    <Image
-      source={{ uri }}
-      style={{ width: size, height: size, borderRadius: size / 2 }}
-      accessibilityElementsHidden
-      importantForAccessibility="no"
-    />
-  ) : null;
+  if (!asset)
+    return uri ? (
+      <Image
+        source={{ uri }}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+      />
+    ) : null;
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <InlineAssetLogo key={asset} asset={asset} theme={theme} accentColor={accentColor} />
+      {uri ? (
+        <Image
+          source={{ uri }}
+          style={{
+            position: 'absolute',
+            right: -3,
+            bottom: -3,
+            width: 12,
+            height: 12,
+            borderRadius: 6,
+            borderWidth: 1.5,
+            borderColor: theme === 'dark' ? '#1a1a1a' : '#ffffff',
+          }}
+        />
+      ) : null}
+    </View>
+  );
 }
 
 function labelOf(request: CosignRequest, copy: CosignCopy): string {
@@ -177,7 +213,14 @@ export function CosignModalTemplate({
     <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
       <View style={styles.header}>
         <View style={styles.heading}>
-          {!confirmingClose && <ChainMark chain={shown?.network} />}
+          {!confirmingClose && (
+            <TitleMark
+              chain={shown?.network}
+              asset={shownReview ? headlineAsset(shownReview) : undefined}
+              theme={theme}
+              accentColor={accentColor}
+            />
+          )}
           <Text style={[styles.title, { color: colors.text }]}>{heading}</Text>
         </View>
         <View style={styles.headerActions}>
@@ -249,7 +292,13 @@ export function CosignModalTemplate({
                 style={[styles.item, { borderColor: current?.id === r.id ? accentColor : colors.border }]}
               >
                 <View style={[styles.heading, { flexShrink: 1 }]}>
-                  <ChainMark chain={r.network} size={18} />
+                  <TitleMark
+                    chain={r.network}
+                    asset={headlineAsset(reviewOf(r))}
+                    theme={theme}
+                    accentColor={accentColor}
+                    size={18}
+                  />
                   <Text style={{ color: colors.text, flexShrink: 1 }}>{reviewOf(r).title}</Text>
                 </View>
                 <Text style={{ color: colors.muted }}>{expiresIn(r, copy)}</Text>
@@ -264,7 +313,6 @@ export function CosignModalTemplate({
                   {chip}
                 </View>
               )}
-              {review.lead ? <Text style={{ color: colors.muted }}>{review.lead}</Text> : null}
               <TxReview
                 key={current.id}
                 data={review}
