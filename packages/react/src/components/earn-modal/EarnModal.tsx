@@ -355,7 +355,10 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
       ? `https://solscan.io/tx/${hash}${network === 'testnet' ? '?cluster=devnet' : ''}`
       : `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}`;
 
-  const isInProgress = (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step);
+  // A transaction past its confirmation window is read on in the background: the modal can close meanwhile.
+  const isInProgress =
+    (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step) &&
+    !(transaction.step === 'submitted' && transaction.slow);
   const showBack = step === 'tx' && (transaction.step === 'error' || transaction.step === 'success') && !isInProgress;
 
   const txTitle = isInProgress

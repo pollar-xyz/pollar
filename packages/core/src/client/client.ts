@@ -407,6 +407,11 @@ function toPersistedWallet(w: PollarApplicationConfigContent['wallet']): PollarP
   };
 }
 
+/** How far apart a transaction past its confirmation window is read: soon at first, then every 30s. */
+const SLOW_TX_POLL_MS = [5_000, 5_000, 10_000, 15_000, 30_000];
+/** Past this a pending transaction can no longer land: the longest validity window the server builds is 5 min. */
+const SLOW_TX_GIVE_UP_MS = 10 * 60_000;
+
 export class PollarClient {
   private readonly _rampSigners = new RampSigningRegistry();
   readonly apiKey: string;
@@ -543,6 +548,8 @@ export class PollarClient {
   // (logout / new login), `_setTransactionState` drops the now-stale write so a
   // tx resolving after logout can't repopulate or emit the old session's state.
   private _txStartGen = 0;
+  /** Timers of the transactions still read after their confirmation window (see `_watchSlowTx`). */
+  private readonly _slowTxTimers = new Set<ReturnType<typeof setTimeout>>();
   private _txHistoryState: TxHistoryState = { step: 'idle' };
   private _txHistoryStateListeners = new Set<(state: TxHistoryState) => void>();
   private _sessionsState: SessionsState = { step: 'idle' };
@@ -940,6 +947,8 @@ export class PollarClient {
     // instead of re-arming a timer or writing state after teardown.
     if (this._destroyed) return; // idempotent - don't double-decrement the registry
     this._destroyed = true;
+    for (const timer of this._slowTxTimers) clearTimeout(timer);
+    this._slowTxTimers.clear();
     if (isClientRuntime) {
       const siblings = liveClientsByApiKey.get(this.apiKey);
       if (siblings) {
@@ -3948,33 +3957,104 @@ export class PollarClient {
       } catch {
         continue; // transient RPC / network blip; keep polling
       }
-      if (status.status === 'SUCCESS') {
-        this._setTransactionState({ step: 'success', hash, ...(buildData && { buildData }) });
-        return { status: 'success', hash, ...outcomeExtra };
-      }
-      if (status.status === 'FAILED') {
-        const code = onChainErrorCode(status.resultCode, ...(status.operationCodes ?? []));
+      const settled = this._settleTxStatus(status, hash, errorPhase, buildData, outcomeExtra);
+      if (settled) return settled;
+      // PENDING: keep polling
+    }
+    // Still pending after the window: the call answers `pending` and the transaction is read on in the background.
+    this._watchSlowTx(hash, errorPhase, buildData, gen);
+    return { status: 'pending', hash, ...outcomeExtra };
+  }
+
+  /** The state and outcome of a transaction the network settled; null while it is still pending. */
+  private _settleTxStatus(
+    status: Awaited<ReturnType<PollarClient['getTxStatus']>>,
+    hash: string,
+    errorPhase: 'submitting' | 'signing-submitting' | 'building-signing-submitting',
+    buildData: TxBuildContent | undefined,
+    outcomeExtra: { buildData?: TxBuildContent },
+  ): SubmitOutcome | null {
+    if (status.status === 'SUCCESS') {
+      this._setTransactionState({ step: 'success', hash, ...(buildData && { buildData }) });
+      return { status: 'success', hash, ...outcomeExtra };
+    }
+    if (status.status === 'FAILED') {
+      const code = onChainErrorCode(status.resultCode, ...(status.operationCodes ?? []));
+      this._setTransactionState({
+        step: 'error',
+        phase: errorPhase,
+        ...(buildData && { buildData }),
+        ...(status.resultCode && { details: status.resultCode }),
+        ...(code && { code }),
+        ...(status.message && { message: status.message }),
+      });
+      return {
+        status: 'error',
+        hash,
+        ...outcomeExtra,
+        ...(status.resultCode && { details: status.resultCode, resultCode: status.resultCode }),
+        ...(code && { code }),
+        ...(status.message && { message: status.message }),
+      };
+    }
+    return null;
+  }
+
+  /**
+   * A transaction still pending when its confirmation window closed. The call
+   * that sent it has already answered `pending`; the transaction state goes on
+   * to `success` or `error` by itself, read further and further apart, so a
+   * prompt showing it never stays on a spinner. The longest validity window
+   * the server builds is five minutes: past {@link SLOW_TX_GIVE_UP_MS} the
+   * transaction can no longer land, and it ends as `TX_NOT_CONFIRMED`. Reading
+   * stops at logout, at destroy, and once another transaction replaces it.
+   */
+  private _watchSlowTx(
+    hash: string,
+    errorPhase: 'submitting' | 'signing-submitting' | 'building-signing-submitting',
+    buildData: TxBuildContent | undefined,
+    gen: number,
+  ): void {
+    const current = () => {
+      const state = this._transactionState;
+      return !this._destroyed && this._sessionGeneration === gen && state?.step === 'submitted' && state.hash === hash;
+    };
+    if (!current()) return;
+    this._setTransactionState({ step: 'submitted', hash, ...(buildData && { buildData }), slow: true });
+    const startedAt = Date.now();
+    let attempt = 0;
+    const schedule = () => {
+      const delay = SLOW_TX_POLL_MS[Math.min(attempt++, SLOW_TX_POLL_MS.length - 1)]!;
+      const timer = setTimeout(() => {
+        this._slowTxTimers.delete(timer);
+        void tick();
+      }, delay);
+      // A transaction still being read must not keep a Node process (a script, a test) alive.
+      (timer as { unref?: () => void }).unref?.();
+      this._slowTxTimers.add(timer);
+    };
+    const tick = async () => {
+      if (!current()) return;
+      if (Date.now() - startedAt > SLOW_TX_GIVE_UP_MS) {
         this._setTransactionState({
           step: 'error',
           phase: errorPhase,
           ...(buildData && { buildData }),
-          ...(status.resultCode && { details: status.resultCode }),
-          ...(code && { code }),
-          ...(status.message && { message: status.message }),
+          code: 'TX_NOT_CONFIRMED',
         });
-        return {
-          status: 'error',
-          hash,
-          ...outcomeExtra,
-          ...(status.resultCode && { details: status.resultCode, resultCode: status.resultCode }),
-          ...(code && { code }),
-          ...(status.message && { message: status.message }),
-        };
+        return;
       }
-      // PENDING: keep polling
-    }
-    // Still pending after the window; leave `submitted`, the tx may yet confirm.
-    return { status: 'pending', hash, ...outcomeExtra };
+      let status: Awaited<ReturnType<PollarClient['getTxStatus']>>;
+      try {
+        status = await this.getTxStatus(hash);
+      } catch {
+        schedule(); // transient RPC / network blip; keep reading
+        return;
+      }
+      if (!current()) return;
+      if (!this._settleTxStatus(status, hash, errorPhase, buildData, {})) schedule();
+    };
+    schedule();
   }
 
   /**

@@ -208,6 +208,7 @@ export function TxStatusView({
             {isInFlight && waitingOn && transaction.step !== 'awaiting_cosign' && (
               <p className="pollar-outcome-note">{waitingOn}</p>
             )}
+            {transaction.step === 'submitted' && transaction.slow && <p className="pollar-outcome-note">{copy.slowNote}</p>}
             {isError && errorDetails && <p className="pollar-outcome-note">{errorDetails}</p>}
             {outcomeNote && (
               <p className="pollar-outcome-note">

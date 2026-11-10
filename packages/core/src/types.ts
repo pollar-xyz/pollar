@@ -726,7 +726,14 @@ export type TransactionState =
   // --- Co-signed wallet: waiting for the user's device to vote --------------
   | { step: 'awaiting_cosign'; request: CosignRequest; buildData?: TxBuildContent }
   // --- Post-Horizon-ack, pre-ledger-confirm (shared) --------------------
-  | { step: 'submitted'; buildData?: TxBuildContent; hash: string; sponsored?: boolean }
+  | {
+      step: 'submitted';
+      buildData?: TxBuildContent;
+      hash: string;
+      sponsored?: boolean;
+      /** Past the confirmation window: still pending, and read on in the background until it settles. */
+      slow?: boolean;
+    }
   // --- Terminal success (shared) ----------------------------------------
   | { step: 'success'; buildData?: TxBuildContent; hash: string; sponsored?: boolean }
   // --- Terminal failure with phase context ------------------------------

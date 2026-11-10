@@ -188,6 +188,9 @@ export function TxStatusBody({
             {isInFlight && waitingOn && transaction.step !== 'awaiting_cosign' && (
               <Text style={{ color: colors.muted, fontSize: 13 }}>{waitingOn}</Text>
             )}
+            {transaction.step === 'submitted' && transaction.slow && (
+              <Text style={{ color: colors.muted, fontSize: 13 }}>{copy.slowNote}</Text>
+            )}
             {isError && errorDetails && <Text style={{ color: colors.muted, fontSize: 13 }}>{errorDetails}</Text>}
           </View>
         )

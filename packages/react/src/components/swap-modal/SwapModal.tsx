@@ -642,7 +642,10 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     'signing-submitting',
     'building-signing-submitting',
   ] as const;
-  const isInProgress = (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step);
+  // A transaction past its confirmation window is read on in the background: the modal can close meanwhile.
+  const isInProgress =
+    (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step) &&
+    !(transaction.step === 'submitted' && transaction.slow);
   const showBack = step === 'tx' && (transaction.step === 'error' || transaction.step === 'success') && !isInProgress;
 
   const txTitle = isInProgress
