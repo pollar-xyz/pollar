@@ -135,7 +135,8 @@ const EN = {
     `This route ${side === 'in' ? 'takes' : 'pays out'} at most ${amount}. Try a smaller amount.`,
   trustAsset: (code: string) =>
     `Your Stellar wallet must trust ${code} to receive it. Add the ${code} trustline and try again.`,
-  linkWallet: (chain: string) => `This route needs a ${chain} wallet. Connect one to this account or choose another network.`,
+  linkWallet: (chain: string) =>
+    `This route needs a ${chain} wallet, which this account does not have. Choose another network.`,
   walletSteps: {
     create_wallet: ['Create wallet', 'Creating…'],
     set_up_wallet: ['Set up wallet', 'Setting up…'],
@@ -217,7 +218,7 @@ const COPY: Record<PollarLanguage, typeof EN> = {
       `Esta ruta ${side === 'in' ? 'acepta' : 'paga'} como máximo ${amount}. Prueba con un monto menor.`,
     trustAsset: (code) =>
       `Tu billetera Stellar debe confiar en ${code} para recibirlo. Agrega la trustline de ${code} e intenta de nuevo.`,
-    linkWallet: (chain) => `Esta ruta necesita una billetera de ${chain}. Conecta una a esta cuenta o elige otra red.`,
+    linkWallet: (chain) => `Esta ruta necesita una billetera de ${chain}, que esta cuenta no tiene. Elige otra red.`,
     walletSteps: {
       create_wallet: ['Crear billetera', 'Creando…'],
       set_up_wallet: ['Configurar billetera', 'Configurando…'],
@@ -295,7 +296,7 @@ const COPY: Record<PollarLanguage, typeof EN> = {
     limitMax: (side, amount) => `Esta rota ${side === 'in' ? 'aceita' : 'paga'} no máximo ${amount}. Tente um valor menor.`,
     trustAsset: (code) =>
       `Sua carteira Stellar precisa confiar em ${code} para recebê-lo. Adicione a trustline de ${code} e tente novamente.`,
-    linkWallet: (chain) => `Esta rota precisa de uma carteira ${chain}. Conecte uma a esta conta ou escolha outra rede.`,
+    linkWallet: (chain) => `Esta rota precisa de uma carteira ${chain}, que esta conta não tem. Escolha outra rede.`,
     walletSteps: {
       create_wallet: ['Criar carteira', 'Criando…'],
       set_up_wallet: ['Configurar carteira', 'Configurando…'],

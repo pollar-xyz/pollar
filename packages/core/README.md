@@ -852,8 +852,8 @@ await client.pollRampOrder(order.id, { onUpdate: (o) => render(describeRampActio
   larger amount."). `rampNoRouteText(rejected)` says why no route quoted.
 - A route that needs a wallet the user does not have and cannot create
   (`WALLET_MISSING`, `link_wallet`) carries the chain in `failure.detail`, and
-  `rampResolutionText` names it ("This route needs a Stellar wallet. Connect one
-  to this account or choose another network.").
+  `rampResolutionText` names it ("This route needs a Stellar wallet, which this
+  account does not have. Choose another network.").
 - A payee the provider would refuse answers `400 VALIDATION_ERROR` with the
   reason in `body.message`; a quote with no route answers `422 SDK_RAMPS_NO_ROUTE`
   with `body.rejected`.
