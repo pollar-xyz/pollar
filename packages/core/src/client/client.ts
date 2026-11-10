@@ -765,7 +765,7 @@ export class PollarClient {
       authEntrySigner: (options) =>
         createAuthEntrySigner(
           {
-            address: () => this._session?.wallet?.address ?? undefined,
+            address: () => this._stellarWallet()?.address ?? undefined,
             networkPassphrase: () => this._networkPassphrase(),
             sign: (entryXdr, signOptions) => this.signAuthEntry(entryXdr, signOptions),
           },
@@ -2497,7 +2497,7 @@ export class PollarClient {
         // single asset list tagged with each asset's chain (see _flattenBalances).
         this._setWalletBalanceState({
           step: 'loaded',
-          data: this._flattenBalances(data.content, this._session?.wallet?.address ?? ''),
+          data: this._flattenBalances(data.content, this._stellarWallet()?.address ?? ''),
         });
       } else {
         this._setWalletBalanceState({ step: 'error', message: 'Failed to load balance' });
@@ -2643,7 +2643,7 @@ export class PollarClient {
         // _flattenAssets), the same way refreshBalance does.
         this._setEnabledAssetsState({
           step: 'loaded',
-          data: this._flattenAssets(data.content, this._session?.wallet?.address ?? ''),
+          data: this._flattenAssets(data.content, this._stellarWallet()?.address ?? ''),
         });
       } else {
         this._setEnabledAssetsState({ step: 'error', message: 'Failed to load assets' });
@@ -2688,9 +2688,9 @@ export class PollarClient {
     },
   ): Promise<TrustlineOutcome> {
     const limit = opts?.limit;
-    const walletType = this._session?.wallet?.type;
+    const walletType = this._stellarWallet()?.type;
 
-    if (!this._session?.wallet?.address) {
+    if (!this._stellarWallet()?.address) {
       return { status: 'error', details: 'No wallet connected' };
     }
     if (walletType === 'smart') {
@@ -2724,7 +2724,7 @@ export class PollarClient {
     // Embedded: one server call. The server sponsors when the app config allows
     // and self-pays otherwise, submitting either way and returning the refreshed
     // asset list - the route is the server's decision, not the client's.
-    if (!this._walletAdapter && walletType === 'internal') {
+    if (!this._stellarAdapter() && walletType === 'internal') {
       const answer = await this._confirm({
         kind: 'build_sign_submit',
         network: 'STELLAR',
@@ -2804,14 +2804,14 @@ export class PollarClient {
    * accounts. Trustlines are a separate step: see {@link setTrustline}.
    */
   async createAccount(): Promise<SubmitOutcome> {
-    const walletType = this._session?.wallet?.type;
-    if (!this._session?.wallet?.address) {
+    const walletType = this._stellarWallet()?.type;
+    if (!this._stellarWallet()?.address) {
       return { status: 'error', details: 'No wallet connected' };
     }
     if (walletType === 'smart') {
       return { status: 'error', details: 'Account creation does not apply to smart wallets' };
     }
-    if (!this._walletAdapter && walletType === 'internal') {
+    if (!this._stellarAdapter() && walletType === 'internal') {
       return { status: 'error', details: 'Embedded wallets are created on the server at login' };
     }
 
@@ -2850,14 +2850,15 @@ export class PollarClient {
     options?: TxBuildBody['options'],
   ): Promise<BuildOutcome> {
     this._txStartGen = this._sessionGeneration;
-    if (!this._session?.wallet?.address) {
+    const stellarAddress = this._stellarWallet()?.address;
+    if (!stellarAddress) {
       const details = 'No wallet connected';
       this._setTransactionState({ step: 'error', phase: 'building', details });
       return { status: 'error', details };
     }
 
     const body = {
-      address: this._session.wallet.address,
+      address: stellarAddress,
       operation,
       params,
       options: options ?? {},
@@ -2933,8 +2934,9 @@ export class PollarClient {
   }
 
   /**
-   * The authenticated user's wallet as a {@link WalletInfo} discriminated union,
-   * or `null` when there's no session (or the session carries no address yet).
+   * The authenticated user's Stellar wallet as a {@link WalletInfo} discriminated union,
+   * or `null` when there's no session (or the user holds no Stellar wallet yet). After a
+   * login with a wallet on another chain it is the Turnkey wallet created beside it.
    *
    * `custody` strictly determines `provider` (the mapping is 1:1 and fixed at
    * account creation server-side): `external` reports the connected adapter id
@@ -2944,7 +2946,7 @@ export class PollarClient {
   getWallet(): WalletInfo | null {
     // `chain` is omitted: this field is Stellar by definition, and saying so
     // explicitly would imply the caller can find a non-Stellar value here.
-    return this._toWalletInfo(this._session?.wallet, { includeChain: false });
+    return this._toWalletInfo(this._stellarWallet() ?? undefined, { includeChain: false });
   }
 
   /**
@@ -3071,11 +3073,39 @@ export class PollarClient {
    * 4xx. The session stays valid (reads/refresh still work); only signing needs the
    * wallet reconnected, so this is an error, NOT a logout.
    */
-  private _externalSignerMissing(): { status: 'error'; details: string } | null {
-    if (this._session?.wallet?.type === 'external' && !this._walletAdapter) {
+  private _externalSignerMissing(chain: 'STELLAR' | 'SOLANA' = 'STELLAR'): { status: 'error'; details: string } | null {
+    if (this._ownWalletOn(chain) && !this._walletAdapter) {
       return { status: 'error', details: 'Wallet not connected. Reconnect your wallet to sign.' };
     }
     return null;
+  }
+
+  /**
+   * The user's Stellar wallet. `session.wallet` is it by contract, except after
+   * a login with a wallet on another chain, whose `wallet` has no address: the
+   * Turnkey wallet the platform creates beside it is listed in `wallets[]`.
+   */
+  private _stellarWallet(): PollarPersistedWallet | null {
+    const session = this._session;
+    if (!session) return null;
+    if (session.wallet?.address) return session.wallet;
+    return session.wallets?.find((w) => (w.chain ?? 'STELLAR') === 'STELLAR' && w.address) ?? null;
+  }
+
+  /** Whether the user's wallet on `chain` is the one they brought, which only the connected adapter signs for. */
+  private _ownWalletOn(chain: 'STELLAR' | 'SOLANA'): boolean {
+    if (chain === 'STELLAR') return this._stellarWallet()?.type === 'external';
+    return (this._session?.wallets ?? []).some((w) => w.chain === chain && w.type === 'external');
+  }
+
+  /**
+   * The adapter that signs on Stellar: the connected one, only while the
+   * user's Stellar wallet is their own. Any other Stellar wallet (custodial,
+   * Turnkey) signs through the platform even when an adapter for another chain
+   * is connected.
+   */
+  private _stellarAdapter(): WalletAdapter | null {
+    return this._ownWalletOn('STELLAR') ? this._walletAdapter : null;
   }
 
   /**
@@ -3113,14 +3143,15 @@ export class PollarClient {
     // (_signSubmitSmart's passkey ceremony), not signTx. Bail BEFORE emitting any
     // tx state so a UI subscribed to onTransactionStateChange isn't stranded on
     // 'signing' (mirrors signAuthEntry, which emits no tx state for this case).
-    if (this._session?.wallet?.type === 'smart') {
+    if (this._stellarWallet()?.type === 'smart') {
       return {
         status: 'error',
         details: 'signTx is not supported for smart (passkey) wallets; use signAndSubmitTx.',
       };
     }
     // Before the prompt: a user with no wallet is never asked to sign.
-    if (!this._walletAdapter && !this._session?.wallet?.address) return this._walletRequired();
+    const stellarAdapter = this._stellarAdapter();
+    if (!stellarAdapter && !this._stellarWallet()?.address) return this._walletRequired();
     const buildData = this._currentBuildData();
     if (confirm) {
       const answer = await this._confirm({ kind: 'sign', network: 'STELLAR', unsignedXdr, ...(buildData && { buildData }) });
@@ -3129,18 +3160,18 @@ export class PollarClient {
     this._setTransactionState({ step: 'signing', ...(buildData && { buildData }) });
 
     // External adapter signs directly (smart sessions already returned above).
-    if (this._walletAdapter) {
-      const accountToSign = this._session?.wallet?.address;
+    if (stellarAdapter) {
+      const accountToSign = this._stellarWallet()?.address;
       const signOpts = accountToSign
         ? { networkPassphrase: this._networkPassphrase(), accountToSign }
         : { networkPassphrase: this._networkPassphrase() };
       // Stellar XDR signing. A non-Stellar adapter never reaches the /tx pipeline
       // (Solana uses the atomic transfer), so a missing method is a bug, not flow.
-      if (!this._walletAdapter.signTransaction) {
-        throw new Error(`[PollarClient] wallet adapter "${this._walletAdapter.type}" cannot sign a Stellar transaction`);
+      if (!stellarAdapter.signTransaction) {
+        throw new Error(`[PollarClient] wallet adapter "${stellarAdapter.type}" cannot sign a Stellar transaction`);
       }
       try {
-        const { signedTxXdr } = await this._walletAdapter.signTransaction(unsignedXdr, signOpts);
+        const { signedTxXdr } = await stellarAdapter.signTransaction(unsignedXdr, signOpts);
         this._setTransactionState({
           step: 'signed',
           signedXdr: signedTxXdr,
@@ -3163,7 +3194,7 @@ export class PollarClient {
     // default the backend also applies sponsorship (per the app's dashboard
     // config), returning a fee-bumped envelope the caller can broadcast directly
     // - the app pays the fee. Pass `skipSponsorship` to force the user to pay.
-    const address = this._session?.wallet?.address;
+    const address = this._stellarWallet()?.address;
     if (!address) return this._walletRequired();
     try {
       const { data, error } = await this._api.POST('/tx/sign', {
@@ -3235,22 +3266,21 @@ export class PollarClient {
   async signAuthEntry(entryXdr: string, options: { validUntilLedger: number }): Promise<SignAuthEntryOutcome> {
     const noSigner = this._externalSignerMissing();
     if (noSigner) return noSigner;
-    if (this._session?.wallet?.type !== 'smart') {
+    if (this._stellarWallet()?.type !== 'smart') {
       const answer = await this._confirm(await this._authEntryConfirmation(entryXdr));
       if (!answer.ok) return { status: 'error', code: answer.code, details: answer.details };
     }
     // External adapter: the provider signs the entry directly. Skip it for a
     // smart-wallet session (passkey-signed) so a stale/foreign adapter can't
     // hijack signing - consistent with the type-first signing paths.
-    if (this._walletAdapter && this._session?.wallet?.type !== 'smart') {
-      const accountToSign = this._session?.wallet?.address;
-      // Soroban auth-entry signing is Stellar-only; a non-Stellar adapter never
-      // reaches this path.
-      if (!this._walletAdapter.signAuthEntry) {
-        throw new Error(`[PollarClient] wallet adapter "${this._walletAdapter.type}" cannot sign a Soroban auth entry`);
+    const stellarAdapter = this._stellarAdapter();
+    if (stellarAdapter) {
+      const accountToSign = this._stellarWallet()?.address;
+      if (!stellarAdapter.signAuthEntry) {
+        throw new Error(`[PollarClient] wallet adapter "${stellarAdapter.type}" cannot sign a Soroban auth entry`);
       }
       try {
-        const { signedAuthEntry } = await this._walletAdapter.signAuthEntry(entryXdr, {
+        const { signedAuthEntry } = await stellarAdapter.signAuthEntry(entryXdr, {
           // Pass the CURRENT network (like signTx) so an external adapter signs
           // on the configured network even after a mid-session setNetwork(), not
           // a network captured when the adapter was constructed.
@@ -3269,7 +3299,7 @@ export class PollarClient {
     // doesn't run that ceremony, so return an explicit, actionable error instead
     // of silently POSTing to /tx/sign-auth-entry (which would sign with the wrong
     // key / 4xx). Mirrors the smart guards on the signing paths.
-    if (this._session?.wallet?.type === 'smart') {
+    if (this._stellarWallet()?.type === 'smart') {
       return {
         status: 'error',
         details: 'signAuthEntry is not supported for smart (passkey) wallets in this SDK build.',
@@ -3277,7 +3307,7 @@ export class PollarClient {
     }
 
     // Embedded path: backend enforces the app's auth-entry policy, then signs.
-    const address = this._session?.wallet?.address;
+    const address = this._stellarWallet()?.address;
     if (!address) return this._walletRequired();
     try {
       const { data, error } = await this._api.POST('/tx/sign-auth-entry', {
@@ -3311,19 +3341,20 @@ export class PollarClient {
   private async _sep53SignMessage(message: string): Promise<StellarMessageProof> {
     const noSigner = this._externalSignerMissing();
     if (noSigner) return noSigner;
-    if (this._session?.wallet?.type === 'smart') {
+    if (this._stellarWallet()?.type === 'smart') {
       return { status: 'error', details: 'SEP-53 message signing is not supported for smart (passkey) wallets.' };
     }
-    const address = this._session?.wallet?.address;
+    const address = this._stellarWallet()?.address;
     if (!address) return this._walletRequired();
 
     // External adapter signs directly (smart already returned above).
-    if (this._walletAdapter) {
-      if (!this._walletAdapter.signStellarMessage) {
-        return { status: 'error', details: `Wallet "${this._walletAdapter.type}" does not support message signing (SEP-53).` };
+    const stellarAdapter = this._stellarAdapter();
+    if (stellarAdapter) {
+      if (!stellarAdapter.signStellarMessage) {
+        return { status: 'error', details: `Wallet "${stellarAdapter.type}" does not support message signing (SEP-53).` };
       }
       try {
-        const { signature, signerAddress } = await this._walletAdapter.signStellarMessage(message, {
+        const { signature, signerAddress } = await stellarAdapter.signStellarMessage(message, {
           networkPassphrase: this._networkPassphrase(),
           ...(address ? { accountToSign: address } : {}),
         });
@@ -3366,21 +3397,22 @@ export class PollarClient {
   private async _sep10Sign(params: Sep10SignParams): Promise<Sep10Proof> {
     const noSigner = this._externalSignerMissing();
     if (noSigner) return noSigner;
-    if (this._session?.wallet?.type === 'smart') {
+    if (this._stellarWallet()?.type === 'smart') {
       return {
         status: 'error',
         details: 'SEP-10 is for classic accounts; smart (passkey) wallets cannot sign a SEP-10 challenge.',
       };
     }
-    const address = this._session?.wallet?.address;
+    const address = this._stellarWallet()?.address;
     if (!address) return this._walletRequired();
 
-    if (this._walletAdapter) {
-      if (!this._walletAdapter.signTransaction) {
-        return { status: 'error', details: `Wallet "${this._walletAdapter.type}" cannot sign a SEP-10 challenge.` };
+    const stellarAdapter = this._stellarAdapter();
+    if (stellarAdapter) {
+      if (!stellarAdapter.signTransaction) {
+        return { status: 'error', details: `Wallet "${stellarAdapter.type}" cannot sign a SEP-10 challenge.` };
       }
       try {
-        const { signedTxXdr } = await this._walletAdapter.signTransaction(params.challengeXdr, {
+        const { signedTxXdr } = await stellarAdapter.signTransaction(params.challengeXdr, {
           networkPassphrase: this._networkPassphrase(),
           ...(address ? { accountToSign: address } : {}),
         });
@@ -4089,7 +4121,7 @@ export class PollarClient {
     const outcomeExtra: { buildData?: TxBuildContent } = buildData ? { buildData } : {};
     this._setTransactionState({ step: 'submitting', signedXdr, ...(buildData && { buildData }) });
 
-    const address = this._session?.wallet?.address ?? '';
+    const address = this._stellarWallet()?.address ?? '';
     try {
       const { data, error } = await this._api.POST('/tx/submit', {
         body: {
@@ -4186,7 +4218,7 @@ export class PollarClient {
     if (noSigner) return noSigner;
     // Smart wallet: there is no unsigned XDR - sign the prepared auth digest
     // with the passkey and submit, using the build already on the state machine.
-    if (this._session?.wallet?.type === 'smart') {
+    if (this._stellarWallet()?.type === 'smart') {
       const buildData = this._currentBuildData();
       if (!buildData?.smart) {
         const details = 'no prepared smart transaction; call buildTx first';
@@ -4200,7 +4232,7 @@ export class PollarClient {
       this._setTransactionState({ step: 'error', phase: 'signing', details: 'missing unsigned transaction' });
       return { status: 'error', details: 'missing unsigned transaction' };
     }
-    if (!this._walletAdapter && !this._session?.wallet?.address) return this._walletRequired();
+    if (!this._stellarAdapter() && !this._stellarWallet()?.address) return this._walletRequired();
 
     const confirmBuild = this._currentBuildData();
     const answer = await this._confirm({
@@ -4211,7 +4243,7 @@ export class PollarClient {
     });
     if (!answer.ok) return this._declined('signing-submitting', confirmBuild, answer);
 
-    if (this._walletAdapter) {
+    if (this._stellarAdapter()) {
       // External - the composed signTx+submitTx already emit the granular
       // state-machine sequence. We just pass outcomes through.
       const signed = await this._signTx(unsignedXdr, undefined, false);
@@ -4234,7 +4266,7 @@ export class PollarClient {
     this._setTransactionState({ step: 'signing-submitting', ...(buildData && { buildData }) });
 
     const body: TxSignAndSendBody = {
-      address: this._session?.wallet?.address ?? '',
+      address: this._stellarWallet()?.address ?? '',
       unsignedXdr,
       // Async ack + client-side status poll (see submitTx / _awaitTxConfirmation).
       waitForConfirmation: false,
@@ -4343,11 +4375,11 @@ export class PollarClient {
     if (noSigner) return noSigner;
     // Smart wallet (passkey / C-address): build (prepare) -> sign the auth digest
     // with the passkey -> submit. The signed entry is assembled server-side.
-    if (this._session?.wallet?.type === 'smart') {
+    if (this._stellarWallet()?.type === 'smart') {
       return this._runSmartTx(operation, params, options);
     }
 
-    if (this._walletAdapter) {
+    if (this._stellarAdapter()) {
       const built = await this.buildTx(operation, params, options);
       if (built.status === 'error') {
         return {
@@ -4364,7 +4396,8 @@ export class PollarClient {
     }
 
     // Embedded path - single backend call, compound state-machine step.
-    if (!this._session?.wallet?.address) {
+    const stellarAddress = this._stellarWallet()?.address;
+    if (!stellarAddress) {
       this._setTransactionState({ step: 'error', phase: 'building-signing-submitting', details: 'No wallet connected' });
       return { status: 'error', details: 'No wallet connected' };
     }
@@ -4379,7 +4412,7 @@ export class PollarClient {
     try {
       const { data, error } = await this._api.POST('/tx/build-sign-submit', {
         body: {
-          address: this._session.wallet.address,
+          address: stellarAddress,
           operation,
           params,
           options: options ?? {},
@@ -4551,7 +4584,7 @@ export class PollarClient {
    * minute, which is why the wallet is asked to sign right away.
    */
   private async _sendSolanaExternal(params: Extract<SendPaymentParams, { chain: 'SOLANA' }>): Promise<SubmitOutcome> {
-    const noSigner = this._externalSignerMissing();
+    const noSigner = this._externalSignerMissing('SOLANA');
     if (noSigner) {
       this._setTransactionState({ step: 'error', phase: 'building', details: noSigner.details });
       return noSigner;
@@ -4663,7 +4696,7 @@ export class PollarClient {
    * when the session has no external Solana wallet that can sign.
    */
   async signSolanaTransaction(transaction: string): Promise<string> {
-    const noSigner = this._externalSignerMissing();
+    const noSigner = this._externalSignerMissing('SOLANA');
     if (noSigner) throw new Error(noSigner.details);
     const adapter = this._walletAdapter;
     if (!adapter?.signSolanaTransaction)
@@ -4702,7 +4735,7 @@ export class PollarClient {
     options?: TxBuildBody['options'],
   ): Promise<SubmitOutcome> {
     this._txStartGen = this._sessionGeneration;
-    const address = this._session?.wallet?.address;
+    const address = this._stellarWallet()?.address;
     if (!address) {
       this._setTransactionState({ step: 'error', phase: 'building', details: 'No wallet connected' });
       return { status: 'error', details: 'No wallet connected' };
@@ -4748,7 +4781,7 @@ export class PollarClient {
    */
   private async _signSubmitSmart(buildData: TxBuildContent): Promise<SubmitOutcome> {
     this._txStartGen = this._sessionGeneration;
-    const address = this._session?.wallet?.address;
+    const address = this._stellarWallet()?.address;
     const smart = buildData.smart;
     if (!address || !smart) {
       const details = 'no prepared smart transaction';
@@ -5348,7 +5381,7 @@ export class PollarClient {
     const external = wallet.custody === 'external';
     const adapter = this._walletAdapter;
     if (external) {
-      const noSigner = this._externalSignerMissing();
+      const noSigner = this._externalSignerMissing('SOLANA');
       if (noSigner) {
         this._setTransactionState({ step: 'error', phase: 'building', details: noSigner.details });
         return noSigner;
@@ -5551,7 +5584,7 @@ export class PollarClient {
 
     const adapter = this._walletAdapter;
     if (wallet.custody === 'external') {
-      const noSigner = this._externalSignerMissing();
+      const noSigner = this._externalSignerMissing('SOLANA');
       if (noSigner) {
         this._setTransactionState({ step: 'error', phase: 'building', details: noSigner.details });
         return noSigner;
@@ -5757,7 +5790,7 @@ export class PollarClient {
       // The transfer the backend built for the funding, signed in the connected
       // wallet right away (its blockhash lasts about a minute) and broadcast
       // like any Solana send; the server reads the signature off that send.
-      const noSigner = this._externalSignerMissing();
+      const noSigner = this._externalSignerMissing('SOLANA');
       if (noSigner) throw new Error(noSigner.details);
       const adapter = this._walletAdapter;
       if (!adapter?.signSolanaTransaction) {
