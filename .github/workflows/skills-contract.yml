@@ -33,7 +33,7 @@ permissions:
 jobs:
   contract:
     name: the published skill path still resolves
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
