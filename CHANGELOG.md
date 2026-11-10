@@ -463,6 +463,19 @@ SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
   logo per option and works from the keyboard. The ramp's step bar starts at
   Route, with a back button to the amount, and the ramp shows the Pollar footer
   like the other modals, web and React Native.
+- **A transaction past its confirmation window keeps being read.** The submit
+  flow still answers `pending` after about 40 seconds without a ledger
+  confirmation, and the transaction is now read on in the background (5s, 5s,
+  10s, 15s, then every 30s) until the state reaches `success` or `error` by
+  itself, so a prompt no longer stays on its spinner. Meanwhile the state is
+  `{ step: 'submitted', hash, slow: true }`: the outcome strip says it is taking
+  longer and that it updates there, and the send, swap and earn modals can be
+  closed. Past ten minutes, twice the longest validity window sdk-api builds,
+  the transaction can no longer land and ends as `error` with the new code
+  `TX_NOT_CONFIRMED` ("The network did not confirm this transaction in time, so
+  nothing moved"). Reading stops at logout, at `destroy()` and once another
+  transaction replaces it. An app that polled `getTxStatus` after a `pending`
+  outcome can listen to `onTransactionStateChange` instead.
 - The custody migration intro speaks of account security and signing from this
   device.
 - `@pollar/core`'s types are regenerated from sdk-api's v3 document.
