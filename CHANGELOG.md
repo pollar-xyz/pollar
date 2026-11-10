@@ -489,7 +489,9 @@ SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
   every leg and step hash in one details panel under the legs. A card funding
   sent from the panel gets its outcome strip under the button. The three
   confirm a signature inline (`InlineConfirm`), and none closes on an outside
-  click while a transfer, an order or a funding is under way.
+  click while a transfer, an order or a funding is under way. The web assets
+  modal does the same for a trustline: Confirm inside it, then a strip saying
+  the asset is being added or removed, added, removed, or why it was not.
 - **A shorter swap form.** Each panel puts the amount and its asset on one row,
   with the balance and Max as a small line under them; the rate stays in view,
   and the route picker, minimum received, price impact and fees are behind

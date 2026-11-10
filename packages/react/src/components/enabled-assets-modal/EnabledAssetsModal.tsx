@@ -12,6 +12,8 @@ import { CustomTrustlineModalTemplate, EnabledAssetsModalTemplate } from './Enab
 import { modalChrome } from '../modal-theme';
 import { ENABLED_ASSETS_COPY } from './enabled-assets-copy';
 import { PollarOverlay } from '../PollarOverlay';
+import { useInlineConfirmation } from '../../useInlineConfirmation';
+import { type AssetOutcome } from './EnabledAssetsModalTemplate';
 
 interface EnabledAssetsModalProps {
   onClose: () => void;
@@ -40,7 +42,10 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
   const [view, setView] = useState<'list' | 'custom'>('list');
   // Key of the in-flight asset (`code+issuer`), or 'custom' for the custom form.
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  // The last trustline change from this modal: its outcome strip, in place of a bare error line.
+  const [outcome, setOutcome] = useState<AssetOutcome | null>(null);
+  // The change's signature is confirmed here, not in a prompt over the modal.
+  const confirmation = useInlineConfirmation(busyKey !== null);
 
   useEffect(() => {
     void refreshAssets();
@@ -52,15 +57,17 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
       asset: { code: string; issuer: string },
       opts: { limit?: string; skipSponsorship?: boolean },
     ): Promise<boolean> => {
+      const removing = opts.limit === '0';
       setBusyKey(key);
-      setActionError(null);
+      setOutcome({ code: asset.code, removing, state: 'busy' });
       const res = await setTrustline(asset, opts);
       if (res.status === 'error') {
-        setActionError(res.details || updateFailed);
+        setOutcome({ code: asset.code, removing, state: 'failed', note: res.details || updateFailed });
         setBusyKey(null);
         return false;
       }
       await refreshAssets();
+      setOutcome({ code: asset.code, removing, state: 'done' });
       setBusyKey(null);
       return true;
     },
@@ -94,7 +101,7 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
   );
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={busyKey ? undefined : onClose}>
       {view === 'list' ? (
         <EnabledAssetsModalTemplate
           theme={theme}
@@ -106,12 +113,13 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
           selectedChain={selectedChain}
           onSelectChain={setSelectedChain}
           busyKey={busyKey}
-          actionError={actionError}
+          outcome={outcome}
+          confirmation={confirmation}
           onRefresh={() => refreshAssets()}
           onClose={onClose}
           onToggleTrustline={handleToggle}
           onAddCustom={() => {
-            setActionError(null);
+            setOutcome(null);
             setView('custom');
           }}
           language={language}
@@ -122,9 +130,10 @@ export function EnabledAssetsModal({ onClose }: EnabledAssetsModalProps) {
           accentColor={accentColor}
           styleOverrides={styleOverrides}
           busy={busyKey === 'custom'}
-          actionError={actionError}
+          outcome={outcome}
+          confirmation={confirmation}
           onBack={() => {
-            setActionError(null);
+            setOutcome(null);
             setView('list');
           }}
           onClose={onClose}
