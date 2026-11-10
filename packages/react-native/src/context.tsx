@@ -208,6 +208,12 @@ export type PollarContextValue = Methods &
     refreshCustodyMigration: () => void;
     /** Signing calls waiting for the user under `confirmation: 'prompt'`; the provider shows the first one. */
     confirmations: PendingConfirmation[];
+    /**
+     * A modal that shows the transaction it signs answers the confirmation itself:
+     * while one is registered the provider does not open its own prompt over it.
+     * Returns the unregister.
+     */
+    registerConfirmationHost: () => () => void;
   };
 const Context = createContext<PollarContextValue | null>(null);
 const emptyConfig: PollarConfig = { application: { name: '', network: 'testnet', chains: [] }, styles: {} };
@@ -422,6 +428,11 @@ function ClientProvider({
   }, [client, signedIn, recoveryWallet, custodyMigrationTick]);
   const confirmations = client.getPendingConfirmations();
   const firstConfirmation = confirmations[0] ?? null;
+  const [confirmationHosts, setConfirmationHosts] = useState(0);
+  const registerConfirmationHost = useCallback(() => {
+    setConfirmationHosts((n) => n + 1);
+    return () => setConfirmationHosts((n) => n - 1);
+  }, []);
   const wallet = client.getWallet();
   const tx = client.getTransactionState() ?? { step: 'idle' as const };
   const open = (next: FeatureName | 'cards' | 'bridge', options?: object) => {
@@ -538,6 +549,7 @@ function ClientProvider({
     custodyMigration,
     refreshCustodyMigration,
     confirmations,
+    registerConfirmationHost,
   };
   const modalLanguage = useProviderLanguage(client, value.styles?.language, language);
   return (
@@ -601,7 +613,7 @@ function ClientProvider({
               />
             </ModalErrorBoundary>
           )}
-          {firstConfirmation && (
+          {firstConfirmation && confirmationHosts === 0 && (
             <ModalErrorBoundary onClose={firstConfirmation.reject}>
               <ConfirmModal key={firstConfirmation.id} confirmation={firstConfirmation} />
             </ModalErrorBoundary>

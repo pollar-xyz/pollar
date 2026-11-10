@@ -19,6 +19,8 @@ export interface TxDetailRow {
   value: string;
   /** What the copy button copies; the row has none when absent. */
   copyValue?: string;
+  /** Opens this page: the value is a link (an explorer on another chain). */
+  href?: string;
   mono?: boolean;
 }
 

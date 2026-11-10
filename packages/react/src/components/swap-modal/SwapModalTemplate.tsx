@@ -1,11 +1,20 @@
 'use client';
 
 import { useInheritedLanguage } from '../../language-context';
-import { type PollarLanguage, SwapDestinationChain, SwapQuoteParams, TransactionState, WalletId } from '@pollar/core';
+import {
+  type PendingConfirmation,
+  type PollarLanguage,
+  type StellarNetwork,
+  SwapDestinationChain,
+  SwapQuoteParams,
+  TransactionState,
+  WalletId,
+} from '@pollar/core';
 import { useState } from 'react';
 import { PollarModalFooter, RefreshIcon } from '../commons';
 import { PollarSelect } from '../PollarSelect';
-import { TxStatusView } from '../transaction-modal/TxStatusView';
+import { TxStatusHeading, TxStatusView, txStatusReview } from '../transaction-modal/TxStatusView';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { SWAP_COPY } from './swap-copy';
 
@@ -173,6 +182,10 @@ export interface SwapModalTemplateProps {
   /** USDC to USDC across chains: a transfer, which the swap does not do. */
   usdcAcross?: boolean;
   settlement?: SwapSettlementView | null;
+  /** The signature waiting for the user's yes, answered in the transaction step. */
+  confirmation?: PendingConfirmation | null | undefined;
+  /** The app's network, for the details of a confirmation. */
+  network?: StellarNetwork | undefined;
   provider: string;
   providers: string[];
   quote: SwapQuoteView | null;
@@ -229,6 +242,8 @@ export function SwapModalTemplate({
   destination = 'SOLANA',
   usdcAcross = false,
   settlement = null,
+  confirmation = null,
+  network,
   provider,
   providers,
   quote,
@@ -268,6 +283,27 @@ export function SwapModalTemplate({
 }: SwapModalTemplateProps) {
   const language = useInheritedLanguage(languageProp);
   const copy = SWAP_COPY[language];
+  // Where a cross-chain swap delivers is a detail: the strip says how far it got, the rows say where.
+  const settlementRows = settlement
+    ? [
+        ...(settlement.address
+          ? [{ label: copy.deliveredTo, value: settlement.address, copyValue: settlement.address, mono: true }]
+          : []),
+        ...(settlement.explorerUrl
+          ? [
+              {
+                label: TX_REVIEW_COPY[language].viewOnExplorer,
+                value: settlement.explorerUrl.replace(/^https:\/\//, '').split('/')[0] ?? settlement.explorerUrl,
+                href: settlement.explorerUrl,
+              },
+            ]
+          : []),
+      ]
+    : [];
+  const txReview =
+    step === 'tx'
+      ? txStatusReview({ transaction, explorerUrl, confirmation, network, extraRows: settlementRows, language })
+      : null;
   const [customOpen, setCustomOpen] = useState(false);
   const [customCode, setCustomCode] = useState('');
   const [customIssuer, setCustomIssuer] = useState('');
@@ -326,7 +362,11 @@ export function SwapModalTemplate({
               </svg>
             </button>
           )}
-          <h2 className="pollar-modal-title">{title}</h2>
+          {step === 'tx' ? (
+            <TxStatusHeading review={txReview} fallback={title} />
+          ) : (
+            <h2 className="pollar-modal-title">{title}</h2>
+          )}
         </div>
         {!isInProgress && (
           <div className="pollar-modal-header-actions">
@@ -629,27 +669,11 @@ export function SwapModalTemplate({
           onCopyHash={onCopyHash}
           onRetry={onRetry}
           onDone={onDone}
+          confirmation={confirmation}
+          network={network}
+          extraRows={settlementRows}
+          {...(settlement ? { outcomeNote: { text: settlement.text, failed: settlement.kind === 'failed' } } : {})}
         />
-      )}
-      {step === 'tx' && settlement && (
-        <div
-          className={settlement.kind === 'failed' ? 'pollar-modal-error' : 'pollar-swap-quote'}
-          role="status"
-          aria-live="polite"
-        >
-          <div>{settlement.text}</div>
-          {settlement.address && (
-            <div className="pollar-swap-quote-row">
-              <span>{copy.deliveredTo}</span>
-              <code style={{ wordBreak: 'break-all' }}>{settlement.address}</code>
-            </div>
-          )}
-          {settlement.explorerUrl && (
-            <a href={settlement.explorerUrl} target="_blank" rel="noopener noreferrer">
-              {settlement.explorerUrl.replace(/^https:\/\//, '').split('/')[0]}
-            </a>
-          )}
-        </div>
       )}
       <PollarModalFooter />
     </div>

@@ -277,7 +277,13 @@ export function TxReview({
               <div key={`${row.label}-${i}`} className="pollar-txr-row">
                 <dt>{row.label}</dt>
                 <dd className={row.mono ? 'pollar-txr-mono' : undefined}>
-                  <span>{row.value}</span>
+                  {row.href ? (
+                    <a className="pollar-txr-link" href={row.href} target="_blank" rel="noopener noreferrer">
+                      {row.value}
+                    </a>
+                  ) : (
+                    <span>{row.value}</span>
+                  )}
                   {row.copyValue && <CopyButton value={row.copyValue} className="pollar-copy-btn-sm" language={language} />}
                 </dd>
               </div>

@@ -8,8 +8,8 @@ import { useWalletAvailable } from '../../useWalletAvailable';
 import { AmountField } from '../AmountField';
 import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
-import { TxStatusView } from '../transaction-modal/TxStatusView';
-import { AssetLogo, ChainLogo, TxExplorerLink } from '../tx-review/TxReview';
+import { TxStatusHeading, TxStatusView, txStatusReview } from '../transaction-modal/TxStatusView';
+import { AssetLogo, ChainLogo } from '../tx-review/TxReview';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
 import { earnOutcome, reviewForEarn } from '../tx-review/tx-review-model';
 import '../shared.css';
@@ -21,6 +21,7 @@ import { EARN_COPY } from './earn-copy';
 import { oneOf, seededAmount, useSuccessReport } from '../../modal-options';
 import { PollarOverlay } from '../PollarOverlay';
 import { PollarSelect } from '../PollarSelect';
+import { useInlineConfirmation } from '../../useInlineConfirmation';
 
 /** Where the earn modal opens: a starting point the user can change. An option the app does not offer is left out. */
 export interface EarnModalOptions {
@@ -155,6 +156,8 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<'form' | 'tx'>('form');
+  // The signature's yes is asked here, under the review, not in a prompt over the modal.
+  const confirmation = useInlineConfirmation(step === 'tx');
   const [tab, setTab] = useState<'deposit' | 'withdraw'>(
     () => oneOf<'deposit' | 'withdraw'>(['deposit', 'withdraw'], initial?.tab) ?? 'deposit',
   );
@@ -558,7 +561,7 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
     ) : null;
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
+    <PollarOverlay style={overlayStyle} onClick={step !== 'tx' && !isInProgress ? onClose : undefined}>
       <div
         className="pollar-modal-card pollar-send-modal"
         data-theme={theme}
@@ -574,7 +577,21 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
                 </svg>
               </button>
             )}
-            <h2 className="pollar-modal-title">{title}</h2>
+            {step === 'tx' ? (
+              <TxStatusHeading
+                review={txStatusReview({
+                  transaction,
+                  review: submissionReview,
+                  explorerUrl,
+                  confirmation,
+                  network,
+                  language,
+                })}
+                fallback={title}
+              />
+            ) : (
+              <h2 className="pollar-modal-title">{title}</h2>
+            )}
           </div>
           <div className="pollar-modal-header-actions">
             {step === 'form' && !earnUnavailable && !smartUnsupported && (
@@ -781,15 +798,10 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
             onDone={onClose}
             language={language}
             review={submissionReview}
+            confirmation={confirmation}
+            network={network}
             successMessage={submission ? earnOutcome(submission, reviewCopy) : undefined}
-            successExtra={
-              submission && (
-                <>
-                  {resultPosition}
-                  {explorerUrl && <TxExplorerLink chain={submission.chain} url={explorerUrl} language={language} />}
-                </>
-              )
-            }
+            successExtra={submission && <>{resultPosition}</>}
           />
         )}
 

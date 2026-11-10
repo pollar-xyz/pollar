@@ -240,44 +240,6 @@
   color: var(--pollar-btn-primary-fg, #fff);
 }
 
-.pollar-cosign-outcome {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.7rem 0.85rem;
-  border-radius: var(--pollar-buttons-border-radius, 10px);
-  border: 1px solid color-mix(in srgb, var(--pollar-success-text, #15803d) 35%, var(--pollar-border));
-  background: color-mix(in srgb, var(--pollar-success-text, #15803d) 7%, var(--pollar-bg));
-  color: var(--pollar-success-text, #15803d);
-}
-
-.pollar-cosign-outcome-bad {
-  border-color: var(--pollar-error-border);
-  background: var(--pollar-error-bg);
-  color: var(--pollar-error-text);
-}
-
-.pollar-cosign-outcome-main {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0;
-  font-weight: 600;
-}
-
-.pollar-cosign-outcome-icon {
-  flex-shrink: 0;
-}
-
-.pollar-cosign-outcome-note {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--pollar-muted);
-}
-
 .pollar-cosign-step {
   display: flex;
   flex-direction: column;

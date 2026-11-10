@@ -8,6 +8,7 @@ import './TransactionModal.css';
 import { TransactionModalTemplate } from './TransactionModalTemplate';
 import { modalChrome } from '../modal-theme';
 import { PollarOverlay } from '../PollarOverlay';
+import { useInlineConfirmation } from '../../useInlineConfirmation';
 
 interface TransactionModalProps {
   onClose: () => void;
@@ -21,6 +22,8 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   const language = useModalLanguage();
 
+  // The signature's yes is asked here, under the review, not in a prompt over the modal.
+  const confirmation = useInlineConfirmation(true);
   const [showXdr, setShowXdr] = useState(false);
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -68,11 +71,13 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle}>
       <TransactionModalTemplate
         theme={theme}
         accentColor={accentColor}
         styleOverrides={styleOverrides}
+        confirmation={confirmation}
+        network={network}
         transaction={transaction}
         showXdr={showXdr}
         copied={copied}

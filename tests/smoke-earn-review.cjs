@@ -276,6 +276,63 @@ async function mount(element) {
     await unknown.unmount();
   }
 
+  console.log('\n── web TxStatusView, a confirmation answered in the view ──');
+  {
+    const load = loader({ '../commons': { CopyButton: () => null, ModalStatusBanner: ({ message }) => message } });
+    const model = load('packages/react/src/components/tx-review/tx-review-model.ts');
+    const { TX_REVIEW_COPY } = load('packages/react/src/components/tx-review/tx-review-copy.ts');
+    const { TxStatusView } = load('packages/react/src/components/transaction-modal/TxStatusView.tsx');
+    const parts = { action: 'deposit', chain: 'SOLANA', amount: '1', asset: 'USDC', name: 'USDC vault' };
+    const answers = [];
+    const base = {
+      showXdr: false,
+      copied: false,
+      explorerUrl: null,
+      onSignAndSend: () => undefined,
+      onToggleXdr: () => undefined,
+      onCopyHash: () => undefined,
+      onDone: () => undefined,
+      language: 'en',
+      review: model.reviewForEarn(parts, TX_REVIEW_COPY.en),
+    };
+    const confirmation = {
+      id: 'c-1',
+      kind: 'sign',
+      network: 'SOLANA',
+      confirm: () => answers.push('yes'),
+      reject: () => answers.push('no'),
+    };
+    const asking = await mount(
+      React.createElement(TxStatusView, {
+        ...base,
+        transaction: { step: 'building-signing-submitting' },
+        confirmation,
+      }),
+    );
+    const confirmButton = [...document.body.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Confirm');
+    check('the yes is asked in the view, under the review', () => {
+      assert.ok(confirmButton, 'no Confirm button');
+      assert.match(asking.text(), /USDC vault/);
+    });
+    check('no status strip while it waits for the yes', () => assert.doesNotMatch(asking.text(), /Processing transaction/));
+    await React.act(async () => confirmButton?.click());
+    check('Confirm answers the confirmation', () => assert.deepEqual(answers, ['yes']));
+    await asking.unmount();
+
+    const sending = await mount(
+      React.createElement(TxStatusView, { ...base, transaction: { step: 'building-signing-submitting' } }),
+    );
+    check('on its way: one strip under the same review', () => {
+      assert.match(sending.text(), /USDC vault/);
+      assert.ok(document.body.querySelector('.pollar-outcome'), 'no outcome strip');
+    });
+    await sending.unmount();
+
+    const sent = await mount(React.createElement(TxStatusView, { ...base, transaction: { step: 'success', hash: 'sig-3' } }));
+    check('sent: the hash stays out of the view until the details open', () => assert.doesNotMatch(sent.text(), /sig-3/));
+    await sent.unmount();
+  }
+
   console.log('\n── react-native TxReview, Earn ───────────────────────────');
   {
     const load = loader({ 'react-native': reactNative, 'react-native-svg': reactNativeSvg });

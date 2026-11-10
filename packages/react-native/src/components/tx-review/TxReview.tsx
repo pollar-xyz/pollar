@@ -386,9 +386,19 @@ export function TxReview({
             <View key={`${row.label}-${i}`} style={styles.row}>
               <Text style={[styles.rowLabel, { color: colors.muted }]}>{row.label}</Text>
               <View style={styles.rowValue}>
-                <Text selectable style={[styles.rowText, row.mono && styles.mono, { color: colors.text }]}>
-                  {row.value}
-                </Text>
+                {row.href ? (
+                  <Pressable
+                    accessibilityRole="link"
+                    hitSlop={8}
+                    onPress={() => void Linking.openURL(row.href!).catch(() => undefined)}
+                  >
+                    <Text style={[styles.rowText, { color: colors.accent }]}>{row.value}</Text>
+                  </Pressable>
+                ) : (
+                  <Text selectable style={[styles.rowText, row.mono && styles.mono, { color: colors.text }]}>
+                    {row.value}
+                  </Text>
+                )}
                 {row.copyValue ? copyButton(row.copyValue) : null}
               </View>
             </View>

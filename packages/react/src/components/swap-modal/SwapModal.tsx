@@ -24,6 +24,7 @@ import { SwapAssetOption, SwapChain, SwapModalTemplate, SwapQuoteView, SwapSettl
 import { modalChrome } from '../modal-theme';
 import { byCode, oneOf, seededAmount, useSuccessReport } from '../../modal-options';
 import { PollarOverlay } from '../PollarOverlay';
+import { useInlineConfirmation } from '../../useInlineConfirmation';
 
 /** Where the swap modal opens: a starting point the user can change. An option the app does not offer is left out. */
 export interface SwapModalOptions {
@@ -137,6 +138,8 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<'form' | 'tx'>('form');
+  // The signature's yes is asked here, under the review, not in a prompt over the modal.
+  const confirmation = useInlineConfirmation(step === 'tx');
   const [selectedSell, setSelectedSell] = useState<SwapAssetOption | null>(null);
   const [selectedBuy, setSelectedBuy] = useState<SwapAssetOption | null>(null);
   const [amount, setAmount] = useState(() => seededAmount(initial?.amount));
@@ -735,7 +738,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
+    <PollarOverlay style={overlayStyle} onClick={step !== 'tx' && !isInProgress ? onClose : undefined}>
       <SwapModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -753,6 +756,8 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
         destination={destination}
         usdcAcross={usdcAcross}
         settlement={settlementView}
+        confirmation={confirmation}
+        network={network}
         provider={provider}
         providers={providers}
         quote={quoteView}

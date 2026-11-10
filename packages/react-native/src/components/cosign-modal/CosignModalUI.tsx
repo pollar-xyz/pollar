@@ -114,7 +114,7 @@ function outcomeText(request: CosignRequest, copy: CosignCopy): string {
   return copy.status.APPROVED ?? 'Approved';
 }
 
-function OutcomeIcon({ ok, color }: { ok: boolean; color: string }) {
+export function OutcomeIcon({ ok, color }: { ok: boolean; color: string }) {
   return (
     <View style={[styles.okDot, { backgroundColor: color }]}>
       {ok ? <View style={styles.okMark} /> : <Text style={styles.badMark}>×</Text>}

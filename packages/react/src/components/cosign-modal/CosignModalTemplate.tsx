@@ -3,10 +3,10 @@
 import { useInheritedLanguage } from '../../language-context';
 import { type CosignRequest, type CosignVerification, type PollarLanguage, type StellarNetwork } from '@pollar/core';
 import { useState } from 'react';
-import { CHAIN_LOGOS } from '../../constants';
 import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
-import { AssetLogo, TxReview } from '../tx-review/TxReview';
+import { TxReview } from '../tx-review/TxReview';
+import { OutcomeIcon, TitleMark } from '../signing-marks';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
 import { headlineAsset, reviewFromRequest } from '../tx-review/tx-review-model';
 import { COSIGN_COPY } from './cosign-copy';
@@ -70,21 +70,6 @@ function expiresIn(request: CosignRequest, copy: CosignCopy): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-/**
- * The logo next to the title: the asset the action moves with its chain in the
- * corner, or the chain alone when it moves no asset.
- */
-export function TitleMark({ chain, asset }: { chain: string | undefined; asset?: string | undefined }) {
-  const src = chain ? CHAIN_LOGOS[chain as keyof typeof CHAIN_LOGOS] : undefined;
-  if (!asset) return src ? <img className="pollar-cosign-chain" src={src} alt="" aria-hidden /> : null;
-  return (
-    <span className="pollar-cosign-mark" aria-hidden>
-      <AssetLogo key={asset} asset={asset} small />
-      {src && <img className="pollar-cosign-mark-chain" src={src} alt="" />}
-    </span>
-  );
-}
-
 /** What a resolved request did, in one line: signed and sent, signed for the app to send, or why nothing was. */
 function outcomeText(request: CosignRequest, copy: CosignCopy): string {
   if (request.status !== 'APPROVED')
@@ -92,19 +77,6 @@ function outcomeText(request: CosignRequest, copy: CosignCopy): string {
   if (request.submit?.hash) return copy.signedSent;
   if (request.signedXdr) return copy.signedAppSends;
   return copy.status.APPROVED ?? 'Approved';
-}
-
-function OutcomeIcon({ ok }: { ok: boolean }) {
-  return (
-    <svg className="pollar-cosign-outcome-icon" width="16" height="16" viewBox="0 0 14 14" fill="none" aria-hidden>
-      <circle cx="7" cy="7" r="7" fill="currentColor" />
-      {ok ? (
-        <path d="M3.5 7l2.5 2.5 4.5-5" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-      ) : (
-        <path d="m4.5 4.5 5 5m0-5-5 5" stroke="white" strokeWidth="1.4" strokeLinecap="round" />
-      )}
-    </svg>
-  );
 }
 
 /** A step of the flow already resolved: one line, and its own details when opened. */
@@ -294,19 +266,17 @@ export function CosignModalTemplate({
             (lastResolved && shownReview ? (
               <div className="pollar-cosign-detail">
                 <TxReview key={lastResolved.id} data={shownReview} language={language} />
-                <div
-                  className={`pollar-cosign-outcome${lastResolved.status === 'APPROVED' ? '' : ' pollar-cosign-outcome-bad'}`}
-                >
-                  <p className="pollar-cosign-outcome-main">
+                <div className={`pollar-outcome${lastResolved.status === 'APPROVED' ? '' : ' pollar-outcome-bad'}`}>
+                  <p className="pollar-outcome-main">
                     <OutcomeIcon ok={lastResolved.status === 'APPROVED'} />
                     {outcomeText(lastResolved, copy)}
                   </p>
                   {nextStep && (
-                    <p className="pollar-cosign-outcome-note">
+                    <p className="pollar-outcome-note">
                       <span className="pollar-spinner pollar-spinner-sm" aria-hidden /> {copy.next(nextStep)}
                     </p>
                   )}
-                  {closesIn !== null && <p className="pollar-cosign-outcome-note">{copy.closingIn(closesIn)}</p>}
+                  {closesIn !== null && <p className="pollar-outcome-note">{copy.closingIn(closesIn)}</p>}
                 </div>
               </div>
             ) : (

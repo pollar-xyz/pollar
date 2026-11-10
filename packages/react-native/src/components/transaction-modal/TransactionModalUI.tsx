@@ -1,12 +1,22 @@
 import { useInheritedLanguage } from '../../language-context';
-import { PollarLanguage, TransactionState, WalletId, WalletType } from '@pollar/core';
+import {
+  type PendingConfirmation,
+  PollarLanguage,
+  type StellarNetwork,
+  TransactionState,
+  transactionErrorMessage,
+  WalletId,
+  WalletType,
+} from '@pollar/core';
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image } from 'react-native';
-import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR_MARK_ON_DARK, LOGO_POLLAR_MARK_ON_LIGHT } from '../../constants';
-import { ModalStatusBanner, PollarModalFooter, PollarOverlay } from '../commons';
+import { ActivityIndicator, View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { PollarModalFooter, PollarOverlay } from '../commons';
+import { CONFIRM_COPY } from '../confirm-modal/confirm-copy';
+import { confirmationReview } from '../confirm-modal/confirmation-review';
+import { OutcomeIcon, TitleMark } from '../cosign-modal/CosignModalUI';
 import { TxReview } from '../tx-review/TxReview';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
-import { reviewFromBuild, type TxReviewData } from '../tx-review/tx-review-model';
+import { headlineAsset, reviewFromBuild, type TxReviewData } from '../tx-review/tx-review-model';
 import { TRANSACTION_COPY } from './transaction-copy';
 
 export interface TransactionModalTemplateProps {
@@ -30,17 +40,28 @@ export interface TransactionModalTemplateProps {
   onRetry?: () => void;
   /** Language of the modal. Defaults to the user's device; the modal passes the resolved one. */
   language?: PollarLanguage | undefined;
+  /** The signature waiting for the user's yes, answered in this view instead of a prompt over it. */
+  confirmation?: PendingConfirmation | null | undefined;
+  /** The app's network, for the details of a confirmation. */
+  network?: StellarNetwork | undefined;
 }
 
-const SENDING_STEPS = new Set<TransactionState['step']>([
+const IN_FLIGHT_STEPS = new Set<TransactionState['step']>([
+  'building',
   'signing',
   'signed',
   'submitting',
   'signing-submitting',
   'submitted',
+  'building-signing-submitting',
   'awaiting_cosign',
 ]);
 
+/**
+ * A transaction from the user's yes to its outcome in one view: the review stays,
+ * and a strip under it says where the transaction stands. The hash and every
+ * address live in the details.
+ */
 export function TransactionModalTemplate({
   theme,
   accentColor,
@@ -54,9 +75,12 @@ export function TransactionModalTemplate({
   copyText,
   onRetry,
   language: languageProp,
+  confirmation = null,
+  network,
 }: TransactionModalTemplateProps) {
   const language = useInheritedLanguage(languageProp);
   const copy = TRANSACTION_COPY[language];
+  const confirmCopy = CONFIRM_COPY[language];
   const isDark = theme === 'dark';
 
   const colors = {
@@ -66,116 +90,108 @@ export function TransactionModalTemplate({
     muted: isDark ? '#9ca3af' : '#6b7280',
     errorBg: isDark ? '#2a1515' : '#fef2f2',
     errorText: isDark ? '#f87171' : '#dc2626',
+    okText: isDark ? '#4ade80' : '#15803d',
   };
 
   const buildData = 'buildData' in transaction ? transaction.buildData : null;
   const hash = transaction.step === 'success' ? transaction.hash : null;
-  const errorDetails = transaction.step === 'error' ? (transaction.details ?? null) : null;
+  const errorDetails =
+    transaction.step === 'error' ? transactionErrorMessage(transaction.code, transaction.details, language) : null;
 
   const isBuilt = transaction.step === 'built';
-  const isSigning = SENDING_STEPS.has(transaction.step);
+  const isInFlight = IN_FLIGHT_STEPS.has(transaction.step);
   const isSuccess = transaction.step === 'success';
   const isError = transaction.step === 'error';
-  const showDetails = isBuilt || isSigning || isSuccess;
+  const asking = !!confirmation && !isSuccess && !isError;
   const hashInfo = hash ? { value: hash, explorerUrl } : undefined;
   const sponsored = 'sponsored' in transaction ? transaction.sponsored : undefined;
   // A compound flow can finish without the build it ran: the hash still has a place in the details.
   const review: TxReviewData | null = buildData
     ? reviewFromBuild(buildData, TX_REVIEW_COPY[language], copy.title, hashInfo, sponsored)
-    : hashInfo
-      ? { title: copy.title, kind: 'other', rows: [], hash: hashInfo, ...(sponsored !== undefined && { fee: { sponsored } }) }
-      : null;
-  const reviewBlock = showDetails && review && (
-    <ScrollView style={styles.contentWrap} nestedScrollEnabled>
-      {buildData && <Text style={[styles.reviewTitle, { color: colors.text }]}>{review.title}</Text>}
-      <TxReview
-        data={review}
-        theme={theme}
-        accentColor={accentColor}
-        open={showXdr}
-        onToggle={onToggleXdr}
-        copyText={copyText}
-        language={language}
-      />
-    </ScrollView>
-  );
+    : confirmation
+      ? confirmationReview(confirmation, language, network)
+      : hashInfo
+        ? { title: copy.title, kind: 'other', rows: [], hash: hashInfo, ...(sponsored !== undefined && { fee: { sponsored } }) }
+        : null;
+  const waitingOn =
+    walletType === WalletType.FREIGHTER ? copy.waitingFreighter : walletType === WalletType.ALBEDO ? copy.waitingAlbedo : null;
+  const tone = isError ? colors.errorText : colors.okText;
+  const chain = review?.from?.chain ?? review?.to?.chain;
 
   return (
-    <PollarOverlay onCancel={onClose}>
+    // A transaction on its way is closed from its X; a tap beside it does nothing.
+    <PollarOverlay onCancel={onClose} dismissOnBackdrop={false}>
       <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>{copy.title}</Text>
+          {review && <TitleMark chain={chain} asset={headlineAsset(review)} theme={theme} accentColor={accentColor} />}
+          <Text style={[styles.title, { color: colors.text }]}>{review?.title ?? copy.title}</Text>
         </View>
 
         <TouchableOpacity style={[styles.iconButton, styles.closeBtn, { borderColor: colors.border }]} onPress={onClose}>
           <Text style={{ color: colors.muted, fontSize: 16 }}>✕</Text>
         </TouchableOpacity>
 
-        {!isSuccess && reviewBlock}
-
-        {isError && errorDetails && (
-          <View style={[styles.errorBox, { backgroundColor: colors.errorBg }]}>
-            <Text style={{ color: colors.errorText, fontWeight: '600', marginBottom: 4 }}>{copy.errorDetails}</Text>
-            <Text style={{ color: colors.errorText, fontSize: 12 }}>{errorDetails}</Text>
-          </View>
+        {review && (
+          <ScrollView style={styles.contentWrap} nestedScrollEnabled>
+            <TxReview
+              data={review}
+              theme={theme}
+              accentColor={accentColor}
+              open={showXdr}
+              onToggle={onToggleXdr}
+              copyText={copyText}
+              language={language}
+              {...(asking
+                ? {
+                    detailsIntro: { title: confirmCopy.whyTitle, body: confirmCopy.whyBody },
+                    detailsAction: { label: confirmCopy.cancelAction, onPress: confirmation!.reject },
+                  }
+                : {})}
+            />
+          </ScrollView>
         )}
 
-        {isBuilt && (
+        {asking ? (
+          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: accentColor }]} onPress={confirmation!.confirm}>
+            <Text style={styles.primaryBtnText}>
+              {review?.kind === 'activate_wallet' ? confirmCopy.activateWallet : confirmCopy.confirm}
+            </Text>
+          </TouchableOpacity>
+        ) : isBuilt ? (
           <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: accentColor }]} onPress={onSignAndSend}>
             <Text style={styles.primaryBtnText}>{copy.signAndSend}</Text>
           </TouchableOpacity>
-        )}
-
-        {(isSigning || isSuccess || isError) && (
-          <View style={styles.walletSpinnerBox}>
-            <View style={styles.walletIconContainer}>
-              <Image
-                source={{
-                  uri:
-                    walletType === WalletType.FREIGHTER
-                      ? LOGO_FREIGHTER
-                      : walletType === WalletType.ALBEDO
-                        ? LOGO_ALBEDO
-                        : isDark
-                          ? LOGO_POLLAR_MARK_ON_DARK
-                          : LOGO_POLLAR_MARK_ON_LIGHT,
-                }}
-                style={styles.walletImage}
-              />
+        ) : (
+          (isInFlight || isSuccess || isError) && (
+            <View
+              style={[
+                styles.outcome,
+                { borderColor: isInFlight ? colors.border : tone, backgroundColor: isError ? colors.errorBg : 'transparent' },
+              ]}
+            >
+              <View style={styles.outcomeMain}>
+                {isInFlight ? (
+                  <ActivityIndicator size="small" color={accentColor} />
+                ) : (
+                  <OutcomeIcon ok={!isError} color={tone} />
+                )}
+                <Text style={{ color: isInFlight ? colors.text : tone, fontWeight: '600', flexShrink: 1 }}>
+                  {copy.status[transaction.step]}
+                </Text>
+              </View>
+              {isInFlight && waitingOn && transaction.step !== 'awaiting_cosign' && (
+                <Text style={{ color: colors.muted, fontSize: 13 }}>{waitingOn}</Text>
+              )}
+              {isError && errorDetails && <Text style={{ color: colors.muted, fontSize: 13 }}>{errorDetails}</Text>}
             </View>
-
-            {isSigning && transaction.step !== 'awaiting_cosign' && (
-              <Text style={[styles.spinnerText, { color: colors.text }]}>
-                {walletType === WalletType.FREIGHTER
-                  ? copy.waitingFreighter
-                  : walletType === WalletType.ALBEDO
-                    ? copy.waitingAlbedo
-                    : copy.signingAndSending}
-              </Text>
-            )}
-
-            {isError && onRetry && buildData && (
-              <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border }]} onPress={onRetry}>
-                <Text style={[styles.secondaryBtnText, { color: colors.muted }]}>{copy.tryAgain}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          )
         )}
 
-        <ModalStatusBanner
-          message={copy.status[transaction.step] || ''}
-          status={
-            isError
-              ? 'ERROR'
-              : isSigning || transaction.step === 'building' || transaction.step === 'building-signing-submitting'
-                ? 'LOADING'
-                : isSuccess
-                  ? 'SUCCESS'
-                  : 'NONE'
-          }
-        />
-
-        {isSuccess && reviewBlock}
+        {isError && onRetry && buildData && (
+          <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border }]} onPress={onRetry}>
+            <Text style={[styles.secondaryBtnText, { color: colors.muted }]}>{copy.tryAgain}</Text>
+          </TouchableOpacity>
+        )}
 
         {isSuccess && (
           <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: accentColor }]} onPress={onClose}>
@@ -202,11 +218,28 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   header: {
-    marginBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
     marginTop: 10,
+    // Clear of the close button in the corner.
+    paddingRight: 40,
+  },
+  outcome: {
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+  },
+  outcomeMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   title: {
-    fontSize: 22,
+    flexShrink: 1,
+    fontSize: 20,
     fontWeight: '700',
   },
   iconButton: {
@@ -227,17 +260,7 @@ const styles = StyleSheet.create({
     maxHeight: 360,
     marginBottom: 16,
   },
-  reviewTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
 
-  errorBox: {
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
   primaryBtn: {
     width: '100%',
     height: 44,
@@ -258,31 +281,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
-    marginTop: 16,
+    marginTop: 10,
   },
   secondaryBtnText: {
     fontSize: 14,
     fontWeight: '600',
-  },
-  walletSpinnerBox: {
-    alignItems: 'center',
-    marginVertical: 20,
-  },
-  walletIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: '#005DB4',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  walletImage: {
-    width: 32,
-    height: 32,
-  },
-  spinnerText: {
-    fontSize: 16,
   },
 });
