@@ -403,6 +403,11 @@ client.login({ provider: 'xbull' });
 
 Submits the OTP code for email authentication. The active `clientSessionId` is tracked internally - no need to pass it.
 
+When the app refuses the address on the code request (a throwaway inbox on an app that blocks them, or an address or
+domain on its blocklist), the auth state ends in `step: 'error'` with `errorCode: 'EMAIL_NOT_ALLOWED'` and the backend's
+`code` (`EMAIL_DISPOSABLE_NOT_ALLOWED` or `EMAIL_BLOCKED`); `authErrorMessage(code, language)` words it for the user.
+Every other failure to send the code is `EMAIL_SEND_FAILED`, with its `code` when the backend sent one.
+
 #### `client.providerAction(provider, action, payload?): void`
 
 Invokes a named secondary step on a registered auth provider (e.g. an email `sendCode` / `verifyCode`, or a custom
