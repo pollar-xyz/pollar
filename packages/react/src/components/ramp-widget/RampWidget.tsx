@@ -689,13 +689,12 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
     }
   }
 
+  // The steps start once there is a route to pick: the amount screen is where the flow begins, not a step of it.
   const flowSteps =
     fields.length || quotes.some((q) => rampQuoteFields(q).length)
-      ? [copy.steps.amount, copy.steps.route, copy.steps.details, copy.steps.complete]
-      : [copy.steps.amount, copy.steps.route, copy.steps.complete];
+      ? [copy.steps.route, copy.steps.details, copy.steps.complete]
+      : [copy.steps.route, copy.steps.complete];
   const stepLabel: Partial<Record<RampStep, string>> = {
-    input: copy.steps.amount,
-    loading_quote: copy.steps.amount,
     select_route: copy.steps.route,
     contact: copy.steps.details,
     status: copy.steps.complete,

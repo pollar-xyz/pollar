@@ -8,6 +8,7 @@ import { ChainSelect } from '../ChainSelect';
 import { PollarModalFooter, RefreshIcon } from '../commons';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
+import { PollarSelect } from '../PollarSelect';
 import { SEND_COPY } from './send-copy';
 
 type SendCopy = (typeof SEND_COPY)['en'];
@@ -421,16 +422,18 @@ export function SendModalTemplate({
                 {copy.memo} <span className="pollar-send-label-optional">{copy.optional}</span>
               </label>
               <div className="pollar-send-memo-row">
-                <select
-                  className="pollar-input pollar-send-memo-type"
-                  value={memoType}
-                  onChange={(e) => onMemoTypeChange?.(e.target.value as SendMemoType)}
-                  aria-label={copy.memoType}
-                >
-                  <option value="text">{copy.memoTypes.text}</option>
-                  <option value="id">{copy.memoTypes.id}</option>
-                  <option value="hash">{copy.memoTypes.hash}</option>
-                </select>
+                <div className="pollar-send-memo-type">
+                  <PollarSelect
+                    value={memoType}
+                    onChange={(value) => onMemoTypeChange?.(value as SendMemoType)}
+                    aria-label={copy.memoType}
+                    options={[
+                      { value: 'text', label: copy.memoTypes.text },
+                      { value: 'id', label: copy.memoTypes.id },
+                      { value: 'hash', label: copy.memoTypes.hash },
+                    ]}
+                  />
+                </div>
                 <input
                   id="pollar-send-memo"
                   className="pollar-input pollar-send-memo-input"

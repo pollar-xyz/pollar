@@ -1,7 +1,7 @@
 'use client';
 
 // --- Shared network picker ----------------------------------------------------
-// One chain <select> used by the Send, Wallet Balance and Assets modals. The
+// One chain picker used by the Send, Wallet Balance and Assets modals. The
 // options are the chains the user actually holds a wallet on (`getWallets()`),
 // so every option always resolves to an address; the parent defaults to the
 // first one. Everything else in those modals - address, assets, balances - is
@@ -11,6 +11,7 @@
 import { useInheritedLanguage } from '../language-context';
 import type { PollarLanguage, WalletChain, WalletInfo } from '@pollar/core';
 import { COMMONS_COPY } from './commons-copy';
+import { PollarSelect } from './PollarSelect';
 import './send-modal/SendModal.css';
 import './shared.css';
 
@@ -85,21 +86,13 @@ export function ChainSelect({ label, value, options, onChange, disabled = false,
   return (
     <div className="pollar-send-field pollar-chain-field">
       <label className="pollar-send-label">{label ?? COMMONS_COPY[language].network}</label>
-      <select
-        className="pollar-input pollar-send-select"
+      <PollarSelect
         value={value ?? ''}
         disabled={disabled}
-        onChange={(e) => onChange(e.target.value as WalletChain)}
-      >
-        {/* Only present before the parent defaults to the first chain; hidden
-            from the open dropdown. */}
-        {value === null && <option value="" disabled hidden />}
-        {options.map((chain) => (
-          <option key={chain} value={chain}>
-            {CHAIN_LABEL[chain] ?? chain}
-          </option>
-        ))}
-      </select>
+        aria-label={label ?? COMMONS_COPY[language].network}
+        onChange={(chain) => onChange(chain as WalletChain)}
+        options={options.map((chain) => ({ value: chain, label: CHAIN_LABEL[chain] ?? chain }))}
+      />
     </div>
   );
 }

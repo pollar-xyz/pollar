@@ -162,7 +162,7 @@ async function mount(client) {
   return { open, settle, unmount };
 }
 
-const selects = () => [...document.querySelectorAll('.pollar-bridge-modal select')].map((s) => s.value);
+const selects = () => [...document.querySelectorAll('.pollar-bridge-modal .pollar-select-trigger')].map((s) => s.dataset.value);
 const amount = () => document.querySelector('.pollar-bridge-modal input')?.value;
 const button = (text) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === text);
 

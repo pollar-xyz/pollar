@@ -41,6 +41,7 @@ import '../shared.css';
 import '../send-modal/SendModal.css';
 import './CardModal.css';
 import { PollarOverlay } from '../PollarOverlay';
+import { PollarSelect } from '../PollarSelect';
 
 /** Where the card modal opens: a starting point the user can change. An option the user cannot use is left out. */
 export interface CardModalOptions {
@@ -511,17 +512,12 @@ export function CardModal({ onClose, initial }: CardModalProps) {
   const rangeField = (key: 'annualSalary' | 'expectedMonthlyVolume', label: string) => (
     <label className="pollar-send-field">
       <span className="pollar-send-label">{label}</span>
-      <select
-        className="pollar-input pollar-send-select"
+      <PollarSelect
+        aria-label={label}
         value={kyc[key]}
-        onChange={(e) => setKyc((k) => ({ ...k, [key]: e.target.value as CardIncomeRange }))}
-      >
-        {INCOME_RANGES.map((range) => (
-          <option key={range} value={range}>
-            {copy.incomeRanges[range]}
-          </option>
-        ))}
-      </select>
+        onChange={(value) => setKyc((k) => ({ ...k, [key]: value as CardIncomeRange }))}
+        options={INCOME_RANGES.map((range) => ({ value: range, label: copy.incomeRanges[range] }))}
+      />
     </label>
   );
 
@@ -687,18 +683,13 @@ export function CardModal({ onClose, initial }: CardModalProps) {
               {field('countryOfIssue', copy.idCountry, { maxLength: 2, placeholder: 'AR' })}
               <label className="pollar-send-field">
                 <span className="pollar-send-label">{copy.occupation}</span>
-                <select
-                  className="pollar-input pollar-send-select"
+                <PollarSelect
+                  aria-label={copy.occupation}
                   value={kyc.occupation}
-                  onChange={(e) => setKyc((k) => ({ ...k, occupation: e.target.value }))}
-                >
-                  <option value="">{copy.selectOccupation}</option>
-                  {occupations.map((o) => (
-                    <option key={o.code} value={o.code}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
+                  placeholder={copy.selectOccupation}
+                  onChange={(value) => setKyc((k) => ({ ...k, occupation: value }))}
+                  options={occupations.map((o) => ({ value: o.code, label: o.label }))}
+                />
               </label>
               {field('phoneCountryCode', copy.phoneCountryCode, { placeholder: '54', inputMode: 'numeric' })}
               {field('phoneNumber', copy.phoneNumber, { placeholder: '91155551234', inputMode: 'numeric' })}

@@ -144,7 +144,7 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--pollar-accent) 16%, transparent);
 }
 
-.pollar-swap-asset-pill-wrap:has(select:disabled) {
+.pollar-swap-asset-pill-wrap:has(.pollar-select-trigger:disabled) {
   cursor: not-allowed;
   opacity: 0.6;
 }
@@ -161,18 +161,8 @@
   font-size: 0.75rem;
   font-weight: 700;
   cursor: pointer;
-}
-
-.pollar-swap-asset-pill option,
-.pollar-swap-route-pill option {
-  background: var(--pollar-bg);
-  color: var(--pollar-text);
-}
-
-.pollar-swap-chevron {
-  flex: 0 0 auto;
-  color: var(--pollar-muted);
-  pointer-events: none;
+  padding: 0;
+  gap: 0.3rem;
 }
 
 .pollar-swap-asset-icon {
@@ -317,14 +307,13 @@
   align-items: center;
   max-width: 8.5rem;
   height: 2.25rem;
-  padding: 0 1.8rem 0 0.75rem;
+  width: auto;
+  gap: 0.35rem;
+  padding: 0 0.65rem 0 0.75rem;
   appearance: none;
   border: 1px solid var(--pollar-border);
   border-radius: 999px;
   background-color: var(--pollar-input-bg);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-position: right 0.65rem center;
-  background-repeat: no-repeat;
   color: var(--pollar-text);
   font: inherit;
   font-size: 0.6875rem;

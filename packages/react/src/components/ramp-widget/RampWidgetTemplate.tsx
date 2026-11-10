@@ -39,7 +39,9 @@ import {
 import { RAMP_COPY, type RampCopy } from './ramp-copy';
 import { RejectedRouteDisplay, RouteDisplay } from './RouteDisplay';
 import { AmountField } from '../AmountField';
-import { CopyButton } from '../commons';
+import { CopyButton, PollarModalFooter } from '../commons';
+import { PollarSelect } from '../PollarSelect';
+import { AssetLogo } from '../tx-review/TxReview';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 'status' | 'error';
@@ -352,6 +354,19 @@ export function RampWidgetTemplate({
   return (
     <div className="pollar-modal-card pollar-ramp-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
       <div className="pollar-modal-header">
+        {/* The amount is not one of the numbered steps, so the step bar has no way back to it. */}
+        {stepsOpen && (step === 'select_route' || step === 'contact') && (
+          <button
+            type="button"
+            className="pollar-back-btn pollar-ramp-back"
+            onClick={() => onStepSelect?.(step === 'contact' ? copy.steps.route : copy.steps.amount)}
+            aria-label={copy.back}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+              <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
         <div className="pollar-ramp-header-text">
           <h2 className="pollar-modal-title">{stepTitle[step]}</h2>
           <p className="pollar-ramp-subtitle">{stepSubtitle[step]}</p>
@@ -453,21 +468,21 @@ export function RampWidgetTemplate({
                 <label className="pollar-ramp-label" htmlFor="pollar-ramp-country">
                   {copy.country}
                 </label>
-                <select
+                <PollarSelect
                   id="pollar-ramp-country"
                   className="pollar-ramp-input"
                   value={country}
-                  onChange={(e) => onCountryChange(e.target.value)}
-                >
-                  {countries
+                  onChange={onCountryChange}
+                  options={countries
                     .map((c) => ({ code: c.country, name: countryName(c.country, language) }))
                     .sort((a, b) => a.name.localeCompare(b.name, language))
-                    .map((c) => (
-                      <option key={c.code} value={c.code}>
-                        {flagEmoji(c.code)} {c.name}
-                      </option>
-                    ))}
-                </select>
+                    .map((c) => ({
+                      value: c.code,
+                      label: c.name,
+                      text: c.name,
+                      icon: <span aria-hidden>{flagEmoji(c.code)}</span>,
+                    }))}
+                />
               </div>
 
               {fiats.length > 1 && (
@@ -475,18 +490,16 @@ export function RampWidgetTemplate({
                   <label className="pollar-ramp-label" htmlFor="pollar-ramp-fiat">
                     {onramp ? copy.payWith : copy.receiveIn}
                   </label>
-                  <select
+                  <PollarSelect
                     id="pollar-ramp-fiat"
                     className="pollar-ramp-input"
                     value={fiat ? fiatKey(fiat) : ''}
-                    onChange={(e) => onFiatChange(e.target.value)}
-                  >
-                    {fiats.map((f) => (
-                      <option key={fiatKey(f)} value={fiatKey(f)}>
-                        {f.currency} · {rampRailLabel(f.rail, { language })}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={onFiatChange}
+                    options={fiats.map((f) => ({
+                      value: fiatKey(f),
+                      label: `${f.currency} · ${rampRailLabel(f.rail, { language })}`,
+                    }))}
+                  />
                 </div>
               )}
 
@@ -494,18 +507,17 @@ export function RampWidgetTemplate({
                 <label className="pollar-ramp-label" htmlFor="pollar-ramp-asset">
                   {onramp ? copy.receive : copy.sell}
                 </label>
-                <select
+                <PollarSelect
                   id="pollar-ramp-asset"
                   className="pollar-ramp-input"
                   value={asset ? assetKey(asset) : ''}
-                  onChange={(e) => onAssetChange(e.target.value)}
-                >
-                  {assets.map((a) => (
-                    <option key={assetKey(a)} value={assetKey(a)}>
-                      {copy.assetOn(a.code, CHAIN_NAME[a.chain] ?? a.chain)}
-                    </option>
-                  ))}
-                </select>
+                  onChange={onAssetChange}
+                  options={assets.map((a) => ({
+                    value: assetKey(a),
+                    label: copy.assetOn(a.code, CHAIN_NAME[a.chain] ?? a.chain),
+                    icon: <AssetLogo asset={a.code} small />,
+                  }))}
+                />
               </div>
 
               <div className="pollar-ramp-field">
@@ -608,20 +620,14 @@ export function RampWidgetTemplate({
                 {f.optional && <span className="pollar-ramp-field-optional"> ({copy.optional})</span>}
               </label>
               {f.type === 'select' ? (
-                <select
+                <PollarSelect
                   className="pollar-ramp-input"
+                  aria-label={f.label}
                   value={fieldValues[f.key] ?? ''}
-                  onChange={(e) => onFieldChange(f.key, e.target.value)}
-                >
-                  <option value="" disabled>
-                    {copy.select}
-                  </option>
-                  {(f.options ?? []).map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
+                  placeholder={copy.select}
+                  onChange={(value) => onFieldChange(f.key, value)}
+                  options={(f.options ?? []).map((o) => ({ value: o.value, label: o.label }))}
+                />
               ) : (
                 <input
                   type={f.type}
@@ -910,6 +916,8 @@ export function RampWidgetTemplate({
           </div>
         </>
       )}
+
+      <PollarModalFooter />
     </div>
   );
 }

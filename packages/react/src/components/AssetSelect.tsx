@@ -1,7 +1,7 @@
 'use client';
 
 // --- Shared asset picker ------------------------------------------------------
-// One asset <select> used by both the Send and Swap modals: groups options into
+// One asset picker used by both the Send and Swap modals: groups options into
 // "App assets" (enabled by the app) and "Other assets" (everything else, incl.
 // native XLM), shows a "- X available" suffix, and renders a skeleton shimmer
 // while loading. The parent auto-selects the first option, so there is no
@@ -12,6 +12,7 @@ import { useInheritedLanguage } from '../language-context';
 import type { PollarLanguage } from '@pollar/core';
 import type { ReactNode } from 'react';
 import { COMMONS_COPY } from './commons-copy';
+import { PollarSelect } from './PollarSelect';
 import './send-modal/SendModal.css';
 import './shared.css';
 
@@ -84,34 +85,22 @@ export function AssetSelect({
           <div className="pollar-send-skeleton" />
         )
       ) : (
-        <select
-          className="pollar-input pollar-send-select"
+        <PollarSelect
           value={value}
           disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          {/* Only present before the parent auto-selects (or when there are no
-              options); hidden so it never shows in the open dropdown. */}
-          {value === '' && <option value="" disabled hidden />}
-          {appAssets.length > 0 && (
-            <optgroup label={appGroupLabel ?? copy.appAssets}>
-              {appAssets.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {optionLabel(o, language)}
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {otherAssets.length > 0 && (
-            <optgroup label={otherGroupLabel ?? copy.otherAssets}>
-              {otherAssets.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {optionLabel(o, language)}
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </select>
+          aria-label={label}
+          onChange={onChange}
+          options={[
+            {
+              label: appGroupLabel ?? copy.appAssets,
+              options: appAssets.map((o) => ({ value: o.key, label: optionLabel(o, language) })),
+            },
+            {
+              label: otherGroupLabel ?? copy.otherAssets,
+              options: otherAssets.map((o) => ({ value: o.key, label: optionLabel(o, language) })),
+            },
+          ]}
+        />
       )}
       {!loading && children}
     </div>

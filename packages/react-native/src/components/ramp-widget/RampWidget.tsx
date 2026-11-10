@@ -57,7 +57,7 @@ import {
 import { usePollar } from '../../context';
 import { useWalletAvailable } from '../../useWalletAvailable';
 import { AmountField } from '../AmountField';
-import { PollarOverlay } from '../commons';
+import { PollarModalFooter, PollarOverlay } from '../commons';
 import { useModalLanguage } from '../../language';
 import { RAMP_COPY, type RampCopy } from './ramp-copy';
 import { RejectedRouteDisplay, RouteDisplay } from './RouteDisplay';
@@ -465,6 +465,17 @@ export function RampWidgetTemplate({
   return (
     <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
       <View style={styles.header}>
+        {/* The amount is not one of the numbered steps, so the step bar has no way back to it. */}
+        {stepsOpen && (step === 'select_route' || step === 'contact') && (
+          <TouchableOpacity
+            style={[styles.backBtn, { borderColor: colors.border }]}
+            onPress={onBack}
+            accessibilityRole="button"
+            accessibilityLabel={copy.back}
+          >
+            <Text style={{ color: colors.muted, fontSize: 16 }}>‹</Text>
+          </TouchableOpacity>
+        )}
         <Text style={[styles.title, { color: colors.text }]}>{stepTitle[step]}</Text>
         <Text style={[styles.subtitle, { color: colors.muted }]}>{stepSubtitle[step]}</Text>
       </View>
@@ -832,6 +843,7 @@ export function RampWidgetTemplate({
           </>
         )}
       </ScrollView>
+      <PollarModalFooter language={language} />
     </View>
   );
 }
@@ -937,13 +949,12 @@ export function RampWidget({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [direction]);
 
+  // The steps start once there is a route to pick: the amount screen is where the flow begins, not a step of it.
   const flowSteps =
     fields.length || quotes.some((q) => rampQuoteFields(q).length)
-      ? [copy.steps.amount, copy.steps.route, copy.steps.details, copy.steps.complete]
-      : [copy.steps.amount, copy.steps.route, copy.steps.complete];
+      ? [copy.steps.route, copy.steps.details, copy.steps.complete]
+      : [copy.steps.route, copy.steps.complete];
   const stepLabel: Partial<Record<RampStep, string>> = {
-    input: copy.steps.amount,
-    loading_quote: copy.steps.amount,
     select_route: copy.steps.route,
     contact: copy.steps.details,
     status: copy.steps.complete,
@@ -1503,6 +1514,15 @@ const styles = StyleSheet.create({
   closeBtn: {
     top: 16,
     right: 16,
+  },
+  backBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   body: {
     marginVertical: 12,

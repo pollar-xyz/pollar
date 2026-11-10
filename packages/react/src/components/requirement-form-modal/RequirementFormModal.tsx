@@ -22,6 +22,7 @@ import { useModalLanguage } from '../../language';
 import '../shared.css';
 import './RequirementFormModal.css';
 import { PollarOverlay } from '../PollarOverlay';
+import { PollarSelect } from '../PollarSelect';
 
 interface RequirementFormModalProps {
   formId: string;
@@ -54,14 +55,16 @@ function FieldInput({
   switch (field.type) {
     case 'select':
       return (
-        <select id={id} className="pollar-input" value={text} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
-          <option value="" />
-          {(field.options ?? []).map((option) => (
-            <option key={option.value} value={option.value}>
-              {localized(option.label, language)}
-            </option>
-          ))}
-        </select>
+        <PollarSelect
+          id={id}
+          value={text}
+          disabled={disabled}
+          onChange={onChange}
+          options={(field.options ?? []).map((option) => ({
+            value: option.value,
+            label: localized(option.label, language),
+          }))}
+        />
       );
     case 'multiselect': {
       const selected = Array.isArray(value) ? value : [];

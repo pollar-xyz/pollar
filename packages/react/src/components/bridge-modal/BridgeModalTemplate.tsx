@@ -3,6 +3,7 @@
 import type { BridgeChain, BridgeQuote, BridgeTransfer, PollarLanguage } from '@pollar/core';
 import { useInheritedLanguage } from '../../language-context';
 import { PollarModalFooter } from '../commons';
+import { PollarSelect } from '../PollarSelect';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { BRIDGE_COPY } from './bridge-copy';
 
@@ -76,18 +77,13 @@ function ChainPicker({
   return (
     <label className="pollar-bridge-field">
       <span className="pollar-bridge-label">{label}</span>
-      <select
-        className="pollar-input"
+      <PollarSelect
+        aria-label={label}
         value={value ?? ''}
         disabled={disabled || options.length === 0}
-        onChange={(event) => onChange(event.target.value as BridgeChain)}
-      >
-        {options.map((chain) => (
-          <option key={chain} value={chain}>
-            {BRIDGE_CHAIN_LABEL[chain]}
-          </option>
-        ))}
-      </select>
+        onChange={(chain) => onChange(chain as BridgeChain)}
+        options={options.map((chain) => ({ value: chain, label: BRIDGE_CHAIN_LABEL[chain] }))}
+      />
     </label>
   );
 }

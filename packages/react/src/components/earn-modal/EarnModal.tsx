@@ -20,6 +20,7 @@ import './EarnModal.css';
 import { EARN_COPY } from './earn-copy';
 import { oneOf, seededAmount, useSuccessReport } from '../../modal-options';
 import { PollarOverlay } from '../PollarOverlay';
+import { PollarSelect } from '../PollarSelect';
 
 /** Where the earn modal opens: a starting point the user can change. An option the app does not offer is left out. */
 export interface EarnModalOptions {
@@ -678,17 +679,12 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
             {!onSolana && providers && providers.length > 1 && (
               <div className="pollar-send-field">
                 <label className="pollar-send-label">{copy.provider}</label>
-                <select
-                  className="pollar-input pollar-send-select"
+                <PollarSelect
+                  aria-label={copy.provider}
                   value={provider ?? ''}
-                  onChange={(e) => setProvider(e.target.value as EarnProviderId)}
-                >
-                  {providers.map((p) => (
-                    <option key={p} value={p}>
-                      {PROVIDER_LABELS[p]}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setProvider(value as EarnProviderId)}
+                  options={providers.map((p) => ({ value: p, label: PROVIDER_LABELS[p] }))}
+                />
               </div>
             )}
 
@@ -703,22 +699,17 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
                   <span>{copy.loadingOptions}</span>
                 </div>
               ) : (
-                <select
-                  className="pollar-input pollar-send-select"
+                <PollarSelect
+                  aria-label={onSolana ? copy.opportunity : provider === 'defindex' ? copy.vault : copy.pool}
                   value={opportunityId}
+                  placeholder={copy.noneAvailable}
                   disabled={(onSolana ? solanaOpportunities : opportunities).length === 0}
-                  onChange={(e) => setOpportunityId(e.target.value)}
-                >
-                  {(onSolana ? solanaOpportunities : opportunities).length === 0 ? (
-                    <option value="">{copy.noneAvailable}</option>
-                  ) : (
-                    (onSolana ? solanaOpportunities : opportunities).map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name} · {o.apy.toFixed(2)}% APY
-                      </option>
-                    ))
-                  )}
-                </select>
+                  onChange={setOpportunityId}
+                  options={(onSolana ? solanaOpportunities : opportunities).map((o) => ({
+                    value: o.id,
+                    label: `${o.name} · ${o.apy.toFixed(2)}% APY`,
+                  }))}
+                />
               )}
             </div>
 

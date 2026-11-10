@@ -370,7 +370,10 @@ const assetShown = () => document.querySelector('.pollar-send-asset-selector')?.
     const ui = await mount(client);
     await ui.open('openSwapModal', { chain: 'SOLANA', destinationChain: 'POLYGON', sell: 'SOL', buy: 'USDT', amount: '1' });
     await act(async () => new Promise((r) => setTimeout(r, 500)));
-    assert.ok(document.querySelector('select option[value="POLYGON"]'), 'a Receive on selector');
+    assert.ok(
+      document.querySelector('.pollar-select-trigger[aria-label="Receive on"][data-value="POLYGON"]'),
+      'a Receive on selector',
+    );
     const last = quotes.at(-1);
     assert.equal(last.destinationChain, 'POLYGON', 'quoted toward Polygon');
     assert.equal(last.outputMint, USDT_POLYGON, 'the ERC-20 address as the output');

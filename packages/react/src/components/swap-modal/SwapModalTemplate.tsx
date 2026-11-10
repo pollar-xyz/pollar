@@ -4,6 +4,7 @@ import { useInheritedLanguage } from '../../language-context';
 import { type PollarLanguage, SwapDestinationChain, SwapQuoteParams, TransactionState, WalletId } from '@pollar/core';
 import { useState } from 'react';
 import { PollarModalFooter, RefreshIcon } from '../commons';
+import { PollarSelect } from '../PollarSelect';
 import { TxStatusView } from '../transaction-modal/TxStatusView';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { SWAP_COPY } from './swap-copy';
@@ -131,42 +132,23 @@ function AssetPill({
     <label className="pollar-swap-asset-pill-wrap">
       <span className="sr-only">{label}</span>
       <AssetIcon code={selected?.code ?? '—'} />
-      <select
+      <PollarSelect
         className="pollar-swap-asset-pill"
         aria-label={label}
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {value === '' && <option value="" disabled hidden />}
-        {appAssets.length > 0 && (
-          <optgroup label={copy.appAssets}>
-            {appAssets.map((option) => (
-              <option key={assetOptionKey(option)} value={assetOptionKey(option)}>
-                {option.code}
-              </option>
-            ))}
-          </optgroup>
-        )}
-        {otherAssets.length > 0 && (
-          <optgroup label={copy.otherAssets}>
-            {otherAssets.map((option) => (
-              <option key={assetOptionKey(option)} value={assetOptionKey(option)}>
-                {option.code}
-              </option>
-            ))}
-          </optgroup>
-        )}
-      </select>
-      <svg className="pollar-swap-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-        <path
-          d="m3.5 5.25 3.5 3.5 3.5-3.5"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
+        onChange={onChange}
+        options={[
+          {
+            label: copy.appAssets,
+            options: appAssets.map((option) => ({ value: assetOptionKey(option), label: option.code })),
+          },
+          {
+            label: copy.otherAssets,
+            options: otherAssets.map((option) => ({ value: assetOptionKey(option), label: option.code })),
+          },
+        ]}
+      />
     </label>
   );
 }
@@ -376,38 +358,28 @@ export function SwapModalTemplate({
           {chains.length > 1 && (
             <label className="pollar-swap-route-wrap pollar-swap-chain-wrap">
               <span className="sr-only">{copy.network}</span>
-              <select
+              <PollarSelect
                 className="pollar-swap-route-pill"
                 aria-label={copy.network}
                 value={chain}
                 disabled={configLoading || isLoadingData}
-                onChange={(event) => onChainChange(event.target.value as SwapChain)}
-              >
-                {chains.map((c) => (
-                  <option key={c} value={c}>
-                    {CHAIN_LABELS[c]}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => onChainChange(value as SwapChain)}
+                options={chains.map((c) => ({ value: c, label: CHAIN_LABELS[c] }))}
+              />
             </label>
           )}
 
           {destinations.length > 1 && (
             <label className="pollar-swap-route-wrap pollar-swap-chain-wrap">
               <span className="sr-only">{copy.receiveOn}</span>
-              <select
+              <PollarSelect
                 className="pollar-swap-route-pill"
                 aria-label={copy.receiveOn}
                 value={destination}
                 disabled={configLoading || isLoadingData}
-                onChange={(event) => onDestinationChange?.(event.target.value as SwapDestinationChain)}
-              >
-                {destinations.map((c) => (
-                  <option key={c} value={c}>
-                    {copy.receiveOn} {CHAIN_LABELS[c]}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => onDestinationChange?.(value as SwapDestinationChain)}
+                options={destinations.map((c) => ({ value: c, label: `${copy.receiveOn} ${CHAIN_LABELS[c]}` }))}
+              />
             </label>
           )}
 
@@ -576,23 +548,17 @@ export function SwapModalTemplate({
             ) : (
               <label className="pollar-swap-route-wrap">
                 <span className="sr-only">{copy.route}</span>
-                <select
+                <PollarSelect
                   className="pollar-swap-route-pill"
                   aria-label={copy.route}
                   value={provider}
                   disabled={providers.length === 0}
-                  onChange={(event) => onProviderChange(event.target.value)}
-                >
-                  {providers.length === 0 ? (
-                    <option value={provider}>{providerLabel(provider, copy)}</option>
-                  ) : (
-                    providers.map((p) => (
-                      <option key={p} value={p}>
-                        {providerLabel(p, copy)}
-                      </option>
-                    ))
-                  )}
-                </select>
+                  onChange={onProviderChange}
+                  options={(providers.length === 0 ? [provider] : providers).map((p) => ({
+                    value: p,
+                    label: providerLabel(p, copy),
+                  }))}
+                />
               </label>
             )}
           </div>

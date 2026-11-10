@@ -1027,7 +1027,11 @@ async function mount(client, application = {}) {
       await act(async () => (options === undefined ? ctx.openRampModal() : ctx.openRampModal(options)));
       await settle();
     };
-    const value = (id) => document.querySelector(id)?.value;
+    // A picker carries its value on `data-value`; an input on `value`.
+    const value = (id) => {
+      const el = document.querySelector(id);
+      return el?.dataset.value ?? el?.value;
+    };
     const activeTab = () => document.querySelector('.pollar-tab[data-active="true"]')?.textContent.trim();
 
     await open({ country: 'br', direction: 'buy', asset: 'USDC', amount: '50' });
@@ -1094,19 +1098,31 @@ async function mount(client, application = {}) {
         await new Promise((r) => setTimeout(r, 20));
       });
     };
-    const options = () =>
-      [...document.body.querySelectorAll('#pollar-ramp-country option')].map((o) => o.textContent.replace(/^\S+\s/, ''));
+    // The list renders only while open: open it, read the names, close it.
+    const options = async () => {
+      const trigger = document.body.querySelector('#pollar-ramp-country');
+      await act(async () => trigger.click());
+      const names = [...document.body.querySelectorAll('[role="option"] .pollar-select-option-label')].map(
+        (o) => o.textContent,
+      );
+      await act(async () => trigger.click());
+      return names;
+    };
     const label = () => document.body.querySelector('label[for="pollar-ramp-country"]').textContent;
 
     await render('en');
-    assert.deepEqual(options(), ['Argentina', 'Bolivia'], 'names, sorted by name');
-    assert.equal(document.body.querySelector('#pollar-ramp-country').value, 'BO', 'the default country stays the first route');
+    assert.deepEqual(await options(), ['Argentina', 'Bolivia'], 'names, sorted by name');
+    assert.equal(
+      document.body.querySelector('#pollar-ramp-country').dataset.value,
+      'BO',
+      'the default country stays the first route',
+    );
     assert.equal(label(), 'Country');
     await render('es-BO');
-    assert.deepEqual(options(), ['Argentina', 'Bolivia']);
+    assert.deepEqual(await options(), ['Argentina', 'Bolivia']);
     assert.equal(label(), 'País', 'the open widget follows the new language prop');
     await render('pt-BR');
-    assert.deepEqual(options(), ['Argentina', 'Bolívia']);
+    assert.deepEqual(await options(), ['Argentina', 'Bolívia']);
 
     // A tag the modals lack is skipped: the client's locale, then the device (jsdom: en-US).
     await render('fr');
@@ -1118,7 +1134,7 @@ async function mount(client, application = {}) {
 
     // A language pinned in the dashboard wins over the prop.
     await render('pt', { language: 'es' });
-    assert.deepEqual(options(), ['Argentina', 'Bolivia']);
+    assert.deepEqual(await options(), ['Argentina', 'Bolivia']);
     assert.equal(label(), 'País');
 
     await act(async () => root.unmount());
