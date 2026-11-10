@@ -1,0 +1,145 @@
+.pollar-bridge-form,
+.pollar-bridge-transfer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.pollar-bridge-chains {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.pollar-bridge-chains .pollar-bridge-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.pollar-bridge-arrow {
+  padding-bottom: 0.7rem;
+  color: var(--pollar-muted, #6b7280);
+}
+
+.pollar-bridge-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.pollar-bridge-label,
+.pollar-bridge-balance {
+  font-size: 0.8125rem;
+  color: var(--pollar-muted, #6b7280);
+}
+
+.pollar-bridge-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.pollar-bridge-balance {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.pollar-bridge-max {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--pollar-accent, #2563eb);
+  cursor: pointer;
+}
+
+.pollar-bridge-quote {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0.75rem;
+  border-radius: var(--pollar-input-border-radius, 0.5rem);
+  background-color: var(--pollar-input-bg);
+}
+
+.pollar-bridge-quote > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.pollar-bridge-quote dt {
+  color: var(--pollar-muted, #6b7280);
+}
+
+.pollar-bridge-quote dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+
+.pollar-bridge-note {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--pollar-muted, #6b7280);
+}
+
+.pollar-bridge-status strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.pollar-bridge-status p {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: var(--pollar-muted, #6b7280);
+}
+
+.pollar-bridge-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+}
+
+.pollar-bridge-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--pollar-muted, #6b7280);
+}
+
+.pollar-bridge-step-done {
+  color: inherit;
+}
+
+.pollar-bridge-step-dot {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+}
+
+.pollar-bridge-step-done .pollar-bridge-step-dot {
+  background-color: var(--pollar-accent, #2563eb);
+  border-color: var(--pollar-accent, #2563eb);
+}
+
+.pollar-bridge-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.pollar-bridge-links a {
+  color: var(--pollar-accent, #2563eb);
+}

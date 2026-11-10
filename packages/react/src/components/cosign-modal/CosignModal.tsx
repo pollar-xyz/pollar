@@ -3,12 +3,14 @@
 import { type CosignRequest, type CosignVerification, isPollarApiError, transactionErrorMessage } from '@pollar/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { explorerTxUrl } from '../commons';
 import { useCosign } from '../../useCosign';
 import '../shared.css';
 import './CosignModal.css';
 import { CosignModalTemplate } from './CosignModalTemplate';
 import { modalChrome } from '../modal-theme';
+import { PollarOverlay } from '../PollarOverlay';
 
 /** How long an outcome that needs nothing from the user stays up before the modal closes. */
 const CLOSE_AFTER_SECONDS = 3;
@@ -29,9 +31,10 @@ interface CosignModalProps {
  * transaction the device checked itself.
  */
 export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
-  const { getClient, styles, network } = usePollar();
+  const { getClient, styles, network, openRecoveryModal } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
   const { pending, lastResolved, loaded, refresh, approve, reject, verify, inspectQuorum } = useCosign();
+  const language = useModalLanguage();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [verification, setVerification] = useState<CosignVerification | null>(null);
@@ -45,11 +48,16 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
   // vote on a wallet someone else can also control, so a bad reading fails
   // every verification below.
   const [quorumFailure, setQuorumFailure] = useState<string | null>(null);
+  // Another origin or install of the same user holds its own key: until it is
+  // added, every vote it stamps is refused, so it is told how to add itself.
+  const [deviceNotLinked, setDeviceNotLinked] = useState(false);
   useEffect(() => {
     let cancelled = false;
     inspectQuorum()
       .then((q) => {
-        if (!cancelled && !q.ok) setQuorumFailure(q.reason);
+        if (cancelled || q.ok) return;
+        if (q.code === 'DEVICE_NOT_ENROLLED') setDeviceNotLinked(true);
+        else setQuorumFailure(q.reason);
       })
       .catch(() => undefined);
     return () => {
@@ -58,6 +66,12 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
   }, [inspectQuorum]);
 
   const current = pending.find((r) => r.id === selectedId) ?? pending[0] ?? null;
+
+  // A request left unsigned holds up the app's flow, so closing over one asks first and only
+  // the X gets there: a click outside does nothing. With nothing waiting, the X just closes.
+  const [askedToClose, setAskedToClose] = useState(false);
+  const confirmingClose = askedToClose && pending.length > 0;
+  const requestClose = () => (pending.length > 0 ? setAskedToClose(true) : onClose());
 
   // Verify whenever the shown request changes; a stale result must never
   // enable Approve for a different request. Keyed by id: every refresh of the
@@ -133,8 +147,12 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
       try {
         await action(request);
       } catch (err) {
-        setError(transactionErrorMessage(isPollarApiError(err) ? err.code : null, err instanceof Error ? err.message : null));
-        if (kind === 'approving') setApproveFailedFor(request.id);
+        setError(
+          transactionErrorMessage(isPollarApiError(err) ? err.code : null, err instanceof Error ? err.message : null, language),
+        );
+        // The network fee still on its way: the same approval goes through once it lands.
+        if (kind === 'approving' && !(isPollarApiError(err) && err.code === 'SDK_COSIGN_GAS_PENDING'))
+          setApproveFailedFor(request.id);
       } finally {
         setBusy(null);
       }
@@ -143,7 +161,7 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
   );
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle}>
       <CosignModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -154,15 +172,25 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         busy={busy}
         error={error}
         approveBlocked={!!current && approveFailedFor === current.id}
+        deviceNotLinked={deviceNotLinked}
+        onLinkDevice={() => {
+          onClose();
+          openRecoveryModal();
+        }}
         {...(lastResolved ? { lastResolved } : {})}
         closesIn={closesIn}
         nextStep={awaitingNext ? nextStep : null}
+        language={language}
+        network={network}
         explorerUrl={lastResolved?.submit?.hash ? explorerTxUrl(lastResolved.network, lastResolved.submit.hash, network) : null}
         onSelect={(r) => setSelectedId(r.id)}
         onApprove={(r) => void run('approving', r, approve)}
         onReject={(r) => void run('rejecting', r, reject)}
-        onClose={onClose}
+        onClose={requestClose}
+        confirmingClose={confirmingClose}
+        onKeepOpen={() => setAskedToClose(false)}
+        onCloseAnyway={onClose}
       />
-    </div>
+    </PollarOverlay>
   );
 }

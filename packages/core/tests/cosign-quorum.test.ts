@@ -9,7 +9,13 @@ import { CosignManager } from '../src/cosign/manager';
 const DEVICE = '02' + 'ab'.repeat(32);
 const OTHER = '02' + 'cd'.repeat(32);
 
-function managerFor(custody: 'COSIGNED' | 'SELF_CUSTODY', org: { threshold: number; userIds: string[]; deviceKey?: string }) {
+function managerFor(
+  custody: 'COSIGNED' | 'SELF_CUSTODY',
+  org: { threshold: number; userIds: string[]; deviceKey?: string },
+  options: { enrolled?: boolean } = {},
+) {
+  const relayed: string[] = [];
+  const devices = options.enrolled === false ? [] : [{ id: 'dev-1', publicKey: DEVICE }];
   const users = org.userIds.map((userId) => ({
     userId,
     apiKeys: [{ credential: { publicKey: userId === 'tk-user' ? (org.deviceKey ?? DEVICE) : OTHER } }],
@@ -17,12 +23,13 @@ function managerFor(custody: 'COSIGNED' | 'SELF_CUSTODY', org: { threshold: numb
   const manager = new CosignManager({
     api: {
       GET: async () => ({
-        data: { content: { subOrgId: 'sub-org-1', endUserId: 'tk-user', custody, quorumState: null, devices: [] } },
+        data: { content: { subOrgId: 'sub-org-1', endUserId: 'tk-user', custody, quorumState: null, devices } },
       }),
-      POST: async (path: string) =>
-        path === '/cosign/relay'
-          ? { data: { content: { status: 200, body: { organizationData: { rootQuorum: org, users } } } } }
-          : { data: { content: { quorumState: 'VERIFIED' } } },
+      POST: async (path: string) => {
+        if (path !== '/cosign/relay') return { data: { content: { quorumState: 'VERIFIED' } } };
+        relayed.push(path);
+        return { data: { content: { status: 200, body: { organizationData: { rootQuorum: org, users } } } } };
+      },
     } as never,
     keyManager: {} as never,
     logger: { warn: () => undefined, info: () => undefined, error: () => undefined, debug: () => undefined } as never,
@@ -32,7 +39,7 @@ function managerFor(custody: 'COSIGNED' | 'SELF_CUSTODY', org: { threshold: numb
   const m = manager as unknown as { stamp: (body: string) => Promise<string>; publicKeyHex: () => Promise<string> };
   m.stamp = async () => 'stamp';
   m.publicKeyHex = async () => DEVICE;
-  return manager;
+  return Object.assign(manager, { relayed });
 }
 
 test('a co-signed wallet is a 2-of-2 with this device registered', async () => {
@@ -69,4 +76,15 @@ test('a device Turnkey does not list on the user is not registered, whatever the
   });
   assert.equal(report.ok, false);
   assert.equal(report.deviceRegistered, false);
+});
+
+test('a device that is not one of the user devices reads nothing and says so', async () => {
+  const manager = managerFor('COSIGNED', { threshold: 2, userIds: ['tk-user', 'tk-approver'] }, { enrolled: false });
+  const report = await manager.inspectQuorum({ report: false });
+  assert.equal(report.ok, false);
+  assert.equal((report as { code?: string }).code, 'DEVICE_NOT_ENROLLED');
+  assert.equal(report.deviceRegistered, false);
+  assert.equal(report.threshold, undefined);
+  assert.deepEqual(manager.relayed, []);
+  assert.equal(await manager.isDeviceEnrolled(), false);
 });

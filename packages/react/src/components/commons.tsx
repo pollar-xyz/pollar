@@ -1,6 +1,7 @@
+import { useInheritedLanguage } from '../language-context';
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 
-import type { PollarLogger, StellarNetwork, WalletChain } from '@pollar/core';
+import type { PollarLanguage, PollarLogger, StellarNetwork, WalletChain } from '@pollar/core';
 import {
   Component,
   useEffect,
@@ -16,6 +17,7 @@ import {
   LOGO_POLLAR_WORDMARK_ON_DARK,
   LOGO_POLLAR_WORDMARK_ON_LIGHT,
 } from '../constants';
+import { COMMONS_COPY } from './commons-copy';
 
 declare const __POLLAR_VERSION__: string;
 
@@ -62,10 +64,11 @@ export function ModalLogo({ logoUrl }: { logoUrl?: string | null | undefined }) 
   );
 }
 
-export const PollarModalFooter = () => {
+export const PollarModalFooter = ({ language: languageProp }: { language?: PollarLanguage | undefined }) => {
+  const language = useInheritedLanguage(languageProp);
   return (
     <div className="pollar-footer">
-      <span className="pollar-footer-protected">Protected by</span>
+      <span className="pollar-footer-protected">{COMMONS_COPY[language].protectedBy}</span>
       <img src={LOGO_POLLAR_WORDMARK_ON_LIGHT} alt="Pollar" className="pollar-footer-logo pollar-logo-on-light" />
       <img src={LOGO_POLLAR_WORDMARK_ON_DARK} alt="Pollar" className="pollar-footer-logo pollar-logo-on-dark" />
       <span className="pollar-footer-version">v{__POLLAR_VERSION__}</span>
@@ -134,10 +137,13 @@ interface CopyButtonProps {
   label?: string;
   /** Extra class (e.g. `pollar-copy-btn-sm` for the compact issuer variant). */
   className?: string;
+  language?: PollarLanguage | undefined;
 }
 
 /** Self-contained copy-to-clipboard icon button with a transient "copied" tick. */
-export function CopyButton({ value, label = 'Copy', className }: CopyButtonProps) {
+export function CopyButton({ value, label, className, language: languageProp }: CopyButtonProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = COMMONS_COPY[language];
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -165,7 +171,7 @@ export function CopyButton({ value, label = 'Copy', className }: CopyButtonProps
       type="button"
       className={`pollar-copy-btn${className ? ` ${className}` : ''}`}
       onClick={handleCopy}
-      aria-label={copied ? 'Copied' : label}
+      aria-label={copied ? copy.copied : (label ?? copy.copy)}
     >
       {copied ? (
         <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
@@ -191,9 +197,11 @@ interface ModalStatusBannerProps {
   status: StateStatus;
   onCancel?: (() => void) | undefined;
   onRetry?: (() => void) | undefined;
+  language?: PollarLanguage | undefined;
 }
 
-export function ModalStatusBanner({ message, status, onCancel, onRetry }: ModalStatusBannerProps) {
+export function ModalStatusBanner({ message, status, onCancel, onRetry, language: languageProp }: ModalStatusBannerProps) {
+  const language = useInheritedLanguage(languageProp);
   if (!message && status === 'NONE') {
     return <div className="pollar-status" />;
   }
@@ -220,12 +228,12 @@ export function ModalStatusBanner({ message, status, onCancel, onRetry }: ModalS
       <span>{message}</span>
       {isLoading && onCancel && (
         <button type="button" className="pollar-status-cancel" onClick={onCancel}>
-          Cancel
+          {COMMONS_COPY[language].cancel}
         </button>
       )}
       {status === 'ERROR' && onRetry && (
         <button type="button" className="pollar-status-cancel" onClick={onRetry}>
-          Retry
+          {COMMONS_COPY[language].retry}
         </button>
       )}
     </div>
@@ -280,12 +288,13 @@ export function useStickyData<T>(data: T | null): T | null {
  * (and readable) underneath. Covers the whole card, so nothing can be clicked
  * against data that is about to change.
  */
-export function BusyOverlay({ label = 'Loading…' }: { label?: string }) {
+export function BusyOverlay({ label, language: languageProp }: { label?: string; language?: PollarLanguage | undefined }) {
+  const language = useInheritedLanguage(languageProp);
   return (
     <div className="pollar-busy-overlay" aria-busy="true" aria-live="polite">
       <div className="pollar-busy-overlay-inner">
         <div className="pollar-spinner" />
-        <span>{label}</span>
+        <span>{label ?? COMMONS_COPY[language].loading}</span>
       </div>
     </div>
   );

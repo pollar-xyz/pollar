@@ -54,13 +54,21 @@ function priceOf(prices: readonly UsdPrice[], chain: UsdPrice['chain'], asset: s
 
 /**
  * What a signature moves, in USD, or null when it cannot be read: only a
- * payment the SDK builds itself names its asset and amount. Anything else (a
- * raw transaction, a swap, a contract call) is null and always asks.
+ * payment the SDK builds itself names its asset and amount, and so does an
+ * auth entry for a token transfer whose contract is a priced Stellar asset
+ * (`details.assetKey`). Anything else (a raw transaction, a swap, a contract
+ * call) is null and always asks.
  */
 export function usdValueOf(
   request: Pick<ConfirmationRequest, 'kind' | 'network' | 'operation' | 'details'>,
   prices: readonly UsdPrice[],
 ): number | null {
+  if (request.kind === 'sign_auth_entry' && request.operation === 'transfer' && request.details) {
+    const { amount, assetKey } = request.details as { amount?: unknown; assetKey?: unknown };
+    if (typeof amount !== 'string' || !/^\d+(\.\d+)?$/.test(amount) || typeof assetKey !== 'string') return null;
+    const price = priceOf(prices, 'STELLAR', assetKey);
+    return price ? Number(amount) * Number(price.usd) : null;
+  }
   if (request.kind !== 'build_sign_submit' || request.operation !== 'payment' || !request.details) return null;
   const { amount, asset, mint } = request.details as { amount?: unknown; asset?: unknown; mint?: unknown };
   if (typeof amount !== 'string' || !/^\d+(\.\d+)?$/.test(amount)) return null;

@@ -1,5 +1,473 @@
 # Changelog
 
+## 0.12.1
+
+> `@pollar/core`, `@pollar/react` and `@pollar/react-native`. Additive on top of
+> 0.12.0: Soroban auth entries signed by the Pollar wallet for x402 and other
+> sponsored-fee flows, co-signed wallets signing those entries, hash memos,
+> swaps on Solana, every modal in English, Spanish and Portuguese, conditional
+> KYC form fields, ramp texts that name a route's limit, card funding from
+> Solana and from co-signed wallets, a transaction review with a fee badge in
+> every approval and status screen, and fixes. One call
+> an app may already make changes: `signAuthEntry` now passes the signature
+> confirmation (below). The Stellar Wallets Kit and
+> Solana Wallet Standard adapters stay at `0.12.0`; their `^0.12.0` core range
+> accepts 0.12.1.
+
+- **x402 and sponsored-fee flows sign with the Pollar wallet.**
+  `client.stellar.authEntrySigner()` is a SEP-43 signer over the user's wallet,
+  the one stellar-sdk's contract client and x402's `ExactStellarScheme` take
+  (`new ExactStellarScheme(client.stellar.authEntrySigner(), { url })`). It
+  rebuilds the entry from the preimage stellar-sdk hands it, signs it through
+  `signAuthEntry` (the app's allowlist, the validity window, a co-signed
+  wallet's vote) and returns the raw signature; a preimage for another network
+  or an entry signed to another expiration is refused. `createAuthEntrySigner`
+  is exported for a client built elsewhere.
+- A wallet adapter can answer `{ unsignedAuthEntry, validUntilLedger, complete }`
+  instead of `{ unsignedTransaction }`: the React and React Native adapter hooks
+  sign the entry without submitting anything and pass it to `complete`, whose
+  result is the call's outcome (`isAuthEntryAdapterStep`,
+  `completeAuthEntryStep`).
+- **A co-signed wallet signs Soroban auth entries.** `signAuthEntry` on a
+  Turnkey wallet follows sdk-api's 202: the device recomputes the entry's hash
+  (the Soroban authorization preimage, read field by field), refuses an entry
+  for another account, one already signed or one without address credentials,
+  votes on the `AUTH_ENTRY` request, and returns the signed entry
+  (`cosign_pending` under `cosignManual`).
+- The x402 signer refuses a wallet whose signing key is not its address (a
+  wallet moved to Turnkey keeps its address and signs with its Turnkey key),
+  and says why, instead of the network failing later with "signature doesn't
+  match payload".
+- **`signAuthEntry` passes the signature confirmation**, like every other
+  signature, so an x402 payment no longer signs without asking on an app that
+  says to ask. A token `transfer` whose contract is the Stellar asset contract
+  of a priced asset shows its destination, amount and asset in
+  `<ConfirmModal>` (`kind: 'sign_auth_entry'`, `operation: 'transfer'`) and
+  counts its USD value against a window; any other entry asks. An agent that
+  pays unattended sets the app to `AUTO`, or `WINDOW` with a USD cap; a headless
+  client under `'prompt'` gets `SDK_CONFIRMATION_UNAVAILABLE`.
+- **Hash memos.** A Stellar send takes `memo: { type: 'hash', value }`, 32 bytes
+  as 64 hex characters, so an app can anchor a digest (a SHA-256 receipt).
+  `<SendModal>` offers Hash next to Text and ID.
+- **Swaps on Solana.** `getSolanaSwapConfig()` lists the app's Solana venues
+  (Jupiter and Titan, mainnet only);
+  `getSolanaSwapQuote({ inputMint, outputMint, amount, provider?, slippageBps? })`
+  quotes from the user's Solana wallet, amounts in base units of each mint,
+  best output first; and
+  `swapSolana(quote)` asks for the signature confirmation like `sendPayment`,
+  then has the backend build the quoted route for the user's wallet, refusing
+  one whose simulation pays less than its minimum. A co-signed wallet approves
+  it on the device, an external wallet signs it in the connected wallet;
+  custodial wallets cannot swap on Solana. `getSwapQuote` and `swap` stay
+  Stellar and unchanged; the Solana types are `SolanaSwapQuote`,
+  `SolanaSwapQuoteParams` and the rest. The React and React Native contexts
+  expose the three methods.
+- `<SwapModal>` swaps on Solana too. With venues on both chains a Network
+  selector picks between them; on Solana it sells what the Solana wallet holds,
+  buys SOL or a token the app enabled, shows the route's output and minimum,
+  and links the swap to Solscan.
+- A co-signed device recognizes a Solana swap before it votes: the swap must
+  call a known router (Jupiter v6, Titan), be paid and signed by the user
+  alone and stay under the fee cap, and beside the router it may only create,
+  wrap into, sync or close the user's own token accounts.
+- A transaction-state listener that throws no longer fails the transaction:
+  each `onTransactionStateChange` listener is isolated and its error logged, and
+  a throw on the subscribe replay keeps the unsubscribe handle.
+- `@pollar/core` learns the DPoP clock offset only from answers that cannot come
+  from the browser cache: a non-GET/HEAD request, or a 401 (the `iat-skew`
+  rejection of a GET, whose retry still uses it). A cached GET carries the
+  `Date` of the moment it was stored; learning from it pinned every proof's
+  `iat` to that moment, and each later request failed with
+  `SDK_AUTH_DPOP_INVALID` until the page was reloaded.
+- **A route refused for its amount says the minimum or maximum it takes.** A
+  `LIMIT_BELOW_MINIMUM` or `LIMIT_ABOVE_MAXIMUM` rejection carries
+  `failure.limit` (`RampQuoteLimit`: `min`, `max`, `side`, `currency`) and
+  `rampResolutionText` words it ("This route takes at least 1,450 ARS. Try a
+  larger amount."). `rampNoRouteText` says there is no route for the currency
+  and asset when nothing was rejected, instead of asking for another amount.
+  The React and React Native ramp widgets label the dead-end button "Change
+  amount" when a route asks for another amount.
+- **A failed order whose price changed offers a new quote.** When an order
+  fails with `accept_new_quote` (the provider's price moved before anything was
+  sent), the React and React Native ramp widgets show "Get a new quote", which
+  quotes the same amount again and shows the routes, instead of "Try again",
+  which would resend the stale order.
+- **`openRampModal` takes where the widget opens.** In `@pollar/react`,
+  `openRampModal({ direction, country, fiat, asset, amount })` opens the ramp
+  widget on that direction and country, the way `openKycModal` takes `country`
+  (`openRampModal({ country: 'BR', direction: 'sell' })`). The options are a
+  starting point the user can change. A country that does not route in that
+  direction, or that the app does not offer, opens on the default country,
+  without throwing; options given while the routes load apply once they arrive;
+  each call drops the options of the one before, and `openRampModal()` opens as
+  it always did. `RampModalOptions` is exported, and `<RampWidget>` takes the
+  same options as `initial`.
+- **The other modals take where they open, and report back.** In
+  `@pollar/react`, `openSendModal`, `openSwapModal`, `openEarnModal`,
+  `openReceiveModal`, `openTxHistoryModal` and `openCardModal` take options,
+  with the same contract as `openRampModal`: a starting point the user can
+  change, an option the app or wallet cannot use left out, data that loads
+  late picked up when it arrives, and each call dropping the options of the
+  one before. Send takes `chain`, `asset`, `destination`, `amount`, `memo`
+  and `memoType`; swap `chain`, `sell`, `buy` and `amount`; earn `provider`,
+  `opportunityId`, `tab` and `amount`; receive and history `chain`; the card
+  modal `panel: 'fund'`, `amount` and `chain`. Send, swap and earn call
+  `onSuccess({ hash })` once the transaction lands, and the card modal
+  `onFunded(funding)` for each funding sent. `@pollar/react-native` takes
+  the same options, and its panels gain what that needs: a memo with its
+  type on a Stellar send, Solana swaps with a network picker, deposit and
+  withdraw tabs in Earn, and a network picker in the history, whose rows
+  open each chain's explorer. The React Native swap also sells what the
+  wallet holds with **Max**, quotes with the best price or one venue, and on
+  Stellar buys the app's enabled assets, the catalog and a token the user
+  adds, saying when the swap creates a trustline. The option types are
+  exported from both packages.
+- The email code boxes are named in the modal's language ("Dígito 2 de 6")
+  for screen readers, instead of always in English.
+- **The modals follow a language that changes at runtime.**
+  `<PollarProvider language={tag}>` (a BCP 47 tag) is read on every render,
+  unlike `client`, so open and later modals switch with the app's language
+  without remounting the provider. `client.setLocale(tag)` does the same from
+  outside React (`onLocaleChange(cb)` reports it), and `config.locale` stays
+  the starting value. The order is unchanged around it: the dashboard's pin,
+  then a modal's own `language`, then the provider's, then the client's
+  `locale`, then the browser; a tag the modals lack is skipped. React Native's
+  `<PollarProvider language>` does the same without replacing the client,
+  which a changed `config.locale` does.
+- The React and React Native ramp widgets name each country in the modal's
+  language ("Bolivia", "Bolívia"), sorted by name, instead of its ISO code.
+  `countryName(code, language)` in `@pollar/core` names it with the engine's
+  `Intl.DisplayNames`, and on Hermes, which lacks it, with a table of every
+  region in English, Spanish and Portuguese (`scripts/generate-country-names.cjs`
+  writes it from Node's Intl).
+- A route dropped for a missing trustline names the asset it delivers ("Your
+  Stellar wallet must trust ARS to receive it."), instead of always saying
+  USDC.
+- `RampAdapterQuoteRequest` carries `payee`: the quote taken right before an
+  order has the payee the user gave.
+- Base64 padding is stripped by index in the auth-entry and Stellar hash
+  decoders, which read input from outside: the regular expression it replaces
+  took half a second on a long run of `=` (CodeQL `js/polynomial-redos`).
+- **Every modal in English, Spanish and Portuguese.** The language is, in
+  order: the one the app pins in the dashboard (Branding > Language, returned
+  as `styles.language` by `/applications/config`), the `language` prop of
+  `<RampWidget>`, `<KycModal>`, `<RequirementFormModal>`, `<RegistryCheckModal>`
+  and `<ProviderRegistrationModal>` (every exported template takes one too), the
+  client's `locale` (`new PollarClient({ apiKey, locale: 'pt-BR' })`,
+  any BCP 47 tag), then the browser or device language; English when none is
+  one the modals have. The provider resolves it once and every modal, shared
+  block (footer, copy button, amount field, pickers) and exported template
+  under it follows it; a template rendered outside a provider uses the device
+  language. React Native's `FeaturePanel`, `FeatureExample`, `AppShell` and
+  `AccountOnboarding` are translated too, and `AppShell`'s language toggle
+  cycles through the three.
+- `@pollar/core` exports `resolveLanguage`, `languageFromTag`, `localizedText`
+  and the `PollarLanguage` type, and `client.getLocale()`. The functions that
+  write user-facing text take a trailing optional language (`'en'` by default,
+  so their output is unchanged without it): `transactionErrorMessage`,
+  `cosignRefusalMessage`, `appUnavailableMessage`, `resolveAuthError`, every
+  ramp text (`rampLegTitle`, `rampStepTitle`, `rampStepStatusText`,
+  `rampNextApproval`, `rampFieldError`, `rampResolutionText`,
+  `rampOrderResolutionText`, `rampRequirementCopy`, `rampTrustlineErrorText`,
+  `rampNoRouteText`, `describeRampAction`, `rampWalletStep`, `rampLegNote`), and
+  `rampRailLabel` takes `pt`. `authErrorMessage(code, language)` gives the text
+  of a backend auth error code.
+- **KYC forms in Portuguese, with conditional fields.** A form field's label,
+  help and option labels may carry `pt`; without it the form shows the Spanish
+  one, then the English one. A field with `showIf: { key, in }` is asked only
+  while the earlier select, multiselect or checkbox it names answers one of those
+  values (`'true'` or `'false'` for a checkbox): `<RequirementFormModal>` shows
+  and hides it as the user answers, and neither checks nor sends it while
+  hidden.
+- **The card modal copies the card details.** Next to the card number and the
+  CVC while the details are shown, and next to the expiry date always; the
+  number is copied without spaces and the expiry as `MM/YY`.
+- **Fund the card from Solana.** `fundCard({ amount, chain: 'SOLANA' })` sends
+  the USDC from the user's Solana wallet straight to the provider's Solana
+  address, with no bridge; without `chain` it stays Stellar. A custodial wallet
+  pays on the server; an external one (Phantom, Solflare) signs the transfer
+  the backend built and `fundCard` submits it (`cancelled` when the wallet
+  declines). A Solana funding
+  goes `CREATED`, `SENT`, `CREDITED` (`CardFunding.chain`, `sourceTxHash`, new
+  status `SENT`). `<CardModal>` offers a network picker when the user holds a
+  wallet on both chains, reads the balance on the one picked, and shows each
+  funding's own steps.
+- **A co-signed wallet funds the card.** `fundCard` on a Turnkey wallet, on
+  either chain, follows sdk-api's 202: the device votes on the payment and the
+  call returns the funding as the server reads it after the send
+  (`cosign_pending` under `cosignManual`, `cancelled` when the user rejects it).
+  Requires sdk-api with the v3 funding routes.
+- **A funding is not paid twice.** `fundCard` takes an `idempotencyKey`, one
+  per funding the user means to make: a retry with the same key (a double
+  click, a response that never arrived) returns the funding the key already
+  started, as it stands, instead of paying again; a new funding needs a new
+  key, and a funding that failed stays failed under its key. `<CardModal>`, web
+  and React Native, keeps one key per attempt and drops it once the server
+  answers. Requires an sdk-api that accepts `idempotencyKey` on
+  `POST /v3/cards/funding`.
+- **Pollar finds the funding route.** `getCardFundingRoutes()` lists the chains
+  the user can fund the card from and how each reaches the provider: `DIRECT` on
+  a chain it credits, `CCTP` across to one, without a wallet of the user's on
+  that chain. `fundCard({ amount, chain })` takes any of them, Polygon included,
+  and signs every step of the burn the way the wallet signs: a co-signed wallet
+  votes here, an external one signs through `signBridgeStep` (by default the
+  handlers of `registerRampSigningHandler`). `<CardModal>` offers only those
+  chains and tells when the funding crosses. The app pays the network fees of
+  every route. `CardFunding` carries `depositChain`, `route` and
+  `bridgeTransferId`. Requires an sdk-api with `/v3/cards/funding/routes`.
+- `<CardModal>` opens from the stored card during a provider outage, says when
+  it cannot reach the service instead of showing a raw timeout, and offers
+  **Try again**. A funding's review names the card as the destination, not the
+  user's wallet, and a rejected funding reads as not sent.
+- `<CardModal>`, web and React Native, says why a funding failed in the
+  user's language (no SOL for the network fee, not enough USDC, the payment
+  not sent) instead of showing the wallet service's sentence, and a funding
+  the card provider has not credited after two hours reads "Taking longer than
+  usual" instead of crediting forever.
+- **Users on IPv6 accept the card provider's terms.** A provider that takes the
+  terms acceptance only from an IPv4 answers a request over IPv6 with
+  `SDK_CARDS_IP_NOT_SUPPORTED` and `ipv4BaseUrl`. `submitCardKyc` and the
+  registration step (`submitCardProviderRegistration`) then call
+  `GET /client-ip/attest` on that IPv4-only host, which signs the user's IPv4,
+  and send the acceptance once more with it in `x-pollar-ip-attestation`.
+  Nothing changes for the app. The error reaches it only when that host cannot
+  be reached, and the modals then say the connection could not be verified,
+  in place of the old advice to switch networks. Requires an sdk-api with
+  `/v3/client-ip/attest`.
+- **Move USDC between the user's own wallets on Stellar, Solana and Polygon.**
+  `client.bridge({ fromChain, toChain, amount, idempotencyKey })` moves it by
+  Circle CCTP in any direction between the three, on mainnet, about five
+  minutes end to end; `getBridgeConfig()` lists the directions the user holds
+  wallets for, `quoteBridge()` shows what arrives, Pollar's fee to the app and
+  how the wallet signs, and `pollBridgeTransfer()` follows it. A custodial
+  wallet burns at once; a co-signed one approves the request on its device; an
+  external Stellar wallet signs each step through `signBridgeStep(id, actionId)`,
+  which uses the ramp signing handlers (`registerRampSigningHandler`); an
+  external Solana wallet signs the burn the server built
+  (`SOLANA`/`solana-cctp-json`, base64, as `signSolanaTransaction` takes it),
+  and Pollar adds the fee payer's signature. `openBridgeModal()` /
+  `<BridgeModal>`, web and React Native, run the whole flow;
+  `openBridgeModal({ fromChain, toChain, amount, onSuccess })` opens it on a
+  direction and amount the user can still change, and `onSuccess` hears the
+  completed transfer once (`BridgeModalOptions`). The device's
+  check of a Solana burn now accepts `deposit_for_burn_with_hook` when the
+  request states the same hook data, which names the Stellar account Circle's
+  forwarder pays. Requires sdk-api with `/v3/bridge`.
+- **Approvals and transaction screens show what moves.** `<ConfirmModal>`,
+  `<CosignModal>` and every transaction status view (send, swap, earn, the
+  transaction modal), web and React Native, share one review: the asset and
+  chain logos, an arrow, and the user's wallet or the recipient; a fee badge
+  when who pays the fee is known; and "Show details", which unfolds the
+  addresses, network, fee, raw transaction and hash. Ramp steps draw the
+  `details.flow` sdk-api sends with the co-sign request. Chain logos load from
+  `pollar.xyz/chains` and asset logos from `pollar.xyz/tokens`; any other
+  asset shows its initial.
+- `TransactionState` carries `sponsored` on `signed`, `submitting`,
+  `submitted` and `success` once the sign or submit answer reports it (a
+  co-sign request's submit too), and keeps it for the later steps of the same
+  transaction; absent when the platform does not say. The review shows the fee
+  badge from it after the signature, and a co-sign outcome shows who paid.
+- `CosignRequest.appPaysFee` (a required boolean) is `true` when the fee payer
+  of the payload is not the user (the Stellar source or fee-bump source, the
+  first Solana key). `<CosignModal>` then shows "The app pays the network fee" before
+  the vote; any other request shows the badge only after the signature.
+- The email code input takes a one-time code the browser or keyboard
+  autofills, and spreads it across the six boxes; a paste, or a code typed next
+  to a digit already there, fills them the same way
+  ([#89](https://github.com/pollar-xyz/pollar/pull/89)).
+- **A ramp step on Polygon waits for its network fee instead of failing.** A
+  co-signed Polygon wallet pays its own gas with POL the app sends it, and a
+  ramp step is signed only once the wallet holds that transaction's fee.
+  sdk-api waits a few seconds for it on the refresh before the vote and answers
+  `SDK_COSIGN_GAS_PENDING` when it is still on its way; `approve()` asks the
+  refresh again, up to six times, and the refresh gets a 20s budget instead of
+  the 10s default. `<CosignModal>` keeps Approve enabled for that code, and
+  `transactionErrorMessage` has its text in English, Spanish and Portuguese.
+- **The modals work on top of the app's own modal.** Every `@pollar/react`
+  modal renders into `document.body` through a portal, marked
+  `data-react-aria-top-layer`, instead of inline inside the app's tree. A React
+  Aria or HeroUI modal makes everything outside itself `inert`, so a
+  `<ConfirmModal>` opened by a signature started from that modal showed on top
+  and took no clicks, and under `confirmation: 'prompt'` the signature waited
+  forever. React Aria now leaves the Pollar modal reachable and does not close
+  its own modal on a press inside it. The overlay also sets
+  `pointer-events: auto`, which a Radix modal turns off on body. A font or a
+  `--pollar-font-family` set on an element of the app around
+  `<PollarProvider>` no longer reaches the modals; set it on `:root` or
+  `.pollar-modal-card`. Notes for Radix and Headless UI modals are in the
+  `@pollar/react` reference.
+- **Earn on Solana.** `getSolanaEarnProviders()`,
+  `getSolanaEarnOpportunities()` and `getSolanaEarnPosition(opportunity)` read
+  the app's Solana opportunities and the user's position from their own Solana
+  wallet: `apy` is already the expected APY after fees, `profit` the gain after
+  fees, and `actions` what an opportunity takes right now.
+  `earnSolanaDeposit({ opportunity, amount })` and `earnSolanaWithdraw` ask for
+  the signature confirmation, then have the backend build the transaction: an
+  external wallet signs it and it is submitted under the same `idempotencyKey`,
+  a co-signed wallet approves it on the device. The wallet pays its own network
+  fee. Custodial and contract wallets are refused with
+  `SDK_EARN_WALLET_UNSUPPORTED`, an operation the opportunity does not take
+  with `SDK_EARN_ACTION_UNAVAILABLE` and an amount it does not take with
+  `SDK_EARN_AMOUNT_INVALID`, each worded in the three languages; a provider
+  that answers 503 is asked again a couple of times. The Stellar Earn calls are
+  unchanged; the Solana types are `SolanaEarnOpportunity`,
+  `SolanaEarnPosition`, `SolanaEarnTxParams` and the rest.
+- `<EarnModal>` earns on Solana too. With Earn on both chains a Network
+  selector picks between them (`openEarnModal({ chain: 'SOLANA' })` opens on
+  it); on Solana it shows the APY after fees, the position and what it earned,
+  and says when an opportunity does not take deposits or withdrawals right now.
+  The React Native Earn panel gains the same network picker.
+- **Earn approvals and results say what moves.** A co-sign request or a
+  signature confirmation for `earn_deposit` or `earn_withdraw`, web and React
+  Native, reads "Deposit into USDC vault" or "Withdraw from USDC vault" (the
+  opportunity's name, in English, Spanish and Portuguese) instead of the raw
+  operation, and draws the asset with its logo moving between the wallet and
+  the opportunity on its chain, with the amount and asset, the network, and the
+  opportunity's APY after fees in the details. The name and APY come from the
+  last opportunities list the app read (`getSolanaEarnOpportunities`,
+  `getEarnOpportunities`); a request for one it has not read reads "Withdraw
+  0.2 USDC". The fee line follows the request's `details.sponsored` (or its fee
+  payer): "The app pays the network fee" or "You pay the network fee", and
+  nothing before the build has said. The protocol behind an opportunity is
+  never shown. Every fee badge now reads "The app pays the network fee" next to
+  "You pay the network fee".
+- `<EarnModal>` picks the network with the chains' logos, shows the asset's
+  logo next to the opportunity and the amount, and its position card gives the
+  opportunity's name, what was deposited, what it earned after fees, the
+  position and the APY after fees. Its result says what happened ("Deposited
+  1 USDC into the USDC vault on Solana", "Deposit complete" as the title),
+  draws the deposit as the approval does, shows the position read again after
+  it landed, who paid the network fee, and the explorer link with the chain's
+  logo. `TxStatusView` takes a `review`, a `successMessage` and a
+  `successExtra` for that. The React Native Earn panel shows the same: the
+  chains' logos, the opportunity with its asset's logo, the position in words
+  instead of raw JSON, and the result with its review and explorer link.
+- **Solana swaps that deliver to Polygon.** `getSolanaSwapOptions()` returns the
+  Solana venues and `destinationChains`, the chains a swap can deliver to
+  besides Solana. `getSolanaSwapQuote({ ..., destinationChain: 'POLYGON' })`
+  quotes a route that pays the user's own Polygon wallet, with the ERC-20
+  address as `outputMint`. A quote may carry `feeBreakdown` (each charge by
+  kind) and `expiresAt`; `swapSolana` refuses a quote past it with
+  `SDK_SWAP_QUOTE_EXPIRED` before anything is built, and takes an
+  `idempotencyKey`. `getSwapStatus(idempotencyKey)` follows a cross-chain swap:
+  `status` stays `BUILT` after the Solana transaction lands and turns
+  `CONFIRMED` once the destination is paid; a settlement `HELD` is being
+  checked by support. A route the wallet cannot sign answers
+  `SDK_SWAP_SIGNER_UNSUPPORTED` (400) and one the platform refuses to sign
+  answers `SDK_SWAP_ROUTE_REFUSED` (422), each worded in the three languages.
+- `<SwapModal>` on Solana shows a Receive on selector when the app offers
+  another destination (`openSwapModal({ destinationChain: 'POLYGON' })`), lists
+  the app's tokens on that chain, shows each fee by kind with its label in the
+  modal's language, asks for a new price when the old one lapses, and after the
+  swap follows the delivery until the destination wallet is paid. USDC to USDC
+  across chains points to a transfer instead. The React Native swap panel
+  gains the destination picker and a Check delivery button.
+- **A co-signed device reads Earn, cross-chain swaps and EVM batches before it
+  votes.** An Earn transaction and a swap on the cross-chain venue are a third
+  party's: the device checks they are paid by the account the request names
+  (the wallet itself for Earn), signed by the user and that payer alone, under
+  the fee cap, burn nothing over CCTP, and that nothing at the top level moves
+  funds anywhere but into the protocol: beside compute budget and memos only the
+  user's own token accounts, SOL wrapped up to the amount the request moves, and
+  accounts closed back to the user. An `EVM_AUTHORIZATION` request is the
+  EIP-7702 tuple, delegating to Simple7702Account
+  (`0x4Cd241E8d1510e30b2076397afc7508Ae59C66c9`) on this network's chain, whose
+  digest (keccak256 of `0x05 || rlp([chainId, address, nonce])`) the device
+  recomputes and signs unhashed. A Polygon batch is the wallet calling itself
+  with `executeBatch`, exactly the `details.calls` it states, none of them to
+  the wallet or the delegate. The approval and confirmation screens show where
+  a cross-chain swap delivers and each call of a batch.
+- A co-signed device accepts an Earn transaction on Solana sponsored by the
+  app: `details.feePayer` names the sponsor and `details.sponsored` is `true`.
+  The device then checks the sponsor pays every account the transaction opens
+  at the top level (the user's token account, the lookup table, the lending
+  user metadata, obligation and farms state), never the user; a wrapped SOL
+  account closed back to the user in the same transaction may stay the user's
+  to fund. An Earn request paid by another account without `sponsored: true`
+  is refused, as before.
+- **Ramp payments by Pix code and by transfer reference.** A Pix code is labelled
+  "Pix copy and paste code" in the widget's language; a Pix code that arrives
+  without its image is still offered to copy (`describeRampAction(...).pasteCode`),
+  and the React Native widget draws its QR from the text. A bank transfer's
+  reference is shown as required, with a note to write it in the transfer's
+  description. A verification the provider is reviewing, with nothing to open,
+  is titled as in review. `rampQuoteFields(quote, language)` labels the Pix key
+  a sale pays out to in that language.
+- **An email the app refuses says why.** When sdk-api refuses the address on
+  `sendEmailCode` (a throwaway-inbox service on an app that blocks them, or an
+  address or domain on the blocklist), the auth state ends in the new
+  `EMAIL_NOT_ALLOWED` bucket with the backend `code`
+  (`EMAIL_DISPOSABLE_NOT_ALLOWED`, `EMAIL_BLOCKED`) instead of the generic
+  `EMAIL_SEND_FAILED`, and the login modals show the reason in their language:
+  use a permanent email or another sign-in method. Every other failure stays
+  `EMAIL_SEND_FAILED`, now also with its `code`.
+- **A device that is not enrolled is told to link itself.** Each browser origin
+  and app install holds its own co-signing key, so the same user on another
+  site or install starts out not enrolled. `client.cosign.isDeviceEnrolled()`
+  says whether this device's key is one of the wallet's devices, and
+  `inspectQuorum` answers `DEVICE_NOT_ENROLLED` without relaying and without
+  marking the sub-organization `BROKEN`. A co-signed signature from such a
+  device stops before stamping and ends in `SDK_COSIGN_DEVICE_NOT_ENROLLED`;
+  `client.onCosignDeviceNotEnrolled(cb)` fires on it. `<CosignModal>` disables
+  Approve and offers "Link this device", and the React and React Native
+  providers open the recovery modal on that outcome, for every modal that signs
+  and for direct app calls. Only co-signed signatures pay the extra read of the
+  devices.
+- **A wallet without a recovery method opens recovery.** sdk-api answers `409
+SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
+  method is asked for any signature but its setup, or for an on-ramp.
+  `client.onWalletRecoveryRequired(cb)` fires on it, and the React and React
+  Native providers open the recovery modal. Needs sdk-api from
+  pollar-platform#70.
+- After "Ask another device to add this one", the recovery modal (web and React
+  Native) reads the devices every 3 seconds while the request is open (15
+  minutes) and says "Device added." once this device is in.
+- Requirement forms answer `too_short` locally when a text answer is shorter
+  than `validation.minLength`, in the three languages, as the server does.
+- **A ramp adapter can renew a provider session.** `RampAdapter.renewal`
+  (optional, ramp adapter contract version 2) returns the sign-in that renews
+  the session an open order is read with, before it lapses. Pollar asks the
+  user for it while it keeps reading the order with the current session, and
+  hands the signature back through `continue` with the order's reference.
+- **A ramp provider's sign-in reads as "Confirm it's you".** A request for a
+  provider's sign-in (operation `provider_sign_in`, or `sep10` on requests
+  opened before) shows a shield and key, "Confirm it's you", why the payment
+  provider asks, and "No money moves", in en, es and pt, web and React Native.
+  Under the app's `'auto'` confirmation the device approves it itself, once it
+  has checked the transaction is a sign-in (sequence 0, data entries only, the
+  first one on the wallet's own account); every other ramp signature still
+  asks. The check badge reads "Checked" and no longer names the custody
+  provider.
+- **Signing prompts name the action.** The co-sign and confirmation prompts are
+  titled with the action and the logo of the asset with its chain in the
+  corner, instead of "Confirm with your device". A wallet activation reads
+  "Activate your wallet" and its fee badge says it is free. An approve request
+  reads "Allow moving 0.74 USDC", with a lead saying it is a permission and
+  nothing moves yet; the spender and its address are in the details. There is
+  one primary button, and rejecting sits at the end of the details after a "Why
+  am I seeing this?" note. A click outside does nothing, and the X (or Android
+  back) asks before leaving a request unsigned.
+- A co-signed device approves a Solana transfer of a Token-2022 mint (USDG,
+  PYUSD): the check follows the token program the transfer calls and derives
+  the recipient's account under it.
+- `<CardModal>` (web and React Native) says the service could not be reached
+  and offers Try again when its load fails. A funding step names the card as
+  its destination, and a rejected funding reads as not sent.
+- **The history shows ramp orders.** `fetchTxHistory` asks for
+  `includeRamps: 'true'` unless the caller passes `'false'`, so ramp orders come
+  in as `kind: 'ramp'` rows. The history modal shows a ramp row's fiat side,
+  says when it was refunded, and links to the explorer once it has a hash.
+- **One themed select.** `PollarSelect` replaces every native `<select>` in the
+  web modals (ramp, swap, send, earn, bridge, card, requirement forms, asset and
+  chain pickers): it follows the modal theme, groups options, shows a flag or a
+  logo per option and works from the keyboard. The ramp's step bar starts at
+  Route, with a back button to the amount, and the ramp shows the Pollar footer
+  like the other modals, web and React Native.
+- The custody migration intro speaks of account security and signing from this
+  device.
+- `@pollar/core`'s types are regenerated from sdk-api's v3 document.
+- `@pollar/react` and `@pollar/react-native` require `@pollar/core@^0.12.1`.
+
 ## `@pollar/migrate` 0.12.0
 
 > First release. A command that upgrades an app on any `@pollar` release from

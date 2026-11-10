@@ -1,4 +1,5 @@
 import type { CardHolder, CardRequirements, CardRequirementStep } from '@pollar/core';
+import type { CardCopy } from './card-copy';
 
 /**
  * A platform step the user must complete before a card provider: a KYC option, a
@@ -45,11 +46,11 @@ export function pendingFromRequirement(cardProviderId: string, next: CardRequire
 }
 
 /** What a step held for review or rejected says; null when the user can act on it. */
-export function blockedStepMessage(next: CardRequirementStep): string | null {
-  if (next.type === 'REGISTRY_CHECK' && next.status === 'pending') return 'Your details are under review.';
+export function blockedStepMessage(next: CardRequirementStep, copy: CardCopy['blocked']): string | null {
+  if (next.type === 'REGISTRY_CHECK' && next.status === 'pending') return copy.registryReview;
   if (next.type !== 'KYC') return null;
-  if (next.status === 'pending' && next.reviewReason) return 'Your verification is under review.';
-  if (next.status === 'rejected') return 'Your verification was not approved.';
+  if (next.status === 'pending' && next.reviewReason) return copy.kycReview;
+  if (next.status === 'rejected') return copy.kycRejected;
   return null;
 }
 

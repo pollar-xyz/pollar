@@ -8,6 +8,72 @@
   padding-bottom: 0.75rem;
 }
 
+.pollar-cosign-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.pollar-cosign-chain {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.pollar-cosign-mark {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.pollar-cosign-mark .pollar-txr-logo-sm {
+  width: 22px;
+  height: 22px;
+}
+
+.pollar-cosign-mark-chain {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--pollar-bg);
+  background: var(--pollar-bg);
+  object-fit: cover;
+}
+
+.pollar-cosign-item .pollar-cosign-chain {
+  width: 18px;
+  height: 18px;
+}
+
+.pollar-cosign-leave {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-bottom: 0.25rem;
+}
+
+.pollar-cosign-text-btn {
+  align-self: center;
+  padding: 0.25rem 0.5rem;
+  border: none;
+  background: none;
+  color: var(--pollar-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.pollar-cosign-text-btn:hover {
+  color: var(--pollar-text);
+  text-decoration: underline;
+}
+
 .pollar-cosign-muted {
   color: var(--pollar-muted);
   font-size: 0.85rem;
@@ -38,6 +104,10 @@
 .pollar-cosign-copy {
   margin-left: 0.15rem;
   vertical-align: middle;
+}
+
+.pollar-cosign-fee {
+  margin: 0.5rem 0 0;
 }
 
 .pollar-cosign-closing {
@@ -92,6 +162,10 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+/* Under a list of pending requests the frame ties the detail to the selected one. */
+.pollar-cosign-detail-grouped {
   padding: 1rem;
   border: 1px solid var(--pollar-border);
   border-radius: calc(var(--pollar-card-border-radius, 10px) + 2px);
@@ -135,32 +209,6 @@
   color: var(--pollar-text);
 }
 
-.pollar-cosign-rows {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.pollar-cosign-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  font-size: 0.9rem;
-}
-
-.pollar-cosign-row dt {
-  color: var(--pollar-muted);
-}
-
-.pollar-cosign-row dd {
-  margin: 0;
-  color: var(--pollar-text);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  word-break: break-all;
-}
-
 .pollar-cosign-verify {
   padding: 0.55rem 0.7rem;
   border-radius: var(--pollar-card-border-radius, 10px);
@@ -184,6 +232,19 @@
   font-size: 0.82rem;
 }
 
+.pollar-cosign-link {
+  display: block;
+  margin-top: 0.4rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .pollar-cosign-actions {
   display: flex;
   gap: 0.5rem;
@@ -197,6 +258,11 @@
   font-weight: 600;
   cursor: pointer;
   border: 1px solid var(--pollar-border);
+}
+
+.pollar-cosign-detail > .pollar-cosign-btn,
+.pollar-cosign-leave > .pollar-cosign-btn {
+  flex: none;
 }
 
 .pollar-cosign-btn:disabled {

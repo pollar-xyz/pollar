@@ -6,6 +6,7 @@ import type { OnStorageDegrade, Storage } from './storage/types';
 import type { VisibilityProvider } from './visibility/types';
 import { WalletAdapter, WalletId } from './wallets';
 import { stringField } from './api/error-fields';
+import type { AuthEntrySignerOptions, Sep43AuthEntrySigner } from './stellar/auth-entry-signer';
 
 export type PollarApplicationConfigResponse =
   pollarPaths['/auth/login']['post']['responses'][200]['content']['application/json'];
@@ -188,6 +189,14 @@ export interface PollarClientConfig {
   baseUrl?: string;
   apiKey: string;
   /**
+   * Language of the SDK's modals: a BCP 47 tag such as `'es'`, `'pt-BR'` or `'en'`,
+   * typically your app's own current language. A language pinned in the dashboard
+   * (Branding > Language) wins over it; with the dashboard on "device language" it
+   * applies, and without it the modals follow the browser or device. A tag the
+   * modals have no translation for is skipped.
+   */
+  locale?: string;
+  /**
    * Pluggable storage. Defaults to `defaultStorage()` on web (localStorage
    * with memory fallback). On RN you must inject one of the adapters from
    * `@pollar/core/adapters/expo` or `@pollar/core/adapters/react-native-keychain`.
@@ -358,8 +367,9 @@ export interface PollarClientConfig {
    *
    * Unset, the app's dashboard setting applies, and that defaults to
    * `'prompt'`. Set, the stricter of this and the dashboard setting applies.
-   * A ramp leg always asks, whatever the policy. The same code works on
-   * testnet and mainnet.
+   * A ramp leg always asks, whatever the policy, except a provider's sign-in,
+   * which moves nothing: `'auto'` approves it (`autoApproveSignIn`). The same
+   * code works on testnet and mainnet.
    */
   confirmation?: ConfirmationPolicy;
   /**
@@ -376,10 +386,12 @@ export type ConfirmationPolicy = 'auto' | 'prompt' | { window: { seconds: number
 /** What a signing call is about to do, shown to the user under `confirmation: 'prompt'`. */
 export interface ConfirmationRequest {
   id: string;
-  kind: 'sign' | 'sign_and_send' | 'build_sign_submit';
+  kind: 'sign' | 'sign_and_send' | 'build_sign_submit' | 'sign_auth_entry';
   network: 'STELLAR' | 'SOLANA' | 'POLYGON';
   /** The unsigned Stellar envelope, when the call carries one. */
   unsignedXdr?: string;
+  /** `sign_auth_entry`: the unsigned Soroban authorization entry (base64 XDR). */
+  authEntryXdr?: string;
   /** The build this signature completes, when the client built it. */
   buildData?: TxBuildContent;
   operation?: string;
@@ -472,6 +484,12 @@ export type CosignQuorumReport =
   | {
       ok: false;
       reason: string;
+      /**
+       * `DEVICE_NOT_ENROLLED`: this device's key is not one of the user's
+       * devices, so it cannot read the quorum nor vote. Says nothing about the
+       * wallet; the device must be added (another device, a passkey, the email).
+       */
+      code?: 'DEVICE_NOT_ENROLLED';
       custody?: CosignCustody;
       threshold?: number;
       rootUsers?: number;
@@ -689,6 +707,10 @@ export type TxBuildContent = Exclude<TxBuildResponse['content'], { chain: 'SOLAN
  *
  * On `error`, the `phase` discriminator tells the consumer *where* the
  * failure happened so modal UIs can offer "retry from this step" buttons.
+ *
+ * `sponsored` says whether the app paid the network fee. It appears once the
+ * platform reports it (the sign or the submit answer) and is carried to the
+ * later steps of the same transaction; absent when the platform did not say.
  */
 export type TransactionState =
   | { step: 'idle' }
@@ -696,17 +718,17 @@ export type TransactionState =
   | { step: 'building' }
   | { step: 'built'; buildData: TxBuildContent }
   | { step: 'signing'; buildData?: TxBuildContent }
-  | { step: 'signed'; buildData?: TxBuildContent; signedXdr: string; submissionToken?: string }
-  | { step: 'submitting'; buildData?: TxBuildContent; signedXdr?: string }
+  | { step: 'signed'; buildData?: TxBuildContent; signedXdr: string; submissionToken?: string; sponsored?: boolean }
+  | { step: 'submitting'; buildData?: TxBuildContent; signedXdr?: string; sponsored?: boolean }
   // --- Compound phases (embedded-only - backend swallows the boundaries) --
   | { step: 'signing-submitting'; buildData?: TxBuildContent }
   | { step: 'building-signing-submitting' }
   // --- Co-signed wallet: waiting for the user's device to vote --------------
   | { step: 'awaiting_cosign'; request: CosignRequest; buildData?: TxBuildContent }
   // --- Post-Horizon-ack, pre-ledger-confirm (shared) --------------------
-  | { step: 'submitted'; buildData?: TxBuildContent; hash: string }
+  | { step: 'submitted'; buildData?: TxBuildContent; hash: string; sponsored?: boolean }
   // --- Terminal success (shared) ----------------------------------------
-  | { step: 'success'; buildData?: TxBuildContent; hash: string }
+  | { step: 'success'; buildData?: TxBuildContent; hash: string; sponsored?: boolean }
   // --- Terminal failure with phase context ------------------------------
   | {
       step: 'error';
@@ -754,6 +776,9 @@ export type SignOutcome =
  */
 export type SignAuthEntryOutcome =
   | { status: 'signed'; signedAuthEntry: string }
+  // A co-signed (Turnkey) wallet with `cosignManual`, or a vote Turnkey has not
+  // settled yet: the request is what `client.cosign.approve()` takes.
+  | { status: 'cosign_pending'; request: CosignRequest }
   | { status: 'error'; details?: string; code?: string };
 
 // --- Stellar SEP ownership proofs (client.stellar.*) ----------------------------
@@ -794,7 +819,16 @@ export interface StellarSepApi {
   sep53: { signMessage(message: string): Promise<StellarMessageProof> };
   /** SEP-10: sign a web-auth challenge transaction (transaction ownership proof). */
   sep10: { sign(params: Sep10SignParams): Promise<Sep10Proof> };
+  /**
+   * A SEP-43 signer over the user's wallet, for libraries that sign Soroban auth
+   * entries themselves: stellar-sdk's contract client, x402's `ExactStellarScheme`.
+   * Each signature goes through {@link PollarClient.signAuthEntry}, so the app's
+   * allowlist, the validity window and a co-signed wallet's vote all apply.
+   */
+  authEntrySigner(options?: AuthEntrySignerOptions): Sep43AuthEntrySigner;
 }
+
+export type { AuthEntrySignerOptions, Sep43AuthEntrySigner };
 
 /**
  * A payment, addressed per chain.
@@ -867,6 +901,8 @@ export const AUTH_ERROR_CODES = {
    *  abandoned OAuth popup, or the session stuck in a non-terminal state). */
   LOGIN_TIMEOUT: 'LOGIN_TIMEOUT',
   EMAIL_SEND_FAILED: 'EMAIL_SEND_FAILED',
+  /** The app refuses this address: a throwaway-inbox service, or on Pollar's or the app's blocklist. */
+  EMAIL_NOT_ALLOWED: 'EMAIL_NOT_ALLOWED',
   EMAIL_VERIFY_FAILED: 'EMAIL_VERIFY_FAILED',
   EMAIL_CODE_EXPIRED: 'EMAIL_CODE_EXPIRED',
   EMAIL_CODE_INVALID: 'EMAIL_CODE_INVALID',
@@ -917,6 +953,8 @@ export type AuthState =
       previousStep: string;
       message: string;
       errorCode: AuthErrorCode;
+      /** The backend's own error code when it sent one (e.g. `EMAIL_DISPOSABLE_NOT_ALLOWED`). */
+      code?: string;
       clientSessionId?: string;
       email?: string;
     };
@@ -1231,6 +1269,11 @@ export type RampField = RampQuoteLeg['requiredFields'][number];
 export type RampQuoteRejection = RampQuotesResponse['rejected'][number];
 /** The verification step a dropped route waits on: complete it (KYC, form, registry check, registration), then quote again. */
 export type RampQuoteRequirement = NonNullable<RampQuoteRejection['requirement']>;
+/**
+ * The window a dropped route refused the amount against (`LIMIT_BELOW_MINIMUM` / `LIMIT_ABOVE_MAXIMUM`),
+ * in `currency`, on what its leg takes in or pays out (`side`). A null bound is no bound.
+ */
+export type RampQuoteLimit = NonNullable<RampQuoteRejection['failure']['limit']>;
 
 export type RampOrderRequest = NonNullable<pollarPaths['/ramps/orders']['post']['requestBody']>['content']['application/json'];
 /** An order with every leg, what it waits for (`pendingAction`) and when to read it again (`nextPollAfter`). */
@@ -1312,12 +1355,19 @@ export type DistributionRulesState =
 
 // --- Swap types (DEX/AMM) ------------------------------------------------------
 
-export type SwapQuoteBody = NonNullable<pollarPaths['/swap/quote']['post']['requestBody']>['content']['application/json'];
+// POST /swap/quote and GET /swap/config answer for Stellar, or for Solana when
+// the request says `chain: 'SOLANA'`. The unprefixed names are the Stellar side.
+type SwapQuoteRequest = NonNullable<pollarPaths['/swap/quote']['post']['requestBody']>['content']['application/json'];
+type AnySwapQuoteContent = pollarPaths['/swap/quote']['post']['responses'][200]['content']['application/json']['content'];
+type AnySwapQuote = AnySwapQuoteContent['quotes'][number];
+type AnySwapConfigContent = pollarPaths['/swap/config']['get']['responses'][200]['content']['application/json']['content'];
 
-export type SwapQuoteContent = pollarPaths['/swap/quote']['post']['responses'][200]['content']['application/json']['content'];
+export type SwapQuoteBody = Exclude<SwapQuoteRequest, { chain: 'SOLANA' }>;
 
-/** A single priced swap route, including a ready-to-run `build` payload. */
-export type SwapQuote = SwapQuoteContent['quotes'][number];
+/** A single priced Stellar swap route, including a ready-to-run `build` payload. */
+export type SwapQuote = Exclude<AnySwapQuote, { chain: 'SOLANA' }>;
+
+export type SwapQuoteContent = Extract<AnySwapQuoteContent, { quotes: SwapQuote[] }>;
 
 /** Route the caller requests: `auto` (best of every venue) or a concrete venue. */
 export type SwapProvider = NonNullable<SwapQuoteBody['provider']>;
@@ -1326,7 +1376,69 @@ export type SwapProvider = NonNullable<SwapQuoteBody['provider']>;
 export type SwapVenue = SwapQuote['provider'];
 
 /** Venues this app exposes to end-users (from GET /swap/config). Empty = disabled. */
-export type SwapConfigContent = pollarPaths['/swap/config']['get']['responses'][200]['content']['application/json']['content'];
+export type SwapConfigContent = Extract<AnySwapConfigContent, { venues: SwapVenue[] }>;
+
+/** A Solana quote request: mints and an integer amount in base units of the sold mint. */
+export type SolanaSwapQuoteBody = Extract<SwapQuoteRequest, { chain: 'SOLANA' }>;
+
+/**
+ * A priced Solana swap route (Jupiter or Titan). Amounts are base units of each
+ * mint. It carries no transaction: {@link PollarClient.swapSolana} has the route
+ * built for the user's wallet when the swap runs.
+ */
+export type SolanaSwapQuote = Extract<AnySwapQuote, { chain: 'SOLANA' }>;
+
+export type SolanaSwapQuoteContent = Extract<AnySwapQuoteContent, { quotes: SolanaSwapQuote[] }>;
+
+/** `auto` (best of the app's Solana venues) or a concrete one. */
+export type SolanaSwapProvider = NonNullable<SolanaSwapQuoteBody['provider']>;
+
+/** A Solana venue: `jupiter` or `titan`. */
+export type SolanaSwapVenue = SolanaSwapQuote['provider'];
+
+/** Solana venues this app exposes (GET /swap/config?chain=SOLANA). Empty = no swap on Solana. */
+export type SolanaSwapConfigContent = Extract<AnySwapConfigContent, { venues: SolanaSwapVenue[] }>;
+
+export type SolanaSwapBuildBody = NonNullable<pollarPaths['/swap/build']['post']['requestBody']>['content']['application/json'];
+
+/** Where a Solana swap delivers: the same chain, or the user's own wallet on another one. */
+export type SwapDestinationChain = NonNullable<SolanaSwapQuoteBody['destinationChain']>;
+
+/** What a quote's route charges, by kind (`routing`, `integrator`, `bridge_and_slippage`, `other`). */
+export type SolanaSwapFeeBreakdown = NonNullable<SolanaSwapQuote['feeBreakdown']>;
+export type SolanaSwapFeeCharge = SolanaSwapFeeBreakdown['charges'][number];
+
+/** The Solana venues and, when one of them reaches other chains, the chains a swap can deliver to. */
+export type SolanaSwapOptions = {
+  venues: SolanaSwapVenue[];
+  /** Chains other than Solana a swap can deliver to; empty when none. */
+  destinationChains: SwapDestinationChain[];
+};
+
+/**
+ * Where a built swap stands (GET /swap/status). A cross-chain swap carries
+ * `settlement`: `status` stays `BUILT` after the Solana transaction lands and
+ * turns `CONFIRMED` once the destination is final, `FAILED` if it failed or was
+ * refunded. A settlement `HELD` had no final answer in time and support is
+ * checking it.
+ */
+export type SwapStatus = pollarPaths['/swap/status']['get']['responses'][200]['content']['application/json']['content'];
+export type SwapSettlement = NonNullable<SwapStatus['settlement']>;
+
+/** Input to `client.getSolanaSwapQuote`; the wallet is the session user's own Solana wallet. */
+export type SolanaSwapQuoteParams = {
+  /** Mint sold; wrapped SOL (So11111111111111111111111111111111111111112) for SOL. */
+  inputMint: string;
+  /** Mint bought, or the ERC-20 contract address when `destinationChain` is `POLYGON`. */
+  outputMint: string;
+  /** Integer amount of `inputMint` in base units. */
+  amount: string;
+  provider?: SolanaSwapProvider;
+  /** Default 50 (0.5%). */
+  slippageBps?: number;
+  /** Deliver to the user's own wallet on this chain. Default `SOLANA`. */
+  destinationChain?: SwapDestinationChain;
+};
 
 /** Curated "buy" tokens the app opted into (from GET /swap/tokens). */
 export type SwapTokensContent = pollarPaths['/swap/tokens']['get']['responses'][200]['content']['application/json']['content'];
@@ -1480,20 +1592,47 @@ export interface CardSecrets {
 /** Optional on every cards call: which provider, when the app enabled more than one. */
 export type CardProviderParams = { cardProviderId?: string };
 
-export type CardFundingStatus = 'CREATED' | 'BURNED' | 'ATTESTED' | 'MINTED' | 'CREDITED' | 'FAILED';
+export type CardFundingStatus = 'CREATED' | 'SENT' | 'BURNED' | 'ATTESTED' | 'MINTED' | 'CREDITED' | 'FAILED';
+
+/** The chain the user's wallet pays a card funding from. */
+export type CardFundingChain = 'STELLAR' | 'SOLANA' | 'POLYGON';
+
+/** How a funding reaches the provider: a transfer on a chain it credits, or CCTP across to one. */
+export type CardFundingRouteKind = 'DIRECT' | 'CCTP';
+
+/** One chain the user can fund the card from, as {@link PollarClient.getCardFundingRoutes} lists it. */
+export interface CardFundingRoute {
+  source: CardFundingChain;
+  /** The chain the provider receives the USDC on. */
+  deposit: CardFundingChain;
+  route: CardFundingRouteKind;
+  /** The user's wallet that pays. */
+  wallet: string;
+}
 
 /**
- * One transfer from the user's Stellar wallet to the card's collateral. It moves
- * on its own once paid: CREATED (waiting for the payment) -> BURNED -> ATTESTED
- * -> MINTED -> CREDITED (the provider booked the deposit). FAILED carries `error`.
+ * One transfer from the user's wallet to the card's collateral. It moves on its
+ * own once paid. Across chains (`route` CCTP): CREATED (waiting for the payment)
+ * -> BURNED -> ATTESTED -> MINTED -> CREDITED (the provider booked the deposit).
+ * Straight to the provider's address (`route` DIRECT): CREATED -> SENT ->
+ * CREDITED. FAILED carries `error`.
  */
 export interface CardFunding {
   id: string;
   status: CardFundingStatus;
   amount: string;
   asset: string;
+  /** The chain the user's wallet pays from. */
+  chain: CardFundingChain;
+  /** The chain of `depositAddress`. */
+  depositChain: CardFundingChain;
+  route: CardFundingRouteKind;
+  /** The bridge transfer that moves it, when it runs on one; follow it with {@link PollarClient.getBridgeTransfer}. */
+  bridgeTransferId: string | null;
   depositAddress: string;
   chainId: number;
+  /** The user's transaction on `chain`, once there is one. */
+  sourceTxHash: string | null;
   stellarTxHash: string | null;
   burnTxHash: string | null;
   polygonMintTxHash: string | null;
@@ -1540,33 +1679,112 @@ export interface CardProviderRegistration {
 
 export type CardProviderRegistrationSubmitted = Pick<CardProviderRegistration, 'cardProviderId' | 'status'>;
 
-/** Outcome of {@link PollarClient.fundCard}: `cancelled` when the external wallet declined to sign. */
-export type CardFundingOutcome = { status: 'ok'; funding: CardFunding } | { status: 'cancelled'; funding: CardFunding };
+/**
+ * Outcome of {@link PollarClient.fundCard}: `cancelled` when the user declined
+ * to sign (an external wallet, or a co-signed wallet's request rejected), and
+ * `cosign_pending` when a co-signed wallet's request waits for the app to vote it
+ * (`cosignManual: true`); the funding goes on by itself once it is approved.
+ */
+export type CardFundingOutcome =
+  | { status: 'ok'; funding: CardFunding }
+  | { status: 'cancelled'; funding: CardFunding }
+  | { status: 'cosign_pending'; funding: CardFunding; request: CosignRequest };
+
+// --- Bridge (USDC between the user's own wallets, by CCTP) ---------------------
+
+type BridgeContent<P extends '/bridge/config' | '/bridge/transfers' | '/bridge/transfers/{transferId}'> =
+  pollarPaths[P]['get']['responses'][200]['content']['application/json']['content'];
+
+/** The chains a bridge joins: every direction between them, USDC only, mainnet only. */
+export type BridgeChain = 'STELLAR' | 'SOLANA' | 'POLYGON';
+/** GET /bridge/config: the directions the user can bridge in now. `available` is false on testnet. */
+export type BridgeConfig = BridgeContent<'/bridge/config'>;
+export type BridgeQuoteParams = { fromChain: BridgeChain; toChain: BridgeChain; amount: string };
+/**
+ * What a bridge delivers (`amountOut`, equal to `amountIn`: CCTP's Standard Transfer
+ * charges nothing), Pollar's fee to the app, and how the source wallet signs.
+ */
+export type BridgeQuote = pollarPaths['/bridge/quote']['post']['responses'][200]['content']['application/json']['content'];
+/**
+ * One bridge. PENDING -> (AWAITING_ACTION) -> BURNED -> ATTESTED -> COMPLETED, about
+ * five minutes end to end. FAILED: nothing moved. HELD: the USDC was burned and what
+ * followed failed; Pollar resolves it.
+ */
+export type BridgeTransfer = BridgeContent<'/bridge/transfers/{transferId}'>['transfer'];
+export type BridgeTransferStatus = BridgeTransfer['status'];
+export type BridgePendingAction = NonNullable<BridgeTransfer['pendingAction']>;
+/** A step the source wallet signs; the same chains and encodings as a ramp leg's SIGNATURE. */
+export type BridgeSignatureAction = Extract<BridgePendingAction, { kind: 'SIGNATURE' }>;
 
 // --- Earn types (yield vaults / lending) ---------------------------------------
 
-/** Providers this app exposes (from GET /earn/providers). Empty = Earn disabled. */
-export type EarnProvidersContent =
+// The /earn routes answer for Stellar, or for another chain when the request
+// names `chain`. The unprefixed names are the Stellar side.
+type AnyEarnProvidersContent =
   pollarPaths['/earn/providers']['get']['responses'][200]['content']['application/json']['content'];
+type AnyEarnOpportunitiesContent =
+  pollarPaths['/earn/opportunities']['get']['responses'][200]['content']['application/json']['content'];
+type AnyEarnOpportunity = AnyEarnOpportunitiesContent['opportunities'][number];
+type AnyEarnPosition = pollarPaths['/earn/position']['get']['responses'][200]['content']['application/json']['content'];
+type AnyEarnBuildBody = NonNullable<pollarPaths['/earn/build']['post']['requestBody']>['content']['application/json'];
+type AnyEarnBuildContent = pollarPaths['/earn/build']['post']['responses'][200]['content']['application/json']['content'];
+
+/** Providers this app exposes (from GET /earn/providers). Empty = Earn disabled. */
+export type EarnProvidersContent = Exclude<AnyEarnProvidersContent, { chain: 'SOLANA' }>;
 
 /** A concrete Earn provider. */
 export type EarnProviderId = EarnProvidersContent['providers'][number];
 
-export type EarnOpportunitiesContent =
-  pollarPaths['/earn/opportunities']['get']['responses'][200]['content']['application/json']['content'];
-
 /** A vault (DeFindex) or pool (Blend) the user can deposit into. */
-export type EarnOpportunity = EarnOpportunitiesContent['opportunities'][number];
+export type EarnOpportunity = Exclude<AnyEarnOpportunity, { chain: 'SOLANA' }>;
+
+export type EarnOpportunitiesContent = { opportunities: EarnOpportunity[] };
 
 /** The user's position (balance + APY) in a vault/pool (from GET /earn/position). */
-export type EarnPosition = pollarPaths['/earn/position']['get']['responses'][200]['content']['application/json']['content'];
+export type EarnPosition = Exclude<AnyEarnPosition, { chain: 'SOLANA' }>;
 
 /** Which unit a provider's withdraw amount is in: asset (Blend) or shares (DeFindex). */
 export type EarnWithdrawUnit = EarnPosition['withdrawUnit'];
 
-export type EarnBuildBody = NonNullable<pollarPaths['/earn/build']['post']['requestBody']>['content']['application/json'];
+export type EarnBuildBody = Exclude<AnyEarnBuildBody, { chain: 'SOLANA' }>;
 
-export type EarnBuildContent = pollarPaths['/earn/build']['post']['responses'][200]['content']['application/json']['content'];
+export type EarnBuildContent = Exclude<AnyEarnBuildContent, { chain: 'SOLANA' }>;
+
+/** A chain Earn serves besides Stellar. */
+export type EarnChain = 'SOLANA';
+
+/** Earn providers on Solana (GET /earn/providers?chain=SOLANA). Empty = no Earn on Solana. */
+export type SolanaEarnProvidersContent = Extract<AnyEarnProvidersContent, { chain: 'SOLANA' }>;
+export type SolanaEarnProviderId = SolanaEarnProvidersContent['providers'][number];
+
+/**
+ * A yield opportunity on Solana. `apy` is already the expected APY after fees,
+ * as a percentage (3.96 is 3.96%); `actions` says what it takes right now.
+ */
+export type SolanaEarnOpportunity = Extract<AnyEarnOpportunity, { chain: 'SOLANA' }>;
+
+/**
+ * The session user's position in a Solana opportunity. `profit` is the gain
+ * after fees in the asset (negative on a loss, null when unknown) and `apy` the
+ * expected APY after fees; `stale` means the figures are the last known ones.
+ */
+export type SolanaEarnPosition = Extract<AnyEarnPosition, { chain: 'SOLANA' }>;
+
+/** The body of a Solana Earn build. */
+export type SolanaEarnBuildBody = Extract<AnyEarnBuildBody, { chain: 'SOLANA' }>;
+
+/** A Solana Earn build for an external wallet: the unsigned transaction it signs as is. */
+export type SolanaEarnBuildContent = Extract<AnyEarnBuildContent, { chain: 'SOLANA' }>;
+
+/** Input to `client.earnSolanaDeposit` / `client.earnSolanaWithdraw`; the wallet is the session user's Solana wallet. */
+export type SolanaEarnTxParams = {
+  /** The opportunity `id`. */
+  opportunity: string;
+  /** Decimal amount of the opportunity's asset. */
+  amount: string;
+  /** Ties the build to its submit or co-sign request; one is made when absent. Reuse it to retry the same operation. */
+  idempotencyKey?: string;
+};
 
 /** The ready-to-sign payload a build returns. */
 export type EarnBuild = EarnBuildContent['build'];
@@ -1591,7 +1809,31 @@ export type EarnTxParams = {
 
 export type AdapterFn<TParams = unknown> = (params: TParams) => Promise<{ unsignedTransaction: string }>;
 
-export type PollarAdapter = Record<string, AdapterFn<any>>;
+/**
+ * What an adapter returns when the user authorizes a Soroban call instead of
+ * sending a transaction: someone else submits it and pays the fee (an x402
+ * facilitator, a contract that sponsors the gas). The adapter builds the
+ * entry, Pollar signs it and submits nothing, and `complete` carries on with
+ * the signed entry; whatever it returns is the call's result.
+ */
+export interface AuthEntryAdapterStep<TResult = unknown> {
+  /** Base64 XDR of the unsigned `SorobanAuthorizationEntry`. */
+  unsignedAuthEntry: string;
+  /** Absolute ledger the signature expires at; within the app's validity window. */
+  validUntilLedger: number;
+  complete: (signedAuthEntry: string) => Promise<TResult>;
+}
+
+export type AuthEntryAdapterFn<TParams = unknown, TResult = unknown> = (
+  params: TParams,
+) => Promise<AuthEntryAdapterStep<TResult>>;
+
+/** An auth-entry adapter call: what `complete` returned, or why nothing was signed. */
+export type AuthEntryAdapterOutcome<TResult = unknown> =
+  | { status: 'completed'; result: TResult }
+  | Exclude<SignAuthEntryOutcome, { status: 'signed' }>;
+
+export type PollarAdapter = Record<string, AdapterFn<any> | AuthEntryAdapterFn<any, any>>;
 
 export interface PollarAdapters {
   [key: string]: PollarAdapter;

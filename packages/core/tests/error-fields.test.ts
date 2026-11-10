@@ -2,7 +2,7 @@
 // Run with `npm test` in packages/core (or `npm run test:unit` at the root).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { apiErrorFields, isRecord, stringField } from '../src/api/error-fields';
+import { apiErrorFields, isRecord, responseErrorCode, stringField } from '../src/api/error-fields';
 
 test('the string fields of an error envelope are read, the rest ignored', () => {
   assert.deepEqual(
@@ -24,4 +24,15 @@ test('a nested field is read through its parent', () => {
   const body = { verification: { reason: 'payload mismatch' } };
   assert.equal(stringField(body.verification, 'reason'), 'payload mismatch');
   assert.equal(stringField(body, 'verification'), undefined);
+});
+
+test('the code of an error response is read without consuming its body', async () => {
+  const response = new Response(JSON.stringify({ success: false, code: 'SDK_WALLET_RECOVERY_REQUIRED' }), { status: 409 });
+  assert.equal(await responseErrorCode(response), 'SDK_WALLET_RECOVERY_REQUIRED');
+  assert.equal((await response.json()).code, 'SDK_WALLET_RECOVERY_REQUIRED');
+});
+
+test('a body that is not the JSON envelope has no code', async () => {
+  assert.equal(await responseErrorCode(new Response('<html>Bad gateway</html>', { status: 502 })), undefined);
+  assert.equal(await responseErrorCode(new Response(null, { status: 409 })), undefined);
 });

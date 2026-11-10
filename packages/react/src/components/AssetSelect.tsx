@@ -1,14 +1,18 @@
 'use client';
 
 // --- Shared asset picker ------------------------------------------------------
-// One asset <select> used by both the Send and Swap modals: groups options into
+// One asset picker used by both the Send and Swap modals: groups options into
 // "App assets" (enabled by the app) and "Other assets" (everything else, incl.
 // native XLM), shows a "- X available" suffix, and renders a skeleton shimmer
 // while loading. The parent auto-selects the first option, so there is no
 // "Select asset" placeholder in the normal flow.
 // -----------------------------------------------------------------------------
 
+import { useInheritedLanguage } from '../language-context';
+import type { PollarLanguage } from '@pollar/core';
 import type { ReactNode } from 'react';
+import { COMMONS_COPY } from './commons-copy';
+import { PollarSelect } from './PollarSelect';
 import './send-modal/SendModal.css';
 import './shared.css';
 
@@ -39,6 +43,7 @@ interface AssetSelectProps {
   /** Extra content rendered inside the field, below the select (e.g. a
    *  "+ Add a token" toggle). Hidden while loading. */
   children?: ReactNode;
+  language?: PollarLanguage | undefined;
 }
 
 function formatAmount(value: string): string {
@@ -46,8 +51,8 @@ function formatAmount(value: string): string {
   return isNaN(n) ? value : n.toLocaleString(undefined, { maximumFractionDigits: 7 });
 }
 
-const optionLabel = (o: AssetSelectOption): string =>
-  o.available !== undefined ? `${o.code} — ${formatAmount(o.available)} available` : o.code;
+const optionLabel = (o: AssetSelectOption, language: PollarLanguage): string =>
+  o.available !== undefined ? COMMONS_COPY[language].assetAvailable(o.code, formatAmount(o.available)) : o.code;
 
 export function AssetSelect({
   label,
@@ -57,10 +62,13 @@ export function AssetSelect({
   loading = false,
   loadingLabel,
   disabled = false,
-  appGroupLabel = 'App assets',
-  otherGroupLabel = 'Other assets',
+  appGroupLabel,
+  otherGroupLabel,
   children,
+  language: languageProp,
 }: AssetSelectProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = COMMONS_COPY[language];
   const appAssets = options.filter((o) => o.enabledInApp);
   const otherAssets = options.filter((o) => !o.enabledInApp);
 
@@ -77,34 +85,22 @@ export function AssetSelect({
           <div className="pollar-send-skeleton" />
         )
       ) : (
-        <select
-          className="pollar-input pollar-send-select"
+        <PollarSelect
           value={value}
           disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          {/* Only present before the parent auto-selects (or when there are no
-              options); hidden so it never shows in the open dropdown. */}
-          {value === '' && <option value="" disabled hidden />}
-          {appAssets.length > 0 && (
-            <optgroup label={appGroupLabel}>
-              {appAssets.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {optionLabel(o)}
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {otherAssets.length > 0 && (
-            <optgroup label={otherGroupLabel}>
-              {otherAssets.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {optionLabel(o)}
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </select>
+          aria-label={label}
+          onChange={onChange}
+          options={[
+            {
+              label: appGroupLabel ?? copy.appAssets,
+              options: appAssets.map((o) => ({ value: o.key, label: optionLabel(o, language) })),
+            },
+            {
+              label: otherGroupLabel ?? copy.otherAssets,
+              options: otherAssets.map((o) => ({ value: o.key, label: optionLabel(o, language) })),
+            },
+          ]}
+        />
       )}
       {!loading && children}
     </div>

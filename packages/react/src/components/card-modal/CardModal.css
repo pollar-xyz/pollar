@@ -73,6 +73,23 @@
   text-transform: uppercase;
 }
 
+.pollar-card-copy-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+/* On the card art the icon takes the card's text color, not the modal's muted one. */
+.pollar-card-copy {
+  color: inherit;
+  opacity: 0.8;
+}
+
+.pollar-card-copy:hover {
+  color: inherit;
+  opacity: 1;
+}
+
 .pollar-card-visual-bottom strong {
   font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-weight: 600;

@@ -119,8 +119,10 @@ const mock = {
   // HTTP status for /auth/session/resume (200 success; 403/410 = revoked;
   // 5xx/404 = transient/not-found).
   resumeStatus: 200,
-  // When non-zero, /tx/history responses carry a `Date` header offset from local
-  // time by this many seconds, to exercise DPoP clock-skew compensation.
+  // When non-zero, /tx/history and /auth/refresh responses carry a `Date` header
+  // offset from local time by this many seconds, to exercise DPoP clock-skew
+  // compensation. The client learns only from the refresh (a POST); a GET can
+  // come from the browser cache with a stale Date.
   serverDateOffsetSec: 0,
   // When true, the next /auth/refresh responds with a DPoP nonce challenge (401),
   // then succeeds on retry — to assert the retry resends the POST body.
@@ -128,8 +130,8 @@ const mock = {
   // When true, the next /tx/history returns a 500 whose body nests token material
   // — to assert it's redacted in the error log.
   txHistoryErrorWithToken: false,
-  // Raw `Date` header string to put on /tx/history responses (overrides the
-  // offset-based one). Used to test that an implausible Date is ignored.
+  // Raw `Date` header string to put on /tx/history and /auth/refresh responses
+  // (overrides the offset-based one). Used to test that an implausible Date is ignored.
   serverDateOverride: null,
   // Marker echoed as /tx/build content (buildData) so a test can tell which tx
   // a buildData belongs to.
@@ -182,7 +184,7 @@ globalThis.fetch = async (req) => {
         success: true,
         content: { token: { accessToken: 'NEW_AT', refreshToken: 'NEW_RT', expiresAt } },
       }),
-      { status: 200 },
+      { status: 200, headers: serverDateHeaders() },
     );
   }
   if (req.url.includes('/auth/session/resume')) {
@@ -221,12 +223,9 @@ globalThis.fetch = async (req) => {
     const cursor = new URL(req.url).searchParams.get('cursor');
     const d = (cursor && mock.txHistoryDelays[cursor]) || 0;
     if (d) await delay(d, req.signal);
-    const respHeaders = {};
-    if (mock.serverDateOverride) respHeaders.Date = mock.serverDateOverride;
-    else if (mock.serverDateOffsetSec) respHeaders.Date = new Date(Date.now() + mock.serverDateOffsetSec * 1000).toUTCString();
     return new Response(JSON.stringify({ success: true, content: { ok: true, cursor } }), {
       status: 200,
-      headers: respHeaders,
+      headers: serverDateHeaders(),
     });
   }
   // NOTE: check the compound custodial paths BEFORE /tx/build and /tx/submit —
@@ -272,6 +271,12 @@ globalThis.fetch = async (req) => {
   // tx/history, logout, everything else.
   return new Response(JSON.stringify({ success: true, content: {} }), { status: 200 });
 };
+
+function serverDateHeaders() {
+  if (mock.serverDateOverride) return { Date: mock.serverDateOverride };
+  if (mock.serverDateOffsetSec) return { Date: new Date(Date.now() + mock.serverDateOffsetSec * 1000).toUTCString() };
+  return {};
+}
 
 async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSec = 600, waitResume = true } = {}) {
   const storage = sdk.createMemoryAdapter();
@@ -622,7 +627,7 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
   }
 
   // ── O. DPoP iat compensates for a skewed server clock (#1) ─────────────────
-  console.log('\n── O. DPoP iat learns clock offset from Date header (#1) ─────');
+  console.log('\n── O. DPoP iat learns clock offset from an uncached Date header (#1) ─');
   {
     const decodeIat = (dpop) => JSON.parse(Buffer.from(dpop.split('.')[1], 'base64url').toString()).iat;
     const txDpop = () => mock.calls.find((c) => c.url.includes('/tx/history'))?.headers.dpop;
@@ -631,15 +636,22 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     mock.serverDateOffsetSec = 1000; // server clock reads 1000s "ahead" of this device
 
     mock.calls = [];
-    await client.fetchTxHistory(); // req1: offset not learned yet → iat ≈ local now
-    const iat1 = decodeIat(txDpop());
+    await client.fetchTxHistory(); // a GET: its Date may be a cached one, so nothing is learned
     mock.calls = [];
-    await client.fetchTxHistory(); // req2: offset learned from req1's Date header
-    const iat2 = decodeIat(txDpop());
+    await client.fetchTxHistory();
+    const iatAfterGet = decodeIat(txDpop());
+    await client.refresh(); // a POST: its Date comes from the server, so the offset is learned
+    mock.calls = [];
+    await client.fetchTxHistory();
+    const iatAfterPost = decodeIat(txDpop());
 
     const nowSec = Math.floor(Date.now() / 1000);
-    check('first proof iat ≈ local time (offset not yet learned)', Math.abs(iat1 - nowSec) < 5, iat1 - nowSec);
-    check('second proof iat shifted ≈ +1000s toward server time', Math.abs(iat2 - (nowSec + 1000)) < 5, iat2 - nowSec);
+    check('a GET Date teaches no offset (proof iat ≈ local time)', Math.abs(iatAfterGet - nowSec) < 5, iatAfterGet - nowSec);
+    check(
+      'a POST Date teaches it (proof iat shifted ≈ +1000s toward server time)',
+      Math.abs(iatAfterPost - (nowSec + 1000)) < 5,
+      iatAfterPost - nowSec,
+    );
     mock.serverDateOffsetSec = 0;
     client.destroy();
   }
@@ -788,8 +800,7 @@ async function makeClient(apiKey, { seed = true, accessToken = 'AT', expiresInSe
     mock.calls = [];
     const { client } = await makeClient('pk_race_U');
     mock.serverDateOverride = new Date(0).toUTCString(); // epoch — outside the 2020–2100 window
-    mock.calls = [];
-    await client.fetchTxHistory(); // response carries the bad Date → must be ignored
+    await client.refresh(); // a POST, which the client learns from: its bad Date must be ignored
     mock.calls = [];
     await client.fetchTxHistory(); // proof iat must still be ~local time, not poisoned
     const iat = decodeIat(txDpop());

@@ -1,5 +1,65 @@
 # Upgrade guide
 
+## 0.12.0 -> 0.12.1
+
+0.12.1 is additive on 0.12.0: x402 signing with the Pollar wallet
+(`client.stellar.authEntrySigner()`, the auth-entry adapter step), hash memos,
+swaps on Solana (and toward Polygon), Earn on Solana, USDC between the user's
+own wallets (`client.bridge`, `<BridgeModal>`), card funding from Solana and
+from co-signed wallets, modals in English, Spanish and Portuguese that open on
+options, and one transaction review in every approval and status screen. The
+[CHANGELOG](./CHANGELOG.md#0121) lists everything. Upgrade `@pollar/core`, `@pollar/react` and
+`@pollar/react-native` together: `@pollar/react@0.12.1` and
+`@pollar/react-native@0.12.1` require `@pollar/core@^0.12.1`. The adapters stay
+at `0.12.0`.
+
+`signAuthEntry` now passes the signature confirmation, like every other
+signature, so an x402 payment asks the user on an app that says to ask. An
+agent that pays unattended sets the app to `AUTO` in the dashboard, or
+`WINDOW` with a USD cap; a headless client under `'prompt'` with nothing
+subscribed to `client.onConfirmationRequest()` gets
+`SDK_CONFIRMATION_UNAVAILABLE`. See
+[Signature confirmation](#signature-confirmation).
+
+The modals now follow the language set in the dashboard (Branding > Language)
+or the browser's. To keep them in the language of your app, pass it as
+`locale` when you create the client (`new PollarClient({ apiKey, locale })`); a
+language pinned in the dashboard wins over it.
+
+React Native's `AppShell` and `AccountOnboarding` take `'pt'` in
+`settings.language`, and `AppShell`'s `label(key, language)` receives it: a
+`label` typed as `(key, language: 'en' | 'es') => string` no longer type-checks.
+Type the parameter as `PollarLanguage` (from `@pollar/core`).
+
+`CosignRequest` has a required `appPaysFee: boolean`. A test mock or fixture
+that builds a `CosignRequest` literal sets it (`false` keeps the fee badge for
+after the signature).
+
+An app that calls `fundCard` itself passes an `idempotencyKey`, one per funding
+the user means to make, and sends the same key when it retries that funding;
+without it a retry after a lost response can pay twice. `<CardModal>` already
+does this.
+
+`fetchTxHistory` asks for the user's ramp orders too (`includeRamps: 'true'`),
+so `txHistory` carries `kind: 'ramp'` rows (`operation` `onramp` or `offramp`,
+`id` the order id) next to the transactions, counted in `total`. A ramp row may
+have no hash yet, so key rows by `id`. An app that renders the history itself
+and wants transactions only passes `fetchTxHistory({ includeRamps: 'false' })`.
+
+A refused email on `sendEmailCode` ends in the new `EMAIL_NOT_ALLOWED` auth
+error code (with the backend `code`, `EMAIL_DISPOSABLE_NOT_ALLOWED` or
+`EMAIL_BLOCKED`) instead of `EMAIL_SEND_FAILED`. A `switch` over the auth error
+codes that checks it covers every case needs the new one.
+
+The React and React Native providers open the recovery modal on two outcomes:
+`SDK_WALLET_RECOVERY_REQUIRED` (a co-signed wallet without a recovery method,
+asked to sign) and `SDK_COSIGN_DEVICE_NOT_ENROLLED` (this browser origin or app
+install is not one of the wallet's devices). An app that already opens its own
+recovery screen on those codes drops it, or the user sees two. A headless app
+listens with `client.onWalletRecoveryRequired(cb)` and
+`client.onCosignDeviceNotEnrolled(cb)`, and can ask
+`client.cosign.isDeviceEnrolled()` before it offers to sign.
+
 ## 0.11.5 -> 0.12.0
 
 Use `@pollar/core`, `@pollar/react` and `@pollar/react-native` at matching
@@ -261,7 +321,8 @@ template uses.
 ### Signature confirmation
 
 The default is now `'prompt'`: every signing call waits for the user, whatever
-the wallet's custody, unless the app's dashboard says otherwise. A headless
+the wallet's custody, unless the app's dashboard says otherwise. From 0.12.1
+that includes `signAuthEntry`, and with it every x402 payment. A headless
 app with nothing subscribed to `client.onConfirmationRequest()` gets
 `SDK_CONFIRMATION_UNAVAILABLE` on every signature: subscribe, or mount the
 provider, which renders `<ConfirmModal>`.

@@ -25,7 +25,7 @@ const React = require('react');
 const { act } = React;
 const { createRoot } = require('react-dom/client');
 const { PollarClient, PollarApiError } = require('../packages/core/dist/index.js');
-const { PollarProvider, RampWidget } = require('../packages/react/dist/index.js');
+const { PollarProvider, RampWidget, usePollar } = require('../packages/react/dist/index.js');
 const h = React.createElement;
 
 const later = (seconds) => new Date(Date.now() + seconds * 1000).toISOString();
@@ -188,7 +188,7 @@ async function mount(client, application = {}) {
     );
     await new Promise((r) => setTimeout(r, 20));
   });
-  const button = (text) => [...container.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith(text));
+  const button = (text) => [...document.body.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith(text));
   const click = async (element) => {
     assert.ok(element, 'missing element');
     await act(async () => {
@@ -206,7 +206,8 @@ async function mount(client, application = {}) {
     await act(async () => root.unmount());
     container.remove();
   };
-  return { container, button, click, type, unmount };
+  // The widget portals into body, so that is where its content is.
+  return { container: document.body, button, click, type, unmount };
 }
 
 (async () => {
@@ -983,8 +984,166 @@ async function mount(client, application = {}) {
     client.destroy();
   }
 
+  // --- openRampModal(options) seeds the widget; a dead end or no options opens on the defaults ---
+  {
+    const brl = { kind: 'fiat', currency: 'BRL', rail: 'PIX', country: 'BR' };
+    const xlm = { kind: 'asset', code: 'XLM', identifier: null, chain: 'STELLAR' };
+    const routesFor = {
+      ONRAMP: [
+        { fiat: bob, asset: usdc, legs: ['PROVIDER_ONRAMP'] },
+        { fiat: brl, asset: xlm, legs: ['PROVIDER_ONRAMP'] },
+        { fiat: brl, asset: usdc, legs: ['PROVIDER_ONRAMP'] },
+      ],
+      // Brazil does not sell.
+      OFFRAMP: [{ fiat: bob, asset: usdc, legs: ['PROVIDER_OFFRAMP'] }],
+    };
+    let hold = null;
+    const { client, calls } = fixtureClient({
+      getRampRoutes: async (direction) => {
+        calls.push(['getRampRoutes', direction]);
+        if (hold) await hold;
+        return { routes: routesFor[direction] };
+      },
+    });
+    let ctx;
+    const Host = () => {
+      ctx = usePollar();
+      return null;
+    };
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const settle = () => act(async () => new Promise((r) => setTimeout(r, 20)));
+    await act(async () => {
+      root.render(
+        h(
+          PollarProvider,
+          { client, appConfig: { application: { name: 'Fixture', network: 'mainnet', chains: ['STELLAR'] }, styles: {} } },
+          h(Host),
+        ),
+      );
+    });
+    const open = async (options) => {
+      await act(async () => (options === undefined ? ctx.openRampModal() : ctx.openRampModal(options)));
+      await settle();
+    };
+    // A picker carries its value on `data-value`; an input on `value`.
+    const value = (id) => {
+      const el = document.querySelector(id);
+      return el?.dataset.value ?? el?.value;
+    };
+    const activeTab = () => document.querySelector('.pollar-tab[data-active="true"]')?.textContent.trim();
+
+    await open({ country: 'br', direction: 'buy', asset: 'USDC', amount: '50' });
+    assert.equal(value('#pollar-ramp-country'), 'BR', 'the seeded country');
+    assert.equal(value('#pollar-ramp-asset'), 'USDC:STELLAR:GA5Z', 'the seeded asset, not the country first one');
+    assert.equal(value('#pollar-ramp-amount'), '50');
+    assert.deepEqual(calls.at(-1), ['getRampRoutes', 'ONRAMP']);
+
+    await open({ country: 'BR', direction: 'sell' });
+    assert.deepEqual(calls.at(-1), ['getRampRoutes', 'OFFRAMP'], 'the reopen keeps the requested direction');
+    assert.equal(value('#pollar-ramp-country'), 'BO', 'a country that does not sell falls back to the default');
+    assert.equal(value('#pollar-ramp-amount'), '');
+
+    await open({ country: 'BR', fiat: 'BRL', amount: '75' });
+    await open();
+    assert.deepEqual(calls.at(-1), ['getRampRoutes', 'ONRAMP']);
+    assert.equal(value('#pollar-ramp-country'), 'BO', 'no options: the default country, nothing from the previous seed');
+    assert.equal(value('#pollar-ramp-amount'), '');
+    assert.match(activeTab(), /Buy/);
+
+    // The seed waits for routes that arrive after the widget opened.
+    let release;
+    hold = new Promise((r) => (release = r));
+    await open({ country: 'BR', amount: '20' });
+    assert.equal(value('#pollar-ramp-country'), undefined, 'still loading');
+    hold = null;
+    await act(async () => release());
+    await settle();
+    assert.equal(value('#pollar-ramp-country'), 'BR', 'the seed applies once the routes load');
+    assert.equal(value('#pollar-ramp-amount'), '20');
+
+    await act(async () => root.unmount());
+    container.remove();
+    client.destroy();
+  }
+
+  // --- Country names in the modal's language; the provider's `language` and `setLocale` switch an open widget ---
+  {
+    const ars = { kind: 'fiat', currency: 'ARS', rail: 'BANK_TRANSFER', country: 'AR' };
+    const { client } = fixtureClient({
+      getRampRoutes: async () => ({
+        routes: [
+          { fiat: bob, asset: usdc, legs: ['PROVIDER_ONRAMP'] },
+          { fiat: ars, asset: usdc, legs: ['PROVIDER_ONRAMP'] },
+        ],
+      }),
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const render = async (language, styles = {}) => {
+      await act(async () => {
+        root.render(
+          h(
+            PollarProvider,
+            {
+              client,
+              language,
+              appConfig: { application: { name: 'Fixture', network: 'mainnet', chains: ['STELLAR'] }, styles },
+            },
+            h(RampWidget, { onClose() {} }),
+          ),
+        );
+        await new Promise((r) => setTimeout(r, 20));
+      });
+    };
+    // The list renders only while open: open it, read the names, close it.
+    const options = async () => {
+      const trigger = document.body.querySelector('#pollar-ramp-country');
+      await act(async () => trigger.click());
+      const names = [...document.body.querySelectorAll('[role="option"] .pollar-select-option-label')].map(
+        (o) => o.textContent,
+      );
+      await act(async () => trigger.click());
+      return names;
+    };
+    const label = () => document.body.querySelector('label[for="pollar-ramp-country"]').textContent;
+
+    await render('en');
+    assert.deepEqual(await options(), ['Argentina', 'Bolivia'], 'names, sorted by name');
+    assert.equal(
+      document.body.querySelector('#pollar-ramp-country').dataset.value,
+      'BO',
+      'the default country stays the first route',
+    );
+    assert.equal(label(), 'Country');
+    await render('es-BO');
+    assert.deepEqual(await options(), ['Argentina', 'Bolivia']);
+    assert.equal(label(), 'País', 'the open widget follows the new language prop');
+    await render('pt-BR');
+    assert.deepEqual(await options(), ['Argentina', 'Bolívia']);
+
+    // A tag the modals lack is skipped: the client's locale, then the device (jsdom: en-US).
+    await render('fr');
+    assert.equal(label(), 'Country');
+    await act(async () => client.setLocale('es'));
+    assert.equal(label(), 'País', 'setLocale switches the open widget');
+    await act(async () => client.setLocale(undefined));
+    assert.equal(label(), 'Country');
+
+    // A language pinned in the dashboard wins over the prop.
+    await render('pt', { language: 'es' });
+    assert.deepEqual(await options(), ['Argentina', 'Bolivia']);
+    assert.equal(label(), 'País');
+
+    await act(async () => root.unmount());
+    container.remove();
+    client.destroy();
+  }
+
   console.log(
-    'Ramp widget v3: route, quote, details, order, QR, Stellar and Solana wallet signing, verification step, trustline, wallet creation, no chains, resume, open orders, QR window, receive amount, approvals, retry, account approval resume, lapsed quotes, missing payment code, JPEG QR, provider KYC note, closed QR, hosted payment and 402 passed.',
+    'Ramp widget v3: route, quote, details, order, QR, Stellar and Solana wallet signing, verification step, trustline, wallet creation, no chains, resume, open orders, QR window, receive amount, approvals, retry, account approval resume, lapsed quotes, missing payment code, JPEG QR, provider KYC note, closed QR, hosted payment, 402, openRampModal seeds, country names and a runtime language passed.',
   );
 })().catch((error) => {
   console.error(error);

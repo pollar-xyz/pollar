@@ -78,9 +78,15 @@ eq(applyEmailCodePaste('48'), { digits: ['4', '8', '', '', '', ''], focus: 1 });
 eq(applyEmailCodePaste('abc'), { digits: empty, focus: 0 });
 
 // Markup: autofill hint on the first box, and no maxLength to truncate the code.
-const html = renderToStaticMarkup(React.createElement(EmailCodeInput, { email: 'a@b.c', onSubmit() {} }));
+const html = renderToStaticMarkup(React.createElement(EmailCodeInput, { email: 'a@b.c', onSubmit() {}, language: 'en' }));
 assert.equal((html.match(/<input/g) || []).length, 6);
 assert.equal((html.match(/autoComplete="one-time-code"|autocomplete="one-time-code"/g) || []).length, 1);
 assert.doesNotMatch(html, /maxlength/i);
+assert.match(html, /aria-label="Digit 2 of 6"/);
+// Each box is named in the modal's language.
+const markup = (language) =>
+  renderToStaticMarkup(React.createElement(EmailCodeInput, { email: 'a@b.c', onSubmit() {}, language }));
+assert.match(markup('es'), /aria-label="Dígito 2 de 6"/);
+assert.match(markup('pt'), /aria-label="Dígito 2 de 6"/);
 
-console.log('Email code input: autofill, keystrokes, overtype, partial runs and paste passed');
+console.log('Email code input: autofill, keystrokes, overtype, partial runs, paste and box names per language passed');

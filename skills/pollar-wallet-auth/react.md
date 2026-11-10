@@ -68,6 +68,14 @@ What `usePollar()` returns, grouped:
   `openDistributionRulesModal`
 - **Network**: `network`, `setNetwork`
 
+`walletBalance` is the `WalletBalanceState` union from `@pollar/core`, not a number. Read balances only
+after narrowing on `step`, there is no `walletBalance.balance`:
+
+```tsx
+const usdc =
+  walletBalance.step === 'loaded' ? (walletBalance.data.balances.find((b) => b.code === 'USDC')?.balance ?? null) : null; // null = not loaded or unreadable, never render it as 0
+```
+
 Custody is derived from the wallet, not a separate field:
 
 ```ts

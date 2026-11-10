@@ -2,7 +2,7 @@
 // Run with `npm test` in packages/core (or `npm run test:unit` at the root).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { resolveAuthError } from '../src/client/auth/errorMessages';
+import { authErrorMessage, resolveAuthError } from '../src/client/auth/errorMessages';
 import {
   appUnavailableMessage,
   cosignRefusalMessage,
@@ -68,4 +68,16 @@ test("the wallet provider's refusal shows its own reason, without the provider's
   assert.equal(cosignRefusalMessage(refused()), transactionErrorMessage('SDK_COSIGN_TURNKEY_REJECTED'));
   assert.equal(cosignRefusalMessage({ code: 'SDK_COSIGN_UPSTREAM_ERROR', body: { message: 'x' } }), null);
   assert.equal(cosignRefusalMessage(new Error('x')), null);
+});
+
+test('an email the app refuses says why, in each language, under one bucket', () => {
+  for (const code of ['EMAIL_DISPOSABLE_NOT_ALLOWED', 'EMAIL_BLOCKED']) {
+    const resolved = resolveAuthError(code, 'Failed to send code');
+    assert.notEqual(resolved.message, 'Failed to send code');
+    assert.equal(resolved.errorCode, AUTH_ERROR_CODES.EMAIL_NOT_ALLOWED);
+    for (const language of ['es', 'pt'] as const) {
+      assert.notEqual(authErrorMessage(code, language), authErrorMessage(code, 'en'));
+    }
+  }
+  assert.match(authErrorMessage('EMAIL_DISPOSABLE_NOT_ALLOWED', 'es') ?? '', /correos temporales/);
 });

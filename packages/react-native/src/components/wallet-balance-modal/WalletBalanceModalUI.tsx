@@ -1,7 +1,9 @@
-import { WalletBalanceState } from '@pollar/core';
+import { useInheritedLanguage } from '../../language-context';
+import { PollarLanguage, WalletBalanceState } from '@pollar/core';
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList } from 'react-native';
 import { ModalStatusBanner, PollarModalFooter, PollarOverlay } from '../commons';
+import { WALLET_BALANCE_COPY } from './wallet-balance-copy';
 
 export interface WalletBalanceModalTemplateProps {
   theme: string;
@@ -10,14 +12,9 @@ export interface WalletBalanceModalTemplateProps {
   appName: string;
   onClose: () => void;
   onRefresh: () => void;
+  /** Language of the modal. Defaults to the user's device; the modal passes the resolved one. */
+  language?: PollarLanguage | undefined;
 }
-
-const STATUS_MESSAGES: Record<WalletBalanceState['step'], string> = {
-  idle: '',
-  loading: 'Fetching balances…',
-  loaded: '',
-  error: 'Failed to load balances',
-};
 
 export function WalletBalanceModalTemplate({
   theme,
@@ -26,7 +23,16 @@ export function WalletBalanceModalTemplate({
   appName,
   onClose,
   onRefresh,
+  language: languageProp,
 }: WalletBalanceModalTemplateProps) {
+  const language = useInheritedLanguage(languageProp);
+  const copy = WALLET_BALANCE_COPY[language];
+  const statusMessages: Record<WalletBalanceState['step'], string> = {
+    idle: '',
+    loading: copy.fetching,
+    loaded: '',
+    error: copy.loadFailed,
+  };
   const isDark = theme === 'dark';
 
   const colors = {
@@ -47,7 +53,7 @@ export function WalletBalanceModalTemplate({
     <PollarOverlay onCancel={onClose}>
       <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Wallet Balance</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{copy.title}</Text>
           <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh} disabled={isLoading}>
             <Text style={{ color: colors.muted }}>🔄</Text>
           </TouchableOpacity>
@@ -59,7 +65,7 @@ export function WalletBalanceModalTemplate({
 
         {isLoaded && balances.length === 0 && (
           <View style={styles.emptyBox}>
-            <Text style={{ color: colors.muted, textAlign: 'center' }}>No assets found in your wallet.</Text>
+            <Text style={{ color: colors.muted, textAlign: 'center' }}>{copy.emptyWallet}</Text>
           </View>
         )}
 
@@ -73,7 +79,7 @@ export function WalletBalanceModalTemplate({
                 <View>
                   <Text style={[styles.assetCode, { color: colors.text }]}>{item.code}</Text>
                   <Text style={{ color: colors.muted, fontSize: 12 }}>
-                    {item.issuer ? `Issuer: ${item.issuer.slice(0, 6)}...` : 'Native'}
+                    {item.issuer ? copy.issuer.replace('{issuer}', `${item.issuer.slice(0, 6)}...`) : copy.native}
                   </Text>
                 </View>
                 <Text style={[styles.assetBalance, { color: colors.text }]}>{item.balance}</Text>
@@ -89,7 +95,7 @@ export function WalletBalanceModalTemplate({
         )}
 
         <ModalStatusBanner
-          message={STATUS_MESSAGES[walletBalance.step]}
+          message={statusMessages[walletBalance.step]}
           status={isError ? 'ERROR' : isLoading ? 'LOADING' : 'NONE'}
           onRetry={isError ? onRefresh : undefined}
         />

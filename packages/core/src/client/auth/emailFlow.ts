@@ -1,4 +1,5 @@
 import { AUTH_ERROR_CODES, AuthProviderContext } from '../../types';
+import { authErrorMessage, extractErrorCode, resolveAuthError } from './errorMessages';
 import { logApiError } from './logging';
 import { stringField } from '../../api/error-fields';
 
@@ -38,11 +39,17 @@ export async function sendEmailCode(email: string, clientSessionId: string, ctx:
 
   if (error || !data?.success) {
     if (!error) logApiError(logger, 'POST /auth/email', { body, data });
+    // A code the catalog knows (a refused address, an app out of credits) gets
+    // its message and bucket; anything else stays a retryable send failure.
+    // The modals re-translate the message from `code`.
+    const code = extractErrorCode(error, data);
+    const known = authErrorMessage(code, 'en') ? resolveAuthError(code, 'Failed to send code') : null;
     setAuthState({
       step: 'error',
       previousStep: 'sending_email',
-      message: 'Failed to send code',
-      errorCode: AUTH_ERROR_CODES.EMAIL_SEND_FAILED,
+      message: known?.message ?? 'Failed to send code',
+      errorCode: known?.errorCode ?? AUTH_ERROR_CODES.EMAIL_SEND_FAILED,
+      ...(code ? { code } : {}),
     });
     return;
   }

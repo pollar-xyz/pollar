@@ -14,6 +14,7 @@ import {
   rampOrderReceive,
   rampOrderResolutionText,
   rampOrderStopped,
+  rampResolutionText,
   rampWalletStep,
 } from '../src/ramps/workflow';
 
@@ -254,6 +255,34 @@ test('no route the app must fix never sends the user to support with an order id
   }
 });
 
+test('an amount out of a route limits names the bound; without one the user is only asked for another amount', () => {
+  const below = {
+    code: 'LIMIT_BELOW_MINIMUM',
+    resolutionAction: 'change_amount',
+    limit: { min: '1450', max: '14500', side: 'in' as const, currency: 'ARS' },
+  };
+  assert.equal(rampResolutionText(below), 'This route takes at least 1,450 ARS. Try a larger amount.');
+  assert.equal(
+    rampResolutionText({ ...below, code: 'LIMIT_ABOVE_MAXIMUM' }),
+    'This route takes at most 14,500 ARS. Try a smaller amount.',
+  );
+  assert.equal(
+    rampResolutionText({ ...below, limit: { min: '1234567.5', max: null, side: 'out', currency: 'BOB' } }),
+    'This route pays out at least 1,234,567.5 BOB. Try a larger amount.',
+  );
+  const bare = 'This amount is outside what the route accepts. Try another amount.';
+  assert.equal(rampResolutionText({ code: 'LIMIT_BELOW_MINIMUM', resolutionAction: 'change_amount' }), bare);
+  // A bound the failure does not break is not the reason: no number is shown for it.
+  assert.equal(rampResolutionText({ ...below, code: 'LIMIT_ABOVE_MAXIMUM', limit: { ...below.limit, max: null } }), bare);
+
+  assert.equal(rampNoRouteText([{ failure: below } as never]), 'This route takes at least 1,450 ARS. Try a larger amount.');
+  assert.equal(
+    rampNoRouteText([{ failure: below }, { failure: { ...below, limit: { ...below.limit, min: '2000' } } }] as never),
+    'No route can take this amount right now. Try another amount.',
+  );
+  assert.equal(rampNoRouteText([]), 'There is no route for this currency and asset right now. Choose another one.');
+});
+
 const usdtPolygon = { kind: 'asset' as const, code: 'USDT', identifier: '0xc213', chain: 'POLYGON' as const };
 const usdcOnPolygon = { kind: 'asset' as const, code: 'USDC', identifier: '0x3c49', chain: 'POLYGON' as const };
 const step = (kind: string, status: string, signs = true) => ({ kind, status, signs, hash: null });
@@ -294,4 +323,22 @@ test('a running leg counts down its quoted time and stops at zero once late', ()
   assert.equal(rampLegTimeLeft({ etaSeconds: 30, startedAt }, at(12)), 18);
   assert.equal(rampLegTimeLeft({ etaSeconds: 30, startedAt }, at(45)), 0);
   assert.equal(rampLegTimeLeft({ etaSeconds: null, startedAt }, at(1)), null);
+});
+
+test('a missing trustline names the asset the route delivers; a detail that is not CODE:ISSUER names none', () => {
+  const ars = 'ARS:GCLAJ3NUQJPUIXMOP6EEQOOK556X6JUBSQEDGIYN2QD4MBEF3EVKCMDR';
+  assert.equal(
+    rampResolutionText({ code: 'WALLET_TRUSTLINE_MISSING', resolutionAction: 'add_trustline', detail: ars }),
+    'Your Stellar wallet must trust ARS to receive it. Add the ARS trustline and try again.',
+  );
+  const generic = 'Your Stellar wallet must trust the asset this route delivers. Add its trustline and try again.';
+  assert.equal(
+    rampResolutionText({ resolutionAction: 'add_trustline', detail: 'the Stellar wallet does not trust USDC' }),
+    generic,
+  );
+  assert.equal(rampResolutionText({ resolutionAction: 'add_trustline' }), generic);
+  assert.equal(
+    rampNoRouteText([{ failure: { resolutionAction: 'add_trustline', detail: ars } }] as never),
+    rampResolutionText({ resolutionAction: 'add_trustline', detail: ars }),
+  );
 });

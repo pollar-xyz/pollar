@@ -1,14 +1,17 @@
 'use client';
 
 // --- Shared network picker ----------------------------------------------------
-// One chain <select> used by the Send, Wallet Balance and Assets modals. The
+// One chain picker used by the Send, Wallet Balance and Assets modals. The
 // options are the chains the user actually holds a wallet on (`getWallets()`),
 // so every option always resolves to an address; the parent defaults to the
 // first one. Everything else in those modals - address, assets, balances - is
 // filtered by whatever is picked here.
 // -----------------------------------------------------------------------------
 
-import type { WalletChain, WalletInfo } from '@pollar/core';
+import { useInheritedLanguage } from '../language-context';
+import type { PollarLanguage, WalletChain, WalletInfo } from '@pollar/core';
+import { COMMONS_COPY } from './commons-copy';
+import { PollarSelect } from './PollarSelect';
 import './send-modal/SendModal.css';
 import './shared.css';
 
@@ -69,9 +72,11 @@ export interface ChainSelectProps {
   options: WalletChain[];
   onChange: (chain: WalletChain) => void;
   disabled?: boolean;
+  language?: PollarLanguage | undefined;
 }
 
-export function ChainSelect({ label = 'Network', value, options, onChange, disabled = false }: ChainSelectProps) {
+export function ChainSelect({ label, value, options, onChange, disabled = false, language: languageProp }: ChainSelectProps) {
+  const language = useInheritedLanguage(languageProp);
   // A single-network app gets no picker: one option is not a choice, and the
   // modals would carry a dead control. The parent still defaults to that chain,
   // so everything below stays filtered to it. Matches how the per-row ChainTag
@@ -80,22 +85,14 @@ export function ChainSelect({ label = 'Network', value, options, onChange, disab
 
   return (
     <div className="pollar-send-field pollar-chain-field">
-      <label className="pollar-send-label">{label}</label>
-      <select
-        className="pollar-input pollar-send-select"
+      <label className="pollar-send-label">{label ?? COMMONS_COPY[language].network}</label>
+      <PollarSelect
         value={value ?? ''}
         disabled={disabled}
-        onChange={(e) => onChange(e.target.value as WalletChain)}
-      >
-        {/* Only present before the parent defaults to the first chain; hidden
-            from the open dropdown. */}
-        {value === null && <option value="" disabled hidden />}
-        {options.map((chain) => (
-          <option key={chain} value={chain}>
-            {CHAIN_LABEL[chain] ?? chain}
-          </option>
-        ))}
-      </select>
+        aria-label={label ?? COMMONS_COPY[language].network}
+        onChange={(chain) => onChange(chain as WalletChain)}
+        options={options.map((chain) => ({ value: chain, label: CHAIN_LABEL[chain] ?? chain }))}
+      />
     </div>
   );
 }

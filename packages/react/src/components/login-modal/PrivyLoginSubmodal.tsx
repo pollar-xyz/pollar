@@ -1,12 +1,13 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { InteractiveAuthAdapter } from '@pollar/core';
+import type { InteractiveAuthAdapter, PollarLanguage } from '@pollar/core';
 import { ModalLogo, ModalStatusBanner, PollarModalFooter } from '../commons';
 import { EmailCodeInput } from './EmailCodeInput';
 import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
+import { LOGIN_COPY } from './login-copy';
 
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 
@@ -25,6 +26,7 @@ interface PrivyLoginSubmodalProps {
   onCancel: () => void;
   /** The provider login finished - hand off to `login({ provider })`. */
   onAuthenticated: () => void;
+  language: PollarLanguage;
 }
 
 /**
@@ -46,7 +48,9 @@ export function PrivyLoginSubmodal({
   onBack,
   onCancel,
   onAuthenticated,
+  language,
 }: PrivyLoginSubmodalProps) {
+  const copy = LOGIN_COPY[language];
   const options = useMemo(() => adapter.getAuthOptions(), [adapter]);
   const [email, setEmail] = useState('');
   const [view, setView] = useState<'root' | 'email-code'>('root');
@@ -59,7 +63,7 @@ export function PrivyLoginSubmodal({
 
   function fail(error: unknown) {
     setStatus('ERROR');
-    setMessage(error instanceof Error ? error.message : 'Something went wrong. Please try again.');
+    setMessage(error instanceof Error ? error.message : copy.genericError);
   }
 
   async function handleEmailSubmit() {
@@ -69,7 +73,7 @@ export function PrivyLoginSubmodal({
     try {
       await adapter.sendEmailCode(email);
       setStatus('SUCCESS');
-      setMessage('Code sent — check your inbox');
+      setMessage(copy.status.entering_code);
       setView('email-code');
     } catch (error) {
       fail(error);
@@ -78,7 +82,7 @@ export function PrivyLoginSubmodal({
 
   async function handleCodeSubmit(code: string) {
     setStatus('LOADING');
-    setMessage('Verifying…');
+    setMessage(copy.status.verifying_email_code);
     try {
       await adapter.verifyEmailCode(code);
       onAuthenticated();
@@ -101,7 +105,7 @@ export function PrivyLoginSubmodal({
   }
 
   const BackButton = ({ onClick }: { onClick: () => void }) => (
-    <button type="button" className="pollar-back-btn" onClick={onClick} aria-label="Back">
+    <button type="button" className="pollar-back-btn" onClick={onClick} aria-label={copy.back}>
       <svg
         width="20"
         height="20"
@@ -123,7 +127,7 @@ export function PrivyLoginSubmodal({
 
   return (
     <div className="pollar-modal-card pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
-      <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label="Close">
+      <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label={copy.close}>
         <svg
           width="18"
           height="18"
@@ -149,7 +153,7 @@ export function PrivyLoginSubmodal({
       {view === 'email-code' ? (
         <>
           <BackButton onClick={() => setView('root')} />
-          <EmailCodeInput email={email} onSubmit={handleCodeSubmit} />
+          <EmailCodeInput email={email} onSubmit={handleCodeSubmit} language={language} />
         </>
       ) : (
         <>
@@ -158,7 +162,7 @@ export function PrivyLoginSubmodal({
             <div className="pollar-email-section">
               <input
                 type="email"
-                placeholder="you@email.com"
+                placeholder={copy.emailPlaceholder}
                 value={email}
                 disabled={isLoading}
                 className="pollar-input"
@@ -172,7 +176,7 @@ export function PrivyLoginSubmodal({
                 style={{ marginTop: '0.75rem' }}
                 onClick={handleEmailSubmit}
               >
-                Submit
+                {copy.submit}
               </button>
             </div>
           )}
@@ -181,7 +185,7 @@ export function PrivyLoginSubmodal({
             <div className="pollar-divider">
               <div className="pollar-divider-line" />
               <div className="pollar-divider-label">
-                <span className="pollar-divider-text">or continue with</span>
+                <span className="pollar-divider-text">{copy.orContinueWith}</span>
               </div>
             </div>
           )}

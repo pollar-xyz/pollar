@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View, Image, type ImageSourcePropType } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type { PollarLanguage } from '@pollar/core';
 import { usePollar } from '../context';
 import { WalletButton } from './wallet-button/WalletButton';
 import { useSurfaceColors } from './layout';
+import { NEXT_LANGUAGE, SHELL_COPY } from './shell-copy';
 export interface AppShellGroup {
   key: string;
   section: string;
@@ -17,10 +19,10 @@ export interface AppShellProps {
   currentKey?: string;
   groups: AppShellGroup[];
   sections: readonly string[];
-  settings: { theme: 'light' | 'dark'; language: 'en' | 'es' };
+  settings: { theme: 'light' | 'dark'; language: PollarLanguage };
   onPreferencesChange: (next: AppShellProps['settings']) => Promise<void>;
   onNavigate: (href: string, replace?: boolean) => void;
-  label: (key: string, language: 'en' | 'es') => string;
+  label: (key: string, language: PollarLanguage) => string;
   logo?: ImageSourcePropType;
   applicationKeyLabel?: string;
 }
@@ -35,7 +37,7 @@ export function AppShell({
   onNavigate,
   label: navLabel,
   logo,
-  applicationKeyLabel = 'Application key',
+  applicationKeyLabel,
 }: AppShellProps) {
   const [drawer, setDrawer] = useState(false);
   const p = usePollar();
@@ -45,6 +47,7 @@ export function AppShell({
     void save(next).catch((error) => setPreferencesError(error instanceof Error ? error.message : String(error)));
   };
   const c = useSurfaceColors();
+  const copy = SHELL_COPY[settings.language];
   const tabs = groups.find((g) => g.key === currentKey)?.tabs ?? [];
   const go = (href: string) => {
     setDrawer(false);
@@ -72,7 +75,7 @@ export function AppShell({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Open navigation menu"
+            accessibilityLabel={copy.openMenu}
             onPress={() => setDrawer(true)}
             style={{ padding: 8 }}
           >
@@ -80,7 +83,7 @@ export function AppShell({
           </Pressable>
           <Pressable
             accessibilityRole="link"
-            accessibilityLabel="Pollar demo home"
+            accessibilityLabel={copy.home}
             onPress={() => go('/')}
             style={{
               flexDirection: 'row',
@@ -110,15 +113,15 @@ export function AppShell({
         <View style={{ flexDirection: 'row', gap: 7 }}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Application API key settings"
+            accessibilityLabel={copy.applicationKeySettings}
             onPress={() => go('/settings')}
             style={chip}
           >
-            <Text style={{ color: c.muted, fontSize: 11 }}>{applicationKeyLabel}</Text>
+            <Text style={{ color: c.muted, fontSize: 11 }}>{applicationKeyLabel ?? copy.applicationKey}</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Network settings"
+            accessibilityLabel={copy.networkSettings}
             onPress={() => go('/settings')}
             style={{ ...chip, backgroundColor: '#29210a' }}
           >
@@ -126,11 +129,11 @@ export function AppShell({
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Change language"
+            accessibilityLabel={copy.changeLanguage}
             onPress={() =>
               updatePreferences({
                 ...settings,
-                language: settings.language === 'en' ? 'es' : 'en',
+                language: NEXT_LANGUAGE[settings.language],
               })
             }
             style={chip}
@@ -139,7 +142,7 @@ export function AppShell({
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={settings.theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            accessibilityLabel={settings.theme === 'dark' ? copy.lightMode : copy.darkMode}
             onPress={() =>
               updatePreferences({
                 ...settings,
@@ -204,7 +207,7 @@ export function AppShell({
               <Text style={{ color: c.text, fontSize: 22, fontWeight: '800' }}>Pollar DEMO</Text>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Close navigation menu"
+                accessibilityLabel={copy.closeMenu}
                 onPress={() => setDrawer(false)}
                 style={{ padding: 10 }}
               >
@@ -212,8 +215,8 @@ export function AppShell({
               </Pressable>
             </View>
             <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 0, gap: 24 }}>
-              <Pressable accessibilityRole="link" accessibilityLabel="Explore the Pollar SDK" onPress={() => go('/')}>
-                <Text style={{ color: c.blue }}>Explore the Pollar SDK</Text>
+              <Pressable accessibilityRole="link" accessibilityLabel={copy.explore} onPress={() => go('/')}>
+                <Text style={{ color: c.blue }}>{copy.explore}</Text>
               </Pressable>
               {sections.map((section) => (
                 <View key={section} style={{ gap: 9 }}>
@@ -270,7 +273,7 @@ export function AppShell({
                               paddingHorizontal: 6,
                             }}
                           >
-                            {g.soon ? 'SOON' : 'NEW'}
+                            {g.soon ? copy.soon : copy.isNew}
                           </Text>
                         )}
                       </Pressable>
@@ -278,13 +281,13 @@ export function AppShell({
                 </View>
               ))}
               <Pressable accessibilityRole="link" onPress={() => go('/settings')}>
-                <Text style={{ color: c.muted }}>Account & settings</Text>
+                <Text style={{ color: c.muted }}>{copy.account}</Text>
               </Pressable>
             </ScrollView>
           </SafeAreaView>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Dismiss navigation"
+            accessibilityLabel={copy.dismiss}
             onPress={() => setDrawer(false)}
             style={{ flex: 1 }}
           />

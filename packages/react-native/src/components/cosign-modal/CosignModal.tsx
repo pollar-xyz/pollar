@@ -2,7 +2,9 @@ import type { CosignRequest, CosignVerification } from '@pollar/core';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { PollarOverlay } from '../commons';
+import { COSIGN_COPY } from './cosign-copy';
 import { CosignModalTemplate } from './CosignModalUI';
 
 /** How long an outcome that needs nothing from the user stays up before the modal closes. */
@@ -23,9 +25,11 @@ interface CosignModalProps {
  * against Turnkey before enabling Approve.
  */
 export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
-  const { getClient, styles, cosign, copyText } = usePollar();
+  const { getClient, styles, cosign, copyText, network, openRecoveryModal } = usePollar();
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const { pending, lastResolved } = cosign;
+  const language = useModalLanguage();
+  const copy = COSIGN_COPY[language];
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [verification, setVerification] = useState<CosignVerification | null>(null);
@@ -33,6 +37,12 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
   const [error, setError] = useState<string | null>(null);
 
   const current = pending.find((r) => r.id === selectedId) ?? pending[0] ?? null;
+
+  // A request left unsigned holds up the app's flow, so closing over one asks first: the X and
+  // Android's back button get there, a tap on the backdrop does nothing. With nothing waiting, they just close.
+  const [askedToClose, setAskedToClose] = useState(false);
+  const confirmingClose = askedToClose && pending.length > 0;
+  const requestClose = () => (pending.length > 0 ? setAskedToClose(true) : onClose());
 
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
@@ -94,20 +104,25 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
           clearTimeout(copiedTimer.current);
           copiedTimer.current = setTimeout(() => setCopied(false), 1500);
         })
-        .catch((err: unknown) => Alert.alert('Copy failed', String(err)));
+        .catch((err: unknown) => Alert.alert(copy.copyFailed, String(err)));
     },
-    [copyText],
+    [copyText, copy],
   );
 
   // The quorum as this device read it from Turnkey, once per open; a bad
   // reading fails every verification so nothing is approved on it.
   const [quorumFailure, setQuorumFailure] = useState<string | null>(null);
+  // Another install of the same user holds its own key: until it is added,
+  // every vote it stamps is refused, so it is told how to add itself.
+  const [deviceNotLinked, setDeviceNotLinked] = useState(false);
   useEffect(() => {
     let cancelled = false;
     getClient()
       .cosign.inspectQuorum()
       .then((q) => {
-        if (!cancelled && !q.ok) setQuorumFailure(q.reason);
+        if (cancelled || q.ok) return;
+        if (q.code === 'DEVICE_NOT_ENROLLED') setDeviceNotLinked(true);
+        else setQuorumFailure(q.reason);
       })
       .catch(() => undefined);
     return () => {
@@ -147,16 +162,16 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         if (kind === 'approving') await getClient().cosign.approve(request);
         else await getClient().cosign.reject(request);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+        setError(err instanceof Error ? err.message : copy.genericError);
       } finally {
         setBusy(null);
       }
     },
-    [getClient],
+    [getClient, copy],
   );
 
   return (
-    <PollarOverlay onCancel={onClose}>
+    <PollarOverlay onCancel={requestClose} dismissOnBackdrop={false}>
       <CosignModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -165,15 +180,26 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         verification={current ? (quorumFailure ? { ok: false, reason: quorumFailure } : verification) : null}
         busy={busy}
         error={error}
+        deviceNotLinked={deviceNotLinked}
+        onLinkDevice={() => {
+          onClose();
+          openRecoveryModal();
+        }}
         {...(lastResolved ? { lastResolved } : {})}
         closesIn={closesIn}
         nextStep={awaitingNext ? nextStep : null}
+        language={language}
+        network={network}
+        copyText={copyText}
         copied={copied}
         onCopyHash={copyHash}
         onSelect={(r) => setSelectedId(r.id)}
         onApprove={(r) => void run('approving', r)}
         onReject={(r) => void run('rejecting', r)}
-        onClose={onClose}
+        onClose={requestClose}
+        confirmingClose={confirmingClose}
+        onKeepOpen={() => setAskedToClose(false)}
+        onCloseAnyway={onClose}
       />
     </PollarOverlay>
   );

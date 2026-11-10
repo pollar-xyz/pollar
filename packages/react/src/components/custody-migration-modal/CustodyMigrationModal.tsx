@@ -3,10 +3,12 @@
 import { type CosignCustody, type CustodyMigrationState, isPollarApiError, transactionErrorMessage } from '@pollar/core';
 import { useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import '../shared.css';
 import '../recovery-modal/RecoveryModal.css';
 import { modalChrome } from '../modal-theme';
 import { CustodyMigrationModalTemplate } from './CustodyMigrationModalTemplate';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface CustodyMigrationModalProps {
   state: CustodyMigrationState;
@@ -19,6 +21,7 @@ interface CustodyMigrationModalProps {
 export function CustodyMigrationModal({ state, onMoved, onLater }: CustodyMigrationModalProps) {
   const { getClient, styles } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
+  const language = useModalLanguage();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [blockedReasons, setBlockedReasons] = useState<string[] | null>(null);
@@ -36,14 +39,16 @@ export function CustodyMigrationModal({ state, onMoved, onLater }: CustodyMigrat
         setBlockedReasons(Array.isArray(reasons) ? reasons.map(String) : []);
         return;
       }
-      setError(transactionErrorMessage(isPollarApiError(err) ? err.code : null, err instanceof Error ? err.message : null));
+      setError(
+        transactionErrorMessage(isPollarApiError(err) ? err.code : null, err instanceof Error ? err.message : null, language),
+      );
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="pollar-overlay" style={overlayStyle}>
+    <PollarOverlay style={overlayStyle}>
       <CustodyMigrationModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -55,7 +60,8 @@ export function CustodyMigrationModal({ state, onMoved, onLater }: CustodyMigrat
         onMove={(custody) => void move(custody)}
         onLater={onLater}
         onLogout={() => void getClient().logout()}
+        language={language}
       />
-    </div>
+    </PollarOverlay>
   );
 }

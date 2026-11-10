@@ -1,6 +1,6 @@
 # @pollar/stellar-wallets-kit-adapter
 
-Plug [Stellar Wallets Kit](https://stellarwalletskit.dev) into [`@pollar/core`](../core) as a set of wallet adapters, without `@pollar/core` having to depend on the kit. One install gives Pollar access to **every wallet module the kit supports** — Freighter, Albedo, xBull, Lobstr, Rabet, Hana, Bitget, OneKey, Klever, Fordefi, CactusLink, HotWallet, plus Ledger / Trezor / WalletConnect via opt-in.
+Plug [Stellar Wallets Kit](https://stellarwalletskit.dev) into [`@pollar/core`](https://github.com/pollar-xyz/pollar/tree/main/packages/core) as a set of wallet adapters, without `@pollar/core` having to depend on the kit. One install gives Pollar access to **every wallet module the kit supports** - Freighter, Albedo, xBull, Lobstr, Rabet, Hana, Bitget, OneKey, Klever, Fordefi, CactusLink, HotWallet, plus Ledger / Trezor / WalletConnect via opt-in.
 
 The adapters are registered through the `walletAdapters` slot on `PollarClientConfig`. `stellarWalletsKitAdapters()` returns a `WalletAdapter[]` (one adapter per kit module) that you spread into that array alongside any other adapters you register.
 
@@ -10,7 +10,7 @@ The adapters are registered through the `walletAdapters` slot on `PollarClientCo
 npm install @pollar/stellar-wallets-kit-adapter @pollar/core @creit.tech/stellar-wallets-kit
 ```
 
-`@pollar/core` and `@creit.tech/stellar-wallets-kit` are peer dependencies — install whichever versions match the rest of your app. Requires Node 20+ when running in toolchains.
+`@pollar/core` and `@creit.tech/stellar-wallets-kit` are peer dependencies - install whichever versions match the rest of your app. Requires Node 20+ when running in toolchains.
 
 ## Quick start
 
@@ -55,23 +55,11 @@ time (via `ensureInit()`), building one `StellarWalletsKitAdapter` per module up
 front. It is not lazy - a later `login({ provider })` just routes to the
 matching adapter that was already built.
 
-> **0.12.0** accepts `@pollar/core@^0.11.2 || ^0.12.0`; no adapter changes.
->
-> **0.11.2** requires `@pollar/core@^0.11.2` / `@pollar/react@^0.11.2`. The
-> adapter now implements `signStellarMessage` (via `kit.signMessage`), so every
-> kit wallet that supports message signing can back a SEP-53 ownership proof
-> through `client.stellar.sep53`.
->
-> **0.10.0** - switched to the `walletAdapters[]` array model: the factory is now
-> `stellarWalletsKitAdapters()` (was `stellarWalletsKit()`) and returns a
-> `WalletAdapter[]` for the plural `walletAdapters` config slot instead of a
-> single resolver for `walletAdapter`. SSR-safe: returns `[]` when there is no
-> `window`.
->
-> `connect()` resolves to `{ address }` only, and `network` is **required** (no
-> `Networks.TESTNET` default) — the kit is a global singleton, so silently
-> picking testnet risks signing real-looking transactions on the wrong chain.
-> Pass `Networks.TESTNET` or `Networks.PUBLIC` explicitly.
+> **Compatibility:** `@pollar/core@^0.11.2 || ^0.12.0` (and the matching
+> `@pollar/react`). `network` is **required** (there is no `Networks.TESTNET`
+> default): the kit is a global singleton, so silently picking testnet risks
+> signing real-looking transactions on the wrong chain. Pass `Networks.TESTNET`
+> or `Networks.PUBLIC` explicitly.
 
 ## Default wallets
 
@@ -127,14 +115,14 @@ const client = new PollarClient({
 });
 ```
 
-Trimming the default list (e.g. only Freighter + Albedo for a SEP-43 dapp) works the same way — `modules` fully replaces the default when supplied.
+Trimming the default list (e.g. only Freighter + Albedo for a SEP-43 dapp) works the same way - `modules` fully replaces the default when supplied.
 
 ## Configuration
 
 ```ts
 interface StellarWalletsKitAdapterOptions {
   /**
-   * Stellar network used for signing. **Required** — the kit is a
+   * Stellar network used for signing. **Required** - the kit is a
    * global singleton, so the network must be chosen explicitly to avoid
    * cross-chain signing accidents.
    */
@@ -143,7 +131,7 @@ interface StellarWalletsKitAdapterOptions {
   /**
    * Wallet modules the kit can drive. Defaults to every module that works
    * with no extra setup (see "Default wallets"). Passing this option fully
-   * replaces the default — include modules you want explicitly.
+   * replaces the default - include modules you want explicitly.
    */
   modules?: ModuleInterface[];
 
@@ -205,6 +193,10 @@ The adapter implements `WalletAdapter` from `@pollar/core`:
 | `getPublicKey()`             | `StellarWalletsKit.getAddress()`                                       |
 | `signTransaction(xdr, opts)` | `setWallet(id)` > `signTransaction(xdr, opts)`                         |
 | `signAuthEntry(xdr, opts)`   | `setWallet(id)` > `signAuthEntry(xdr, opts)`                           |
+| `signStellarMessage(msg)`    | `setWallet(id)` > `signMessage(msg, opts)`                             |
+
+`signStellarMessage` lets every kit wallet that supports message signing back a
+SEP-53 ownership proof through `client.stellar.sep53.signMessage(...)`.
 
 `setWallet` is called before every signing/connect operation so a single
 `StellarWalletsKit.init({ modules })` covers many wallets. `stellarWalletsKitAdapters()`
@@ -215,7 +207,7 @@ module under the hood.
 ## Login UI
 
 The wallets you register via `stellarWalletsKitAdapters({ network })` render
-automatically inside Pollar's `LoginModal` — one button per wallet, collapsed
+automatically inside Pollar's `LoginModal` - one button per wallet, collapsed
 behind a single "Wallet" gateway button (their shared `meta.group`). Pass
 `picker.groupLabel` to give them a distinct gateway, or `picker.labels` to
 override individual button labels.
@@ -275,7 +267,7 @@ new PollarClient({
 
 ## Fallback behaviour
 
-If `walletAdapters` is omitted from `PollarClientConfig`, `@pollar/core` falls back to its built-in `FreighterAdapter` / `AlbedoAdapter`. Installing this package is opt-in - existing apps keep working without changes until they add adapters to the slot.
+If `walletAdapters` is omitted from `PollarClientConfig`, `@pollar/core` falls back to its built-in `FreighterAdapter` / `AlbedoAdapter`. Installing this package is opt-in: an app that does not fill the slot keeps the built-in wallets.
 
 ## License
 

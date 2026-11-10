@@ -1,52 +1,51 @@
 import type { PendingConfirmation } from '@pollar/core';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
+import { CONFIRM_COPY } from './confirm-copy';
+
+type Copy = (typeof CONFIRM_COPY)['en'];
 import { PollarModalFooter, PollarOverlay } from '../commons';
+import { TitleMark } from '../cosign-modal/CosignModalUI';
+import { TxReview } from '../tx-review/TxReview';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
+import { headlineAsset, reviewFromBuild, reviewFromRequest } from '../tx-review/tx-review-model';
 
 interface ConfirmModalProps {
   confirmation: PendingConfirmation;
 }
 
-const OPERATION_LABELS: Record<string, string> = {
-  payment: 'Send',
-  path_payment_strict_send: 'Swap',
-  change_trust: 'Add asset',
-  create_account: 'Create account',
-  invoke_contract: 'Contract call',
-};
-
-function labelOf(confirmation: PendingConfirmation): string {
+function labelOf(confirmation: PendingConfirmation, copy: Copy): string {
   const op = confirmation.operation ?? '';
-  return OPERATION_LABELS[op] ?? (op ? op.replace(/_/g, ' ') : 'Transaction');
-}
-
-function crop(value: string): string {
-  return value.length > 16 ? `${value.slice(0, 6)}...${value.slice(-6)}` : value;
-}
-
-function detailRows(confirmation: PendingConfirmation): Array<[string, string]> {
-  const details = confirmation.details ?? {};
-  const rows: Array<[string, string]> = [];
-  const push = (label: string, value: unknown) => {
-    if (value === undefined || value === null || value === '') return;
-    const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
-    rows.push([label, /^[GC][A-Z2-7]{55}$/.test(text) ? crop(text) : text]);
-  };
-  push('Destination', details.destination);
-  push('Amount', details.amount);
-  push('Asset', details.asset ?? details.assetCode ?? details.mint);
-  push('Network', confirmation.network);
-  return rows;
+  return copy.operations[op] ?? (op ? op.replace(/_/g, ' ') : copy.transaction);
 }
 
 /**
  * The prompt a signing call waits on under `confirmation: 'prompt'`, the same
  * for every custody: the wallet signs only after the user confirms here.
- * Dismissing it declines.
+ * Closing it declines, so the X and Android's back button ask first and a tap
+ * on the backdrop does nothing.
  */
 export function ConfirmModal({ confirmation }: ConfirmModalProps) {
-  const { getClient, styles } = usePollar();
+  const { getClient, styles, network, copyText } = usePollar();
+  const language = useModalLanguage();
+  const copy = CONFIRM_COPY[language];
+  const reviewCopy = TX_REVIEW_COPY[language];
+  const raw = confirmation.unsignedXdr ?? confirmation.authEntryXdr;
+  const review = confirmation.buildData
+    ? reviewFromBuild(confirmation.buildData, reviewCopy, labelOf(confirmation, copy))
+    : reviewFromRequest(
+        {
+          chain: confirmation.network,
+          network,
+          operation: confirmation.operation,
+          details: confirmation.details,
+          raw,
+          fallbackTitle: labelOf(confirmation, copy),
+        },
+        reviewCopy,
+      );
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const isDark = theme === 'dark';
   const colors = {
@@ -66,38 +65,59 @@ export function ConfirmModal({ confirmation }: ConfirmModalProps) {
     });
   }, [getClient]);
 
+  const [confirmingClose, setConfirmingClose] = useState(false);
+
   return (
-    <PollarOverlay onCancel={confirmation.reject}>
+    <PollarOverlay onCancel={() => setConfirmingClose(true)} dismissOnBackdrop={false}>
       <View style={[localStyles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
         <View style={localStyles.header}>
-          <Text style={[localStyles.title, { color: colors.text }]}>Confirm transaction</Text>
-          <TouchableOpacity onPress={confirmation.reject} accessibilityLabel="Close">
-            <Text style={{ color: colors.muted, fontSize: 18 }}>x</Text>
-          </TouchableOpacity>
+          <View style={localStyles.heading}>
+            {!confirmingClose && (
+              <TitleMark chain={confirmation.network} asset={headlineAsset(review)} theme={theme} accentColor={accentColor} />
+            )}
+            <Text style={[localStyles.title, { color: colors.text }]}>{confirmingClose ? copy.closeTitle : review.title}</Text>
+          </View>
+          {!confirmingClose && (
+            <TouchableOpacity onPress={() => setConfirmingClose(true)} accessibilityLabel={copy.close} hitSlop={8}>
+              <Text style={{ color: colors.muted, fontSize: 18 }}>x</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        <View style={[localStyles.detail, { borderColor: colors.border }]}>
-          <Text style={[localStyles.detailTitle, { color: colors.text }]}>{labelOf(confirmation)}</Text>
-          <Text style={{ color: colors.muted }}>The app asks you to sign this transaction with your wallet.</Text>
-          {detailRows(confirmation).map(([k, v]) => (
-            <View key={k} style={localStyles.row}>
-              <Text style={{ color: colors.muted }}>{k}</Text>
-              <Text style={{ color: colors.text, flexShrink: 1, textAlign: 'right' }}>{v}</Text>
-            </View>
-          ))}
-
-          <View style={localStyles.actions}>
-            <TouchableOpacity onPress={confirmation.reject} style={[localStyles.btn, { borderColor: colors.border }]}>
-              <Text style={{ color: colors.text, fontWeight: '600' }}>Cancel</Text>
+        {confirmingClose ? (
+          <View style={localStyles.detail}>
+            <Text style={{ color: colors.muted }}>{copy.closeBody}</Text>
+            <TouchableOpacity
+              onPress={() => setConfirmingClose(false)}
+              style={[localStyles.btn, { backgroundColor: accentColor, borderColor: accentColor }]}
+            >
+              <Text style={{ color: '#fff', fontWeight: '600' }}>{copy.backToSign}</Text>
             </TouchableOpacity>
+            <TouchableOpacity onPress={confirmation.reject} style={localStyles.textBtn} hitSlop={8}>
+              <Text style={{ color: colors.muted }}>{copy.closeAndCancel}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={localStyles.detail}>
+            <TxReview
+              data={review}
+              theme={theme}
+              accentColor={accentColor}
+              copyText={copyText}
+              language={language}
+              detailsIntro={{ title: copy.whyTitle, body: copy.whyBody }}
+              detailsAction={{ label: copy.cancelAction, onPress: confirmation.reject }}
+            />
             <TouchableOpacity
               onPress={confirmation.confirm}
               style={[localStyles.btn, { backgroundColor: accentColor, borderColor: accentColor }]}
             >
-              <Text style={{ color: '#fff', fontWeight: '600' }}>Confirm</Text>
+              <Text style={{ color: '#fff', fontWeight: '600' }}>
+                {review.kind === 'activate_wallet' ? copy.activateWallet : copy.confirm}
+              </Text>
             </TouchableOpacity>
           </View>
-        </View>
+        )}
         <PollarModalFooter />
       </View>
     </PollarOverlay>
@@ -106,11 +126,10 @@ export function ConfirmModal({ confirmation }: ConfirmModalProps) {
 
 const localStyles = StyleSheet.create({
   card: { width: '100%', maxWidth: 420, borderRadius: 16, borderWidth: 1, padding: 16 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  title: { fontSize: 17, fontWeight: '600' },
-  detail: { borderWidth: 1, borderRadius: 12, padding: 14, gap: 8 },
-  detailTitle: { fontSize: 16, fontWeight: '600' },
-  row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 4 },
-  btn: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 10, borderWidth: 1 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 12 },
+  heading: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  title: { fontSize: 17, fontWeight: '600', flexShrink: 1 },
+  detail: { gap: 8 },
+  btn: { alignItems: 'center', paddingVertical: 11, borderRadius: 10, borderWidth: 1, marginTop: 4 },
+  textBtn: { alignSelf: 'center', paddingVertical: 4 },
 });

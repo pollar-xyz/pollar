@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  type PollarLanguage,
   type CosignDevicesContent,
   isPollarApiError,
   type RecoveryState,
@@ -9,19 +10,27 @@ import {
 } from '@pollar/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import '../shared.css';
 import './RecoveryModal.css';
 import { modalChrome } from '../modal-theme';
+import { RECOVERY_COPY } from './recovery-copy';
 import { RecoveryModalTemplate, type RecoveryView } from './RecoveryModalTemplate';
+import { PollarOverlay } from '../PollarOverlay';
+
+/** How often the modal reads again while another device is asked to add this one. */
+const APPROVAL_POLL_MS = 3_000;
+/** An enrollment request expires after 15 minutes; past that nothing can approve it. */
+const APPROVAL_WINDOW_MS = 15 * 60_000;
 
 interface RecoveryModalProps {
   onClose: () => void;
 }
 
-function errorText(err: unknown): string {
+function errorText(err: unknown, language: PollarLanguage): string {
   return (
-    cosignRefusalMessage(err) ??
-    transactionErrorMessage(isPollarApiError(err) ? err.code : null, err instanceof Error ? err.message : null)
+    cosignRefusalMessage(err, language) ??
+    transactionErrorMessage(isPollarApiError(err) ? err.code : null, err instanceof Error ? err.message : null, language)
   );
 }
 
@@ -35,6 +44,8 @@ function errorText(err: unknown): string {
 export function RecoveryModal({ onClose }: RecoveryModalProps) {
   const { getClient, styles, refreshRecovery, appConfig } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
+  const language = useModalLanguage();
+  const copy = RECOVERY_COPY[language];
   const recovery = getClient().cosign.recovery;
 
   const [state, setState] = useState<RecoveryState | null>(null);
@@ -63,7 +74,7 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
   }, [getClient, refreshRecovery]);
 
   useEffect(() => {
-    load().catch((err: unknown) => setError(errorText(err)));
+    load().catch((err: unknown) => setError(errorText(err, language)));
   }, [load]);
 
   const onCloseRef = useRef(onClose);
@@ -88,7 +99,7 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
         if (after?.notice) setNotice(after.notice);
         if (after?.view) setView(after.view);
       } catch (err) {
-        setError(errorText(err));
+        setError(errorText(err, language));
       } finally {
         setBusy(null);
       }
@@ -98,8 +109,27 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
 
   const enrolled = !!thisDeviceKey && !!devices?.devices.some((d) => d.publicKey.toLowerCase() === thisDeviceKey);
 
+  // The approval happens on another device, so nothing here learns of it unless
+  // this modal reads again: while the request is open it looks every few
+  // seconds and says so the moment this device is in.
+  const [awaitingApproval, setAwaitingApproval] = useState(false);
+  useEffect(() => {
+    if (!awaitingApproval) return;
+    if (enrolled) {
+      setAwaitingApproval(false);
+      setNotice(copy.deviceAdded);
+      return;
+    }
+    const timer = setInterval(() => void load().catch(() => undefined), APPROVAL_POLL_MS);
+    const stop = setTimeout(() => setAwaitingApproval(false), APPROVAL_WINDOW_MS);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(stop);
+    };
+  }, [awaitingApproval, enrolled, load, copy]);
+
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <RecoveryModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -125,7 +155,7 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
           setView(next);
         }}
         onEmailDraft={setEmailDraft}
-        onAddPasskey={() => void run('passkey', () => recovery.addPasskey(), { notice: 'Passkey added.' })}
+        onAddPasskey={() => void run('passkey', () => recovery.addPasskey(), { notice: copy.passkeyAdded })}
         onRemovePasskey={(id) => void run(`passkey:${id}`, () => recovery.removePasskey(id))}
         onSendEmailCode={() =>
           void run('email-send', async () => {
@@ -134,18 +164,23 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
           })
         }
         onConfirmEmail={(code) =>
-          void run('email-confirm', () => recovery.confirmEmail(code.trim()), { notice: 'Email confirmed.', view: 'overview' })
+          void run('email-confirm', () => recovery.confirmEmail(code.trim()), { notice: copy.emailConfirmed, view: 'overview' })
         }
-        onApproveDevice={(id) => void run(`approve:${id}`, () => recovery.approveDevice(id), { notice: 'Device added.' })}
+        onApproveDevice={(id) => void run(`approve:${id}`, () => recovery.approveDevice(id), { notice: copy.deviceAdded })}
         onRejectDevice={(id) => void run(`reject:${id}`, () => recovery.rejectDevice(id))}
         onRequestEnrollment={() =>
-          void run('enroll', () => recovery.requestDeviceEnrollment(), {
-            notice: 'Request sent. Approve it from a device that already has this wallet within 15 minutes.',
-          })
+          void run(
+            'enroll',
+            async () => {
+              await recovery.requestDeviceEnrollment();
+              setAwaitingApproval(true);
+            },
+            { notice: copy.requestSent },
+          )
         }
         onRecoverWithPasskey={() =>
           void run('recover-passkey', () => recovery.recoverWithPasskey(), {
-            notice: 'This device is part of your wallet again.',
+            notice: copy.recovered,
           })
         }
         onSendRecoveryCode={() =>
@@ -156,7 +191,7 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
         }
         onRecoverWithCode={(code) =>
           void run('recover-code', () => recovery.recoverWithEmailCode(code.trim()), {
-            notice: 'This device is part of your wallet again.',
+            notice: copy.recovered,
             view: 'overview',
           })
         }
@@ -166,7 +201,8 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
           })
         }
         onClose={onClose}
+        language={language}
       />
-    </div>
+    </PollarOverlay>
   );
 }

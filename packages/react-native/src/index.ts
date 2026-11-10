@@ -85,7 +85,13 @@ export { RegistryCheckModal } from './components/registry-check-modal/RegistryCh
 export { ProviderRegistrationModal } from './components/provider-registration-modal/ProviderRegistrationModal';
 export { KycStatus } from './components/kyc-modal/KycStatus';
 export { RampWidget } from './components/ramp-widget/RampWidget';
+export type { RampModalOptions } from './components/ramp-widget/RampWidget';
 export { CardModal } from './components/card-modal/CardModal';
+export { BridgeModal } from './components/bridge-modal/BridgeModal';
+export type { BridgeModalOptions, BridgeModalProps } from './components/bridge-modal/BridgeModal';
+export type { CardModalOptions } from './components/card-modal/CardModal';
+export type { EarnModalOptions, ReceiveModalOptions, SendModalOptions, SwapModalOptions } from './components/FeaturePanel';
+export type { TxHistoryModalOptions } from './components/tx-history-modal/TxHistoryModal';
 export { CosignModal } from './components/cosign-modal/CosignModal';
 export { RecoveryModal } from './components/recovery-modal/RecoveryModal';
 export { CustodyMigrationModal } from './components/custody-migration-modal/CustodyMigrationModal';

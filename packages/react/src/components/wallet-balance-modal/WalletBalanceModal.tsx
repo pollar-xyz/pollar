@@ -3,12 +3,14 @@
 import { WalletChain } from '@pollar/core';
 import { useEffect, useState } from 'react';
 import { usePollar } from '../../context';
+import { useModalLanguage } from '../../language';
 import { useChains } from '../../useChains';
 import { addressForChain } from '../ChainSelect';
 import '../shared.css';
 import './WalletBalanceModal.css';
 import { WalletBalanceModalTemplate } from './WalletBalanceModalTemplate';
 import { modalChrome } from '../modal-theme';
+import { PollarOverlay } from '../PollarOverlay';
 
 interface WalletBalanceModalProps {
   onClose: () => void;
@@ -17,6 +19,7 @@ interface WalletBalanceModalProps {
 export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
   const { walletBalance, refreshWalletBalance, wallets, network, styles, enabledAssets } = usePollar();
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
+  const language = useModalLanguage();
 
   const { chains } = useChains();
   const [selectedChain, setSelectedChain] = useState<WalletChain | null>(null);
@@ -33,7 +36,7 @@ export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
   }, [refreshWalletBalance]);
 
   return (
-    <div className="pollar-overlay" style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={onClose}>
       <WalletBalanceModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -47,7 +50,8 @@ export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
         onSelectChain={setSelectedChain}
         onRefresh={() => refreshWalletBalance()}
         onClose={onClose}
+        language={language}
       />
-    </div>
+    </PollarOverlay>
   );
 }
