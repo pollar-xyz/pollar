@@ -410,6 +410,7 @@ export const TARGET_EXPORTS: Record<string, readonly string[]> = {
     'rampResolutionText',
     'rampStepStatusText',
     'rampStepTitle',
+    'rampSupportContact',
     'rampSupportCopy',
     'rampTrustlineAsset',
     'rampTrustlineErrorText',
