@@ -75,7 +75,15 @@ export { completeAuthEntryStep, isAuthEntryAdapterStep } from './adapter-steps';
 export type { StellarNetwork, StellarClientConfig, StellarBalance } from './stellar/StellarClient';
 
 // --- KYC endpoints ------------------------------------------------------------
-export { getKycStatus, getKycProviders, startKyc, resolveKyc, pollKycStatus, pollKycDecision } from './api/endpoints/kyc';
+export {
+  getKycStatus,
+  getKycProviders,
+  startKyc,
+  resolveKyc,
+  pollKycStatus,
+  pollKycDecision,
+  isKycSettled,
+} from './api/endpoints/kyc';
 export {
   getAppRequirements,
   getRequirementForm,
