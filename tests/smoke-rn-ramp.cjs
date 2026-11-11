@@ -284,6 +284,31 @@ const order = (pendingAction, patch = {}) => ({
     },
   };
 
+  // The amount screen quotes as the user types and Continue takes the best route.
+  {
+    const done = await render(React.createElement(RampWidget, { onClose() {} }));
+    texts = [];
+    await rerender(() =>
+      [...inputs]
+        .reverse()
+        .find((i) => i.keyboardType === 'decimal-pad')
+        .onChangeText('100'),
+    );
+    await React.act(async () => new Promise((r) => setTimeout(r, 700)));
+    assert.equal(calls.filter(([name]) => name === 'quoteRamp').length, 1, 'one quote once typing stops');
+    assert.match(shown(), /~14\.2/, 'You receive shows the best route');
+    await press('Show details');
+    assert.ok(
+      buttons.some((b) => label(b).startsWith('Best price')),
+      'the best route is the one picked in the details',
+    );
+    await press('Continue');
+    assert.match(shown(), /Full name/, 'the best route goes on to its details');
+    assert.ok(!buttons.slice(-20).some((b) => label(b).startsWith('100 BOB')), 'no route list on the way');
+    await done();
+    calls.length = 0;
+  }
+
   let unmount = await render(React.createElement(RampWidget, { onClose() {} }));
   assert.deepEqual(calls[0], ['getRampRoutes', 'ONRAMP']);
   await rerender(() =>
