@@ -51,6 +51,19 @@
   overflow-y: auto;
 }
 
+/* A card shown inline in the host's page (ModalFrame `inline`): it takes the
+ * page's width and height instead of floating over a backdrop. */
+.pollar-inline-frame {
+  width: 100%;
+}
+.pollar-modal-card.pollar-modal-card--inline {
+  max-width: none;
+  max-height: none;
+  overflow-y: visible;
+  box-shadow: none;
+  animation: none;
+}
+
 /* --- Theme variables -------------------------------------------------------------
  * Every component reads the public `--pollar-*` variables. Each one resolves in
  * three tiers, strongest first:

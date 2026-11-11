@@ -18,7 +18,7 @@ import { kycErrorMessage } from './kyc-messages';
 import '../shared.css';
 import './KycModal.css';
 import { modalChrome } from '../modal-theme';
-import { PollarOverlay } from '../PollarOverlay';
+import { ModalFrame } from '../ModalFrame';
 
 interface KycModalProps {
   corridorId?: string;
@@ -35,6 +35,8 @@ interface KycModalProps {
   onApproved?: () => void;
   /** Language of the modal, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
   language?: string | undefined;
+  /** Render the card in the page instead of over a backdrop, without its close buttons. */
+  inline?: boolean;
 }
 
 /**
@@ -62,6 +64,7 @@ export function KycModal({
   cardProviderId,
   providerId,
   language: languageProp,
+  inline = false,
 }: KycModalProps) {
   const { getClient, styles } = usePollar();
   const language = useModalLanguage(languageProp);
@@ -255,7 +258,7 @@ export function KycModal({
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={onClose}>
+    <ModalFrame inline={inline} overlayStyle={overlayStyle} onClose={onClose}>
       <KycModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -277,7 +280,8 @@ export function KycModal({
         onRefresh={() => void loadProviders()}
         onClose={onClose}
         language={language}
+        inline={inline}
       />
-    </PollarOverlay>
+    </ModalFrame>
   );
 }
