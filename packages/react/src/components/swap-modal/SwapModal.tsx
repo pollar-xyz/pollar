@@ -359,7 +359,12 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   // Auto-select the first sell / buy asset once options are available, and keep a
   // valid selection if the list changes - so the pickers never sit empty.
   useEffect(() => {
-    if (sellOptions.length === 0) return;
+    // An empty list (another network's, once read) drops the selection: a pick from the
+    // previous network would leave the pill blank while its balance still shows.
+    if (sellOptions.length === 0) {
+      if (selectedSell && !isLoadingData) setSelectedSell(null);
+      return;
+    }
     const seeded = byCode(sellOptions, sellSeed.current);
     if (seeded) {
       sellSeed.current = undefined;
@@ -369,10 +374,13 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     if (!selectedSell || !sellOptions.some((o) => optKey(o) === optKey(selectedSell))) {
       setSelectedSell(sellOptions[0]!);
     }
-  }, [sellOptions, selectedSell]);
+  }, [sellOptions, selectedSell, isLoadingData]);
 
   useEffect(() => {
-    if (buyOptions.length === 0) return;
+    if (buyOptions.length === 0) {
+      if (selectedBuy && !isLoadingData) setSelectedBuy(null);
+      return;
+    }
     const seeded = byCode(buyOptions, buySeed.current);
     if (seeded) {
       buySeed.current = undefined;
@@ -382,7 +390,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     if (!selectedBuy || !buyOptions.some((o) => optKey(o) === optKey(selectedBuy))) {
       setSelectedBuy(buyOptions[0]!);
     }
-  }, [buyOptions, selectedBuy]);
+  }, [buyOptions, selectedBuy, isLoadingData]);
 
   // Add a user-pasted token (code + issuer) to the buy list and select it.
   // Returns an error message, or null on success.

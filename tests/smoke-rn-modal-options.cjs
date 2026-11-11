@@ -156,12 +156,12 @@ async function unmount() {
       onSuccess: (r) => hashes.push(r.hash),
     };
     await show(SendPanel, { initial });
-    assert.deepEqual(checked(), ['STELLAR', 'Native', 'Text'], 'the asset waits for the enabled assets');
+    assert.deepEqual(checked(), ['Stellar', 'Native', 'Text'], 'the asset waits for the enabled assets');
     assert.equal(input('Destination address'), 'GDEST');
     assert.equal(input('Amount'), '5');
     ctx.enabledAssets = { step: 'loaded', data: { assets: [usdc] } };
     await show(SendPanel, { initial });
-    assert.deepEqual(checked(), ['STELLAR', 'STELLAR:USDC:GA5Z', 'Text'], 'the seeded asset once it loads');
+    assert.deepEqual(checked(), ['Stellar', 'STELLAR:USDC:GA5Z', 'Text'], 'the seeded asset once it loads');
 
     await press('Review payment');
     await press('Confirm payment');
@@ -173,7 +173,7 @@ async function unmount() {
     ctx = context({ enabledAssets: { step: 'loaded', data: { assets: [usdc] } } });
     await mount();
     await show(SendPanel, { initial: { chain: 'POLYGON', asset: 'NOPE', amount: '1e3' } });
-    assert.deepEqual(checked(), ['STELLAR', 'Native', 'Text'], 'an unknown chain and asset keep the defaults');
+    assert.deepEqual(checked(), ['Stellar', 'Native', 'Text'], 'an unknown chain and asset keep the defaults');
     assert.equal(input('Amount'), '', 'an amount that is not a plain decimal is left out');
     await unmount();
 
@@ -189,7 +189,7 @@ async function unmount() {
     await mount();
     const memoed = { destination: 'GDEST', amount: '1', memo: '12345', memoType: 'id' };
     await show(SendPanel, { initial: memoed });
-    assert.deepEqual(checked(), ['STELLAR', 'Native', 'ID']);
+    assert.deepEqual(checked(), ['Stellar', 'Native', 'ID']);
     assert.equal(input('Memo (optional)'), '12345');
     await press('Review payment');
     await press('Confirm payment');
@@ -337,7 +337,7 @@ async function unmount() {
     await mount();
     const onSolana = { chain: 'SOLANA', sell: 'sol', buy: 'USDC', amount: '1.5', onSuccess: (r) => solHashes.push(r.hash) };
     await show(SwapPanel, { initial: onSolana });
-    assert.deepEqual(checked(), ['SOLANA', 'SOL', 'USDC', 'Best price'], 'the network, the mints by code, auto venue');
+    assert.deepEqual(checked(), ['Solana', 'SOL', 'USDC', 'Best price'], 'the network, the mints by code, auto venue');
     await press('Get quotes');
     assert.deepEqual(JSON.parse(JSON.stringify(solQuotes[0])), {
       inputMint: 'So11111111111111111111111111111111111111112',

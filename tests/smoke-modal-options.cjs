@@ -285,7 +285,7 @@ const assetShown = () => document.querySelector('.pollar-send-asset-selector')?.
     });
     const ui = await mount(client);
     await ui.open('openEarnModal', { chain: 'SOLANA', tab: 'deposit' });
-    assert.ok(document.querySelector('[data-chain="SOLANA"]'), 'a network selector when both chains offer Earn');
+    assert.ok(document.querySelector('.pollar-network-pill'), 'a network selector when both chains offer Earn');
     assert.match(document.body.textContent, /APY after fees/);
     assert.match(document.body.textContent, /3\.90%/, 'the position APY, after fees');
     assert.match(document.body.textContent, /Earned after fees/);

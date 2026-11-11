@@ -521,6 +521,16 @@ SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
   panels. React Native follows the same flow with chips inside the two panels:
   the country with its flag, the live quote, Continue on the best route, and
   the route chips and "See every route" in the details.
+- **The network sits next to the title.** Send, swap, earn, wallet balance,
+  receive, history and assets show the network as a pill on the title's row,
+  out of the form, with each chain's logo (`NetworkPill` from `ChainSelect`;
+  `ChainSelect` options carry the logos too). Once a transaction starts it
+  turns into a label: the flow runs on that network and it cannot change
+  midway. An app on a single network shows none. React Native's send, swap,
+  earn, receive and history panels do the same beside their card title, and
+  the history modal's network chips show the logo and the chain's name. A swap
+  whose sell or buy list empties on the new network drops the old pick instead
+  of leaving the pill blank with the previous asset's balance.
 - **A shorter swap form.** Each panel puts the amount and its asset on one row,
   with the balance and Max as a small line under them; the rate stays in view,
   and the route picker, minimum received, price impact and fees are behind

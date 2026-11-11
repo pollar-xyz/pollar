@@ -696,3 +696,45 @@
   font-weight: 600;
   color: var(--pollar-text);
 }
+
+/* --- The modal's network, next to its title ----------------------------------- */
+.pollar-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.pollar-network-logo {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.pollar-network-pill.pollar-select-trigger,
+.pollar-network-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: auto;
+  height: 1.85rem;
+  padding: 0 0.6rem;
+  border: 1px solid var(--pollar-border);
+  border-radius: 999px;
+  background: var(--pollar-input-bg);
+  color: var(--pollar-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.pollar-network-pill.pollar-select-trigger {
+  cursor: pointer;
+}
+
+.pollar-network-tag {
+  background: transparent;
+  color: var(--pollar-muted);
+}

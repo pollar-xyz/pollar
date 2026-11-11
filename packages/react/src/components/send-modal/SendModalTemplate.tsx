@@ -12,7 +12,7 @@ import {
 } from '@pollar/core';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { AmountField } from '../AmountField';
-import { ChainSelect } from '../ChainSelect';
+import { NetworkPill } from '../ChainSelect';
 import { PollarModalFooter, RefreshIcon } from '../commons';
 import { TxStatusHeading, TxStatusView, txStatusReview } from '../transaction-modal/TxStatusView';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
@@ -347,11 +347,23 @@ export function SendModalTemplate({
             </button>
           )}
           <div className="pollar-send-title-copy">
-            {step === 'tx' ? (
-              <TxStatusHeading review={txReview} fallback={title} />
-            ) : (
-              <h2 className="pollar-modal-title">{title}</h2>
-            )}
+            <div className="pollar-title-row">
+              {step === 'tx' ? (
+                <TxStatusHeading review={txReview} fallback={title} />
+              ) : (
+                <h2 className="pollar-modal-title">{title}</h2>
+              )}
+              {chains && (
+                <NetworkPill
+                  value={selectedChain}
+                  options={chains}
+                  {...(onSelectChain ? { onChange: onSelectChain } : {})}
+                  locked={step !== 'form'}
+                  disabled={isLoadingBalance}
+                  language={language}
+                />
+              )}
+            </div>
             {step === 'form' && (
               <p className="pollar-send-subtitle">{copy.subtitle.replace('{chain}', chainLabel(selectedChain, copy))}</p>
             )}
@@ -383,17 +395,6 @@ export function SendModalTemplate({
       {/* Form step */}
       {step === 'form' && (
         <>
-          {/* Network selector - drives the asset list below */}
-          {chains && onSelectChain && (
-            <ChainSelect
-              label={copy.network}
-              value={selectedChain}
-              options={chains}
-              onChange={onSelectChain}
-              disabled={isLoadingBalance}
-            />
-          )}
-
           {!canSendOnChain && <div className="pollar-modal-empty">{copy.sendingUnavailable}</div>}
           {canSendOnChain && notReadyReason && <div className="pollar-modal-empty">{notReadyReason}</div>}
 

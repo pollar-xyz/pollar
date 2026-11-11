@@ -5,17 +5,6 @@
   font-weight: 600;
 }
 
-.pollar-earn-network {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-}
-
-.pollar-earn-networks {
-  margin-bottom: 0;
-}
-
 .pollar-earn-card-head {
   display: flex;
   align-items: center;

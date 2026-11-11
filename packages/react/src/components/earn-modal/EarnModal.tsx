@@ -9,7 +9,7 @@ import { AmountField } from '../AmountField';
 import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
 import { TxStatusHeading, TxStatusView, txStatusReview } from '../transaction-modal/TxStatusView';
-import { AssetLogo, ChainLogo } from '../tx-review/TxReview';
+import { AssetLogo } from '../tx-review/TxReview';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
 import { earnOutcome, reviewForEarn } from '../tx-review/tx-review-model';
 import '../shared.css';
@@ -22,6 +22,7 @@ import { oneOf, seededAmount, useSuccessReport } from '../../modal-options';
 import { PollarOverlay } from '../PollarOverlay';
 import { PollarSelect } from '../PollarSelect';
 import { useInlineConfirmation } from '../../useInlineConfirmation';
+import { NetworkPill } from '../ChainSelect';
 
 /** Where the earn modal opens: a starting point the user can change. An option the app does not offer is left out. */
 export interface EarnModalOptions {
@@ -595,6 +596,19 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
             ) : (
               <h2 className="pollar-modal-title">{title}</h2>
             )}
+            <NetworkPill
+              value={earnChain}
+              options={networks}
+              locked={step === 'tx'}
+              onChange={(n) => {
+                if (n === earnChain) return;
+                setEarnChain(n as typeof earnChain);
+                setOpportunityId('');
+                setAmount('');
+                setFormError('');
+              }}
+              language={language}
+            />
           </div>
           <div className="pollar-modal-header-actions">
             {step === 'form' && !earnUnavailable && !smartUnsupported && (
@@ -664,36 +678,6 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
                 {copy.withdraw}
               </button>
             </div>
-
-            {/* Network */}
-            {networks.length > 1 && (
-              <div className="pollar-send-field">
-                <span className="pollar-send-label">{copy.network}</span>
-                <div className="pollar-tabs pollar-earn-networks" role="radiogroup" aria-label={copy.network}>
-                  {networks.map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      role="radio"
-                      aria-checked={earnChain === n}
-                      className="pollar-tab pollar-earn-network"
-                      data-active={earnChain === n}
-                      data-chain={n}
-                      onClick={() => {
-                        if (n === earnChain) return;
-                        setEarnChain(n);
-                        setOpportunityId('');
-                        setAmount('');
-                        setFormError('');
-                      }}
-                    >
-                      <ChainLogo chain={n} />
-                      {reviewCopy.chains[n]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Provider */}
             {!onSolana && providers && providers.length > 1 && (

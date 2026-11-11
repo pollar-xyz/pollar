@@ -3,7 +3,7 @@
 import { useInheritedLanguage } from '../../language-context';
 import { EnabledAssetRecord, EnabledAssetsState, type PendingConfirmation, PollarLanguage, WalletChain } from '@pollar/core';
 import { useState } from 'react';
-import { ChainSelect, resolveChain } from '../ChainSelect';
+import { NetworkPill, resolveChain } from '../ChainSelect';
 import { BusyOverlay, CopyButton, cropAddress, PollarModalFooter, Toggle, useStickyData } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { ENABLED_ASSETS_COPY } from './enabled-assets-copy';
@@ -201,7 +201,10 @@ export function EnabledAssetsModalTemplate({
       {isLoading && data && <BusyOverlay label={copy.refreshing} />}
 
       <div className="pollar-modal-header">
-        <h2 className="pollar-modal-title">{copy.title}</h2>
+        <div className="pollar-title-row">
+          <h2 className="pollar-modal-title">{copy.title}</h2>
+          <NetworkPill value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoading || busy} />
+        </div>
         <div className="pollar-modal-header-actions">
           <button
             type="button"
@@ -235,14 +238,6 @@ export function EnabledAssetsModalTemplate({
           </button>
         </div>
       </div>
-
-      <ChainSelect
-        label={copy.network}
-        value={selectedChain}
-        options={chains}
-        onChange={onSelectChain}
-        disabled={isLoading || busy}
-      />
 
       {walletAddress && (
         <div className="pollar-address-row">

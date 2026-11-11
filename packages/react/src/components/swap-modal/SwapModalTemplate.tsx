@@ -12,6 +12,7 @@ import {
 } from '@pollar/core';
 import { useState } from 'react';
 import { PollarModalFooter, RefreshIcon } from '../commons';
+import { ChainLogo, NetworkPill } from '../ChainSelect';
 import { PollarSelect } from '../PollarSelect';
 import { TxStatusHeading, TxStatusView, txStatusReview } from '../transaction-modal/TxStatusView';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
@@ -365,11 +366,20 @@ export function SwapModalTemplate({
               </svg>
             </button>
           )}
-          {step === 'tx' ? (
-            <TxStatusHeading review={txReview} fallback={title} />
-          ) : (
-            <h2 className="pollar-modal-title">{title}</h2>
-          )}
+          <div className="pollar-title-row">
+            {step === 'tx' ? (
+              <TxStatusHeading review={txReview} fallback={title} />
+            ) : (
+              <h2 className="pollar-modal-title">{title}</h2>
+            )}
+            <NetworkPill
+              value={chain}
+              options={chains}
+              onChange={(value) => onChainChange(value as SwapChain)}
+              locked={step === 'tx'}
+              disabled={configLoading || isLoadingData}
+            />
+          </div>
         </div>
         {!isInProgress && (
           <div className="pollar-modal-header-actions">
@@ -398,20 +408,6 @@ export function SwapModalTemplate({
 
       {step === 'form' && !swapUnavailable && (
         <>
-          {chains.length > 1 && (
-            <label className="pollar-swap-route-wrap pollar-swap-chain-wrap">
-              <span className="sr-only">{copy.network}</span>
-              <PollarSelect
-                className="pollar-swap-route-pill"
-                aria-label={copy.network}
-                value={chain}
-                disabled={configLoading || isLoadingData}
-                onChange={(value) => onChainChange(value as SwapChain)}
-                options={chains.map((c) => ({ value: c, label: CHAIN_LABELS[c] }))}
-              />
-            </label>
-          )}
-
           {destinations.length > 1 && (
             <label className="pollar-swap-route-wrap pollar-swap-chain-wrap">
               <span className="sr-only">{copy.receiveOn}</span>
@@ -421,7 +417,11 @@ export function SwapModalTemplate({
                 value={destination}
                 disabled={configLoading || isLoadingData}
                 onChange={(value) => onDestinationChange?.(value as SwapDestinationChain)}
-                options={destinations.map((c) => ({ value: c, label: `${copy.receiveOn} ${CHAIN_LABELS[c]}` }))}
+                options={destinations.map((c) => ({
+                  value: c,
+                  label: `${copy.receiveOn} ${CHAIN_LABELS[c]}`,
+                  icon: <ChainLogo chain={c} />,
+                }))}
               />
             </label>
           )}
@@ -455,7 +455,8 @@ export function SwapModalTemplate({
               </div>
               <div className="pollar-swap-panel-foot">
                 <span className="pollar-swap-balance">
-                  {copy.balance} {formatAmount(selectedSell?.available)}
+                  {copy.balance}{' '}
+                  {formatAmount(sellOptions.some((o) => assetOptionKey(o) === sellKey) ? selectedSell?.available : undefined)}
                 </span>
                 <span aria-hidden>·</span>
                 <button

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Linking, View } from 'react-native';
+import { Image, Linking, Pressable, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import type {
   RampRoute,
@@ -33,7 +33,7 @@ import {
 import { usePollar } from '../context';
 import { useModalLanguage } from '../language';
 import { FEATURE_COPY } from './feature-copy';
-import { ActionButton, ActionState, Card, Choice, Field, Label, ResultView, useAction } from './native-ui';
+import { ActionButton, ActionState, Card, Choice, Field, Label, ResultView, useAction, useNativeColors } from './native-ui';
 import { CHAIN_LOGOS } from '../constants';
 import { InlineAssetLogo, TxExplorerLink, TxReview } from './tx-review/TxReview';
 import { TX_REVIEW_COPY } from './tx-review/tx-review-copy';
@@ -60,10 +60,93 @@ export type FeatureName =
   | 'distribution';
 export function ChainSelect({ value, onChange }: { value: WalletChain; onChange: (value: WalletChain) => void }) {
   const { wallets } = usePollar();
-  const copy = FEATURE_COPY[useModalLanguage()];
+  const language = useModalLanguage();
+  const copy = FEATURE_COPY[language];
   const chains = [...new Set(wallets.map((w) => w.chain ?? 'STELLAR'))];
-  return <Choice label={copy.chain} value={value} options={chains.length ? chains : ['STELLAR']} onChange={onChange} />;
+  return (
+    <Choice
+      label={copy.chain}
+      labels={TX_REVIEW_COPY[language].chains}
+      icons={CHAIN_LOGOS}
+      value={value}
+      options={chains.length ? chains : ['STELLAR']}
+      onChange={onChange}
+    />
+  );
 }
+
+/** The chains the user holds a wallet on, Stellar when none is read yet. */
+function useWalletChains(): WalletChain[] {
+  const { wallets } = usePollar();
+  const chains = [...new Set(wallets.map((w) => w.chain ?? 'STELLAR'))];
+  return chains.length ? chains : ['STELLAR'];
+}
+
+/**
+ * The panel's network next to its title, out of the form: switching it changes
+ * every asset, balance and route the panel shows. Chips on the form, a label
+ * while its transaction runs, nothing for a single network.
+ */
+function NetworkChoice<T extends WalletChain>({
+  options,
+  value,
+  onChange,
+  locked = false,
+  disabled = false,
+}: {
+  options: readonly T[];
+  value: T;
+  onChange: (value: T) => void;
+  locked?: boolean;
+  disabled?: boolean;
+}) {
+  const c = useNativeColors();
+  const names = TX_REVIEW_COPY[useModalLanguage()].chains;
+  if (options.length < 2) return null;
+  const logo = (chain: T) =>
+    CHAIN_LOGOS[chain] ? (
+      <Image source={{ uri: CHAIN_LOGOS[chain] }} style={{ width: 16, height: 16, borderRadius: 8 }} />
+    ) : null;
+  if (locked) {
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }} accessibilityLabel={names[value]}>
+        {logo(value)}
+        <Text style={{ color: c.muted, fontWeight: '600' }}>{names[value]}</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} accessibilityRole="radiogroup">
+      {options.map((chain) => (
+        <Pressable
+          key={chain}
+          accessibilityRole="radio"
+          accessibilityLabel={names[chain]}
+          accessibilityState={{ checked: chain === value, disabled }}
+          disabled={disabled}
+          onPress={() => chain !== value && onChange(chain)}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingVertical: 5,
+            paddingHorizontal: 10,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: chain === value ? c.accent : c.border,
+            opacity: disabled ? 0.5 : 1,
+          }}
+        >
+          {logo(chain)}
+          <Text style={{ color: c.text, fontSize: 13, fontWeight: '600' }}>{names[chain]}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+/** Whether the panel's transaction is under way: its network is a label then. */
+const runningTx = (step: string) => step !== 'idle' && step !== 'success' && step !== 'error';
 export function AssetSelect({
   assets,
   value,
@@ -351,10 +434,10 @@ export function ReceivePanel({ initial }: { initial?: ReceiveModalOptions | unde
   const action = useAction();
   const seededChain = p.wallets.some((w) => (w.chain ?? 'STELLAR') === initial?.chain) ? initial?.chain : undefined;
   const [chain, setChain] = useState<WalletChain>(seededChain ?? 'STELLAR');
+  const walletChains = useWalletChains();
   const address = p.wallets.find((w) => (w.chain ?? 'STELLAR') === chain)?.address;
   return (
-    <Card title={copy.receive.title}>
-      <ChainSelect value={chain} onChange={setChain} />
+    <Card title={copy.receive.title} aside={<NetworkChoice options={walletChains} value={chain} onChange={setChain} />}>
       {p.recoveryLocked ? (
         // A locked wallet signs nothing, so funds sent to it now could not leave.
         <>
@@ -390,6 +473,7 @@ export function SendPanel({ initial }: { initial?: SendModalOptions | undefined 
   const action = useAction();
   const seededChain = p.wallets.some((w) => (w.chain ?? 'STELLAR') === initial?.chain) ? initial?.chain : undefined;
   const [chain, setChain] = useState<WalletChain>(seededChain ?? 'STELLAR');
+  const walletChains = useWalletChains();
   const [destination, setDestination] = useState(initial?.destination?.trim() ?? '');
   const [amount, setAmount] = useState(seededAmount(initial?.amount));
   const [memo, setMemo] = useState(initial?.memo ?? '');
@@ -437,16 +521,22 @@ export function SendPanel({ initial }: { initial?: SendModalOptions | undefined 
     return p.sendPayment({ chain, destination: destination.trim(), amount, ...(asset?.issuer ? { mint: asset.issuer } : {}) });
   }
   return (
-    <Card title={copy.send.title}>
-      <ChainSelect
-        value={chain}
-        onChange={(v) => {
-          assetSeed.current = undefined;
-          setChain(v);
-          setSelected('');
-          setReview(false);
-        }}
-      />
+    <Card
+      title={copy.send.title}
+      aside={
+        <NetworkChoice
+          options={walletChains}
+          value={chain}
+          locked={review || runningTx(p.tx.step)}
+          onChange={(v) => {
+            assetSeed.current = undefined;
+            setChain(v);
+            setSelected('');
+            setReview(false);
+          }}
+        />
+      }
+    >
       <Choice
         label={copy.send.token}
         labels={{ Native: copy.send.native }}
@@ -675,12 +765,12 @@ export function HistoryPanel() {
   const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   const [chain, setChain] = useState<WalletChain>(p.wallets[0]?.chain ?? 'STELLAR');
+  const walletChains = useWalletChains();
   useEffect(() => {
     void action.run(() => p.fetchTxHistory({ chain }));
   }, [chain]);
   return (
-    <Card title={copy.history.title}>
-      <ChainSelect value={chain} onChange={setChain} />
+    <Card title={copy.history.title} aside={<NetworkChoice options={walletChains} value={chain} onChange={setChain} />}>
       <ActionButton
         title={copy.history.refresh}
         disabled={action.busy}
@@ -1010,19 +1100,23 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
     ]),
   );
   return (
-    <Card title={copy.swap.title}>
+    <Card
+      title={copy.swap.title}
+      aside={
+        chains && (
+          <NetworkChoice
+            options={chains}
+            value={chain}
+            locked={runningTx(p.tx.step)}
+            onChange={(v) => {
+              setChain(v);
+              clearPicks();
+            }}
+          />
+        )
+      }
+    >
       <ActionButton title={copy.swap.refresh} disabled={action.busy} onPress={() => void action.run(refreshSwap)} />
-      {chains && chains.length > 1 && (
-        <Choice
-          label={copy.swap.network}
-          options={chains}
-          value={chain}
-          onChange={(v) => {
-            setChain(v);
-            clearPicks();
-          }}
-        />
-      )}
       {chain === 'SOLANA' && destinationChains.length > 0 && (
         <Choice
           label={copy.swap.receiveOn}
@@ -1256,16 +1350,14 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
     void action.run(refreshEarn);
   }, []);
   return (
-    <Card title={copy.earn.title}>
-      <ActionButton title={copy.earn.refresh} disabled={action.busy} onPress={() => void action.run(refreshEarn)} />
-      {networks.length > 1 && (
-        <Choice
-          label={copy.earn.network}
-          disabled={action.busy}
-          labels={reviewCopy.chains}
-          icons={CHAIN_LOGOS}
+    <Card
+      title={copy.earn.title}
+      aside={
+        <NetworkChoice
           options={networks}
           value={earnChain}
+          disabled={action.busy}
+          locked={runningTx(p.tx.step)}
           onChange={(v) => {
             void action.run(async () => {
               setEarnChain(v);
@@ -1280,7 +1372,9 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
             });
           }}
         />
-      )}
+      }
+    >
+      <ActionButton title={copy.earn.refresh} disabled={action.busy} onPress={() => void action.run(refreshEarn)} />
       {!onSolana && (
         <Choice
           label={copy.provider}
