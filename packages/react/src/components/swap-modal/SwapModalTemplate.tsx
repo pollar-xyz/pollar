@@ -16,6 +16,7 @@ import { ChainLogo, NetworkPill } from '../ChainSelect';
 import { PollarSelect } from '../PollarSelect';
 import { TxStatusHeading, TxStatusView, txStatusReview } from '../transaction-modal/TxStatusView';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
+import type { TxReviewData } from '../tx-review/tx-review-model';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { SWAP_COPY } from './swap-copy';
 
@@ -185,6 +186,8 @@ export interface SwapModalTemplateProps {
   settlement?: SwapSettlementView | null;
   /** The signature waiting for the user's yes, answered in the transaction step. */
   confirmation?: PendingConfirmation | null | undefined;
+  /** What the transaction step reviews when the transaction carries no build of its own to read it from. */
+  review?: TxReviewData | null | undefined;
   /** The app's network, for the details of a confirmation. */
   network?: StellarNetwork | undefined;
   provider: string;
@@ -244,6 +247,7 @@ export function SwapModalTemplate({
   usdcAcross = false,
   settlement = null,
   confirmation = null,
+  review = null,
   network,
   provider,
   providers,
@@ -306,7 +310,7 @@ export function SwapModalTemplate({
     : [];
   const txReview =
     step === 'tx'
-      ? txStatusReview({ transaction, explorerUrl, confirmation, network, extraRows: settlementRows, language })
+      ? txStatusReview({ transaction, review, explorerUrl, confirmation, network, extraRows: settlementRows, language })
       : null;
   const [customOpen, setCustomOpen] = useState(false);
   const [customCode, setCustomCode] = useState('');
@@ -695,6 +699,7 @@ export function SwapModalTemplate({
           onRetry={onRetry}
           onDone={onDone}
           confirmation={confirmation}
+          review={review}
           network={network}
           extraRows={settlementRows}
           {...(settlement ? { outcomeNote: { text: settlement.text, failed: settlement.kind === 'failed' } } : {})}
