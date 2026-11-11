@@ -219,6 +219,7 @@ const order = (pendingAction, patch = {}) => ({
   const { RampWidget } = load('packages/react-native/src/components/ramp-widget/RampWidget.tsx');
   const calls = [];
   client = {
+    getSupportContact: () => null,
     getRampRoutes: async (direction) => {
       calls.push(['getRampRoutes', direction]);
       return { routes: [{ fiat: bob, asset: usdc, legs: ['PROVIDER_ONRAMP'] }] };
