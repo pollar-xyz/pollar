@@ -9,7 +9,7 @@ import {
   WalletBalanceState,
   WalletChain,
 } from '@pollar/core';
-import { ChainSelect, resolveChain } from '../ChainSelect';
+import { NetworkPill, resolveChain } from '../ChainSelect';
 import { BusyOverlay, CopyButton, cropAddress, PollarModalFooter, RefreshIcon, useStickyData } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { WALLET_BALANCE_COPY } from './wallet-balance-copy';
@@ -175,7 +175,12 @@ export function WalletBalanceModalTemplate({
       {isLoading && data && <BusyOverlay label={copy.refreshing} />}
 
       <div className="pollar-modal-header">
-        <h2 className="pollar-modal-title">{copy.title}</h2>
+        <div className="pollar-title-row">
+          <h2 className="pollar-modal-title">{copy.title}</h2>
+          {chains && onSelectChain && (
+            <NetworkPill value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoading} />
+          )}
+        </div>
         <div className="pollar-modal-header-actions">
           <button
             type="button"
@@ -194,16 +199,6 @@ export function WalletBalanceModalTemplate({
           </button>
         </div>
       </div>
-
-      {chains && onSelectChain && (
-        <ChainSelect
-          label={copy.network}
-          value={selectedChain}
-          options={chains}
-          onChange={onSelectChain}
-          disabled={isLoading}
-        />
-      )}
 
       {walletAddress && (
         <div className="pollar-address-row">

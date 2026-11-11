@@ -184,6 +184,13 @@ export interface PollarUserProfile {
   };
 }
 
+/** Your app's support contact, shown where a modal asks the user to contact support. */
+export interface PollarSupportContact {
+  /** A page, chat or form (https). */
+  url?: string;
+  email?: string;
+}
+
 export interface PollarClientConfig {
   stellarNetwork?: StellarNetwork;
   baseUrl?: string;
@@ -291,6 +298,12 @@ export interface PollarClientConfig {
    * If unset, the server-recorded `user_agent` header is the fallback.
    */
   deviceLabel?: string;
+  /**
+   * Where your users reach your support. A ramp order that stops with nothing
+   * they can fix tells them to contact support: with this set, the modal links
+   * here and shows the order id to quote; without it, only the order id.
+   */
+  support?: PollarSupportContact;
   /**
    * Foreground-detection signal for the silent-refresh scheduler. When the
    * app is hidden / backgrounded, scheduled refreshes are skipped (saves
@@ -726,7 +739,14 @@ export type TransactionState =
   // --- Co-signed wallet: waiting for the user's device to vote --------------
   | { step: 'awaiting_cosign'; request: CosignRequest; buildData?: TxBuildContent }
   // --- Post-Horizon-ack, pre-ledger-confirm (shared) --------------------
-  | { step: 'submitted'; buildData?: TxBuildContent; hash: string; sponsored?: boolean }
+  | {
+      step: 'submitted';
+      buildData?: TxBuildContent;
+      hash: string;
+      sponsored?: boolean;
+      /** Past the confirmation window: still pending, and read on in the background until it settles. */
+      slow?: boolean;
+    }
   // --- Terminal success (shared) ----------------------------------------
   | { step: 'success'; buildData?: TxBuildContent; hash: string; sponsored?: boolean }
   // --- Terminal failure with phase context ------------------------------

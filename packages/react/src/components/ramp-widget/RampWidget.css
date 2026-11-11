@@ -526,6 +526,42 @@
   color: var(--pollar-muted);
 }
 
+.pollar-ramp-support {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.pollar-ramp-support-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.pollar-ramp-support-email {
+  font-size: 0.8125rem;
+  color: var(--pollar-accent);
+  word-break: break-all;
+}
+
+.pollar-ramp-support-order {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--pollar-muted);
+}
+
+.pollar-ramp-support-order code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--pollar-text);
+}
+
 /* The chain steps of the running leg, under its title, indented like the note. */
 .pollar-ramp-steps {
   flex-basis: 100%;
@@ -580,4 +616,23 @@
   font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.75rem;
   color: var(--pollar-accent);
+}
+
+/* --- Amount screen, drawn like the swap ---------------------------------------- */
+.pollar-ramp-modal .pollar-swap-panels {
+  margin-top: 0.75rem;
+}
+
+/* "BOB - QR" and "USDT on Polygon" are longer than a swap asset code. */
+.pollar-ramp-pill {
+  max-width: 11rem;
+}
+
+.pollar-ramp-modal .pollar-swap-quote .pollar-swap-route-pill {
+  max-width: 12rem;
+}
+
+.pollar-ramp-all-routes {
+  align-self: flex-start;
+  font-size: 0.75rem;
 }

@@ -1,9 +1,12 @@
 import { useInheritedLanguage } from '../../language-context';
 import { PollarLanguage, TxHistoryRecord, TxHistoryState, WalletChain } from '@pollar/core';
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, FlatList, Linking, Image } from 'react-native';
+import { CHAIN_LOGOS } from '../../constants';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
 import { ModalStatusBanner, PollarModalFooter, PollarOverlay } from '../commons';
 import { TX_HISTORY_COPY } from './tx-history-copy';
+import { explorerTxUrl } from '../explorer';
 
 export interface TxHistoryModalTemplateProps {
   theme: string;
@@ -17,14 +20,6 @@ export interface TxHistoryModalTemplateProps {
   chains?: WalletChain[] | undefined;
   chain?: WalletChain | null | undefined;
   onChainChange?: ((chain: WalletChain) => void) | undefined;
-}
-
-/** The explorer page of a transaction on its own chain; testnet is Solana devnet and Polygon Amoy. */
-function explorerTxUrl(chain: WalletChain | undefined, hash: string, network: string): string {
-  const testnet = network === 'testnet';
-  if (chain === 'SOLANA') return `https://explorer.solana.com/tx/${hash}${testnet ? '?cluster=devnet' : ''}`;
-  if (chain === 'POLYGON') return `https://${testnet ? 'amoy.' : ''}polygonscan.com/tx/${hash}`;
-  return `https://stellar.expert/explorer/${testnet ? 'testnet' : 'public'}/tx/${hash}`;
 }
 
 /** A ramp row's fiat side (`70 BOB`); its amounts are decimal strings, not base units. */
@@ -93,7 +88,10 @@ export function TxHistoryModalTemplate({
                 style={[styles.chainChip, { borderColor: c === chain ? accentColor : colors.border }]}
                 onPress={() => onChainChange?.(c)}
               >
-                <Text style={{ color: colors.text }}>{c}</Text>
+                {CHAIN_LOGOS[c] ? (
+                  <Image source={{ uri: CHAIN_LOGOS[c] }} style={{ width: 16, height: 16, borderRadius: 8 }} />
+                ) : null}
+                <Text style={{ color: colors.text }}>{TX_REVIEW_COPY[language].chains[c]}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -216,6 +214,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   chainChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,

@@ -1,13 +1,22 @@
 'use client';
 
 import { useInheritedLanguage } from '../../language-context';
-import { PollarLanguage, TransactionState, transactionErrorMessage, WalletId, WalletType } from '@pollar/core';
+import {
+  type PendingConfirmation,
+  PollarLanguage,
+  type StellarNetwork,
+  TransactionState,
+  transactionErrorMessage,
+  WalletId,
+  WalletType,
+} from '@pollar/core';
 import type { ReactNode } from 'react';
-import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR_MARK_ON_DARK, LOGO_POLLAR_MARK_ON_LIGHT } from '../../constants';
-import { ModalStatusBanner } from '../commons';
+import { CONFIRM_COPY } from '../confirm-modal/confirm-copy';
+import { confirmationReview } from '../confirm-modal/confirmation-review';
+import { OutcomeIcon, TitleMark } from '../signing-marks';
 import { TxReview } from '../tx-review/TxReview';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
-import { reviewFromBuild, type TxReviewData } from '../tx-review/tx-review-model';
+import { headlineAsset, reviewFromBuild, type TxDetailRow, type TxReviewData } from '../tx-review/tx-review-model';
 import { TRANSACTION_COPY } from './transaction-copy';
 
 /** Step values that represent in-flight work (spinner / non-cancellable UI). */
@@ -19,18 +28,6 @@ const IN_FLIGHT_STEPS = new Set<TransactionState['step']>([
   'signing-submitting',
   'building-signing-submitting',
   'awaiting_cosign',
-]);
-
-/** Step values that should show the transaction details panel. */
-const SHOW_DETAILS_STEPS = new Set<TransactionState['step']>([
-  'built',
-  'signing',
-  'signed',
-  'submitting',
-  'submitted',
-  'signing-submitting',
-  'awaiting_cosign',
-  'success',
 ]);
 
 export interface TxStatusViewProps {
@@ -60,8 +57,79 @@ export interface TxStatusViewProps {
   successMessage?: string | undefined;
   /** Shown under the review once the transaction succeeds, above Done. */
   successExtra?: ReactNode;
+  /** The signature waiting for the user's yes, answered here instead of in a prompt over the modal. */
+  confirmation?: PendingConfirmation | null | undefined;
+  /** The app's network, for the details of a confirmation. */
+  network?: StellarNetwork | undefined;
+  /** Rows the modal adds to the details (where a cross-chain swap delivers). */
+  extraRows?: TxDetailRow[] | undefined;
+  /** A second line for the outcome strip, and whether it reports a failure (a cross-chain leg). */
+  outcomeNote?: { text: string; failed?: boolean } | undefined;
 }
 
+const SPINNER = <span className="pollar-spinner pollar-spinner-sm" aria-hidden />;
+
+/**
+ * The review a transaction step draws: the confirmation waiting for a yes,
+ * else the modal's own review, else the build's. Modals read it for their
+ * title, so the header names the action the body shows.
+ */
+export function txStatusReview({
+  transaction,
+  review: reviewProp,
+  explorerUrl,
+  confirmation,
+  network,
+  extraRows,
+  language,
+}: Pick<TxStatusViewProps, 'transaction' | 'review' | 'explorerUrl' | 'confirmation' | 'network' | 'extraRows'> & {
+  language: PollarLanguage;
+}): TxReviewData | null {
+  const copy = TRANSACTION_COPY[language];
+  const reviewCopy = TX_REVIEW_COPY[language];
+  const buildData = 'buildData' in transaction ? transaction.buildData : null;
+  const hash = transaction.step === 'success' ? transaction.hash : null;
+  const hashInfo = hash ? { value: hash, explorerUrl } : undefined;
+  const sponsored = 'sponsored' in transaction ? transaction.sponsored : undefined;
+  // A compound flow can finish without the build it ran: the hash still has a place in the details.
+  const review: TxReviewData | null = reviewProp
+    ? {
+        ...reviewProp,
+        ...(hashInfo && { hash: hashInfo }),
+        ...(sponsored !== undefined && { fee: { sponsored } }),
+      }
+    : buildData
+      ? reviewFromBuild(buildData, reviewCopy, copy.title, hashInfo, sponsored)
+      : confirmation
+        ? confirmationReview(confirmation, language, network)
+        : hashInfo
+          ? {
+              title: copy.title,
+              kind: 'other',
+              rows: [],
+              hash: hashInfo,
+              ...(sponsored !== undefined && { fee: { sponsored } }),
+            }
+          : null;
+  return review && extraRows?.length ? { ...review, rows: [...review.rows, ...extraRows] } : review;
+}
+
+/** The title of a transaction step with its logo: the asset it moves on its chain, or the chain alone. */
+export function TxStatusHeading({ review, fallback }: { review: TxReviewData | null; fallback: string }) {
+  const chain = review?.from?.chain ?? review?.to?.chain;
+  return (
+    <h2 className="pollar-modal-title pollar-cosign-heading">
+      {review && <TitleMark chain={chain} asset={headlineAsset(review)} />}
+      <span>{review?.title ?? fallback}</span>
+    </h2>
+  );
+}
+
+/**
+ * A transaction from the user's yes to its outcome in one view: the review stays,
+ * and a strip under it says where the transaction stands. The hash and every
+ * address live in the details.
+ */
 export function TxStatusView({
   transaction,
   showXdr,
@@ -75,129 +143,88 @@ export function TxStatusView({
   review: reviewProp,
   successMessage,
   successExtra,
+  confirmation,
+  network,
+  extraRows,
+  outcomeNote,
 }: TxStatusViewProps) {
   const language = useInheritedLanguage(languageProp);
   const copy = TRANSACTION_COPY[language];
-  const buildData = 'buildData' in transaction ? transaction.buildData : null;
-  const hash = transaction.step === 'success' ? transaction.hash : null;
+  const confirmCopy = CONFIRM_COPY[language];
   const errorDetails =
     transaction.step === 'error' ? transactionErrorMessage(transaction.code, transaction.details, language) : null;
-
   const isBuilt = transaction.step === 'built';
   const isInFlight = IN_FLIGHT_STEPS.has(transaction.step);
   const isSuccess = transaction.step === 'success';
   const isError = transaction.step === 'error';
-  const showDetails = SHOW_DETAILS_STEPS.has(transaction.step);
-  const reviewCopy = TX_REVIEW_COPY[language];
-  const hashInfo = hash ? { value: hash, explorerUrl } : undefined;
-  const sponsored = 'sponsored' in transaction ? transaction.sponsored : undefined;
-  // A compound flow can finish without the build it ran: the hash still has a place in the details.
-  const review: TxReviewData | null = reviewProp
-    ? {
-        ...reviewProp,
-        ...(hashInfo && { hash: hashInfo }),
-        ...(sponsored !== undefined && { fee: { sponsored } }),
-      }
-    : buildData
-      ? reviewFromBuild(buildData, reviewCopy, copy.title, hashInfo, sponsored)
-      : hashInfo
-        ? { title: copy.title, kind: 'other', rows: [], hash: hashInfo, ...(sponsored !== undefined && { fee: { sponsored } }) }
-        : null;
-
-  const walletImg =
-    walletType === WalletType.FREIGHTER ? LOGO_FREIGHTER : walletType === WalletType.ALBEDO ? LOGO_ALBEDO : null;
-
-  const walletAlt = walletType === WalletType.FREIGHTER ? 'Freighter' : walletType === WalletType.ALBEDO ? 'Albedo' : 'Pollar';
-  const statusBanner = (
-    <ModalStatusBanner
-      message={isSuccess && successMessage ? successMessage : copy.status[transaction.step]}
-      status={isError ? 'ERROR' : isInFlight ? 'LOADING' : isSuccess ? 'SUCCESS' : 'NONE'}
-    />
-  );
-  const showSpinner = isInFlight || isSuccess || isError;
-  const reviewBlock = showDetails && review && (
-    <div className="pollar-tx-review">
-      {(buildData || reviewProp) && <p className="pollar-tx-review-title">{review.title}</p>}
-      <TxReview data={review} open={showXdr} onToggle={onToggleXdr} language={language} />
-    </div>
-  );
+  const asking = !!confirmation && !isSuccess && !isError;
+  const review = txStatusReview({
+    transaction,
+    review: reviewProp,
+    explorerUrl,
+    confirmation,
+    network,
+    extraRows,
+    language,
+  });
+  const waitingOn =
+    walletType === WalletType.FREIGHTER ? copy.waitingFreighter : walletType === WalletType.ALBEDO ? copy.waitingAlbedo : null;
+  const failed = isError || outcomeNote?.failed === true;
 
   return (
-    <>
-      {!isSuccess && reviewBlock}
-
-      {isError && errorDetails && (
-        <div className="pollar-tx-error-details">
-          <p className="pollar-tx-error-details-label">{copy.errorDetails}</p>
-          <pre className="pollar-tx-error-details-content">{errorDetails}</pre>
+    <div className="pollar-tx-status-view">
+      {review && (
+        <div className="pollar-tx-review">
+          <TxReview
+            data={review}
+            open={showXdr}
+            onToggle={onToggleXdr}
+            language={language}
+            {...(asking
+              ? {
+                  detailsIntro: { title: confirmCopy.whyTitle, body: confirmCopy.whyBody },
+                  detailsAction: { label: confirmCopy.cancelAction, onClick: confirmation!.reject },
+                }
+              : {})}
+          />
         </div>
       )}
 
-      {isBuilt && (
+      {asking ? (
+        <button className="pollar-btn-primary pollar-tx-sign-btn" onClick={confirmation!.confirm}>
+          {review?.kind === 'activate_wallet' ? confirmCopy.activateWallet : confirmCopy.confirm}
+        </button>
+      ) : isBuilt ? (
         <button className="pollar-btn-primary pollar-tx-sign-btn" onClick={onSignAndSend}>
           {copy.signAndSend}
         </button>
-      )}
-
-      {showSpinner && (
-        <div className="pollar-tx-wallet-spinner">
-          <div className="pollar-tx-spinner-ring">
-            <svg
-              viewBox="0 0 88 88"
-              width="88"
-              height="88"
-              className={`pollar-tx-spinner-svg${isInFlight ? ' pollar-tx-spinner-rotating' : ''}`}
-              aria-hidden
-            >
-              <circle cx="44" cy="44" r="36" fill="none" stroke="var(--pollar-border)" strokeWidth="3" />
-              <circle
-                cx="44"
-                cy="44"
-                r="36"
-                fill="none"
-                stroke={
-                  isSuccess ? 'var(--pollar-success-text)' : isError ? 'var(--pollar-error-text)' : 'var(--pollar-accent)'
-                }
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeDasharray={isInFlight ? '169.6 56.6' : '999 0'}
-                transform="rotate(-90 44 44)"
-                style={{ transition: isInFlight ? 'none' : 'stroke 400ms, stroke-dasharray 400ms' }}
-              />
-            </svg>
-            <div className="pollar-tx-wallet-icon">
-              {walletImg ? (
-                <img src={walletImg} alt={walletAlt} className="pollar-tx-wallet-img" />
-              ) : (
-                <>
-                  <img src={LOGO_POLLAR_MARK_ON_LIGHT} alt={walletAlt} className="pollar-tx-wallet-img pollar-logo-on-light" />
-                  <img src={LOGO_POLLAR_MARK_ON_DARK} alt={walletAlt} className="pollar-tx-wallet-img pollar-logo-on-dark" />
-                </>
-              )}
-            </div>
-          </div>
-
-          {statusBanner}
-
-          {isInFlight && transaction.step !== 'awaiting_cosign' && (
-            <p className="pollar-tx-spinner-label">
-              {walletType === WalletType.FREIGHTER
-                ? copy.waitingFreighter
-                : walletType === WalletType.ALBEDO
-                  ? copy.waitingAlbedo
-                  : copy.signingAndSending}
+      ) : (
+        (isInFlight || isSuccess || isError) && (
+          <div className={`pollar-outcome${failed ? ' pollar-outcome-bad' : ''}${isInFlight ? ' pollar-outcome-busy' : ''}`}>
+            <p className="pollar-outcome-main">
+              {isInFlight ? SPINNER : <OutcomeIcon ok={!failed} />}
+              {isSuccess && successMessage ? successMessage : copy.status[transaction.step]}
             </p>
-          )}
-
-          {isError && onRetry && 'buildData' in transaction && transaction.buildData && (
-            <button className="pollar-btn-secondary pollar-tx-retry-btn" onClick={onRetry}>
-              {copy.tryAgain}
-            </button>
-          )}
-        </div>
+            {isInFlight && waitingOn && transaction.step !== 'awaiting_cosign' && (
+              <p className="pollar-outcome-note">{waitingOn}</p>
+            )}
+            {transaction.step === 'submitted' && transaction.slow && <p className="pollar-outcome-note">{copy.slowNote}</p>}
+            {isError && errorDetails && <p className="pollar-outcome-note">{errorDetails}</p>}
+            {outcomeNote && (
+              <p className="pollar-outcome-note">
+                {!outcomeNote.failed && !isError && SPINNER}
+                {outcomeNote.text}
+              </p>
+            )}
+          </div>
+        )
       )}
 
-      {isSuccess && reviewBlock}
+      {isError && onRetry && 'buildData' in transaction && transaction.buildData && (
+        <button className="pollar-btn-secondary pollar-tx-retry-btn" onClick={onRetry}>
+          {copy.tryAgain}
+        </button>
+      )}
 
       {isSuccess && successExtra}
 
@@ -206,8 +233,6 @@ export function TxStatusView({
           {copy.done}
         </button>
       )}
-
-      {!showSpinner && statusBanner}
-    </>
+    </div>
   );
 }

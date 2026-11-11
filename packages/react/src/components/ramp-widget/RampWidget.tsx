@@ -38,6 +38,8 @@ import { ProviderRegistrationModal } from '../provider-registration-modal/Provid
 import { useModalLanguage } from '../../language';
 import { RAMP_COPY, type RampCopy } from './ramp-copy';
 import { PollarOverlay } from '../PollarOverlay';
+import { useInlineConfirmation } from '../../useInlineConfirmation';
+import { BEST_ROUTE, routeKey } from './ramp-route';
 
 /** Where the ramp widget opens: a starting point the user can change, never a lock. */
 export interface RampModalOptions {
@@ -76,15 +78,10 @@ function rampErrorMessage(error: unknown, fallback: string, copy: RampCopy, lang
   return fallback;
 }
 
-/** A route's identity across quotes: quoting again gives the same route a new quote id. */
-function routeKey(quote: RampQuote): string {
-  const node = (n: RampQuote['legs'][number]['from']) =>
-    n.kind === 'asset' ? `${n.code}:${n.chain}` : `${n.currency}:${n.rail}`;
-  return quote.legs.map((leg) => `${leg.kind}:${node(leg.from)}>${node(leg.to)}`).join('|');
-}
-
 /** An exact decimal, as the API takes amounts: "10", "10.5", never "1e3" or "-2". */
 const DECIMAL = /^\d+(\.\d+)?$/;
+/** How long the amount screen waits after the last keystroke before it quotes. */
+const QUOTE_DEBOUNCE_MS = 600;
 
 /**
  * The choices a seed names among one direction's routes, as the widget's choice
@@ -180,6 +177,8 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<RampStep>('input');
+  // A leg's signature is confirmed in the status view, not in a prompt over the widget.
+  const confirmation = useInlineConfirmation(step === 'status');
   const [direction, setDirection] = useState<RampDirection>(initial?.direction === 'sell' ? 'OFFRAMP' : 'ONRAMP');
   // Applied to the first routes that load for the seeded direction, then dropped; the user moving first drops it too.
   const seedRef = useRef<{ direction: RampDirection; options: RampModalOptions } | null>(
@@ -241,6 +240,59 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   const sellAvailable = useWalletAvailable(
     direction === 'OFFRAMP' && asset ? { chain: asset.chain, code: asset.code, issuer: asset.identifier } : null,
   );
+
+  // The amount screen quotes as the user types: "You receive" shows the best route's amount, and
+  // Continue takes that route unless the user picks another in the details.
+  const [quoting, setQuoting] = useState(false);
+  const [routeChoice, setRouteChoice] = useState<string>(BEST_ROUTE);
+  const quoteRun = useRef(0);
+  const quoteInput = step === 'input' && fiat && asset && DECIMAL.test(amount.trim()) && Number(amount) > 0;
+  const quoteKey = quoteInput ? `${direction}|${fiatKey(fiat)}|${assetKey(asset)}|${amount.trim()}` : null;
+  useEffect(() => {
+    const run = ++quoteRun.current;
+    if (!quoteKey || !fiat || !asset) {
+      setQuoting(false);
+      if (step === 'input') {
+        setQuotes([]);
+        setRejected([]);
+      }
+      return;
+    }
+    setQuoting(true);
+    const timer = setTimeout(() => {
+      client
+        .quoteRamp({
+          direction,
+          fiat: { currency: fiat.currency, rail: fiat.rail, country: fiat.country },
+          asset: { code: asset.code, identifier: asset.identifier, chain: asset.chain },
+          amount: { value: amount.trim(), denomination: 'in' },
+        })
+        .then((result) => {
+          if (run !== quoteRun.current) return;
+          setQuotes(result.quotes);
+          setRejected(result.rejected);
+          setErrorMsg(null);
+        })
+        .catch((error: unknown) => {
+          if (run !== quoteRun.current) return;
+          setQuotes([]);
+          if (isPollarApiError(error) && error.code === 'SDK_RAMPS_NO_ROUTE') {
+            setRejected(Array.isArray(error.body.rejected) ? (error.body.rejected as RampQuoteRejection[]) : []);
+          } else {
+            setRejected([]);
+            setErrorMsg(rampErrorMessage(error, copy.findRouteFailed, copy, language));
+          }
+        })
+        .finally(() => {
+          if (run === quoteRun.current) setQuoting(false);
+        });
+    }, QUOTE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoteKey]);
+  // A route picked from an earlier quote that the new one lacks falls back to the best.
+  const chosenQuote =
+    (routeChoice !== BEST_ROUTE ? quotes.find((q) => routeKey(q) === routeChoice) : undefined) ?? quotes[0] ?? null;
 
   useEffect(() => {
     if (direction === 'OFFRAMP') void refreshWalletBalance();
@@ -748,7 +800,7 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={step === 'status' ? undefined : onClose}>
       <RampWidgetTemplate
         language={language}
         theme={theme}
@@ -796,6 +848,11 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
           setErrorMsg(null);
         }}
         onFindRoute={() => void handleFindRoute()}
+        quoting={quoting}
+        routeChoice={routeChoice}
+        chosenQuote={chosenQuote}
+        onRouteChoice={setRouteChoice}
+        onContinue={() => (chosenQuote ? handleSelectQuote(chosenQuote) : setStep('select_route'))}
         onSelectQuote={(quote) => handleSelectQuote(quote)}
         onVerifyRoute={handleVerifyRoute}
         trustingAsset={trustingAsset}
@@ -815,6 +872,7 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
         onRequote={() => void handleRequote()}
         onSetUpRecovery={openRecoveryModal}
         recoveryMissing={recovery === null ? null : recoveryLocked}
+        support={client.getSupportContact()}
         pollTrouble={pollTrouble}
         checkingPayment={paymentCheckUntil !== null}
         onCheckPayment={() => void handleCheckPayment()}
@@ -828,6 +886,7 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
         }}
         onRefresh={() => void handleRefresh()}
         onClose={onClose}
+        confirmation={confirmation}
       />
     </PollarOverlay>
   );

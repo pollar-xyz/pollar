@@ -109,17 +109,6 @@
   cursor: not-allowed;
 }
 
-/* ---- Action error banner ---- */
-.pollar-modal-action-error {
-  font-size: 0.75rem;
-  color: var(--pollar-error-text);
-  background: var(--pollar-error-bg);
-  border: 1px solid var(--pollar-error-border);
-  border-radius: var(--pollar-card-border-radius, 10px);
-  padding: 0.5rem 0.75rem;
-  margin-bottom: 1rem;
-}
-
 /* Back nav button reuses the shared in-header .pollar-modal-close base. */
 
 /* ---- Custom trustline form ---- */

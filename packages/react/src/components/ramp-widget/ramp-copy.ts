@@ -79,6 +79,8 @@ export interface RampCopy {
   select: string;
   starting: string;
   continue: string;
+  /** The amount screen, drawn like the swap: the route picker, the balance line and the direction switch. */
+  quick: { bestPrice: string; route: string; balance: string; max: string; seeAllRoutes: string; switchDirection: string };
   progress: string;
   inProgress: string;
   timeLeft: (seconds: number) => string;
@@ -204,6 +206,14 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     select: 'Select…',
     starting: 'Starting…',
     continue: 'Continue',
+    quick: {
+      bestPrice: 'Best price',
+      route: 'Route',
+      balance: 'Balance',
+      max: 'Max',
+      seeAllRoutes: 'See every route',
+      switchDirection: 'Switch between buying and selling',
+    },
     progress: 'Progress',
     inProgress: 'In progress',
     timeLeft: (seconds) =>
@@ -332,6 +342,14 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     select: 'Selecciona…',
     starting: 'Iniciando…',
     continue: 'Continuar',
+    quick: {
+      bestPrice: 'Mejor precio',
+      route: 'Ruta',
+      balance: 'Saldo',
+      max: 'Máx',
+      seeAllRoutes: 'Ver todas las rutas',
+      switchDirection: 'Cambiar entre comprar y vender',
+    },
     progress: 'Progreso',
     inProgress: 'En curso',
     timeLeft: (seconds) =>
@@ -462,6 +480,14 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     select: 'Selecione…',
     starting: 'Iniciando…',
     continue: 'Continuar',
+    quick: {
+      bestPrice: 'Melhor preço',
+      route: 'Rota',
+      balance: 'Saldo',
+      max: 'Máx',
+      seeAllRoutes: 'Ver todas as rotas',
+      switchDirection: 'Alternar entre comprar e vender',
+    },
     progress: 'Progresso',
     inProgress: 'Em andamento',
     timeLeft: (seconds) =>

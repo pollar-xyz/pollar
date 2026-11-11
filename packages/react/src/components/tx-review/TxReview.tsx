@@ -18,6 +18,8 @@ export interface TxReviewProps {
   detailsIntro?: { title: string; body: string } | undefined;
   /** A secondary action kept out of the way, at the end of the details (declining the request). */
   detailsAction?: { label: string; onClick: () => void; disabled?: boolean } | undefined;
+  /** Only the details, unfolded: a step already signed, opened from its row. */
+  detailsOnly?: boolean;
   language?: PollarLanguage | undefined;
 }
 
@@ -202,12 +204,13 @@ export function TxReview({
   onToggle,
   detailsIntro,
   detailsAction,
+  detailsOnly = false,
   language: languageProp,
 }: TxReviewProps) {
   const language = useInheritedLanguage(languageProp);
   const copy = TX_REVIEW_COPY[language];
   const [openState, setOpenState] = useState(false);
-  const open = openProp ?? openState;
+  const open = detailsOnly || (openProp ?? openState);
   const toggle = onToggle ?? (() => setOpenState((v) => !v));
   const { from, to, kind } = data;
   // The receiving end repeats the amount only when it differs from what leaves.
@@ -216,46 +219,50 @@ export function TxReview({
 
   return (
     <div className="pollar-txr">
-      {data.lead && <p className="pollar-txr-lead">{data.lead}</p>}
-      {/* A permission moves nothing: an arrow from the wallet would say otherwise. */}
-      {from && to && kind !== 'approve' && (
-        <div className="pollar-txr-flow">
-          <Node party={from} showAmount glyph={from.asset ? 'asset' : 'account'} copy={copy} />
-          <Arrow />
-          <Node party={to} showAmount={toShowsAmount} glyph={toGlyph} copy={copy} />
-        </div>
-      )}
-      {kind === 'sign_in' && (
-        <div className="pollar-txr-signin">
-          <SignInGlyph />
-          <p className="pollar-txr-signin-body">{copy.signIn.body}</p>
-          <ul className="pollar-txr-assurances">
-            <Assurance text={copy.signIn.noMoney} />
-            <Assurance text={copy.signIn.nothingSent} />
-          </ul>
-        </div>
-      )}
+      {!detailsOnly && (
+        <>
+          {data.lead && <p className="pollar-txr-lead">{data.lead}</p>}
+          {/* A permission moves nothing: an arrow from the wallet would say otherwise. */}
+          {from && to && kind !== 'approve' && (
+            <div className="pollar-txr-flow">
+              <Node party={from} showAmount glyph={from.asset ? 'asset' : 'account'} copy={copy} />
+              <Arrow />
+              <Node party={to} showAmount={toShowsAmount} glyph={toGlyph} copy={copy} />
+            </div>
+          )}
+          {kind === 'sign_in' && (
+            <div className="pollar-txr-signin">
+              <SignInGlyph />
+              <p className="pollar-txr-signin-body">{copy.signIn.body}</p>
+              <ul className="pollar-txr-assurances">
+                <Assurance text={copy.signIn.noMoney} />
+                <Assurance text={copy.signIn.nothingSent} />
+              </ul>
+            </div>
+          )}
 
-      <div className="pollar-txr-bar">
-        {data.fee?.sponsored !== undefined ? (
-          <FeeBadge sponsored={data.fee.sponsored} free={data.fee.free === true} copy={copy} />
-        ) : (
-          <span />
-        )}
-        <button type="button" className="pollar-txr-toggle" aria-expanded={open} onClick={toggle}>
-          {open ? copy.hideDetails : copy.showDetails}
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 12 12"
-            fill="none"
-            aria-hidden
-            style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}
-          >
-            <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-      </div>
+          <div className="pollar-txr-bar">
+            {data.fee?.sponsored !== undefined ? (
+              <FeeBadge sponsored={data.fee.sponsored} free={data.fee.free === true} copy={copy} />
+            ) : (
+              <span />
+            )}
+            <button type="button" className="pollar-txr-toggle" aria-expanded={open} onClick={toggle}>
+              {open ? copy.hideDetails : copy.showDetails}
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 12 12"
+                fill="none"
+                aria-hidden
+                style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}
+              >
+                <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        </>
+      )}
 
       {open && (
         <div className="pollar-txr-details">
@@ -270,7 +277,13 @@ export function TxReview({
               <div key={`${row.label}-${i}`} className="pollar-txr-row">
                 <dt>{row.label}</dt>
                 <dd className={row.mono ? 'pollar-txr-mono' : undefined}>
-                  <span>{row.value}</span>
+                  {row.href ? (
+                    <a className="pollar-txr-link" href={row.href} target="_blank" rel="noopener noreferrer">
+                      {row.value}
+                    </a>
+                  ) : (
+                    <span>{row.value}</span>
+                  )}
                   {row.copyValue && <CopyButton value={row.copyValue} className="pollar-copy-btn-sm" language={language} />}
                 </dd>
               </div>

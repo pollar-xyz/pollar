@@ -179,6 +179,14 @@
   values (`'true'` or `'false'` for a checkbox): `<RequirementFormModal>` shows
   and hides it as the user answers, and neither checks nor sends it while
   hidden.
+- **A form sent back to correct says why, in the user's language.** When a
+  provider refuses an answer, or Pollar asks the user to correct one,
+  `getRequirementForm` carries `corrections: { keys, codes, note }`: a code per
+  field (`invalid_cpf`, `invalid_postal_code`, `invalid_state`,
+  `invalid_country`, `refused`, `review`) and, when Pollar wrote one, a note.
+  `<RequirementFormModal>` (web and React Native) opens with a notice and the
+  note above the fields, and shows each field's code as a translated message
+  until the user changes it.
 - **The card modal copies the card details.** Next to the card number and the
   CVC while the details are shown, and next to the expiry date always; the
   number is copied without spaces and the expiry as `MM/YY`.
@@ -463,6 +471,89 @@ SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
   logo per option and works from the keyboard. The ramp's step bar starts at
   Route, with a back button to the amount, and the ramp shows the Pollar footer
   like the other modals, web and React Native.
+- **A signed approval stays in the same view.** The co-sign prompt no longer
+  swaps to a separate "Approved" screen: the request stays as it was, with a
+  strip under it saying signed and sent, signed for the app to send, or
+  rejected or expired, plus the next step and the countdown. A flow's earlier
+  approvals stay above the current one as one-line rows marked signed; each
+  opens its own details, where the transaction hash and the explorer link
+  live. The hash is never shown outside the details.
+- **Transaction modals confirm and finish in one view.** Send, swap, earn and
+  the transaction modal answer the signature's confirmation themselves, with a
+  Confirm button under the review and the reason and "Cancel this action" in
+  the details, instead of a `ConfirmModal` over them. A modal registers for
+  this while it signs (`registerConfirmationHost` in the provider's context,
+  `useInlineConfirmation` inside the SDK). `TxStatusView` keeps the review on
+  screen from the yes to the outcome: one strip under it says sending, sent or
+  failed with the reason, in place of the spinner ring and the repeated
+  review, and the header names the action with the asset and chain logo. A
+  cross-chain swap's delivery address and destination explorer are detail
+  rows; detail rows can be links (`href`). An outside click no longer closes a
+  modal once its transaction step starts.
+- **Bridge, ramp and card funding follow the same format**, web and React
+  Native. The bridge's transfer is titled with the action, drawn as a review,
+  and reports burn, attestation and mint inside the outcome strip, with both
+  transactions in the details. The ramp's status view keeps the order id and
+  every leg and step hash in one details panel under the legs. A card funding
+  sent from the panel gets its outcome strip under the button. The three
+  confirm a signature inline (`InlineConfirm`), and none closes on an outside
+  click while a transfer, an order or a funding is under way. The web assets
+  modal does the same for a trustline: Confirm inside it, then a strip saying
+  the asset is being added or removed, added, removed, or why it was not.
+- **A Solana swap's confirmation shows what is swapped.** `swapSolana` adds each
+  side's `inputSymbol`/`inputDecimals` and `outputSymbol`/`outputDecimals` to
+  the confirmation, from the balances and app assets the client already read
+  (wrapped SOL is SOL), and the review draws it as a swap: "Swap SOL for USDC",
+  1 SOL to at least 148.4 USDC with each token's logo and chain, the venue,
+  and both mints in the details. Prompts titled `swap`, `cctp_burn`,
+  `ramp_payment` and the other co-sign operations now have their names in
+  `<ConfirmModal>` too.
+- **The ramp's amount screen works like the swap.** "You pay" and "You receive"
+  are two panels, each with its amount and a pill (the fiat with its payment
+  method, the asset with its chain), and the switch between them turns a
+  purchase into a sale in place of the Buy and Sell tabs; the country is a pill
+  above them. The screen quotes as the user types (600 ms after the last
+  keystroke): "You receive" shows the best route's amount and the rate, and
+  Continue goes on with that route, straight to its details or its order. The
+  details pick another route ("Best price" by default), and "See every route"
+  opens the routes screen, where routes that need a verification first are
+  resolved. When nothing can be quoted, the reason and that link show under the
+  panels. React Native follows the same flow with chips inside the two panels:
+  the country with its flag, the live quote, Continue on the best route, and
+  the route chips and "See every route" in the details.
+- **The network sits next to the title.** Send, swap, earn, wallet balance,
+  receive, history and assets show the network as a pill on the title's row,
+  out of the form, with each chain's logo (`NetworkPill` from `ChainSelect`;
+  `ChainSelect` options carry the logos too). Once a transaction starts it
+  turns into a label: the flow runs on that network and it cannot change
+  midway. An app on a single network shows none. React Native's send, swap,
+  earn, receive and history panels do the same beside their card title, and
+  the history modal's network chips show the logo and the chain's name. A swap
+  whose sell or buy list empties on the new network drops the old pick instead
+  of leaving the pill blank with the previous asset's balance.
+- **A shorter swap form.** Each panel puts the amount and its asset on one row,
+  with the balance and Max as a small line under them; the rate stays in view,
+  and the route picker, minimum received, price impact and fees are behind
+  Show details. "Best price" names the venue its quote landed on, so the details
+  list the route once.
+- **React Native's send, swap and earn panels show their transaction like the
+  modals** (`TxStatusBody`, shared with the transaction modal): the action's
+  title, the review, Confirm when the signature asks for a yes, then the
+  outcome strip, with the hash in the details. The raw state, the copy-hash
+  button and "Check confirmation" are gone.
+- **A transaction past its confirmation window keeps being read.** The submit
+  flow still answers `pending` after about 40 seconds without a ledger
+  confirmation, and the transaction is now read on in the background (5s, 5s,
+  10s, 15s, then every 30s) until the state reaches `success` or `error` by
+  itself, so a prompt no longer stays on its spinner. Meanwhile the state is
+  `{ step: 'submitted', hash, slow: true }`: the outcome strip says it is taking
+  longer and that it updates there, and the send, swap and earn modals can be
+  closed. Past ten minutes, twice the longest validity window sdk-api builds,
+  the transaction can no longer land and ends as `error` with the new code
+  `TX_NOT_CONFIRMED` ("The network did not confirm this transaction in time, so
+  nothing moved"). Reading stops at logout, at `destroy()` and once another
+  transaction replaces it. An app that polled `getTxStatus` after a `pending`
+  outcome can listen to `onTransactionStateChange` instead.
 - The custody migration intro speaks of account security and signing from this
   device.
 - `@pollar/core`'s types are regenerated from sdk-api's v3 document.

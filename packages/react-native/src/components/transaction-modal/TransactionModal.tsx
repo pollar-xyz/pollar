@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, TouchableWithoutFeedback, Linking } from 'react-native';
 import { usePollar } from '../../context';
 import { useModalLanguage } from '../../language';
+import { useInlineConfirmation } from '../../useInlineConfirmation';
 import { TransactionModalTemplate } from './TransactionModalUI';
 
 interface TransactionModalProps {
@@ -13,6 +14,8 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const language = useModalLanguage();
 
+  // The signature's yes is asked here, under the review, not in a prompt over the modal.
+  const confirmation = useInlineConfirmation(true);
   const [showXdr, setShowXdr] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -48,7 +51,7 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
   }
 
   return (
-    <TouchableWithoutFeedback onPress={onClose}>
+    <TouchableWithoutFeedback>
       <View style={stylesUI.overlay}>
         <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
           <View style={stylesUI.modalWrapper}>
@@ -67,6 +70,8 @@ export function TransactionModal({ onClose }: TransactionModalProps) {
               copyText={copyText}
               onRetry={handleRetry}
               language={language}
+              confirmation={confirmation}
+              network={network}
             />
           </View>
         </TouchableWithoutFeedback>

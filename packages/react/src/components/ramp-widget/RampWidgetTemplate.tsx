@@ -4,7 +4,9 @@ import { useInheritedLanguage } from '../../language-context';
 import { useEffect, useState } from 'react';
 import type {
   CosignCustody,
+  PendingConfirmation,
   PollarLanguage,
+  PollarSupportContact,
   RampAsset,
   RampDirection,
   RampField,
@@ -34,14 +36,22 @@ import {
   rampOrderStopped,
   rampRailLabel,
   rampOrderResolutionText,
+  rampFailureReason,
+  rampFailureNeedsSupport,
+  rampSupportCopy,
   rampTrustlineAsset,
 } from '@pollar/core';
 import { RAMP_COPY, type RampCopy } from './ramp-copy';
 import { RejectedRouteDisplay, RouteDisplay } from './RouteDisplay';
-import { AmountField } from '../AmountField';
 import { CopyButton, PollarModalFooter } from '../commons';
 import { PollarSelect } from '../PollarSelect';
-import { AssetLogo } from '../tx-review/TxReview';
+import { TitleMark } from '../signing-marks';
+import '../swap-modal/SwapModal.css';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
+import { BEST_ROUTE, routeKey } from './ramp-route';
+import { TxReview } from '../tx-review/TxReview';
+import type { TxDetailRow } from '../tx-review/tx-review-model';
+import { InlineConfirm } from '../confirm-modal/InlineConfirm';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 'status' | 'error';
@@ -170,6 +180,15 @@ interface RampWidgetTemplateProps {
   onAssetChange: (key: string) => void;
   onAmountChange: (value: string) => void;
   onFindRoute: () => void;
+  /** The amount screen is quoting what was typed. */
+  quoting?: boolean;
+  /** `BEST_ROUTE`, or the key of the route the user picked in the details. */
+  routeChoice?: string;
+  /** The route Continue takes: the picked one, else the best. */
+  chosenQuote?: RampQuote | null;
+  onRouteChoice?: (choice: string) => void;
+  /** Takes the chosen route, or opens every route when none could be quoted. */
+  onContinue?: () => void;
   onSelectQuote: (quote: RampQuote) => void;
   /** Opens the verification step a dropped route waits on. */
   onVerifyRoute?: (requirement: RampQuoteRequirement) => void;
@@ -198,6 +217,8 @@ interface RampWidgetTemplateProps {
   onSetUpRecovery?: (() => void) | undefined;
   /** Whether the wallet still has no way to be recovered; null while its state is unread. */
   recoveryMissing?: boolean | null;
+  /** The app's support contact, linked when an order asks the user to contact support. */
+  support?: PollarSupportContact | null;
   /** Reading the order keeps failing and polling is retrying. */
   pollTrouble?: boolean;
   /** The fiat payment the user says they made is being checked. */
@@ -217,6 +238,8 @@ interface RampWidgetTemplateProps {
   onRetry: () => void;
   onRefresh: () => void;
   onClose: () => void;
+  /** A leg's signature waiting for the user's yes, answered in the status view. */
+  confirmation?: PendingConfirmation | null | undefined;
 }
 
 /** The trustline a dropped route asks for, as the widget tracks it while it is added. */
@@ -271,6 +294,11 @@ export function RampWidgetTemplate({
   onAssetChange,
   onAmountChange,
   onFindRoute,
+  quoting = false,
+  routeChoice = BEST_ROUTE,
+  chosenQuote = null,
+  onRouteChoice,
+  onContinue,
   onSelectQuote,
   onVerifyRoute,
   trustingAsset = null,
@@ -284,6 +312,7 @@ export function RampWidgetTemplate({
   onRequote,
   onSetUpRecovery,
   recoveryMissing = null,
+  support = null,
   checkingPayment = false,
   onCheckPayment,
   pollTrouble = false,
@@ -299,14 +328,88 @@ export function RampWidgetTemplate({
   onRefresh,
   onClose,
   language: languageProp,
+  confirmation = null,
 }: RampWidgetTemplateProps) {
   const language = useInheritedLanguage(languageProp);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
   const copy = RAMP_COPY[language];
   const onramp = direction === 'ONRAMP';
   const sendUnit = onramp ? fiat?.currency : asset?.code;
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const routeName = (quote: RampQuote) => quote.legs.map((leg) => rampLegTitle(leg, language)).join(' · ');
+  // What a unit of the asset costs in the fiat, from the route Continue takes.
+  const rate = (() => {
+    if (!chosenQuote) return null;
+    const amountIn = Number(chosenQuote.amountIn);
+    const amountOut = Number(chosenQuote.amountOut);
+    if (!(amountIn > 0) || !(amountOut > 0)) return null;
+    const perUnit = onramp ? amountIn / amountOut : amountOut / amountIn;
+    return `1 ${asset?.code ?? ''} ≈ ${perUnit.toLocaleString(language, { maximumFractionDigits: 2 })} ${fiat?.currency ?? ''}`;
+  })();
+  const fiatPill = fiat && (
+    <label className="pollar-swap-asset-pill-wrap pollar-ramp-pill">
+      <span className="sr-only">{onramp ? copy.payWith : copy.receiveIn}</span>
+      <PollarSelect
+        id="pollar-ramp-fiat"
+        className="pollar-swap-asset-pill"
+        aria-label={onramp ? copy.payWith : copy.receiveIn}
+        value={fiatKey(fiat)}
+        disabled={fiats.length < 2}
+        onChange={onFiatChange}
+        options={fiats.map((f) => ({ value: fiatKey(f), label: `${f.currency} · ${rampRailLabel(f.rail, { language })}` }))}
+      />
+    </label>
+  );
+  const assetPill = asset && (
+    <label className="pollar-swap-asset-pill-wrap pollar-ramp-pill">
+      <span className="sr-only">{onramp ? copy.receive : copy.sell}</span>
+      <PollarSelect
+        id="pollar-ramp-asset"
+        className="pollar-swap-asset-pill"
+        aria-label={onramp ? copy.receive : copy.sell}
+        value={assetKey(asset)}
+        onChange={onAssetChange}
+        options={assets.map((a) => ({
+          value: assetKey(a),
+          label: a.code,
+          text: copy.assetOn(a.code, CHAIN_NAME[a.chain] ?? a.chain),
+          icon: <TitleMark chain={a.chain} asset={a.code} />,
+        }))}
+      />
+    </label>
+  );
   const view = order ? describeRampAction(order, language) : null;
   const settled = order ? ['completed', 'failed', 'refunded'].includes(order.state) : false;
+  const shortHash = (hash: string) => `${hash.slice(0, 8)}…${hash.slice(-6)}`;
+  const orderRows: TxDetailRow[] = order
+    ? [
+        ...order.legs.flatMap((leg): TxDetailRow[] => [
+          ...(leg.onchainTxHash
+            ? [
+                {
+                  label: rampLegTitle(leg, language),
+                  value: shortHash(leg.onchainTxHash),
+                  href: explorerTxUrl(legChain(leg), leg.onchainTxHash, network),
+                  copyValue: leg.onchainTxHash,
+                },
+              ]
+            : []),
+          ...(leg.steps ?? []).flatMap((st): TxDetailRow[] =>
+            st.hash
+              ? [
+                  {
+                    label: rampStepTitle(st, leg, language),
+                    value: shortHash(st.hash),
+                    href: explorerTxUrl(stepChain(st.kind, leg), st.hash, network),
+                    copyValue: st.hash,
+                  },
+                ]
+              : [],
+          ),
+        ]),
+        { label: copy.order, value: order.id, copyValue: order.id, mono: true },
+      ]
+    : [];
   // A leg running on its own (not waiting on the user) counts down its quoted time.
   const running = order?.legs.find((leg) => rampLegStatus(leg) === 'active' && order.pendingAction?.legIndex !== leg.index);
   const now = useNowEverySecond(step === 'status' && !settled && !!running && running.etaSeconds !== null);
@@ -446,15 +549,6 @@ export function RampWidgetTemplate({
 
       {step === 'input' && (
         <>
-          <div className="pollar-tabs">
-            <button type="button" className="pollar-tab" data-active={onramp} onClick={() => onDirectionChange('ONRAMP')}>
-              {copy.buy}
-            </button>
-            <button type="button" className="pollar-tab" data-active={!onramp} onClick={() => onDirectionChange('OFFRAMP')}>
-              {copy.sell}
-            </button>
-          </div>
-
           {routesLoading ? (
             <div className="pollar-ramp-input pollar-select-loading">
               <span className="pollar-spinner pollar-spinner-sm" />
@@ -464,13 +558,12 @@ export function RampWidgetTemplate({
             <div className="pollar-modal-error">{noChains ? copy.noChains : copy.noRoutes}</div>
           ) : (
             <>
-              <div className="pollar-ramp-field">
-                <label className="pollar-ramp-label" htmlFor="pollar-ramp-country">
-                  {copy.country}
-                </label>
+              <label className="pollar-swap-route-wrap pollar-swap-chain-wrap">
+                <span className="sr-only">{copy.country}</span>
                 <PollarSelect
                   id="pollar-ramp-country"
-                  className="pollar-ramp-input"
+                  className="pollar-swap-route-pill"
+                  aria-label={copy.country}
                   value={country}
                   onChange={onCountryChange}
                   options={countries
@@ -483,55 +576,157 @@ export function RampWidgetTemplate({
                       icon: <span aria-hidden>{flagEmoji(c.code)}</span>,
                     }))}
                 />
+              </label>
+
+              <div className="pollar-swap-panels">
+                <section className="pollar-swap-panel" aria-labelledby="pollar-ramp-pay-label">
+                  <span id="pollar-ramp-pay-label" className="pollar-swap-panel-label">
+                    {onramp ? copy.youPay : copy.youSell}
+                  </span>
+                  <div className="pollar-swap-panel-main">
+                    <input
+                      id="pollar-ramp-amount"
+                      className="pollar-swap-amount"
+                      type="text"
+                      inputMode="decimal"
+                      aria-label={onramp ? copy.youPay : copy.youSell}
+                      placeholder="0.00"
+                      value={amount}
+                      onChange={(event) => onAmountChange(event.target.value.replace(',', '.'))}
+                    />
+                    {onramp ? fiatPill : assetPill}
+                  </div>
+                  <div className="pollar-swap-panel-foot">
+                    {!onramp && sellAvailable != null ? (
+                      <>
+                        <span className="pollar-swap-balance">
+                          {copy.quick.balance} {sellAvailable} {sendUnit}
+                        </span>
+                        <span aria-hidden>·</span>
+                        <button type="button" className="pollar-swap-max" onClick={() => onAmountChange(sellAvailable)}>
+                          {copy.quick.max}
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                </section>
+
+                <button
+                  type="button"
+                  className="pollar-swap-reverse"
+                  onClick={() => onDirectionChange(onramp ? 'OFFRAMP' : 'ONRAMP')}
+                  aria-label={copy.quick.switchDirection}
+                  title={copy.quick.switchDirection}
+                >
+                  <svg width="17" height="17" viewBox="0 0 17 17" fill="none" aria-hidden>
+                    <path
+                      d="M5 3v10M5 3 2.5 5.5M5 3l2.5 2.5M12 14V4M12 14l2.5-2.5M12 14 9.5 11.5"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+
+                <section className="pollar-swap-panel" aria-labelledby="pollar-ramp-receive-label">
+                  <span id="pollar-ramp-receive-label" className="pollar-swap-panel-label">
+                    {copy.youReceive}
+                  </span>
+                  <div className="pollar-swap-panel-main">
+                    <div className={`pollar-swap-output${quoting ? ' is-loading' : ''}`} aria-live="polite">
+                      {quoting ? (
+                        <span className="pollar-spinner pollar-spinner-sm" />
+                      ) : chosenQuote ? (
+                        `~${chosenQuote.amountOut}`
+                      ) : (
+                        '—'
+                      )}
+                    </div>
+                    {onramp ? assetPill : fiatPill}
+                  </div>
+                </section>
               </div>
 
-              {fiats.length > 1 && (
-                <div className="pollar-ramp-field">
-                  <label className="pollar-ramp-label" htmlFor="pollar-ramp-fiat">
-                    {onramp ? copy.payWith : copy.receiveIn}
-                  </label>
-                  <PollarSelect
-                    id="pollar-ramp-fiat"
-                    className="pollar-ramp-input"
-                    value={fiat ? fiatKey(fiat) : ''}
-                    onChange={onFiatChange}
-                    options={fiats.map((f) => ({
-                      value: fiatKey(f),
-                      label: `${f.currency} · ${rampRailLabel(f.rail, { language })}`,
-                    }))}
-                  />
+              <div className="pollar-swap-rate-row">
+                <div className="pollar-swap-rate" aria-live="polite">
+                  {rate ?? (quoting ? copy.subtitle.comparing : '')}
+                </div>
+                {chosenQuote && (
+                  <button
+                    type="button"
+                    className="pollar-txr-toggle"
+                    aria-expanded={detailsOpen}
+                    onClick={() => setDetailsOpen((open) => !open)}
+                  >
+                    {detailsOpen ? TX_REVIEW_COPY[language].hideDetails : TX_REVIEW_COPY[language].showDetails}
+                    <svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 12 12"
+                      fill="none"
+                      aria-hidden
+                      style={{ transform: detailsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}
+                    >
+                      <path
+                        d="M2 4l4 4 4-4"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {detailsOpen && chosenQuote && (
+                <div className="pollar-swap-quote">
+                  <div className="pollar-swap-quote-row">
+                    <span>{copy.quick.route}</span>
+                    <label className="pollar-swap-route-wrap">
+                      <span className="sr-only">{copy.quick.route}</span>
+                      <PollarSelect
+                        className="pollar-swap-route-pill"
+                        aria-label={copy.quick.route}
+                        value={routeChoice}
+                        onChange={(choice) => onRouteChoice?.(choice)}
+                        options={[
+                          {
+                            value: BEST_ROUTE,
+                            label: quotes[0] ? `${copy.quick.bestPrice} · ${routeName(quotes[0])}` : copy.quick.bestPrice,
+                          },
+                          ...quotes.map((q) => ({ value: routeKey(q), label: `${routeName(q)} · ~${q.amountOut}` })),
+                        ]}
+                      />
+                    </label>
+                  </div>
+                  <div className="pollar-swap-quote-row">
+                    <span>{copy.youReceive}</span>
+                    <strong>
+                      ~{chosenQuote.amountOut} {onramp ? asset?.code : fiat?.currency}
+                    </strong>
+                  </div>
+                  <div className="pollar-swap-quote-row">
+                    <span>{copy.routeSteps(chosenQuote.legs.length)}</span>
+                    <strong>{copy.feesIncluded}</strong>
+                  </div>
+                  {/* Every route, with the ones that ask for a verification first, on the routes screen. */}
+                  <button type="button" className="pollar-swap-max pollar-ramp-all-routes" onClick={onFindRoute}>
+                    {copy.quick.seeAllRoutes}
+                  </button>
                 </div>
               )}
 
-              <div className="pollar-ramp-field">
-                <label className="pollar-ramp-label" htmlFor="pollar-ramp-asset">
-                  {onramp ? copy.receive : copy.sell}
-                </label>
-                <PollarSelect
-                  id="pollar-ramp-asset"
-                  className="pollar-ramp-input"
-                  value={asset ? assetKey(asset) : ''}
-                  onChange={onAssetChange}
-                  options={assets.map((a) => ({
-                    value: assetKey(a),
-                    label: copy.assetOn(a.code, CHAIN_NAME[a.chain] ?? a.chain),
-                    icon: <AssetLogo asset={a.code} small />,
-                  }))}
-                />
-              </div>
-
-              <div className="pollar-ramp-field">
-                <AmountField
-                  id="pollar-ramp-amount"
-                  label={onramp ? copy.youPay : copy.youSell}
-                  value={amount}
-                  onChange={onAmountChange}
-                  unit={sendUnit}
-                  available={onramp ? undefined : sellAvailable}
-                  language={language}
-                />
-                {errorMsg && <span className="pollar-ramp-field-error">{errorMsg}</span>}
-              </div>
+              {errorMsg && <span className="pollar-ramp-field-error">{errorMsg}</span>}
+              {!quoting && !chosenQuote && rejected.length > 0 && (
+                <p className="pollar-ramp-payment-note">
+                  {rampNoRouteText(rejected, language)}{' '}
+                  <button type="button" className="pollar-swap-max" onClick={onFindRoute}>
+                    {copy.quick.seeAllRoutes}
+                  </button>
+                </p>
+              )}
             </>
           )}
 
@@ -539,10 +734,16 @@ export function RampWidgetTemplate({
             <button
               type="button"
               className="pollar-btn-primary"
-              disabled={!amount || !fiat || !asset || isLoading || routesLoading}
-              onClick={onFindRoute}
+              disabled={quoting || isLoading || routesLoading || (!chosenQuote && rejected.length === 0)}
+              onClick={onContinue ?? onFindRoute}
             >
-              {copy.findBestRoute}
+              {isLoading ? (
+                <>
+                  <span className="pollar-spinner pollar-spinner-sm" /> {copy.starting}
+                </>
+              ) : (
+                copy.continue
+              )}
             </button>
           </div>
         </>
@@ -671,24 +872,15 @@ export function RampWidgetTemplate({
           <ol className="pollar-ramp-legs" aria-label={copy.progress}>
             {order.legs.map((leg) => {
               const status = rampLegStatus(leg);
-              const hash = leg.onchainTxHash;
-              const note = rampLegNote(leg, language);
+              const note =
+                (status === 'failed' && leg.failure ? rampFailureReason(leg.failure, language) : null) ??
+                rampLegNote(leg, language);
               return (
                 <li key={leg.index} className="pollar-ramp-leg" data-status={status}>
                   <span className="pollar-ramp-leg-dot" aria-hidden />
                   <span className="pollar-ramp-leg-title">{rampLegTitle(leg, language)}</span>
                   {status === 'active' && !settled && (
                     <span className="pollar-spinner pollar-spinner-sm" aria-label={copy.inProgress} />
-                  )}
-                  {hash && (
-                    <a
-                      className="pollar-ramp-leg-link"
-                      href={explorerTxUrl(legChain(leg), hash, network)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {hash.slice(0, 6)}…{hash.slice(-4)}
-                    </a>
                   )}
                   {note && <span className="pollar-ramp-leg-note">{note}</span>}
                   {status === 'active' && !settled && !!leg.steps?.length && (
@@ -698,18 +890,7 @@ export function RampWidgetTemplate({
                           <span className="pollar-ramp-step-title">{rampStepTitle(s, leg, language)}</span>
                           <span className="pollar-ramp-step-state">
                             {s.status === 'confirming' && <span className="pollar-spinner pollar-spinner-sm" aria-hidden />}
-                            {s.hash ? (
-                              <a
-                                className="pollar-ramp-leg-link"
-                                href={explorerTxUrl(stepChain(s.kind, leg), s.hash, network)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                {rampStepStatusText(s, language)}
-                              </a>
-                            ) : (
-                              rampStepStatusText(s, language)
-                            )}
+                            {rampStepStatusText(s, language)}
                           </span>
                         </li>
                       ))}
@@ -722,6 +903,11 @@ export function RampWidgetTemplate({
               );
             })}
           </ol>
+
+          {confirmation && <InlineConfirm confirmation={confirmation} language={language} network={network} />}
+
+          {/* Every transaction hash and the order id are details: the legs above only say how far the order got. */}
+          <TxReview data={{ title: '', kind: 'other', rows: orderRows }} language={language} />
 
           {nextApproval && !order.pendingAction && <p className="pollar-ramp-next">{copy.next(nextApproval)}</p>}
 
@@ -741,6 +927,9 @@ export function RampWidgetTemplate({
             <div className="pollar-ramp-payment-field">
               <span className="pollar-ramp-payment-label">{copy.whatToDo}</span>
               <p className="pollar-ramp-payment-note">{rampOrderResolutionText(order, language)}</p>
+              {rampFailureNeedsSupport(order.failure) && (
+                <SupportContact support={support} orderId={order.id} language={language} />
+              )}
               {stopped && !settled && waitsOnRecovery && recoveryMissing !== false && onSetUpRecovery && (
                 <button type="button" className="pollar-btn-secondary" onClick={onSetUpRecovery}>
                   {copy.setUpRecovery}
@@ -770,12 +959,6 @@ export function RampWidgetTemplate({
                   )}
                 </button>
               )}
-              <div className="pollar-ramp-payment-value" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <code style={{ flex: 1, wordBreak: 'break-all' }}>
-                  {copy.order} {order.id}
-                </code>
-                <CopyButton value={order.id} label={copy.copyOrderId} language={language} />
-              </div>
             </div>
           )}
 
@@ -918,6 +1101,45 @@ export function RampWidgetTemplate({
       )}
 
       <PollarModalFooter />
+    </div>
+  );
+}
+
+/** Where the user reaches the app's support, and the order id to quote; only the id when the app set no contact. */
+function SupportContact({
+  support,
+  orderId,
+  language,
+}: {
+  support: PollarSupportContact | null;
+  orderId: string;
+  language: PollarLanguage;
+}) {
+  const copy = rampSupportCopy(language);
+  // Only https: the contact comes from the app's config and lands in an href.
+  const url = support?.url && /^https:\/\//i.test(support.url) ? support.url : null;
+  const email = support?.email && /^[^\s@]+@[^\s@]+$/.test(support.email) ? support.email : null;
+  return (
+    <div className="pollar-ramp-support">
+      {(url || email) && (
+        <div className="pollar-ramp-support-links">
+          {url && (
+            <a className="pollar-btn-secondary" href={url} target="_blank" rel="noopener noreferrer">
+              {copy.action}
+            </a>
+          )}
+          {email && (
+            <a className="pollar-ramp-support-email" href={`mailto:${email}?subject=${encodeURIComponent(orderId)}`}>
+              {email}
+            </a>
+          )}
+        </div>
+      )}
+      <div className="pollar-ramp-support-order">
+        <span>{copy.orderId}</span>
+        <code>{orderId}</code>
+        <CopyButton value={orderId} language={language} />
+      </div>
     </div>
   );
 }

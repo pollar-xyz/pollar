@@ -5,20 +5,14 @@ import { usePollar } from '../../context';
 import { useModalLanguage } from '../../language';
 import { CONFIRM_COPY } from './confirm-copy';
 
-type Copy = (typeof CONFIRM_COPY)['en'];
 import { PollarModalFooter, PollarOverlay } from '../commons';
 import { TitleMark } from '../cosign-modal/CosignModalUI';
 import { TxReview } from '../tx-review/TxReview';
-import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
-import { headlineAsset, reviewFromBuild, reviewFromRequest } from '../tx-review/tx-review-model';
+import { headlineAsset } from '../tx-review/tx-review-model';
+import { confirmationReview } from './confirmation-review';
 
 interface ConfirmModalProps {
   confirmation: PendingConfirmation;
-}
-
-function labelOf(confirmation: PendingConfirmation, copy: Copy): string {
-  const op = confirmation.operation ?? '';
-  return copy.operations[op] ?? (op ? op.replace(/_/g, ' ') : copy.transaction);
 }
 
 /**
@@ -31,21 +25,7 @@ export function ConfirmModal({ confirmation }: ConfirmModalProps) {
   const { getClient, styles, network, copyText } = usePollar();
   const language = useModalLanguage();
   const copy = CONFIRM_COPY[language];
-  const reviewCopy = TX_REVIEW_COPY[language];
-  const raw = confirmation.unsignedXdr ?? confirmation.authEntryXdr;
-  const review = confirmation.buildData
-    ? reviewFromBuild(confirmation.buildData, reviewCopy, labelOf(confirmation, copy))
-    : reviewFromRequest(
-        {
-          chain: confirmation.network,
-          network,
-          operation: confirmation.operation,
-          details: confirmation.details,
-          raw,
-          fallbackTitle: labelOf(confirmation, copy),
-        },
-        reviewCopy,
-      );
+  const review = confirmationReview(confirmation, language, network);
   const { theme = 'light', accentColor = '#005DB4' } = styles;
   const isDark = theme === 'dark';
   const colors = {

@@ -3,7 +3,7 @@
 import { useInheritedLanguage } from '../../language-context';
 import { fromBaseUnits, PollarLanguage, TxHistoryRecord, TxHistoryState, WalletChain } from '@pollar/core';
 import { type ReactNode } from 'react';
-import { ChainSelect } from '../ChainSelect';
+import { NetworkPill } from '../ChainSelect';
 import { CopyButton, cropAddress, explorerTxUrl, PollarModalFooter } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { TX_HISTORY_COPY } from './tx-history-copy';
@@ -154,7 +154,10 @@ export function TxHistoryModalTemplate({
       onClick={(e) => e.stopPropagation()}
     >
       <div className="pollar-modal-header">
-        <h2 className="pollar-modal-title">{copy.title}</h2>
+        <div className="pollar-title-row">
+          <h2 className="pollar-modal-title">{copy.title}</h2>
+          <NetworkPill value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoading} />
+        </div>
         <div className="pollar-modal-header-actions">
           <button
             type="button"
@@ -188,8 +191,6 @@ export function TxHistoryModalTemplate({
           </button>
         </div>
       </div>
-
-      <ChainSelect label={copy.network} value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoading} />
 
       {walletAddress && (
         <div className="pollar-address-row">

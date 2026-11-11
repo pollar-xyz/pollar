@@ -85,50 +85,9 @@
   text-align: center;
 }
 
-.pollar-cosign-approved-icon {
-  display: block;
-  margin: 0 auto 0.75rem;
-  color: var(--pollar-success-text);
-}
-
-.pollar-cosign-tx-link {
-  color: var(--pollar-accent);
-  font-family: var(--pollar-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  text-decoration: none;
-}
-
-.pollar-cosign-tx-link:hover {
-  text-decoration: underline;
-}
-
-.pollar-cosign-copy {
-  margin-left: 0.15rem;
-  vertical-align: middle;
-}
-
-.pollar-cosign-fee {
-  margin: 0.5rem 0 0;
-}
-
 .pollar-cosign-closing {
   margin-top: 0.75rem;
   font-size: 0.75rem;
-}
-
-.pollar-cosign-next {
-  margin: 0.75rem 0 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-  color: var(--pollar-text);
-}
-
-.pollar-cosign-empty-title {
-  margin: 0 0 0.35rem;
-  font-weight: 600;
-  color: var(--pollar-text);
 }
 
 .pollar-cosign-list {
@@ -279,4 +238,47 @@
   background: var(--pollar-accent);
   border-color: var(--pollar-accent);
   color: var(--pollar-btn-primary-fg, #fff);
+}
+
+.pollar-cosign-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--pollar-border);
+}
+
+.pollar-cosign-step-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--pollar-success-text, #15803d);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pollar-cosign-step-bad .pollar-cosign-step-head {
+  color: var(--pollar-error-text);
+}
+
+.pollar-cosign-step-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--pollar-text);
+}
+
+.pollar-cosign-step-status {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
 }

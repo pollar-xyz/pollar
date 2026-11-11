@@ -443,6 +443,12 @@ each carrying `address` and a `provider`, or `null` when there is no wallet. To 
 platform-managed Stellar wallet also carries `provisioning` - see
 [Wallet provisioning](#wallet-provisioning) before offering any on-chain operation on a fresh session.
 
+A user who signed in with their own wallet on another chain (Solana, through SIWS) has their Stellar wallet created
+beside it, in the app's Turnkey custody: `getWallet()` returns that one (`custody: 'internal'`). Each chain signs with
+the wallet the user holds there: the connected adapter only on the chain of the wallet they brought, the platform on
+every other one, so a Phantom session signs Stellar through the platform and a Freighter session signs Solana the same
+way.
+
 #### `client.hasWallet(): boolean` / `client.createWallet(options?): Promise<WalletInfo>`
 
 For an app whose wallet creation is set to "on demand" in the dashboard (or never), or whose custody is left to the
@@ -844,6 +850,10 @@ await client.pollRampOrder(order.id, { onUpdate: (o) => render(describeRampActio
   carries `failure.limit` (`RampQuoteLimit`: `min`, `max`, `side`, `currency`),
   and `rampResolutionText` words it ("This route takes at least 1,450 ARS. Try a
   larger amount."). `rampNoRouteText(rejected)` says why no route quoted.
+- A route that needs a wallet the user does not have and cannot create
+  (`WALLET_MISSING`, `link_wallet`) carries the chain in `failure.detail`, and
+  `rampResolutionText` names it ("This route needs a Stellar wallet, which this
+  account does not have. Choose another network.").
 - A payee the provider would refuse answers `400 VALIDATION_ERROR` with the
   reason in `body.message`; a quote with no route answers `422 SDK_RAMPS_NO_ROUTE`
   with `body.rejected`.

@@ -15,6 +15,7 @@ import { SEND_COPY } from './send-copy';
 import { SendModalTemplate, type SendMemoType } from './SendModalTemplate';
 import { modalChrome } from '../modal-theme';
 import { PollarOverlay } from '../PollarOverlay';
+import { useInlineConfirmation } from '../../useInlineConfirmation';
 
 /** Where the send modal opens: a starting point the user can change. An option the wallet cannot use is left out. */
 export interface SendModalOptions {
@@ -99,6 +100,8 @@ export function SendModal({ onClose, initial }: SendModalProps) {
   const copy = SEND_COPY[language];
 
   const [step, setStep] = useState<'form' | 'create-account' | 'tx'>('form');
+  // The signature's yes is asked here, under the review, not in a prompt over the modal.
+  const confirmation = useInlineConfirmation(step === 'tx');
   // The destination had no Stellar account, so the tx being built creates it.
   const [createsAccount, setCreatesAccount] = useState(false);
   const [checkingDestination, setCheckingDestination] = useState(false);
@@ -201,7 +204,10 @@ export function SendModal({ onClose, initial }: SendModalProps) {
     'signing-submitting',
     'building-signing-submitting',
   ] as const;
-  const isInProgress = (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step);
+  // A transaction past its confirmation window is read on in the background: the modal can close meanwhile.
+  const isInProgress =
+    (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step) &&
+    !(transaction.step === 'submitted' && transaction.slow);
   const showBack =
     step === 'create-account' ||
     (step === 'tx' && (transaction.step === 'error' || transaction.step === 'success') && !isInProgress);
@@ -408,7 +414,7 @@ export function SendModal({ onClose, initial }: SendModalProps) {
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
+    <PollarOverlay style={overlayStyle} onClick={step !== 'tx' && !isInProgress ? onClose : undefined}>
       <SendModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -455,6 +461,8 @@ export function SendModal({ onClose, initial }: SendModalProps) {
         onRetry={() => void handleRetry()}
         onDone={onClose}
         language={language}
+        confirmation={confirmation}
+        network={network}
       />
     </PollarOverlay>
   );

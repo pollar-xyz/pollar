@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  isKycSettled,
   isPollarApiError,
   type KycProvider,
   type KycStartResponse,
@@ -17,7 +18,7 @@ import { kycErrorMessage } from './kyc-messages';
 import '../shared.css';
 import './KycModal.css';
 import { modalChrome } from '../modal-theme';
-import { PollarOverlay } from '../PollarOverlay';
+import { ModalFrame } from '../ModalFrame';
 
 interface KycModalProps {
   corridorId?: string;
@@ -34,7 +35,19 @@ interface KycModalProps {
   onApproved?: () => void;
   /** Language of the modal, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
   language?: string | undefined;
+  /** Render the card in the page instead of over a backdrop, without its close buttons. */
+  inline?: boolean;
 }
+
+/**
+ * While the vendor's page is open the modal reads the status on its own, so a
+ * user who finishes (here or on their phone) moves on without asking. Each read
+ * is cheap once the option's webhook stores the decision; without one, sdk-api
+ * asks the vendor. It stops when the modal closes, the decision arrives or the
+ * window below runs out; "Check status" stays for a user who does not wait.
+ */
+const WATCH_INTERVAL_MS = 4000;
+const WATCH_WINDOW_MS = 30 * 60_000;
 
 function newIdempotencyKey(): string {
   const c = globalThis.crypto;
@@ -51,6 +64,7 @@ export function KycModal({
   cardProviderId,
   providerId,
   language: languageProp,
+  inline = false,
 }: KycModalProps) {
   const { getClient, styles } = usePollar();
   const language = useModalLanguage(languageProp);
@@ -186,6 +200,35 @@ export function KycModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadProviders, providerId]);
 
+  // The latest finishWith, for the watch below: it must not restart on every render.
+  const finishRef = useRef(finishWith);
+  finishRef.current = finishWith;
+
+  useEffect(() => {
+    if (step !== 'verifying' || !selectedProvider) return;
+    const optionId = selectedProvider.id;
+    const until = Date.now() + WATCH_WINDOW_MS;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = async () => {
+      if (stopped || Date.now() > until) return;
+      const read = await readStatus(optionId).catch(() => null);
+      if (stopped) return;
+      if (read && isKycSettled(read)) {
+        finishRef.current(read);
+        return;
+      }
+      timer = setTimeout(() => void tick(), WATCH_INTERVAL_MS);
+    };
+    timer = setTimeout(() => void tick(), WATCH_INTERVAL_MS);
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+    // readStatus reads the fixed client and route props of this modal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, selectedProvider]);
+
   async function handleDoneVerifying() {
     if (!selectedProvider) return;
     setError(null);
@@ -215,7 +258,7 @@ export function KycModal({
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={onClose}>
+    <ModalFrame inline={inline} overlayStyle={overlayStyle} onClose={onClose}>
       <KycModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -237,7 +280,8 @@ export function KycModal({
         onRefresh={() => void loadProviders()}
         onClose={onClose}
         language={language}
+        inline={inline}
       />
-    </PollarOverlay>
+    </ModalFrame>
   );
 }

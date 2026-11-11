@@ -24,6 +24,10 @@ import { SwapAssetOption, SwapChain, SwapModalTemplate, SwapQuoteView, SwapSettl
 import { modalChrome } from '../modal-theme';
 import { byCode, oneOf, seededAmount, useSuccessReport } from '../../modal-options';
 import { PollarOverlay } from '../PollarOverlay';
+import { useInlineConfirmation } from '../../useInlineConfirmation';
+import { CONFIRM_COPY } from '../confirm-modal/confirm-copy';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
+import { reviewFromRequest } from '../tx-review/tx-review-model';
 
 /** Where the swap modal opens: a starting point the user can change. An option the app does not offer is left out. */
 export interface SwapModalOptions {
@@ -137,6 +141,8 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<'form' | 'tx'>('form');
+  // The signature's yes is asked here, under the review, not in a prompt over the modal.
+  const confirmation = useInlineConfirmation(step === 'tx');
   const [selectedSell, setSelectedSell] = useState<SwapAssetOption | null>(null);
   const [selectedBuy, setSelectedBuy] = useState<SwapAssetOption | null>(null);
   const [amount, setAmount] = useState(() => seededAmount(initial?.amount));
@@ -165,6 +171,12 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   const [formError, setFormError] = useState('');
   const [showXdr, setShowXdr] = useState(false);
   const [copied, setCopied] = useState(false);
+  // The Solana swap in the transaction step, with the assets as the user picked them.
+  const [sentSolana, setSentSolana] = useState<{
+    quote: SolanaSwapQuote;
+    sell: SwapAssetOption;
+    buy: SwapAssetOption;
+  } | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fixed default slippage (0.5%). Exposed as a constant for now; an advanced
@@ -356,7 +368,12 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   // Auto-select the first sell / buy asset once options are available, and keep a
   // valid selection if the list changes - so the pickers never sit empty.
   useEffect(() => {
-    if (sellOptions.length === 0) return;
+    // An empty list (another network's, once read) drops the selection: a pick from the
+    // previous network would leave the pill blank while its balance still shows.
+    if (sellOptions.length === 0) {
+      if (selectedSell && !isLoadingData) setSelectedSell(null);
+      return;
+    }
     const seeded = byCode(sellOptions, sellSeed.current);
     if (seeded) {
       sellSeed.current = undefined;
@@ -366,10 +383,13 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     if (!selectedSell || !sellOptions.some((o) => optKey(o) === optKey(selectedSell))) {
       setSelectedSell(sellOptions[0]!);
     }
-  }, [sellOptions, selectedSell]);
+  }, [sellOptions, selectedSell, isLoadingData]);
 
   useEffect(() => {
-    if (buyOptions.length === 0) return;
+    if (buyOptions.length === 0) {
+      if (selectedBuy && !isLoadingData) setSelectedBuy(null);
+      return;
+    }
     const seeded = byCode(buyOptions, buySeed.current);
     if (seeded) {
       buySeed.current = undefined;
@@ -379,7 +399,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     if (!selectedBuy || !buyOptions.some((o) => optKey(o) === optKey(selectedBuy))) {
       setSelectedBuy(buyOptions[0]!);
     }
-  }, [buyOptions, selectedBuy]);
+  }, [buyOptions, selectedBuy, isLoadingData]);
 
   // Add a user-pasted token (code + issuer) to the buy list and select it.
   // Returns an error message, or null on success.
@@ -607,6 +627,37 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
       ? `https://solscan.io/tx/${hash}${network === 'testnet' ? '?cluster=devnet' : ''}`
       : `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}`;
 
+  // A Solana swap's transaction carries no build to review: once the confirmation is answered, the
+  // review is read from the quote that was sent, so the step keeps saying what is being signed.
+  const solanaReview = useMemo(() => {
+    if (!sentSolana) return null;
+    const { quote: sent, sell, buy } = sentSolana;
+    const toward = sent.destinationChain && sent.destinationChain !== 'SOLANA' ? sent.destinationChain : undefined;
+    return reviewFromRequest(
+      {
+        chain: 'SOLANA',
+        network,
+        operation: 'swap',
+        details: {
+          provider: sent.provider,
+          inputMint: sent.inputMint,
+          outputMint: sent.outputMint,
+          inAmount: sent.inAmount,
+          outAmount: sent.outAmount,
+          minOut: sent.minOut,
+          ...(toward && { destinationChain: toward }),
+          inputSymbol: sell.code,
+          outputSymbol: buy.code,
+          ...(sell.decimals !== undefined && { inputDecimals: sell.decimals }),
+          ...((sent.outputDecimals ?? buy.decimals) !== undefined && { outputDecimals: sent.outputDecimals ?? buy.decimals }),
+        },
+        fallbackTitle: CONFIRM_COPY[language].operations.swap ?? copy.title,
+      },
+      TX_REVIEW_COPY[language],
+    );
+  }, [sentSolana, network, language, copy.title]);
+  const stepReview = solanaReview && !buildData && !confirmation ? solanaReview : null;
+
   const settlementView: SwapSettlementView | null = (() => {
     if (!settlement || transaction.step !== 'success') return null;
     const chainName = settlement.chain === 'POLYGON' ? 'Polygon' : 'Solana';
@@ -639,7 +690,10 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     'signing-submitting',
     'building-signing-submitting',
   ] as const;
-  const isInProgress = (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step);
+  // A transaction past its confirmation window is read on in the background: the modal can close meanwhile.
+  const isInProgress =
+    (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step) &&
+    !(transaction.step === 'submitted' && transaction.slow);
   const showBack = step === 'tx' && (transaction.step === 'error' || transaction.step === 'success') && !isInProgress;
 
   const txTitle = isInProgress
@@ -677,6 +731,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
       const key = newSwapKey();
       const toward = solanaQuote.destinationChain;
       setSettlement(toward && toward !== 'SOLANA' ? { key, chain: toward, value: null } : null);
+      setSentSolana({ quote: solanaQuote, sell: selectedSell, buy: selectedBuy });
       setStep('tx');
       await swapSolana(solanaQuote, { slippageBps, idempotencyKey: key });
       return;
@@ -685,6 +740,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
       setFormError(copy.noRouteForPair);
       return;
     }
+    setSentSolana(null);
     setStep('tx');
     await swap(quote);
   }
@@ -696,6 +752,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
       const key = newSwapKey();
       const toward = solanaQuote.destinationChain;
       setSettlement(toward && toward !== 'SOLANA' ? { key, chain: toward, value: null } : null);
+      if (selectedSell && selectedBuy) setSentSolana({ quote: solanaQuote, sell: selectedSell, buy: selectedBuy });
       await swapSolana(solanaQuote, { slippageBps, idempotencyKey: key });
       return;
     }
@@ -729,13 +786,14 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
 
   function handleBack() {
     setSettlement(null);
+    setSentSolana(null);
     setStep('form');
     setShowXdr(false);
     setCopied(false);
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
+    <PollarOverlay style={overlayStyle} onClick={step !== 'tx' && !isInProgress ? onClose : undefined}>
       <SwapModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -753,6 +811,9 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
         destination={destination}
         usdcAcross={usdcAcross}
         settlement={settlementView}
+        confirmation={confirmation}
+        review={stepReview}
+        network={network}
         provider={provider}
         providers={providers}
         quote={quoteView}

@@ -184,6 +184,12 @@ interface PollarContextValue {
   refreshCustodyMigration: () => void;
   /** Signing calls waiting for the user under `confirmation: 'prompt'`; the provider shows the first one. */
   confirmations: PendingConfirmation[];
+  /**
+   * A modal that shows the transaction it signs answers the confirmation itself:
+   * while one is registered the provider does not open its own prompt over it.
+   * Returns the unregister.
+   */
+  registerConfirmationHost: () => () => void;
   appConfig: PollarConfig;
   styles: PollarStyles;
   /** Remote app-config load state. 'loading' while the initial fetch is in
@@ -543,6 +549,11 @@ export function PollarProvider({
   const [cosign, setCosign] = useState<CosignState>({ pending: [] });
   const [confirmations, setConfirmations] = useState<PendingConfirmation[]>([]);
   const firstConfirmation = confirmations[0] ?? null;
+  const [confirmationHosts, setConfirmationHosts] = useState(0);
+  const registerConfirmationHost = useCallback(() => {
+    setConfirmationHosts((n) => n + 1);
+    return () => setConfirmationHosts((n) => n - 1);
+  }, []);
   const [walletBalance, setWalletBalance] = useState<WalletBalanceState>({ step: 'idle' });
   const [enabledAssets, setEnabledAssets] = useState<EnabledAssetsState>({ step: 'idle' });
   const [resolvedConfig, setResolvedConfig] = useState<PollarConfig>(() => appConfigProp ?? DEFAULT_APP_CONFIG);
@@ -963,6 +974,7 @@ export function PollarProvider({
       custodyMigration,
       refreshCustodyMigration,
       confirmations,
+      registerConfirmationHost,
       // distribution
       openDistributionRulesModal: () => setDistributionRulesModalOpen(true),
       // network
@@ -1003,6 +1015,7 @@ export function PollarProvider({
     sessions,
     cosign,
     confirmations,
+    registerConfirmationHost,
     walletBalance,
     refreshWalletBalance,
     enabledAssets,
@@ -1141,7 +1154,7 @@ export function PollarProvider({
             />
           </ModalErrorBoundary>
         )}
-        {firstConfirmation && (
+        {firstConfirmation && confirmationHosts === 0 && (
           <ModalErrorBoundary onClose={firstConfirmation.reject}>
             <ConfirmModal key={firstConfirmation.id} confirmation={firstConfirmation} />
           </ModalErrorBoundary>

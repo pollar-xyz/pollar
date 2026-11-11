@@ -33,6 +33,7 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     TX_LINE_FULL: "The destination can't hold that much of this asset.",
     TX_NOT_AUTHORIZED: "This account isn't authorized to hold or send this asset.",
     TX_TOO_LATE: 'The transaction expired before it was sent. Please try again.',
+    TX_NOT_CONFIRMED: 'The network did not confirm this transaction in time, so nothing moved. Please try again.',
     TX_BAD_SEQUENCE: 'Another transaction was sent from this wallet at the same time. Please try again.',
     TX_SUBMIT_FAILED: "The network didn't accept the transaction. Please try again.",
     TX_SUBMIT_UNCONFIRMED: "The transaction was sent but isn't confirmed yet. Check its status before sending again.",
@@ -67,6 +68,7 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     TX_LINE_FULL: 'El destino no puede tener tanto de este activo.',
     TX_NOT_AUTHORIZED: 'Esta cuenta no está autorizada para tener o enviar este activo.',
     TX_TOO_LATE: 'La transacción venció antes de enviarse. Intenta de nuevo.',
+    TX_NOT_CONFIRMED: 'La red no confirmó esta transacción a tiempo, así que no se movió nada. Intenta de nuevo.',
     TX_BAD_SEQUENCE: 'Se envió otra transacción desde esta billetera al mismo tiempo. Intenta de nuevo.',
     TX_SUBMIT_FAILED: 'La red no aceptó la transacción. Intenta de nuevo.',
     TX_SUBMIT_UNCONFIRMED:
@@ -104,6 +106,7 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     TX_LINE_FULL: 'O destino não pode manter tanto deste ativo.',
     TX_NOT_AUTHORIZED: 'Esta conta não está autorizada a manter ou enviar este ativo.',
     TX_TOO_LATE: 'A transação expirou antes de ser enviada. Tente novamente.',
+    TX_NOT_CONFIRMED: 'A rede não confirmou esta transação a tempo, então nada foi movido. Tente novamente.',
     TX_BAD_SEQUENCE: 'Outra transação foi enviada desta carteira ao mesmo tempo. Tente novamente.',
     TX_SUBMIT_FAILED: 'A rede não aceitou a transação. Tente novamente.',
     TX_SUBMIT_UNCONFIRMED: 'A transação foi enviada, mas ainda não foi confirmada. Verifique o status antes de enviar de novo.',

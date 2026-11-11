@@ -1,12 +1,11 @@
 import { useInheritedLanguage } from '../../language-context';
-import { PollarLanguage, TransactionState, WalletId, WalletType } from '@pollar/core';
+import { type PendingConfirmation, PollarLanguage, type StellarNetwork, TransactionState, WalletId } from '@pollar/core';
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image } from 'react-native';
-import { LOGO_ALBEDO, LOGO_FREIGHTER, LOGO_POLLAR_MARK_ON_DARK, LOGO_POLLAR_MARK_ON_LIGHT } from '../../constants';
-import { ModalStatusBanner, PollarModalFooter, PollarOverlay } from '../commons';
-import { TxReview } from '../tx-review/TxReview';
-import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
-import { reviewFromBuild, type TxReviewData } from '../tx-review/tx-review-model';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { PollarModalFooter, PollarOverlay } from '../commons';
+import { TitleMark } from '../cosign-modal/CosignModalUI';
+import { headlineAsset } from '../tx-review/tx-review-model';
+import { TxStatusBody, txStatusReview } from './TxStatusBody';
 import { TRANSACTION_COPY } from './transaction-copy';
 
 export interface TransactionModalTemplateProps {
@@ -30,17 +29,17 @@ export interface TransactionModalTemplateProps {
   onRetry?: () => void;
   /** Language of the modal. Defaults to the user's device; the modal passes the resolved one. */
   language?: PollarLanguage | undefined;
+  /** The signature waiting for the user's yes, answered in this view instead of a prompt over it. */
+  confirmation?: PendingConfirmation | null | undefined;
+  /** The app's network, for the details of a confirmation. */
+  network?: StellarNetwork | undefined;
 }
 
-const SENDING_STEPS = new Set<TransactionState['step']>([
-  'signing',
-  'signed',
-  'submitting',
-  'signing-submitting',
-  'submitted',
-  'awaiting_cosign',
-]);
-
+/**
+ * A transaction from the user's yes to its outcome in one view: the review stays,
+ * and a strip under it says where the transaction stands. The hash and every
+ * address live in the details.
+ */
 export function TransactionModalTemplate({
   theme,
   accentColor,
@@ -54,130 +53,53 @@ export function TransactionModalTemplate({
   copyText,
   onRetry,
   language: languageProp,
+  confirmation = null,
+  network,
 }: TransactionModalTemplateProps) {
   const language = useInheritedLanguage(languageProp);
   const copy = TRANSACTION_COPY[language];
   const isDark = theme === 'dark';
-
   const colors = {
     bg: isDark ? '#1a1a1a' : '#ffffff',
     border: isDark ? '#374151' : '#e5e7eb',
     text: isDark ? '#ffffff' : '#111827',
     muted: isDark ? '#9ca3af' : '#6b7280',
-    errorBg: isDark ? '#2a1515' : '#fef2f2',
-    errorText: isDark ? '#f87171' : '#dc2626',
   };
-
-  const buildData = 'buildData' in transaction ? transaction.buildData : null;
-  const hash = transaction.step === 'success' ? transaction.hash : null;
-  const errorDetails = transaction.step === 'error' ? (transaction.details ?? null) : null;
-
-  const isBuilt = transaction.step === 'built';
-  const isSigning = SENDING_STEPS.has(transaction.step);
-  const isSuccess = transaction.step === 'success';
-  const isError = transaction.step === 'error';
-  const showDetails = isBuilt || isSigning || isSuccess;
-  const hashInfo = hash ? { value: hash, explorerUrl } : undefined;
-  const sponsored = 'sponsored' in transaction ? transaction.sponsored : undefined;
-  // A compound flow can finish without the build it ran: the hash still has a place in the details.
-  const review: TxReviewData | null = buildData
-    ? reviewFromBuild(buildData, TX_REVIEW_COPY[language], copy.title, hashInfo, sponsored)
-    : hashInfo
-      ? { title: copy.title, kind: 'other', rows: [], hash: hashInfo, ...(sponsored !== undefined && { fee: { sponsored } }) }
-      : null;
-  const reviewBlock = showDetails && review && (
-    <ScrollView style={styles.contentWrap} nestedScrollEnabled>
-      {buildData && <Text style={[styles.reviewTitle, { color: colors.text }]}>{review.title}</Text>}
-      <TxReview
-        data={review}
-        theme={theme}
-        accentColor={accentColor}
-        open={showXdr}
-        onToggle={onToggleXdr}
-        copyText={copyText}
-        language={language}
-      />
-    </ScrollView>
-  );
+  const review = txStatusReview(transaction, language, explorerUrl, confirmation, null, network);
+  const chain = review?.from?.chain ?? review?.to?.chain;
 
   return (
-    <PollarOverlay onCancel={onClose}>
+    // A transaction on its way is closed from its X; a tap beside it does nothing.
+    <PollarOverlay onCancel={onClose} dismissOnBackdrop={false}>
       <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border }]}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>{copy.title}</Text>
+          {review && <TitleMark chain={chain} asset={headlineAsset(review)} theme={theme} accentColor={accentColor} />}
+          <Text style={[styles.title, { color: colors.text }]}>{review?.title ?? copy.title}</Text>
         </View>
 
         <TouchableOpacity style={[styles.iconButton, styles.closeBtn, { borderColor: colors.border }]} onPress={onClose}>
           <Text style={{ color: colors.muted, fontSize: 16 }}>✕</Text>
         </TouchableOpacity>
 
-        {!isSuccess && reviewBlock}
+        <ScrollView style={styles.contentWrap} nestedScrollEnabled>
+          <TxStatusBody
+            transaction={transaction}
+            theme={theme}
+            accentColor={accentColor}
+            explorerUrl={explorerUrl}
+            walletType={walletType}
+            confirmation={confirmation}
+            showXdr={showXdr}
+            onToggleXdr={onToggleXdr}
+            onSignAndSend={onSignAndSend}
+            {...(onRetry ? { onRetry } : {})}
+            network={network}
+            copyText={copyText}
+            language={language}
+          />
+        </ScrollView>
 
-        {isError && errorDetails && (
-          <View style={[styles.errorBox, { backgroundColor: colors.errorBg }]}>
-            <Text style={{ color: colors.errorText, fontWeight: '600', marginBottom: 4 }}>{copy.errorDetails}</Text>
-            <Text style={{ color: colors.errorText, fontSize: 12 }}>{errorDetails}</Text>
-          </View>
-        )}
-
-        {isBuilt && (
-          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: accentColor }]} onPress={onSignAndSend}>
-            <Text style={styles.primaryBtnText}>{copy.signAndSend}</Text>
-          </TouchableOpacity>
-        )}
-
-        {(isSigning || isSuccess || isError) && (
-          <View style={styles.walletSpinnerBox}>
-            <View style={styles.walletIconContainer}>
-              <Image
-                source={{
-                  uri:
-                    walletType === WalletType.FREIGHTER
-                      ? LOGO_FREIGHTER
-                      : walletType === WalletType.ALBEDO
-                        ? LOGO_ALBEDO
-                        : isDark
-                          ? LOGO_POLLAR_MARK_ON_DARK
-                          : LOGO_POLLAR_MARK_ON_LIGHT,
-                }}
-                style={styles.walletImage}
-              />
-            </View>
-
-            {isSigning && transaction.step !== 'awaiting_cosign' && (
-              <Text style={[styles.spinnerText, { color: colors.text }]}>
-                {walletType === WalletType.FREIGHTER
-                  ? copy.waitingFreighter
-                  : walletType === WalletType.ALBEDO
-                    ? copy.waitingAlbedo
-                    : copy.signingAndSending}
-              </Text>
-            )}
-
-            {isError && onRetry && buildData && (
-              <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border }]} onPress={onRetry}>
-                <Text style={[styles.secondaryBtnText, { color: colors.muted }]}>{copy.tryAgain}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
-        <ModalStatusBanner
-          message={copy.status[transaction.step] || ''}
-          status={
-            isError
-              ? 'ERROR'
-              : isSigning || transaction.step === 'building' || transaction.step === 'building-signing-submitting'
-                ? 'LOADING'
-                : isSuccess
-                  ? 'SUCCESS'
-                  : 'NONE'
-          }
-        />
-
-        {isSuccess && reviewBlock}
-
-        {isSuccess && (
+        {transaction.step === 'success' && (
           <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: accentColor }]} onPress={onClose}>
             <Text style={styles.primaryBtnText}>{copy.done}</Text>
           </TouchableOpacity>
@@ -202,11 +124,17 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   header: {
-    marginBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
     marginTop: 10,
+    // Clear of the close button in the corner.
+    paddingRight: 40,
   },
   title: {
-    fontSize: 22,
+    flexShrink: 1,
+    fontSize: 20,
     fontWeight: '700',
   },
   iconButton: {
@@ -227,17 +155,7 @@ const styles = StyleSheet.create({
     maxHeight: 360,
     marginBottom: 16,
   },
-  reviewTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
 
-  errorBox: {
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
   primaryBtn: {
     width: '100%',
     height: 44,
@@ -250,39 +168,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '700',
-  },
-  secondaryBtn: {
-    height: 44,
-    borderWidth: 1,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginTop: 16,
-  },
-  secondaryBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  walletSpinnerBox: {
-    alignItems: 'center',
-    marginVertical: 20,
-  },
-  walletIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: '#005DB4',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  walletImage: {
-    width: 32,
-    height: 32,
-  },
-  spinnerText: {
-    fontSize: 16,
   },
 });

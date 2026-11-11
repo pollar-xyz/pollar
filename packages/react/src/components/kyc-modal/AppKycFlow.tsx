@@ -12,6 +12,12 @@ interface AppKycFlowProps {
   level?: 'basic' | 'intermediate' | 'enhanced';
   /** Called once every step of the app's own KYC is complete. */
   onApproved?: () => void;
+  /**
+   * In the host's page instead of modals: each step's card shows inline with no
+   * close buttons, an approved step moves to the next one at once, and the flow
+   * renders nothing once every step is complete (the host shows its own result).
+   */
+  inline?: boolean;
 }
 
 type FlowState =
@@ -20,14 +26,16 @@ type FlowState =
   | { kind: 'options' }
   | { kind: 'step'; step: AppRequirementStep }
   /** Every step was already complete on open; the KYC modal shows the verified state on the option the user passed. */
-  | { kind: 'done'; providerId: string };
+  | { kind: 'done'; providerId: string }
+  /** Inline only: every step is complete and the host shows the result. */
+  | { kind: 'complete' };
 
 /**
  * The app's own KYC, step by step: the user completes every step the app configured,
  * in order, and only the pending one is shown. A KYC step opens the KYC modal on its
  * option; a form step opens the form. After each one the steps are read again.
  */
-export function AppKycFlow({ onClose, country, level, onApproved }: AppKycFlowProps) {
+export function AppKycFlow({ onClose, country, level, onApproved, inline = false }: AppKycFlowProps) {
   const { getClient } = usePollar();
   const client = getClient();
   const [state, setState] = useState<FlowState>({ kind: 'loading' });
@@ -75,6 +83,7 @@ export function AppKycFlow({ onClose, country, level, onApproved }: AppKycFlowPr
       firstRead.current = false;
       if (requirements.next) return setState({ kind: 'step', step: requirements.next });
       onApproved?.();
+      if (inline) return setState({ kind: 'complete' });
       const providerId = first ? await approvedOption(requirements.steps) : null;
       if (!mounted.current) return;
       if (providerId) setState({ kind: 'done', providerId });
@@ -93,12 +102,13 @@ export function AppKycFlow({ onClose, country, level, onApproved }: AppKycFlowPr
     void load();
   }, [load]);
 
-  if (state.kind === 'loading') return null;
+  if (state.kind === 'loading' || state.kind === 'complete') return null;
 
   if (state.kind === 'options') {
     return (
       <KycModal
         onClose={onClose}
+        inline={inline}
         {...(country !== undefined && { country })}
         {...(level !== undefined && { level })}
         {...(onApproved !== undefined && { onApproved })}
@@ -107,7 +117,9 @@ export function AppKycFlow({ onClose, country, level, onApproved }: AppKycFlowPr
   }
 
   if (state.kind === 'done') {
-    return <KycModal onClose={onClose} providerId={state.providerId} {...(country !== undefined && { country })} />;
+    return (
+      <KycModal onClose={onClose} inline={inline} providerId={state.providerId} {...(country !== undefined && { country })} />
+    );
   }
 
   const { step } = state;
@@ -118,20 +130,24 @@ export function AppKycFlow({ onClose, country, level, onApproved }: AppKycFlowPr
         key={step.optionId}
         formId={step.optionId}
         progress={progress}
+        inline={inline}
         onClose={onClose}
         onSubmitted={() => void load()}
       />
     );
   }
   // The KYC modal shows its own result; closing it after an approval moves to the next step.
+  // Inline there is nothing to close: an approval moves on at once.
   return (
     <KycModal
       key={step.optionId}
       providerId={step.optionId}
+      inline={inline}
       {...(country !== undefined && { country })}
       {...(level !== undefined && { level })}
       onApproved={() => {
         kycStepDone.current = true;
+        if (inline) void load();
       }}
       onClose={() => {
         if (kycStepDone.current) void load();

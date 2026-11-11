@@ -117,7 +117,8 @@ export async function resolveKyc(
  * the vendor approved that Pollar is still recording (`status: 'pending'`,
  * `decisionStatus: 'approved'`), which another read seconds later does not change.
  */
-function isSettled({ status, decisionStatus }: KycStatusContent): boolean {
+/** Whether a status read carries the vendor's decision (or the session ended): there is nothing more to wait for. */
+export function isKycSettled({ status, decisionStatus }: KycStatusContent): boolean {
   return (
     status === 'approved' ||
     status === 'rejected' ||
@@ -157,7 +158,7 @@ export async function pollKycDecision(
       corridorId || cardProviderId
         ? await getKycStatus(api, undefined, corridorId, cardProviderId)
         : await getKycStatus(api, providerId);
-    if (isSettled(read)) return read;
+    if (isKycSettled(read)) return read;
     await new Promise((r) => setTimeout(r, intervalMs));
   }
   throw new Error('KYC polling timed out');
