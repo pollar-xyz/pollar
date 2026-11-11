@@ -59,7 +59,7 @@ import {
 } from '@pollar/core';
 import { usePollar } from '../../context';
 import { useWalletAvailable } from '../../useWalletAvailable';
-import { AmountField } from '../AmountField';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
 import { PollarModalFooter, PollarOverlay } from '../commons';
 import { useModalLanguage } from '../../language';
 import { RAMP_COPY, type RampCopy } from './ramp-copy';
@@ -73,6 +73,7 @@ import { InlineConfirm } from '../confirm-modal/InlineConfirm';
 import { explorerTxUrl } from '../explorer';
 import { TxReview } from '../tx-review/TxReview';
 import type { TxDetailRow } from '../tx-review/tx-review-model';
+import { BEST_ROUTE, routeKey } from './ramp-route';
 
 /** The chain a leg's on-chain transaction ran on: where its funds left from, else where they arrived. */
 function legChain(leg: RampOrder['legs'][number]): WalletChain {
@@ -115,15 +116,17 @@ function rampErrorMessage(error: unknown, fallback: string, copy: RampCopy, lang
   return fallback;
 }
 
-/** A route's identity across quotes: quoting again gives the same route a new quote id. */
-function routeKey(quote: RampQuote): string {
-  const node = (n: RampQuote['legs'][number]['from']) =>
-    n.kind === 'asset' ? `${n.code}:${n.chain}` : `${n.currency}:${n.rail}`;
-  return quote.legs.map((leg) => `${leg.kind}:${node(leg.from)}>${node(leg.to)}`).join('|');
+/** The regional-indicator flag of an ISO 3166 country code ("BO" is the Bolivian flag). */
+function flagEmoji(code: string): string {
+  return /^[A-Za-z]{2}$/.test(code)
+    ? String.fromCodePoint(...[...code.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65))
+    : '';
 }
 
 /** An exact decimal, as the API takes amounts: "10", "10.5", never "1e3" or "-2". */
 const DECIMAL = /^\d+(\.\d+)?$/;
+/** How long the amount screen waits after the last keystroke before it quotes. */
+const QUOTE_DEBOUNCE_MS = 600;
 
 /**
  * Signs a leg, lending the user's own connected wallet as the ramp signer while
@@ -254,6 +257,15 @@ export interface RampWidgetTemplateProps {
   onAssetChange: (key: string) => void;
   onAmountChange: (value: string) => void;
   onFindRoute: () => void;
+  /** The amount screen is quoting what was typed. */
+  quoting?: boolean;
+  /** `BEST_ROUTE`, or the key of the route the user picked in the details. */
+  routeChoice?: string;
+  /** The route Continue takes: the picked one, else the best. */
+  chosenQuote?: RampQuote | null;
+  onRouteChoice?: (choice: string) => void;
+  /** Takes the chosen route, or opens every route when none could be quoted. */
+  onContinue?: () => void;
   onSelectQuote: (quote: RampQuote) => void;
   /** Opens the verification step a dropped route waits on. */
   onVerifyRoute?: (requirement: RampQuoteRequirement) => void;
@@ -358,6 +370,11 @@ export function RampWidgetTemplate({
   onAssetChange,
   onAmountChange,
   onFindRoute,
+  quoting = false,
+  routeChoice = BEST_ROUTE,
+  chosenQuote = null,
+  onRouteChoice,
+  onContinue,
   onSelectQuote,
   onVerifyRoute,
   trustingAsset = null,
@@ -400,6 +417,7 @@ export function RampWidgetTemplate({
     error: '#ef4444',
   };
   const onramp = direction === 'ONRAMP';
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const view = order ? describeRampAction(order, language) : null;
   const settled = order ? ['completed', 'failed', 'refunded'].includes(order.state) : false;
   const shortHash = (hash: string) => `${hash.slice(0, 8)}…${hash.slice(-6)}`;
@@ -520,6 +538,26 @@ export function RampWidgetTemplate({
     error: copy.subtitle.error,
   };
   const errorLine = errorMsg ? <Text style={[styles.note, { color: colors.error }]}>{errorMsg}</Text> : null;
+  const routeName = (quote: RampQuote) => quote.legs.map((leg) => rampLegTitle(leg, language)).join(' · ');
+  // What a unit of the asset costs in the fiat, from the route Continue takes.
+  const rate = (() => {
+    if (!chosenQuote) return null;
+    const amountIn = Number(chosenQuote.amountIn);
+    const amountOut = Number(chosenQuote.amountOut);
+    if (!(amountIn > 0) || !(amountOut > 0)) return null;
+    const perUnit = onramp ? amountIn / amountOut : amountOut / amountIn;
+    return `1 ${asset?.code ?? ''} ≈ ${perUnit.toLocaleString(language, { maximumFractionDigits: 2 })} ${fiat?.currency ?? ''}`;
+  })();
+  const fiatChips = chips(
+    fiats.map((f) => ({ key: fiatKey(f), label: `${f.currency} · ${rampRailLabel(f.rail, { language })}` })),
+    fiat ? fiatKey(fiat) : '',
+    onFiatChange,
+  );
+  const assetChips = chips(
+    assets.map((a) => ({ key: assetKey(a), label: copy.assetOn(a.code, CHAIN_NAME[a.chain] ?? a.chain) })),
+    asset ? assetKey(asset) : '',
+    onAssetChange,
+  );
   const scannable = view?.scannable ?? null;
 
   return (
@@ -601,62 +639,119 @@ export function RampWidgetTemplate({
                 )}
               </>
             )}
-            {chips<RampDirection>(
-              [
-                { key: 'ONRAMP', label: copy.buy },
-                { key: 'OFFRAMP', label: copy.sell },
-              ],
-              direction,
-              onDirectionChange,
-            )}
             {routesLoading ? (
               <ActivityIndicator color={accentColor} style={{ marginBottom: 16 }} />
             ) : countries.length === 0 ? (
               <Text style={[styles.note, { color: colors.muted }]}>{noChains ? copy.noChains : copy.noRoutes}</Text>
             ) : (
               <>
-                <Text style={[styles.label, { color: colors.text }]}>{copy.country}</Text>
                 {chips(
                   countries
-                    .map((c) => ({ key: c.country, label: countryName(c.country, language) }))
+                    .map((c) => ({ key: c.country, label: `${flagEmoji(c.country)} ${countryName(c.country, language)}` }))
                     .sort((a, b) => a.label.localeCompare(b.label, language)),
                   country,
                   onCountryChange,
                 )}
-                {fiats.length > 1 && (
-                  <>
-                    <Text style={[styles.label, { color: colors.text }]}>{onramp ? copy.payWith : copy.receiveIn}</Text>
-                    {chips(
-                      fiats.map((f) => ({
-                        key: fiatKey(f),
-                        label: `${f.currency} · ${rampRailLabel(f.rail, { language })}`,
-                      })),
-                      fiat ? fiatKey(fiat) : '',
-                      onFiatChange,
+
+                <View style={[styles.panel, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                  <Text style={[styles.panelLabel, { color: colors.text }]}>{onramp ? copy.youPay : copy.youSell}</Text>
+                  <View style={styles.panelMain}>
+                    <TextInput
+                      style={[styles.panelAmount, { color: colors.text }]}
+                      keyboardType="decimal-pad"
+                      placeholder="0.00"
+                      placeholderTextColor={colors.muted}
+                      accessibilityLabel={onramp ? copy.youPay : copy.youSell}
+                      value={amount}
+                      onChangeText={(value) => onAmountChange(value.replace(',', '.'))}
+                    />
+                    <Text style={{ color: colors.muted, fontWeight: '600' }}>{onramp ? fiat?.currency : asset?.code}</Text>
+                  </View>
+                  {!onramp && sellAvailable != null && (
+                    <View style={styles.panelFoot}>
+                      <Text style={{ color: colors.muted, fontSize: 12 }}>
+                        {copy.quick.balance} {sellAvailable} {asset?.code}
+                      </Text>
+                      <TouchableOpacity onPress={() => onAmountChange(sellAvailable)} accessibilityRole="button">
+                        <Text style={{ color: accentColor, fontSize: 12, fontWeight: '600' }}>{copy.quick.max}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  {onramp ? fiatChips : assetChips}
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.reverse, { backgroundColor: accentColor, borderColor: colors.bg }]}
+                  onPress={() => onDirectionChange(onramp ? 'OFFRAMP' : 'ONRAMP')}
+                  accessibilityRole="button"
+                  accessibilityLabel={copy.quick.switchDirection}
+                >
+                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>⇅</Text>
+                </TouchableOpacity>
+
+                <View style={[styles.panel, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                  <Text style={[styles.panelLabel, { color: colors.text }]}>{copy.youReceive}</Text>
+                  <View style={styles.panelMain}>
+                    {quoting ? (
+                      <ActivityIndicator color={accentColor} />
+                    ) : (
+                      <Text style={[styles.panelAmount, { color: chosenQuote ? colors.text : colors.muted }]}>
+                        {chosenQuote ? `~${chosenQuote.amountOut}` : '—'}
+                      </Text>
                     )}
-                  </>
+                    <Text style={{ color: colors.muted, fontWeight: '600' }}>{onramp ? asset?.code : fiat?.currency}</Text>
+                  </View>
+                  {onramp ? assetChips : fiatChips}
+                </View>
+
+                {chosenQuote && (
+                  <View style={styles.rateRow}>
+                    <Text style={{ color: colors.muted, fontSize: 13, flexShrink: 1 }}>{rate}</Text>
+                    <TouchableOpacity onPress={() => setDetailsOpen((open) => !open)} accessibilityRole="button">
+                      <Text style={{ color: accentColor, fontSize: 13, fontWeight: '500' }}>
+                        {detailsOpen ? TX_REVIEW_COPY[language].hideDetails : TX_REVIEW_COPY[language].showDetails}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
-                <Text style={[styles.label, { color: colors.text }]}>{onramp ? copy.receive : copy.sell}</Text>
-                {chips(
-                  assets.map((a) => ({ key: assetKey(a), label: copy.assetOn(a.code, CHAIN_NAME[a.chain] ?? a.chain) })),
-                  asset ? assetKey(asset) : '',
-                  onAssetChange,
+                {detailsOpen && chosenQuote && (
+                  <View style={[styles.instructions, { borderColor: colors.border, gap: 8 }]}>
+                    <Text style={{ color: colors.muted, fontSize: 12 }}>{copy.quick.route}</Text>
+                    {chips(
+                      [
+                        {
+                          key: BEST_ROUTE,
+                          label: quotes[0] ? `${copy.quick.bestPrice} · ${routeName(quotes[0])}` : copy.quick.bestPrice,
+                        },
+                        ...quotes.map((q) => ({ key: routeKey(q), label: `${routeName(q)} · ~${q.amountOut}` })),
+                      ],
+                      routeChoice,
+                      (choice) => onRouteChoice?.(choice),
+                    )}
+                    <Text style={{ color: colors.muted, fontSize: 12 }}>
+                      {copy.routeSteps(chosenQuote.legs.length)} · {copy.feesIncluded}
+                    </Text>
+                    <TouchableOpacity onPress={onFindRoute} accessibilityRole="button">
+                      <Text style={{ color: accentColor, fontSize: 13, fontWeight: '600' }}>{copy.quick.seeAllRoutes}</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                {!quoting && !chosenQuote && rejected.length > 0 && (
+                  <>
+                    <Text style={[styles.note, { color: colors.muted }]}>{rampNoRouteText(rejected, language)}</Text>
+                    <TouchableOpacity onPress={onFindRoute} accessibilityRole="button">
+                      <Text style={{ color: accentColor, fontWeight: '600', marginBottom: 12 }}>{copy.quick.seeAllRoutes}</Text>
+                    </TouchableOpacity>
+                  </>
                 )}
               </>
             )}
-            <AmountField
-              theme={theme}
-              accentColor={accentColor}
-              label={onramp ? copy.youPay : copy.youSell}
-              value={amount}
-              onChange={onAmountChange}
-              unit={onramp ? fiat?.currency : asset?.code}
-              available={onramp ? undefined : sellAvailable}
-              placeholder="25.00"
-              language={language}
-            />
             {errorLine}
-            {primary(copy.findBestRoute, onFindRoute, !canFind)}
+            {primary(
+              isLoading ? copy.starting : copy.continue,
+              onContinue ?? onFindRoute,
+              quoting || isLoading || routesLoading || (!chosenQuote && rejected.length === 0),
+            )}
           </>
         )}
 
@@ -1022,6 +1117,59 @@ export function RampWidget({
   const sellAvailable = useWalletAvailable(
     direction === 'OFFRAMP' && asset ? { chain: asset.chain, code: asset.code, issuer: asset.identifier } : null,
   );
+
+  // The amount screen quotes as the user types: "You receive" shows the best route's amount, and
+  // Continue takes that route unless the user picks another in the details.
+  const [quoting, setQuoting] = useState(false);
+  const [routeChoice, setRouteChoice] = useState<string>(BEST_ROUTE);
+  const quoteRun = useRef(0);
+  const quoteInput = step === 'input' && fiat && asset && DECIMAL.test(amount.trim()) && Number(amount) > 0;
+  const quoteKey = quoteInput ? `${direction}|${fiatKey(fiat)}|${assetKey(asset)}|${amount.trim()}` : null;
+  useEffect(() => {
+    const run = ++quoteRun.current;
+    if (!quoteKey || !fiat || !asset) {
+      setQuoting(false);
+      if (step === 'input') {
+        setQuotes([]);
+        setRejected([]);
+      }
+      return;
+    }
+    setQuoting(true);
+    const timer = setTimeout(() => {
+      client
+        .quoteRamp({
+          direction,
+          fiat: { currency: fiat.currency, rail: fiat.rail, country: fiat.country },
+          asset: { code: asset.code, identifier: asset.identifier, chain: asset.chain },
+          amount: { value: amount.trim(), denomination: 'in' },
+        })
+        .then((result) => {
+          if (run !== quoteRun.current) return;
+          setQuotes(result.quotes);
+          setRejected(result.rejected);
+          setErrorMsg(null);
+        })
+        .catch((error: unknown) => {
+          if (run !== quoteRun.current) return;
+          setQuotes([]);
+          if (isPollarApiError(error) && error.code === 'SDK_RAMPS_NO_ROUTE') {
+            setRejected(Array.isArray(error.body.rejected) ? (error.body.rejected as RampQuoteRejection[]) : []);
+          } else {
+            setRejected([]);
+            setErrorMsg(rampErrorMessage(error, copy.findRouteFailed, copy, language));
+          }
+        })
+        .finally(() => {
+          if (run === quoteRun.current) setQuoting(false);
+        });
+    }, QUOTE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoteKey]);
+  // A route picked from an earlier quote that the new one lacks falls back to the best.
+  const chosenQuote =
+    (routeChoice !== BEST_ROUTE ? quotes.find((q) => routeKey(q) === routeChoice) : undefined) ?? quotes[0] ?? null;
 
   useEffect(() => {
     if (direction === 'OFFRAMP') void refreshWalletBalance();
@@ -1484,6 +1632,11 @@ export function RampWidget({
             setErrorMsg(null);
           }}
           onFindRoute={() => void handleFindRoute()}
+          quoting={quoting}
+          routeChoice={routeChoice}
+          chosenQuote={chosenQuote}
+          onRouteChoice={setRouteChoice}
+          onContinue={() => (chosenQuote ? handleSelectQuote(chosenQuote) : setStep('select_route'))}
           onSelectQuote={(quote) => handleSelectQuote(quote)}
           onVerifyRoute={handleVerifyRoute}
           trustingAsset={trustingAsset}
@@ -1667,6 +1820,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 8,
   },
+  panel: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 8 },
+  panelLabel: { fontSize: 12, fontWeight: '700' },
+  panelMain: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  panelAmount: { flex: 1, fontSize: 26, fontWeight: '600', padding: 0 },
+  panelFoot: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  reverse: {
+    alignSelf: 'center',
+    width: 40,
+    height: 40,
+    marginVertical: -12,
+    zIndex: 1,
+    borderRadius: 20,
+    borderWidth: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginVertical: 10 },
   instructions: {
     borderWidth: 1,
     borderRadius: 8,

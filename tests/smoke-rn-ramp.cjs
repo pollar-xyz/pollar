@@ -122,6 +122,18 @@ function press(text) {
   });
 }
 const shown = () => texts.map(label).join('\n');
+/**
+ * The amount screen quotes on its own; the routes screen opens from its details
+ * (or from the note when no route could be quoted). The live quote is the
+ * amount screen's, so it leaves the counted calls.
+ */
+async function findRoutes(calls) {
+  const before = calls ? calls.length : 0;
+  await React.act(async () => new Promise((r) => setTimeout(r, 700)));
+  if (calls) for (let i = calls.length - 1; i >= before; i--) if (calls[i][0] === 'quoteRamp') calls.splice(i, 1);
+  if (!buttons.some((b) => label(b).startsWith('See every route'))) await press('Show details');
+  await press('See every route');
+}
 async function render(element) {
   const container = document.createElement('div');
   const root = createRoot(container);
@@ -279,7 +291,7 @@ const order = (pendingAction, patch = {}) => ({
       .find((i) => i.keyboardType === 'decimal-pad')
       .onChangeText('100'),
   );
-  await press('Find best route');
+  await findRoutes(typeof calls === 'undefined' ? undefined : calls);
   assert.deepEqual(calls[1], ['quoteRamp', '100']);
   await press('100 BOB');
   await rerender(() => inputs.at(-1).onChangeText('Ana Perez'));
@@ -347,7 +359,11 @@ const order = (pendingAction, patch = {}) => ({
         .find((i) => i.keyboardType === 'decimal-pad')
         .onChangeText('100'),
     );
-    await press('Find best route');
+    // The amount screen's live quote is not one of the rounds counted below.
+    await React.act(async () => new Promise((r) => setTimeout(r, 700)));
+    round = 0;
+    for (let i = calls.length - 1; i >= 0; i--) if (calls[i][0] === 'quoteRamp') calls.splice(i, 1);
+    await findRoutes(calls);
     await press('100 BOB');
     assert.match(shown(), /Approve the new account on your device\. The order starts once it is approved\./);
     assert.doesNotMatch(shown(), /then try again/, 'waiting on the device is not an error');
@@ -393,7 +409,11 @@ const order = (pendingAction, patch = {}) => ({
         .find((i) => i.keyboardType === 'decimal-pad')
         .onChangeText('100'),
     );
-    await press('Find best route');
+    // The amount screen's live quote is not one of the rounds counted below.
+    await React.act(async () => new Promise((r) => setTimeout(r, 700)));
+    round = 0;
+    for (let i = calls.length - 1; i >= 0; i--) if (calls[i][0] === 'quoteRamp') calls.splice(i, 1);
+    await findRoutes(calls);
     await press('100 BOB');
     await rerender(() => new Promise((r) => setTimeout(r, 20)));
     assert.equal(
@@ -458,7 +478,8 @@ const order = (pendingAction, patch = {}) => ({
     client.listRampOrders = async () => ({ orders: [], nextCursor: null });
     texts = [];
     unmount = await render(React.createElement(RampWidget, { onClose() {}, language: 'pt' }));
-    const chipsShown = [...new Set(buttons.map(label))];
+    // A country chip leads with its flag.
+    const chipsShown = [...new Set(buttons.map((b) => label(b).replace(/^[\u{1F1E6}-\u{1F1FF}]{2}\s/u, '')))];
     const ar = chipsShown.indexOf('Argentina');
     const bo = chipsShown.indexOf('Bolívia');
     assert.ok(ar >= 0 && bo > ar, `country chips by name, in Portuguese; have: ${chipsShown.join(', ')}`);
@@ -528,7 +549,10 @@ const order = (pendingAction, patch = {}) => ({
     saved = null;
     // The chips drawn with the accent border are the picked ones; a chip's last render is its state.
     const picked = () => {
-      const last = new Map(buttons.map((b) => [label(b), b.style?.[1]?.borderColor === '#005DB4']));
+      // A country chip leads with its flag; the name is what the checks read.
+      const last = new Map(
+        buttons.map((b) => [label(b).replace(/^[\u{1F1E6}-\u{1F1FF}]{2}\s/u, ''), b.style?.[1]?.borderColor === '#005DB4']),
+      );
       return [...last].filter(([, on]) => on).map(([name]) => name);
     };
     const amountValue = () => [...inputs].reverse().find((i) => i.keyboardType === 'decimal-pad')?.value;

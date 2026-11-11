@@ -518,7 +518,9 @@ SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
   details pick another route ("Best price" by default), and "See every route"
   opens the routes screen, where routes that need a verification first are
   resolved. When nothing can be quoted, the reason and that link show under the
-  panels.
+  panels. React Native follows the same flow with chips inside the two panels:
+  the country with its flag, the live quote, Continue on the best route, and
+  the route chips and "See every route" in the details.
 - **A shorter swap form.** Each panel puts the amount and its asset on one row,
   with the balance and Max as a small line under them; the rate stays in view,
   and the route picker, minimum received, price impact and fees are behind
