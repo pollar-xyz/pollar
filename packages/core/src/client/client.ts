@@ -188,6 +188,7 @@ import {
   PollarApplicationConfigContent,
   PollarAuthProvider,
   PollarClientConfig,
+  PollarSupportContact,
   PollarFlowError,
   PollarLoginOptions,
   PollarPersistedSession,
@@ -511,6 +512,7 @@ export class PollarClient {
   /** Optional UI label sent to the server at /auth/login so the sessions UI
    *  can show a recognizable device name. Set via PollarClientConfig.deviceLabel. */
   private readonly _deviceLabel: string | undefined;
+  private readonly _support: PollarSupportContact | null;
   private readonly _visibilityProvider: VisibilityProvider;
   private readonly _maxIdleMs: number | undefined;
   /** Per-attempt HTTP timeout (ms). Also applied to the manual DPoP-nonce retry
@@ -695,6 +697,7 @@ export class PollarClient {
     this._passkey = config.passkey ?? null;
     this._passkeySign = config.passkeySign ?? null;
     this._deviceLabel = config.deviceLabel;
+    this._support = config.support ?? null;
     this._visibilityProvider = config.visibilityProvider ?? defaultVisibilityProvider();
     this._maxIdleMs = config.maxIdleMs;
     this._requestTimeoutMs = config.requestTimeoutMs ?? 10_000;
@@ -2368,6 +2371,11 @@ export class PollarClient {
    */
   getLogger(): PollarLogger {
     return this._log;
+  }
+
+  /** Your app's support contact, if configured. See {@link PollarClientConfig.support}. */
+  getSupportContact(): PollarSupportContact | null {
+    return this._support;
   }
 
   /** The modals' `locale`, if any: the configured one until {@link setLocale} changes it. See {@link PollarClientConfig.locale}. */

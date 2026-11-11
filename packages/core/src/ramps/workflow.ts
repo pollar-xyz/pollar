@@ -171,6 +171,11 @@ const EN = {
   noRouteForAmount: 'No route can take this amount right now. Try another amount.',
   processing: 'Processing',
   completed: 'Transfer completed',
+  failed: 'Transfer did not go through',
+  refunded: 'Transfer refunded',
+  onHold: 'On hold',
+  contactSupport: 'Contact support',
+  supportOrderId: 'Quote this order id:',
   pay: (amount: string, currency: string) => `Pay ${amount} ${currency}`,
   payOnProvider: 'Pay on the provider page',
   openPaymentPage: 'Open payment page',
@@ -253,6 +258,11 @@ const COPY: Record<PollarLanguage, typeof EN> = {
     noRouteForAmount: 'Ninguna ruta acepta este monto en este momento. Prueba con otro monto.',
     processing: 'Procesando',
     completed: 'Transferencia completada',
+    failed: 'La transferencia no se completó',
+    refunded: 'Transferencia reembolsada',
+    onHold: 'En espera',
+    contactSupport: 'Contactar a soporte',
+    supportOrderId: 'Indica este id de orden:',
     pay: (amount, currency) => `Paga ${amount} ${currency}`,
     payOnProvider: 'Pagar en la página del proveedor',
     openPaymentPage: 'Abrir página de pago',
@@ -332,6 +342,11 @@ const COPY: Record<PollarLanguage, typeof EN> = {
     noRouteForAmount: 'Nenhuma rota aceita este valor no momento. Tente outro valor.',
     processing: 'Processando',
     completed: 'Transferência concluída',
+    failed: 'A transferência não foi concluída',
+    refunded: 'Transferência reembolsada',
+    onHold: 'Em espera',
+    contactSupport: 'Falar com o suporte',
+    supportOrderId: 'Informe este id da ordem:',
     pay: (amount, currency) => `Pague ${amount} ${currency}`,
     payOnProvider: 'Pagar na página do provedor',
     openPaymentPage: 'Abrir página de pagamento',
@@ -687,6 +702,80 @@ export function rampWalletStep(
   return null;
 }
 
+/** Why a leg stopped, by its failure `code`, in words the user can act on. */
+const REASON: Record<PollarLanguage, Partial<Record<string, string>>> = {
+  en: {
+    PROVIDER_ORDER_EXPIRED: 'The payment was not made in time, so the order was cancelled.',
+    PROVIDER_PAYMENT_LATE: 'The payment arrived after the order had closed.',
+    PROVIDER_REJECTED: 'The payment provider did not accept the order.',
+    PROVIDER_QUOTE_CHANGED: 'The price changed before the order was placed.',
+    PROVIDER_INVALID_INPUT: 'Some of your details were not accepted.',
+    PROVIDER_VERIFICATION_REQUIRED: 'Your identity has to be verified first.',
+    PROVIDER_UNAVAILABLE: 'The payment provider is not responding.',
+    PROVIDER_RATE_LIMITED: 'The payment provider is not responding.',
+    SIGNATURE_EXPIRED: 'The transaction was not signed in time.',
+    COSIGN_REJECTED: 'The approval was declined.',
+    COSIGN_REQUEST_EXPIRED: 'The approval was not given in time.',
+    CHAIN_INSUFFICIENT_BALANCE: 'The wallet did not hold enough to pay.',
+    CHAIN_INSUFFICIENT_GAS: 'There was not enough to pay the network fee.',
+    LIMIT_BELOW_MINIMUM: 'The amount is below what this route accepts.',
+    LIMIT_ABOVE_MAXIMUM: 'The amount is above what this route accepts.',
+    ORDER_CANCELLED: 'The order was cancelled.',
+  },
+  es: {
+    PROVIDER_ORDER_EXPIRED: 'El pago no se hizo a tiempo, así que la orden se canceló.',
+    PROVIDER_PAYMENT_LATE: 'El pago llegó después de que la orden se cerró.',
+    PROVIDER_REJECTED: 'El proveedor de pagos no aceptó la orden.',
+    PROVIDER_QUOTE_CHANGED: 'El precio cambió antes de crear la orden.',
+    PROVIDER_INVALID_INPUT: 'Algunos de tus datos no fueron aceptados.',
+    PROVIDER_VERIFICATION_REQUIRED: 'Primero hay que verificar tu identidad.',
+    PROVIDER_UNAVAILABLE: 'El proveedor de pagos no está respondiendo.',
+    PROVIDER_RATE_LIMITED: 'El proveedor de pagos no está respondiendo.',
+    SIGNATURE_EXPIRED: 'La transacción no se firmó a tiempo.',
+    COSIGN_REJECTED: 'La aprobación fue rechazada.',
+    COSIGN_REQUEST_EXPIRED: 'La aprobación no se dio a tiempo.',
+    CHAIN_INSUFFICIENT_BALANCE: 'La billetera no tenía suficiente para pagar.',
+    CHAIN_INSUFFICIENT_GAS: 'No había suficiente para pagar la comisión de red.',
+    LIMIT_BELOW_MINIMUM: 'El monto está por debajo de lo que acepta esta ruta.',
+    LIMIT_ABOVE_MAXIMUM: 'El monto está por encima de lo que acepta esta ruta.',
+    ORDER_CANCELLED: 'La orden fue cancelada.',
+  },
+  pt: {
+    PROVIDER_ORDER_EXPIRED: 'O pagamento não foi feito a tempo, então a ordem foi cancelada.',
+    PROVIDER_PAYMENT_LATE: 'O pagamento chegou depois que a ordem foi encerrada.',
+    PROVIDER_REJECTED: 'O provedor de pagamentos não aceitou a ordem.',
+    PROVIDER_QUOTE_CHANGED: 'O preço mudou antes de a ordem ser criada.',
+    PROVIDER_INVALID_INPUT: 'Alguns dos seus dados não foram aceitos.',
+    PROVIDER_VERIFICATION_REQUIRED: 'Primeiro é preciso verificar sua identidade.',
+    PROVIDER_UNAVAILABLE: 'O provedor de pagamentos não está respondendo.',
+    PROVIDER_RATE_LIMITED: 'O provedor de pagamentos não está respondendo.',
+    SIGNATURE_EXPIRED: 'A transação não foi assinada a tempo.',
+    COSIGN_REJECTED: 'A aprovação foi recusada.',
+    COSIGN_REQUEST_EXPIRED: 'A aprovação não foi dada a tempo.',
+    CHAIN_INSUFFICIENT_BALANCE: 'A carteira não tinha saldo suficiente para pagar.',
+    CHAIN_INSUFFICIENT_GAS: 'Não havia saldo suficiente para a taxa de rede.',
+    LIMIT_BELOW_MINIMUM: 'O valor está abaixo do que esta rota aceita.',
+    LIMIT_ABOVE_MAXIMUM: 'O valor está acima do que esta rota aceita.',
+    ORDER_CANCELLED: 'A ordem foi cancelada.',
+  },
+};
+
+/** Why a leg stopped, for the line under it; null for a code with nothing useful to tell the user. */
+export function rampFailureReason(failure: Pick<RampFailure, 'code'>, language: PollarLanguage = 'en'): string | null {
+  return REASON[language][failure.code] ?? null;
+}
+
+/** The order asks the user to reach support: nothing they can fix, and Pollar or the provider owns it. */
+export function rampFailureNeedsSupport(failure: Pick<RampFailure, 'resolutionAction'>): boolean {
+  return failure.resolutionAction === 'pollar_follows_up' || failure.resolutionAction === 'contact_pollar';
+}
+
+/** The words for the support contact line in the order screen. */
+export function rampSupportCopy(language: PollarLanguage = 'en'): { action: string; orderId: string } {
+  const copy = COPY[language];
+  return { action: copy.contactSupport, orderId: copy.supportOrderId };
+}
+
 /** What a held order asks instead, where it differs: its funds moved and wait where they are. */
 const HELD_RESOLUTION = (language: PollarLanguage): Record<string, string> => ({
   start_again: COPY[language].heldStartAgain,
@@ -806,7 +895,7 @@ function kycAwaitingProvider(steps: unknown): boolean {
 
 /** The action as a screen shows it; platforms supply the controls, links and QR rendering. */
 export function describeRampAction(
-  order: Pick<RampOrder, 'pendingAction' | 'state'>,
+  order: Pick<RampOrder, 'pendingAction' | 'state'> & Partial<Pick<RampOrder, 'failure' | 'nextPollAfter'>>,
   language: PollarLanguage = 'en',
 ): {
   action: RampPendingAction | null;
@@ -851,6 +940,9 @@ export function describeRampAction(
     expiresAt,
   };
   if (order.state === 'completed') return { ...base, title: copy.completed };
+  if (order.state === 'failed') return { ...base, title: copy.failed };
+  if (order.state === 'refunded') return { ...base, title: copy.refunded };
+  if (order.failure && order.nextPollAfter === null && !action) return { ...base, title: copy.onHold };
   if (!action) return base;
   switch (action.kind) {
     case 'FIAT_PAYMENT': {

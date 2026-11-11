@@ -17,6 +17,7 @@ import type {
   CosignCustody,
   PendingConfirmation,
   PollarClient,
+  PollarSupportContact,
   RampAsset,
   RampSigningHandler,
   RampWalletStep,
@@ -54,6 +55,9 @@ import {
   rampQuoteFields,
   rampRailLabel,
   rampOrderResolutionText,
+  rampFailureReason,
+  rampFailureNeedsSupport,
+  rampSupportCopy,
   rampTrustlineAsset,
   rampTrustlineErrorText,
 } from '@pollar/core';
@@ -294,6 +298,8 @@ export interface RampWidgetTemplateProps {
   onSetUpRecovery?: (() => void) | undefined;
   /** Whether the wallet still has no way to be recovered; null while its state is unread. */
   recoveryMissing?: boolean | null;
+  /** The app's support contact, linked when an order asks the user to contact support. */
+  support?: PollarSupportContact | null;
   /** Reading the order keeps failing and polling is retrying. */
   pollTrouble?: boolean;
   onFieldChange: (key: string, value: string) => void;
@@ -388,6 +394,7 @@ export function RampWidgetTemplate({
   onRequote,
   onSetUpRecovery,
   recoveryMissing = null,
+  support = null,
   pollTrouble = false,
   onFieldChange,
   onContactContinue,
@@ -873,7 +880,9 @@ export function RampWidgetTemplate({
                   {status === 'active' && !settled && <ActivityIndicator size="small" color={accentColor} />}
                 </View>
               );
-              const note = rampLegNote(leg, language);
+              const note =
+                (status === 'failed' && leg.failure ? rampFailureReason(leg.failure, language) : null) ??
+                rampLegNote(leg, language);
               const steps = (status === 'active' && !settled ? leg.steps : null) ?? [];
               const timeLeft = running === leg && !settled ? rampLegTimeLeft(leg, now) : null;
               if (!note && !steps.length && timeLeft === null) return row;
@@ -933,6 +942,26 @@ export function RampWidgetTemplate({
             {order.failure && (
               <>
                 <Text style={[styles.note, { color: colors.text }]}>{rampOrderResolutionText(order, language)}</Text>
+                {rampFailureNeedsSupport(order.failure) &&
+                  (() => {
+                    const supportCopy = rampSupportCopy(language);
+                    // Only https: the contact comes from the app's config and is opened as a link.
+                    const url = support?.url && /^https:\/\//i.test(support.url) ? support.url : null;
+                    const email = support?.email && /^[^\s@]+@[^\s@]+$/.test(support.email) ? support.email : null;
+                    return (
+                      <>
+                        {url && secondary(supportCopy.action, () => void Linking.openURL(url))}
+                        {email && (
+                          <TouchableOpacity
+                            onPress={() => void Linking.openURL(`mailto:${email}?subject=${encodeURIComponent(order.id)}`)}
+                          >
+                            <Text style={{ color: accentColor, fontWeight: '600' }}>{email}</Text>
+                          </TouchableOpacity>
+                        )}
+                        {copyRow(supportCopy.orderId, order.id)}
+                      </>
+                    );
+                  })()}
                 {stopped &&
                   !settled &&
                   waitsOnRecovery &&
@@ -1650,6 +1679,7 @@ export function RampWidget({
           onRequote={() => void handleRequote()}
           onSetUpRecovery={openRecoveryModal}
           recoveryMissing={recovery === null ? null : recoveryLocked}
+          support={client.getSupportContact()}
           pollTrouble={pollTrouble}
           onFieldChange={(key, value) => setFieldValues((current) => ({ ...current, [key]: value }))}
           onContactContinue={() => {

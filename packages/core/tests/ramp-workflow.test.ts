@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   describeRampAction,
+  rampFailureNeedsSupport,
+  rampFailureReason,
   rampFieldError,
   rampFieldValid,
   rampLegNote,
@@ -355,4 +357,25 @@ test('a missing wallet names the network it is missing on; an unknown or absent 
   const generic = 'This route needs a wallet on another network.';
   assert.equal(rampResolutionText({ resolutionAction: 'link_wallet', detail: 'no STELLAR wallet' }), generic);
   assert.equal(rampResolutionText({ resolutionAction: 'link_wallet' }), generic);
+});
+
+test('an order that stopped says so in its title, never "Processing"', () => {
+  assert.equal(describeRampAction({ state: 'failed', pendingAction: null } as never).title, 'Transfer did not go through');
+  assert.equal(
+    describeRampAction({ state: 'refunded', pendingAction: null } as never, 'es').title,
+    'Transferencia reembolsada',
+  );
+  const held = { state: 'processing', pendingAction: null, nextPollAfter: null, failure: { code: 'PROVIDER_REJECTED' } };
+  assert.equal(describeRampAction(held as never).title, 'On hold');
+  assert.equal(describeRampAction({ state: 'processing', pendingAction: null } as never).title, 'Processing');
+});
+
+test('a stopped leg names why, and only a failure nobody but support can fix asks for support', () => {
+  assert.equal(
+    rampFailureReason({ code: 'PROVIDER_ORDER_EXPIRED' }, 'es'),
+    'El pago no se hizo a tiempo, así que la orden se canceló.',
+  );
+  assert.equal(rampFailureReason({ code: 'INTERNAL_ERROR' }), null);
+  assert.equal(rampFailureNeedsSupport({ resolutionAction: 'pollar_follows_up' }), true);
+  assert.equal(rampFailureNeedsSupport({ resolutionAction: 'start_again' }), false);
 });

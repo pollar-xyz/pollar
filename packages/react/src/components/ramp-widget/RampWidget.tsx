@@ -872,6 +872,7 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
         onRequote={() => void handleRequote()}
         onSetUpRecovery={openRecoveryModal}
         recoveryMissing={recovery === null ? null : recoveryLocked}
+        support={client.getSupportContact()}
         pollTrouble={pollTrouble}
         checkingPayment={paymentCheckUntil !== null}
         onCheckPayment={() => void handleCheckPayment()}

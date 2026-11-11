@@ -6,6 +6,7 @@ import type {
   CosignCustody,
   PendingConfirmation,
   PollarLanguage,
+  PollarSupportContact,
   RampAsset,
   RampDirection,
   RampField,
@@ -35,6 +36,9 @@ import {
   rampOrderStopped,
   rampRailLabel,
   rampOrderResolutionText,
+  rampFailureReason,
+  rampFailureNeedsSupport,
+  rampSupportCopy,
   rampTrustlineAsset,
 } from '@pollar/core';
 import { RAMP_COPY, type RampCopy } from './ramp-copy';
@@ -213,6 +217,8 @@ interface RampWidgetTemplateProps {
   onSetUpRecovery?: (() => void) | undefined;
   /** Whether the wallet still has no way to be recovered; null while its state is unread. */
   recoveryMissing?: boolean | null;
+  /** The app's support contact, linked when an order asks the user to contact support. */
+  support?: PollarSupportContact | null;
   /** Reading the order keeps failing and polling is retrying. */
   pollTrouble?: boolean;
   /** The fiat payment the user says they made is being checked. */
@@ -306,6 +312,7 @@ export function RampWidgetTemplate({
   onRequote,
   onSetUpRecovery,
   recoveryMissing = null,
+  support = null,
   checkingPayment = false,
   onCheckPayment,
   pollTrouble = false,
@@ -865,7 +872,9 @@ export function RampWidgetTemplate({
           <ol className="pollar-ramp-legs" aria-label={copy.progress}>
             {order.legs.map((leg) => {
               const status = rampLegStatus(leg);
-              const note = rampLegNote(leg, language);
+              const note =
+                (status === 'failed' && leg.failure ? rampFailureReason(leg.failure, language) : null) ??
+                rampLegNote(leg, language);
               return (
                 <li key={leg.index} className="pollar-ramp-leg" data-status={status}>
                   <span className="pollar-ramp-leg-dot" aria-hidden />
@@ -918,6 +927,9 @@ export function RampWidgetTemplate({
             <div className="pollar-ramp-payment-field">
               <span className="pollar-ramp-payment-label">{copy.whatToDo}</span>
               <p className="pollar-ramp-payment-note">{rampOrderResolutionText(order, language)}</p>
+              {rampFailureNeedsSupport(order.failure) && (
+                <SupportContact support={support} orderId={order.id} language={language} />
+              )}
               {stopped && !settled && waitsOnRecovery && recoveryMissing !== false && onSetUpRecovery && (
                 <button type="button" className="pollar-btn-secondary" onClick={onSetUpRecovery}>
                   {copy.setUpRecovery}
@@ -1089,6 +1101,45 @@ export function RampWidgetTemplate({
       )}
 
       <PollarModalFooter />
+    </div>
+  );
+}
+
+/** Where the user reaches the app's support, and the order id to quote; only the id when the app set no contact. */
+function SupportContact({
+  support,
+  orderId,
+  language,
+}: {
+  support: PollarSupportContact | null;
+  orderId: string;
+  language: PollarLanguage;
+}) {
+  const copy = rampSupportCopy(language);
+  // Only https: the contact comes from the app's config and lands in an href.
+  const url = support?.url && /^https:\/\//i.test(support.url) ? support.url : null;
+  const email = support?.email && /^[^\s@]+@[^\s@]+$/.test(support.email) ? support.email : null;
+  return (
+    <div className="pollar-ramp-support">
+      {(url || email) && (
+        <div className="pollar-ramp-support-links">
+          {url && (
+            <a className="pollar-btn-secondary" href={url} target="_blank" rel="noopener noreferrer">
+              {copy.action}
+            </a>
+          )}
+          {email && (
+            <a className="pollar-ramp-support-email" href={`mailto:${email}?subject=${encodeURIComponent(orderId)}`}>
+              {email}
+            </a>
+          )}
+        </div>
+      )}
+      <div className="pollar-ramp-support-order">
+        <span>{copy.orderId}</span>
+        <code>{orderId}</code>
+        <CopyButton value={orderId} language={language} />
+      </div>
     </div>
   );
 }
