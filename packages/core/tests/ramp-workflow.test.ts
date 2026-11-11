@@ -4,6 +4,7 @@ import {
   describeRampAction,
   rampFailureNeedsSupport,
   rampFailureReason,
+  rampSupportContact,
   rampFieldError,
   rampFieldValid,
   rampLegNote,
@@ -378,4 +379,15 @@ test('a stopped leg names why, and only a failure nobody but support can fix ask
   assert.equal(rampFailureReason({ code: 'INTERNAL_ERROR' }), null);
   assert.equal(rampFailureNeedsSupport({ resolutionAction: 'pollar_follows_up' }), true);
   assert.equal(rampFailureNeedsSupport({ resolutionAction: 'start_again' }), false);
+});
+
+test("the client's support contact wins whole; without one, the dashboard's, which defaults to Pollar's email", () => {
+  const app = { email: 'support@pollar.xyz', url: null };
+  assert.deepEqual(rampSupportContact({ url: 'https://help.app' }, app), { url: 'https://help.app' });
+  assert.deepEqual(rampSupportContact(undefined, app), { email: 'support@pollar.xyz' });
+  assert.deepEqual(rampSupportContact({}, { email: 'help@app.com', url: 'https://help.app' }), {
+    email: 'help@app.com',
+    url: 'https://help.app',
+  });
+  assert.equal(rampSupportContact(null, undefined), null);
 });

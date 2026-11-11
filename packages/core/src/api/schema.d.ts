@@ -10645,6 +10645,11 @@ export interface operations {
                                     windowSeconds: number;
                                     maxUsd: string;
                                 };
+                                support?: {
+                                    email: string;
+                                    /** @description An https page, chat or form; null when the app set none. */
+                                    url: string | null;
+                                };
                             };
                             styles: {
                                 theme?: string;

@@ -300,8 +300,9 @@ export interface PollarClientConfig {
   deviceLabel?: string;
   /**
    * Where your users reach your support. A ramp order that stops with nothing
-   * they can fix tells them to contact support: with this set, the modal links
-   * here and shows the order id to quote; without it, only the order id.
+   * they can fix tells them to contact support, links here and shows the order
+   * id to quote. When set, it wins over the contact in the dashboard
+   * (Settings > General), which is Pollar's support email when the app set none.
    */
   support?: PollarSupportContact;
   /**

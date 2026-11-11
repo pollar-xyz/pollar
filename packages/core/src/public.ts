@@ -139,6 +139,7 @@ export {
   rampFailureReason,
   rampFailureNeedsSupport,
   rampSupportCopy,
+  rampSupportContact,
   rampOrderStopped,
   rampLegTitle,
   rampNoRouteText,

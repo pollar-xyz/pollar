@@ -1,6 +1,7 @@
 import { assertRampChain } from './chains';
 import type { PollarLanguage } from '../lib/language';
 import type {
+  PollarSupportContact,
   RampChain,
   RampFailure,
   RampField,
@@ -768,6 +769,20 @@ export function rampFailureReason(failure: Pick<RampFailure, 'code'>, language: 
 /** The order asks the user to reach support: nothing they can fix, and Pollar or the provider owns it. */
 export function rampFailureNeedsSupport(failure: Pick<RampFailure, 'resolutionAction'>): boolean {
   return failure.resolutionAction === 'pollar_follows_up' || failure.resolutionAction === 'contact_pollar';
+}
+
+/**
+ * The support contact a modal shows: the `support` the app's code passed to the
+ * client, whole, or else the one the dashboard set (`application.support` in the
+ * app config, Pollar's support email when the app set none). Null when neither is known.
+ */
+export function rampSupportContact(
+  client: PollarSupportContact | null | undefined,
+  app: { email: string; url: string | null } | null | undefined,
+): PollarSupportContact | null {
+  if (client && (client.email || client.url)) return client;
+  if (!app) return null;
+  return app.url ? { email: app.email, url: app.url } : { email: app.email };
 }
 
 /** The words for the support contact line in the order screen. */

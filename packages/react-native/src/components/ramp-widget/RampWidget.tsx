@@ -35,6 +35,7 @@ import type {
 import {
   countryName,
   appUnavailableMessage,
+  rampSupportContact,
   type PollarLanguage,
   assertRampStellarSigner,
   describeRampAction,
@@ -1679,7 +1680,7 @@ export function RampWidget({
           onRequote={() => void handleRequote()}
           onSetUpRecovery={openRecoveryModal}
           recoveryMissing={recovery === null ? null : recoveryLocked}
-          support={client.getSupportContact()}
+          support={rampSupportContact(client.getSupportContact(), appConfig.application?.support)}
           pollTrouble={pollTrouble}
           onFieldChange={(key, value) => setFieldValues((current) => ({ ...current, [key]: value }))}
           onContactContinue={() => {

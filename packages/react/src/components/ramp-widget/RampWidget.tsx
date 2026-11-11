@@ -15,6 +15,7 @@ import type {
 } from '@pollar/core';
 import {
   appUnavailableMessage,
+  rampSupportContact,
   assertRampStellarSigner,
   isPollarApiError,
   isPollarNetworkError,
@@ -872,7 +873,7 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
         onRequote={() => void handleRequote()}
         onSetUpRecovery={openRecoveryModal}
         recoveryMissing={recovery === null ? null : recoveryLocked}
-        support={client.getSupportContact()}
+        support={rampSupportContact(client.getSupportContact(), appConfig.application?.support)}
         pollTrouble={pollTrouble}
         checkingPayment={paymentCheckUntil !== null}
         onCheckPayment={() => void handleCheckPayment()}
