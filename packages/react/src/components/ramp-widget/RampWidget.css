@@ -581,3 +581,22 @@
   font-size: 0.75rem;
   color: var(--pollar-accent);
 }
+
+/* --- Amount screen, drawn like the swap ---------------------------------------- */
+.pollar-ramp-modal .pollar-swap-panels {
+  margin-top: 0.75rem;
+}
+
+/* "BOB - QR" and "USDT on Polygon" are longer than a swap asset code. */
+.pollar-ramp-pill {
+  max-width: 11rem;
+}
+
+.pollar-ramp-modal .pollar-swap-quote .pollar-swap-route-pill {
+  max-width: 12rem;
+}
+
+.pollar-ramp-all-routes {
+  align-self: flex-start;
+  font-size: 0.75rem;
+}

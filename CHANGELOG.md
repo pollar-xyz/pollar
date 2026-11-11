@@ -508,10 +508,22 @@ SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
   and both mints in the details. Prompts titled `swap`, `cctp_burn`,
   `ramp_payment` and the other co-sign operations now have their names in
   `<ConfirmModal>` too.
+- **The ramp's amount screen works like the swap.** "You pay" and "You receive"
+  are two panels, each with its amount and a pill (the fiat with its payment
+  method, the asset with its chain), and the switch between them turns a
+  purchase into a sale in place of the Buy and Sell tabs; the country is a pill
+  above them. The screen quotes as the user types (600 ms after the last
+  keystroke): "You receive" shows the best route's amount and the rate, and
+  Continue goes on with that route, straight to its details or its order. The
+  details pick another route ("Best price" by default), and "See every route"
+  opens the routes screen, where routes that need a verification first are
+  resolved. When nothing can be quoted, the reason and that link show under the
+  panels.
 - **A shorter swap form.** Each panel puts the amount and its asset on one row,
   with the balance and Max as a small line under them; the rate stays in view,
   and the route picker, minimum received, price impact and fees are behind
-  Show details.
+  Show details. "Best price" names the venue its quote landed on, so the details
+  list the route once.
 - **React Native's send, swap and earn panels show their transaction like the
   modals** (`TxStatusBody`, shared with the transaction modal): the action's
   title, the review, Confirm when the signature asks for a yes, then the

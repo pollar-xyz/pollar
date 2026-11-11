@@ -624,7 +624,11 @@ export function SwapModalTemplate({
                       onChange={onProviderChange}
                       options={(providers.length === 0 ? [provider] : providers).map((p) => ({
                         value: p,
-                        label: providerLabel(p, copy),
+                        // "Best price" names the venue the quote landed on, the one row a route needs.
+                        label:
+                          quote && p === provider && provider !== quote.provider
+                            ? `${providerLabel(p, copy)} · ${providerLabel(quote.provider, copy)}`
+                            : providerLabel(p, copy),
                       }))}
                     />
                   </label>
@@ -641,10 +645,6 @@ export function SwapModalTemplate({
                   <div className="pollar-swap-quote-row">
                     <span>{copy.priceImpact}</span>
                     <strong>{quote.priceImpactPct === null ? '—' : `${quote.priceImpactPct}%`}</strong>
-                  </div>
-                  <div className="pollar-swap-quote-row">
-                    <span>{copy.route}</span>
-                    <strong>{providerLabel(quote.provider, copy)}</strong>
                   </div>
                   {(quote.fees ?? []).map((fee) => (
                     <div key={fee.label} className="pollar-swap-quote-row">
