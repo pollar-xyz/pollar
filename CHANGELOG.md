@@ -87,6 +87,13 @@
   and asset when nothing was rejected, instead of asking for another amount.
   The React and React Native ramp widgets label the dead-end button "Change
   amount" when a route asks for another amount.
+- **A route that needs a wallet the user cannot have names its network.** A
+  `WALLET_MISSING` rejection (`link_wallet`) carries the chain in
+  `failure.detail`, and `rampResolutionText` says "This route needs a Stellar
+  wallet, which this account does not have. Choose another network." Without a
+  known chain it keeps the generic text. sdk-api also stops listing, in
+  `GET /v3/ramps/routes`, assets on chains where the user has no wallet and
+  cannot get one.
 - **A failed order whose price changed offers a new quote.** When an order
   fails with `accept_new_quote` (the provider's price moved before anything was
   sent), the React and React Native ramp widgets show "Get a new quote", which
@@ -427,6 +434,17 @@ SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
   `client.onWalletRecoveryRequired(cb)` fires on it, and the React and React
   Native providers open the recovery modal. Needs sdk-api from
   pollar-platform#70.
+- **Each chain signs with the wallet the user holds there.** A user who signs in
+  with their own wallet on another chain (Phantom, through SIWS) gets their
+  Stellar wallet beside it, in the app's Turnkey custody, and `getWallet()`
+  returns it (`custody: 'internal'`). The connected adapter signs only on the
+  chain of the wallet the user brought; every other chain signs through the
+  platform. A Phantom session signs Stellar transactions, auth entries, SEP-10
+  and SEP-53 through the platform instead of handing them to the Solana adapter
+  ("cannot sign a Stellar transaction"), and a Freighter session signs Solana
+  the same way. "Reconnect your wallet" is judged per chain, so a missing
+  Phantom adapter after a reload no longer blocks the Stellar wallet. Needs
+  sdk-api with pollar-platform `8363cddc`, which creates those wallets.
 - After "Ask another device to add this one", the recovery modal (web and React
   Native) reads the devices every 3 seconds while the request is open (15
   minutes) and says "Device added." once this device is in.
