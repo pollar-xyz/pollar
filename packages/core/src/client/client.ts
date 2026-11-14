@@ -3144,7 +3144,7 @@ export class PollarClient {
     options: { skipSponsorship?: boolean } | undefined,
     confirm: boolean,
   ): Promise<SignOutcome> {
-    this._txStartGen = this._sessionGeneration;
+    this._beginTx();
     const noSigner = this._externalSignerMissing();
     if (noSigner) return noSigner;
     // Smart-wallet (C-address/passkey) sessions sign via signAndSubmitTx
@@ -4221,7 +4221,7 @@ export class PollarClient {
    *   `success` (ledger-confirmed), or `error[phase: 'signing-submitting']`.
    */
   async signAndSubmitTx(unsignedXdr?: string): Promise<SubmitOutcome> {
-    this._txStartGen = this._sessionGeneration;
+    this._beginTx();
     const noSigner = this._externalSignerMissing();
     if (noSigner) return noSigner;
     // Smart wallet: there is no unsigned XDR - sign the prepared auth digest
@@ -4378,7 +4378,7 @@ export class PollarClient {
     params: TxBuildBody['params'],
     options?: TxBuildBody['options'],
   ): Promise<SubmitOutcome> {
-    this._txStartGen = this._sessionGeneration;
+    this._beginTx();
     const noSigner = this._externalSignerMissing();
     if (noSigner) return noSigner;
     // Smart wallet (passkey / C-address): build (prepare) -> sign the auth digest
@@ -4502,7 +4502,7 @@ export class PollarClient {
     const send = params as Extract<SendPaymentParams, { chain: 'SOLANA' | 'POLYGON' }>;
     const chain = send.chain;
     const label = chain === 'SOLANA' ? 'Solana' : 'Polygon';
-    this._txStartGen = this._sessionGeneration;
+    this._beginTx();
     // `session.wallet` is the Stellar wallet by contract (null after a SIWS
     // login), so the other chains' wallets are looked up in `wallets[]`.
     const wallet = this.getWallets().find((w) => w.chain === chain);
@@ -5354,7 +5354,7 @@ export class PollarClient {
    * follow it with {@link getSwapStatus}.
    */
   async swapSolana(quote: SolanaSwapQuote, opts?: { slippageBps?: number; idempotencyKey?: string }): Promise<SubmitOutcome> {
-    this._txStartGen = this._sessionGeneration;
+    this._beginTx();
     const wallet = this.getWallets().find((w) => w.chain === 'SOLANA');
     if (!wallet) {
       this._setTransactionState({ step: 'error', phase: 'building', details: 'No Solana wallet' });
@@ -5576,7 +5576,7 @@ export class PollarClient {
   }
 
   private async _earnSolana(action: 'deposit' | 'withdraw', params: SolanaEarnTxParams): Promise<SubmitOutcome> {
-    this._txStartGen = this._sessionGeneration;
+    this._beginTx();
     const wallet = this.getWallets().find((w) => w.chain === 'SOLANA');
     if (!wallet) {
       this._setTransactionState({ step: 'error', phase: 'building', details: 'No Solana wallet' });
@@ -6657,6 +6657,20 @@ export class PollarClient {
     const assets = this._enabledAssetsState.step === 'loaded' ? this._enabledAssetsState.data.assets : [];
     const found = [...balances, ...assets].find((record) => same(record.issuer) && typeof record.decimals === 'number');
     return found ? { symbol: found.code, decimals: found.decimals! } : undefined;
+  }
+
+  /**
+   * A transaction that asks for the user's yes before its first step. The
+   * outcome of a finished one is cleared first: a modal retrying in place would
+   * otherwise show the last error or "Done!" under the new confirmation, and the
+   * stale error hides its Confirm button. A live state (`built`, in flight, a
+   * slow `submitted` still being read) is the same or a running transaction and
+   * stays.
+   */
+  private _beginTx(): void {
+    this._txStartGen = this._sessionGeneration;
+    const step = this._transactionState?.step;
+    if (step === 'success' || step === 'error') this._setTransactionState({ step: 'idle' });
   }
 
   private _setTransactionState(next: TransactionState): void {
