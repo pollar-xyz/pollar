@@ -24,7 +24,7 @@ import { SwapAssetOption, SwapChain, SwapModalTemplate, SwapQuoteView, SwapSettl
 import { modalChrome } from '../modal-theme';
 import { byCode, oneOf, seededAmount, useSuccessReport } from '../../modal-options';
 import { PollarOverlay } from '../PollarOverlay';
-import { useInlineConfirmation } from '../../useInlineConfirmation';
+import { useDeclineOnClose, useInlineConfirmation } from '../../useInlineConfirmation';
 import { CONFIRM_COPY } from '../confirm-modal/confirm-copy';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
 import { reviewFromRequest } from '../tx-review/tx-review-model';
@@ -143,6 +143,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   const [step, setStep] = useState<'form' | 'tx'>('form');
   // The signature's yes is asked here, under the review, not in a prompt over the modal.
   const confirmation = useInlineConfirmation(step === 'tx');
+  const { track, declineOnClose } = useDeclineOnClose(confirmation);
   const [selectedSell, setSelectedSell] = useState<SwapAssetOption | null>(null);
   const [selectedBuy, setSelectedBuy] = useState<SwapAssetOption | null>(null);
   const [amount, setAmount] = useState(() => seededAmount(initial?.amount));
@@ -733,7 +734,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
       setSettlement(toward && toward !== 'SOLANA' ? { key, chain: toward, value: null } : null);
       setSentSolana({ quote: solanaQuote, sell: selectedSell, buy: selectedBuy });
       setStep('tx');
-      await swapSolana(solanaQuote, { slippageBps, idempotencyKey: key });
+      await track(swapSolana(solanaQuote, { slippageBps, idempotencyKey: key }));
       return;
     }
     if (!quote) {
@@ -742,7 +743,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     }
     setSentSolana(null);
     setStep('tx');
-    await swap(quote);
+    await track(swap(quote));
   }
 
   async function handleRetry() {
@@ -753,10 +754,10 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
       const toward = solanaQuote.destinationChain;
       setSettlement(toward && toward !== 'SOLANA' ? { key, chain: toward, value: null } : null);
       if (selectedSell && selectedBuy) setSentSolana({ quote: solanaQuote, sell: selectedSell, buy: selectedBuy });
-      await swapSolana(solanaQuote, { slippageBps, idempotencyKey: key });
+      await track(swapSolana(solanaQuote, { slippageBps, idempotencyKey: key }));
       return;
     }
-    if (quote) await swap(quote);
+    if (quote) await track(swap(quote));
   }
 
   function handleMax() {
@@ -784,6 +785,11 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     });
   }
 
+  function handleClose() {
+    declineOnClose();
+    onClose();
+  }
+
   function handleBack() {
     setSettlement(null);
     setSentSolana(null);
@@ -793,7 +799,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={step !== 'tx' && !isInProgress ? onClose : undefined}>
+    <PollarOverlay style={overlayStyle} onClick={step !== 'tx' && !isInProgress ? handleClose : undefined}>
       <SwapModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -833,7 +839,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
         showBack={showBack}
         isInProgress={isInProgress}
         language={language}
-        onClose={onClose}
+        onClose={handleClose}
         onBack={handleBack}
         onRefresh={handleRefresh}
         onSelectSell={(option) => {
