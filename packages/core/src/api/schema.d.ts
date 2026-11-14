@@ -1199,7 +1199,7 @@ export interface paths {
         };
         /**
          * Get application config
-         * @description Returns the public configuration and branding for the application, when its users get a wallet (`application.walletProvisioning`), and when the SDK asks them to confirm a signature (`application.signConfirmation`).
+         * @description Returns the public configuration and branding for the application, when its users get a wallet (`application.walletProvisioning`), when the SDK asks them to confirm a signature (`application.signConfirmation`), and where they reach the app's support (`application.support`, Pollar's support email when the app set none).
          */
         get: operations["getApplicationsConfig"];
         put?: never;
@@ -1868,6 +1868,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/kyc-links/{publicId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a KYC link
+         * @description What a KYC link's page shows before anyone signs in, and the publishable key it signs in with. No API key. 404 `KYC_LINK_NOT_FOUND` for a link that does not exist or is disabled.
+         */
+        get: operations["getKycLinksByPublicId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/kyc-links/{publicId}/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Join a KYC link
+         * @description Takes one of the link's places for the signed-in user (a user who already joined keeps theirs) and answers where they stand on the link's steps. Only the link's own key. 409 `KYC_LINK_FULL` when every place is taken, 410 `KYC_LINK_EXPIRED` past its date. A KYC done before for the same workflow in this app counts: such a user is complete at once.
+         */
+        post: operations["postKycLinksByPublicIdJoin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/requirements/card-registration/{cardProviderId}": {
         parameters: {
             query?: never;
@@ -2013,7 +2053,7 @@ export interface paths {
         };
         /**
          * Ramp routes
-         * @description The fiat and asset pairs the app can ramp between in a direction, each with the legs of its shortest path. Nothing is quoted: a listed pair may still find no liquidity or a limit when quoted.
+         * @description The fiat and asset pairs the app can ramp between in a direction, each with the legs of its shortest path. A pair on a chain where the user has no wallet and cannot get one is left out. Nothing is quoted: a listed pair may still find no liquidity or a limit when quoted.
          */
         get: operations["getRampsRoutes"];
         put?: never;
@@ -10647,7 +10687,6 @@ export interface operations {
                                 };
                                 support?: {
                                     email: string;
-                                    /** @description An https page, chat or form; null when the app set none. */
                                     url: string | null;
                                 };
                             };
@@ -14628,6 +14667,178 @@ export interface operations {
             };
         };
     };
+    getKycLinksByPublicId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The link */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_KYC_LINK";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            name: string;
+                            /**
+                             * @description `expired` past its date, `full` when every place is taken (a user who joined may still continue).
+                             * @enum {string}
+                             */
+                            status: "active" | "expired" | "full";
+                            application: {
+                                id: string;
+                                name: string;
+                                /** @enum {string} */
+                                network: "testnet" | "mainnet";
+                            };
+                            /** @description The link's publishable key: the SDK signs in with it on the link's page and nowhere else. */
+                            apiKey: string;
+                            expiresAt: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postKycLinksByPublicIdJoin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publicId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The user's place and progress */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_KYC_LINK_JOINED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            joinedAt: string;
+                            completedAt: string | null;
+                            requirements: {
+                                steps: {
+                                    position: number;
+                                    /** @enum {string} */
+                                    type: "KYC" | "FORM" | "REGISTRY_CHECK" | "PROVIDER_REGISTRATION";
+                                    optionIds: string[];
+                                    completed: boolean;
+                                }[];
+                                next: {
+                                    position: number;
+                                    completed: number;
+                                    total: number;
+                                    /** @enum {string} */
+                                    type: "KYC" | "FORM" | "REGISTRY_CHECK" | "PROVIDER_REGISTRATION";
+                                    optionId: string;
+                                    /** @enum {string} */
+                                    status: "none" | "pending" | "rejected" | "expired";
+                                    reviewReason?: string;
+                                } | null;
+                                completed: number;
+                                total: number;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Gone (expired) */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
     getRequirementsCardRegistrationByCardProviderId: {
         parameters: {
             query?: never;
@@ -16006,7 +16217,7 @@ export interface operations {
                                 }[];
                                 failure: {
                                     /** @enum {string} */
-                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                     legIndex: number | null;
                                     retryable: boolean;
                                     /** @enum {string} */
@@ -16022,6 +16233,21 @@ export interface operations {
                                         currency: string;
                                     };
                                 };
+                                tierLimit?: {
+                                    version: number;
+                                    tier: string;
+                                    amount: string;
+                                    currency: string;
+                                    window: ("operation" | "day" | "month") | null;
+                                    cap?: string;
+                                    upgrade?: {
+                                        optionId: string;
+                                        optionName: string;
+                                        tier: string;
+                                        /** @enum {string} */
+                                        status: "expired" | "none";
+                                    };
+                                };
                                 requirement?: {
                                     corridorId: string;
                                     position: number;
@@ -16033,6 +16259,8 @@ export interface operations {
                                     /** @enum {string} */
                                     status: "none" | "pending" | "rejected" | "expired";
                                     reviewReason?: string;
+                                    /** @constant */
+                                    purpose?: "TIER_UPGRADE";
                                 };
                             }[];
                         };
@@ -16069,18 +16297,101 @@ export interface operations {
                     };
                 };
             };
-            /** @description Unprocessable */
+            /** @description A route could not proceed. Amount-limit rejections include the current limit and any available verification upgrade. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
+                        code: string;
                         /** @constant */
                         success: false;
-                        code: string;
                         message?: string;
-                        resultCode?: string;
+                        rejected?: {
+                            legs: {
+                                index: number;
+                                /** @enum {string} */
+                                kind: "PROVIDER_ONRAMP" | "PROVIDER_OFFRAMP" | "SWAP" | "BRIDGE";
+                                from: {
+                                    /** @constant */
+                                    kind: "asset";
+                                    code: string;
+                                    identifier: string | null;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                } | {
+                                    /** @constant */
+                                    kind: "fiat";
+                                    currency: string;
+                                    /** @enum {string} */
+                                    rail: "SPEI" | "PIX" | "PSE" | "ACH" | "BREB" | "QR" | "BANK_TRANSFER" | "CASH" | "CARD" | "HOSTED";
+                                    country: string;
+                                };
+                                to: {
+                                    /** @constant */
+                                    kind: "asset";
+                                    code: string;
+                                    identifier: string | null;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                } | {
+                                    /** @constant */
+                                    kind: "fiat";
+                                    currency: string;
+                                    /** @enum {string} */
+                                    rail: "SPEI" | "PIX" | "PSE" | "ACH" | "BREB" | "QR" | "BANK_TRANSFER" | "CASH" | "CARD" | "HOSTED";
+                                    country: string;
+                                };
+                            }[];
+                            failure: {
+                                /** @enum {string} */
+                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                legIndex: number | null;
+                                retryable: boolean;
+                                /** @enum {string} */
+                                resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                /** @enum {string} */
+                                resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
+                                detail?: string;
+                                limit?: {
+                                    min: string | null;
+                                    max: string | null;
+                                    /** @enum {string} */
+                                    side: "in" | "out";
+                                    currency: string;
+                                };
+                            };
+                            tierLimit?: {
+                                version: number;
+                                tier: string;
+                                amount: string;
+                                currency: string;
+                                window: ("operation" | "day" | "month") | null;
+                                cap?: string;
+                                upgrade?: {
+                                    optionId: string;
+                                    optionName: string;
+                                    tier: string;
+                                    /** @enum {string} */
+                                    status: "expired" | "none";
+                                };
+                            };
+                            requirement?: {
+                                corridorId: string;
+                                position: number;
+                                completed: number;
+                                total: number;
+                                /** @enum {string} */
+                                type: "KYC" | "FORM" | "REGISTRY_CHECK" | "PROVIDER_REGISTRATION";
+                                optionId: string;
+                                /** @enum {string} */
+                                status: "none" | "pending" | "rejected" | "expired";
+                                reviewReason?: string;
+                                /** @constant */
+                                purpose?: "TIER_UPGRADE";
+                            };
+                        }[];
                     };
                 };
             };
@@ -16174,7 +16485,7 @@ export interface operations {
                                     failure: {
                                         legIndex: number;
                                         /** @enum {string} */
-                                        code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                        code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                         retryable: boolean;
                                         /** @enum {string} */
                                         resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
@@ -16275,7 +16586,7 @@ export interface operations {
                                 failure: {
                                     legIndex: number;
                                     /** @enum {string} */
-                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                     retryable: boolean;
                                     /** @enum {string} */
                                     resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
@@ -16411,7 +16722,7 @@ export interface operations {
                                 failure: {
                                     legIndex: number;
                                     /** @enum {string} */
-                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                     retryable: boolean;
                                     /** @enum {string} */
                                     resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
@@ -16512,7 +16823,7 @@ export interface operations {
                             failure: {
                                 legIndex: number;
                                 /** @enum {string} */
-                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                 retryable: boolean;
                                 /** @enum {string} */
                                 resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
@@ -16585,18 +16896,101 @@ export interface operations {
                     };
                 };
             };
-            /** @description Unprocessable */
+            /** @description A route could not proceed. Amount-limit rejections include the current limit and any available verification upgrade. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
+                        code: string;
                         /** @constant */
                         success: false;
-                        code: string;
                         message?: string;
-                        resultCode?: string;
+                        rejected?: {
+                            legs: {
+                                index: number;
+                                /** @enum {string} */
+                                kind: "PROVIDER_ONRAMP" | "PROVIDER_OFFRAMP" | "SWAP" | "BRIDGE";
+                                from: {
+                                    /** @constant */
+                                    kind: "asset";
+                                    code: string;
+                                    identifier: string | null;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                } | {
+                                    /** @constant */
+                                    kind: "fiat";
+                                    currency: string;
+                                    /** @enum {string} */
+                                    rail: "SPEI" | "PIX" | "PSE" | "ACH" | "BREB" | "QR" | "BANK_TRANSFER" | "CASH" | "CARD" | "HOSTED";
+                                    country: string;
+                                };
+                                to: {
+                                    /** @constant */
+                                    kind: "asset";
+                                    code: string;
+                                    identifier: string | null;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                } | {
+                                    /** @constant */
+                                    kind: "fiat";
+                                    currency: string;
+                                    /** @enum {string} */
+                                    rail: "SPEI" | "PIX" | "PSE" | "ACH" | "BREB" | "QR" | "BANK_TRANSFER" | "CASH" | "CARD" | "HOSTED";
+                                    country: string;
+                                };
+                            }[];
+                            failure: {
+                                /** @enum {string} */
+                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                legIndex: number | null;
+                                retryable: boolean;
+                                /** @enum {string} */
+                                resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                /** @enum {string} */
+                                resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
+                                detail?: string;
+                                limit?: {
+                                    min: string | null;
+                                    max: string | null;
+                                    /** @enum {string} */
+                                    side: "in" | "out";
+                                    currency: string;
+                                };
+                            };
+                            tierLimit?: {
+                                version: number;
+                                tier: string;
+                                amount: string;
+                                currency: string;
+                                window: ("operation" | "day" | "month") | null;
+                                cap?: string;
+                                upgrade?: {
+                                    optionId: string;
+                                    optionName: string;
+                                    tier: string;
+                                    /** @enum {string} */
+                                    status: "expired" | "none";
+                                };
+                            };
+                            requirement?: {
+                                corridorId: string;
+                                position: number;
+                                completed: number;
+                                total: number;
+                                /** @enum {string} */
+                                type: "KYC" | "FORM" | "REGISTRY_CHECK" | "PROVIDER_REGISTRATION";
+                                optionId: string;
+                                /** @enum {string} */
+                                status: "none" | "pending" | "rejected" | "expired";
+                                reviewReason?: string;
+                                /** @constant */
+                                purpose?: "TIER_UPGRADE";
+                            };
+                        }[];
                     };
                 };
             };
@@ -16684,7 +17078,7 @@ export interface operations {
                                 failure: {
                                     legIndex: number;
                                     /** @enum {string} */
-                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                     retryable: boolean;
                                     /** @enum {string} */
                                     resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
@@ -16785,7 +17179,7 @@ export interface operations {
                             failure: {
                                 legIndex: number;
                                 /** @enum {string} */
-                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                 retryable: boolean;
                                 /** @enum {string} */
                                 resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
@@ -16912,7 +17306,7 @@ export interface operations {
                                 failure: {
                                     legIndex: number;
                                     /** @enum {string} */
-                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                     retryable: boolean;
                                     /** @enum {string} */
                                     resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
@@ -17013,7 +17407,7 @@ export interface operations {
                             failure: {
                                 legIndex: number;
                                 /** @enum {string} */
-                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                 retryable: boolean;
                                 /** @enum {string} */
                                 resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
@@ -17148,7 +17542,7 @@ export interface operations {
                                 failure: {
                                     legIndex: number;
                                     /** @enum {string} */
-                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                     retryable: boolean;
                                     /** @enum {string} */
                                     resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
@@ -17249,7 +17643,7 @@ export interface operations {
                             failure: {
                                 legIndex: number;
                                 /** @enum {string} */
-                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                 retryable: boolean;
                                 /** @enum {string} */
                                 resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
@@ -17319,6 +17713,104 @@ export interface operations {
                         code: string;
                         message?: string;
                         resultCode?: string;
+                    };
+                };
+            };
+            /** @description A route could not proceed. Amount-limit rejections include the current limit and any available verification upgrade. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        /** @constant */
+                        success: false;
+                        message?: string;
+                        rejected?: {
+                            legs: {
+                                index: number;
+                                /** @enum {string} */
+                                kind: "PROVIDER_ONRAMP" | "PROVIDER_OFFRAMP" | "SWAP" | "BRIDGE";
+                                from: {
+                                    /** @constant */
+                                    kind: "asset";
+                                    code: string;
+                                    identifier: string | null;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                } | {
+                                    /** @constant */
+                                    kind: "fiat";
+                                    currency: string;
+                                    /** @enum {string} */
+                                    rail: "SPEI" | "PIX" | "PSE" | "ACH" | "BREB" | "QR" | "BANK_TRANSFER" | "CASH" | "CARD" | "HOSTED";
+                                    country: string;
+                                };
+                                to: {
+                                    /** @constant */
+                                    kind: "asset";
+                                    code: string;
+                                    identifier: string | null;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                } | {
+                                    /** @constant */
+                                    kind: "fiat";
+                                    currency: string;
+                                    /** @enum {string} */
+                                    rail: "SPEI" | "PIX" | "PSE" | "ACH" | "BREB" | "QR" | "BANK_TRANSFER" | "CASH" | "CARD" | "HOSTED";
+                                    country: string;
+                                };
+                            }[];
+                            failure: {
+                                /** @enum {string} */
+                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                legIndex: number | null;
+                                retryable: boolean;
+                                /** @enum {string} */
+                                resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                /** @enum {string} */
+                                resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
+                                detail?: string;
+                                limit?: {
+                                    min: string | null;
+                                    max: string | null;
+                                    /** @enum {string} */
+                                    side: "in" | "out";
+                                    currency: string;
+                                };
+                            };
+                            tierLimit?: {
+                                version: number;
+                                tier: string;
+                                amount: string;
+                                currency: string;
+                                window: ("operation" | "day" | "month") | null;
+                                cap?: string;
+                                upgrade?: {
+                                    optionId: string;
+                                    optionName: string;
+                                    tier: string;
+                                    /** @enum {string} */
+                                    status: "expired" | "none";
+                                };
+                            };
+                            requirement?: {
+                                corridorId: string;
+                                position: number;
+                                completed: number;
+                                total: number;
+                                /** @enum {string} */
+                                type: "KYC" | "FORM" | "REGISTRY_CHECK" | "PROVIDER_REGISTRATION";
+                                optionId: string;
+                                /** @enum {string} */
+                                status: "none" | "pending" | "rejected" | "expired";
+                                reviewReason?: string;
+                                /** @constant */
+                                purpose?: "TIER_UPGRADE";
+                            };
+                        }[];
                     };
                 };
             };
@@ -17406,7 +17898,7 @@ export interface operations {
                                 failure: {
                                     legIndex: number;
                                     /** @enum {string} */
-                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                     retryable: boolean;
                                     /** @enum {string} */
                                     resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
@@ -17507,7 +17999,7 @@ export interface operations {
                             failure: {
                                 legIndex: number;
                                 /** @enum {string} */
-                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
                                 retryable: boolean;
                                 /** @enum {string} */
                                 resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
