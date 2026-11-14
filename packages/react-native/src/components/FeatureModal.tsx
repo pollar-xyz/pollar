@@ -14,6 +14,7 @@ import { ActionButton } from './native-ui';
 import { useSurfaceColors } from './layout';
 import { useModalLanguage } from '../language';
 import { FEATURE_COPY } from './feature-copy';
+import { OwnCallsContext, useDeclineOnClose } from '../useInlineConfirmation';
 
 export interface FeatureModalProps {
   onClose: () => void;
@@ -28,14 +29,21 @@ export function FeatureModal({
 }: FeatureModalProps & { feature: FeatureName | null; initial?: FeatureInitial | undefined }) {
   const c = useSurfaceColors();
   const copy = FEATURE_COPY[useModalLanguage()];
+  const { track, declineOnClose } = useDeclineOnClose();
+  const close = () => {
+    declineOnClose();
+    onClose();
+  };
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet">
+    <Modal visible={visible} animationType="slide" onRequestClose={close} presentationStyle="pageSheet">
       <SafeAreaProvider>
         <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 24, gap: 16 }}>
-              <ActionButton title={copy.close} onPress={onClose} />
-              {visible && feature && <FeaturePanel key={feature} feature={feature} initial={initial} />}
+              <ActionButton title={copy.close} onPress={close} />
+              <OwnCallsContext.Provider value={track}>
+                {visible && feature && <FeaturePanel key={feature} feature={feature} initial={initial} />}
+              </OwnCallsContext.Provider>
             </ScrollView>
           </KeyboardAvoidingView>
         </SafeAreaView>

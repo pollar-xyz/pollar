@@ -437,6 +437,8 @@ function ClientProvider({
   const tx = client.getTransactionState() ?? { step: 'idle' as const };
   const open = (next: FeatureName | 'cards' | 'bridge', options?: object) => {
     if (modal === 'authentication' && next !== modal) client.cancelLogin();
+    // A transaction modal opens on its form: the last transaction's outcome would show as this one's.
+    if (next === 'send' || next === 'swap' || next === 'earn') client.resetTransactionState();
     const seeded = options !== undefined && Object.keys(options).length > 0;
     if (seeded || modalSeeded.current) setModalKey((k) => k + 1);
     modalSeeded.current = seeded;

@@ -11,6 +11,7 @@ import type {
   SolanaEarnPosition,
   SolanaSwapOptions,
   SolanaSwapQuote,
+  PollarLanguage,
   SwapDestinationChain,
   SwapSettlement,
   SwapQuote,
@@ -37,8 +38,15 @@ import { ActionButton, ActionState, Card, Choice, Field, Label, ResultView, useA
 import { CHAIN_LOGOS } from '../constants';
 import { InlineAssetLogo, TxExplorerLink, TxReview } from './tx-review/TxReview';
 import { TX_REVIEW_COPY } from './tx-review/tx-review-copy';
-import { earnOutcome, reviewForEarn, type EarnReviewParts, type TxReviewData } from './tx-review/tx-review-model';
-import { useInlineConfirmation } from '../useInlineConfirmation';
+import {
+  earnOutcome,
+  reviewForEarn,
+  reviewFromRequest,
+  type EarnReviewParts,
+  type TxReviewData,
+} from './tx-review/tx-review-model';
+import { CONFIRM_COPY } from './confirm-modal/confirm-copy';
+import { useInlineConfirmation, useTrackOwnCall } from '../useInlineConfirmation';
 import { explorerTxUrl } from './explorer';
 import { TxStatusBody } from './transaction-modal/TxStatusBody';
 
@@ -471,6 +479,7 @@ export function SendPanel({ initial }: { initial?: SendModalOptions | undefined 
   const p = usePollar();
   const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
+  const track = useTrackOwnCall();
   const seededChain = p.wallets.some((w) => (w.chain ?? 'STELLAR') === initial?.chain) ? initial?.chain : undefined;
   const [chain, setChain] = useState<WalletChain>(seededChain ?? 'STELLAR');
   const walletChains = useWalletChains();
@@ -595,7 +604,7 @@ export function SendPanel({ initial }: { initial?: SendModalOptions | undefined 
           review
             ? void action.run(async () => {
                 arm();
-                const result = await send();
+                const result = await track(send());
                 setReview(false);
                 return result;
               })
@@ -888,8 +897,16 @@ function settlementKind(settlement: SwapSettlement | null): 'pending' | 'complet
 }
 export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined }) {
   const p = usePollar();
-  const copy = FEATURE_COPY[useModalLanguage()];
+  const language = useModalLanguage();
+  const copy = FEATURE_COPY[language];
   const action = useAction();
+  const track = useTrackOwnCall();
+  // The Solana swap sent, with its tokens: its transaction carries no build to review it from.
+  const [sentSolana, setSentSolana] = useState<{
+    quote: SolanaSwapQuote;
+    sell: SolanaSwapOption | undefined;
+    buy: SolanaSwapOption | undefined;
+  } | null>(null);
   const [chains, setChains] = useState<SwapChain[] | null>(null);
   const [venues, setVenues] = useState<Record<SwapChain, string[]>>({ STELLAR: [], SOLANA: [] });
   const [venue, setVenue] = useState('auto');
@@ -1211,8 +1228,9 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
             onPress={() =>
               void action.run(async () => {
                 setQuotes([]);
+                setSentSolana(null);
                 arm();
-                return p.swap(q, { autoTrustline: true });
+                return track(p.swap(q, { autoTrustline: true }));
               })
             }
           />
@@ -1230,11 +1248,16 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
               onPress={() =>
                 void action.run(async () => {
                   setSolanaQuotes([]);
+                  setSentSolana({
+                    quote: q,
+                    sell: solanaSell.find((o) => o.mint === q.inputMint),
+                    buy: solanaBuy.find((o) => o.mint === q.outputMint),
+                  });
                   arm();
                   const toward = q.destinationChain && q.destinationChain !== 'SOLANA';
                   const key = newKey();
                   setDelivery(toward ? { key, settlement: null } : null);
-                  return p.swapSolana(q, { slippageBps: 50, idempotencyKey: key });
+                  return track(p.swapSolana(q, { slippageBps: 50, idempotencyKey: key }));
                 })
               }
             />
@@ -1259,9 +1282,44 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
         </>
       )}
       {chain === 'STELLAR' && stellarBuyAll.length === 0 && <Label>{copy.swap.noTokens}</Label>}
-      <TransactionStatus />
+      <TransactionStatus
+        review={
+          sentSolana && !('buildData' in p.tx && p.tx.buildData) ? solanaSwapReview(sentSolana, p.network, language) : undefined
+        }
+      />
       <ActionState action={action} />
     </Card>
+  );
+}
+/** A Solana swap's review from the quote sent, worded like its confirmation, for the steps after the user's yes. */
+function solanaSwapReview(
+  sent: { quote: SolanaSwapQuote; sell: SolanaSwapOption | undefined; buy: SolanaSwapOption | undefined },
+  network: string,
+  language: PollarLanguage,
+): TxReviewData {
+  const { quote, sell, buy } = sent;
+  const toward = quote.destinationChain && quote.destinationChain !== 'SOLANA' ? quote.destinationChain : undefined;
+  const outputDecimals = quote.outputDecimals ?? buy?.decimals;
+  return reviewFromRequest(
+    {
+      chain: 'SOLANA',
+      network,
+      operation: 'swap',
+      details: {
+        provider: quote.provider,
+        inputMint: quote.inputMint,
+        outputMint: quote.outputMint,
+        inAmount: quote.inAmount,
+        outAmount: quote.outAmount,
+        minOut: quote.minOut,
+        ...(toward && { destinationChain: toward }),
+        ...(sell && { inputSymbol: sell.code, inputDecimals: sell.decimals }),
+        ...(buy && { outputSymbol: buy.code }),
+        ...(outputDecimals !== undefined && { outputDecimals }),
+      },
+      fallbackTitle: CONFIRM_COPY[language].operations.swap ?? 'Swap',
+    },
+    TX_REVIEW_COPY[language],
   );
 }
 function earnExplorerUrl(chain: WalletChain, network: string, hash: string): string {
@@ -1286,6 +1344,7 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
   const reviewCopy = TX_REVIEW_COPY[language];
   const { theme = 'light', accentColor = '#005DB4' } = p.styles;
   const action = useAction();
+  const track = useTrackOwnCall();
   // The operation sent, kept for its result once the form changes.
   const [submission, setSubmission] = useState<EarnReviewParts | null>(null);
   const [providers, setProviders] = useState<EarnProviderId[]>([]);
@@ -1494,12 +1553,16 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
                   wallet: p.wallets.find((w) => (w.chain ?? 'STELLAR') === earnChain)?.address,
                 });
                 if (onSolana)
-                  return tab === 'deposit'
-                    ? p.earnSolanaDeposit({ opportunity, amount })
-                    : p.earnSolanaWithdraw({ opportunity, amount });
-                return tab === 'deposit'
-                  ? p.earnDeposit({ provider: provider!, opportunity, amount })
-                  : p.earnWithdraw({ provider: provider!, opportunity, amount });
+                  return track(
+                    tab === 'deposit'
+                      ? p.earnSolanaDeposit({ opportunity, amount })
+                      : p.earnSolanaWithdraw({ opportunity, amount }),
+                  );
+                return track(
+                  tab === 'deposit'
+                    ? p.earnDeposit({ provider: provider!, opportunity, amount })
+                    : p.earnWithdraw({ provider: provider!, opportunity, amount }),
+                );
               })
         }
       />
