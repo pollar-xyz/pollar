@@ -20,6 +20,7 @@ type RegistryCopy = Record<
   | 'rejected'
   | 'loadError'
   | 'submitError'
+  | 'registryDown'
   | 'step',
   string
 >;
@@ -47,6 +48,7 @@ export const REGISTRY_COPY: Record<FormLanguage, RegistryCopy> = {
     rejected: 'The registry did not confirm: {fields}. Check how they are written and try again.',
     loadError: 'Could not load your details. Please try again.',
     submitError: 'Could not check your details. Please try again.',
+    registryDown: 'The civil registry is not responding right now. Please try again in a few minutes.',
     step: 'Step {n} of {total}',
   },
   es: {
@@ -71,6 +73,7 @@ export const REGISTRY_COPY: Record<FormLanguage, RegistryCopy> = {
     rejected: 'El registro no confirmó: {fields}. Revisa cómo están escritos e intenta de nuevo.',
     loadError: 'No se pudieron cargar tus datos. Intenta de nuevo.',
     submitError: 'No se pudieron validar tus datos. Intenta de nuevo.',
+    registryDown: 'El registro civil no responde en este momento. Intenta de nuevo en unos minutos.',
     step: 'Paso {n} de {total}',
   },
   pt: {
@@ -95,6 +98,7 @@ export const REGISTRY_COPY: Record<FormLanguage, RegistryCopy> = {
     rejected: 'O registro não confirmou: {fields}. Verifique como estão escritos e tente novamente.',
     loadError: 'Não foi possível carregar seus dados. Tente novamente.',
     submitError: 'Não foi possível validar seus dados. Tente novamente.',
+    registryDown: 'O registro civil não está respondendo agora. Tente novamente em alguns minutos.',
     step: 'Passo {n} de {total}',
   },
 };
@@ -286,6 +290,12 @@ export const errorCode = (error: unknown) =>
 const errorBody = (error: unknown): object | undefined => {
   const body = typeof error === 'object' && error !== null && 'body' in error ? error.body : undefined;
   return typeof body === 'object' && body !== null ? body : undefined;
+};
+
+/** An SDK_KYC_PROVIDER_ERROR the server marks `retryable`: the registry did not answer, nothing was checked. */
+export const isRegistryDown = (error: unknown) => {
+  const body = errorBody(error);
+  return errorCode(error) === 'SDK_KYC_PROVIDER_ERROR' && !!body && 'retryable' in body && body.retryable === true;
 };
 
 /** `body.missing` of a KYC_REGISTRATION_MISSING_DATA error. */
