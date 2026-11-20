@@ -1,7 +1,7 @@
 import type { KycStatus, PollarLanguage } from '@pollar/core';
 
 export interface KycCopy {
-  /** What a failed KYC call means for the user, by backend code. */
+  /** What a failed KYC call means for the user, by backend code, or by `code:reason` where the reason changes it. */
   errors: Record<string, string>;
   loadFailed: string;
   startFailed: string;
@@ -53,6 +53,9 @@ export const KYC_COPY: Record<PollarLanguage, KycCopy> = {
   en: {
     errors: {
       SDK_KYC_NOT_CONFIGURED: 'Identity verification is not available for this app yet.',
+      // The vendor's account ran out of credits: the operator tops it up, the app's setup is fine.
+      'SDK_KYC_NOT_CONFIGURED:provider_credits_exhausted':
+        'Identity verification is temporarily unavailable. Please try again later.',
       SDK_KYC_PROVIDER_ERROR: 'The verification service is not responding right now. Please try again in a moment.',
       SDK_KYC_SESSION_EXPIRED: 'Your previous verification session expired. Select the provider to start a new one.',
       SDK_KYC_PROVIDER_NOT_FOUND: 'This verification option is no longer available. Refresh to see the current options.',
@@ -120,6 +123,8 @@ export const KYC_COPY: Record<PollarLanguage, KycCopy> = {
   es: {
     errors: {
       SDK_KYC_NOT_CONFIGURED: 'La verificación de identidad todavía no está disponible para esta app.',
+      'SDK_KYC_NOT_CONFIGURED:provider_credits_exhausted':
+        'La verificación de identidad no está disponible temporalmente. Intenta de nuevo más tarde.',
       SDK_KYC_PROVIDER_ERROR: 'El servicio de verificación no responde en este momento. Intenta de nuevo en un momento.',
       SDK_KYC_SESSION_EXPIRED: 'Tu sesión de verificación anterior venció. Elige el proveedor para iniciar una nueva.',
       SDK_KYC_PROVIDER_NOT_FOUND:
@@ -190,6 +195,8 @@ export const KYC_COPY: Record<PollarLanguage, KycCopy> = {
   pt: {
     errors: {
       SDK_KYC_NOT_CONFIGURED: 'A verificação de identidade ainda não está disponível para este app.',
+      'SDK_KYC_NOT_CONFIGURED:provider_credits_exhausted':
+        'A verificação de identidade está temporariamente indisponível. Tente de novo mais tarde.',
       SDK_KYC_PROVIDER_ERROR: 'O serviço de verificação não está respondendo agora. Tente de novo em instantes.',
       SDK_KYC_SESSION_EXPIRED: 'Sua sessão de verificação anterior expirou. Escolha o provedor para iniciar uma nova.',
       SDK_KYC_PROVIDER_NOT_FOUND: 'Esta opção de verificação não está mais disponível. Atualize para ver as opções atuais.',
