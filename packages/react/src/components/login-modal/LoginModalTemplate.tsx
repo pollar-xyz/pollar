@@ -69,6 +69,25 @@ function WalletAdapterButtons({
   );
 }
 
+export function CloseButton({ onClick, label }: { onClick: () => void; label: string }) {
+  return (
+    <button type="button" className="pollar-close-btn" onClick={onClick} aria-label={label}>
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M18 6L6 18M6 6l12 12" />
+      </svg>
+    </button>
+  );
+}
+
 function authStateToStatus(step: AuthState['step']): StateStatus {
   const loading: AuthState['step'][] = [
     'creating_session',
@@ -129,6 +148,8 @@ interface LoginModalTemplateProps {
   onRetry: () => void;
   /** Language of the modal's text. Defaults to the user's device; the modal passes the resolved one. */
   language?: PollarLanguage | undefined;
+  /** In the host's page instead of over a backdrop: no close button. */
+  inline?: boolean;
 }
 
 export function LoginModalTemplate({
@@ -156,6 +177,7 @@ export function LoginModalTemplate({
   onCancel,
   onRetry,
   language: languageProp,
+  inline = false,
 }: LoginModalTemplateProps) {
   const language = useInheritedLanguage(languageProp);
   const copy = LOGIN_COPY[language];
@@ -213,21 +235,12 @@ export function LoginModalTemplate({
   );
 
   return (
-    <div className="pollar-modal-card pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
-      <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label={copy.close}>
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      </button>
+    <div
+      className={`pollar-modal-card pollar-modal ${inline ? 'pollar-modal-card--inline' : ''}`}
+      style={cssVars}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {!inline && <CloseButton onClick={onCancel} label={copy.close} />}
       <div className="pollar-header">
         <div className="pollar-logo-wrap">
           <ModalLogo logoUrl={logoUrl} />
@@ -398,6 +411,7 @@ export function LoginModalStatus({
   onRetry,
   onCancel,
   language: languageProp,
+  inline = false,
 }: {
   status: 'loading' | 'error';
   theme: string;
@@ -408,26 +422,18 @@ export function LoginModalStatus({
   onRetry: () => void;
   onCancel: () => void;
   language?: PollarLanguage | undefined;
+  inline?: boolean;
 }) {
   const language = useInheritedLanguage(languageProp);
   const copy = LOGIN_COPY[language];
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
   return (
-    <div className="pollar-modal-card pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
-      <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label={copy.close}>
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      </button>
+    <div
+      className={`pollar-modal-card pollar-modal ${inline ? 'pollar-modal-card--inline' : ''}`}
+      style={cssVars}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {!inline && <CloseButton onClick={onCancel} label={copy.close} />}
       <div className="pollar-header">
         <div className="pollar-logo-wrap">
           <ModalLogo logoUrl={logoUrl} />
