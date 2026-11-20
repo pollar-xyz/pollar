@@ -261,7 +261,13 @@ export type RampAdapterFact =
   | { kind: 'provider_processing' }
   | { kind: 'fiat_receipt_reported' | 'fiat_payout_reported'; reference: string | null }
   | { kind: 'chain_transaction_reported'; chain: string; hash: string; leg: 'source' | 'intermediate' | 'destination' }
-  | { kind: 'provider_rejection_reported' };
+  | { kind: 'provider_rejection_reported' }
+  /**
+   * Something Pollar must take up with the provider while the order goes on,
+   * such as a payout the bank refused that the provider sends again. `detail`
+   * is the provider's own wording, never personal data.
+   */
+  | { kind: 'provider_attention_reported'; code: string; detail: string | null };
 export type RampAdapterObservation = {
   providerOrderRef: string | null;
   identity: string;
