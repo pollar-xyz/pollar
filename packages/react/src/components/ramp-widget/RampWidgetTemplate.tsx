@@ -26,7 +26,6 @@ import {
   rampLegNote,
   rampLegTimeLeft,
   rampLegTitle,
-  rampNextApproval,
   rampStepStatusText,
   rampStepTitle,
   rampFieldError,
@@ -52,6 +51,7 @@ import { BEST_ROUTE, routeKey } from './ramp-route';
 import { TxReview } from '../tx-review/TxReview';
 import type { TxDetailRow } from '../tx-review/tx-review-model';
 import { InlineConfirm } from '../confirm-modal/InlineConfirm';
+import { amountText, rampOrderScreens, type RampScreen } from './ramp-screens';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 'status' | 'error';
@@ -336,6 +336,9 @@ export function RampWidgetTemplate({
   const onramp = direction === 'ONRAMP';
   const sendUnit = onramp ? fiat?.currency : asset?.code;
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // A done screen the user stepped back to; null follows the order's current one.
+  const [viewing, setViewing] = useState<number | null>(null);
+  useEffect(() => setViewing(null), [order?.id]);
   const routeName = (quote: RampQuote) => quote.legs.map((leg) => rampLegTitle(leg, language)).join(' · ');
   // What a unit of the asset costs in the fiat, from the route Continue takes.
   const rate = (() => {
@@ -413,7 +416,6 @@ export function RampWidgetTemplate({
   // A leg running on its own (not waiting on the user) counts down its quoted time.
   const running = order?.legs.find((leg) => rampLegStatus(leg) === 'active' && order.pendingAction?.legIndex !== leg.index);
   const now = useNowEverySecond(step === 'status' && !settled && !!running && running.etaSeconds !== null);
-  const nextApproval = order && !settled ? rampNextApproval(order, language) : null;
   // Held (no next read) or final: the order no longer moves on its own.
   const stopped = order ? rampOrderStopped(order) : false;
   const receive = order ? rampOrderReceive(order) : null;
@@ -432,12 +434,60 @@ export function RampWidgetTemplate({
     trustingAsset === null &&
     walletBusy === null;
 
+  const screens = order ? rampOrderScreens(order, language) : [];
+  const completed = order?.state === 'completed';
+  const firstOpen = screens.findIndex((s) => s.status !== 'done');
+  // A completed order has one screen more, after its own: what arrived.
+  const currentScreen = completed ? screens.length : firstOpen === -1 ? Math.max(0, screens.length - 1) : firstOpen;
+  // Only done screens are looked back at; the order moving past one keeps it in view.
+  const shownScreen = viewing !== null && viewing < currentScreen ? viewing : currentScreen;
+  const shown: RampScreen | undefined = screens[shownScreen];
+  const firstLeg = order?.legs[0];
+  const orderSummary =
+    firstLeg && receive
+      ? `${amountText(firstLeg.amountInPlanned, language)} ${
+          firstLeg.from.kind === 'fiat' ? firstLeg.from.currency : firstLeg.from.code
+        } → ${receive.estimated ? '~' : ''}${amountText(receive.amount, language)} ${receive.unit}`
+      : null;
+  const lastLeg = order?.legs[order.legs.length - 1];
+  const arrivedText =
+    lastLeg?.to.kind === 'asset'
+      ? copy.screens.arrived(CHAIN_NAME[lastLeg.to.chain] ?? lastLeg.to.chain)
+      : copy.screens.paidOut;
+  // A substitute the provider paid out, said once the order is done.
+  const finalNote = order?.legs.map((leg) => rampLegNote(leg, language)).find((note) => note !== null) ?? null;
+  // The transactions one screen ran; a provider payment runs none of the user's.
+  const screenRows = (screen: RampScreen): TxDetailRow[] =>
+    screen.steps.length
+      ? screen.steps.flatMap((st): TxDetailRow[] =>
+          st.hash
+            ? [
+                {
+                  label: rampStepTitle(st, screen.leg, language),
+                  value: shortHash(st.hash),
+                  href: explorerTxUrl(stepChain(st.kind, screen.leg), st.hash, network),
+                  copyValue: st.hash,
+                },
+              ]
+            : [],
+        )
+      : screen.leg.onchainTxHash && !screen.key.endsWith(':pay')
+        ? [
+            {
+              label: rampLegTitle(screen.leg, language),
+              value: shortHash(screen.leg.onchainTxHash),
+              href: explorerTxUrl(legChain(screen.leg), screen.leg.onchainTxHash, network),
+              copyValue: screen.leg.onchainTxHash,
+            },
+          ]
+        : [];
+
   const stepTitle: Record<RampStep, string> = {
     input: onramp ? copy.title.buy : copy.title.sell,
     loading_quote: copy.title.finding,
     select_route: copy.title.chooseRoute,
     contact: copy.title.details,
-    status: order?.state === 'completed' ? copy.title.completed : onramp ? copy.title.purchase : copy.title.sale,
+    status: onramp ? copy.title.purchase : copy.title.sale,
     error: copy.title.error,
   };
   const stepSubtitle: Record<RampStep, string> = {
@@ -450,7 +500,7 @@ export function RampWidgetTemplate({
         copy,
       ),
     ),
-    status: view?.title ?? copy.subtitle.processing,
+    status: orderSummary ?? copy.subtitle.processing,
     error: copy.subtitle.error,
   };
 
@@ -463,6 +513,18 @@ export function RampWidgetTemplate({
             type="button"
             className="pollar-back-btn pollar-ramp-back"
             onClick={() => onStepSelect?.(step === 'contact' ? copy.steps.route : copy.steps.amount)}
+            aria-label={copy.back}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+              <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
+        {step === 'status' && shownScreen > 0 && shownScreen <= currentScreen && (
+          <button
+            type="button"
+            className="pollar-back-btn pollar-ramp-back"
+            onClick={() => setViewing(shownScreen - 1)}
             aria-label={copy.back}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -527,6 +589,19 @@ export function RampWidgetTemplate({
             ))}
           </ol>
         </div>
+      )}
+
+      {step === 'status' && screens.length > 0 && (
+        <ol className="pollar-ramp-screens-bar" aria-label={copy.progress}>
+          {[...screens.map((s) => s.key), 'final'].map((key, i) => (
+            <li
+              key={key}
+              data-done={i < currentScreen || (completed && i === screens.length) || undefined}
+              data-shown={i === shownScreen || undefined}
+              data-failed={screens[i]?.status === 'failed' || undefined}
+            />
+          ))}
+        </ol>
       )}
 
       {step === 'input' && pendingOrders.length > 0 && (
@@ -869,220 +944,260 @@ export function RampWidgetTemplate({
 
       {step === 'status' && order && view && (
         <div className="pollar-ramp-payment">
-          <ol className="pollar-ramp-legs" aria-label={copy.progress}>
-            {order.legs.map((leg) => {
-              const status = rampLegStatus(leg);
-              const note =
-                (status === 'failed' && leg.failure ? rampFailureReason(leg.failure, language) : null) ??
-                rampLegNote(leg, language);
-              return (
-                <li key={leg.index} className="pollar-ramp-leg" data-status={status}>
-                  <span className="pollar-ramp-leg-dot" aria-hidden />
-                  <span className="pollar-ramp-leg-title">{rampLegTitle(leg, language)}</span>
-                  {status === 'active' && !settled && (
-                    <span className="pollar-spinner pollar-spinner-sm" aria-label={copy.inProgress} />
-                  )}
-                  {note && <span className="pollar-ramp-leg-note">{note}</span>}
-                  {status === 'active' && !settled && !!leg.steps?.length && (
-                    <ol className="pollar-ramp-steps">
-                      {leg.steps.map((s) => (
-                        <li key={s.kind} className="pollar-ramp-step" data-status={s.status}>
-                          <span className="pollar-ramp-step-title">{rampStepTitle(s, leg, language)}</span>
-                          <span className="pollar-ramp-step-state">
-                            {s.status === 'confirming' && <span className="pollar-spinner pollar-spinner-sm" aria-hidden />}
-                            {rampStepStatusText(s, language)}
-                          </span>
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                  {running === leg && !settled && rampLegTimeLeft(leg, now) !== null && (
-                    <span className="pollar-ramp-leg-eta">{copy.timeLeft(rampLegTimeLeft(leg, now)!)}</span>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-
-          {confirmation && <InlineConfirm confirmation={confirmation} language={language} network={network} />}
-
-          {/* Every transaction hash and the order id are details: the legs above only say how far the order got. */}
-          <TxReview data={{ title: '', kind: 'other', rows: orderRows }} language={language} />
-
-          {nextApproval && !order.pendingAction && <p className="pollar-ramp-next">{copy.next(nextApproval)}</p>}
-
-          {receive && (
-            <div className="pollar-ramp-payment-field">
-              <span className="pollar-ramp-payment-label">
-                {order.state === 'completed' ? copy.youReceived : copy.youReceive}
-              </span>
-              <div className="pollar-ramp-payment-value">
-                {receive.estimated && '~'}
-                {receive.amount} {receive.unit}
+          {shownScreen === screens.length ? (
+            <>
+              <div className="pollar-ramp-final">
+                <span className="pollar-ramp-final-mark" aria-hidden>
+                  <svg width="28" height="28" viewBox="0 0 16 16" fill="none">
+                    <path
+                      d="M3 8.5 6.5 12 13 4.5"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+                {receive && (
+                  <p className="pollar-ramp-final-amount">
+                    {copy.screens.received(`${amountText(receive.amount, language)} ${receive.unit}`)}
+                  </p>
+                )}
+                <p className="pollar-ramp-payment-note">{arrivedText}</p>
+                {finalNote && <p className="pollar-ramp-payment-note">{finalNote}</p>}
               </div>
-            </div>
-          )}
+              <button type="button" className="pollar-btn-primary" onClick={onClose}>
+                {copy.screens.finish}
+              </button>
+              <TxReview data={{ title: '', kind: 'other', rows: orderRows }} language={language} />
+            </>
+          ) : shownScreen < currentScreen ? (
+            <>
+              <h3 className="pollar-ramp-screen-title">{screens[shownScreen]!.title}</h3>
+              <p className="pollar-ramp-screen-state">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                  <path
+                    d="M3 8.5 6.5 12 13 4.5"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                {copy.screens.done}
+              </p>
+              {screenRows(screens[shownScreen]!).length > 0 && (
+                <TxReview data={{ title: '', kind: 'other', rows: screenRows(screens[shownScreen]!) }} language={language} />
+              )}
+              <button type="button" className="pollar-btn-secondary" onClick={() => setViewing(null)}>
+                {copy.screens.toCurrent}
+              </button>
+            </>
+          ) : (
+            <>
+              {shown && (
+                <h3 className="pollar-ramp-screen-title" data-status={shown.status}>
+                  {order.pendingAction?.kind === 'KYC' ? view.title : shown.title}
+                </h3>
+              )}
+              {shown?.status === 'failed' && shown.leg.failure && (
+                <p className="pollar-ramp-field-error">{rampFailureReason(shown.leg.failure, language)}</p>
+              )}
 
-          {order.failure && (
-            <div className="pollar-ramp-payment-field">
-              <span className="pollar-ramp-payment-label">{copy.whatToDo}</span>
-              <p className="pollar-ramp-payment-note">{rampOrderResolutionText(order, language)}</p>
-              {rampFailureNeedsSupport(order.failure) && (
-                <SupportContact support={support} orderId={order.id} language={language} />
+              {shown?.kind === 'wait' && !settled && !order.failure && (
+                <div className="pollar-ramp-wait">
+                  <span className="pollar-spinner" aria-label={copy.inProgress} />
+                  {rampLegTimeLeft(shown.leg, now) !== null && (
+                    <span className="pollar-ramp-leg-eta">{copy.timeLeft(rampLegTimeLeft(shown.leg, now)!)}</span>
+                  )}
+                  {rampLegNote(shown.leg, language) && (
+                    <p className="pollar-ramp-payment-note">{rampLegNote(shown.leg, language)}</p>
+                  )}
+                  <p className="pollar-ramp-payment-note">{copy.screens.updatesItself}</p>
+                </div>
               )}
-              {stopped && !settled && waitsOnRecovery && recoveryMissing !== false && onSetUpRecovery && (
-                <button type="button" className="pollar-btn-secondary" onClick={onSetUpRecovery}>
-                  {copy.setUpRecovery}
-                </button>
+              {shown && shown.steps.length > 1 && !settled && (
+                <ol className="pollar-ramp-screen-steps">
+                  {shown.steps.map((s) => (
+                    <li key={s.kind} className="pollar-ramp-step" data-status={s.status}>
+                      <span className="pollar-ramp-step-title">{rampStepTitle(s, shown.leg, language)}</span>
+                      <span className="pollar-ramp-step-state">
+                        {s.status === 'confirming' && <span className="pollar-spinner pollar-spinner-sm" aria-hidden />}
+                        {rampStepStatusText(s, language)}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
               )}
-              {stopped && !settled && waitsOnRecovery && recoveryMissing === true && (
-                <p className="pollar-ramp-payment-note">{copy.recoveryNote}</p>
+
+              {confirmation && <InlineConfirm confirmation={confirmation} language={language} network={network} />}
+
+              {order.failure && (
+                <div className="pollar-ramp-payment-field">
+                  <span className="pollar-ramp-payment-label">{copy.whatToDo}</span>
+                  <p className="pollar-ramp-payment-note">{rampOrderResolutionText(order, language)}</p>
+                  {rampFailureNeedsSupport(order.failure) && (
+                    <SupportContact support={support} orderId={order.id} language={language} />
+                  )}
+                  {stopped && !settled && waitsOnRecovery && recoveryMissing !== false && onSetUpRecovery && (
+                    <button type="button" className="pollar-btn-secondary" onClick={onSetUpRecovery}>
+                      {copy.setUpRecovery}
+                    </button>
+                  )}
+                  {stopped && !settled && waitsOnRecovery && recoveryMissing === true && (
+                    <p className="pollar-ramp-payment-note">{copy.recoveryNote}</p>
+                  )}
+                  {stopped && !settled && asksNewQuote && onRequote && (
+                    <button type="button" className="pollar-btn-primary" onClick={onRequote}>
+                      {copy.newQuote}
+                    </button>
+                  )}
+                  {stopped && !settled && order.failure.resolutionOwner === 'END_USER' && !asksNewQuote && onRetryOrder && (
+                    <button
+                      type="button"
+                      className="pollar-btn-primary"
+                      disabled={retrying || (waitsOnRecovery && recoveryMissing === true)}
+                      onClick={onRetryOrder}
+                    >
+                      {retrying ? (
+                        <>
+                          <span className="pollar-spinner pollar-spinner-sm" /> {copy.tryingAgain}
+                        </>
+                      ) : (
+                        copy.tryAgain
+                      )}
+                    </button>
+                  )}
+                </div>
               )}
-              {stopped && !settled && asksNewQuote && onRequote && (
-                <button type="button" className="pollar-btn-primary" onClick={onRequote}>
-                  {copy.newQuote}
-                </button>
+              {!settled && payBy !== null && (
+                <p className="pollar-ramp-payment-note">
+                  {payBy > Date.now()
+                    ? copy.payBefore(new Date(payBy).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+                    : copy.windowClosed}
+                </p>
               )}
-              {stopped && !settled && order.failure.resolutionOwner === 'END_USER' && !asksNewQuote && onRetryOrder && (
-                <button
-                  type="button"
-                  className="pollar-btn-primary"
-                  disabled={retrying || (waitsOnRecovery && recoveryMissing === true)}
-                  onClick={onRetryOrder}
-                >
-                  {retrying ? (
+              {!settled && view.scannable && (
+                <div className="pollar-ramp-payment-field">
+                  <span className="pollar-ramp-payment-label">{copy.paymentQr}</span>
+                  <div className="pollar-ramp-payment-value">
+                    {view.scannable.image.inlineSafe ? (
+                      <div
+                        className="pollar-ramp-qr"
+                        aria-label={copy.paymentQr}
+                        dangerouslySetInnerHTML={{ __html: view.scannable.image.data }}
+                      />
+                    ) : (
+                      <img
+                        src={scannableImageSrc(view.scannable.image)}
+                        alt={copy.paymentQr}
+                        style={{ width: '100%', maxWidth: 220, height: 'auto', display: 'block', margin: '0 auto' }}
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
+              {!settled && view.codeMissing && (
+                <p className="pollar-ramp-payment-note" style={{ color: 'var(--pollar-error-text)' }}>
+                  {copy.codeMissing}
+                </p>
+              )}
+              {!settled && view.scannable?.payload && view.scannable.payloadLabel && (
+                <div className="pollar-ramp-payment-field">
+                  <span className="pollar-ramp-payment-label">{view.scannable.payloadLabel}</span>
+                  <div className="pollar-ramp-payment-value">
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <code style={{ flex: 1, wordBreak: 'break-all' }}>{view.scannable.payload}</code>
+                      <CopyButton
+                        value={view.scannable.payload}
+                        label={copy.copyLabel(view.scannable.payloadLabel)}
+                        language={language}
+                      />
+                    </span>
+                  </div>
+                </div>
+              )}
+              {!settled && view.pasteCode && (
+                <div className="pollar-ramp-payment-field">
+                  <span className="pollar-ramp-payment-label">{view.pasteCode.label}</span>
+                  <div className="pollar-ramp-payment-value">
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <code style={{ flex: 1, wordBreak: 'break-all' }}>{view.pasteCode.value}</code>
+                      <CopyButton
+                        value={view.pasteCode.value}
+                        label={copy.copyLabel(view.pasteCode.label)}
+                        language={language}
+                      />
+                    </span>
+                  </div>
+                </div>
+              )}
+              {!settled &&
+                view.details.map((d) => (
+                  <div key={d.label} className="pollar-ramp-payment-field">
+                    <span className="pollar-ramp-payment-label">{d.label}</span>
+                    <div className="pollar-ramp-payment-value">
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <code style={{ flex: 1, wordBreak: 'break-all' }}>{d.value}</code>
+                        <CopyButton value={d.value} label={copy.copyLabel(d.label)} language={language} />
+                      </span>
+                    </div>
+                  </div>
+                ))}
+
+              {!settled && view.action?.kind === 'FIAT_PAYMENT' && view.note && (
+                <p className="pollar-ramp-payment-note">{view.note}</p>
+              )}
+              {!settled && view.action?.kind === 'FIAT_PAYMENT' && onCheckPayment && (
+                <button type="button" className="pollar-btn-primary" disabled={checkingPayment} onClick={onCheckPayment}>
+                  {checkingPayment ? (
                     <>
-                      <span className="pollar-spinner pollar-spinner-sm" /> {copy.tryingAgain}
+                      <span className="pollar-spinner pollar-spinner-sm" /> {copy.checkingPayment}
                     </>
                   ) : (
-                    copy.tryAgain
+                    copy.paid
                   )}
                 </button>
               )}
-            </div>
-          )}
 
-          {!settled && payBy !== null && (
-            <p className="pollar-ramp-payment-note">
-              {payBy > Date.now()
-                ? copy.payBefore(new Date(payBy).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
-                : copy.windowClosed}
-            </p>
-          )}
-          {!settled && view.scannable && (
-            <div className="pollar-ramp-payment-field">
-              <span className="pollar-ramp-payment-label">{copy.paymentQr}</span>
-              <div className="pollar-ramp-payment-value">
-                {view.scannable.image.inlineSafe ? (
-                  <div
-                    className="pollar-ramp-qr"
-                    aria-label={copy.paymentQr}
-                    dangerouslySetInnerHTML={{ __html: view.scannable.image.data }}
-                  />
-                ) : (
-                  <img
-                    src={scannableImageSrc(view.scannable.image)}
-                    alt={copy.paymentQr}
-                    style={{ width: '100%', maxWidth: 220, height: 'auto', display: 'block', margin: '0 auto' }}
-                  />
-                )}
-              </div>
-            </div>
-          )}
-          {!settled && view.codeMissing && (
-            <p className="pollar-ramp-payment-note" style={{ color: 'var(--pollar-error-text)' }}>
-              {copy.codeMissing}
-            </p>
-          )}
-          {!settled && view.scannable?.payload && view.scannable.payloadLabel && (
-            <div className="pollar-ramp-payment-field">
-              <span className="pollar-ramp-payment-label">{view.scannable.payloadLabel}</span>
-              <div className="pollar-ramp-payment-value">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <code style={{ flex: 1, wordBreak: 'break-all' }}>{view.scannable.payload}</code>
-                  <CopyButton
-                    value={view.scannable.payload}
-                    label={copy.copyLabel(view.scannable.payloadLabel)}
-                    language={language}
-                  />
-                </span>
-              </div>
-            </div>
-          )}
-          {!settled && view.pasteCode && (
-            <div className="pollar-ramp-payment-field">
-              <span className="pollar-ramp-payment-label">{view.pasteCode.label}</span>
-              <div className="pollar-ramp-payment-value">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <code style={{ flex: 1, wordBreak: 'break-all' }}>{view.pasteCode.value}</code>
-                  <CopyButton value={view.pasteCode.value} label={copy.copyLabel(view.pasteCode.label)} language={language} />
-                </span>
-              </div>
-            </div>
-          )}
-          {!settled &&
-            view.details.map((d) => (
-              <div key={d.label} className="pollar-ramp-payment-field">
-                <span className="pollar-ramp-payment-label">{d.label}</span>
-                <div className="pollar-ramp-payment-value">
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <code style={{ flex: 1, wordBreak: 'break-all' }}>{d.value}</code>
-                    <CopyButton value={d.value} label={copy.copyLabel(d.label)} language={language} />
-                  </span>
-                </div>
-              </div>
-            ))}
-
-          {!settled && view.action?.kind === 'FIAT_PAYMENT' && view.note && (
-            <p className="pollar-ramp-payment-note">{view.note}</p>
-          )}
-          {!settled && view.action?.kind === 'FIAT_PAYMENT' && onCheckPayment && (
-            <button type="button" className="pollar-btn-primary" disabled={checkingPayment} onClick={onCheckPayment}>
-              {checkingPayment ? (
-                <>
-                  <span className="pollar-spinner pollar-spinner-sm" /> {copy.checkingPayment}
-                </>
-              ) : (
-                copy.paid
+              {!settled && view.canSign && (
+                <button type="button" className="pollar-btn-primary" disabled={signing} onClick={onSign}>
+                  {signing ? copy.waitingWallet : copy.authorize}
+                </button>
               )}
-            </button>
-          )}
+              {!settled && view.action?.kind === 'SIGNATURE' && !view.canSign && (
+                <p className="pollar-ramp-payment-note">{copy.preparingSignature}</p>
+              )}
+              {!settled && view.canApprove && (
+                <button type="button" className="pollar-btn-primary" onClick={onApprove}>
+                  {copy.approveOnDevice}
+                </button>
+              )}
+              {!settled && view.link && (
+                <a
+                  className="pollar-btn-primary pollar-ramp-hosted-link"
+                  href={view.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {view.linkLabel}
+                </a>
+              )}
+              {!settled && order.pendingAction?.kind === 'KYC' && !view.link && (
+                <p className="pollar-ramp-payment-note">{view.note ?? copy.providerReviewing}</p>
+              )}
+              {pollTrouble && !settled && <p className="pollar-ramp-payment-note">{copy.serverTrouble}</p>}
+              {errorMsg && <p className="pollar-ramp-field-error">{errorMsg}</p>}
 
-          {!settled && view.canSign && (
-            <button type="button" className="pollar-btn-primary" disabled={signing} onClick={onSign}>
-              {signing ? copy.waitingWallet : copy.authorize}
-            </button>
+              {!settled && (
+                <div className="pollar-ramp-explore">
+                  <button type="button" className="pollar-btn-secondary" onClick={onNewOrder}>
+                    {copy.startAnother}
+                  </button>
+                </div>
+              )}
+            </>
           )}
-          {!settled && view.action?.kind === 'SIGNATURE' && !view.canSign && (
-            <p className="pollar-ramp-payment-note">{copy.preparingSignature}</p>
-          )}
-          {!settled && view.canApprove && (
-            <button type="button" className="pollar-btn-primary" onClick={onApprove}>
-              {copy.approveOnDevice}
-            </button>
-          )}
-          {!settled && view.link && (
-            <a
-              className="pollar-btn-primary pollar-ramp-hosted-link"
-              href={view.link}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {view.linkLabel}
-            </a>
-          )}
-          {!settled && order.pendingAction?.kind === 'KYC' && !view.link && (
-            <p className="pollar-ramp-payment-note">{view.note ?? copy.providerReviewing}</p>
-          )}
-          {pollTrouble && !settled && <p className="pollar-ramp-payment-note">{copy.serverTrouble}</p>}
-          {errorMsg && <p className="pollar-ramp-field-error">{errorMsg}</p>}
-
-          <div className="pollar-ramp-explore">
-            <button type="button" className="pollar-btn-secondary" onClick={onNewOrder}>
-              {copy.startAnother}
-            </button>
-            {!stopped && <p className="pollar-ramp-payment-note">{copy.keepsGoing}</p>}
-          </div>
         </div>
       )}
 

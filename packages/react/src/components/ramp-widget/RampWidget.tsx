@@ -750,7 +750,6 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   const stepLabel: Partial<Record<RampStep, string>> = {
     select_route: copy.steps.route,
     contact: copy.steps.details,
-    status: copy.steps.complete,
   };
   const label = stepLabel[step];
 

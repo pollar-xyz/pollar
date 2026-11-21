@@ -112,6 +112,21 @@ export interface RampCopy {
   startAnother: string;
   newQuote: string;
   keepsGoing: string;
+  /** A running order, one screen per thing the user does or waits on. */
+  screens: {
+    pay: (amount: string, currency: string) => string;
+    send: (amount: string, code: string) => string;
+    delivering: (code: string) => string;
+    payingOut: (currency: string) => string;
+    done: string;
+    toCurrent: string;
+    updatesItself: string;
+    received: (amount: string) => string;
+    arrived: (chain: string) => string;
+    paidOut: string;
+    finish: string;
+    details: string;
+  };
   somethingWrong: string;
   routeSteps: (count: number) => string;
   feesIncluded: string;
@@ -250,6 +265,20 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     startAnother: 'Start another operation',
     newQuote: 'Get a new quote',
     keepsGoing: 'This one keeps going; you can resume it later.',
+    screens: {
+      pay: (amount, currency) => `Pay ${amount} ${currency}`,
+      send: (amount, code) => `Send ${amount} ${code}`,
+      delivering: (code) => `Your ${code} is on its way`,
+      payingOut: (currency) => `Your ${currency} is on its way to your account`,
+      done: 'Done',
+      toCurrent: 'Go to the current step',
+      updatesItself: 'This screen updates on its own.',
+      received: (amount) => `+${amount}`,
+      arrived: (chain) => `It reached your wallet on ${chain}.`,
+      paidOut: 'It was sent to your account.',
+      finish: 'Done',
+      details: 'Details',
+    },
     somethingWrong: 'Something went wrong.',
     routeSteps: (count) => (count === 1 ? '1 step' : `${count} steps`),
     feesIncluded: 'fees included',
@@ -386,6 +415,20 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     startAnother: 'Iniciar otra operación',
     newQuote: 'Pedir nueva cotización',
     keepsGoing: 'Esta sigue en curso; puedes retomarla más tarde.',
+    screens: {
+      pay: (amount, currency) => `Paga ${amount} ${currency}`,
+      send: (amount, code) => `Envía ${amount} ${code}`,
+      delivering: (code) => `Tu ${code} está en camino`,
+      payingOut: (currency) => `Tus ${currency} van en camino a tu cuenta`,
+      done: 'Hecho',
+      toCurrent: 'Ir al paso actual',
+      updatesItself: 'Esta pantalla se actualiza sola.',
+      received: (amount) => `+${amount}`,
+      arrived: (chain) => `Llegó a tu wallet en ${chain}.`,
+      paidOut: 'Se envió a tu cuenta.',
+      finish: 'Listo',
+      details: 'Detalles',
+    },
     somethingWrong: 'Algo salió mal.',
     routeSteps: (count) => (count === 1 ? '1 paso' : `${count} pasos`),
     feesIncluded: 'comisiones incluidas',
@@ -525,6 +568,20 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     startAnother: 'Iniciar outra operação',
     newQuote: 'Pedir nova cotação',
     keepsGoing: 'Esta continua em andamento; você pode retomá-la depois.',
+    screens: {
+      pay: (amount, currency) => `Pague ${amount} ${currency}`,
+      send: (amount, code) => `Envie ${amount} ${code}`,
+      delivering: (code) => `Seu ${code} está a caminho`,
+      payingOut: (currency) => `Seus ${currency} estão a caminho da sua conta`,
+      done: 'Concluído',
+      toCurrent: 'Ir para a etapa atual',
+      updatesItself: 'Esta tela se atualiza sozinha.',
+      received: (amount) => `+${amount}`,
+      arrived: (chain) => `Chegou à sua carteira na ${chain}.`,
+      paidOut: 'Foi enviado para a sua conta.',
+      finish: 'Pronto',
+      details: 'Detalhes',
+    },
     somethingWrong: 'Algo deu errado.',
     routeSteps: (count) => (count === 1 ? '1 etapa' : `${count} etapas`),
     feesIncluded: 'taxas incluídas',
