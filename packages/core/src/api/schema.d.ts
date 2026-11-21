@@ -1808,6 +1808,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/checkout/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a hosted checkout
+         * @description Requires the read-only x-pollar-checkout-token returned in the charge checkoutPath fragment. No application API key.
+         */
+        get: operations["getCheckoutById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/kyc/status": {
         parameters: {
             query?: never;
@@ -1862,6 +1882,26 @@ export interface paths {
          * @description Creates a session through a configured KYC adapter. Returns the local sessionId and verification URL. Expiry comes from the provider. Supply country for global/multi-country providers and reuse idempotencyKey for retries. Unconfigured providers return 503.
          */
         post: operations["postKycStart"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/kyc-links/returns/{returnId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a KYC return
+         * @description Where the return page of a hosted identity verification (kyc.pollar.xyz/return?r={returnId}) sends the user back: the app's KYC return URL stored with the id. No API key. It is not a verdict: the verification's result is read from the ramp. 404 `KYC_RETURN_NOT_FOUND` for an unknown or expired id.
+         */
+        get: operations["getKycLinksReturnsByReturnId"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -14067,7 +14107,9 @@ export interface operations {
                         success: true;
                         content: {
                             chargeId: string;
+                            checkoutPath: string;
                             walletAddress: string;
+                            memo: string | null;
                             reason: string;
                             amount: string;
                             asset: string;
@@ -14146,7 +14188,9 @@ export interface operations {
                 content: {
                     "application/json": {
                         chargeId: string;
+                        checkoutPath: string;
                         walletAddress: string;
+                        memo: string | null;
                         reason: string;
                         amount: string;
                         asset: string;
@@ -14190,6 +14234,7 @@ export interface operations {
                             remaining: string;
                             asset: string;
                             walletAddress: string;
+                            memo: string | null;
                             network: string;
                             expiresAt: string;
                             timeRemainingSeconds: number;
@@ -14197,6 +14242,8 @@ export interface operations {
                             feeAmount: string | null;
                             payoutAmount: string | null;
                             forwardTxHash: string | null;
+                            awaitingSettlement: boolean;
+                            reconciliationPending: boolean;
                             createdAt: string;
                         };
                     };
@@ -14229,6 +14276,71 @@ export interface operations {
                         code: string;
                         message?: string;
                         resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getCheckoutById: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-pollar-checkout-token": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Checkout */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_CHARGE_STATUS";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            chargeId: string;
+                            merchantName: string;
+                            hasRampOrder: boolean;
+                            awaitingSettlement: boolean;
+                            reconciliationPending: boolean;
+                            /** @enum {string} */
+                            status: "pending" | "completed" | "overpaid" | "underpaid" | "expired" | "refunded";
+                            reason: string;
+                            amountExpected: string;
+                            amountPaid: string;
+                            remaining: string;
+                            asset: string;
+                            walletAddress: string;
+                            memo: string | null;
+                            network: string;
+                            expiresAt: string;
+                            timeRemainingSeconds: number;
+                            isExpired: boolean;
+                            forwardTxHash: string | null;
+                        };
                     };
                 };
             };
@@ -14652,6 +14764,55 @@ export interface operations {
             };
             /** @description Not configured */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    getKycLinksReturnsByReturnId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                returnId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The destination */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_KYC_RETURN";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            application: {
+                                name: string;
+                            };
+                            /** @description The app's KYC return URL, as the app configured it. */
+                            returnUrl: string;
+                        };
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -16501,7 +16662,6 @@ export interface operations {
                                         signs: boolean;
                                         hash: string | null;
                                     }[];
-                                    /** @description A provider leg's payment from the user (the fiat of an onramp, the crypto of an offramp): not asked for yet, asked for, or seen. Null for a swap or bridge leg. */
                                     paymentStatus: ("not_requested" | "requested" | "received") | null;
                                     etaSeconds: number | null;
                                     startedAt: string | null;
@@ -16740,7 +16900,6 @@ export interface operations {
                                     signs: boolean;
                                     hash: string | null;
                                 }[];
-                                /** @description A provider leg's payment from the user (the fiat of an onramp, the crypto of an offramp): not asked for yet, asked for, or seen. Null for a swap or bridge leg. */
                                 paymentStatus: ("not_requested" | "requested" | "received") | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
@@ -17098,7 +17257,6 @@ export interface operations {
                                     signs: boolean;
                                     hash: string | null;
                                 }[];
-                                /** @description A provider leg's payment from the user (the fiat of an onramp, the crypto of an offramp): not asked for yet, asked for, or seen. Null for a swap or bridge leg. */
                                 paymentStatus: ("not_requested" | "requested" | "received") | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
@@ -17328,7 +17486,6 @@ export interface operations {
                                     signs: boolean;
                                     hash: string | null;
                                 }[];
-                                /** @description A provider leg's payment from the user (the fiat of an onramp, the crypto of an offramp): not asked for yet, asked for, or seen. Null for a swap or bridge leg. */
                                 paymentStatus: ("not_requested" | "requested" | "received") | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
@@ -17566,7 +17723,6 @@ export interface operations {
                                     signs: boolean;
                                     hash: string | null;
                                 }[];
-                                /** @description A provider leg's payment from the user (the fiat of an onramp, the crypto of an offramp): not asked for yet, asked for, or seen. Null for a swap or bridge leg. */
                                 paymentStatus: ("not_requested" | "requested" | "received") | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
@@ -17924,7 +18080,6 @@ export interface operations {
                                     signs: boolean;
                                     hash: string | null;
                                 }[];
-                                /** @description A provider leg's payment from the user (the fiat of an onramp, the crypto of an offramp): not asked for yet, asked for, or seen. Null for a swap or bridge leg. */
                                 paymentStatus: ("not_requested" | "requested" | "received") | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
