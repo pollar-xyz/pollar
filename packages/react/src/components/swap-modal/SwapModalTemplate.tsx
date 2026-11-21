@@ -1,11 +1,22 @@
 'use client';
 
 import { useInheritedLanguage } from '../../language-context';
-import { type PollarLanguage, SwapDestinationChain, SwapQuoteParams, TransactionState, WalletId } from '@pollar/core';
+import {
+  type PendingConfirmation,
+  type PollarLanguage,
+  type StellarNetwork,
+  SwapDestinationChain,
+  SwapQuoteParams,
+  TransactionState,
+  WalletId,
+} from '@pollar/core';
 import { useState } from 'react';
 import { PollarModalFooter, RefreshIcon } from '../commons';
+import { ChainLogo, NetworkPill } from '../ChainSelect';
 import { PollarSelect } from '../PollarSelect';
-import { TxStatusView } from '../transaction-modal/TxStatusView';
+import { TxStatusHeading, TxStatusView, txStatusReview } from '../transaction-modal/TxStatusView';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
+import type { TxReviewData } from '../tx-review/tx-review-model';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { SWAP_COPY } from './swap-copy';
 
@@ -173,6 +184,12 @@ export interface SwapModalTemplateProps {
   /** USDC to USDC across chains: a transfer, which the swap does not do. */
   usdcAcross?: boolean;
   settlement?: SwapSettlementView | null;
+  /** The signature waiting for the user's yes, answered in the transaction step. */
+  confirmation?: PendingConfirmation | null | undefined;
+  /** What the transaction step reviews when the transaction carries no build of its own to read it from. */
+  review?: TxReviewData | null | undefined;
+  /** The app's network, for the details of a confirmation. */
+  network?: StellarNetwork | undefined;
   provider: string;
   providers: string[];
   quote: SwapQuoteView | null;
@@ -229,6 +246,9 @@ export function SwapModalTemplate({
   destination = 'SOLANA',
   usdcAcross = false,
   settlement = null,
+  confirmation = null,
+  review = null,
+  network,
   provider,
   providers,
   quote,
@@ -268,6 +288,30 @@ export function SwapModalTemplate({
 }: SwapModalTemplateProps) {
   const language = useInheritedLanguage(languageProp);
   const copy = SWAP_COPY[language];
+  const reviewCopy = TX_REVIEW_COPY[language];
+  // Minimum received, price impact, the route and its fees: read on demand, like every review's details.
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  // Where a cross-chain swap delivers is a detail: the strip says how far it got, the rows say where.
+  const settlementRows = settlement
+    ? [
+        ...(settlement.address
+          ? [{ label: copy.deliveredTo, value: settlement.address, copyValue: settlement.address, mono: true }]
+          : []),
+        ...(settlement.explorerUrl
+          ? [
+              {
+                label: TX_REVIEW_COPY[language].viewOnExplorer,
+                value: settlement.explorerUrl.replace(/^https:\/\//, '').split('/')[0] ?? settlement.explorerUrl,
+                href: settlement.explorerUrl,
+              },
+            ]
+          : []),
+      ]
+    : [];
+  const txReview =
+    step === 'tx'
+      ? txStatusReview({ transaction, review, explorerUrl, confirmation, network, extraRows: settlementRows, language })
+      : null;
   const [customOpen, setCustomOpen] = useState(false);
   const [customCode, setCustomCode] = useState('');
   const [customIssuer, setCustomIssuer] = useState('');
@@ -326,7 +370,20 @@ export function SwapModalTemplate({
               </svg>
             </button>
           )}
-          <h2 className="pollar-modal-title">{title}</h2>
+          <div className="pollar-title-row">
+            {step === 'tx' ? (
+              <TxStatusHeading review={txReview} fallback={title} />
+            ) : (
+              <h2 className="pollar-modal-title">{title}</h2>
+            )}
+            <NetworkPill
+              value={chain}
+              options={chains}
+              onChange={(value) => onChainChange(value as SwapChain)}
+              locked={step === 'tx'}
+              disabled={configLoading || isLoadingData}
+            />
+          </div>
         </div>
         {!isInProgress && (
           <div className="pollar-modal-header-actions">
@@ -355,20 +412,6 @@ export function SwapModalTemplate({
 
       {step === 'form' && !swapUnavailable && (
         <>
-          {chains.length > 1 && (
-            <label className="pollar-swap-route-wrap pollar-swap-chain-wrap">
-              <span className="sr-only">{copy.network}</span>
-              <PollarSelect
-                className="pollar-swap-route-pill"
-                aria-label={copy.network}
-                value={chain}
-                disabled={configLoading || isLoadingData}
-                onChange={(value) => onChainChange(value as SwapChain)}
-                options={chains.map((c) => ({ value: c, label: CHAIN_LABELS[c] }))}
-              />
-            </label>
-          )}
-
           {destinations.length > 1 && (
             <label className="pollar-swap-route-wrap pollar-swap-chain-wrap">
               <span className="sr-only">{copy.receiveOn}</span>
@@ -378,7 +421,11 @@ export function SwapModalTemplate({
                 value={destination}
                 disabled={configLoading || isLoadingData}
                 onChange={(value) => onDestinationChange?.(value as SwapDestinationChain)}
-                options={destinations.map((c) => ({ value: c, label: `${copy.receiveOn} ${CHAIN_LABELS[c]}` }))}
+                options={destinations.map((c) => ({
+                  value: c,
+                  label: `${copy.receiveOn} ${CHAIN_LABELS[c]}`,
+                  icon: <ChainLogo chain={c} />,
+                }))}
               />
             </label>
           )}
@@ -387,14 +434,9 @@ export function SwapModalTemplate({
 
           <div className="pollar-swap-panels">
             <section className="pollar-swap-panel" aria-labelledby="pollar-swap-pay-label">
-              <div className="pollar-swap-panel-heading">
-                <span id="pollar-swap-pay-label" className="pollar-swap-panel-label">
-                  {copy.youPay}
-                </span>
-                <span className="pollar-swap-balance">
-                  {copy.balance} {formatAmount(selectedSell?.available)}
-                </span>
-              </div>
+              <span id="pollar-swap-pay-label" className="pollar-swap-panel-label">
+                {copy.youPay}
+              </span>
               <div className="pollar-swap-panel-main">
                 <input
                   className="pollar-swap-amount"
@@ -406,24 +448,29 @@ export function SwapModalTemplate({
                   disabled={configLoading || isLoadingData}
                   onChange={(event) => onAmountChange(event.target.value)}
                 />
-                <div className="pollar-swap-panel-selector">
-                  <AssetPill
-                    label={copy.assetToPay}
-                    value={sellKey}
-                    options={sellOptions}
-                    disabled={configLoading || isLoadingData}
-                    copy={copy}
-                    onChange={selectSell}
-                  />
-                  <button
-                    type="button"
-                    className="pollar-swap-max"
-                    onClick={onMax}
-                    disabled={!selectedSell?.available || configLoading || isLoadingData}
-                  >
-                    {copy.max}
-                  </button>
-                </div>
+                <AssetPill
+                  label={copy.assetToPay}
+                  value={sellKey}
+                  options={sellOptions}
+                  disabled={configLoading || isLoadingData}
+                  copy={copy}
+                  onChange={selectSell}
+                />
+              </div>
+              <div className="pollar-swap-panel-foot">
+                <span className="pollar-swap-balance">
+                  {copy.balance}{' '}
+                  {formatAmount(sellOptions.some((o) => assetOptionKey(o) === sellKey) ? selectedSell?.available : undefined)}
+                </span>
+                <span aria-hidden>·</span>
+                <button
+                  type="button"
+                  className="pollar-swap-max"
+                  onClick={onMax}
+                  disabled={!selectedSell?.available || configLoading || isLoadingData}
+                >
+                  {copy.max}
+                </button>
               </div>
             </section>
 
@@ -447,14 +494,9 @@ export function SwapModalTemplate({
             </button>
 
             <section className="pollar-swap-panel" aria-labelledby="pollar-swap-receive-label">
-              <div className="pollar-swap-panel-heading">
-                <span id="pollar-swap-receive-label" className="pollar-swap-panel-label">
-                  {copy.youReceive}
-                </span>
-                <span className="pollar-swap-balance">
-                  {copy.balance} {formatAmount(selectedBuy?.available)}
-                </span>
-              </div>
+              <span id="pollar-swap-receive-label" className="pollar-swap-panel-label">
+                {copy.youReceive}
+              </span>
               <div className="pollar-swap-panel-main">
                 <div className={`pollar-swap-output${quoteLoading ? ' is-loading' : ''}`} aria-live="polite">
                   {quoteLoading ? (
@@ -465,17 +507,19 @@ export function SwapModalTemplate({
                     '—'
                   )}
                 </div>
-                <div className="pollar-swap-panel-selector">
-                  <AssetPill
-                    label={copy.assetToReceive}
-                    value={buyKey}
-                    options={buyOptions}
-                    disabled={configLoading || isLoadingData}
-                    copy={copy}
-                    onChange={selectBuy}
-                  />
-                  <span className="pollar-swap-panel-note">{copy.quotedAmount}</span>
-                </div>
+                <AssetPill
+                  label={copy.assetToReceive}
+                  value={buyKey}
+                  options={buyOptions}
+                  disabled={configLoading || isLoadingData}
+                  copy={copy}
+                  onChange={selectBuy}
+                />
+              </div>
+              <div className="pollar-swap-panel-foot">
+                <span className="pollar-swap-balance">
+                  {copy.balance} {formatAmount(selectedBuy?.available)}
+                </span>
               </div>
             </section>
           </div>
@@ -541,26 +585,24 @@ export function SwapModalTemplate({
                 copy.rateUnavailable
               )}
             </div>
-            {configLoading ? (
-              <div className="pollar-swap-route-pill">
-                <span className="pollar-spinner pollar-spinner-sm" /> {copy.loading}
-              </div>
-            ) : (
-              <label className="pollar-swap-route-wrap">
-                <span className="sr-only">{copy.route}</span>
-                <PollarSelect
-                  className="pollar-swap-route-pill"
-                  aria-label={copy.route}
-                  value={provider}
-                  disabled={providers.length === 0}
-                  onChange={onProviderChange}
-                  options={(providers.length === 0 ? [provider] : providers).map((p) => ({
-                    value: p,
-                    label: providerLabel(p, copy),
-                  }))}
-                />
-              </label>
-            )}
+            <button
+              type="button"
+              className="pollar-txr-toggle"
+              aria-expanded={detailsOpen}
+              onClick={() => setDetailsOpen((open) => !open)}
+            >
+              {detailsOpen ? reviewCopy.hideDetails : reviewCopy.showDetails}
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 12 12"
+                fill="none"
+                aria-hidden
+                style={{ transform: detailsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}
+              >
+                <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
           </div>
 
           {!quoteLoading && quoteError && <div className="pollar-modal-error">{quoteError}</div>}
@@ -568,38 +610,65 @@ export function SwapModalTemplate({
           {!usdcAcross && !quoteLoading && !quoteError && !quote && selectedSell && selectedBuy && !!amount && (
             <div className="pollar-send-hint">{copy.noRoute}</div>
           )}
-          {quote && (
+          {detailsOpen && (
             <div className="pollar-swap-quote">
               <div className="pollar-swap-quote-row">
-                <span>{copy.minimumReceived}</span>
-                <strong>
-                  {formatAmount(quote.minReceived)} {selectedBuy?.code}
-                </strong>
-              </div>
-              <div className="pollar-swap-quote-row">
-                <span>{copy.priceImpact}</span>
-                <strong>{quote.priceImpactPct === null ? '—' : `${quote.priceImpactPct}%`}</strong>
-              </div>
-              <div className="pollar-swap-quote-row">
                 <span>{copy.route}</span>
-                <strong>{providerLabel(quote.provider, copy)}</strong>
+                {configLoading ? (
+                  <div className="pollar-swap-route-pill">
+                    <span className="pollar-spinner pollar-spinner-sm" /> {copy.loading}
+                  </div>
+                ) : (
+                  <label className="pollar-swap-route-wrap">
+                    <span className="sr-only">{copy.route}</span>
+                    <PollarSelect
+                      className="pollar-swap-route-pill"
+                      aria-label={copy.route}
+                      value={provider}
+                      disabled={providers.length === 0}
+                      onChange={onProviderChange}
+                      options={(providers.length === 0 ? [provider] : providers).map((p) => ({
+                        value: p,
+                        // "Best price" names the venue the quote landed on, the one row a route needs.
+                        label:
+                          quote && p === provider && provider !== quote.provider
+                            ? `${providerLabel(p, copy)} · ${providerLabel(quote.provider, copy)}`
+                            : providerLabel(p, copy),
+                      }))}
+                    />
+                  </label>
+                )}
               </div>
-              {(quote.fees ?? []).map((fee) => (
-                <div key={fee.label} className="pollar-swap-quote-row">
-                  <span>{fee.label}</span>
-                  <strong>{fee.value}</strong>
-                </div>
-              ))}
-              {quote.totalFeesUsd != null && (
-                <div className="pollar-swap-quote-row">
-                  <span>{copy.totalFees}</span>
-                  <strong>${quote.totalFeesUsd.toFixed(2)}</strong>
-                </div>
-              )}
-              {quote.expiresInSeconds != null && (
-                <div className="pollar-send-hint" aria-live="off">
-                  {copy.priceRefreshesIn(quote.expiresInSeconds)}
-                </div>
+              {quote && (
+                <>
+                  <div className="pollar-swap-quote-row">
+                    <span>{copy.minimumReceived}</span>
+                    <strong>
+                      {formatAmount(quote.minReceived)} {selectedBuy?.code}
+                    </strong>
+                  </div>
+                  <div className="pollar-swap-quote-row">
+                    <span>{copy.priceImpact}</span>
+                    <strong>{quote.priceImpactPct === null ? '—' : `${quote.priceImpactPct}%`}</strong>
+                  </div>
+                  {(quote.fees ?? []).map((fee) => (
+                    <div key={fee.label} className="pollar-swap-quote-row">
+                      <span>{fee.label}</span>
+                      <strong>{fee.value}</strong>
+                    </div>
+                  ))}
+                  {quote.totalFeesUsd != null && (
+                    <div className="pollar-swap-quote-row">
+                      <span>{copy.totalFees}</span>
+                      <strong>${quote.totalFeesUsd.toFixed(2)}</strong>
+                    </div>
+                  )}
+                  {quote.expiresInSeconds != null && (
+                    <div className="pollar-send-hint" aria-live="off">
+                      {copy.priceRefreshesIn(quote.expiresInSeconds)}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -629,27 +698,12 @@ export function SwapModalTemplate({
           onCopyHash={onCopyHash}
           onRetry={onRetry}
           onDone={onDone}
+          confirmation={confirmation}
+          review={review}
+          network={network}
+          extraRows={settlementRows}
+          {...(settlement ? { outcomeNote: { text: settlement.text, failed: settlement.kind === 'failed' } } : {})}
         />
-      )}
-      {step === 'tx' && settlement && (
-        <div
-          className={settlement.kind === 'failed' ? 'pollar-modal-error' : 'pollar-swap-quote'}
-          role="status"
-          aria-live="polite"
-        >
-          <div>{settlement.text}</div>
-          {settlement.address && (
-            <div className="pollar-swap-quote-row">
-              <span>{copy.deliveredTo}</span>
-              <code style={{ wordBreak: 'break-all' }}>{settlement.address}</code>
-            </div>
-          )}
-          {settlement.explorerUrl && (
-            <a href={settlement.explorerUrl} target="_blank" rel="noopener noreferrer">
-              {settlement.explorerUrl.replace(/^https:\/\//, '').split('/')[0]}
-            </a>
-          )}
-        </div>
       )}
       <PollarModalFooter />
     </div>

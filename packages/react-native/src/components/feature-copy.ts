@@ -12,8 +12,6 @@ const EN = {
   copyChainAddress: (chain: string) => `Copy ${chain} address`,
   privyStellarOnly: 'Privy supports Stellar signing only.',
   transaction: 'Transaction',
-  copyHash: 'Copy transaction hash',
-  checkConfirmation: 'Check confirmation',
   confirmPayment: 'Confirm payment',
   reviewPayment: 'Review payment',
   auth: {
@@ -213,8 +211,6 @@ export const FEATURE_COPY: Record<PollarLanguage, typeof EN> = {
     copyChainAddress: (chain) => `Copiar dirección de ${chain}`,
     privyStellarOnly: 'Privy solo permite firmar en Stellar.',
     transaction: 'Transacción',
-    copyHash: 'Copiar hash de la transacción',
-    checkConfirmation: 'Verificar confirmación',
     confirmPayment: 'Confirmar pago',
     reviewPayment: 'Revisar pago',
     auth: {
@@ -409,8 +405,6 @@ export const FEATURE_COPY: Record<PollarLanguage, typeof EN> = {
     copyChainAddress: (chain) => `Copiar endereço de ${chain}`,
     privyStellarOnly: 'O Privy só permite assinar na Stellar.',
     transaction: 'Transação',
-    copyHash: 'Copiar hash da transação',
-    checkConfirmation: 'Verificar confirmação',
     confirmPayment: 'Confirmar pagamento',
     reviewPayment: 'Revisar pagamento',
     auth: {

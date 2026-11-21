@@ -16,12 +16,9 @@ export const COSIGN_COPY: Record<
     closeAnyway: string;
     activateWallet: string;
     status: Record<string, string>;
-    sentTransaction: string;
-    copy: string;
-    copied: string;
-    copyHash: string;
-    copyFailed: string;
     signedAppSends: string;
+    signedSent: string;
+    signed: string;
     nothingSigned: string;
     nothingWaiting: string;
     next: (step: string) => string;
@@ -56,12 +53,9 @@ export const COSIGN_COPY: Record<
     closeAnyway: 'Close anyway',
     activateWallet: 'Activate wallet',
     status: { APPROVED: 'Approved', REJECTED: 'Rejected', EXPIRED: 'Expired', FAILED: 'Failed', PENDING: 'Pending' },
-    sentTransaction: 'Sent. Transaction',
-    copy: 'Copy',
-    copied: 'Copied',
-    copyHash: 'Copy transaction hash',
-    copyFailed: 'Copy failed',
     signedAppSends: 'Signed. The app will send it.',
+    signedSent: 'Signed and sent',
+    signed: 'Signed',
     nothingSigned: 'Nothing was signed.',
     nothingWaiting: 'Nothing waits for your approval.',
     next: (step) => `Next: ${step}. It appears here in a few seconds.`,
@@ -113,12 +107,9 @@ export const COSIGN_COPY: Record<
     closeAnyway: 'Cerrar igual',
     activateWallet: 'Activar billetera',
     status: { APPROVED: 'Aprobada', REJECTED: 'Rechazada', EXPIRED: 'Vencida', FAILED: 'Fallida', PENDING: 'Pendiente' },
-    sentTransaction: 'Enviada. Transacción',
-    copy: 'Copiar',
-    copied: 'Copiado',
-    copyHash: 'Copiar hash de la transacción',
-    copyFailed: 'No se pudo copiar',
     signedAppSends: 'Firmada. La app la enviará.',
+    signedSent: 'Firmada y enviada',
+    signed: 'Firmada',
     nothingSigned: 'No se firmó nada.',
     nothingWaiting: 'No hay nada esperando tu aprobación.',
     next: (step) => `Siguiente: ${step}. Aparecerá aquí en unos segundos.`,
@@ -170,12 +161,9 @@ export const COSIGN_COPY: Record<
     closeAnyway: 'Fechar mesmo assim',
     activateWallet: 'Ativar carteira',
     status: { APPROVED: 'Aprovada', REJECTED: 'Rejeitada', EXPIRED: 'Expirada', FAILED: 'Falhou', PENDING: 'Pendente' },
-    sentTransaction: 'Enviada. Transação',
-    copy: 'Copiar',
-    copied: 'Copiado',
-    copyHash: 'Copiar hash da transação',
-    copyFailed: 'Não foi possível copiar',
     signedAppSends: 'Assinada. O app vai enviá-la.',
+    signedSent: 'Assinada e enviada',
+    signed: 'Assinada',
     nothingSigned: 'Nada foi assinado.',
     nothingWaiting: 'Nada aguarda a sua aprovação.',
     next: (step) => `Próximo: ${step}. Aparece aqui em alguns segundos.`,

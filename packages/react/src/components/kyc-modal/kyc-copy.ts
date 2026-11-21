@@ -1,7 +1,7 @@
 import type { KycStatus, PollarLanguage } from '@pollar/core';
 
 export interface KycCopy {
-  /** What a failed KYC call means for the user, by backend code. */
+  /** What a failed KYC call means for the user, by backend code, or by `code:reason` where the reason changes it. */
   errors: Record<string, string>;
   loadFailed: string;
   startFailed: string;
@@ -53,12 +53,15 @@ export const KYC_COPY: Record<PollarLanguage, KycCopy> = {
   en: {
     errors: {
       SDK_KYC_NOT_CONFIGURED: 'Identity verification is not available for this app yet.',
+      // The vendor's account ran out of credits: the operator tops it up, the app's setup is fine.
+      'SDK_KYC_NOT_CONFIGURED:provider_credits_exhausted':
+        'Identity verification is temporarily unavailable. Please try again later.',
       SDK_KYC_PROVIDER_ERROR: 'The verification service is not responding right now. Please try again in a moment.',
       SDK_KYC_SESSION_EXPIRED: 'Your previous verification session expired. Select the provider to start a new one.',
       SDK_KYC_PROVIDER_NOT_FOUND: 'This verification option is no longer available. Refresh to see the current options.',
       SDK_KYC_PROVIDER_NOT_ENABLED: 'This verification option is no longer available. Refresh to see the current options.',
       SDK_RAMPS_PROVIDER_NOT_CONFIGURED: 'This route is not set up for identity verification yet.',
-      VALIDATION_ERROR: 'This verification option is not available for your country.',
+      VALIDATION_ERROR: 'This verification option could not be started. Please try again or choose another option.',
     },
     loadFailed: 'Could not load verification options. Please refresh to try again.',
     startFailed: 'Could not start verification. Please try again.',
@@ -101,7 +104,7 @@ export const KYC_COPY: Record<PollarLanguage, KycCopy> = {
     formHere: 'The identity verification form will appear here.',
     opensHere: 'Identity verification will open here.',
     opensInBrowser: 'Verification opens in your browser. Finish the steps there, then come back here to check your status.',
-    finished: 'Finished the steps? Check your status to continue.',
+    finished: 'This moves on by itself when the verification finishes. Done already? Check your status.',
     checkStatus: 'Check status',
     checking: 'Checking verification status…',
     approved: 'Approved',
@@ -120,6 +123,8 @@ export const KYC_COPY: Record<PollarLanguage, KycCopy> = {
   es: {
     errors: {
       SDK_KYC_NOT_CONFIGURED: 'La verificación de identidad todavía no está disponible para esta app.',
+      'SDK_KYC_NOT_CONFIGURED:provider_credits_exhausted':
+        'La verificación de identidad no está disponible temporalmente. Intenta de nuevo más tarde.',
       SDK_KYC_PROVIDER_ERROR: 'El servicio de verificación no responde en este momento. Intenta de nuevo en un momento.',
       SDK_KYC_SESSION_EXPIRED: 'Tu sesión de verificación anterior venció. Elige el proveedor para iniciar una nueva.',
       SDK_KYC_PROVIDER_NOT_FOUND:
@@ -127,7 +132,7 @@ export const KYC_COPY: Record<PollarLanguage, KycCopy> = {
       SDK_KYC_PROVIDER_NOT_ENABLED:
         'Esta opción de verificación ya no está disponible. Actualiza para ver las opciones actuales.',
       SDK_RAMPS_PROVIDER_NOT_CONFIGURED: 'Esta ruta todavía no está configurada para la verificación de identidad.',
-      VALIDATION_ERROR: 'Esta opción de verificación no está disponible para tu país.',
+      VALIDATION_ERROR: 'No se pudo iniciar esta opción de verificación. Intenta de nuevo o elige otra opción.',
     },
     loadFailed: 'No se pudieron cargar las opciones de verificación. Actualiza para intentar de nuevo.',
     startFailed: 'No se pudo iniciar la verificación. Intenta de nuevo.',
@@ -171,7 +176,7 @@ export const KYC_COPY: Record<PollarLanguage, KycCopy> = {
     opensHere: 'La verificación de identidad se abrirá aquí.',
     opensInBrowser:
       'La verificación se abre en tu navegador. Termina los pasos allí y luego vuelve aquí para consultar tu estado.',
-    finished: '¿Terminaste los pasos? Consulta tu estado para continuar.',
+    finished: 'Esto avanza solo cuando termine la verificación. ¿Ya terminaste? Consulta tu estado.',
     checkStatus: 'Consultar estado',
     checking: 'Consultando el estado de la verificación…',
     approved: 'Aprobado',
@@ -190,12 +195,14 @@ export const KYC_COPY: Record<PollarLanguage, KycCopy> = {
   pt: {
     errors: {
       SDK_KYC_NOT_CONFIGURED: 'A verificação de identidade ainda não está disponível para este app.',
+      'SDK_KYC_NOT_CONFIGURED:provider_credits_exhausted':
+        'A verificação de identidade está temporariamente indisponível. Tente de novo mais tarde.',
       SDK_KYC_PROVIDER_ERROR: 'O serviço de verificação não está respondendo agora. Tente de novo em instantes.',
       SDK_KYC_SESSION_EXPIRED: 'Sua sessão de verificação anterior expirou. Escolha o provedor para iniciar uma nova.',
       SDK_KYC_PROVIDER_NOT_FOUND: 'Esta opção de verificação não está mais disponível. Atualize para ver as opções atuais.',
       SDK_KYC_PROVIDER_NOT_ENABLED: 'Esta opção de verificação não está mais disponível. Atualize para ver as opções atuais.',
       SDK_RAMPS_PROVIDER_NOT_CONFIGURED: 'Esta rota ainda não está configurada para a verificação de identidade.',
-      VALIDATION_ERROR: 'Esta opção de verificação não está disponível para o seu país.',
+      VALIDATION_ERROR: 'Não foi possível iniciar esta opção de verificação. Tente de novo ou escolha outra opção.',
     },
     loadFailed: 'Não foi possível carregar as opções de verificação. Atualize para tentar de novo.',
     startFailed: 'Não foi possível iniciar a verificação. Tente de novo.',
@@ -238,7 +245,7 @@ export const KYC_COPY: Record<PollarLanguage, KycCopy> = {
     formHere: 'O formulário de verificação de identidade vai aparecer aqui.',
     opensHere: 'A verificação de identidade vai abrir aqui.',
     opensInBrowser: 'A verificação abre no seu navegador. Conclua as etapas lá e depois volte aqui para consultar seu status.',
-    finished: 'Concluiu as etapas? Consulte seu status para continuar.',
+    finished: 'Isto avança sozinho quando a verificação terminar. Já concluiu? Consulte seu status.',
     checkStatus: 'Consultar status',
     checking: 'Consultando o status da verificação…',
     approved: 'Aprovada',

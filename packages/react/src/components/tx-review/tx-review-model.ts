@@ -19,6 +19,8 @@ export interface TxDetailRow {
   value: string;
   /** What the copy button copies; the row has none when absent. */
   copyValue?: string;
+  /** Opens this page: the value is a link (an explorer on another chain). */
+  href?: string;
   mono?: boolean;
 }
 
@@ -348,6 +350,8 @@ export function reviewFromRequest(parts: SigningRequestParts, copy: TxReviewCopy
   const rows: TxDetailRow[] = [];
   let data: Pick<TxReviewData, 'kind' | 'from' | 'to'>;
   let via: string | undefined;
+  // A swap's mints close its details, after the amounts they explain.
+  let mintRows: TxDetailRow[] = [];
 
   if (flow) {
     data = { kind: flow.kind, from: flow.from, to: flow.to };
@@ -359,7 +363,39 @@ export function reviewFromRequest(parts: SigningRequestParts, copy: TxReviewCopy
     const amount = readable?.amount ?? asString(details.amount);
     const isTransfer = parts.operation === 'payment' || parts.operation === 'transfer';
     const code = asString(details.code) ?? asset?.split(':')[0];
-    if (parts.operation === 'create_account' && (!destination || destination === parts.signWith)) {
+    const inputMint = asString(details.inputMint);
+    const outputMint = asString(details.outputMint);
+    if (parts.operation === 'swap' && inputMint && outputMint) {
+      // A swap by mint: core adds each side's symbol and decimals when it knows the token.
+      const side = (mint: string, prefix: 'input' | 'output', units: string | undefined) => {
+        const symbol = asString(details[`${prefix}Symbol`]);
+        const decimals = details[`${prefix}Decimals`];
+        let amount = units;
+        if (units && typeof decimals === 'number') {
+          try {
+            amount = fromBaseUnits(units, decimals);
+          } catch {
+            amount = units;
+          }
+        }
+        return { asset: symbol ?? shortAddress(mint), ...(amount ? { amount } : {}) };
+      };
+      data = {
+        kind: 'swap',
+        from: { chain: parts.chain, self: true, ...side(inputMint, 'input', asString(details.inAmount)) },
+        to: {
+          chain: asChain(details.destinationChain) ?? parts.chain,
+          self: true,
+          minimum: true,
+          ...side(outputMint, 'output', asString(details.minOut) ?? asString(details.outAmount)),
+        },
+      };
+      via = asString(details.provider);
+      mintRows = [
+        { label: data.from!.asset!, value: inputMint, copyValue: inputMint, mono: true },
+        { label: data.to!.asset!, value: outputMint, copyValue: outputMint, mono: true },
+      ];
+    } else if (parts.operation === 'create_account' && (!destination || destination === parts.signWith)) {
       data = { kind: 'activate_wallet' };
     } else if (parts.operation === 'change_trust' && code) {
       data = { kind: 'add_asset', to: { chain: parts.chain, self: true, asset: code } };
@@ -403,6 +439,7 @@ export function reviewFromRequest(parts: SigningRequestParts, copy: TxReviewCopy
   if (data.kind === 'swap' && data.to?.amount)
     rows.push({ label: data.to.minimum ? copy.rows.receiveMin : copy.rows.amount, value: withAsset(data.to) });
   if (via) rows.push({ label: copy.rows.via, value: displayName(via) });
+  rows.push(...mintRows);
   const contract = asString(details.contractId);
   if (contract) rows.push({ label: copy.rows.contract, value: contract, copyValue: contract, mono: true });
   const method = asString(details.method);

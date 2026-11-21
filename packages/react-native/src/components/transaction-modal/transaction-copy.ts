@@ -9,6 +9,8 @@ export const TRANSACTION_COPY: Record<
     signAndSend: string;
     waitingFreighter: string;
     waitingAlbedo: string;
+    /** Under a transaction past its confirmation window, still read in the background. */
+    slowNote: string;
     signingAndSending: string;
     tryAgain: string;
     done: string;
@@ -22,6 +24,7 @@ export const TRANSACTION_COPY: Record<
     signAndSend: 'Sign & Send',
     waitingFreighter: 'Waiting for Freighter…',
     waitingAlbedo: 'Waiting for Albedo…',
+    slowNote: "It's taking longer than usual. You can close this; it keeps checking and updates here.",
     signingAndSending: 'Signing and sending…',
     tryAgain: 'Try again',
     done: 'Done',
@@ -47,6 +50,7 @@ export const TRANSACTION_COPY: Record<
     signAndSend: 'Firmar y enviar',
     waitingFreighter: 'Esperando a Freighter…',
     waitingAlbedo: 'Esperando a Albedo…',
+    slowNote: 'Está tardando más de lo normal. Puedes cerrar; se sigue verificando y se actualiza aquí.',
     signingAndSending: 'Firmando y enviando…',
     tryAgain: 'Intenta de nuevo',
     done: 'Listo',
@@ -72,6 +76,7 @@ export const TRANSACTION_COPY: Record<
     signAndSend: 'Assinar e enviar',
     waitingFreighter: 'Aguardando o Freighter…',
     waitingAlbedo: 'Aguardando o Albedo…',
+    slowNote: 'Está demorando mais que o normal. Você pode fechar; a verificação continua e atualiza aqui.',
     signingAndSending: 'Assinando e enviando…',
     tryAgain: 'Tentar novamente',
     done: 'Concluir',

@@ -12,7 +12,7 @@ import {
   type RampSigningHandler,
 } from '@pollar/core';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { usePollar } from '../../context';
 import { useModalLanguage } from '../../language';
@@ -20,6 +20,11 @@ import { PollarModalFooter } from '../commons';
 import { useSurfaceColors } from '../layout';
 import { ActionButton, Card, Choice, Field, Label, useNativeColors } from '../native-ui';
 import { BRIDGE_COPY, type BridgeCopy } from './bridge-copy';
+import { useInlineConfirmation } from '../../useInlineConfirmation';
+import { InlineConfirm } from '../confirm-modal/InlineConfirm';
+import { TxReview } from '../tx-review/TxReview';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
+import type { TxReviewData } from '../tx-review/tx-review-model';
 
 /** Where the bridge modal opens: a starting point the user can change, never a lock. */
 export interface BridgeModalOptions {
@@ -134,7 +139,8 @@ function newIntentKey(): string {
 
 /** Moves USDC between the user's wallets on Stellar, Solana and Polygon (mainnet). The web SDK's BridgeModal, native. */
 export function BridgeModal({ onClose, visible = true, initial }: BridgeModalProps) {
-  const { getClient, walletBalance, refreshWalletBalance, openCosignModal } = usePollar();
+  const { getClient, walletBalance, refreshWalletBalance, openCosignModal, styles, copyText } = usePollar();
+  const { theme = 'light', accentColor = '#005DB4' } = styles;
   const language = useModalLanguage();
   const copy = BRIDGE_COPY[language];
   const surface = useSurfaceColors();
@@ -153,6 +159,8 @@ export function BridgeModal({ onClose, visible = true, initial }: BridgeModalPro
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [transfer, setTransfer] = useState<BridgeTransfer | null>(null);
+  // The signature's yes is asked in the transfer view, not in a prompt over the modal.
+  const confirmation = useInlineConfirmation(!!transfer);
   const [signing, setSigning] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pollTrouble, setPollTrouble] = useState(false);
@@ -308,15 +316,69 @@ export function BridgeModal({ onClose, visible = true, initial }: BridgeModalPro
       [copy.steps.attest, transfer.status === 'ATTESTED' || transfer.status === 'COMPLETED' || !!transfer.mintTxHash],
       [fill(copy.steps.mint, names), transfer.status === 'COMPLETED'],
     ] as const;
+    const reviewCopy = TX_REVIEW_COPY[language];
+    const short = (hash: string) => `${hash.slice(0, 8)}…${hash.slice(-6)}`;
+    // The transfer as every transaction modal draws it, with each chain's transaction in the details.
+    const transferReview: TxReviewData = {
+      kind: 'bridge',
+      title: reviewCopy.titles.bridge(`${transfer.amount} USDC`, names.to),
+      from: { chain: transfer.fromChain, asset: 'USDC', amount: transfer.amount, self: true },
+      to: { chain: transfer.toChain, asset: 'USDC', amount: transfer.amountOut ?? transfer.amount, self: true },
+      rows: [
+        ...(transfer.burnTxHash
+          ? [
+              {
+                label: fill(copy.viewBurn, { chain: names.from }),
+                value: short(transfer.burnTxHash),
+                href: EXPLORER[transfer.fromChain](transfer.burnTxHash),
+                copyValue: transfer.burnTxHash,
+              },
+            ]
+          : []),
+        ...(transfer.mintTxHash
+          ? [
+              {
+                label: fill(copy.viewMint, { chain: names.to }),
+                value: short(transfer.mintTxHash),
+                href: EXPLORER[transfer.toChain](transfer.mintTxHash),
+                copyValue: transfer.mintTxHash,
+              },
+            ]
+          : []),
+      ],
+    };
+    const finished = transfer.status === 'COMPLETED' || transfer.status === 'FAILED';
+    const failedColor = theme === 'dark' ? '#f87171' : '#dc2626';
+    const tone = transfer.status === 'FAILED' ? failedColor : transfer.status === 'COMPLETED' ? c.accent : c.text;
     body = (
-      <Card title={copy.statusTitle[transfer.status]}>
-        <Label>{fill(copy.statusBody[transfer.status], names)}</Label>
-        {reached.map(([label, done]) => (
-          <Text key={label} style={{ color: done ? c.text : c.muted, fontSize: 15 }}>
-            {done ? '●' : '○'} {label}
-          </Text>
-        ))}
-        {transfer.pendingAction?.kind === 'SIGNATURE' && (
+      <Card title={transferReview.title}>
+        <TxReview data={transferReview} theme={theme} accentColor={accentColor} copyText={copyText} language={language} />
+        {confirmation ? (
+          <InlineConfirm
+            confirmation={confirmation}
+            language={language}
+            theme={theme}
+            accentColor={accentColor}
+            copyText={copyText}
+          />
+        ) : (
+          <View style={{ gap: 6, borderWidth: 1, borderRadius: 10, padding: 12, borderColor: finished ? tone : c.border }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {!finished && <ActivityIndicator size="small" color={c.accent} />}
+              <Text style={{ color: tone, fontWeight: '600', flexShrink: 1 }}>
+                {finished ? (transfer.status === 'COMPLETED' ? '✓ ' : '✕ ') : ''}
+                {copy.statusTitle[transfer.status]}
+              </Text>
+            </View>
+            <Label>{fill(copy.statusBody[transfer.status], names)}</Label>
+            {reached.map(([label, done]) => (
+              <Text key={label} style={{ color: done ? c.text : c.muted, fontSize: 13 }}>
+                {done ? '✓' : '○'} {label}
+              </Text>
+            ))}
+          </View>
+        )}
+        {!confirmation && transfer.pendingAction?.kind === 'SIGNATURE' && (
           <ActionButton
             title={signing ? copy.waitingWallet : copy.authorize}
             disabled={signing}
@@ -332,24 +394,6 @@ export function BridgeModal({ onClose, visible = true, initial }: BridgeModalPro
           </Text>
         )}
         {pollTrouble && <Text style={muted}>{copy.pollTrouble}</Text>}
-        {transfer.burnTxHash && (
-          <Text
-            accessibilityRole="link"
-            style={{ color: c.accent }}
-            onPress={() => void Linking.openURL(EXPLORER[transfer.fromChain](transfer.burnTxHash!))}
-          >
-            {fill(copy.viewBurn, { chain: names.from })}
-          </Text>
-        )}
-        {transfer.mintTxHash && (
-          <Text
-            accessibilityRole="link"
-            style={{ color: c.accent }}
-            onPress={() => void Linking.openURL(EXPLORER[transfer.toChain](transfer.mintTxHash!))}
-          >
-            {fill(copy.viewMint, { chain: names.to })}
-          </Text>
-        )}
         {(transfer.status === 'COMPLETED' || transfer.status === 'FAILED') && (
           <>
             <ActionButton title={copy.newBridge} onPress={newBridge} />

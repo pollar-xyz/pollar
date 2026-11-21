@@ -210,15 +210,35 @@ async function mount(client, application = {}) {
   return { container: document.body, button, click, type, unmount };
 }
 
+/**
+ * The amount screen quotes on its own; the routes screen opens from its details
+ * (or from the note when no route could be quoted).
+ */
+async function findRoutes(ui, calls) {
+  const before = calls ? calls.length : 0;
+  await act(async () => new Promise((r) => setTimeout(r, 700)));
+  // The live quote is the amount screen's own: the counts below are about the routes screen.
+  if (calls) {
+    for (let i = calls.length - 1; i >= before; i--) if (calls[i][0] === 'quoteRamp') calls.splice(i, 1);
+  }
+  if (!ui.button('See every route')) {
+    // A quote that failed outright is already on the amount screen: nothing to open.
+    const details = ui.button('Show details');
+    if (!details) return;
+    await ui.click(details);
+  }
+  await ui.click(ui.button('See every route'));
+}
+
 (async () => {
   // --- Route, quote, details, order, payment, signature ---
   {
     const { client, calls } = fixtureClient();
     const ui = await mount(client);
     assert.deepEqual(calls[0], ['getRampRoutes', 'ONRAMP']);
-    assert.match(ui.container.textContent, /USDC on Stellar/);
+    assert.match(ui.container.querySelector('#pollar-ramp-asset').dataset.value, /^USDC:STELLAR:/);
     await ui.type(ui.container.querySelector('#pollar-ramp-amount'), '100');
-    await ui.click(ui.button('Find best route'));
+    await findRoutes(ui, typeof calls === 'undefined' ? undefined : calls);
     assert.deepEqual(calls[1], [
       'quoteRamp',
       {
@@ -416,7 +436,7 @@ async function mount(client, application = {}) {
     });
     const ui = await mount(client);
     await ui.type(ui.container.querySelector('#pollar-ramp-amount'), '100');
-    await ui.click(ui.button('Find best route'));
+    await findRoutes(ui, typeof calls === 'undefined' ? undefined : calls);
     assert.match(ui.container.textContent, /Register with the provider to see this route/);
     await ui.click(ui.button('Continue'));
     assert.deepEqual(calls.at(-1), ['getProviderRegistration', 'corridor-bob-usdc']);
@@ -462,7 +482,7 @@ async function mount(client, application = {}) {
     });
     const ui = await mount(client);
     await ui.type(ui.container.querySelector('#pollar-ramp-amount'), '100');
-    await ui.click(ui.button('Find best route'));
+    await findRoutes(ui, typeof calls === 'undefined' ? undefined : calls);
     await ui.click(ui.button('Add USDC trustline'));
     assert.deepEqual(calls.at(-1), ['setTrustline', { code: 'USDC', issuer: 'GA5Z' }]);
     const adding = ui.button('Adding');
@@ -503,7 +523,7 @@ async function mount(client, application = {}) {
     });
     const ui = await mount(client);
     await ui.type(ui.container.querySelector('#pollar-ramp-amount'), '100');
-    await ui.click(ui.button('Find best route'));
+    await findRoutes(ui, typeof calls === 'undefined' ? undefined : calls);
     await ui.click(ui.button('Add USDC trustline'));
     assert.match(ui.container.textContent, /needs about 0.5 XLM to add the USDC trustline/);
     assert.doesNotMatch(ui.container.textContent, /GBQSHLR3/, 'no address in the message');
@@ -544,7 +564,7 @@ async function mount(client, application = {}) {
       });
       const ui = await mount(client, { walletCustodyMode: custody });
       await ui.type(ui.container.querySelector('#pollar-ramp-amount'), '100');
-      await ui.click(ui.button('Find best route'));
+      await findRoutes(ui, typeof calls === 'undefined' ? undefined : calls);
       if (custody === 'USER_CHOICE') {
         assert.equal(ui.button('Create wallet'), undefined, 'the custody is picked in the wallet menu');
         assert.match(ui.container.textContent, /Create it from the wallet menu/);
@@ -596,7 +616,7 @@ async function mount(client, application = {}) {
       client.cosign.recovery.status = async () => ({ required: true, configured: recovered });
       const ui = await mount(client, { walletCustodyMode: custody });
       await ui.type(ui.container.querySelector('#pollar-ramp-amount'), '100');
-      await ui.click(ui.button('Find best route'));
+      await findRoutes(ui, typeof calls === 'undefined' ? undefined : calls);
       assert.match(ui.container.textContent, /Set up your wallet there to continue/);
       if (custody === 'USER_CHOICE') {
         assert.equal(ui.button('Set up wallet ('), ui.button('Set up wallet (co-signed)'), 'one button per custody');
@@ -636,7 +656,7 @@ async function mount(client, application = {}) {
     client.cosign.recovery.status = async () => ({ required: true, configured: true });
     const ui = await mount(client, { walletCustodyMode: 'COSIGNED' });
     await ui.type(ui.container.querySelector('#pollar-ramp-amount'), '100');
-    await ui.click(ui.button('Find best route'));
+    await findRoutes(ui, typeof calls === 'undefined' ? undefined : calls);
     assert.match(ui.container.textContent, /still held by Pollar alone/);
     await ui.click(ui.button('Move wallet'));
     assert.deepEqual(
@@ -839,6 +859,27 @@ async function mount(client, application = {}) {
     }
   }
 
+  // --- The amount screen quotes as the user types and Continue takes the best route ---
+  {
+    const { client, calls } = fixtureClient();
+    const ui = await mount(client);
+    await ui.type(ui.container.querySelector('#pollar-ramp-amount'), '100');
+    await act(async () => new Promise((r) => setTimeout(r, 700)));
+    assert.equal(calls.filter(([name]) => name === 'quoteRamp').length, 1, 'one quote once typing stops');
+    assert.match(ui.container.querySelector('.pollar-swap-output').textContent, /~14\.2/, 'You receive shows the best route');
+    await ui.click(ui.button('Show details'));
+    assert.match(
+      ui.container.querySelector('.pollar-swap-quote').textContent,
+      /Best price/,
+      'the best route is the one picked',
+    );
+    await ui.click(ui.button('Continue'));
+    assert.equal(ui.container.querySelector('.pollar-ramp-route-card'), null, 'no route list on the way');
+    assert.match(ui.container.textContent, /Full name/, 'the best route goes on to its details');
+    await ui.unmount();
+    client.destroy();
+  }
+
   // --- An app out of credits: the user is pointed to the app, never told about credits ---
   {
     const { client } = fixtureClient({
@@ -848,7 +889,7 @@ async function mount(client, application = {}) {
     });
     const ui = await mount(client);
     await ui.type(ui.container.querySelector('#pollar-ramp-amount'), '100');
-    await ui.click(ui.button('Find best route'));
+    await findRoutes(ui, typeof calls === 'undefined' ? undefined : calls);
     assert.match(ui.container.textContent, /contact this app's support/);
     assert.doesNotMatch(ui.container.textContent, /credit/i);
     await ui.unmount();
@@ -908,7 +949,11 @@ async function mount(client, application = {}) {
       client.cosign.inspectQuorum = async () => ({ ok: true });
       const ui = await mount(client);
       await ui.type(ui.container.querySelector('#pollar-ramp-amount'), '100');
-      await ui.click(ui.button('Find best route'));
+      // The amount screen's live quote is not one of the rounds counted below.
+      await act(async () => new Promise((r) => setTimeout(r, 700)));
+      round = 0;
+      for (let i = calls.length - 1; i >= 0; i--) if (calls[i][0] === 'quoteRamp') calls.splice(i, 1);
+      await findRoutes(ui, calls);
       await ui.click(ui.container.querySelectorAll('.pollar-ramp-route-card')[1]);
       assert.equal(JSON.stringify(calls.at(-1)), JSON.stringify(['createRampOrder', { quoteId: 'p1' }]));
       assert.match(ui.container.textContent, /Approve the new account on your device\. The order starts once it is approved\./);
@@ -945,7 +990,11 @@ async function mount(client, application = {}) {
     });
     const ui = await mount(client);
     await ui.type(ui.container.querySelector('#pollar-ramp-amount'), '100');
-    await ui.click(ui.button('Find best route'));
+    // The amount screen's live quote is not one of the rounds counted below.
+    await act(async () => new Promise((r) => setTimeout(r, 700)));
+    round = 0;
+    for (let i = calls.length - 1; i >= 0; i--) if (calls[i][0] === 'quoteRamp') calls.splice(i, 1);
+    await findRoutes(ui, calls);
     await ui.click(ui.container.querySelector('.pollar-ramp-route-card'));
     const orders = calls.filter(([name]) => name === 'createRampOrder');
     assert.equal(JSON.stringify(orders), JSON.stringify([['createRampOrder', { quoteId: 'q2' }]]), 'only the new quote');
@@ -973,7 +1022,11 @@ async function mount(client, application = {}) {
     });
     const ui = await mount(client);
     await ui.type(ui.container.querySelector('#pollar-ramp-amount'), '100');
-    await ui.click(ui.button('Find best route'));
+    // The amount screen's live quote is not one of the rounds counted below.
+    await act(async () => new Promise((r) => setTimeout(r, 700)));
+    round = 0;
+    for (let i = calls.length - 1; i >= 0; i--) if (calls[i][0] === 'quoteRamp') calls.splice(i, 1);
+    await findRoutes(ui, calls);
     await ui.click(ui.container.querySelector('.pollar-ramp-route-card'));
     await act(async () => new Promise((r) => setTimeout(r, 30)));
     const orders = calls.filter(([name]) => name === 'createRampOrder').map(([, body]) => body.quoteId);
@@ -1032,7 +1085,8 @@ async function mount(client, application = {}) {
       const el = document.querySelector(id);
       return el?.dataset.value ?? el?.value;
     };
-    const activeTab = () => document.querySelector('.pollar-tab[data-active="true"]')?.textContent.trim();
+    // The direction shows in the title: the switch between the panels replaced the tabs.
+    const activeTab = () => document.querySelector('.pollar-modal-title')?.textContent.trim();
 
     await open({ country: 'br', direction: 'buy', asset: 'USDC', amount: '50' });
     assert.equal(value('#pollar-ramp-country'), 'BR', 'the seeded country');
@@ -1108,7 +1162,8 @@ async function mount(client, application = {}) {
       await act(async () => trigger.click());
       return names;
     };
-    const label = () => document.body.querySelector('label[for="pollar-ramp-country"]').textContent;
+    // The country is a pill: its name is the trigger's aria-label.
+    const label = () => document.body.querySelector('#pollar-ramp-country').getAttribute('aria-label');
 
     await render('en');
     assert.deepEqual(await options(), ['Argentina', 'Bolivia'], 'names, sorted by name');

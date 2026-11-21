@@ -51,6 +51,19 @@
   overflow-y: auto;
 }
 
+/* A card shown inline in the host's page (ModalFrame `inline`): it takes the
+ * page's width and height instead of floating over a backdrop. */
+.pollar-inline-frame {
+  width: 100%;
+}
+.pollar-modal-card.pollar-modal-card--inline {
+  max-width: none;
+  max-height: none;
+  overflow-y: visible;
+  box-shadow: none;
+  animation: none;
+}
+
 /* --- Theme variables -------------------------------------------------------------
  * Every component reads the public `--pollar-*` variables. Each one resolves in
  * three tiers, strongest first:
@@ -640,4 +653,101 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* --- Outcome strip: where a signature or a transaction stands, under its review --- */
+.pollar-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--pollar-buttons-border-radius, 10px);
+  border: 1px solid color-mix(in srgb, var(--pollar-success-text, #15803d) 35%, var(--pollar-border));
+  background: color-mix(in srgb, var(--pollar-success-text, #15803d) 7%, var(--pollar-bg));
+  color: var(--pollar-success-text, #15803d);
+}
+
+.pollar-outcome-bad {
+  border-color: var(--pollar-error-border);
+  background: var(--pollar-error-bg);
+  color: var(--pollar-error-text);
+}
+
+.pollar-outcome-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-weight: 600;
+}
+
+.pollar-outcome-icon {
+  flex-shrink: 0;
+}
+
+.pollar-outcome-note {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--pollar-muted);
+}
+
+/* --- A signature's yes asked inside the modal that started it ------------------ */
+.pollar-inline-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid var(--pollar-accent);
+  border-radius: var(--pollar-card-border-radius, 10px);
+}
+
+.pollar-inline-confirm-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--pollar-text);
+}
+
+/* --- The modal's network, next to its title ----------------------------------- */
+.pollar-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.pollar-network-logo {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.pollar-network-pill.pollar-select-trigger,
+.pollar-network-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: auto;
+  height: 1.85rem;
+  padding: 0 0.6rem;
+  border: 1px solid var(--pollar-border);
+  border-radius: 999px;
+  background: var(--pollar-input-bg);
+  color: var(--pollar-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.pollar-network-pill.pollar-select-trigger {
+  cursor: pointer;
+}
+
+.pollar-network-tag {
+  background: transparent;
+  color: var(--pollar-muted);
 }

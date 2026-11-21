@@ -39,6 +39,8 @@ interface KycModalTemplateProps {
   onClose: () => void;
   /** Defaults to the user's device; the modal passes the resolved one. */
   language?: PollarLanguage | undefined;
+  /** In the host's page rather than over a backdrop: a region, with no close buttons. */
+  inline?: boolean;
 }
 
 export function KycModalTemplate({
@@ -62,6 +64,7 @@ export function KycModalTemplate({
   onRefresh,
   onClose,
   language = deviceLanguage(),
+  inline = false,
 }: KycModalTemplateProps) {
   const copy = KYC_COPY[language];
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
@@ -69,9 +72,9 @@ export function KycModalTemplate({
 
   return (
     <div
-      className={`pollar-modal-card pollar-kyc-modal ${step === 'verifying' ? 'pollar-kyc-modal--verifying' : ''}`}
-      role="dialog"
-      aria-modal="true"
+      className={`pollar-modal-card pollar-kyc-modal ${step === 'verifying' ? 'pollar-kyc-modal--verifying' : ''} ${inline ? 'pollar-modal-card--inline' : ''}`}
+      role={inline ? 'region' : 'dialog'}
+      aria-modal={inline ? undefined : true}
       aria-label={copy.title}
       style={cssVars}
       onClick={(e) => e.stopPropagation()}
@@ -114,11 +117,13 @@ export function KycModalTemplate({
               </svg>
             </button>
           )}
-          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-              <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </button>
+          {!inline && (
+            <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -201,9 +206,11 @@ export function KycModalTemplate({
           <div className="pollar-kyc-footer">
             <p>{copy.finished}</p>
             <div className="pollar-modal-actions">
-              <button type="button" className="pollar-btn-secondary" onClick={onClose}>
-                {copy.close}
-              </button>
+              {!inline && (
+                <button type="button" className="pollar-btn-secondary" onClick={onClose}>
+                  {copy.close}
+                </button>
+              )}
               <button type="button" className="pollar-btn-primary" onClick={onDoneVerifying}>
                 {copy.checkStatus}
               </button>
@@ -267,9 +274,11 @@ export function KycModalTemplate({
                 {copy.checkAgain}
               </button>
             )}
-            <button type="button" className="pollar-btn-primary" onClick={onClose}>
-              {copy.close}
-            </button>
+            {!inline && (
+              <button type="button" className="pollar-btn-primary" onClick={onClose}>
+                {copy.close}
+              </button>
+            )}
           </div>
         </div>
       )}

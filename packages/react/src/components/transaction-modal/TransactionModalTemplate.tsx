@@ -1,11 +1,11 @@
 'use client';
 
 import { useInheritedLanguage } from '../../language-context';
-import { PollarLanguage, TransactionState, WalletId } from '@pollar/core';
+import { type PendingConfirmation, PollarLanguage, type StellarNetwork, TransactionState, WalletId } from '@pollar/core';
 import React from 'react';
 import { PollarModalFooter } from '../commons';
 import { TRANSACTION_COPY } from './transaction-copy';
-import { TxStatusView } from './TxStatusView';
+import { TxStatusHeading, TxStatusView, txStatusReview } from './TxStatusView';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 export interface TransactionModalTemplateProps {
@@ -25,6 +25,10 @@ export interface TransactionModalTemplateProps {
   onRetry?: () => void;
   /** Language of the modal. Defaults to the user's device; the modal passes the resolved one. */
   language?: PollarLanguage | undefined;
+  /** The signature waiting for the user's yes, answered in this view. */
+  confirmation?: PendingConfirmation | null | undefined;
+  /** The app's network, for the details of a confirmation. */
+  network?: StellarNetwork | undefined;
 }
 
 export function TransactionModalTemplate({
@@ -42,6 +46,8 @@ export function TransactionModalTemplate({
   onCopyHash,
   onRetry,
   language: languageProp,
+  confirmation = null,
+  network,
 }: TransactionModalTemplateProps) {
   const language = useInheritedLanguage(languageProp);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
@@ -50,7 +56,10 @@ export function TransactionModalTemplate({
   return (
     <div className="pollar-modal-card pollar-tx-modal" data-theme={theme} style={cssVars} onClick={(e) => e.stopPropagation()}>
       <div className="pollar-modal-header">
-        <h2 className="pollar-modal-title">{copy.title}</h2>
+        <TxStatusHeading
+          review={txStatusReview({ transaction, explorerUrl, confirmation, network, language })}
+          fallback={copy.title}
+        />
       </div>
       <button type="button" className="pollar-close-btn" onClick={onClose} aria-label={copy.close}>
         <svg
@@ -80,6 +89,8 @@ export function TransactionModalTemplate({
         onRetry={onRetry}
         onDone={onClose}
         language={language}
+        confirmation={confirmation}
+        network={network}
       />
 
       <PollarModalFooter />

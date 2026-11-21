@@ -14,7 +14,7 @@ import { PollarOverlay } from '../PollarOverlay';
 
 /** How long an outcome that needs nothing from the user stays up before the modal closes. */
 const CLOSE_AFTER_SECONDS = 3;
-/** A sent transaction stays up longer, so its hash can be read, copied or opened. */
+/** A sent transaction stays up longer, so its details can be opened. */
 const CLOSE_AFTER_SENT_SECONDS = 5;
 /** How often the prompt looks for the next request while a flow says one is coming. */
 const NEXT_REQUEST_EVERY_MS = 2_000;
@@ -66,6 +66,15 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
   }, [inspectQuorum]);
 
   const current = pending.find((r) => r.id === selectedId) ?? pending[0] ?? null;
+
+  // Every request resolved while the prompt is open: a flow's earlier steps stay listed as signed.
+  // One resolved before it opened belongs to another flow and is left out.
+  const [history, setHistory] = useState<CosignRequest[]>([]);
+  const resolvedBeforeOpen = useRef(lastResolved?.id);
+  useEffect(() => {
+    if (!lastResolved || lastResolved.id === resolvedBeforeOpen.current) return;
+    setHistory((list) => [...list.filter((r) => r.id !== lastResolved.id), lastResolved]);
+  }, [lastResolved]);
 
   // A request left unsigned holds up the app's flow, so closing over one asks first and only
   // the X gets there: a click outside does nothing. With nothing waiting, the X just closes.
@@ -182,7 +191,8 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         nextStep={awaitingNext ? nextStep : null}
         language={language}
         network={network}
-        explorerUrl={lastResolved?.submit?.hash ? explorerTxUrl(lastResolved.network, lastResolved.submit.hash, network) : null}
+        history={history}
+        explorerUrlOf={(r) => (r.submit?.hash ? explorerTxUrl(r.network, r.submit.hash, network) : null)}
         onSelect={(r) => setSelectedId(r.id)}
         onApprove={(r) => void run('approving', r, approve)}
         onReject={(r) => void run('rejecting', r, reject)}

@@ -1,12 +1,14 @@
 'use client';
 
 import { useInheritedLanguage } from '../../language-context';
-import { EnabledAssetRecord, EnabledAssetsState, PollarLanguage, WalletChain } from '@pollar/core';
+import { EnabledAssetRecord, EnabledAssetsState, type PendingConfirmation, PollarLanguage, WalletChain } from '@pollar/core';
 import { useState } from 'react';
-import { ChainSelect, resolveChain } from '../ChainSelect';
+import { NetworkPill, resolveChain } from '../ChainSelect';
 import { BusyOverlay, CopyButton, cropAddress, PollarModalFooter, Toggle, useStickyData } from '../commons';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { ENABLED_ASSETS_COPY } from './enabled-assets-copy';
+import { InlineConfirm } from '../confirm-modal/InlineConfirm';
+import { OutcomeIcon } from '../signing-marks';
 
 type EnabledAssetsCopy = (typeof ENABLED_ASSETS_COPY)['en'];
 
@@ -76,6 +78,61 @@ function AssetItem({
   );
 }
 
+/** Adding or removing an asset from this modal, and where that trustline change stands. */
+export interface AssetOutcome {
+  code: string;
+  removing: boolean;
+  state: 'busy' | 'done' | 'failed';
+  /** Why it failed, ready to show. */
+  note?: string;
+}
+
+/** The change's confirmation while it asks for a yes, then its outcome strip. */
+function AssetChange({
+  outcome,
+  confirmation,
+  copy,
+  language,
+}: {
+  outcome: AssetOutcome | null;
+  confirmation: PendingConfirmation | null;
+  copy: (typeof ENABLED_ASSETS_COPY)[PollarLanguage];
+  language: PollarLanguage;
+}) {
+  if (confirmation) return <InlineConfirm confirmation={confirmation} language={language} />;
+  if (!outcome) return null;
+  const words = copy.outcome;
+  const text = (
+    outcome.state === 'failed'
+      ? words.failed
+      : outcome.state === 'busy'
+        ? outcome.removing
+          ? words.removing
+          : words.adding
+        : outcome.removing
+          ? words.removed
+          : words.added
+  ).replace('{code}', outcome.code);
+  return (
+    <div
+      className={`pollar-outcome${outcome.state === 'failed' ? ' pollar-outcome-bad' : ''}${
+        outcome.state === 'busy' ? ' pollar-outcome-busy' : ''
+      }`}
+      role="status"
+    >
+      <p className="pollar-outcome-main">
+        {outcome.state === 'busy' ? (
+          <span className="pollar-spinner pollar-spinner-sm" aria-hidden />
+        ) : (
+          <OutcomeIcon ok={outcome.state === 'done'} />
+        )}
+        {text}
+      </p>
+      {outcome.note && <p className="pollar-outcome-note">{outcome.note}</p>}
+    </div>
+  );
+}
+
 export interface EnabledAssetsModalTemplateProps {
   theme: string;
   accentColor: string;
@@ -90,7 +147,8 @@ export interface EnabledAssetsModalTemplateProps {
   onSelectChain: (chain: WalletChain) => void;
   /** Key (`code+issuer`) of the asset whose trustline action is in flight. */
   busyKey: string | null;
-  actionError: string | null;
+  outcome: AssetOutcome | null;
+  confirmation?: PendingConfirmation | null | undefined;
   onRefresh: () => void;
   onClose: () => void;
   onToggleTrustline: (record: EnabledAssetRecord) => void;
@@ -109,7 +167,8 @@ export function EnabledAssetsModalTemplate({
   selectedChain,
   onSelectChain,
   busyKey,
-  actionError,
+  outcome,
+  confirmation = null,
   onRefresh,
   onClose,
   onToggleTrustline,
@@ -142,7 +201,10 @@ export function EnabledAssetsModalTemplate({
       {isLoading && data && <BusyOverlay label={copy.refreshing} />}
 
       <div className="pollar-modal-header">
-        <h2 className="pollar-modal-title">{copy.title}</h2>
+        <div className="pollar-title-row">
+          <h2 className="pollar-modal-title">{copy.title}</h2>
+          <NetworkPill value={selectedChain} options={chains} onChange={onSelectChain} disabled={isLoading || busy} />
+        </div>
         <div className="pollar-modal-header-actions">
           <button
             type="button"
@@ -177,14 +239,6 @@ export function EnabledAssetsModalTemplate({
         </div>
       </div>
 
-      <ChainSelect
-        label={copy.network}
-        value={selectedChain}
-        options={chains}
-        onChange={onSelectChain}
-        disabled={isLoading || busy}
-      />
-
       {walletAddress && (
         <div className="pollar-address-row">
           <span className="pollar-address">{cropAddress(walletAddress)}</span>
@@ -202,7 +256,7 @@ export function EnabledAssetsModalTemplate({
 
       {enabledAssets.step === 'error' && <div className="pollar-modal-error">{enabledAssets.message}</div>}
 
-      {actionError && <div className="pollar-modal-action-error">{actionError}</div>}
+      <AssetChange outcome={outcome} confirmation={confirmation} copy={copy} language={language} />
 
       {data && !data.exists && (
         <div className="pollar-modal-empty">{copy.accountNotFound.replace('{network}', data.network)}</div>
@@ -242,7 +296,8 @@ export interface CustomTrustlineModalTemplateProps {
   /** Per-app modal chrome overrides (background, card + button radius). */
   styleOverrides?: ModalStyleOverrides;
   busy: boolean;
-  actionError: string | null;
+  outcome: AssetOutcome | null;
+  confirmation?: PendingConfirmation | null | undefined;
   onBack: () => void;
   onClose: () => void;
   onSubmit: (input: { code: string; issuer: string; limit?: string }) => void;
@@ -259,7 +314,8 @@ export function CustomTrustlineModalTemplate({
   accentColor,
   styleOverrides,
   busy,
-  actionError,
+  outcome,
+  confirmation = null,
   onBack,
   onClose,
   onSubmit,
@@ -359,7 +415,7 @@ export function CustomTrustlineModalTemplate({
         />
       </div>
 
-      {actionError && <div className="pollar-modal-action-error">{actionError}</div>}
+      <AssetChange outcome={outcome} confirmation={confirmation} copy={copy} language={language} />
 
       <div className="pollar-modal-actions">
         <button type="button" className="pollar-btn-primary" onClick={submit} disabled={!canSubmit}>

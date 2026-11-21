@@ -19,7 +19,6 @@ export const SWAP_COPY: Record<
     assetToReceive: string;
     max: string;
     reverse: string;
-    quotedAmount: string;
     customCodePlaceholder: string;
     customIssuerPlaceholder: string;
     addToken: string;
@@ -78,7 +77,6 @@ export const SWAP_COPY: Record<
     assetToReceive: 'Asset to receive',
     max: 'Max',
     reverse: 'Swap pay and receive assets',
-    quotedAmount: 'Quoted amount',
     customCodePlaceholder: 'Code (e.g. USDC)',
     customIssuerPlaceholder: 'Issuer (G...)',
     addToken: 'Add token',
@@ -148,7 +146,6 @@ export const SWAP_COPY: Record<
     assetToReceive: 'Activo a recibir',
     max: 'Máx.',
     reverse: 'Invertir activos a pagar y recibir',
-    quotedAmount: 'Monto cotizado',
     customCodePlaceholder: 'Código (p. ej. USDC)',
     customIssuerPlaceholder: 'Emisor (G...)',
     addToken: 'Agregar token',
@@ -218,7 +215,6 @@ export const SWAP_COPY: Record<
     assetToReceive: 'Ativo a receber',
     max: 'Máx.',
     reverse: 'Inverter ativos a pagar e receber',
-    quotedAmount: 'Valor cotado',
     customCodePlaceholder: 'Código (ex.: USDC)',
     customIssuerPlaceholder: 'Emissor (G...)',
     addToken: 'Adicionar token',
