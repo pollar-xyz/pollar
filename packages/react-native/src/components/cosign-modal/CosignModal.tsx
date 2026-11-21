@@ -1,4 +1,4 @@
-import type { CosignRequest, CosignVerification } from '@pollar/core';
+import { type CosignRequest, type CosignVerification, isPollarNetworkError } from '@pollar/core';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { useModalLanguage } from '../../language';
@@ -155,7 +155,9 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         if (kind === 'approving') await getClient().cosign.approve(request);
         else await getClient().cosign.reject(request);
       } catch (err) {
-        setError(err instanceof Error ? err.message : copy.genericError);
+        // fetch rejects with a TypeError when no answer comes back (offline, a replica mid-deploy).
+        if (isPollarNetworkError(err) || err instanceof TypeError) setError(copy.unreachable);
+        else setError(err instanceof Error ? err.message : copy.genericError);
       } finally {
         setBusy(null);
       }

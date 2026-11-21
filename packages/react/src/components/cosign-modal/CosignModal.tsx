@@ -1,6 +1,12 @@
 'use client';
 
-import { type CosignRequest, type CosignVerification, isPollarApiError, transactionErrorMessage } from '@pollar/core';
+import {
+  type CosignRequest,
+  type CosignVerification,
+  isPollarApiError,
+  isPollarNetworkError,
+  transactionErrorMessage,
+} from '@pollar/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { useModalLanguage } from '../../language';
@@ -9,6 +15,7 @@ import { useCosign } from '../../useCosign';
 import '../shared.css';
 import './CosignModal.css';
 import { CosignModalTemplate } from './CosignModalTemplate';
+import { COSIGN_COPY } from './cosign-copy';
 import { modalChrome } from '../modal-theme';
 import { PollarOverlay } from '../PollarOverlay';
 
@@ -156,6 +163,13 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
       try {
         await action(request);
       } catch (err) {
+        // fetch rejects with a TypeError when no answer comes back (offline, a replica mid-deploy).
+        // Approving again is safe: approve() reads the request back first and never proposes it twice.
+        if (isPollarNetworkError(err) || err instanceof TypeError) {
+          setError(COSIGN_COPY[language].unreachable);
+          void refresh().catch(() => undefined);
+          return;
+        }
         setError(
           transactionErrorMessage(isPollarApiError(err) ? err.code : null, err instanceof Error ? err.message : null, language),
         );
@@ -166,7 +180,7 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
         setBusy(null);
       }
     },
-    [],
+    [language, refresh],
   );
 
   return (

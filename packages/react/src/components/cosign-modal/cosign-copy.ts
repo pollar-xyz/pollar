@@ -34,6 +34,8 @@ export const COSIGN_COPY: Record<
     approve: string;
     approving: string;
     genericError: string;
+    /** The request never reached Pollar (offline, or a server mid-deploy): nothing was voted, approving again is safe. */
+    unreachable: string;
     deviceNotLinked: string;
     linkDevice: string;
     transaction: string;
@@ -71,6 +73,7 @@ export const COSIGN_COPY: Record<
     approve: 'Approve',
     approving: 'Approving...',
     genericError: 'Something went wrong. Please try again.',
+    unreachable: 'We could not reach Pollar, so nothing was approved. Check your connection and approve again.',
     deviceNotLinked:
       "This device isn't linked to your wallet yet, so it can't approve. Add it with a device that already is, your passkey or your email.",
     linkDevice: 'Link this device',
@@ -125,6 +128,7 @@ export const COSIGN_COPY: Record<
     approve: 'Aprobar',
     approving: 'Aprobando...',
     genericError: 'Algo salió mal. Intenta de nuevo.',
+    unreachable: 'No pudimos conectar con Pollar, así que no se aprobó nada. Revisa tu conexión y aprueba de nuevo.',
     deviceNotLinked:
       'Este dispositivo aún no está vinculado a tu billetera, así que no puede aprobar. Agrégalo con un dispositivo que ya lo esté, tu passkey o tu email.',
     linkDevice: 'Vincular este dispositivo',
@@ -179,6 +183,7 @@ export const COSIGN_COPY: Record<
     approve: 'Aprovar',
     approving: 'Aprovando...',
     genericError: 'Algo deu errado. Tente novamente.',
+    unreachable: 'Não conseguimos conectar à Pollar, então nada foi aprovado. Verifique sua conexão e aprove novamente.',
     deviceNotLinked:
       'Este dispositivo ainda não está vinculado à sua carteira, então não pode aprovar. Adicione-o com um dispositivo que já esteja, sua passkey ou seu email.',
     linkDevice: 'Vincular este dispositivo',
