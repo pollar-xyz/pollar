@@ -470,6 +470,17 @@ The script refuses to tag unless:
 The workflow can also be started by hand from the Actions tab (`workflow_dispatch` with a
 `version` input).
 
+For a quick candidate, `--fast` publishes without the unit and smoke tests:
+
+```bash
+npm run release:rc -- 0.12.1-rc.24 --fast
+```
+
+It creates no tag: it starts `release-rc.yml` by hand on the current branch with `skip_tests`, so `e2e-rc.yml` does not
+run. Besides the checks above, it refuses unless `HEAD` is exactly `origin/<branch>` (the workflow builds the branch as
+it is on `origin`) and the version is not on npm yet. It needs the GitHub CLI (`gh`). A version published without tests
+cannot be published again; a broken one is fixed by the next `rc.N`.
+
 ### Tag a stable release
 
 Publish the stable packages first with their `*:publish` scripts, `core` before the packages that depend on it. Then:
