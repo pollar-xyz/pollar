@@ -359,6 +359,7 @@ const sessions = await client.listSessions();
 | `logLevel`           | `LogLevel`                | No       | Minimum severity the SDK logs (default `'info'`). See [Logging](#logging)                                                                      |
 | `logger`             | `PollarLogger`            | No       | Sink the SDK writes logs to (default `console`)                                                                                                |
 | `deviceLabel`        | `string`                  | No       | UI-friendly device label sent at `/auth/login` time and shown in `listSessions()` rows                                                         |
+| `support`            | `PollarSupportContact`    | No       | `{ url?, email? }` the ramp links to when an order asks the user to contact support. Wins over the dashboard's contact (Settings > General)    |
 | `onStorageDegrade`   | `OnStorageDegrade`        | No       | Notified the first time `localStorage` falls back to in-memory mode (SSR, private browsing, quota, ...)                                        |
 | `visibilityProvider` | `VisibilityProvider`      | No       | Foreground-detection signal for the silent-refresh scheduler. Web default; RN should inject an `AppState` provider                             |
 | `maxIdleMs`          | `number`                  | No       | Stop proactive refreshes after this many ms of no client HTTP activity. Default `undefined` (refresh while visible)                            |
@@ -1055,7 +1056,8 @@ client.pollKycStatus(providerId: string, opts?: { intervalMs?: number; timeoutMs
   pending.
 - `pollKycDecision()` stops when the decision settles - approved, rejected, expired, held for manual review, or approved
   by the vendor and still being recorded - and returns the whole read. `pollKycStatus()` is the same poll reduced to a
-  status, so a session held for review returns `'pending'`.
+  status, so a session held for review returns `'pending'`. `isKycSettled(read)` is the rule it stops on, for a UI that
+  polls on its own.
 - The status, providers and start calls throw `PollarApiError` with the backend code (`SDK_KYC_UNDER_REVIEW`,
   `SDK_KYC_ALREADY_APPROVED`, ...). `resolveKyc()` treats `SDK_KYC_ALREADY_APPROVED` as approved, and reusing the same
   `idempotencyKey` after a vendor failure returns the session already created instead of billing a new one.

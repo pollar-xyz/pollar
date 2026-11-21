@@ -7,7 +7,8 @@
 swaps on Solana (and toward Polygon), Earn on Solana, USDC between the user's
 own wallets (`client.bridge`, `<BridgeModal>`), card funding from Solana and
 from co-signed wallets, modals in English, Spanish and Portuguese that open on
-options, and one transaction review in every approval and status screen. The
+options, one transaction review in every approval and status screen, and the
+sign-in and KYC inline in a page (`<LoginFlow>`, `<KycFlow>`). The
 [CHANGELOG](./CHANGELOG.md#0121) lists everything. Upgrade `@pollar/core`, `@pollar/react` and
 `@pollar/react-native` together: `@pollar/react@0.12.1` and
 `@pollar/react-native@0.12.1` require `@pollar/core@^0.12.1`. The adapters stay
@@ -59,6 +60,21 @@ recovery screen on those codes drops it, or the user sees two. A headless app
 listens with `client.onWalletRecoveryRequired(cb)` and
 `client.onCosignDeviceNotEnrolled(cb)`, and can ask
 `client.cosign.isDeviceEnrolled()` before it offers to sign.
+
+A transaction that answers `pending` (no ledger confirmation after about 40
+seconds) is now read on in the background until it reaches `success` or
+`error` by itself. Meanwhile the state is `{ step: 'submitted', hash, slow: true }`,
+and past ten minutes it ends as `error` with the new code `TX_NOT_CONFIRMED`.
+An app that polled `getTxStatus` after a `pending` outcome can listen to
+`onTransactionStateChange` instead. Code that maps the transaction error codes
+to its own texts meets a new value; `transactionErrorMessage` already words it
+in English, Spanish and Portuguese.
+
+When a ramp order stops and asks the user to contact support, the widget links
+to the app's support contact: `support: { url, email }` passed to the client,
+or else the contact in the dashboard (Settings > General), which is Pollar's
+support email when the app set none. Set one of the two so your users reach
+your own support.
 
 ## 0.11.5 -> 0.12.0
 

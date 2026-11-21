@@ -7,8 +7,10 @@
 > sponsored-fee flows, co-signed wallets signing those entries, hash memos,
 > swaps on Solana, every modal in English, Spanish and Portuguese, conditional
 > KYC form fields, ramp texts that name a route's limit, card funding from
-> Solana and from co-signed wallets, a transaction review with a fee badge in
-> every approval and status screen, and fixes. One call
+> Solana and from co-signed wallets, Earn on Solana, USDC between the user's own
+> wallets, a transaction review with a fee badge in every approval and status
+> screen, the sign-in and KYC inline in a page (`<LoginFlow>`, `<KycFlow>`),
+> and fixes. One call
 > an app may already make changes: `signAuthEntry` now passes the signature
 > confirmation (below). The Stellar Wallets Kit and
 > Solana Wallet Standard adapters stay at `0.12.0`; their `^0.12.0` core range
@@ -572,6 +574,62 @@ SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
   nothing moved"). Reading stops at logout, at `destroy()` and once another
   transaction replaces it. An app that polled `getTxStatus` after a `pending`
   outcome can listen to `onTransactionStateChange` instead.
+- **A transaction that asks for confirmation starts without the last outcome.**
+  `signTx`, `signAndSubmitTx`, `buildAndSignAndSubmitTx`, `sendPayment` off
+  Stellar, `swapSolana` and the Solana Earn calls clear a finished `success` or
+  `error` to `idle` while they wait for the user's yes, so a modal that retries
+  in place no longer shows "Transaction failed" under the new review or hides
+  its Confirm button. A built, in-flight or slow `submitted` state stays.
+- **Closing send, swap or earn declines the confirmation it waits on**, web and
+  React Native, instead of leaving it to reopen as the provider's prompt over
+  the page. Only the modal's own signing call is declined, never a
+  confirmation another flow queued. React Native's send, swap and earn panels
+  also open clean, without the last transaction's outcome, as on web.
+- A Solana swap keeps its review while it signs and submits, web and React
+  Native: the review is read from the quote that was sent, since the
+  transaction carries no build to read it from.
+- **A stopped ramp order says why and where to get support.** The failed leg
+  names its reason by failure code (`rampFailureReason`), in en, es and pt, and
+  the order is titled "Transfer did not go through", "Transfer refunded" or
+  "On hold" instead of "Processing". An order that asks the user to contact
+  support links to the app's contact and shows the order id with a copy button.
+  The contact is `PollarClientConfig.support` (`{ url, email }`,
+  `PollarSupportContact`) when the app passes it, whole; otherwise the one in
+  the dashboard (Settings > General), which is Pollar's support email when the
+  app set none (`rampSupportContact`, `rampFailureNeedsSupport`,
+  `rampSupportCopy`, `rampOrderStopped`). Web and React Native widgets.
+- **`<LoginFlow>` and `<KycFlow>` put the sign-in and the KYC in the host's
+  page.** In `@pollar/react`, `<LoginFlow />` renders the app's sign-in inline,
+  with no backdrop and no close button, at the width of its container; once
+  the user is signed in the host reads `isAuthenticated` and swaps it for its
+  next screen. `<KycFlow onApproved country level />` shows the pending step of
+  the app's own KYC (the vendor's verification or a form) as a card where it
+  is placed, moves on as soon as a step is approved and renders nothing once
+  every step is complete, calling `onApproved`. Meant for a page whose job is
+  signing in or verifying, like a KYC link's. `<KycModal>` and
+  `<RequirementFormModal>` take `inline`.
+- **The KYC modal moves on by itself when the decision arrives.** While the
+  vendor's page is open it reads the status every 4 seconds, for up to 30
+  minutes, and shows the result as soon as it is settled, whether the user
+  finished in the iframe or on their phone. Check status stays for a user who
+  does not wait. `@pollar/core` exports `isKycSettled`, the rule
+  `pollKycDecision` stops on.
+- **A refused login carries the backend code.** A `POST /auth/login` refused
+  with a code the auth catalog knows (`SDK_CREDITS_INSUFFICIENT`,
+  `SDK_BILLING_OVERDUE`) puts it in the error state's `code` with the catalog's
+  message, so the login modals say the app is temporarily unavailable in the
+  user's language. `errorCode` stays `AUTH_FAILED`, and an unknown code keeps
+  "Failed to load session".
+- KYC texts, web and React Native, en/es/pt: a KYC vendor out of credits
+  (`SDK_KYC_NOT_CONFIGURED` with reason `provider_credits_exhausted`) reads as
+  temporarily unavailable instead of "not available for this app yet"; a
+  `VALIDATION_ERROR` no longer says the option is unavailable in the user's
+  country; and `<RegistryCheckModal>` says the civil registry is not responding,
+  try again in a few minutes, on a retryable `SDK_KYC_PROVIDER_ERROR`.
+- The ramp adapter contract has the fact `provider_attention_reported`:
+  something Pollar must take up with the provider while the order goes on, such
+  as a bank payout the provider sends again.
+- PYUSD and USDG have their logos in the web and React Native modals.
 - The custody migration intro speaks of account security and signing from this
   device.
 - `@pollar/core`'s types are regenerated from sdk-api's v3 document.
