@@ -507,6 +507,7 @@ export const TARGET_EXPORTS: Record<string, readonly string[]> = {
     'KycStatus',
     'KycStep',
     'LoginButtonProps',
+    'LoginFlow',
     'LoginModalTemplate',
     'ModalChrome',
     'ModalStyleOverrides',
