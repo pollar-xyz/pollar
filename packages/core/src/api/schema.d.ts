@@ -16501,6 +16501,8 @@ export interface operations {
                                         signs: boolean;
                                         hash: string | null;
                                     }[];
+                                    /** @description A provider leg's payment from the user (the fiat of an onramp, the crypto of an offramp): not asked for yet, asked for, or seen. Null for a swap or bridge leg. */
+                                    paymentStatus: ("not_requested" | "requested" | "received") | null;
                                     etaSeconds: number | null;
                                     startedAt: string | null;
                                 }[];
@@ -16738,6 +16740,8 @@ export interface operations {
                                     signs: boolean;
                                     hash: string | null;
                                 }[];
+                                /** @description A provider leg's payment from the user (the fiat of an onramp, the crypto of an offramp): not asked for yet, asked for, or seen. Null for a swap or bridge leg. */
+                                paymentStatus: ("not_requested" | "requested" | "received") | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
                             }[];
@@ -17094,6 +17098,8 @@ export interface operations {
                                     signs: boolean;
                                     hash: string | null;
                                 }[];
+                                /** @description A provider leg's payment from the user (the fiat of an onramp, the crypto of an offramp): not asked for yet, asked for, or seen. Null for a swap or bridge leg. */
+                                paymentStatus: ("not_requested" | "requested" | "received") | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
                             }[];
@@ -17322,6 +17328,8 @@ export interface operations {
                                     signs: boolean;
                                     hash: string | null;
                                 }[];
+                                /** @description A provider leg's payment from the user (the fiat of an onramp, the crypto of an offramp): not asked for yet, asked for, or seen. Null for a swap or bridge leg. */
+                                paymentStatus: ("not_requested" | "requested" | "received") | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
                             }[];
@@ -17558,6 +17566,8 @@ export interface operations {
                                     signs: boolean;
                                     hash: string | null;
                                 }[];
+                                /** @description A provider leg's payment from the user (the fiat of an onramp, the crypto of an offramp): not asked for yet, asked for, or seen. Null for a swap or bridge leg. */
+                                paymentStatus: ("not_requested" | "requested" | "received") | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
                             }[];
@@ -17914,6 +17924,8 @@ export interface operations {
                                     signs: boolean;
                                     hash: string | null;
                                 }[];
+                                /** @description A provider leg's payment from the user (the fiat of an onramp, the crypto of an offramp): not asked for yet, asked for, or seen. Null for a swap or bridge leg. */
+                                paymentStatus: ("not_requested" | "requested" | "received") | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
                             }[];

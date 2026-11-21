@@ -121,6 +121,7 @@ export interface RampCopy {
     done: string;
     toCurrent: string;
     updatesItself: string;
+    preparing: string;
     received: (amount: string) => string;
     arrived: (chain: string) => string;
     paidOut: string;
@@ -273,6 +274,7 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
       done: 'Done',
       toCurrent: 'Go to the current step',
       updatesItself: 'This screen updates on its own.',
+      preparing: 'Preparing your payment…',
       received: (amount) => `+${amount}`,
       arrived: (chain) => `It reached your wallet on ${chain}.`,
       paidOut: 'It was sent to your account.',
@@ -423,6 +425,7 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
       done: 'Hecho',
       toCurrent: 'Ir al paso actual',
       updatesItself: 'Esta pantalla se actualiza sola.',
+      preparing: 'Preparando tu pago…',
       received: (amount) => `+${amount}`,
       arrived: (chain) => `Llegó a tu wallet en ${chain}.`,
       paidOut: 'Se envió a tu cuenta.',
@@ -576,6 +579,7 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
       done: 'Concluído',
       toCurrent: 'Ir para a etapa atual',
       updatesItself: 'Esta tela se atualiza sozinha.',
+      preparing: 'Preparando o seu pagamento…',
       received: (amount) => `+${amount}`,
       arrived: (chain) => `Chegou à sua carteira na ${chain}.`,
       paidOut: 'Foi enviado para a sua conta.',

@@ -442,6 +442,12 @@ export function RampWidgetTemplate({
   // Only done screens are looked back at; the order moving past one keeps it in view.
   const shownScreen = viewing !== null && viewing < currentScreen ? viewing : currentScreen;
   const shown: RampScreen | undefined = screens[shownScreen];
+  // A payment screen whose provider first asks for something else (a sign-in, a verification) is titled by that.
+  const askedInstead =
+    order?.pendingAction?.kind === 'KYC' ||
+    (!!shown?.key.endsWith(':pay') &&
+      order?.pendingAction?.legIndex === shown.leg.index &&
+      !['FIAT_PAYMENT', 'NONE'].includes(order.pendingAction.kind));
   const firstLeg = order?.legs[0];
   const orderSummary =
     firstLeg && receive
@@ -997,13 +1003,19 @@ export function RampWidgetTemplate({
             <>
               {shown && (
                 <h3 className="pollar-ramp-screen-title" data-status={shown.status}>
-                  {order.pendingAction?.kind === 'KYC' ? view.title : shown.title}
+                  {askedInstead ? view.title : shown.title}
                 </h3>
               )}
               {shown?.status === 'failed' && shown.leg.failure && (
                 <p className="pollar-ramp-field-error">{rampFailureReason(shown.leg.failure, language)}</p>
               )}
 
+              {shown?.preparing && !settled && !order.failure && (
+                <div className="pollar-ramp-wait">
+                  <span className="pollar-spinner" aria-label={copy.inProgress} />
+                  <p className="pollar-ramp-payment-note">{copy.screens.preparing}</p>
+                </div>
+              )}
               {shown?.kind === 'wait' && !settled && !order.failure && (
                 <div className="pollar-ramp-wait">
                   <span className="pollar-spinner" aria-label={copy.inProgress} />

@@ -17,6 +17,8 @@ export interface RampScreen {
   steps: LegStep[];
   title: string;
   status: RampScreenStatus;
+  /** A payment screen whose provider has not asked for the payment yet: nothing to pay with so far. */
+  preparing?: boolean;
 }
 
 export const amountText = (value: string, language: PollarLanguage) => {
@@ -36,6 +38,7 @@ export function rampOrderScreens(
 ): RampScreen[] {
   const copy = RAMP_COPY[language].screens;
   const parts: Array<Omit<RampScreen, 'status'> & { done: boolean }> = [];
+  const waitsOn = (leg: Leg) => order.pendingAction?.legIndex === leg.index && order.pendingAction.kind !== 'NONE';
 
   for (const leg of order.legs) {
     const legStatus = rampLegStatus(leg);
@@ -77,7 +80,9 @@ export function rampOrderScreens(
       const onramp = leg.kind === 'PROVIDER_ONRAMP';
       const unitIn = leg.from.kind === 'fiat' ? leg.from.currency : leg.from.code;
       const unitOut = leg.to.kind === 'fiat' ? leg.to.currency : leg.to.code;
-      const waitsOnUser = order.pendingAction?.legIndex === leg.index && order.pendingAction.kind !== 'NONE';
+      // Absent from an sdk-api that predates it: a running leg not waiting on the user is then taken as paid.
+      const payment = leg.paymentStatus as Leg['paymentStatus'] | undefined;
+      const paid = payment === undefined ? legStatus === 'active' && !waitsOn(leg) : payment === 'received';
       const amount = amountText(leg.amountInPlanned, language);
       parts.push({
         key: `${leg.index}:pay`,
@@ -85,8 +90,8 @@ export function rampOrderScreens(
         leg,
         steps: [],
         title: onramp ? copy.pay(amount, unitIn) : copy.send(amount, unitIn),
-        // Once the provider holds the payment it no longer asks for it: the leg runs on its side.
-        done: legDone || (legStatus === 'active' && !waitsOnUser),
+        done: legDone || paid,
+        preparing: payment === 'not_requested' && !waitsOn(leg),
       });
       parts.push({
         key: `${leg.index}:deliver`,
