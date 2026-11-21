@@ -190,9 +190,9 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   }, [refreshWalletBalance, refreshAssets]);
 
   // Which venues this app exposes (operator config intersected with server capability).
+  // A reload keeps the venues on screen until the new ones land: emptying them would let
+  // whichever chain answers first look like the only one offered, and the form would move to it.
   const loadConfig = useCallback(() => {
-    setVenues(null); // back to loading
-    setSolanaVenues(null);
     return Promise.all([
       getSwapConfig()
         .then(setVenues)
@@ -397,10 +397,13 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
       setSelectedBuy(seeded);
       return;
     }
-    if (!selectedBuy || !buyOptions.some((o) => optKey(o) === optKey(selectedBuy))) {
-      setSelectedBuy(buyOptions[0]!);
+    // Both pickers settle in the same commit, so this list can still hold the asset just picked to sell.
+    const sellKey = selectedSell ? optKey(selectedSell) : '';
+    if (!selectedBuy || optKey(selectedBuy) === sellKey || !buyOptions.some((o) => optKey(o) === optKey(selectedBuy))) {
+      const next = buyOptions.find((o) => optKey(o) !== sellKey) ?? null;
+      if (next !== selectedBuy) setSelectedBuy(next);
     }
-  }, [buyOptions, selectedBuy, isLoadingData]);
+  }, [buyOptions, selectedBuy, selectedSell, isLoadingData]);
 
   // Add a user-pasted token (code + issuer) to the buy list and select it.
   // Returns an error message, or null on success.
@@ -483,10 +486,17 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     };
   }, [quotedSolana, step]);
 
-  // Land on a chain the app offers swaps on; Stellar first when it offers both.
+  // Land on a chain the app offers swaps on; Stellar first when it offers both. Only once both
+  // configs are read: with one still loading, the other chain would look like the only one.
   useEffect(() => {
-    if (chains.length > 0 && !chains.includes(chain)) setChain(chains[0]!);
-  }, [chains, chain]);
+    if (configLoading) return;
+    if (chains.length === 0 || chains.includes(chain)) return;
+    // The seeded amount and assets stay: they are what the app opened the modal with.
+    setChain(chains[0]!);
+    setProvider('auto');
+    setQuotes([]);
+    setSolanaQuotes([]);
+  }, [chains, chain, configLoading]);
 
   function handleChainChange(next: SwapChain) {
     sellSeed.current = undefined;

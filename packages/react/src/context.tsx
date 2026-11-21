@@ -864,24 +864,47 @@ export function PollarProvider({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- walletAddress is an intentional re-bind trigger, not read in the body
   const refreshAssets = useCallback(() => pollarClient.refreshAssets(), [pollarClient, walletAddress]);
 
-  const contextValue: PollarContextValue = useMemo(() => {
-    const styles: PollarStyles = resolvedConfig.styles ?? {};
-    return {
-      // session
-      wallet: pollarClient.getWallet(),
-      wallets: pollarClient.getWallets(),
-      isAuthenticated: hasSession,
-      hasWallet: pollarClient.hasWallet(),
+  // Bound once per client: a modal that loads on one of these must not reload whenever the session refreshes.
+  const clientMethods = useMemo<
+    Pick<
+      PollarContextValue,
+      | 'createWallet'
+      | 'login'
+      | 'logout'
+      | 'buildTx'
+      | 'signAndSubmitTx'
+      | 'signTx'
+      | 'submitTx'
+      | 'buildAndSignAndSubmitTx'
+      | 'runTx'
+      | 'sendPayment'
+      | 'setTrustline'
+      | 'getSwapConfig'
+      | 'getSwapTokens'
+      | 'getSwapQuote'
+      | 'swap'
+      | 'getSolanaSwapConfig'
+      | 'getSolanaSwapQuote'
+      | 'swapSolana'
+      | 'getSolanaSwapOptions'
+      | 'getSwapStatus'
+      | 'getEarnProviders'
+      | 'getEarnOpportunities'
+      | 'getEarnPosition'
+      | 'earnDeposit'
+      | 'earnWithdraw'
+      | 'getSolanaEarnProviders'
+      | 'getSolanaEarnOpportunities'
+      | 'getSolanaEarnPosition'
+      | 'earnSolanaDeposit'
+      | 'earnSolanaWithdraw'
+      | 'setNetwork'
+    >
+  >(
+    () => ({
       createWallet: (options?: { custody?: CosignCustody }) => pollarClient.createWallet(options),
-      verified,
-      // client
-      getClient,
-      // auth
       login: (options: PollarLoginOptions) => pollarClient.login(options),
       logout: () => pollarClient.logout(),
-      openLoginModal: () => setLoginModalOpen(true),
-      // transactions
-      tx: transaction,
       buildTx: (operation, params, options) => pollarClient.buildTx(operation, params, options),
       signAndSubmitTx: (unsignedXdr?: string) => pollarClient.signAndSubmitTx(unsignedXdr),
       signTx: (unsignedXdr: string) => pollarClient.signTx(unsignedXdr),
@@ -889,6 +912,47 @@ export function PollarProvider({
       buildAndSignAndSubmitTx: (operation, params, options) => pollarClient.buildAndSignAndSubmitTx(operation, params, options),
       runTx: (operation, params, options) => pollarClient.runTx(operation, params, options),
       sendPayment: (params) => pollarClient.sendPayment(params),
+      setTrustline: (asset, opts) => pollarClient.setTrustline(asset, opts),
+      getSwapConfig: () => pollarClient.getSwapConfig(),
+      getSwapTokens: () => pollarClient.getSwapTokens(),
+      getSwapQuote: (params) => pollarClient.getSwapQuote(params),
+      swap: (quote, opts) => pollarClient.swap(quote, opts),
+      getSolanaSwapConfig: () => pollarClient.getSolanaSwapConfig(),
+      getSolanaSwapQuote: (params) => pollarClient.getSolanaSwapQuote(params),
+      swapSolana: (quote, opts) => pollarClient.swapSolana(quote, opts),
+      getSolanaSwapOptions: () => pollarClient.getSolanaSwapOptions(),
+      getSwapStatus: (idempotencyKey) => pollarClient.getSwapStatus(idempotencyKey),
+      getEarnProviders: () => pollarClient.getEarnProviders(),
+      getEarnOpportunities: (provider) => pollarClient.getEarnOpportunities(provider).then(remembered),
+      getEarnPosition: (params) => pollarClient.getEarnPosition(params),
+      earnDeposit: (params) => pollarClient.earnDeposit(params),
+      earnWithdraw: (params) => pollarClient.earnWithdraw(params),
+      getSolanaEarnProviders: () => pollarClient.getSolanaEarnProviders(),
+      getSolanaEarnOpportunities: () => pollarClient.getSolanaEarnOpportunities().then(remembered),
+      getSolanaEarnPosition: (opportunity) => pollarClient.getSolanaEarnPosition(opportunity),
+      earnSolanaDeposit: (params) => pollarClient.earnSolanaDeposit(params),
+      earnSolanaWithdraw: (params) => pollarClient.earnSolanaWithdraw(params),
+      setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
+    }),
+    [pollarClient],
+  );
+
+  const contextValue: PollarContextValue = useMemo(() => {
+    const styles: PollarStyles = resolvedConfig.styles ?? {};
+    return {
+      ...clientMethods,
+      // session
+      wallet: pollarClient.getWallet(),
+      wallets: pollarClient.getWallets(),
+      isAuthenticated: hasSession,
+      hasWallet: pollarClient.hasWallet(),
+      verified,
+      // client
+      getClient,
+      // auth
+      openLoginModal: () => setLoginModalOpen(true),
+      // transactions
+      tx: transaction,
       openTxModal: () => setTransactionModalOpen(true),
       // tx history
       txHistory,
@@ -903,7 +967,6 @@ export function PollarProvider({
       // enabled assets
       enabledAssets,
       refreshAssets,
-      setTrustline: (asset, opts) => pollarClient.setTrustline(asset, opts),
       openEnabledAssetsModal: () => setEnabledAssetsModalOpen(true),
       // send / receive
       openSendModal: (options?: SendModalOptions) => {
@@ -917,15 +980,6 @@ export function PollarProvider({
         setReceiveModalOpen(true);
       },
       // swap
-      getSwapConfig: () => pollarClient.getSwapConfig(),
-      getSwapTokens: () => pollarClient.getSwapTokens(),
-      getSwapQuote: (params) => pollarClient.getSwapQuote(params),
-      swap: (quote, opts) => pollarClient.swap(quote, opts),
-      getSolanaSwapConfig: () => pollarClient.getSolanaSwapConfig(),
-      getSolanaSwapQuote: (params) => pollarClient.getSolanaSwapQuote(params),
-      swapSolana: (quote, opts) => pollarClient.swapSolana(quote, opts),
-      getSolanaSwapOptions: () => pollarClient.getSolanaSwapOptions(),
-      getSwapStatus: (idempotencyKey) => pollarClient.getSwapStatus(idempotencyKey),
       openSwapModal: (options?: SwapModalOptions) => {
         setSwapModalOptions(options);
         pollarClient.resetTransactionState();
@@ -938,16 +992,6 @@ export function PollarProvider({
         setBridgeModalOpen(true);
       },
       // earn
-      getEarnProviders: () => pollarClient.getEarnProviders(),
-      getEarnOpportunities: (provider) => pollarClient.getEarnOpportunities(provider).then(remembered),
-      getEarnPosition: (params) => pollarClient.getEarnPosition(params),
-      earnDeposit: (params) => pollarClient.earnDeposit(params),
-      earnWithdraw: (params) => pollarClient.earnWithdraw(params),
-      getSolanaEarnProviders: () => pollarClient.getSolanaEarnProviders(),
-      getSolanaEarnOpportunities: () => pollarClient.getSolanaEarnOpportunities().then(remembered),
-      getSolanaEarnPosition: (opportunity) => pollarClient.getSolanaEarnPosition(opportunity),
-      earnSolanaDeposit: (params) => pollarClient.earnSolanaDeposit(params),
-      earnSolanaWithdraw: (params) => pollarClient.earnSolanaWithdraw(params),
       openEarnModal: (options?: EarnModalOptions) => {
         setEarnModalOptions(options);
         pollarClient.resetTransactionState();
@@ -979,7 +1023,6 @@ export function PollarProvider({
       openDistributionRulesModal: () => setDistributionRulesModalOpen(true),
       // network
       network: networkState.step === 'connected' ? networkState.network : 'testnet',
-      setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
       // kyc
       openKycModal: (options = {}) => {
         setKycModalOptions(options);
@@ -999,6 +1042,7 @@ export function PollarProvider({
     } as PollarContextValue;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- walletProvisioning is an intentional recompute trigger, not read in the body
   }, [
+    clientMethods,
     walletAddress,
     walletProvisioning,
     recovery,
