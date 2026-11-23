@@ -276,6 +276,15 @@ export type RampAdapterObservation = {
   proposedActions: RampAdapterAction[];
   verificationRequired: boolean;
   payment: RampAdapterPayment | null;
+  /**
+   * Version 2. What an order placed on an indicative offer settled for, once the
+   * provider fixes it: the crypto an on-ramp delivers (`cryptoAmount`, with the
+   * `payment` naming the same amount) or the fiat an off-ramp pays out
+   * (`fiatAmount`). The side the user fixed never moves. Pollar amends the
+   * ramp's terms to it before any proof of that side is checked; an offer quoted
+   * firm ignores it.
+   */
+  settled?: { cryptoAmount?: RampDecimal; fiatAmount?: RampDecimal; feeAmount?: RampDecimal } | null;
 };
 export type RampAdapterSubmission =
   | { outcome: 'accepted'; observation: RampAdapterObservation }
