@@ -24,7 +24,7 @@ const STATE = {
 const completed = { status: 200, body: { activity: { status: 'ACTIVITY_STATUS_COMPLETED' } } };
 const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
 
-function harness(extra: { exportBundle?: string; state?: Partial<typeof STATE> } = {}) {
+function harness(extra: { exportBundle?: string; state?: Partial<typeof STATE>; otpInit?: () => Response } = {}) {
   const relays: Array<{ path: string; body: Record<string, unknown> }> = [];
   const stamped: Array<{ path: string; body: string; stamp: string; stampHeader: string }> = [];
   const proxy: Array<{ path: string; headers: Record<string, string>; body: Record<string, unknown> }> = [];
@@ -78,7 +78,8 @@ function harness(extra: { exportBundle?: string; state?: Partial<typeof STATE> }
     fetch: (async (url: string, init: RequestInit) => {
       const path = new URL(url).pathname;
       proxy.push({ path, headers: init.headers as Record<string, string>, body: JSON.parse(String(init.body)) });
-      if (path === '/v1/otp_init_v2') return Response.json({ otpId: 'otp-1', otpEncryptionTargetBundle: 'target' });
+      if (path === '/v1/otp_init_v2')
+        return extra.otpInit?.() ?? Response.json({ otpId: 'otp-1', otpEncryptionTargetBundle: 'target' });
       if (path === '/v1/otp_verify_v2') {
         const sessionKey = crypto.find(([n]) => n === 'encryptOtp')![1][2] as string;
         const claims = Buffer.from(JSON.stringify({ id: 'tok-1', public_key: sessionKey })).toString('base64url');
@@ -218,4 +219,28 @@ test('an email already confirmed is not set again', async () => {
   await recovery.startEmail('user@fixture.invalid');
   await recovery.confirmEmail('123456789');
   assert.equal(relays.length, 0);
+});
+
+test('a second code to the same address waits out the cooldown without calling Turnkey', async () => {
+  const { recovery, proxy } = harness();
+  await recovery.startEmail('User@fixture.invalid');
+  assert.ok(recovery.codeAvailableAt('user@fixture.invalid') > Date.now());
+  await assert.rejects(recovery.startEmail('user@fixture.invalid'), { code: 'SDK_COSIGN_OTP_RATE_LIMITED' });
+  assert.equal(proxy.length, 1, 'the second send never reached the Auth Proxy');
+  assert.equal(recovery.codeAvailableAt('other@fixture.invalid'), 0);
+});
+
+test("Turnkey's OTP cap is its own code, not a raw provider refusal, and starts the cooldown", async () => {
+  const { recovery } = harness({
+    otpInit: () =>
+      Response.json({ message: 'Max number of OTPs have been initiated please wait and try again' }, { status: 400 }),
+  });
+  await assert.rejects(recovery.startEmail('user@fixture.invalid'), { code: 'SDK_COSIGN_OTP_RATE_LIMITED' });
+  assert.ok(recovery.codeAvailableAt('user@fixture.invalid') > Date.now());
+});
+
+test('any other Auth Proxy refusal stays a provider refusal and leaves no cooldown', async () => {
+  const { recovery } = harness({ otpInit: () => Response.json({ message: 'invalid contact' }, { status: 400 }) });
+  await assert.rejects(recovery.startEmail('user@fixture.invalid'), { code: 'SDK_COSIGN_TURNKEY_REJECTED' });
+  assert.equal(recovery.codeAvailableAt('user@fixture.invalid'), 0);
 });
