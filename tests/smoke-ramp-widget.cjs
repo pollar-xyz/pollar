@@ -691,7 +691,7 @@ async function findRoutes(ui, calls) {
     assert.deepEqual(listQueries[0], { open: 'true', limit: 5 }, 'resume lists every order not final yet');
     await ui.click(ui.button('Resume purchase'));
     assert.match(ui.container.textContent, /Pay before/);
-    assert.match(ui.container.textContent, /You receive~14.2 USDC/);
+    assert.match(ui.container.textContent, /100 BOB → ~14\.2 USDC/);
     await ui.unmount();
     client.destroy();
   }
