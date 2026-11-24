@@ -714,7 +714,8 @@ async function findRoutes(ui, calls) {
     });
     const ui = await mount(client);
     await ui.click(ui.button('Resume purchase'));
-    assert.equal(ui.container.querySelector('.pollar-ramp-leg')?.getAttribute('data-status'), 'active');
+    assert.equal(ui.container.querySelector('.pollar-ramp-screen-title')?.getAttribute('data-status'), 'current');
+    assert.equal(ui.container.querySelector('.pollar-ramp-field-error'), null);
     await ui.unmount();
     client.destroy();
   }
