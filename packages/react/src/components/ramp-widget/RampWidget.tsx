@@ -207,6 +207,8 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   // The dropped route (its index) whose wallet step is running.
   const [walletBusy, setWalletBusy] = useState<number | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   // A route whose order waits on the new account the user approves on the device: once that
   // request is approved the route is resumed, since its quote may lapse meanwhile.
   const [awaitingAccount, setAwaitingAccount] = useState<{ routeKey: string; requestId: string } | null>(null);
@@ -707,6 +709,21 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
     }
   }
 
+  /** Cancels the order the user is leaving; the cancelled order stays on screen, saying so. */
+  async function handleCancelOrder() {
+    if (!order || cancelling) return;
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      setOrder(await client.cancelRampOrder(order.id));
+      void loadPendingOrders();
+    } catch (error) {
+      setCancelError(rampErrorMessage(error, copy.cancelOrderFailed, copy, language));
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   /** The price changed before anything moved: the same amount is quoted again and the routes shown. */
   async function handleRequote() {
     setOrder(null);
@@ -887,6 +904,9 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
         onRefresh={() => void handleRefresh()}
         onClose={onClose}
         confirmation={confirmation}
+        onCancelOrder={() => void handleCancelOrder()}
+        cancelling={cancelling}
+        cancelError={cancelError}
       />
     </PollarOverlay>
   );

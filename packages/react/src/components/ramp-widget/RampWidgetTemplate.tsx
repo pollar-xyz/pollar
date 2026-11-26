@@ -52,6 +52,7 @@ import { TxReview } from '../tx-review/TxReview';
 import type { TxDetailRow } from '../tx-review/tx-review-model';
 import { InlineConfirm } from '../confirm-modal/InlineConfirm';
 import { amountText, rampOrderScreens, type RampScreen } from './ramp-screens';
+import { SaveQrButton } from './SaveQrButton';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 
 export type RampStep = 'input' | 'loading_quote' | 'select_route' | 'contact' | 'status' | 'error';
@@ -240,6 +241,11 @@ interface RampWidgetTemplateProps {
   onClose: () => void;
   /** A leg's signature waiting for the user's yes, answered in the status view. */
   confirmation?: PendingConfirmation | null | undefined;
+  /** Cancels the running order; absent, leaving only closes or starts another. */
+  onCancelOrder?: (() => void) | undefined;
+  cancelling?: boolean;
+  /** Why the order could not be cancelled. */
+  cancelError?: string | null;
 }
 
 /** The trustline a dropped route asks for, as the widget tracks it while it is added. */
@@ -329,6 +335,9 @@ export function RampWidgetTemplate({
   onClose,
   language: languageProp,
   confirmation = null,
+  onCancelOrder,
+  cancelling = false,
+  cancelError = null,
 }: RampWidgetTemplateProps) {
   const language = useInheritedLanguage(languageProp);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides, 'hero');
@@ -338,7 +347,12 @@ export function RampWidgetTemplate({
   const [detailsOpen, setDetailsOpen] = useState(false);
   // A done screen the user stepped back to; null follows the order's current one.
   const [viewing, setViewing] = useState<number | null>(null);
-  useEffect(() => setViewing(null), [order?.id]);
+  // The X asked whether to leave an order that is still running.
+  const [leaving, setLeaving] = useState(false);
+  useEffect(() => {
+    setViewing(null);
+    setLeaving(false);
+  }, [order?.id]);
   const routeName = (quote: RampQuote) => quote.legs.map((leg) => rampLegTitle(leg, language)).join(' · ');
   // What a unit of the asset costs in the fiat, from the route Continue takes.
   const rate = (() => {
@@ -449,6 +463,9 @@ export function RampWidgetTemplate({
       order?.pendingAction?.legIndex === shown.leg.index &&
       !['FIAT_PAYMENT', 'NONE'].includes(order.pendingAction.kind));
   const firstLeg = order?.legs[0];
+  const payment = order?.pendingAction?.kind === 'FIAT_PAYMENT' ? order.pendingAction.instructions : null;
+  // What the user finds it by in their gallery: what to pay, and the order's tail.
+  const qrFileName = [copy.screens.qrFile, payment?.amount, payment?.currency, order?.id.slice(-8)].filter(Boolean).join('-');
   const orderSummary =
     firstLeg && receive
       ? `${amountText(firstLeg.amountInPlanned, language)} ${
@@ -460,6 +477,29 @@ export function RampWidgetTemplate({
     lastLeg?.to.kind === 'asset'
       ? copy.screens.arrived(CHAIN_NAME[lastLeg.to.chain] ?? lastLeg.to.chain)
       : copy.screens.paidOut;
+  const requestClose = () => (step === 'status' && order && !settled ? setLeaving(true) : onClose());
+  // What the server accepts too: nothing moved yet and no device approval open.
+  const cancellable =
+    !!order &&
+    !settled &&
+    order.pendingAction?.kind !== 'COSIGN_APPROVAL' &&
+    order.legs.every((leg) => leg.status !== 'COMPLETED' && leg.status !== 'HELD' && leg.paymentStatus !== 'received');
+  /** What a done screen did, in the past tense. */
+  const doneText = (screen: RampScreen): string => {
+    const leg = screen.leg;
+    const unit = (node: typeof leg.from) => (node.kind === 'fiat' ? node.currency : node.code);
+    const inAmount = amountText(leg.amountInActual ?? leg.amountInPlanned, language);
+    const outAmount = amountText(leg.amountOutActual ?? leg.amountOutPlanned, language);
+    if (screen.key.endsWith(':pay'))
+      return leg.kind === 'PROVIDER_ONRAMP'
+        ? copy.screens.paidDone(inAmount, unit(leg.from))
+        : copy.screens.sentDone(inAmount, unit(leg.from));
+    if (screen.key.endsWith(':deliver'))
+      return leg.to.kind === 'asset'
+        ? copy.screens.receivedDone(outAmount, leg.to.code, CHAIN_NAME[leg.to.chain] ?? leg.to.chain)
+        : copy.screens.payoutDone(outAmount, leg.to.currency);
+    return screen.kind === 'action' ? copy.screens.signedDone : copy.screens.ranDone;
+  };
   // A substitute the provider paid out, said once the order is done.
   const finalNote = order?.legs.map((leg) => rampLegNote(leg, language)).find((note) => note !== null) ?? null;
   // The transactions one screen ran; a provider payment runs none of the user's.
@@ -526,18 +566,6 @@ export function RampWidgetTemplate({
             </svg>
           </button>
         )}
-        {step === 'status' && shownScreen > 0 && shownScreen <= currentScreen && (
-          <button
-            type="button"
-            className="pollar-back-btn pollar-ramp-back"
-            onClick={() => setViewing(shownScreen - 1)}
-            aria-label={copy.back}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-              <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        )}
         <div className="pollar-ramp-header-text">
           <h2 className="pollar-modal-title">{stepTitle[step]}</h2>
           <p className="pollar-ramp-subtitle">{stepSubtitle[step]}</p>
@@ -567,7 +595,7 @@ export function RampWidgetTemplate({
               />
             </svg>
           </button>
-          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
+          <button type="button" className="pollar-modal-close" onClick={requestClose} aria-label={copy.close}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
               <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
@@ -597,17 +625,44 @@ export function RampWidgetTemplate({
         </div>
       )}
 
-      {step === 'status' && screens.length > 0 && (
-        <ol className="pollar-ramp-screens-bar" aria-label={copy.progress}>
-          {[...screens.map((s) => s.key), 'final'].map((key, i) => (
-            <li
-              key={key}
-              data-done={i < currentScreen || (completed && i === screens.length) || undefined}
-              data-shown={i === shownScreen || undefined}
-              data-failed={screens[i]?.status === 'failed' || undefined}
-            />
-          ))}
-        </ol>
+      {step === 'status' && screens.length > 0 && !(leaving && !settled) && (
+        <div className="pollar-ramp-screens-nav">
+          {/* Hidden, not removed, when there is nowhere to go: the bar keeps its width. */}
+          <button
+            type="button"
+            className="pollar-ramp-screens-arrow"
+            data-hidden={shownScreen === 0 || undefined}
+            disabled={shownScreen === 0}
+            onClick={() => setViewing(shownScreen - 1)}
+            aria-label={copy.back}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+              <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <ol className="pollar-ramp-screens-bar" aria-label={copy.progress}>
+            {[...screens.map((s) => s.key), 'final'].map((key, i) => (
+              <li
+                key={key}
+                data-done={i < currentScreen || (completed && i === screens.length) || undefined}
+                data-shown={i === shownScreen || undefined}
+                data-failed={screens[i]?.status === 'failed' || undefined}
+              />
+            ))}
+          </ol>
+          <button
+            type="button"
+            className="pollar-ramp-screens-arrow"
+            data-hidden={shownScreen >= currentScreen || undefined}
+            disabled={shownScreen >= currentScreen}
+            onClick={() => setViewing(shownScreen + 1 >= currentScreen ? null : shownScreen + 1)}
+            aria-label={copy.screens.next}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+              <path d="m6 3 5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
       )}
 
       {step === 'input' && pendingOrders.length > 0 && (
@@ -950,7 +1005,40 @@ export function RampWidgetTemplate({
 
       {step === 'status' && order && view && (
         <div className="pollar-ramp-payment">
-          {shownScreen === screens.length ? (
+          {leaving && !settled ? (
+            <div className="pollar-ramp-leave">
+              <h3 className="pollar-ramp-screen-title">{copy.leave.title}</h3>
+              <p className="pollar-ramp-payment-note">{copy.leave.note}</p>
+              {cancelError && <p className="pollar-ramp-field-error">{cancelError}</p>}
+              <button type="button" className="pollar-btn-primary" onClick={() => setLeaving(false)}>
+                {copy.leave.stay}
+              </button>
+              <button type="button" className="pollar-btn-secondary" onClick={onClose}>
+                {copy.leave.exit}
+              </button>
+              <button
+                type="button"
+                className="pollar-ramp-leave-link"
+                onClick={() => {
+                  setLeaving(false);
+                  onNewOrder();
+                }}
+              >
+                {copy.startAnother}
+              </button>
+              {onCancelOrder && cancellable && (
+                <button type="button" className="pollar-ramp-leave-cancel" disabled={cancelling} onClick={onCancelOrder}>
+                  {cancelling ? (
+                    <>
+                      <span className="pollar-spinner pollar-spinner-sm" /> {copy.leave.cancelling}
+                    </>
+                  ) : (
+                    copy.leave.cancel
+                  )}
+                </button>
+              )}
+            </div>
+          ) : shownScreen === screens.length ? (
             <>
               <div className="pollar-ramp-final">
                 <span className="pollar-ramp-final-mark" aria-hidden>
@@ -979,25 +1067,24 @@ export function RampWidgetTemplate({
             </>
           ) : shownScreen < currentScreen ? (
             <>
-              <h3 className="pollar-ramp-screen-title">{screens[shownScreen]!.title}</h3>
-              <p className="pollar-ramp-screen-state">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-                  <path
-                    d="M3 8.5 6.5 12 13 4.5"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                {copy.screens.done}
-              </p>
+              <div className="pollar-ramp-done">
+                <span className="pollar-ramp-done-mark" aria-hidden>
+                  <svg width="30" height="30" viewBox="0 0 16 16" fill="none">
+                    <path
+                      d="M3 8.5 6.5 12 13 4.5"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+                <h3 className="pollar-ramp-done-title">{screens[shownScreen]!.title}</h3>
+                <p className="pollar-ramp-payment-note">{doneText(screens[shownScreen]!)}</p>
+              </div>
               {screenRows(screens[shownScreen]!).length > 0 && (
                 <TxReview data={{ title: '', kind: 'other', rows: screenRows(screens[shownScreen]!) }} language={language} />
               )}
-              <button type="button" className="pollar-btn-secondary" onClick={() => setViewing(null)}>
-                {copy.screens.toCurrent}
-              </button>
             </>
           ) : (
             <>
@@ -1107,6 +1194,16 @@ export function RampWidgetTemplate({
                       />
                     )}
                   </div>
+                  <SaveQrButton
+                    image={view.scannable.image}
+                    fileName={qrFileName}
+                    labels={{
+                      save: copy.screens.saveQr,
+                      saving: copy.screens.savingQr,
+                      saved: copy.screens.savedQr,
+                      failed: copy.screens.saveQrFailed,
+                    }}
+                  />
                 </div>
               )}
               {!settled && view.codeMissing && (
@@ -1200,14 +1297,6 @@ export function RampWidgetTemplate({
               )}
               {pollTrouble && !settled && <p className="pollar-ramp-payment-note">{copy.serverTrouble}</p>}
               {errorMsg && <p className="pollar-ramp-field-error">{errorMsg}</p>}
-
-              {!settled && (
-                <div className="pollar-ramp-explore">
-                  <button type="button" className="pollar-btn-secondary" onClick={onNewOrder}>
-                    {copy.startAnother}
-                  </button>
-                </div>
-              )}
             </>
           )}
         </div>

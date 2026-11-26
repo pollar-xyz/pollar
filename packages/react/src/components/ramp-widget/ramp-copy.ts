@@ -20,6 +20,7 @@ export interface RampCopy {
   resumeOrderFailed: string;
   checkPaymentFailed: string;
   retryOrderFailed: string;
+  cancelOrderFailed: string;
   refreshFailed: string;
   copyFailed: string;
   awaitingAccount: string;
@@ -112,16 +113,29 @@ export interface RampCopy {
   startAnother: string;
   newQuote: string;
   keepsGoing: string;
+  /** Asked when the X closes an order that is still running. */
+  leave: { title: string; note: string; stay: string; exit: string; cancel: string; cancelling: string };
   /** A running order, one screen per thing the user does or waits on. */
   screens: {
     pay: (amount: string, currency: string) => string;
     send: (amount: string, code: string) => string;
     delivering: (code: string) => string;
     payingOut: (currency: string) => string;
-    done: string;
-    toCurrent: string;
+    next: string;
+    paidDone: (amount: string, currency: string) => string;
+    sentDone: (amount: string, code: string) => string;
+    receivedDone: (amount: string, code: string, chain: string) => string;
+    payoutDone: (amount: string, currency: string) => string;
+    signedDone: string;
+    ranDone: string;
     updatesItself: string;
     preparing: string;
+    saveQr: string;
+    savingQr: string;
+    savedQr: string;
+    saveQrFailed: string;
+    /** The start of the saved QR's file name. */
+    qrFile: string;
     received: (amount: string) => string;
     arrived: (chain: string) => string;
     paidOut: string;
@@ -144,6 +158,7 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
       SDK_RAMPS_QUOTE_EXPIRED: 'This quote expired. Find a route again.',
       SDK_RAMPS_QUOTE_NOT_FOUND: 'This quote is no longer available. Find a route again.',
       SDK_RAMPS_ACTION_STALE: 'This step changed. It was refreshed; try again.',
+      SDK_RAMPS_ORDER_NOT_CANCELLABLE: 'This order can no longer be cancelled: its funds are already moving.',
       SDK_RAMPS_TX_NOT_FOUND: 'This operation was not found.',
       SDK_RAMPS_WALLET_NOT_READY: 'Approve the new wallet account on your device, then try again.',
     },
@@ -164,6 +179,7 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     resumeOrderFailed: 'Could not resume the operation.',
     checkPaymentFailed: 'Could not check the payment. Please try again.',
     retryOrderFailed: 'Could not try again. Please try again.',
+    cancelOrderFailed: 'Could not cancel the order. Please try again.',
     refreshFailed: 'Could not refresh.',
     copyFailed: 'Could not copy.',
     awaitingAccount: 'Approve the new account on your device. The order starts once it is approved.',
@@ -266,15 +282,33 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     startAnother: 'Start another operation',
     newQuote: 'Get a new quote',
     keepsGoing: 'This one keeps going; you can resume it later.',
+    leave: {
+      title: 'Leave this purchase?',
+      note: 'Your order keeps going. You can come back to it from Buy.',
+      stay: 'Stay here',
+      exit: 'Leave, keep the order',
+      cancel: 'Cancel the order',
+      cancelling: 'Cancelling…',
+    },
     screens: {
       pay: (amount, currency) => `Pay ${amount} ${currency}`,
       send: (amount, code) => `Send ${amount} ${code}`,
       delivering: (code) => `Your ${code} is on its way`,
       payingOut: (currency) => `Your ${currency} is on its way to your account`,
-      done: 'Done',
-      toCurrent: 'Go to the current step',
+      next: 'Next step',
+      paidDone: (amount, currency) => `You paid ${amount} ${currency}.`,
+      sentDone: (amount, code) => `You sent ${amount} ${code}.`,
+      receivedDone: (amount, code, chain) => `You received ${amount} ${code} on ${chain}.`,
+      payoutDone: (amount, currency) => `${amount} ${currency} were sent to your account.`,
+      signedDone: 'You approved this step.',
+      ranDone: 'This step is complete.',
       updatesItself: 'This screen updates on its own.',
       preparing: 'Preparing your payment…',
+      saveQr: 'Save QR',
+      savingQr: 'Saving…',
+      savedQr: 'QR saved',
+      saveQrFailed: 'Could not save the QR',
+      qrFile: 'payment',
       received: (amount) => `+${amount}`,
       arrived: (chain) => `It reached your wallet on ${chain}.`,
       paidOut: 'It was sent to your account.',
@@ -295,6 +329,7 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
       SDK_RAMPS_QUOTE_EXPIRED: 'Esta cotización venció. Busca una ruta de nuevo.',
       SDK_RAMPS_QUOTE_NOT_FOUND: 'Esta cotización ya no está disponible. Busca una ruta de nuevo.',
       SDK_RAMPS_ACTION_STALE: 'Este paso cambió y se actualizó. Intenta de nuevo.',
+      SDK_RAMPS_ORDER_NOT_CANCELLABLE: 'Esta orden ya no se puede cancelar: sus fondos ya están en movimiento.',
       SDK_RAMPS_TX_NOT_FOUND: 'No se encontró esta operación.',
       SDK_RAMPS_WALLET_NOT_READY: 'Aprueba la nueva cuenta de la billetera en tu dispositivo e intenta de nuevo.',
     },
@@ -315,6 +350,7 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     resumeOrderFailed: 'No se pudo retomar la operación.',
     checkPaymentFailed: 'No se pudo verificar el pago. Intenta de nuevo.',
     retryOrderFailed: 'No se pudo reintentar. Intenta de nuevo.',
+    cancelOrderFailed: 'No se pudo cancelar la orden. Intenta de nuevo.',
     refreshFailed: 'No se pudo actualizar.',
     copyFailed: 'No se pudo copiar.',
     awaitingAccount: 'Aprueba la nueva cuenta en tu dispositivo. La orden comienza cuando la apruebes.',
@@ -417,15 +453,33 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     startAnother: 'Iniciar otra operación',
     newQuote: 'Pedir nueva cotización',
     keepsGoing: 'Esta sigue en curso; puedes retomarla más tarde.',
+    leave: {
+      title: '¿Salir de esta compra?',
+      note: 'Tu orden sigue activa. Puedes retomarla desde Comprar.',
+      stay: 'Seguir aquí',
+      exit: 'Salir, la orden sigue',
+      cancel: 'Cancelar la orden',
+      cancelling: 'Cancelando…',
+    },
     screens: {
       pay: (amount, currency) => `Paga ${amount} ${currency}`,
       send: (amount, code) => `Envía ${amount} ${code}`,
       delivering: (code) => `Tu ${code} está en camino`,
       payingOut: (currency) => `Tus ${currency} van en camino a tu cuenta`,
-      done: 'Hecho',
-      toCurrent: 'Ir al paso actual',
+      next: 'Paso siguiente',
+      paidDone: (amount, currency) => `Pagaste ${amount} ${currency}.`,
+      sentDone: (amount, code) => `Enviaste ${amount} ${code}.`,
+      receivedDone: (amount, code, chain) => `Recibiste ${amount} ${code} en ${chain}.`,
+      payoutDone: (amount, currency) => `Se enviaron ${amount} ${currency} a tu cuenta.`,
+      signedDone: 'Aprobaste este paso.',
+      ranDone: 'Este paso está completo.',
       updatesItself: 'Esta pantalla se actualiza sola.',
       preparing: 'Preparando tu pago…',
+      saveQr: 'Guardar QR',
+      savingQr: 'Guardando…',
+      savedQr: 'QR guardado',
+      saveQrFailed: 'No se pudo guardar el QR',
+      qrFile: 'pago',
       received: (amount) => `+${amount}`,
       arrived: (chain) => `Llegó a tu wallet en ${chain}.`,
       paidOut: 'Se envió a tu cuenta.',
@@ -447,6 +501,7 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
       SDK_RAMPS_QUOTE_EXPIRED: 'Esta cotação expirou. Busque uma rota de novo.',
       SDK_RAMPS_QUOTE_NOT_FOUND: 'Esta cotação não está mais disponível. Busque uma rota de novo.',
       SDK_RAMPS_ACTION_STALE: 'Esta etapa mudou e foi atualizada. Tente de novo.',
+      SDK_RAMPS_ORDER_NOT_CANCELLABLE: 'Esta ordem não pode mais ser cancelada: os fundos já estão em movimento.',
       SDK_RAMPS_TX_NOT_FOUND: 'Esta operação não foi encontrada.',
       SDK_RAMPS_WALLET_NOT_READY: 'Aprove a nova conta da carteira no seu dispositivo e tente de novo.',
     },
@@ -467,6 +522,7 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     resumeOrderFailed: 'Não foi possível retomar a operação.',
     checkPaymentFailed: 'Não foi possível verificar o pagamento. Tente de novo.',
     retryOrderFailed: 'Não foi possível tentar de novo. Tente de novo.',
+    cancelOrderFailed: 'Não foi possível cancelar a ordem. Tente de novo.',
     refreshFailed: 'Não foi possível atualizar.',
     copyFailed: 'Não foi possível copiar.',
     awaitingAccount: 'Aprove a nova conta no seu dispositivo. A ordem começa assim que você aprovar.',
@@ -571,15 +627,33 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     startAnother: 'Iniciar outra operação',
     newQuote: 'Pedir nova cotação',
     keepsGoing: 'Esta continua em andamento; você pode retomá-la depois.',
+    leave: {
+      title: 'Sair desta compra?',
+      note: 'Sua ordem continua ativa. Você pode retomá-la em Comprar.',
+      stay: 'Ficar aqui',
+      exit: 'Sair, manter a ordem',
+      cancel: 'Cancelar a ordem',
+      cancelling: 'Cancelando…',
+    },
     screens: {
       pay: (amount, currency) => `Pague ${amount} ${currency}`,
       send: (amount, code) => `Envie ${amount} ${code}`,
       delivering: (code) => `Seu ${code} está a caminho`,
       payingOut: (currency) => `Seus ${currency} estão a caminho da sua conta`,
-      done: 'Concluído',
-      toCurrent: 'Ir para a etapa atual',
+      next: 'Próxima etapa',
+      paidDone: (amount, currency) => `Você pagou ${amount} ${currency}.`,
+      sentDone: (amount, code) => `Você enviou ${amount} ${code}.`,
+      receivedDone: (amount, code, chain) => `Você recebeu ${amount} ${code} na ${chain}.`,
+      payoutDone: (amount, currency) => `${amount} ${currency} foram enviados para a sua conta.`,
+      signedDone: 'Você aprovou esta etapa.',
+      ranDone: 'Esta etapa está concluída.',
       updatesItself: 'Esta tela se atualiza sozinha.',
       preparing: 'Preparando o seu pagamento…',
+      saveQr: 'Salvar QR',
+      savingQr: 'Salvando…',
+      savedQr: 'QR salvo',
+      saveQrFailed: 'Não foi possível salvar o QR',
+      qrFile: 'pagamento',
       received: (amount) => `+${amount}`,
       arrived: (chain) => `Chegou à sua carteira na ${chain}.`,
       paidOut: 'Foi enviado para a sua conta.',

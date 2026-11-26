@@ -2228,6 +2228,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ramps/orders/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a ramp order
+         * @description Cancels an order before any funds move. Refused once a payment, burn or swap was sent, or while a co-signed approval is open (reject it first).
+         */
+        post: operations["postRampsOrdersByIdCancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ramps/wallets/{chain}": {
         parameters: {
             query?: never;
@@ -18002,6 +18022,250 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         code: "SDK_RAMPS_ORDER_RETRIED";
+                        /** @constant */
+                        success: true;
+                        content: {
+                            id: string;
+                            /** @enum {string} */
+                            direction: "ONRAMP" | "OFFRAMP";
+                            /** @enum {string} */
+                            state: "created" | "awaiting_payment" | "processing" | "settling_onchain" | "completed" | "failed" | "refunded";
+                            createdAt: string;
+                            updatedAt: string;
+                            legs: {
+                                index: number;
+                                /** @enum {string} */
+                                kind: "PROVIDER_ONRAMP" | "PROVIDER_OFFRAMP" | "SWAP" | "BRIDGE";
+                                /** @enum {string} */
+                                status: "PENDING" | "ACTIVE" | "AWAITING_ACTION" | "COMPLETED" | "HELD" | "FAILED" | "CANCELLED";
+                                from: {
+                                    /** @constant */
+                                    kind: "asset";
+                                    code: string;
+                                    identifier: string | null;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                } | {
+                                    /** @constant */
+                                    kind: "fiat";
+                                    currency: string;
+                                    /** @enum {string} */
+                                    rail: "SPEI" | "PIX" | "PSE" | "ACH" | "BREB" | "QR" | "BANK_TRANSFER" | "CASH" | "CARD" | "HOSTED";
+                                    country: string;
+                                };
+                                to: {
+                                    /** @constant */
+                                    kind: "asset";
+                                    code: string;
+                                    identifier: string | null;
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                } | {
+                                    /** @constant */
+                                    kind: "fiat";
+                                    currency: string;
+                                    /** @enum {string} */
+                                    rail: "SPEI" | "PIX" | "PSE" | "ACH" | "BREB" | "QR" | "BANK_TRANSFER" | "CASH" | "CARD" | "HOSTED";
+                                    country: string;
+                                };
+                                amountInPlanned: string;
+                                amountOutPlanned: string;
+                                amountInActual: string | null;
+                                amountOutActual: string | null;
+                                onchainTxHash: string | null;
+                                signingMode: ("COSIGNED" | "EXTERNAL" | "APP_CUSTODY" | "SELF_CUSTODY") | null;
+                                fundsLocation: {
+                                    /** @enum {string} */
+                                    chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                    address: string;
+                                    asset: string;
+                                    amount: string;
+                                } | null;
+                                failure: {
+                                    legIndex: number;
+                                    /** @enum {string} */
+                                    code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                    retryable: boolean;
+                                    /** @enum {string} */
+                                    resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                    /** @enum {string} */
+                                    resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
+                                    detail: string | null;
+                                } | null;
+                                steps: {
+                                    /** @enum {string} */
+                                    kind: "approve" | "swap" | "burn" | "attestation" | "mint";
+                                    /** @enum {string} */
+                                    status: "pending" | "awaiting_approval" | "confirming" | "done";
+                                    signs: boolean;
+                                    hash: string | null;
+                                }[];
+                                paymentStatus: ("not_requested" | "requested" | "received") | null;
+                                etaSeconds: number | null;
+                                startedAt: string | null;
+                            }[];
+                            pendingAction: ({
+                                /** @constant */
+                                kind: "FIAT_PAYMENT";
+                                actionId: string;
+                                legIndex: number;
+                                instructions: {
+                                    /** @constant */
+                                    kind: "qr";
+                                    payload: string;
+                                    amount: string;
+                                    currency: string;
+                                    scannable?: {
+                                        /** @enum {string} */
+                                        kind: "pix" | "stellar" | "url" | "opaque";
+                                        payload: string | null;
+                                        payloadLabel: string | null;
+                                        image: {
+                                            /** @enum {string} */
+                                            mediaType: "image/svg+xml" | "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+                                            /** @enum {string} */
+                                            encoding: "utf8" | "base64";
+                                            data: string;
+                                            inlineSafe: boolean;
+                                        };
+                                    };
+                                    link?: string | null;
+                                } | {
+                                    /** @constant */
+                                    kind: "bank_transfer";
+                                    amount: string;
+                                    currency: string;
+                                    details: {
+                                        label: string;
+                                        value: string;
+                                    }[];
+                                    reference: string | null;
+                                    link?: string | null;
+                                } | {
+                                    /** @constant */
+                                    kind: "hosted";
+                                    url: string;
+                                    amount: string;
+                                    currency: string;
+                                };
+                                expiresAt: string | null;
+                            } | {
+                                /** @constant */
+                                kind: "SIGNATURE";
+                                actionId: string;
+                                legIndex: number;
+                                /** @enum {string} */
+                                chain: "STELLAR" | "POLYGON" | "SOLANA";
+                                payload: {
+                                    /** @enum {string} */
+                                    encoding: "xdr" | "evm-eip1559-json" | "solana-v0-json" | "solana-cctp-json" | "solana-wire-base64";
+                                    value: string;
+                                };
+                                summary: string;
+                                expiresAt: string;
+                            } | {
+                                /** @constant */
+                                kind: "COSIGN_APPROVAL";
+                                actionId: string;
+                                legIndex: number;
+                                cosignRequestId: string;
+                                summary: string;
+                            } | {
+                                /** @constant */
+                                kind: "KYC";
+                                actionId: string;
+                                legIndex: number;
+                                steps: unknown;
+                                url: string | null;
+                            } | {
+                                /** @constant */
+                                kind: "NONE";
+                                actionId: string;
+                                legIndex: number;
+                            }) | null;
+                            failure: {
+                                legIndex: number;
+                                /** @enum {string} */
+                                code: "PROVIDER_INVALID_INPUT" | "PROVIDER_UNSUPPORTED_ROUTE" | "PROVIDER_QUOTE_CHANGED" | "PROVIDER_QUOTE_EXPIRED" | "PROVIDER_VERIFICATION_REQUIRED" | "PROVIDER_RATE_LIMITED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_REJECTED" | "PROVIDER_AUTH_CONFIGURATION" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_ORDER_EXPIRED" | "PROVIDER_PAYMENT_LATE" | "PROVIDER_TRANSFER_UNATTRIBUTED" | "FIAT_RECEIPT_MISMATCH" | "PROVIDER_SETTLEMENT_MISMATCH" | "PROVIDER_ASSET_SUBSTITUTED" | "SWAP_QUOTE_EXPIRED" | "SWAP_SLIPPAGE_EXCEEDED" | "SWAP_NO_LIQUIDITY" | "BRIDGE_UNSUPPORTED_ROUTE" | "CCTP_BURN_EXPIRED" | "CCTP_BURN_FAILED" | "CCTP_ATTESTATION_TIMEOUT" | "CCTP_MINT_EXPIRED" | "CCTP_MINT_FAILED" | "CCTP_MESSAGE_MISMATCH" | "CCTP_MINT_AMOUNT_MISMATCH" | "RPC_UNAVAILABLE" | "CHAIN_SUBMIT_REJECTED" | "CHAIN_SETTLEMENT_MISMATCH" | "CHAIN_INSUFFICIENT_GAS" | "CHAIN_INSUFFICIENT_BALANCE" | "SIGNATURE_EXPIRED" | "SIGNATURE_MISMATCH" | "COSIGN_REJECTED" | "COSIGN_REQUEST_EXPIRED" | "COSIGN_POLICY_DENIED" | "SIGNING_MODE_NOT_ALLOWED" | "WALLET_MISSING" | "WALLET_NOT_CREATED" | "WALLET_TRUSTLINE_MISSING" | "WALLET_CUSTODY_MIGRATION_REQUIRED" | "WALLET_SETUP_REQUIRED" | "WALLET_RECOVERY_REQUIRED" | "LIMIT_BELOW_MINIMUM" | "KYC_TIER_LIMIT_EXCEEDED" | "LIMIT_ABOVE_MAXIMUM" | "ORDER_CANCELLED" | "LEG_STUCK" | "RETRIES_EXHAUSTED" | "INTERNAL_ERROR" | "UNEXPECTED_ERROR";
+                                retryable: boolean;
+                                /** @enum {string} */
+                                resolutionOwner: "POLLAR" | "APPLICATION" | "END_USER" | "PROVIDER";
+                                /** @enum {string} */
+                                resolutionAction: "correct_input" | "contact_pollar" | "accept_new_quote" | "automatic_retry" | "complete_verification" | "pollar_follows_up" | "wait_reconciliation" | "start_again" | "fund_gas_wallet" | "add_funds" | "sign_again" | "approve_again" | "enable_signing_mode" | "link_wallet" | "create_wallet" | "add_trustline" | "migrate_custody" | "set_up_wallet" | "set_up_recovery" | "change_amount";
+                                detail: string | null;
+                            } | null;
+                            nextPollAfter: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: false;
+                        code: string;
+                        message?: string;
+                        resultCode?: string;
+                    };
+                };
+            };
+        };
+    };
+    postRampsOrdersByIdCancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The cancelled order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        code: "SDK_RAMPS_ORDER_CANCELLED";
                         /** @constant */
                         success: true;
                         content: {

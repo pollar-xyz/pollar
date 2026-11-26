@@ -79,6 +79,7 @@ import {
   createRampOrder,
   getRampOrder,
   retryRampOrder,
+  cancelRampOrder,
   checkRampOrder,
   setUpRampWallet,
   getRampRoutes,
@@ -5007,6 +5008,11 @@ export class PollarClient {
   /** Runs the user's held order again from where it stopped (their failure to resolve, e.g. an approval). */
   retryRampOrder(id: string): Promise<RampOrder> {
     return retryRampOrder(this._api, id);
+  }
+
+  /** Cancels the user's order while nothing has moved; refused once a payment, burn or swap was sent. */
+  cancelRampOrder(id: string): Promise<RampOrder> {
+    return cancelRampOrder(this._api, id);
   }
 
   /**
