@@ -2,6 +2,7 @@
 
 import {
   fromBaseUnits as unitsToDecimal,
+  startBackoffPoll,
   SolanaSwapQuote,
   SolanaSwapVenue,
   SwapDestinationChain,
@@ -605,20 +606,17 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   useEffect(() => {
     if (!settlementKey || settlementDone || !originLanded) return;
     let cancelled = false;
-    const read = () =>
-      getSwapStatus(settlementKey)
-        .then((status) => {
-          if (!cancelled)
-            setSettlement((cur) => (cur && cur.key === settlementKey ? { ...cur, value: status.settlement } : cur));
-        })
-        .catch(() => {
-          /* the next read tries again */
-        });
-    void read();
-    const id = setInterval(read, SETTLEMENT_POLL_MS);
+    const read = async () => {
+      const status = await getSwapStatus(settlementKey);
+      if (!cancelled) setSettlement((cur) => (cur && cur.key === settlementKey ? { ...cur, value: status.settlement } : cur));
+    };
+    void read().catch(() => {
+      /* the poll below tries again */
+    });
+    const stop = startBackoffPoll(read, SETTLEMENT_POLL_MS);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      stop();
     };
   }, [settlementKey, settlementDone, originLanded, getSwapStatus]);
 

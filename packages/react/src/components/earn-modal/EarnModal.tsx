@@ -1,6 +1,13 @@
 'use client';
 
-import { EarnOpportunity, EarnPosition, EarnProviderId, SolanaEarnOpportunity, SolanaEarnPosition } from '@pollar/core';
+import {
+  EarnOpportunity,
+  EarnPosition,
+  EarnProviderId,
+  SolanaEarnOpportunity,
+  SolanaEarnPosition,
+  startBackoffPoll,
+} from '@pollar/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { useModalLanguage } from '../../language';
@@ -290,8 +297,7 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
 
   useEffect(() => {
     if (step !== 'form' || (!onSolana && !provider) || !opportunityId) return;
-    const id = setInterval(refreshPosition, POSITION_POLL_MS);
-    return () => clearInterval(id);
+    return startBackoffPoll(async () => refreshPosition(), POSITION_POLL_MS);
   }, [step, onSolana, provider, opportunityId, refreshPosition]);
 
   useEffect(

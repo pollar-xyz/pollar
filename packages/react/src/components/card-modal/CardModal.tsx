@@ -3,6 +3,7 @@
 import {
   isPollarApiError,
   isPollarNetworkError,
+  startBackoffPoll,
   type CardBalance,
   type CardDepositAddress,
   type CardFunding,
@@ -291,16 +292,10 @@ export function CardModal({ onClose, initial }: CardModalProps) {
   const kycPending = holder ? KYC_PENDING.has(holder.kycStatus) : false;
   useEffect(() => {
     if (!kycPending) return;
-    const id = setInterval(() => {
-      loadHolder()
-        .then((h) => {
-          if (h?.kycStatus === 'APPROVED') void loadCardData();
-        })
-        .catch(() => {
-          /* transient; the next tick retries */
-        });
+    return startBackoffPoll(async () => {
+      const h = await loadHolder();
+      if (h?.kycStatus === 'APPROVED') void loadCardData();
     }, KYC_POLL_MS);
-    return () => clearInterval(id);
   }, [kycPending, loadHolder, loadCardData]);
 
   useEffect(
@@ -465,24 +460,17 @@ export function CardModal({ onClose, initial }: CardModalProps) {
   const fundingsInflight = (fundings ?? []).some((f) => FUNDING_INFLIGHT.has(f.status));
   useEffect(() => {
     if (panel !== 'fund' || !fundingsInflight) return;
-    const id = setInterval(() => {
-      getClient()
-        .listCardFundings()
-        .then((next) => {
-          setFundings((previous) => {
-            // A funding that just got credited moves the card's balance: re-read it.
-            const credited = next.some(
-              (f) => f.status === 'CREDITED' && previous?.find((p) => p.id === f.id)?.status !== 'CREDITED',
-            );
-            if (credited) void loadCardData().catch(() => {});
-            return next;
-          });
-        })
-        .catch(() => {
-          /* transient; the next tick retries */
-        });
+    return startBackoffPoll(async () => {
+      const next = await getClient().listCardFundings();
+      setFundings((previous) => {
+        // A funding that just got credited moves the card's balance: re-read it.
+        const credited = next.some(
+          (f) => f.status === 'CREDITED' && previous?.find((p) => p.id === f.id)?.status !== 'CREDITED',
+        );
+        if (credited) void loadCardData().catch(() => {});
+        return next;
+      });
     }, FUNDING_POLL_MS);
-    return () => clearInterval(id);
   }, [panel, fundingsInflight, getClient, loadCardData]);
 
   const field = (

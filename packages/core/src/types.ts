@@ -1045,6 +1045,26 @@ export function isPollarApiError(err: unknown): err is PollarApiError {
 }
 
 /**
+ * True for an API error that says "try again later" rather than "no": a rate
+ * limit (429) or a server failure (5xx). The same request can go again.
+ */
+export function isTransientApiError(err: unknown): boolean {
+  if (!isPollarApiError(err)) return false;
+  if (err.code === 'RATE_LIMITED') return true;
+  const status = err.body.httpStatus;
+  return typeof status === 'number' && (status === 429 || status >= 500);
+}
+
+/**
+ * True for a failure the same request can simply retry later: a transient API
+ * error ({@link isTransientApiError}) or no answer at all (a timeout, or the
+ * `TypeError` fetch rejects with when the connection drops).
+ */
+export function isTransientFailure(err: unknown): boolean {
+  return isTransientApiError(err) || isPollarNetworkError(err) || err instanceof TypeError;
+}
+
+/**
  * The server's code for "this wallet's Stellar account is not on the ledger yet".
  *
  * Under asynchronous provisioning a login returns before the account exists, so

@@ -20,12 +20,21 @@ interface ResolvedAuthError {
 
 interface CatalogEntry {
   message: Record<PollarLanguage, string>;
-  errorCode: AuthErrorCode;
+  /** Absent for a code any flow can hit: the failure keeps the bucket of the flow it happened in. */
+  errorCode?: AuthErrorCode;
 }
 
 const appUnavailable = (language: PollarLanguage) => appUnavailableMessage({ code: 'SDK_CREDITS_INSUFFICIENT' }, language)!;
 
 const CATALOG: Record<string, CatalogEntry> = {
+  RATE_LIMITED: {
+    message: {
+      en: 'Too many attempts from this connection right now. Wait a minute and try again.',
+      es: 'Hay demasiados intentos desde esta conexión en este momento. Espera un minuto e intenta de nuevo.',
+      pt: 'Há tentativas demais desta conexão neste momento. Aguarde um minuto e tente novamente.',
+    },
+  },
+
   // -- Email sign-in refused by the app ---------------------------------------
   EMAIL_DISPOSABLE_NOT_ALLOWED: {
     message: {
@@ -253,22 +262,25 @@ const CATALOG: Record<string, CatalogEntry> = {
 
 /**
  * Resolves a backend error `code` to a friendly message + bucket. Falls back to
- * the supplied default message when the code is unknown or absent, bucketing by
- * the code's domain prefix (`TX_`/`SDK_TX_` -> `TX_FAILED`, else `PASSKEY_FAILED`).
+ * the supplied default message when the code is unknown or absent. The bucket is
+ * the entry's own, else `flowErrorCode`, else the code's domain prefix
+ * (`TX_`/`SDK_TX_` -> `TX_FAILED`, else `PASSKEY_FAILED`).
  */
 export function resolveAuthError(
   code: string | undefined,
   fallbackMessage: string,
   language: PollarLanguage = 'en',
+  flowErrorCode?: AuthErrorCode,
 ): ResolvedAuthError {
   const entry = code ? CATALOG[code] : undefined;
-  if (entry) return { message: entry.message[language], errorCode: entry.errorCode };
   // Bucket an UNKNOWN code by its domain prefix so a transaction code isn't
   // mislabeled as a passkey failure.
   const errorCode =
-    code && (code.startsWith('TX_') || code.startsWith('SDK_TX_'))
+    flowErrorCode ??
+    (code && (code.startsWith('TX_') || code.startsWith('SDK_TX_'))
       ? AUTH_ERROR_CODES.TX_FAILED
-      : AUTH_ERROR_CODES.PASSKEY_FAILED;
+      : AUTH_ERROR_CODES.PASSKEY_FAILED);
+  if (entry) return { message: entry.message[language], errorCode: entry.errorCode ?? errorCode };
   return { message: fallbackMessage, errorCode };
 }
 

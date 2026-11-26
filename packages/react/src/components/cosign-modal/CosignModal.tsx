@@ -4,6 +4,8 @@ import {
   type CosignRequest,
   type CosignVerification,
   isPollarApiError,
+  isTransientApiError,
+  startBackoffPoll,
   isPollarNetworkError,
   transactionErrorMessage,
 } from '@pollar/core';
@@ -148,8 +150,7 @@ export function CosignPrompt({ nextStep = null, onClose, inline = false }: Cosig
   const closeAfter = awaitingNext ? null : sent ? CLOSE_AFTER_SENT_SECONDS : silent ? CLOSE_AFTER_SECONDS : null;
   useEffect(() => {
     if (!awaitingNext) return;
-    const timer = setInterval(() => void refresh().catch(() => undefined), NEXT_REQUEST_EVERY_MS);
-    return () => clearInterval(timer);
+    return startBackoffPoll(refresh, NEXT_REQUEST_EVERY_MS);
   }, [awaitingNext, refresh]);
   const [closesIn, setClosesIn] = useState<number | null>(null);
   useEffect(() => {
@@ -187,9 +188,10 @@ export function CosignPrompt({ nextStep = null, onClose, inline = false }: Cosig
         setError(
           transactionErrorMessage(isPollarApiError(err) ? err.code : null, err instanceof Error ? err.message : null, language),
         );
-        // The network fee still on its way: the same approval goes through once it lands.
-        if (kind === 'approving' && !(isPollarApiError(err) && err.code === 'SDK_COSIGN_GAS_PENDING'))
-          setApproveFailedFor(request.id);
+        // The network fee still on its way, a rate limit or a server error: the
+        // same approval goes through on a later try.
+        const retryable = isTransientApiError(err) || (isPollarApiError(err) && err.code === 'SDK_COSIGN_GAS_PENDING');
+        if (kind === 'approving' && !retryable) setApproveFailedFor(request.id);
       } finally {
         setBusy(null);
       }

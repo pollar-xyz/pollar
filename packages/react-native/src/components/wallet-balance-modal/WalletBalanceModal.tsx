@@ -1,3 +1,4 @@
+import { startBackoffPoll } from '@pollar/core';
 import React, { useEffect } from 'react';
 import { View, StyleSheet, TouchableWithoutFeedback } from 'react-native';
 import { usePollar } from '../../context';
@@ -15,10 +16,7 @@ export function WalletBalanceModal({ onClose }: WalletBalanceModalProps) {
 
   useEffect(() => {
     refreshBalance();
-    const interval = setInterval(() => {
-      refreshBalance();
-    }, 10000);
-    return () => clearInterval(interval);
+    return startBackoffPoll(async () => refreshBalance(), 10_000);
   }, []);
 
   return (

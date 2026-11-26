@@ -57,6 +57,7 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     SDK_COSIGN_PASSKEY_UNAVAILABLE: "Passkeys aren't available on this device.",
     SDK_CREDITS_INSUFFICIENT: APP_UNAVAILABLE.en,
     SDK_BILLING_OVERDUE: APP_UNAVAILABLE.en,
+    RATE_LIMITED: 'Too many requests from this connection right now. Wait a minute and try again.',
   },
   es: {
     TX_INSUFFICIENT_BALANCE: 'No tienes saldo suficiente para cubrir el monto y la comisión de la red.',
@@ -97,6 +98,7 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     SDK_COSIGN_PASSKEY_UNAVAILABLE: 'Las passkeys no están disponibles en este dispositivo.',
     SDK_CREDITS_INSUFFICIENT: APP_UNAVAILABLE.es,
     SDK_BILLING_OVERDUE: APP_UNAVAILABLE.es,
+    RATE_LIMITED: 'Hay demasiadas solicitudes desde esta conexión en este momento. Espera un minuto e intenta de nuevo.',
   },
   pt: {
     TX_INSUFFICIENT_BALANCE: 'Você não tem saldo suficiente para cobrir o valor e a taxa da rede.',
@@ -136,6 +138,7 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     SDK_COSIGN_PASSKEY_UNAVAILABLE: 'Passkeys não estão disponíveis neste dispositivo.',
     SDK_CREDITS_INSUFFICIENT: APP_UNAVAILABLE.pt,
     SDK_BILLING_OVERDUE: APP_UNAVAILABLE.pt,
+    RATE_LIMITED: 'Há solicitações demais desta conexão neste momento. Aguarde um minuto e tente novamente.',
   },
 };
 

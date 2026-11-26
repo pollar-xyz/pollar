@@ -1,4 +1,4 @@
-import { PollarClient } from '@pollar/core';
+import { PollarClient, isTransientFailure } from '@pollar/core';
 import type {
   AuthState,
   CosignState,
@@ -389,16 +389,22 @@ function ClientProvider({
       return;
     }
     let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | null = null;
     client.cosign.recovery
       .status()
       .then((next) => {
         if (!cancelled) setRecovery(next);
       })
-      .catch(() => {
-        if (!cancelled) setRecovery(null);
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        // A rate limit or a lost answer says nothing about the wallet: keep what
+        // was read before and read again shortly.
+        if (isTransientFailure(err)) retry = setTimeout(() => setRecoveryTick((t) => t + 1), 5_000 + Math.random() * 5_000);
+        else setRecovery(null);
       });
     return () => {
       cancelled = true;
+      if (retry) clearTimeout(retry);
     };
   }, [client, signedIn, recoveryWallet, recoveryTick]);
   const recoveryLocked = !!recovery && recovery.required && !recovery.configured;
@@ -414,16 +420,23 @@ function ClientProvider({
       return;
     }
     let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | null = null;
     client.cosign
       .custodyMigration()
       .then((next) => {
         if (!cancelled) setCustodyMigration(next);
       })
-      .catch(() => {
-        if (!cancelled) setCustodyMigration(null);
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        // A rate limit or a lost answer says nothing about the wallet: keep what
+        // was read before and read again shortly.
+        if (isTransientFailure(err))
+          retry = setTimeout(() => setCustodyMigrationTick((t) => t + 1), 5_000 + Math.random() * 5_000);
+        else setCustodyMigration(null);
       });
     return () => {
       cancelled = true;
+      if (retry) clearTimeout(retry);
     };
   }, [client, signedIn, recoveryWallet, custodyMigrationTick]);
   const confirmations = client.getPendingConfirmations();

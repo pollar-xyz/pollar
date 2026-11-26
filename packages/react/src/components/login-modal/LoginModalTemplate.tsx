@@ -209,7 +209,9 @@ export function LoginModalTemplate({
   const isEmailCodeError =
     authState.step === 'error' &&
     (authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_EXPIRED ||
-      authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_INVALID);
+      authState.errorCode === AUTH_ERROR_CODES.EMAIL_CODE_INVALID ||
+      // A rate limit or a server error on verify: the same code can go again.
+      authState.errorCode === AUTH_ERROR_CODES.EMAIL_VERIFY_FAILED);
   const awaitingEmailCode = authState.step === 'entering_code' || authState.step === 'verifying_email_code' || isEmailCodeError;
   // The catalog's text in the modal's language when the backend named the reason.
   const statusMessage =

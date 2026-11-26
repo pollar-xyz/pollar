@@ -65,6 +65,17 @@ export function LoginModal({ onClose }: LoginModalProps) {
   }
 
   function handleRetry() {
+    // A rate-limited send goes again on the same login, with the email already typed.
+    if (
+      authState.step === 'error' &&
+      authState.errorCode === AUTH_ERROR_CODES.EMAIL_SEND_FAILED &&
+      authState.code === 'RATE_LIMITED' &&
+      authState.clientSessionId &&
+      authState.email
+    ) {
+      getClient().sendEmailCode(authState.email);
+      return;
+    }
     getClient().logout();
     if (styles.emailEnabled) {
       getClient().beginEmailLogin();

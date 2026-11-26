@@ -23,6 +23,7 @@ import {
   rampNextApproval,
   rampQuoteFields,
   rampTrustlineErrorText,
+  startBackoffPoll,
 } from '@pollar/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
@@ -378,17 +379,13 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
       setPollKey((key) => key + 1);
       return;
     }
-    const timer = setInterval(() => {
+    return startBackoffPoll(async () => {
       if (Date.now() >= paymentCheckUntil) {
         setPaymentCheckUntil(null);
         return;
       }
-      client
-        .checkRampOrder(orderId)
-        .then(setOrder)
-        .catch(() => undefined);
+      setOrder(await client.checkRampOrder(orderId));
     }, PAYMENT_CHECK_EVERY_MS);
-    return () => clearInterval(timer);
   }, [client, orderId, awaitingPayment, paymentCheckUntil]);
 
   useEffect(() => {

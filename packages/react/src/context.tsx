@@ -2,6 +2,7 @@
 
 import {
   isPollarClient,
+  isTransientFailure,
   BuildOutcome,
   CosignCustody,
   EnabledAssetsState,
@@ -828,16 +829,22 @@ export function PollarProvider({
       return;
     }
     let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | null = null;
     pollarClient.cosign.recovery
       .status()
       .then((next) => {
         if (!cancelled) setRecovery(next);
       })
-      .catch(() => {
-        if (!cancelled) setRecovery(null);
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        // A rate limit or a lost answer says nothing about the wallet: keep what
+        // was read before and read again shortly.
+        if (isTransientFailure(err)) retry = setTimeout(() => setRecoveryTick((t) => t + 1), 5_000 + Math.random() * 5_000);
+        else setRecovery(null);
       });
     return () => {
       cancelled = true;
+      if (retry) clearTimeout(retry);
     };
   }, [pollarClient, hasSession, walletAddress, recoveryTick]);
   const recoveryLocked = !!recovery && recovery.required && !recovery.configured;
@@ -854,16 +861,23 @@ export function PollarProvider({
       return;
     }
     let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | null = null;
     pollarClient.cosign
       .custodyMigration()
       .then((next) => {
         if (!cancelled) setCustodyMigration(next);
       })
-      .catch(() => {
-        if (!cancelled) setCustodyMigration(null);
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        // A rate limit or a lost answer says nothing about the wallet: keep what
+        // was read before and read again shortly.
+        if (isTransientFailure(err))
+          retry = setTimeout(() => setCustodyMigrationTick((t) => t + 1), 5_000 + Math.random() * 5_000);
+        else setCustodyMigration(null);
       });
     return () => {
       cancelled = true;
+      if (retry) clearTimeout(retry);
     };
   }, [pollarClient, hasSession, walletAddress, custodyMigrationTick]);
   // refreshBalance resolves the own wallet server-side from the session;

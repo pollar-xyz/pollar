@@ -1,4 +1,11 @@
-import { type CosignRequest, type CosignVerification, isPollarNetworkError } from '@pollar/core';
+import {
+  type CosignRequest,
+  type CosignVerification,
+  isPollarApiError,
+  isPollarNetworkError,
+  startBackoffPoll,
+  transactionErrorMessage,
+} from '@pollar/core';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { useModalLanguage } from '../../language';
@@ -63,14 +70,7 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
   const closeAfter = awaitingNext ? null : sent ? CLOSE_AFTER_SENT_SECONDS : silent ? CLOSE_AFTER_SECONDS : null;
   useEffect(() => {
     if (!awaitingNext) return;
-    const timer = setInterval(
-      () =>
-        void getClient()
-          .cosign.pending()
-          .catch(() => undefined),
-      NEXT_REQUEST_EVERY_MS,
-    );
-    return () => clearInterval(timer);
+    return startBackoffPoll(() => getClient().cosign.pending(), NEXT_REQUEST_EVERY_MS);
   }, [awaitingNext, getClient]);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -157,12 +157,19 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
       } catch (err) {
         // fetch rejects with a TypeError when no answer comes back (offline, a replica mid-deploy).
         if (isPollarNetworkError(err) || err instanceof TypeError) setError(copy.unreachable);
-        else setError(err instanceof Error ? err.message : copy.genericError);
+        else
+          setError(
+            transactionErrorMessage(
+              isPollarApiError(err) ? err.code : null,
+              err instanceof Error ? err.message : null,
+              language,
+            ),
+          );
       } finally {
         setBusy(null);
       }
     },
-    [getClient, copy],
+    [getClient, copy, language],
   );
 
   return (

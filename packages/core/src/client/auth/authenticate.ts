@@ -101,7 +101,9 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
     // message; anything else stays the generic session failure. The modals
     // re-translate the message from `code`.
     const code = extractErrorCode(error, data);
-    const known = authErrorMessage(code, 'en') ? resolveAuthError(code, 'Failed to load session') : null;
+    const known = authErrorMessage(code, 'en')
+      ? resolveAuthError(code, 'Failed to load session', 'en', AUTH_ERROR_CODES.AUTH_FAILED)
+      : null;
     // Clear first, then emit error (see the LOGIN_TIMEOUT branch above).
     await clearSession();
     setAuthState({

@@ -159,7 +159,10 @@ export class CosignRecovery {
   async status(): Promise<RecoveryState> {
     const res = await this.deps.api.GET('/cosign/recovery');
     if (res.error || !res.data?.content)
-      throw new PollarApiError('SDK_COSIGN_UPSTREAM_ERROR', isRecord(res.error) ? res.error : {});
+      throw new PollarApiError('SDK_COSIGN_UPSTREAM_ERROR', {
+        ...(isRecord(res.error) ? res.error : {}),
+        httpStatus: res.response?.status,
+      });
     return res.data.content;
   }
 
@@ -261,7 +264,11 @@ export class CosignRecovery {
     const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
     if (!res.ok || !json) {
       const message = stringField(json, 'message') ?? `Turnkey's Auth Proxy answered ${res.status}`;
-      const code = OTP_CAP_MESSAGE.test(message) ? 'SDK_COSIGN_OTP_RATE_LIMITED' : 'SDK_COSIGN_TURNKEY_REJECTED';
+      const code = OTP_CAP_MESSAGE.test(message)
+        ? 'SDK_COSIGN_OTP_RATE_LIMITED'
+        : res.status === 429
+          ? 'RATE_LIMITED'
+          : 'SDK_COSIGN_TURNKEY_REJECTED';
       throw new PollarApiError(code, { turnkeyStatus: res.status, message });
     }
     return json as T;

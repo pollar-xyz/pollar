@@ -108,6 +108,7 @@ import { hashApiKey } from '../lib/api-key-hash';
 import { createLogger, type PollarLogger } from '../lib/logger';
 import { redactBody, redactDeep } from '../lib/logging';
 import { randomUUID } from '../lib/random-uuid';
+import { parseRetryAfterMs, retryAfterDelayMs } from '../lib/retry-after';
 import { onChainErrorCode } from '../lib/tx-error-messages';
 import { apiErrorFields, isRecord, responseErrorCode, stringField } from '../api/error-fields';
 import { bytesToHex, hexToBytes } from '../cosign/encoding';
@@ -194,7 +195,6 @@ import {
   PollarLoginOptions,
   PollarPersistedSession,
   PollarPersistedWallet,
-  isPollarNetworkError,
   PollarUserProfile,
   SessionInfo,
   SessionsState,
@@ -646,6 +646,10 @@ export class PollarClient {
   private _resumeFailStreak = 0;
   /** Epoch ms before which `_resume()` refuses to fire again (failure backoff). */
   private _resumeBackoffUntil = 0;
+  /** Consecutive `/auth/refresh` answers that were a rate limit or a server failure. */
+  private _refreshFailStreak = 0;
+  /** Epoch ms before which `refresh()` does not call `/auth/refresh` again (see `_deferRefresh`). */
+  private _refreshRetryAt = 0;
   /** Platform strategy for opening the hosted-OAuth URL (popup on web; injected on RN). */
   private readonly _openAuthUrl: AuthUrlOpener;
   /** `redirect_uri` sent to the backend for hosted OAuth. */
@@ -1452,6 +1456,11 @@ export class PollarClient {
   refresh(): Promise<void> {
     if (this._destroyed) return Promise.resolve();
     if (this._refreshPromise) return this._refreshPromise;
+    // A deferred refresh waits for its retry timer: every 401 in that window
+    // asking again would only spend the limit that is already exhausted.
+    if (Date.now() < this._refreshRetryAt) {
+      return Promise.reject(new Error('Refresh deferred: /auth/refresh is rate limited or unavailable'));
+    }
     this._refreshPromise = this._doRefresh().finally(() => {
       this._refreshPromise = null;
     });
@@ -1488,18 +1497,26 @@ export class PollarClient {
     const refreshCall = () => this._api.POST('/auth/refresh', { body: { refreshToken } });
     let data: Awaited<ReturnType<typeof refreshCall>>['data'];
     let error: Awaited<ReturnType<typeof refreshCall>>['error'];
+    let response: Response | undefined;
     try {
-      ({ data, error } = await refreshCall());
+      ({ data, error, response } = await refreshCall());
     } catch (err) {
       // A transient transport failure (timeout / dropped connection) must NOT
       // tear down the session: the refresh token is almost certainly still
       // valid - the network just hiccuped - so clearing here would log the user
       // out over a momentary stall. Keep the session and rethrow a catchable
-      // error; the caller can fall back to the cached token, and the next
-      // request (or proactive timer) will refresh once connectivity returns.
-      // Genuine refresh failures (4xx/5xx, malformed) still clear, below.
-      if (isPollarNetworkError(err)) {
-        this._log.warn('[PollarClient] /auth/refresh timed out; keeping session for retry', err);
+      // error and retry soon: the server may have rotated the token before the
+      // answer was lost, and it only accepts the old one again for 30 seconds
+      // (`REFRESH_ROTATION_GRACE_MS` in sdk-api) before revoking the family.
+      // A browser reports an answer it cannot read (a proxy's 502 or 429 without
+      // CORS headers) as this same `TypeError`.
+      // Genuine refresh failures (4xx other than 429, malformed) still clear, below.
+      if (isRetryableTransportError(err)) {
+        const delayMs = this._deferRefresh(gen, undefined);
+        this._log.warn(
+          `[PollarClient] /auth/refresh got no answer; keeping session, retrying in ${Math.ceil(delayMs / 1000)}s`,
+          err,
+        );
         throw err;
       }
       this._log.error('[PollarClient] /auth/refresh request threw', err);
@@ -1508,6 +1525,17 @@ export class PollarClient {
     }
 
     if (error || !data) {
+      // A rate limit or a server failure says nothing about the refresh token.
+      // Clearing on it logs out every user behind one IP the moment they renew
+      // together, and sends them all to log in again against a stricter limit.
+      const status = response?.status ?? 0;
+      if (status === 429 || status >= 500) {
+        const delayMs = this._deferRefresh(gen, response);
+        this._log.warn(
+          `[PollarClient] /auth/refresh answered ${status}; keeping session, retrying in ${Math.ceil(delayMs / 1000)}s`,
+        );
+        throw new Error(`Refresh deferred (${status})`);
+      }
       this._log.error('[PollarClient] /auth/refresh returned error', { error: redactDeep(error) });
       await this._clearIfCurrent(gen);
       throw new Error('Refresh failed');
@@ -1543,6 +1571,8 @@ export class PollarClient {
       await this._clearIfCurrent(gen);
       throw new Error('Refresh response token shape invalid');
     }
+    this._refreshFailStreak = 0;
+    this._refreshRetryAt = 0;
     // Sanity (non-fatal): `expiresAt` is Unix SECONDS. A value implausibly far
     // ahead (e.g. the server mistakenly sending milliseconds) would silently
     // disable proactive refresh - the scheduler clamps the huge delay - so the
@@ -1586,6 +1616,27 @@ export class PollarClient {
       this._setAuthState({ ...this._authState, session: this._session });
     }
     this._scheduleNextRefresh();
+  }
+
+  /**
+   * Arm the retry of a refresh the server deferred (429/5xx) and return its
+   * delay: the server's `Retry-After` when present (the only rate-limit header
+   * sdk-api exposes to browsers), else a 1s -> 30s backoff, plus jitter.
+   */
+  private _deferRefresh(gen: number, response: Response | undefined): number {
+    this._refreshFailStreak++;
+    const retryAfterMs = parseRetryAfterMs(response?.headers.get('Retry-After'));
+    const fallbackMs = Math.min(1_000 * 2 ** (this._refreshFailStreak - 1), 30_000);
+    const delayMs = retryAfterDelayMs(retryAfterMs ?? fallbackMs, 1_000, 120_000);
+    this._refreshRetryAt = Date.now() + delayMs;
+    if (!this._destroyed && this._sessionGeneration === gen) {
+      this._clearRefreshTimer();
+      this._refreshTimer = setTimeout(() => {
+        this._refreshRetryAt = 0;
+        void this._maybeProactiveRefresh();
+      }, delayMs);
+    }
+    return delayMs;
   }
 
   // --- Silent refresh scheduler ------------------------------------------------
@@ -1634,7 +1685,8 @@ export class PollarClient {
    * so we never collide with a reactive 401-triggered refresh. On a genuine
    * failure `_doRefresh` clears the session (listeners see `step:'idle'`); on a
    * transient network timeout it keeps the session and rejects - we just log and
-   * leave it for the next reactive refresh / foreground re-trigger.
+   * leave it for the next reactive refresh / foreground re-trigger. A 429/5xx
+   * also keeps it, and `_deferRefresh` has already armed the retry.
    */
   private async _maybeProactiveRefresh(): Promise<void> {
     if (this._destroyed) return;
@@ -2058,10 +2110,18 @@ export class PollarClient {
       warnServerSide('sendEmailCode');
       return;
     }
-    if (this._authState.step !== 'entering_email') {
-      throw new PollarFlowError(`sendEmailCode() requires step 'entering_email', current step is '${this._authState.step}'`);
+    // A send the server rate limited goes again on the same login session: a new
+    // one would spend the stricter `/auth/session` limit from the same IP.
+    const state = this._authState;
+    const resendable =
+      state.step === 'error' &&
+      state.errorCode === AUTH_ERROR_CODES.EMAIL_SEND_FAILED &&
+      state.code === 'RATE_LIMITED' &&
+      !!state.clientSessionId;
+    if (state.step !== 'entering_email' && !resendable) {
+      throw new PollarFlowError(`sendEmailCode() requires step 'entering_email', current step is '${state.step}'`);
     }
-    const { clientSessionId } = this._authState;
+    const clientSessionId = state.step === 'entering_email' ? state.clientSessionId : state.clientSessionId!;
     // Reuse the active login controller if present, else mint one - matching the
     // other entry points; mint a fresh controller if there's none or the
     // existing one is already aborted (else this resend would hit a dead signal).
@@ -6194,13 +6254,18 @@ export class PollarClient {
       // dead. A successful refresh both rotates the token AND proves the session
       // is alive server-side, so emit `verified:true` and skip the resume.
       // `_doRefresh` already re-armed the proactive timer and, on failure, cleared
-      // the session (so we just return).
+      // the session (so we just return). A deferred refresh (429/5xx, timeout)
+      // keeps the session: surface it unverified, and the armed retry renews it.
       if (this._session.token.expiresAt * 1000 < Date.now()) {
         this._log.info('[PollarClient] Restored session has an expired access token; refreshing before surfacing it');
         try {
           await this.refresh();
         } catch {
-          return; // refresh failed -> session was cleared; stay logged out
+          if (this._session) {
+            this._setAuthState({ step: 'authenticated', session: this._session, verified: false });
+            this._emitWalletStateIfChanged(prevSession, this._session);
+          }
+          return;
         }
         if (this._session) {
           this._setAuthState({ step: 'authenticated', session: this._session, verified: true });
@@ -6303,7 +6368,10 @@ export class PollarClient {
         // logout. A 404 (deploy/endpoint mismatch), 429 (rate limit) or 5xx
         // (transient) must NOT strand the user logged-out.
         const status = response?.status ?? 0;
-        if (status === 401 || status === 403 || status === 410) {
+        // A 401 while the refresh is deferred is the expired access token the
+        // pending retry is about to renew, not a revoked session.
+        const refreshDeferred = Date.now() < this._refreshRetryAt;
+        if ((status === 401 && !refreshDeferred) || status === 403 || status === 410) {
           await this._clearSession();
         } else {
           this._noteResumeFailure();
@@ -6423,6 +6491,8 @@ export class PollarClient {
     // session is already server-validated -> `verified: true`.
     this._setAuthState({ step: 'authenticated', session: persisted, verified: true });
     this._emitWalletStateIfChanged(prevSession, persisted);
+    this._refreshFailStreak = 0;
+    this._refreshRetryAt = 0;
     this._scheduleNextRefresh();
     // A login that returned before the account was on the ledger leaves the
     // wallet CREATING. Nothing else would tell the app when that ends.
@@ -6456,6 +6526,8 @@ export class PollarClient {
     this._resumeController = null;
     this._resetResumeBackoff();
     this._clearRefreshTimer();
+    this._refreshFailStreak = 0;
+    this._refreshRetryAt = 0;
     this._session = null;
     this._profile = null;
     this._walletAdapter = null;

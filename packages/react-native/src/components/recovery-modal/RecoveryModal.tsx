@@ -5,6 +5,7 @@ import {
   type RecoveryState,
   transactionErrorMessage,
   cosignRefusalMessage,
+  startBackoffPoll,
 } from '@pollar/core';
 import React, { useCallback, useEffect, useState } from 'react';
 import { usePollar } from '../../context';
@@ -15,6 +16,8 @@ import { RecoveryModalTemplate, type RecoveryView } from './RecoveryModalUI';
 
 /** How often the modal reads again while another device is asked to add this one. */
 const APPROVAL_POLL_MS = 3_000;
+/** How long the modal waits to read again when the read after a successful action failed. */
+const RELOAD_AFTER_FAILURE_MS = 5_000;
 /** An enrollment request expires after 15 minutes; past that nothing can approve it. */
 const APPROVAL_WINDOW_MS = 15 * 60_000;
 
@@ -81,12 +84,20 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
       setError(null);
       setNotice(null);
       try {
-        await action();
-        await load();
+        try {
+          await action();
+        } catch (err) {
+          setError(errorText(err, language));
+          return;
+        }
+        // The action went through. A failed read after it (a rate limit) must not
+        // show as its failure: the user would repeat a step already done, such as
+        // an email code that is now spent. Read again a little later instead.
+        await load().catch(() => {
+          setTimeout(() => void load().catch(() => undefined), RELOAD_AFTER_FAILURE_MS);
+        });
         if (after?.notice) setNotice(after.notice);
         if (after?.view) setView(after.view);
-      } catch (err) {
-        setError(errorText(err, language));
       } finally {
         setBusy(null);
       }
@@ -117,10 +128,10 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
       setNotice(copy.deviceAdded);
       return;
     }
-    const timer = setInterval(() => void load().catch(() => undefined), APPROVAL_POLL_MS);
+    const stopPoll = startBackoffPoll(load, APPROVAL_POLL_MS);
     const stop = setTimeout(() => setAwaitingApproval(false), APPROVAL_WINDOW_MS);
     return () => {
-      clearInterval(timer);
+      stopPoll();
       clearTimeout(stop);
     };
   }, [awaitingApproval, enrolled, load, copy]);

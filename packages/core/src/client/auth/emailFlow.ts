@@ -43,13 +43,18 @@ export async function sendEmailCode(email: string, clientSessionId: string, ctx:
     // its message and bucket; anything else stays a retryable send failure.
     // The modals re-translate the message from `code`.
     const code = extractErrorCode(error, data);
-    const known = authErrorMessage(code, 'en') ? resolveAuthError(code, 'Failed to send code') : null;
+    const known = authErrorMessage(code, 'en')
+      ? resolveAuthError(code, 'Failed to send code', 'en', AUTH_ERROR_CODES.EMAIL_SEND_FAILED)
+      : null;
     setAuthState({
       step: 'error',
       previousStep: 'sending_email',
       message: known?.message ?? 'Failed to send code',
       errorCode: known?.errorCode ?? AUTH_ERROR_CODES.EMAIL_SEND_FAILED,
       ...(code ? { code } : {}),
+      // Lets a rate-limited send go again on this same login session.
+      clientSessionId,
+      email,
     });
     return;
   }
@@ -121,11 +126,14 @@ export async function verifyAndAuthenticate(
   // contract drift) stays RETRYABLE - the message says "try again" and the
   // session is usually still alive, so `verifyEmailCode()` must be able to
   // re-submit without restarting the whole flow.
+  const serverCode = extractErrorCode(error, data);
+  const known = authErrorMessage(serverCode, 'en');
   setAuthState({
     step: 'error',
     previousStep: 'verifying_email_code',
-    message: 'Failed to verify code — try again',
+    message: known ?? 'Failed to verify code — try again',
     errorCode: AUTH_ERROR_CODES.EMAIL_VERIFY_FAILED,
+    ...(known && serverCode ? { code: serverCode } : {}),
     clientSessionId,
     email,
   });

@@ -63,8 +63,11 @@ export {
   isPollarNetworkError,
   PollarApiError,
   isPollarApiError,
+  isTransientApiError,
+  isTransientFailure,
 } from './types';
 export { RampChain } from './types';
+export { startBackoffPoll } from './lib/backoff-poll';
 export { WALLET_NOT_READY_CODE, isWalletNotReady, WALLET_REQUIRED_CODE, isWalletRequired } from './types';
 export { PollarApiClient } from './api/client';
 export type { paths as pollarPaths } from './api/schema';
