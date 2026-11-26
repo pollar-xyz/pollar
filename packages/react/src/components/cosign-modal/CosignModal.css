@@ -282,3 +282,19 @@
   font-size: 0.78rem;
   font-weight: 600;
 }
+
+/* The prompt inside another flow's modal: that modal is the card, the prompt is a section of it. */
+.pollar-cosign-inline {
+  padding: 1rem;
+  border: 1px solid var(--pollar-border);
+  border-radius: var(--pollar-card-border-radius, 12px);
+  background: var(--pollar-input-bg, transparent);
+}
+
+.pollar-cosign-inline .pollar-modal-header {
+  margin-bottom: 0.5rem;
+}
+
+.pollar-cosign-inline .pollar-modal-title {
+  font-size: 1rem;
+}

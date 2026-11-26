@@ -40,6 +40,7 @@ import { useModalLanguage } from '../../language';
 import { RAMP_COPY, type RampCopy } from './ramp-copy';
 import { PollarOverlay } from '../PollarOverlay';
 import { useInlineConfirmation } from '../../useInlineConfirmation';
+import { CosignPrompt } from '../cosign-modal/CosignModal';
 import { BEST_ROUTE, routeKey } from './ramp-route';
 
 /** Where the ramp widget opens: a starting point the user can change, never a lock. */
@@ -171,6 +172,7 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
     appConfig,
     cosign,
     refreshWalletBalance,
+    registerCosignHost,
   } = usePollar();
   const client = getClient();
   const language = useModalLanguage(languageProp);
@@ -397,6 +399,11 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   }, [awaitingPayment]);
 
   // A co-signed step of the order waits on the user's device: bring its request up the moment it appears.
+  // A running order shows its co-sign approvals on its own step screen, not in a modal over it.
+  const hostsCosign = step === 'status' && !!order && !['completed', 'failed', 'refunded'].includes(order.state);
+  const hostsCosignRef = useRef(hostsCosign);
+  hostsCosignRef.current = hostsCosign;
+  useEffect(() => (hostsCosign ? registerCosignHost() : undefined), [hostsCosign, registerCosignHost]);
   const approval = order?.pendingAction?.kind === 'COSIGN_APPROVAL' ? order.pendingAction.actionId : null;
   const approvalRequest = order?.pendingAction?.kind === 'COSIGN_APPROVAL' ? order.pendingAction.cosignRequestId : null;
   useEffect(() => {
@@ -409,7 +416,7 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
         // The provider's sign-in moves nothing: under the app's 'auto' confirmation it is approved without the prompt.
         const request = requests.find((r) => r.id === approvalRequest);
         if (request && (await client.autoApproveSignIn(request))) return;
-        openCosignModal();
+        if (!hostsCosignRef.current) openCosignModal();
       });
   }, [approval, approvalRequest, client, openCosignModal]);
 
@@ -884,6 +891,7 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
         }}
         onSign={() => void handleSign()}
         onApprove={openCosignModal}
+        cosignPrompt={hostsCosign && cosign.pending.length > 0 ? <CosignPrompt inline onClose={() => undefined} /> : null}
         retrying={retrying}
         onRetryOrder={() => void handleRetryOrder()}
         onRequote={() => void handleRequote()}

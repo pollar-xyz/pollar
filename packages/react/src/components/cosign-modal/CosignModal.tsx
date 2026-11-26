@@ -37,9 +37,23 @@ interface CosignModalProps {
  * against Turnkey before enabling Approve, so the user only ever confirms a
  * transaction the device checked itself.
  */
-export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
+export function CosignModal(props: CosignModalProps) {
+  const { styles } = usePollar();
+  const { overlayStyle } = modalChrome(styles);
+  return (
+    <PollarOverlay style={overlayStyle}>
+      <CosignPrompt {...props} />
+    </PollarOverlay>
+  );
+}
+
+/**
+ * The prompt itself, for a flow that shows it inside its own modal (`inline`):
+ * no card, no close button; the flow's own X and screens frame it.
+ */
+export function CosignPrompt({ nextStep = null, onClose, inline = false }: CosignModalProps & { inline?: boolean }) {
   const { getClient, styles, network, openRecoveryModal } = usePollar();
-  const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
+  const { theme, accentColor, styleOverrides } = modalChrome(styles);
   const { pending, lastResolved, loaded, refresh, approve, reject, verify, inspectQuorum } = useCosign();
   const language = useModalLanguage();
 
@@ -184,37 +198,36 @@ export function CosignModal({ nextStep = null, onClose }: CosignModalProps) {
   );
 
   return (
-    <PollarOverlay style={overlayStyle}>
-      <CosignModalTemplate
-        theme={theme}
-        accentColor={accentColor}
-        styleOverrides={styleOverrides}
-        pending={pending}
-        current={current}
-        verification={current ? (quorumFailure ? { ok: false, reason: quorumFailure } : verification) : null}
-        busy={busy}
-        error={error}
-        approveBlocked={!!current && approveFailedFor === current.id}
-        deviceNotLinked={deviceNotLinked}
-        onLinkDevice={() => {
-          onClose();
-          openRecoveryModal();
-        }}
-        {...(lastResolved ? { lastResolved } : {})}
-        closesIn={closesIn}
-        nextStep={awaitingNext ? nextStep : null}
-        language={language}
-        network={network}
-        history={history}
-        explorerUrlOf={(r) => (r.submit?.hash ? explorerTxUrl(r.network, r.submit.hash, network) : null)}
-        onSelect={(r) => setSelectedId(r.id)}
-        onApprove={(r) => void run('approving', r, approve)}
-        onReject={(r) => void run('rejecting', r, reject)}
-        onClose={requestClose}
-        confirmingClose={confirmingClose}
-        onKeepOpen={() => setAskedToClose(false)}
-        onCloseAnyway={onClose}
-      />
-    </PollarOverlay>
+    <CosignModalTemplate
+      inline={inline}
+      theme={theme}
+      accentColor={accentColor}
+      styleOverrides={styleOverrides}
+      pending={pending}
+      current={current}
+      verification={current ? (quorumFailure ? { ok: false, reason: quorumFailure } : verification) : null}
+      busy={busy}
+      error={error}
+      approveBlocked={!!current && approveFailedFor === current.id}
+      deviceNotLinked={deviceNotLinked}
+      onLinkDevice={() => {
+        onClose();
+        openRecoveryModal();
+      }}
+      {...(lastResolved ? { lastResolved } : {})}
+      closesIn={closesIn}
+      nextStep={awaitingNext ? nextStep : null}
+      language={language}
+      network={network}
+      history={history}
+      explorerUrlOf={(r) => (r.submit?.hash ? explorerTxUrl(r.network, r.submit.hash, network) : null)}
+      onSelect={(r) => setSelectedId(r.id)}
+      onApprove={(r) => void run('approving', r, approve)}
+      onReject={(r) => void run('rejecting', r, reject)}
+      onClose={requestClose}
+      confirmingClose={confirmingClose}
+      onKeepOpen={() => setAskedToClose(false)}
+      onCloseAnyway={onClose}
+    />
   );
 }

@@ -121,7 +121,9 @@ export interface RampCopy {
     send: (amount: string, code: string) => string;
     delivering: (code: string) => string;
     payingOut: (currency: string) => string;
-    next: string;
+    stepLabel: (position: number, total: number, title: string) => string;
+    finalStep: string;
+    paidAt: string;
     paidDone: (amount: string, currency: string) => string;
     sentDone: (amount: string, code: string) => string;
     receivedDone: (amount: string, code: string, chain: string) => string;
@@ -139,7 +141,6 @@ export interface RampCopy {
     received: (amount: string) => string;
     arrived: (chain: string) => string;
     paidOut: string;
-    finish: string;
     details: string;
   };
   somethingWrong: string;
@@ -295,7 +296,9 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
       send: (amount, code) => `Send ${amount} ${code}`,
       delivering: (code) => `Your ${code} is on its way`,
       payingOut: (currency) => `Your ${currency} is on its way to your account`,
-      next: 'Next step',
+      stepLabel: (position, total, title) => `Step ${position} of ${total}: ${title}`,
+      finalStep: 'Done',
+      paidAt: 'Paid',
       paidDone: (amount, currency) => `You paid ${amount} ${currency}.`,
       sentDone: (amount, code) => `You sent ${amount} ${code}.`,
       receivedDone: (amount, code, chain) => `You received ${amount} ${code} on ${chain}.`,
@@ -312,7 +315,6 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
       received: (amount) => `+${amount}`,
       arrived: (chain) => `It reached your wallet on ${chain}.`,
       paidOut: 'It was sent to your account.',
-      finish: 'Done',
       details: 'Details',
     },
     somethingWrong: 'Something went wrong.',
@@ -466,7 +468,9 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
       send: (amount, code) => `Envía ${amount} ${code}`,
       delivering: (code) => `Tu ${code} está en camino`,
       payingOut: (currency) => `Tus ${currency} van en camino a tu cuenta`,
-      next: 'Paso siguiente',
+      stepLabel: (position, total, title) => `Paso ${position} de ${total}: ${title}`,
+      finalStep: 'Listo',
+      paidAt: 'Pagado',
       paidDone: (amount, currency) => `Pagaste ${amount} ${currency}.`,
       sentDone: (amount, code) => `Enviaste ${amount} ${code}.`,
       receivedDone: (amount, code, chain) => `Recibiste ${amount} ${code} en ${chain}.`,
@@ -483,7 +487,6 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
       received: (amount) => `+${amount}`,
       arrived: (chain) => `Llegó a tu wallet en ${chain}.`,
       paidOut: 'Se envió a tu cuenta.',
-      finish: 'Listo',
       details: 'Detalles',
     },
     somethingWrong: 'Algo salió mal.',
@@ -640,7 +643,9 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
       send: (amount, code) => `Envie ${amount} ${code}`,
       delivering: (code) => `Seu ${code} está a caminho`,
       payingOut: (currency) => `Seus ${currency} estão a caminho da sua conta`,
-      next: 'Próxima etapa',
+      stepLabel: (position, total, title) => `Etapa ${position} de ${total}: ${title}`,
+      finalStep: 'Pronto',
+      paidAt: 'Pago em',
       paidDone: (amount, currency) => `Você pagou ${amount} ${currency}.`,
       sentDone: (amount, code) => `Você enviou ${amount} ${code}.`,
       receivedDone: (amount, code, chain) => `Você recebeu ${amount} ${code} na ${chain}.`,
@@ -657,7 +662,6 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
       received: (amount) => `+${amount}`,
       arrived: (chain) => `Chegou à sua carteira na ${chain}.`,
       paidOut: 'Foi enviado para a sua conta.',
-      finish: 'Pronto',
       details: 'Detalhes',
     },
     somethingWrong: 'Algo deu errado.',

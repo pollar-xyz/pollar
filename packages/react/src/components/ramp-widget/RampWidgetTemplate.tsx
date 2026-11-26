@@ -1,7 +1,7 @@
 'use client';
 
 import { useInheritedLanguage } from '../../language-context';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type {
   CosignCustody,
   PendingConfirmation,
@@ -241,6 +241,8 @@ interface RampWidgetTemplateProps {
   onClose: () => void;
   /** A leg's signature waiting for the user's yes, answered in the status view. */
   confirmation?: PendingConfirmation | null | undefined;
+  /** The co-sign approval the running order waits on, drawn on the current step's screen. */
+  cosignPrompt?: ReactNode;
   /** Cancels the running order; absent, leaving only closes or starts another. */
   onCancelOrder?: (() => void) | undefined;
   cancelling?: boolean;
@@ -336,6 +338,7 @@ export function RampWidgetTemplate({
   language: languageProp,
   confirmation = null,
   onCancelOrder,
+  cosignPrompt = null,
   cancelling = false,
   cancelError = null,
 }: RampWidgetTemplateProps) {
@@ -349,6 +352,8 @@ export function RampWidgetTemplate({
   const [viewing, setViewing] = useState<number | null>(null);
   // The X asked whether to leave an order that is still running.
   const [leaving, setLeaving] = useState(false);
+  // The details of a done step, kept open while the user moves between done steps.
+  const [doneDetailsOpen, setDoneDetailsOpen] = useState(false);
   useEffect(() => {
     setViewing(null);
     setLeaving(false);
@@ -502,8 +507,29 @@ export function RampWidgetTemplate({
   };
   // A substitute the provider paid out, said once the order is done.
   const finalNote = order?.legs.map((leg) => rampLegNote(leg, language)).find((note) => note !== null) ?? null;
+  /** The QR a done payment step paid, kept on the order after the payment. */
+  const paidQr = (screen: RampScreen) => {
+    if (!screen.key.endsWith(':pay')) return null;
+    const instructions = screen.leg.paymentRequest?.instructions;
+    return instructions?.kind === 'qr' ? (instructions.scannable?.image ?? null) : null;
+  };
+  const paidRows = (screen: RampScreen): TxDetailRow[] => {
+    if (!screen.key.endsWith(':pay') || !order) return [];
+    const at = screen.leg.paymentReceivedAt;
+    return [
+      ...(at
+        ? [
+            {
+              label: copy.screens.paidAt,
+              value: new Date(at).toLocaleString(language, { dateStyle: 'medium', timeStyle: 'short' }),
+            },
+          ]
+        : []),
+      { label: copy.order, value: `…${order.id.slice(-8)}`, copyValue: order.id, mono: true },
+    ];
+  };
   // The transactions one screen ran; a provider payment runs none of the user's.
-  const screenRows = (screen: RampScreen): TxDetailRow[] =>
+  const screenRowsOf = (screen: RampScreen): TxDetailRow[] =>
     screen.steps.length
       ? screen.steps.flatMap((st): TxDetailRow[] =>
           st.hash
@@ -527,6 +553,7 @@ export function RampWidgetTemplate({
             },
           ]
         : [];
+  const screenRows = (screen: RampScreen): TxDetailRow[] => [...paidRows(screen), ...screenRowsOf(screen)];
 
   const stepTitle: Record<RampStep, string> = {
     input: onramp ? copy.title.buy : copy.title.sell,
@@ -626,43 +653,54 @@ export function RampWidgetTemplate({
       )}
 
       {step === 'status' && screens.length > 0 && !(leaving && !settled) && (
-        <div className="pollar-ramp-screens-nav">
-          {/* Hidden, not removed, when there is nowhere to go: the bar keeps its width. */}
-          <button
-            type="button"
-            className="pollar-ramp-screens-arrow"
-            data-hidden={shownScreen === 0 || undefined}
-            disabled={shownScreen === 0}
-            onClick={() => setViewing(shownScreen - 1)}
-            aria-label={copy.back}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-              <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          <ol className="pollar-ramp-screens-bar" aria-label={copy.progress}>
-            {[...screens.map((s) => s.key), 'final'].map((key, i) => (
-              <li
-                key={key}
-                data-done={i < currentScreen || (completed && i === screens.length) || undefined}
-                data-shown={i === shownScreen || undefined}
-                data-failed={screens[i]?.status === 'failed' || undefined}
-              />
-            ))}
-          </ol>
-          <button
-            type="button"
-            className="pollar-ramp-screens-arrow"
-            data-hidden={shownScreen >= currentScreen || undefined}
-            disabled={shownScreen >= currentScreen}
-            onClick={() => setViewing(shownScreen + 1 >= currentScreen ? null : shownScreen + 1)}
-            aria-label={copy.screens.next}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-              <path d="m6 3 5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
+        <ol className="pollar-ramp-stepper" aria-label={copy.progress}>
+          {[...screens, null].map((screen, i) => {
+            const state =
+              i < currentScreen || (completed && i === screens.length)
+                ? 'done'
+                : screen?.status === 'failed'
+                  ? 'failed'
+                  : i === currentScreen
+                    ? 'current'
+                    : 'upcoming';
+            // A step that waits on the user shows its number: a spinner would say the order is busy.
+            const busy = state === 'current' && !settled && !(screen?.kind === 'action' && order?.pendingAction);
+            return (
+              <li key={screen?.key ?? 'final'}>
+                <button
+                  type="button"
+                  className="pollar-ramp-stepper-step"
+                  data-state={state}
+                  data-shown={i === shownScreen || undefined}
+                  aria-current={i === shownScreen ? 'step' : undefined}
+                  aria-label={copy.screens.stepLabel(i + 1, screens.length + 1, screen?.title ?? copy.screens.finalStep)}
+                  disabled={i > currentScreen}
+                  onClick={() => setViewing(i >= currentScreen ? null : i)}
+                >
+                  {state === 'done' ? (
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                      <path
+                        d="M3 8.5 6.5 12 13 4.5"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ) : state === 'failed' ? (
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
+                      <path d="M3 3l10 10M13 3 3 13" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+                    </svg>
+                  ) : busy ? (
+                    <span className="pollar-spinner pollar-spinner-sm" aria-hidden />
+                  ) : (
+                    i + 1
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ol>
       )}
 
       {step === 'input' && pendingOrders.length > 0 && (
@@ -1060,9 +1098,6 @@ export function RampWidgetTemplate({
                 <p className="pollar-ramp-payment-note">{arrivedText}</p>
                 {finalNote && <p className="pollar-ramp-payment-note">{finalNote}</p>}
               </div>
-              <button type="button" className="pollar-btn-primary" onClick={onClose}>
-                {copy.screens.finish}
-              </button>
               <TxReview data={{ title: '', kind: 'other', rows: orderRows }} language={language} />
             </>
           ) : shownScreen < currentScreen ? (
@@ -1083,7 +1118,26 @@ export function RampWidgetTemplate({
                 <p className="pollar-ramp-payment-note">{doneText(screens[shownScreen]!)}</p>
               </div>
               {screenRows(screens[shownScreen]!).length > 0 && (
-                <TxReview data={{ title: '', kind: 'other', rows: screenRows(screens[shownScreen]!) }} language={language} />
+                <TxReview
+                  data={{ title: '', kind: 'other', rows: screenRows(screens[shownScreen]!) }}
+                  open={doneDetailsOpen}
+                  onToggle={() => setDoneDetailsOpen((open) => !open)}
+                  language={language}
+                />
+              )}
+              {doneDetailsOpen && paidQr(screens[shownScreen]!) && (
+                <div className="pollar-ramp-paid-qr">
+                  <span className="pollar-ramp-payment-label">{copy.paymentQr}</span>
+                  {paidQr(screens[shownScreen]!)!.inlineSafe ? (
+                    <div
+                      className="pollar-ramp-qr"
+                      aria-label={copy.paymentQr}
+                      dangerouslySetInnerHTML={{ __html: paidQr(screens[shownScreen]!)!.data }}
+                    />
+                  ) : (
+                    <img src={scannableImageSrc(paidQr(screens[shownScreen]!)!)} alt={copy.paymentQr} />
+                  )}
+                </div>
               )}
             </>
           ) : (
@@ -1130,6 +1184,7 @@ export function RampWidgetTemplate({
               )}
 
               {confirmation && <InlineConfirm confirmation={confirmation} language={language} network={network} />}
+              {cosignPrompt}
 
               {order.failure && (
                 <div className="pollar-ramp-payment-field">
@@ -1277,7 +1332,7 @@ export function RampWidgetTemplate({
               {!settled && view.action?.kind === 'SIGNATURE' && !view.canSign && (
                 <p className="pollar-ramp-payment-note">{copy.preparingSignature}</p>
               )}
-              {!settled && view.canApprove && (
+              {!settled && view.canApprove && !cosignPrompt && (
                 <button type="button" className="pollar-btn-primary" onClick={onApprove}>
                   {copy.approveOnDevice}
                 </button>

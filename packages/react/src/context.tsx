@@ -190,6 +190,12 @@ interface PollarContextValue {
    * Returns the unregister.
    */
   registerConfirmationHost: () => () => void;
+  /**
+   * A flow that shows its co-sign approvals inside its own modal (the ramp's running
+   * order): while one is registered the provider does not open `CosignModal` over it.
+   * Returns the unregister.
+   */
+  registerCosignHost: () => () => void;
   appConfig: PollarConfig;
   styles: PollarStyles;
   /** Remote app-config load state. 'loading' while the initial fetch is in
@@ -748,14 +754,19 @@ export function PollarProvider({
   const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
   const [cosignModalOpen, setCosignModalOpen] = useState(false);
   const [cosignNextStep, setCosignNextStep] = useState<string | null>(null);
+  const [cosignHosts, setCosignHosts] = useState(0);
+  const registerCosignHost = useCallback(() => {
+    setCosignHosts((n) => n + 1);
+    return () => setCosignHosts((n) => n - 1);
+  }, []);
   const [recoveryModalOpen, setRecoveryModalOpen] = useState(false);
   // A signing call that came back pending needs the user's vote now; open the
   // prompt the moment a new request appears, never when one merely resolves.
   const cosignPendingCount = useRef(0);
   useEffect(() => {
-    if (cosign.pending.length > cosignPendingCount.current) setCosignModalOpen(true);
+    if (cosign.pending.length > cosignPendingCount.current && cosignHosts === 0) setCosignModalOpen(true);
     cosignPendingCount.current = cosign.pending.length;
-  }, [cosign.pending.length]);
+  }, [cosign.pending.length, cosignHosts]);
   // A co-signed signature this device cannot vote on: the recovery modal is
   // where it gets added (another device, a passkey or the email).
   useEffect(() => pollarClient.onCosignDeviceNotEnrolled(() => setRecoveryModalOpen(true)), [pollarClient]);
@@ -1019,6 +1030,7 @@ export function PollarProvider({
       refreshCustodyMigration,
       confirmations,
       registerConfirmationHost,
+      registerCosignHost,
       // distribution
       openDistributionRulesModal: () => setDistributionRulesModalOpen(true),
       // network
@@ -1060,6 +1072,7 @@ export function PollarProvider({
     cosign,
     confirmations,
     registerConfirmationHost,
+    registerCosignHost,
     walletBalance,
     refreshWalletBalance,
     enabledAssets,
@@ -1165,7 +1178,7 @@ export function PollarProvider({
             <SessionsModal onClose={() => setSessionsModalOpen(false)} />
           </ModalErrorBoundary>
         )}
-        {cosignModalOpen && (
+        {cosignModalOpen && cosignHosts === 0 && (
           <ModalErrorBoundary onClose={() => setCosignModalOpen(false)}>
             <CosignModal nextStep={cosignNextStep} onClose={() => setCosignModalOpen(false)} />
           </ModalErrorBoundary>

@@ -16683,6 +16683,49 @@ export interface operations {
                                         hash: string | null;
                                     }[];
                                     paymentStatus: ("not_requested" | "requested" | "received") | null;
+                                    paymentReceivedAt: string | null;
+                                    paymentRequest: {
+                                        instructions: {
+                                            /** @constant */
+                                            kind: "qr";
+                                            payload: string;
+                                            amount: string;
+                                            currency: string;
+                                            scannable?: {
+                                                /** @enum {string} */
+                                                kind: "pix" | "stellar" | "url" | "opaque";
+                                                payload: string | null;
+                                                payloadLabel: string | null;
+                                                image: {
+                                                    /** @enum {string} */
+                                                    mediaType: "image/svg+xml" | "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+                                                    /** @enum {string} */
+                                                    encoding: "utf8" | "base64";
+                                                    data: string;
+                                                    inlineSafe: boolean;
+                                                };
+                                            };
+                                            link?: string | null;
+                                        } | {
+                                            /** @constant */
+                                            kind: "bank_transfer";
+                                            amount: string;
+                                            currency: string;
+                                            details: {
+                                                label: string;
+                                                value: string;
+                                            }[];
+                                            reference: string | null;
+                                            link?: string | null;
+                                        } | {
+                                            /** @constant */
+                                            kind: "hosted";
+                                            url: string;
+                                            amount: string;
+                                            currency: string;
+                                        };
+                                        expiresAt: string | null;
+                                    } | null;
                                     etaSeconds: number | null;
                                     startedAt: string | null;
                                 }[];
@@ -16921,6 +16964,49 @@ export interface operations {
                                     hash: string | null;
                                 }[];
                                 paymentStatus: ("not_requested" | "requested" | "received") | null;
+                                paymentReceivedAt: string | null;
+                                paymentRequest: {
+                                    instructions: {
+                                        /** @constant */
+                                        kind: "qr";
+                                        payload: string;
+                                        amount: string;
+                                        currency: string;
+                                        scannable?: {
+                                            /** @enum {string} */
+                                            kind: "pix" | "stellar" | "url" | "opaque";
+                                            payload: string | null;
+                                            payloadLabel: string | null;
+                                            image: {
+                                                /** @enum {string} */
+                                                mediaType: "image/svg+xml" | "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+                                                /** @enum {string} */
+                                                encoding: "utf8" | "base64";
+                                                data: string;
+                                                inlineSafe: boolean;
+                                            };
+                                        };
+                                        link?: string | null;
+                                    } | {
+                                        /** @constant */
+                                        kind: "bank_transfer";
+                                        amount: string;
+                                        currency: string;
+                                        details: {
+                                            label: string;
+                                            value: string;
+                                        }[];
+                                        reference: string | null;
+                                        link?: string | null;
+                                    } | {
+                                        /** @constant */
+                                        kind: "hosted";
+                                        url: string;
+                                        amount: string;
+                                        currency: string;
+                                    };
+                                    expiresAt: string | null;
+                                } | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
                             }[];
@@ -17278,6 +17364,49 @@ export interface operations {
                                     hash: string | null;
                                 }[];
                                 paymentStatus: ("not_requested" | "requested" | "received") | null;
+                                paymentReceivedAt: string | null;
+                                paymentRequest: {
+                                    instructions: {
+                                        /** @constant */
+                                        kind: "qr";
+                                        payload: string;
+                                        amount: string;
+                                        currency: string;
+                                        scannable?: {
+                                            /** @enum {string} */
+                                            kind: "pix" | "stellar" | "url" | "opaque";
+                                            payload: string | null;
+                                            payloadLabel: string | null;
+                                            image: {
+                                                /** @enum {string} */
+                                                mediaType: "image/svg+xml" | "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+                                                /** @enum {string} */
+                                                encoding: "utf8" | "base64";
+                                                data: string;
+                                                inlineSafe: boolean;
+                                            };
+                                        };
+                                        link?: string | null;
+                                    } | {
+                                        /** @constant */
+                                        kind: "bank_transfer";
+                                        amount: string;
+                                        currency: string;
+                                        details: {
+                                            label: string;
+                                            value: string;
+                                        }[];
+                                        reference: string | null;
+                                        link?: string | null;
+                                    } | {
+                                        /** @constant */
+                                        kind: "hosted";
+                                        url: string;
+                                        amount: string;
+                                        currency: string;
+                                    };
+                                    expiresAt: string | null;
+                                } | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
                             }[];
@@ -17507,6 +17636,49 @@ export interface operations {
                                     hash: string | null;
                                 }[];
                                 paymentStatus: ("not_requested" | "requested" | "received") | null;
+                                paymentReceivedAt: string | null;
+                                paymentRequest: {
+                                    instructions: {
+                                        /** @constant */
+                                        kind: "qr";
+                                        payload: string;
+                                        amount: string;
+                                        currency: string;
+                                        scannable?: {
+                                            /** @enum {string} */
+                                            kind: "pix" | "stellar" | "url" | "opaque";
+                                            payload: string | null;
+                                            payloadLabel: string | null;
+                                            image: {
+                                                /** @enum {string} */
+                                                mediaType: "image/svg+xml" | "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+                                                /** @enum {string} */
+                                                encoding: "utf8" | "base64";
+                                                data: string;
+                                                inlineSafe: boolean;
+                                            };
+                                        };
+                                        link?: string | null;
+                                    } | {
+                                        /** @constant */
+                                        kind: "bank_transfer";
+                                        amount: string;
+                                        currency: string;
+                                        details: {
+                                            label: string;
+                                            value: string;
+                                        }[];
+                                        reference: string | null;
+                                        link?: string | null;
+                                    } | {
+                                        /** @constant */
+                                        kind: "hosted";
+                                        url: string;
+                                        amount: string;
+                                        currency: string;
+                                    };
+                                    expiresAt: string | null;
+                                } | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
                             }[];
@@ -17744,6 +17916,49 @@ export interface operations {
                                     hash: string | null;
                                 }[];
                                 paymentStatus: ("not_requested" | "requested" | "received") | null;
+                                paymentReceivedAt: string | null;
+                                paymentRequest: {
+                                    instructions: {
+                                        /** @constant */
+                                        kind: "qr";
+                                        payload: string;
+                                        amount: string;
+                                        currency: string;
+                                        scannable?: {
+                                            /** @enum {string} */
+                                            kind: "pix" | "stellar" | "url" | "opaque";
+                                            payload: string | null;
+                                            payloadLabel: string | null;
+                                            image: {
+                                                /** @enum {string} */
+                                                mediaType: "image/svg+xml" | "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+                                                /** @enum {string} */
+                                                encoding: "utf8" | "base64";
+                                                data: string;
+                                                inlineSafe: boolean;
+                                            };
+                                        };
+                                        link?: string | null;
+                                    } | {
+                                        /** @constant */
+                                        kind: "bank_transfer";
+                                        amount: string;
+                                        currency: string;
+                                        details: {
+                                            label: string;
+                                            value: string;
+                                        }[];
+                                        reference: string | null;
+                                        link?: string | null;
+                                    } | {
+                                        /** @constant */
+                                        kind: "hosted";
+                                        url: string;
+                                        amount: string;
+                                        currency: string;
+                                    };
+                                    expiresAt: string | null;
+                                } | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
                             }[];
@@ -18101,6 +18316,49 @@ export interface operations {
                                     hash: string | null;
                                 }[];
                                 paymentStatus: ("not_requested" | "requested" | "received") | null;
+                                paymentReceivedAt: string | null;
+                                paymentRequest: {
+                                    instructions: {
+                                        /** @constant */
+                                        kind: "qr";
+                                        payload: string;
+                                        amount: string;
+                                        currency: string;
+                                        scannable?: {
+                                            /** @enum {string} */
+                                            kind: "pix" | "stellar" | "url" | "opaque";
+                                            payload: string | null;
+                                            payloadLabel: string | null;
+                                            image: {
+                                                /** @enum {string} */
+                                                mediaType: "image/svg+xml" | "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+                                                /** @enum {string} */
+                                                encoding: "utf8" | "base64";
+                                                data: string;
+                                                inlineSafe: boolean;
+                                            };
+                                        };
+                                        link?: string | null;
+                                    } | {
+                                        /** @constant */
+                                        kind: "bank_transfer";
+                                        amount: string;
+                                        currency: string;
+                                        details: {
+                                            label: string;
+                                            value: string;
+                                        }[];
+                                        reference: string | null;
+                                        link?: string | null;
+                                    } | {
+                                        /** @constant */
+                                        kind: "hosted";
+                                        url: string;
+                                        amount: string;
+                                        currency: string;
+                                    };
+                                    expiresAt: string | null;
+                                } | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
                             }[];
@@ -18345,6 +18603,49 @@ export interface operations {
                                     hash: string | null;
                                 }[];
                                 paymentStatus: ("not_requested" | "requested" | "received") | null;
+                                paymentReceivedAt: string | null;
+                                paymentRequest: {
+                                    instructions: {
+                                        /** @constant */
+                                        kind: "qr";
+                                        payload: string;
+                                        amount: string;
+                                        currency: string;
+                                        scannable?: {
+                                            /** @enum {string} */
+                                            kind: "pix" | "stellar" | "url" | "opaque";
+                                            payload: string | null;
+                                            payloadLabel: string | null;
+                                            image: {
+                                                /** @enum {string} */
+                                                mediaType: "image/svg+xml" | "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+                                                /** @enum {string} */
+                                                encoding: "utf8" | "base64";
+                                                data: string;
+                                                inlineSafe: boolean;
+                                            };
+                                        };
+                                        link?: string | null;
+                                    } | {
+                                        /** @constant */
+                                        kind: "bank_transfer";
+                                        amount: string;
+                                        currency: string;
+                                        details: {
+                                            label: string;
+                                            value: string;
+                                        }[];
+                                        reference: string | null;
+                                        link?: string | null;
+                                    } | {
+                                        /** @constant */
+                                        kind: "hosted";
+                                        url: string;
+                                        amount: string;
+                                        currency: string;
+                                    };
+                                    expiresAt: string | null;
+                                } | null;
                                 etaSeconds: number | null;
                                 startedAt: string | null;
                             }[];

@@ -55,6 +55,8 @@ export interface CosignModalTemplateProps {
   confirmingClose?: boolean;
   onKeepOpen?: () => void;
   onCloseAnyway?: () => void;
+  /** Inside another flow's modal: no card, no close button and no footer of its own. */
+  inline?: boolean;
 }
 
 function labelOf(request: CosignRequest, copy: CosignCopy): string {
@@ -158,6 +160,7 @@ export function CosignModalTemplate({
   confirmingClose = false,
   onKeepOpen,
   onCloseAnyway,
+  inline = false,
 }: CosignModalTemplateProps) {
   const language = useInheritedLanguage(languageProp);
   const copy = COSIGN_COPY[language];
@@ -224,7 +227,7 @@ export function CosignModalTemplate({
 
   return (
     <div
-      className="pollar-modal-card pollar-cosign-modal"
+      className={inline ? 'pollar-cosign-modal pollar-cosign-inline' : 'pollar-modal-card pollar-cosign-modal'}
       data-theme={theme}
       style={cssVars}
       onClick={(e) => e.stopPropagation()}
@@ -238,7 +241,7 @@ export function CosignModalTemplate({
         </h2>
         <div className="pollar-modal-header-actions">
           {!grouped && chip}
-          {!confirmingClose && (
+          {!confirmingClose && !inline && (
             <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close} title={copy.close}>
               <CloseIcon />
             </button>
@@ -363,7 +366,7 @@ export function CosignModalTemplate({
         </>
       )}
 
-      <PollarModalFooter />
+      {!inline && <PollarModalFooter />}
     </div>
   );
 }
