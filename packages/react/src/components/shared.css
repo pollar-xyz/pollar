@@ -129,6 +129,20 @@
   --pollar-overlay-bg: rgba(0, 0, 0, 0.5);
 }
 
+/* A label for screen readers only. Defined here so it does not depend on the host
+ * shipping a utility of the same name (Tailwind generates it only where used). */
+:is(.pollar-modal-card, .pollar-wallet-wrapper) .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* --- Common input -------------------------------------------------------------- */
 .pollar-input {
   width: 100%;

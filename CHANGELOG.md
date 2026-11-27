@@ -616,6 +616,15 @@ SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
   so the host can remount it for the next one. A ramp route's verification
   step (KYC, form, registry check, provider registration) still opens over the
   page, where the user can close it and return to the widget.
+- **The ramp's options take `rail`.** `openRampModal({ fiat: 'USD', rail:
+'BANK_TRANSFER' })` and `<RampWidget initial>` open on that way to pay or be
+  paid when the country offers it, and on the fiat's first rail otherwise. Web
+  and React Native.
+- **The ramp widget's hidden labels stay hidden in any host.** "Pay with",
+  "Receive" and "Country" are for screen readers; the widget relied on the host
+  defining `.sr-only`, and a host without it (Tailwind, which emits the class
+  only where its own sources use it) showed them beside the selectors. The rule
+  now ships with every modal.
 - **The KYC modal moves on by itself when the decision arrives.** While the
   vendor's page is open it reads the status every 4 seconds, for up to 30
   minutes, and shows the result as soon as it is settled, whether the user

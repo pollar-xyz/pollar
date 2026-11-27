@@ -264,16 +264,17 @@ openRampModal({ country: 'BR', direction: flow === 'withdraw' ? 'sell' : 'buy' }
 openRampModal({ direction: 'buy', country: 'MX', fiat: 'MXN', asset: 'USDC', amount: '500' });
 ```
 
-| Option      | Type              | Description                                                          |
-| ----------- | ----------------- | -------------------------------------------------------------------- |
-| `direction` | `'buy' \| 'sell'` | Buy (on-ramp) or sell (off-ramp). Defaults to `'buy'`                |
-| `country`   | `string`          | ISO 3166-1 alpha-2, e.g. `'BR'`                                      |
-| `fiat`      | `string`          | Currency code, e.g. `'BRL'`. Defaults to the country's first fiat    |
-| `asset`     | `string`          | Asset code, e.g. `'USDC'`. Defaults to the first asset for that fiat |
-| `amount`    | `string`          | A plain decimal, e.g. `'100'` or `'12.5'`; anything else is left out |
+| Option      | Type              | Description                                                                                            |
+| ----------- | ----------------- | ------------------------------------------------------------------------------------------------------ |
+| `direction` | `'buy' \| 'sell'` | Buy (on-ramp) or sell (off-ramp). Defaults to `'buy'`                                                  |
+| `country`   | `string`          | ISO 3166-1 alpha-2, e.g. `'BR'`                                                                        |
+| `fiat`      | `string`          | Currency code, e.g. `'BRL'`. Defaults to the country's first fiat                                      |
+| `rail`      | `string`          | How the fiat is paid or received, e.g. `'PIX'` or `'BANK_TRANSFER'`. Defaults to the fiat's first rail |
+| `asset`     | `string`          | Asset code, e.g. `'USDC'`. Defaults to the first asset for that fiat                                   |
+| `amount`    | `string`          | A plain decimal, e.g. `'100'` or `'12.5'`; anything else is left out                                   |
 
 A country that does not route in the requested direction, or that the app does not offer, opens on the widget's default
-country, without the fiat, asset or amount; a fiat or asset the country does not offer opens on the country's first one.
+country, without the fiat, asset or amount; a fiat, rail or asset the country does not offer opens on the country's first one.
 Nothing is thrown. The options wait for the routes when they are still loading. Each call starts over: opening again
 with other options, or with none, drops the earlier ones. `<RampWidget initial={options}>` takes the same options.
 

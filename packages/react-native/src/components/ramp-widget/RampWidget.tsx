@@ -188,6 +188,8 @@ export interface RampModalOptions {
   country?: string;
   /** e.g. 'BRL'; the country's first fiat when left out or not offered there. */
   fiat?: string;
+  /** How the fiat is paid or received, e.g. 'PIX' or 'BANK_TRANSFER'; the fiat's first rail when left out or not offered there. */
+  rail?: string;
   /** e.g. 'USDC'. */
   asset?: string;
   amount?: string;
@@ -205,7 +207,14 @@ function seededSelection(
   const wanted = seed.country?.trim().toUpperCase();
   const country = wanted ? countries.find((c) => c.country === wanted) : countries[0];
   if (!country) return null;
-  const fiat = country.fiats.find((f) => f.currency === seed.fiat?.trim().toUpperCase()) ?? null;
+  const wantedFiat = seed.fiat?.trim().toUpperCase();
+  const wantedRail = seed.rail?.trim().toUpperCase();
+  const fiat =
+    (wantedFiat || wantedRail
+      ? country.fiats.find((f) => (!wantedFiat || f.currency === wantedFiat) && (!wantedRail || f.rail === wantedRail))
+      : undefined) ??
+    country.fiats.find((f) => f.currency === wantedFiat) ??
+    null;
   const resolvedFiat = fiat ?? country.fiats[0];
   const asset = routes.find(
     (r) =>
