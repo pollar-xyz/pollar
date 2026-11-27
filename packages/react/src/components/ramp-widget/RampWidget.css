@@ -773,6 +773,28 @@
   color: #fff;
 }
 
+/* The current step keeps its number beside a sign of where the order is: a spinner while it moves by itself, a
+ * pulsing dot while it waits on the user. */
+.pollar-ramp-stepper-current {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.pollar-ramp-stepper-current .pollar-spinner {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-width: 2px;
+}
+
+.pollar-ramp-stepper-pulse {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 999px;
+  background: var(--pollar-accent);
+  animation: pollar-pulse 1.2s ease-in-out infinite;
+}
+
 /* The step on screen, when the user looks back at a done one. */
 .pollar-ramp-stepper-step[data-shown] {
   box-shadow:
@@ -854,4 +876,21 @@
   align-items: center;
   gap: 0.375rem;
   color: var(--pollar-error-text, #dc2626);
+}
+
+.pollar-ramp-sandbox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.pollar-ramp-sandbox-note {
+  margin: 0;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid color-mix(in srgb, #d97706 40%, transparent);
+  border-radius: var(--pollar-card-border-radius, 10px);
+  background: color-mix(in srgb, #d97706 10%, transparent);
+  color: var(--pollar-text);
+  font-size: 0.875rem;
+  line-height: 1.4;
 }

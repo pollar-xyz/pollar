@@ -446,6 +446,23 @@ export function RampWidgetTemplate({
   // The price changed before anything moved: the same order would be refused again, so the amount is quoted anew.
   const asksNewQuote = order?.failure?.resolutionAction === 'accept_new_quote';
   const payBy = view?.action?.kind === 'FIAT_PAYMENT' && view.expiresAt ? Date.parse(view.expiresAt) : null;
+  // In the sandbox the primary action is simulating the transfer; "I've paid" only speeds up the check after it.
+  const paidButton = view?.action?.kind === 'FIAT_PAYMENT' && onCheckPayment && (
+    <button
+      type="button"
+      className={view.simulated ? 'pollar-btn-secondary' : 'pollar-btn-primary'}
+      disabled={checkingPayment}
+      onClick={onCheckPayment}
+    >
+      {checkingPayment ? (
+        <>
+          <span className="pollar-spinner pollar-spinner-sm" /> {copy.checkingPayment}
+        </>
+      ) : (
+        copy.paid
+      )}
+    </button>
+  );
   useRenderAt(view?.canSign && view.expiresAt ? Date.parse(view.expiresAt) : null);
   // Once the order exists, going back means a new order, which "New order" already starts.
   const stepsOpen =
@@ -680,7 +697,7 @@ export function RampWidgetTemplate({
                   type="button"
                   className="pollar-ramp-stepper-step"
                   data-state={state}
-                  data-shown={i === shownScreen || undefined}
+                  data-shown={(i === shownScreen && shownScreen < currentScreen) || undefined}
                   aria-current={i === shownScreen ? 'step' : undefined}
                   aria-label={copy.screens.stepLabel(i + 1, screens.length + 1, screen?.title ?? copy.screens.finalStep)}
                   disabled={i > currentScreen}
@@ -700,8 +717,15 @@ export function RampWidgetTemplate({
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
                       <path d="M3 3l10 10M13 3 3 13" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
                     </svg>
-                  ) : busy ? (
-                    <span className="pollar-spinner pollar-spinner-sm" aria-hidden />
+                  ) : state === 'current' ? (
+                    <span className="pollar-ramp-stepper-current">
+                      {i + 1}
+                      {busy ? (
+                        <span className="pollar-spinner" aria-hidden />
+                      ) : (
+                        <span className="pollar-ramp-stepper-pulse" aria-hidden />
+                      )}
+                    </span>
                   ) : (
                     i + 1
                   )}
@@ -1233,6 +1257,20 @@ export function RampWidgetTemplate({
                   )}
                 </div>
               )}
+              {!settled && view.simulated && view.link && (
+                <div className="pollar-ramp-sandbox">
+                  <p className="pollar-ramp-sandbox-note">{copy.sandboxNotice}</p>
+                  <a
+                    className="pollar-btn-primary pollar-ramp-hosted-link"
+                    href={view.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {view.linkLabel}
+                  </a>
+                  {paidButton}
+                </div>
+              )}
               {!settled && payBy !== null && (
                 <p className="pollar-ramp-payment-note">
                   {payBy > Date.now()
@@ -1321,17 +1359,7 @@ export function RampWidgetTemplate({
               {!settled && view.action?.kind === 'FIAT_PAYMENT' && view.note && (
                 <p className="pollar-ramp-payment-note">{view.note}</p>
               )}
-              {!settled && view.action?.kind === 'FIAT_PAYMENT' && onCheckPayment && (
-                <button type="button" className="pollar-btn-primary" disabled={checkingPayment} onClick={onCheckPayment}>
-                  {checkingPayment ? (
-                    <>
-                      <span className="pollar-spinner pollar-spinner-sm" /> {copy.checkingPayment}
-                    </>
-                  ) : (
-                    copy.paid
-                  )}
-                </button>
-              )}
+              {!settled && !view.simulated && paidButton}
 
               {!settled && view.canSign && (
                 <button type="button" className="pollar-btn-primary" disabled={signing} onClick={onSign}>
@@ -1346,7 +1374,7 @@ export function RampWidgetTemplate({
                   {copy.approveOnDevice}
                 </button>
               )}
-              {!settled && view.link && (
+              {!settled && view.link && !view.simulated && (
                 <a
                   className="pollar-btn-primary pollar-ramp-hosted-link"
                   href={view.link}
@@ -1362,6 +1390,11 @@ export function RampWidgetTemplate({
               {pollTrouble && !settled && <p className="pollar-ramp-payment-note">{copy.serverTrouble}</p>}
               {errorMsg && <p className="pollar-ramp-field-error">{errorMsg}</p>}
             </>
+          )}
+          {settled && (
+            <button type="button" className="pollar-btn-secondary" onClick={onNewOrder}>
+              {order.state !== 'completed' ? copy.startAnother : order.direction === 'ONRAMP' ? copy.buyAgain : copy.sellAgain}
+            </button>
           )}
         </div>
       )}

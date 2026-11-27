@@ -181,6 +181,7 @@ const EN = {
   payOnProvider: 'Pay on the provider page',
   openPaymentPage: 'Open payment page',
   openStatusPage: 'Open status page',
+  simulatePayment: 'Simulate payment',
   reference: 'Reference',
   authorize: 'Authorize your transfer',
   approveOnDevice: 'Approve on your device',
@@ -268,6 +269,7 @@ const COPY: Record<PollarLanguage, typeof EN> = {
     payOnProvider: 'Pagar en la página del proveedor',
     openPaymentPage: 'Abrir página de pago',
     openStatusPage: 'Abrir página de estado',
+    simulatePayment: 'Simular pago',
     reference: 'Referencia',
     authorize: 'Autoriza tu transferencia',
     approveOnDevice: 'Aprueba en tu dispositivo',
@@ -352,6 +354,7 @@ const COPY: Record<PollarLanguage, typeof EN> = {
     payOnProvider: 'Pagar na página do provedor',
     openPaymentPage: 'Abrir página de pagamento',
     openStatusPage: 'Abrir página de status',
+    simulatePayment: 'Simular pagamento',
     reference: 'Referência',
     authorize: 'Autorize sua transferência',
     approveOnDevice: 'Aprove no seu dispositivo',
@@ -929,6 +932,8 @@ export function describeRampAction(
   link: string | null;
   /** What the button that opens `link` says; null when there is no link. */
   linkLabel: string | null;
+  /** A sandbox payment: nothing real is paid, and `link` is where the transfer is simulated. */
+  simulated: boolean;
   /** The provider's own words on what the user does next, for a step with nothing to open. */
   note: string | null;
   /** A payment whose window has closed: its code, details and page are no longer shown. */
@@ -950,6 +955,7 @@ export function describeRampAction(
     details: [] as Array<{ label: string; value: string }>,
     link: null as string | null,
     linkLabel: null as string | null,
+    simulated: false,
     note: null as string | null,
     paymentClosed: false,
     expiresAt,
@@ -970,7 +976,18 @@ export function describeRampAction(
         return { ...base, title, link, linkLabel: link ? copy.payOnProvider : null, codeMissing: !link };
       }
       const link = instructions.link ? safeRampUrl(instructions.link) : null;
-      const page = { link, linkLabel: link ? (instructions.kind === 'qr' ? copy.openPaymentPage : copy.openStatusPage) : null };
+      const simulated = instructions.kind === 'bank_transfer' && instructions.simulated === true && link !== null;
+      const page = {
+        link,
+        linkLabel: !link
+          ? null
+          : simulated
+            ? copy.simulatePayment
+            : instructions.kind === 'qr'
+              ? copy.openPaymentPage
+              : copy.openStatusPage,
+        simulated,
+      };
       if (instructions.kind === 'qr') {
         // Every EMV code starts 000201; only a Pix one pays in BRL.
         const codeLabel = instructions.currency === 'BRL' ? copy.pixCopyPaste : copy.paymentCode;

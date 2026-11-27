@@ -111,6 +111,9 @@ export interface RampCopy {
   providerReviewing: string;
   serverTrouble: string;
   startAnother: string;
+  buyAgain: string;
+  sandboxNotice: string;
+  sellAgain: string;
   newQuote: string;
   keepsGoing: string;
   /** Asked when the X closes an order that is still running. */
@@ -281,6 +284,9 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     providerReviewing: 'The provider is reviewing your details. This updates on its own.',
     serverTrouble: 'Having trouble reaching the server. Retrying…',
     startAnother: 'Start another operation',
+    buyAgain: 'Buy again',
+    sandboxNotice: 'Sandbox: no real money moves. Simulate the transfer to continue.',
+    sellAgain: 'Sell again',
     newQuote: 'Get a new quote',
     keepsGoing: 'This one keeps going; you can resume it later.',
     leave: {
@@ -453,6 +459,9 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     providerReviewing: 'El proveedor está revisando tus datos. Esto se actualiza solo.',
     serverTrouble: 'Hay problemas para conectar con el servidor. Reintentando…',
     startAnother: 'Iniciar otra operación',
+    buyAgain: 'Comprar otra vez',
+    sandboxNotice: 'Sandbox: no se mueve dinero real. Simula la transferencia para continuar.',
+    sellAgain: 'Vender otra vez',
     newQuote: 'Pedir nueva cotización',
     keepsGoing: 'Esta sigue en curso; puedes retomarla más tarde.',
     leave: {
@@ -628,6 +637,9 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     providerReviewing: 'O provedor está analisando seus dados. Isto se atualiza sozinho.',
     serverTrouble: 'Problemas para conectar ao servidor. Tentando de novo…',
     startAnother: 'Iniciar outra operação',
+    buyAgain: 'Comprar novamente',
+    sandboxNotice: 'Sandbox: nenhum dinheiro real se move. Simule a transferência para continuar.',
+    sellAgain: 'Vender novamente',
     newQuote: 'Pedir nova cotação',
     keepsGoing: 'Esta continua em andamento; você pode retomá-la depois.',
     leave: {

@@ -105,6 +105,8 @@ export type RampAdapterAction =
       expiresAt: string | null;
       /** The provider's own page for this payment, where its status can be followed. */
       link?: string | null;
+      /** A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+      simulated?: boolean;
     }
   | { kind: 'user_ready'; purpose: 'create_order' | 'withdrawal_payment' | 'onramp_claim' }
   | {

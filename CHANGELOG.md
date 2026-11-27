@@ -625,6 +625,21 @@ SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
   defining `.sr-only`, and a host without it (Tailwind, which emits the class
   only where its own sources use it) showed them beside the selectors. The rule
   now ships with every modal.
+- **A settled ramp order offers the next one.** Its last screen ends with
+  Buy again or Sell again (Start another operation when it failed or was
+  refunded), which opens a new order in the same widget. An inline widget has
+  no close button, so this is how its user moves on.
+- **A sandbox payment says it is one.** A bank transfer whose provider is a
+  sandbox carries `simulated: true` (`RampAdapterAction`, the order's
+  `instructions`), and `describeRampAction` labels its link Simulate payment
+  (`view.simulated`). The web widget opens the step with a note that no real
+  money moves, Simulate payment as the main button and I've paid as the
+  secondary one, above the transfer details.
+- **The ramp's step bar marks where the order is.** The current step keeps its
+  number beside a spinner while the order moves by itself, or a pulsing dot
+  while it waits on the user. The ring around the step on screen shows only
+  when the user looks back at a done step, so the current one no longer has a
+  double border.
 - **The KYC modal moves on by itself when the decision arrives.** While the
   vendor's page is open it reads the status every 4 seconds, for up to 30
   minutes, and shows the result as soon as it is settled, whether the user

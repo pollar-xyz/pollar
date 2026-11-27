@@ -16717,6 +16717,8 @@ export interface operations {
                                             }[];
                                             reference: string | null;
                                             link?: string | null;
+                                            /** @description A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+                                            simulated?: boolean;
                                         } | {
                                             /** @constant */
                                             kind: "hosted";
@@ -16766,6 +16768,8 @@ export interface operations {
                                         }[];
                                         reference: string | null;
                                         link?: string | null;
+                                        /** @description A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+                                        simulated?: boolean;
                                     } | {
                                         /** @constant */
                                         kind: "hosted";
@@ -16998,6 +17002,8 @@ export interface operations {
                                         }[];
                                         reference: string | null;
                                         link?: string | null;
+                                        /** @description A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+                                        simulated?: boolean;
                                     } | {
                                         /** @constant */
                                         kind: "hosted";
@@ -17047,6 +17053,8 @@ export interface operations {
                                     }[];
                                     reference: string | null;
                                     link?: string | null;
+                                    /** @description A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+                                    simulated?: boolean;
                                 } | {
                                     /** @constant */
                                     kind: "hosted";
@@ -17398,6 +17406,8 @@ export interface operations {
                                         }[];
                                         reference: string | null;
                                         link?: string | null;
+                                        /** @description A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+                                        simulated?: boolean;
                                     } | {
                                         /** @constant */
                                         kind: "hosted";
@@ -17447,6 +17457,8 @@ export interface operations {
                                     }[];
                                     reference: string | null;
                                     link?: string | null;
+                                    /** @description A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+                                    simulated?: boolean;
                                 } | {
                                     /** @constant */
                                     kind: "hosted";
@@ -17670,6 +17682,8 @@ export interface operations {
                                         }[];
                                         reference: string | null;
                                         link?: string | null;
+                                        /** @description A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+                                        simulated?: boolean;
                                     } | {
                                         /** @constant */
                                         kind: "hosted";
@@ -17719,6 +17733,8 @@ export interface operations {
                                     }[];
                                     reference: string | null;
                                     link?: string | null;
+                                    /** @description A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+                                    simulated?: boolean;
                                 } | {
                                     /** @constant */
                                     kind: "hosted";
@@ -17950,6 +17966,8 @@ export interface operations {
                                         }[];
                                         reference: string | null;
                                         link?: string | null;
+                                        /** @description A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+                                        simulated?: boolean;
                                     } | {
                                         /** @constant */
                                         kind: "hosted";
@@ -17999,6 +18017,8 @@ export interface operations {
                                     }[];
                                     reference: string | null;
                                     link?: string | null;
+                                    /** @description A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+                                    simulated?: boolean;
                                 } | {
                                     /** @constant */
                                     kind: "hosted";
@@ -18350,6 +18370,8 @@ export interface operations {
                                         }[];
                                         reference: string | null;
                                         link?: string | null;
+                                        /** @description A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+                                        simulated?: boolean;
                                     } | {
                                         /** @constant */
                                         kind: "hosted";
@@ -18399,6 +18421,8 @@ export interface operations {
                                     }[];
                                     reference: string | null;
                                     link?: string | null;
+                                    /** @description A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+                                    simulated?: boolean;
                                 } | {
                                     /** @constant */
                                     kind: "hosted";
@@ -18637,6 +18661,8 @@ export interface operations {
                                         }[];
                                         reference: string | null;
                                         link?: string | null;
+                                        /** @description A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+                                        simulated?: boolean;
                                     } | {
                                         /** @constant */
                                         kind: "hosted";
@@ -18686,6 +18712,8 @@ export interface operations {
                                     }[];
                                     reference: string | null;
                                     link?: string | null;
+                                    /** @description A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+                                    simulated?: boolean;
                                 } | {
                                     /** @constant */
                                     kind: "hosted";
