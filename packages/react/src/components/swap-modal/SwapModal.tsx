@@ -24,7 +24,7 @@ import { SWAP_COPY } from './swap-copy';
 import { SwapAssetOption, SwapChain, SwapModalTemplate, SwapQuoteView, SwapSettlementView } from './SwapModalTemplate';
 import { modalChrome } from '../modal-theme';
 import { byCode, oneOf, seededAmount, useSuccessReport } from '../../modal-options';
-import { PollarOverlay } from '../PollarOverlay';
+import { ModalFrame } from '../ModalFrame';
 import { useDeclineOnClose, useInlineConfirmation } from '../../useInlineConfirmation';
 import { CONFIRM_COPY } from '../confirm-modal/confirm-copy';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
@@ -47,6 +47,8 @@ export interface SwapModalOptions {
 interface SwapModalProps {
   onClose: () => void;
   initial?: SwapModalOptions | undefined;
+  /** Render the card in the page instead of over a backdrop, without its close button. */
+  inline?: boolean;
 }
 
 /** Debounce (ms) before re-quoting as the user edits the amount / assets. */
@@ -110,7 +112,7 @@ function catalogRef(code: string, issuer: string): SwapQuoteParams['sellAsset'] 
   return code.length <= 4 ? { type: 'credit_alphanum4', code, issuer } : { type: 'credit_alphanum12', code, issuer };
 }
 
-export function SwapModal({ onClose, initial }: SwapModalProps) {
+export function SwapModal({ onClose, initial, inline = false }: SwapModalProps) {
   const {
     getSwapConfig,
     getSwapTokens,
@@ -807,7 +809,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={step !== 'tx' && !isInProgress ? handleClose : undefined}>
+    <ModalFrame inline={inline} overlayStyle={overlayStyle} {...(step !== 'tx' && !isInProgress && { onClose: handleClose })}>
       <SwapModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -847,6 +849,7 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
         showBack={showBack}
         isInProgress={isInProgress}
         language={language}
+        inline={inline}
         onClose={handleClose}
         onBack={handleBack}
         onRefresh={handleRefresh}
@@ -871,6 +874,6 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
         onRetry={() => void handleRetry()}
         onDone={onClose}
       />
-    </PollarOverlay>
+    </ModalFrame>
   );
 }

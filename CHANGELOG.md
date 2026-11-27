@@ -10,6 +10,7 @@
 > Solana and from co-signed wallets, Earn on Solana, USDC between the user's own
 > wallets, a transaction review with a fee badge in every approval and status
 > screen, the sign-in and KYC inline in a page (`<LoginFlow>`, `<KycFlow>`),
+> swaps and ramps inline in a page (`<SwapModal inline>`, `<RampWidget inline>`),
 > and fixes. One call
 > an app may already make changes: `signAuthEntry` now passes the signature
 > confirmation (below). The Stellar Wallets Kit and
@@ -608,6 +609,13 @@ SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
   every step is complete, calling `onApproved`. Meant for a page whose job is
   signing in or verifying, like a KYC link's. `<KycModal>` and
   `<RequirementFormModal>` take `inline`.
+- **`<SwapModal inline>` and `<RampWidget inline>` sit in the host's page.**
+  The card renders where it is placed, at the width of its container, with no
+  backdrop and no close button, for a page whose job is swapping or buying and
+  selling. `onClose` is still called when the flow finishes (Done after a swap),
+  so the host can remount it for the next one. A ramp route's verification
+  step (KYC, form, registry check, provider registration) still opens over the
+  page, where the user can close it and return to the widget.
 - **The KYC modal moves on by itself when the decision arrives.** While the
   vendor's page is open it reads the status every 4 seconds, for up to 30
   minutes, and shows the result as soon as it is settled, whether the user

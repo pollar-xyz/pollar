@@ -210,6 +210,8 @@ export interface SwapModalTemplateProps {
   isInProgress: boolean;
   /** Language of the modal's text; the device's when not given. */
   language?: PollarLanguage | undefined;
+  /** Render the card in the page instead of over a backdrop, without its close button. */
+  inline?: boolean;
   onClose: () => void;
   onBack: () => void;
   onRefresh: () => void;
@@ -268,6 +270,7 @@ export function SwapModalTemplate({
   showBack,
   isInProgress,
   language: languageProp,
+  inline = false,
   onClose,
   onBack,
   onRefresh,
@@ -356,7 +359,7 @@ export function SwapModalTemplate({
   };
   return (
     <div
-      className="pollar-modal-card pollar-swap-modal"
+      className={`pollar-modal-card pollar-swap-modal ${inline ? 'pollar-modal-card--inline' : ''}`}
       data-theme={theme}
       style={cssVars}
       onClick={(event) => event.stopPropagation()}
@@ -399,11 +402,13 @@ export function SwapModalTemplate({
                 <RefreshIcon spinning={configLoading || isLoadingData} />
               </button>
             )}
-            <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-                <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-            </button>
+            {!inline && (
+              <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                  <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -139,6 +139,8 @@ export const assetKey = (asset: Pick<RampAsset, 'code' | 'chain' | 'identifier'>
 interface RampWidgetTemplateProps {
   /** Language of the widget's text and rail labels. Defaults to the user's device; the widget passes the resolved one. */
   language?: PollarLanguage;
+  /** Render the card in the page instead of over a backdrop, without its close button. */
+  inline?: boolean;
   theme: string;
   accentColor: string;
   /** Per-app modal chrome overrides (background, card + button radius). */
@@ -336,6 +338,7 @@ export function RampWidgetTemplate({
   onRefresh,
   onClose,
   language: languageProp,
+  inline = false,
   confirmation = null,
   onCancelOrder,
   cosignPrompt = null,
@@ -578,7 +581,11 @@ export function RampWidgetTemplate({
   };
 
   return (
-    <div className="pollar-modal-card pollar-ramp-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
+    <div
+      className={`pollar-modal-card pollar-ramp-modal ${inline ? 'pollar-modal-card--inline' : ''}`}
+      style={cssVars}
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="pollar-modal-header">
         {/* The amount is not one of the numbered steps, so the step bar has no way back to it. */}
         {stepsOpen && (step === 'select_route' || step === 'contact') && (
@@ -622,11 +629,13 @@ export function RampWidgetTemplate({
               />
             </svg>
           </button>
-          <button type="button" className="pollar-modal-close" onClick={requestClose} aria-label={copy.close}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-              <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </button>
+          {!inline && (
+            <button type="button" className="pollar-modal-close" onClick={requestClose} aria-label={copy.close}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 

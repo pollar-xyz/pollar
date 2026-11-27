@@ -39,7 +39,7 @@ import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
 import { useModalLanguage } from '../../language';
 import { RAMP_COPY, type RampCopy } from './ramp-copy';
-import { PollarOverlay } from '../PollarOverlay';
+import { ModalFrame } from '../ModalFrame';
 import { useInlineConfirmation } from '../../useInlineConfirmation';
 import { CosignPrompt } from '../cosign-modal/CosignModal';
 import { BEST_ROUTE, routeKey } from './ramp-route';
@@ -62,6 +62,8 @@ interface RampWidgetProps {
   initial?: RampModalOptions | undefined;
   /** Language of the widget and the steps it opens, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
   language?: string | undefined;
+  /** Render the card in the page instead of over a backdrop, without its close button. */
+  inline?: boolean;
 }
 
 /** After "I've paid", the payment is checked this often for this long, then the order goes back to the server's pace. */
@@ -160,7 +162,7 @@ async function signLegWithWallet(client: PollarClient, orderId: string, actionId
   }
 }
 
-export function RampWidget({ onClose, language: languageProp, initial }: RampWidgetProps) {
+export function RampWidget({ onClose, language: languageProp, initial, inline = false }: RampWidgetProps) {
   const {
     getClient,
     styles,
@@ -774,7 +776,8 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   };
   const label = stepLabel[step];
 
-  // The step replaces the widget while it is open; the widget keeps what was entered.
+  // The step replaces the widget while it is open; the widget keeps what was entered. It opens over the page even
+  // when the widget is inline: inline, a step has no close button, and the user could not back out of it.
   if (verifying) {
     const progress = { progress: { position: verifying.completed + 1, total: verifying.total } };
     const done = () => verificationDone(verifying);
@@ -821,7 +824,7 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={step === 'status' ? undefined : onClose}>
+    <ModalFrame inline={inline} overlayStyle={overlayStyle} {...(step !== 'status' && { onClose })}>
       <RampWidgetTemplate
         language={language}
         theme={theme}
@@ -907,12 +910,13 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
           setStep('input');
         }}
         onRefresh={() => void handleRefresh()}
+        inline={inline}
         onClose={onClose}
         confirmation={confirmation}
         onCancelOrder={() => void handleCancelOrder()}
         cancelling={cancelling}
         cancelError={cancelError}
       />
-    </PollarOverlay>
+    </ModalFrame>
   );
 }
