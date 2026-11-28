@@ -89,6 +89,8 @@ function rampErrorMessage(error: unknown, fallback: string, copy: RampCopy, lang
 const DECIMAL = /^\d+(\.\d+)?$/;
 /** How long the amount screen waits after the last keystroke before it quotes. */
 const QUOTE_DEBOUNCE_MS = 600;
+/** How long the widget waits for the order's approval to reach the pending list before offering the modal. */
+const APPROVAL_WAIT_MS = 8000;
 
 /**
  * The choices a seed names among one direction's routes, as the widget's choice
@@ -427,6 +429,19 @@ export function RampWidget({ onClose, language: languageProp, initial, inline = 
         if (!hostsCosignRef.current) openCosignModal();
       });
   }, [approval, approvalRequest, client, openCosignModal]);
+
+  // The order can name its approval before this device's pending list has it. Until it arrives the widget waits instead
+  // of offering the modal; past APPROVAL_WAIT_MS the button comes back, since a request made from another device or
+  // origin may never reach this list.
+  const [approvalWaitOver, setApprovalWaitOver] = useState(false);
+  useEffect(() => {
+    setApprovalWaitOver(false);
+    if (!approvalRequest) return;
+    const timer = setTimeout(() => setApprovalWaitOver(true), APPROVAL_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [approvalRequest]);
+  const approvalLoading =
+    hostsCosign && !!approvalRequest && !approvalWaitOver && !cosign.pending.some((r) => r.id === approvalRequest);
 
   // The approval prompt stays up between two approvals of the order instead of closing and reopening.
   const nextApproval = step === 'status' && order ? rampNextApproval(order, language) : null;
@@ -901,6 +916,7 @@ export function RampWidget({ onClose, language: languageProp, initial, inline = 
         onSign={() => void handleSign()}
         onApprove={openCosignModal}
         cosignPrompt={hostsCosign && cosign.pending.length > 0 ? <CosignPrompt inline onClose={() => undefined} /> : null}
+        approvalLoading={approvalLoading}
         retrying={retrying}
         onRetryOrder={() => void handleRetryOrder()}
         onRequote={() => void handleRequote()}

@@ -245,6 +245,8 @@ interface RampWidgetTemplateProps {
   confirmation?: PendingConfirmation | null | undefined;
   /** The co-sign approval the running order waits on, drawn on the current step's screen. */
   cosignPrompt?: ReactNode;
+  /** The approval the order waits on has not reached this device's list yet: a wait is shown instead of a button. */
+  approvalLoading?: boolean;
   /** Cancels the running order; absent, leaving only closes or starts another. */
   onCancelOrder?: (() => void) | undefined;
   cancelling?: boolean;
@@ -342,6 +344,7 @@ export function RampWidgetTemplate({
   confirmation = null,
   onCancelOrder,
   cosignPrompt = null,
+  approvalLoading = false,
   cancelling = false,
   cancelError = null,
 }: RampWidgetTemplateProps) {
@@ -1369,7 +1372,13 @@ export function RampWidgetTemplate({
               {!settled && view.action?.kind === 'SIGNATURE' && !view.canSign && (
                 <p className="pollar-ramp-payment-note">{copy.preparingSignature}</p>
               )}
-              {!settled && view.canApprove && !cosignPrompt && (
+              {!settled && view.canApprove && !cosignPrompt && approvalLoading && (
+                <div className="pollar-ramp-wait">
+                  <span className="pollar-spinner" aria-hidden />
+                  <p className="pollar-ramp-payment-note">{copy.preparingApproval}</p>
+                </div>
+              )}
+              {!settled && view.canApprove && !cosignPrompt && !approvalLoading && (
                 <button type="button" className="pollar-btn-primary" onClick={onApprove}>
                   {copy.approveOnDevice}
                 </button>

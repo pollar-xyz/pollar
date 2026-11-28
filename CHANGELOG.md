@@ -640,6 +640,13 @@ SDK_WALLET_RECOVERY_REQUIRED` when a co-signed wallet without a recovery
   while it waits on the user. The ring around the step on screen shows only
   when the user looks back at a done step, so the current one no longer has a
   double border.
+- **A co-sign approval inside the ramp widget fits it.** The inline prompt kept
+  the modal's 420px width and stuck out of a narrower widget, shifting the
+  host's page sideways; it now takes the widget's width.
+- **The ramp widget waits for the approval instead of flashing a button.** When
+  the order names an approval this device's pending list does not have yet, the
+  step shows Preparing the approval for up to 8 seconds; Approve on this device
+  comes back only if the request has not arrived by then.
 - **The KYC modal moves on by itself when the decision arrives.** While the
   vendor's page is open it reads the status every 4 seconds, for up to 30
   minutes, and shows the result as soon as it is settled, whether the user

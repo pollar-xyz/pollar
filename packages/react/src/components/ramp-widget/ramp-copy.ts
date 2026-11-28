@@ -106,6 +106,7 @@ export interface RampCopy {
   waitingWallet: string;
   authorize: string;
   preparingSignature: string;
+  preparingApproval: string;
   approveOnDevice: string;
   open: string;
   providerReviewing: string;
@@ -279,6 +280,7 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     waitingWallet: 'Waiting for your wallet…',
     authorize: 'Authorize',
     preparingSignature: 'Preparing a new signature request…',
+    preparingApproval: 'Preparing the approval…',
     approveOnDevice: 'Approve on this device',
     open: 'Open',
     providerReviewing: 'The provider is reviewing your details. This updates on its own.',
@@ -454,6 +456,7 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     waitingWallet: 'Esperando tu billetera…',
     authorize: 'Autorizar',
     preparingSignature: 'Preparando una nueva solicitud de firma…',
+    preparingApproval: 'Preparando la aprobación…',
     approveOnDevice: 'Aprobar en este dispositivo',
     open: 'Abrir',
     providerReviewing: 'El proveedor está revisando tus datos. Esto se actualiza solo.',
@@ -632,6 +635,7 @@ export const RAMP_COPY: Record<PollarLanguage, RampCopy> = {
     waitingWallet: 'Aguardando sua carteira…',
     authorize: 'Autorizar',
     preparingSignature: 'Preparando uma nova solicitação de assinatura…',
+    preparingApproval: 'Preparando a aprovação…',
     approveOnDevice: 'Aprovar neste dispositivo',
     open: 'Abrir',
     providerReviewing: 'O provedor está analisando seus dados. Isto se atualiza sozinho.',

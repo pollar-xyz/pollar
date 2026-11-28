@@ -285,6 +285,11 @@
 
 /* The prompt inside another flow's modal: that modal is the card, the prompt is a section of it. */
 .pollar-cosign-inline {
+  width: auto;
+  max-width: 100%;
+  max-height: none;
+  overflow: visible;
+  box-sizing: border-box;
   padding: 1rem;
   border: 1px solid var(--pollar-border);
   border-radius: var(--pollar-card-border-radius, 12px);
