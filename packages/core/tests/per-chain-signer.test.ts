@@ -102,6 +102,28 @@ test('a Solana wallet login signs Solana with the connected adapter', async () =
   assert.deepEqual(signed, ['solana']);
 });
 
+test('a Solana transaction in hex (ramp and bridge payloads) or base64 reaches the wallet as its bytes, answered in kind', async () => {
+  const wire = Uint8Array.from([1, ...new Array(64).fill(0), 128, 1, 2, 3, 250, 251]);
+  const received: Uint8Array[] = [];
+  const phantom = {
+    ...adapter('phantom', ['SOLANA'], []),
+    signSolanaTransaction: async (tx: Uint8Array) => {
+      received.push(tx);
+      return tx.map((b, i) => (i >= 1 && i <= 64 ? 7 : b));
+    },
+  };
+  const { c } = client(solanaLogin, phantom);
+  const signedWire = wire.map((b, i) => (i >= 1 && i <= 64 ? 7 : b));
+
+  const hex = Buffer.from(wire).toString('hex');
+  assert.equal(await c.signSolanaTransaction(hex), Buffer.from(signedWire).toString('hex'));
+  const base64 = Buffer.from(wire).toString('base64');
+  assert.equal(await c.signSolanaTransaction(base64), Buffer.from(signedWire).toString('base64'));
+
+  assert.equal(received.length, 2);
+  for (const tx of received) assert.deepEqual(Array.from(tx), Array.from(wire));
+});
+
 test('a Stellar wallet login signs Stellar with the connected adapter, as the wallet the user brought', async () => {
   const signed: string[] = [];
   const { c, posted } = client(stellarLogin, adapter('freighter', ['STELLAR'], signed));

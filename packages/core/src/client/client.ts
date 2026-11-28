@@ -4761,8 +4761,9 @@ export class PollarClient {
    * Signs a serialized Solana transaction with the user's own connected wallet
    * and returns it signed, without broadcasting. The wallet shows the
    * transaction and the user approves it there; Pollar adds no prompt of its
-   * own. Base64 in and out, as Solana RPC and ramp payloads carry it. Throws
-   * when the session has no external Solana wallet that can sign.
+   * own. Hex or base64 in, answered in the same encoding: ramp and bridge
+   * payloads carry hex (Pollar's Solana service), Solana RPC carries base64.
+   * Throws when the session has no external Solana wallet that can sign.
    */
   async signSolanaTransaction(transaction: string): Promise<string> {
     const noSigner = this._externalSignerMissing('SOLANA');
@@ -4770,10 +4771,13 @@ export class PollarClient {
     const adapter = this._walletAdapter;
     if (!adapter?.signSolanaTransaction)
       throw new Error(`Wallet "${adapter?.type ?? 'none'}" cannot sign a Solana transaction.`);
+    // A serialized transaction in base64 always has a character outside 0-9a-f.
+    const hex = /^(?:[0-9a-fA-F]{2})+$/.test(transaction);
     const signed = await adapter.signSolanaTransaction(
-      base64urlDecode(transaction.replace(/\+/g, '-').replace(/\//g, '_')),
+      hex ? hexToBytes(transaction) : base64urlDecode(transaction.replace(/\+/g, '-').replace(/\//g, '_')),
       this._solanaChainId(),
     );
+    if (hex) return bytesToHex(signed);
     const encoded = base64urlEncode(signed).replace(/-/g, '+').replace(/_/g, '/');
     return encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '=');
   }
