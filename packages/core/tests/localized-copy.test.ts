@@ -64,6 +64,16 @@ test('a wallet provider refusal names its reason in the language asked', () => {
   );
 });
 
+test("Turnkey's OTP cap reads as a wait, never as the provider's raw text", () => {
+  const error = { code: 'SDK_COSIGN_OTP_RATE_LIMITED', body: { message: 'Max number of OTPs have been initiated' } };
+  assert.equal(cosignRefusalMessage(error, 'es'), null);
+  for (const language of ['en', 'es', 'pt'] as const) {
+    const text = transactionErrorMessage('SDK_COSIGN_OTP_RATE_LIMITED', null, language);
+    assert.doesNotMatch(text, /turnkey|otp|status/i);
+  }
+  assert.match(transactionErrorMessage('SDK_COSIGN_OTP_RATE_LIMITED', null, 'es'), /^Se pidieron demasiados códigos/);
+});
+
 test('auth errors resolve in each language, and authErrorMessage re-translates a known code', () => {
   assert.equal(
     resolveAuthError('PASSKEY_VERIFICATION_FAILED', 'x').message,

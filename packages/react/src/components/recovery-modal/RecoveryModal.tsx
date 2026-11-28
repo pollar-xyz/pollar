@@ -7,6 +7,7 @@ import {
   type RecoveryState,
   transactionErrorMessage,
   cosignRefusalMessage,
+  startBackoffPoll,
 } from '@pollar/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePollar } from '../../context';
@@ -20,6 +21,8 @@ import { PollarOverlay } from '../PollarOverlay';
 
 /** How often the modal reads again while another device is asked to add this one. */
 const APPROVAL_POLL_MS = 3_000;
+/** How long the modal waits to read again when the read after a successful action failed. */
+const RELOAD_AFTER_FAILURE_MS = 5_000;
 /** An enrollment request expires after 15 minutes; past that nothing can approve it. */
 const APPROVAL_WINDOW_MS = 15 * 60_000;
 
@@ -58,6 +61,7 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
   const [emailDraft, setEmailDraft] = useState('');
   const [codeSent, setCodeSent] = useState(false);
   const [phrase, setPhrase] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
     const client = getClient();
@@ -94,18 +98,36 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
       setError(null);
       setNotice(null);
       try {
-        await action();
-        await load();
+        try {
+          await action();
+        } catch (err) {
+          setError(errorText(err, language));
+          return;
+        }
+        // The action went through. A failed read after it (a rate limit) must not
+        // show as its failure: the user would repeat a step already done, such as
+        // an email code that is now spent. Read again a little later instead.
+        await load().catch(() => {
+          setTimeout(() => void load().catch(() => undefined), RELOAD_AFTER_FAILURE_MS);
+        });
         if (after?.notice) setNotice(after.notice);
         if (after?.view) setView(after.view);
-      } catch (err) {
-        setError(errorText(err, language));
       } finally {
         setBusy(null);
       }
     },
     [load],
   );
+
+  // The address a send in this view would go to, and the seconds until it may get another code.
+  const codeEmail = view === 'recover-email' ? (state?.email.address ?? '') : emailDraft.trim();
+  const codeAvailableAt = codeEmail ? recovery.codeAvailableAt(codeEmail) : 0;
+  const sendWaitSeconds = codeAvailableAt > now ? Math.ceil((codeAvailableAt - now) / 1000) : 0;
+  useEffect(() => {
+    if (!codeAvailableAt) return;
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [codeAvailableAt]);
 
   const enrolled = !!thisDeviceKey && !!devices?.devices.some((d) => d.publicKey.toLowerCase() === thisDeviceKey);
 
@@ -120,10 +142,10 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
       setNotice(copy.deviceAdded);
       return;
     }
-    const timer = setInterval(() => void load().catch(() => undefined), APPROVAL_POLL_MS);
+    const stopPoll = startBackoffPoll(load, APPROVAL_POLL_MS);
     const stop = setTimeout(() => setAwaitingApproval(false), APPROVAL_WINDOW_MS);
     return () => {
-      clearInterval(timer);
+      stopPoll();
       clearTimeout(stop);
     };
   }, [awaitingApproval, enrolled, load, copy]);
@@ -146,6 +168,7 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
         notice={notice}
         emailDraft={emailDraft}
         codeSent={codeSent}
+        sendWaitSeconds={sendWaitSeconds}
         phrase={phrase}
         onView={(next) => {
           setError(null);
@@ -159,8 +182,12 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
         onRemovePasskey={(id) => void run(`passkey:${id}`, () => recovery.removePasskey(id))}
         onSendEmailCode={() =>
           void run('email-send', async () => {
-            await recovery.startEmail(emailDraft.trim());
-            setCodeSent(true);
+            try {
+              await recovery.startEmail(emailDraft.trim());
+              setCodeSent(true);
+            } finally {
+              setNow(Date.now());
+            }
           })
         }
         onConfirmEmail={(code) =>
@@ -185,8 +212,12 @@ export function RecoveryModal({ onClose }: RecoveryModalProps) {
         }
         onSendRecoveryCode={() =>
           void run('recover-send', async () => {
-            await recovery.startEmailRecovery();
-            setCodeSent(true);
+            try {
+              await recovery.startEmailRecovery();
+              setCodeSent(true);
+            } finally {
+              setNow(Date.now());
+            }
           })
         }
         onRecoverWithCode={(code) =>

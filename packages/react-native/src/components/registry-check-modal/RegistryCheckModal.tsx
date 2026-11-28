@@ -4,7 +4,7 @@ import type { RegistryCheck, RegistryCheckPrefill } from '@pollar/core';
 import { usePollar } from '../../context';
 import { PollarModalFooter } from '../commons';
 import { useModalLanguage } from '../../language';
-import { errorCode, REGISTRY_COPY } from './registry-copy';
+import { errorCode, isRegistryDown, REGISTRY_COPY } from './registry-copy';
 
 export interface RegistryCheckModalProps {
   optionId: string;
@@ -122,6 +122,7 @@ export function RegistryCheckModal({
       if (code === 'KYC_REGISTRY_NAME_MISMATCH') {
         setError(copy.nameMismatch.replace('{full}', [prefill.surname1, prefill.surname2].filter(Boolean).join(' ')));
       } else if (code === 'SDK_KYC_UNDER_REVIEW') setReview(true);
+      else if (isRegistryDown(e)) setError(copy.registryDown);
       else setError(copy.submitError);
     } finally {
       if (mounted.current) setSubmitting(false);

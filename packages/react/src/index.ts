@@ -32,6 +32,8 @@ export type { UseChainsResult } from './useChains';
 
 // --- Modals -------------------------------------------------------------------
 export { KycModal } from './components/kyc-modal/KycModal';
+export { KycFlow } from './components/kyc-modal/KycFlow';
+export { LoginFlow } from './components/login-modal/LoginFlow';
 export { RequirementFormModal } from './components/requirement-form-modal/RequirementFormModal';
 export { RegistryCheckModal } from './components/registry-check-modal/RegistryCheckModal';
 export { ProviderRegistrationModal } from './components/provider-registration-modal/ProviderRegistrationModal';

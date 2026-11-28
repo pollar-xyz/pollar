@@ -25,4 +25,6 @@ export const TOKEN_LOGOS: Record<string, string> = {
   XLM: 'https://www.pollar.xyz/tokens/xlm.png',
   SOL: 'https://www.pollar.xyz/tokens/sol.png',
   POL: 'https://www.pollar.xyz/tokens/pol.png',
+  PYUSD: 'https://www.pollar.xyz/tokens/pyusd.png',
+  USDG: 'https://www.pollar.xyz/tokens/usdg.png',
 };

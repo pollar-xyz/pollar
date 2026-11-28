@@ -4,6 +4,7 @@ import type { PollarLogger } from '../../lib/logger';
 import { AUTH_ERROR_CODES, AuthState, PasskeyCeremony, PollarApplicationConfigContent } from '../../types';
 import { WalletAdapter, WalletId } from '../../wallets';
 import { logApiError } from './logging';
+import { authErrorMessage, extractErrorCode } from './errorMessages';
 
 export type FlowDeps = {
   api: PollarApiClient;
@@ -84,11 +85,14 @@ export async function createAuthSession(deps: FlowDeps): Promise<string | null> 
     // HTTP-level errors are logged by the central middleware; only log the
     // 2xx-with-no-success case here.
     if (!error) logApiError(logger, 'POST /auth/session', { data });
+    const code = extractErrorCode(error, data);
+    const known = authErrorMessage(code, 'en');
     setAuthState({
       step: 'error',
       previousStep: 'creating_session',
-      message: 'Failed to create session',
+      message: known ?? 'Failed to create session',
       errorCode: AUTH_ERROR_CODES.SESSION_CREATE_FAILED,
+      ...(known && code ? { code } : {}),
     });
     return null;
   }

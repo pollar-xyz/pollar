@@ -3,6 +3,7 @@ import { AUTH_ERROR_CODES } from '../../types';
 import { isValidSession } from '../session';
 import { SessionStatusError, waitForSessionReady } from '../stream';
 import { FlowDeps } from './deps';
+import { authErrorMessage, extractErrorCode, resolveAuthError } from './errorMessages';
 import { logApiError } from './logging';
 
 export async function authenticate(clientSessionId: string, deps: FlowDeps, expectedWallet?: string): Promise<void> {
@@ -96,13 +97,21 @@ export async function authenticate(clientSessionId: string, deps: FlowDeps, expe
     await storeSession(data.content, boundDpopJkt);
   } else {
     if (!error) logApiError(logger, 'POST /auth/login', { body, data });
+    // A code the catalog knows (an app out of credits, an overdue bill) gets its
+    // message; anything else stays the generic session failure. The modals
+    // re-translate the message from `code`.
+    const code = extractErrorCode(error, data);
+    const known = authErrorMessage(code, 'en')
+      ? resolveAuthError(code, 'Failed to load session', 'en', AUTH_ERROR_CODES.AUTH_FAILED)
+      : null;
     // Clear first, then emit error (see the LOGIN_TIMEOUT branch above).
     await clearSession();
     setAuthState({
       step: 'error',
       previousStep: 'authenticating',
-      message: 'Failed to load session',
-      errorCode: AUTH_ERROR_CODES.AUTH_FAILED,
+      message: known?.message ?? 'Failed to load session',
+      errorCode: known?.errorCode ?? AUTH_ERROR_CODES.AUTH_FAILED,
+      ...(code ? { code } : {}),
     });
   }
 }

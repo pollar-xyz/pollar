@@ -1,4 +1,10 @@
-import { localizedText, type PollarLanguage, type RequirementFormAnswers, type RequirementFormField } from '@pollar/core';
+import {
+  localizedText,
+  type PollarLanguage,
+  type RequirementForm,
+  type RequirementFormAnswers,
+  type RequirementFormField,
+} from '@pollar/core';
 
 export type FormLanguage = PollarLanguage;
 
@@ -118,6 +124,12 @@ const MESSAGES: Record<FormLanguage, Record<string, string>> = {
     too_large: 'This value is too large.',
     pattern: 'This does not have the expected format.',
     invalid_format: 'This does not have the expected format.',
+    refused: 'This value was not accepted. Check it and correct it.',
+    review: 'Please review this value.',
+    invalid_cpf: 'This CPF is not valid. Check its digits.',
+    invalid_postal_code: 'The CEP must have 8 digits.',
+    invalid_state: 'Use your state code, such as SP or RJ.',
+    invalid_country: 'Choose a country from the list.',
   },
   es: {
     required: 'Este campo es obligatorio.',
@@ -129,6 +141,12 @@ const MESSAGES: Record<FormLanguage, Record<string, string>> = {
     too_large: 'Este valor es demasiado alto.',
     pattern: 'No tiene el formato esperado.',
     invalid_format: 'No tiene el formato esperado.',
+    refused: 'Este dato no fue aceptado. Revísalo y corrígelo.',
+    review: 'Revisa este dato, por favor.',
+    invalid_cpf: 'Este CPF no es válido. Revisa sus dígitos.',
+    invalid_postal_code: 'El CEP debe tener 8 dígitos.',
+    invalid_state: 'Usa el código de tu estado, como SP o RJ.',
+    invalid_country: 'Elige un país de la lista.',
   },
   pt: {
     required: 'Este campo é obrigatório.',
@@ -140,11 +158,23 @@ const MESSAGES: Record<FormLanguage, Record<string, string>> = {
     too_large: 'Este valor é alto demais.',
     pattern: 'Não tem o formato esperado.',
     invalid_format: 'Não tem o formato esperado.',
+    refused: 'Este dado não foi aceito. Revise e corrija.',
+    review: 'Revise este dado, por favor.',
+    invalid_cpf: 'Este CPF não é válido. Confira os dígitos.',
+    invalid_postal_code: 'O CEP deve ter 8 dígitos.',
+    invalid_state: 'Use a sigla do seu estado, como SP ou RJ.',
+    invalid_country: 'Escolha um país da lista.',
   },
 };
 
 export function fieldErrorMessage(code: string, language: FormLanguage): string {
   return MESSAGES[language][code] ?? MESSAGES[language].invalid_type!;
+}
+
+/** The answers the form comes back to correct, each marked with why until the user changes it. */
+export function correctionErrors(form: RequirementForm): Record<string, string> {
+  const codes = form.corrections?.codes ?? {};
+  return Object.fromEntries((form.corrections?.keys ?? []).map((key) => [key, codes[key] ?? 'refused']));
 }
 
 /** The per-field errors of a KYC_FORM_INVALID_ANSWERS error, by key; null when it names none. */
@@ -165,7 +195,7 @@ export function fieldErrorsOf(error: unknown): Record<string, string> | null {
 
 export const COPY: Record<
   FormLanguage,
-  Record<'title' | 'loading' | 'submit' | 'submitting' | 'close' | 'loadError' | 'submitError' | 'step', string>
+  Record<'title' | 'loading' | 'submit' | 'submitting' | 'close' | 'loadError' | 'submitError' | 'step' | 'corrections', string>
 > = {
   en: {
     title: 'A few more details',
@@ -176,6 +206,7 @@ export const COPY: Record<
     loadError: 'Could not load the form. Please try again.',
     submitError: 'Could not save your answers. Please try again.',
     step: 'Step {n} of {total}',
+    corrections: 'Some of your answers were not accepted. Correct the marked fields.',
   },
   es: {
     title: 'Unos datos más',
@@ -186,6 +217,7 @@ export const COPY: Record<
     loadError: 'No se pudo cargar el formulario. Intenta de nuevo.',
     submitError: 'No se pudieron guardar tus respuestas. Intenta de nuevo.',
     step: 'Paso {n} de {total}',
+    corrections: 'Algunas de tus respuestas no fueron aceptadas. Corrige los campos marcados.',
   },
   pt: {
     title: 'Mais alguns dados',
@@ -196,5 +228,6 @@ export const COPY: Record<
     loadError: 'Não foi possível carregar o formulário. Tente novamente.',
     submitError: 'Não foi possível salvar suas respostas. Tente novamente.',
     step: 'Passo {n} de {total}',
+    corrections: 'Algumas das suas respostas não foram aceitas. Corrija os campos marcados.',
   },
 };

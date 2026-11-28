@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Linking, View } from 'react-native';
+import { Image, Linking, Pressable, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import type {
   RampRoute,
@@ -11,6 +11,7 @@ import type {
   SolanaEarnPosition,
   SolanaSwapOptions,
   SolanaSwapQuote,
+  PollarLanguage,
   SwapDestinationChain,
   SwapSettlement,
   SwapQuote,
@@ -33,11 +34,21 @@ import {
 import { usePollar } from '../context';
 import { useModalLanguage } from '../language';
 import { FEATURE_COPY } from './feature-copy';
-import { ActionButton, ActionState, Card, Choice, Field, Label, ResultView, useAction } from './native-ui';
+import { ActionButton, ActionState, Card, Choice, Field, Label, ResultView, useAction, useNativeColors } from './native-ui';
 import { CHAIN_LOGOS } from '../constants';
 import { InlineAssetLogo, TxExplorerLink, TxReview } from './tx-review/TxReview';
 import { TX_REVIEW_COPY } from './tx-review/tx-review-copy';
-import { earnOutcome, reviewForEarn, type EarnReviewParts } from './tx-review/tx-review-model';
+import {
+  earnOutcome,
+  reviewForEarn,
+  reviewFromRequest,
+  type EarnReviewParts,
+  type TxReviewData,
+} from './tx-review/tx-review-model';
+import { CONFIRM_COPY } from './confirm-modal/confirm-copy';
+import { useInlineConfirmation, useTrackOwnCall } from '../useInlineConfirmation';
+import { explorerTxUrl } from './explorer';
+import { TxStatusBody } from './transaction-modal/TxStatusBody';
 
 export type FeatureName =
   | 'authentication'
@@ -57,10 +68,93 @@ export type FeatureName =
   | 'distribution';
 export function ChainSelect({ value, onChange }: { value: WalletChain; onChange: (value: WalletChain) => void }) {
   const { wallets } = usePollar();
-  const copy = FEATURE_COPY[useModalLanguage()];
+  const language = useModalLanguage();
+  const copy = FEATURE_COPY[language];
   const chains = [...new Set(wallets.map((w) => w.chain ?? 'STELLAR'))];
-  return <Choice label={copy.chain} value={value} options={chains.length ? chains : ['STELLAR']} onChange={onChange} />;
+  return (
+    <Choice
+      label={copy.chain}
+      labels={TX_REVIEW_COPY[language].chains}
+      icons={CHAIN_LOGOS}
+      value={value}
+      options={chains.length ? chains : ['STELLAR']}
+      onChange={onChange}
+    />
+  );
 }
+
+/** The chains the user holds a wallet on, Stellar when none is read yet. */
+function useWalletChains(): WalletChain[] {
+  const { wallets } = usePollar();
+  const chains = [...new Set(wallets.map((w) => w.chain ?? 'STELLAR'))];
+  return chains.length ? chains : ['STELLAR'];
+}
+
+/**
+ * The panel's network next to its title, out of the form: switching it changes
+ * every asset, balance and route the panel shows. Chips on the form, a label
+ * while its transaction runs, nothing for a single network.
+ */
+function NetworkChoice<T extends WalletChain>({
+  options,
+  value,
+  onChange,
+  locked = false,
+  disabled = false,
+}: {
+  options: readonly T[];
+  value: T;
+  onChange: (value: T) => void;
+  locked?: boolean;
+  disabled?: boolean;
+}) {
+  const c = useNativeColors();
+  const names = TX_REVIEW_COPY[useModalLanguage()].chains;
+  if (options.length < 2) return null;
+  const logo = (chain: T) =>
+    CHAIN_LOGOS[chain] ? (
+      <Image source={{ uri: CHAIN_LOGOS[chain] }} style={{ width: 16, height: 16, borderRadius: 8 }} />
+    ) : null;
+  if (locked) {
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }} accessibilityLabel={names[value]}>
+        {logo(value)}
+        <Text style={{ color: c.muted, fontWeight: '600' }}>{names[value]}</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} accessibilityRole="radiogroup">
+      {options.map((chain) => (
+        <Pressable
+          key={chain}
+          accessibilityRole="radio"
+          accessibilityLabel={names[chain]}
+          accessibilityState={{ checked: chain === value, disabled }}
+          disabled={disabled}
+          onPress={() => chain !== value && onChange(chain)}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingVertical: 5,
+            paddingHorizontal: 10,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: chain === value ? c.accent : c.border,
+            opacity: disabled ? 0.5 : 1,
+          }}
+        >
+          {logo(chain)}
+          <Text style={{ color: c.text, fontSize: 13, fontWeight: '600' }}>{names[chain]}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+/** Whether the panel's transaction is under way: its network is a label then. */
+const runningTx = (step: string) => step !== 'idle' && step !== 'success' && step !== 'error';
 export function AssetSelect({
   assets,
   value,
@@ -348,10 +442,10 @@ export function ReceivePanel({ initial }: { initial?: ReceiveModalOptions | unde
   const action = useAction();
   const seededChain = p.wallets.some((w) => (w.chain ?? 'STELLAR') === initial?.chain) ? initial?.chain : undefined;
   const [chain, setChain] = useState<WalletChain>(seededChain ?? 'STELLAR');
+  const walletChains = useWalletChains();
   const address = p.wallets.find((w) => (w.chain ?? 'STELLAR') === chain)?.address;
   return (
-    <Card title={copy.receive.title}>
-      <ChainSelect value={chain} onChange={setChain} />
+    <Card title={copy.receive.title} aside={<NetworkChoice options={walletChains} value={chain} onChange={setChain} />}>
       {p.recoveryLocked ? (
         // A locked wallet signs nothing, so funds sent to it now could not leave.
         <>
@@ -385,8 +479,10 @@ export function SendPanel({ initial }: { initial?: SendModalOptions | undefined 
   const p = usePollar();
   const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
+  const track = useTrackOwnCall();
   const seededChain = p.wallets.some((w) => (w.chain ?? 'STELLAR') === initial?.chain) ? initial?.chain : undefined;
   const [chain, setChain] = useState<WalletChain>(seededChain ?? 'STELLAR');
+  const walletChains = useWalletChains();
   const [destination, setDestination] = useState(initial?.destination?.trim() ?? '');
   const [amount, setAmount] = useState(seededAmount(initial?.amount));
   const [memo, setMemo] = useState(initial?.memo ?? '');
@@ -434,16 +530,22 @@ export function SendPanel({ initial }: { initial?: SendModalOptions | undefined 
     return p.sendPayment({ chain, destination: destination.trim(), amount, ...(asset?.issuer ? { mint: asset.issuer } : {}) });
   }
   return (
-    <Card title={copy.send.title}>
-      <ChainSelect
-        value={chain}
-        onChange={(v) => {
-          assetSeed.current = undefined;
-          setChain(v);
-          setSelected('');
-          setReview(false);
-        }}
-      />
+    <Card
+      title={copy.send.title}
+      aside={
+        <NetworkChoice
+          options={walletChains}
+          value={chain}
+          locked={review || runningTx(p.tx.step)}
+          onChange={(v) => {
+            assetSeed.current = undefined;
+            setChain(v);
+            setSelected('');
+            setReview(false);
+          }}
+        />
+      }
+    >
       <Choice
         label={copy.send.token}
         labels={{ Native: copy.send.native }}
@@ -502,7 +604,7 @@ export function SendPanel({ initial }: { initial?: SendModalOptions | undefined 
           review
             ? void action.run(async () => {
                 arm();
-                const result = await send();
+                const result = await track(send());
                 setReview(false);
                 return result;
               })
@@ -514,37 +616,44 @@ export function SendPanel({ initial }: { initial?: SendModalOptions | undefined 
     </Card>
   );
 }
-export function TransactionStatus() {
+/**
+ * Where the panel's transaction stands, as every transaction modal shows it: the
+ * review, Confirm when the signature asks for a yes, then a strip with the
+ * outcome. The hash is in the review's details.
+ */
+export function TransactionStatus({
+  review,
+  successMessage,
+  explorerUrl: explorerProp,
+}: {
+  review?: TxReviewData | undefined;
+  successMessage?: string | undefined;
+  explorerUrl?: string | undefined;
+} = {}) {
   const p = usePollar();
-  const copy = FEATURE_COPY[useModalLanguage()];
-  const action = useAction();
-  const hash = 'hash' in p.tx ? p.tx.hash : undefined;
+  const language = useModalLanguage();
+  // The signature's yes is asked here, under the review, not in a prompt over the panel.
+  const confirmation = useInlineConfirmation(true);
+  const { theme = 'light', accentColor = '#005DB4' } = p.styles;
+  if (p.tx.step === 'idle' && !confirmation) return null;
+  const hash = p.tx.step === 'success' ? p.tx.hash : null;
+  const buildChain = 'buildData' in p.tx ? (p.tx.buildData as { chain?: WalletChain } | undefined)?.chain : undefined;
+  const explorerUrl = explorerProp ?? (hash ? explorerTxUrl(buildChain ?? review?.from?.chain, hash, p.network) : null);
   return (
-    <View style={{ gap: 8 }}>
-      <Label>
-        {copy.transaction}: {p.tx.step}
-      </Label>
-      <ResultView value={p.tx} />
-      {hash && (
-        <>
-          <ActionButton
-            title={copy.copyHash}
-            onPress={() =>
-              void action.run(async () => {
-                await p.copyText(hash);
-                return copy.copied;
-              })
-            }
-          />
-          <ActionButton
-            title={copy.checkConfirmation}
-            disabled={action.busy}
-            onPress={() => void action.run(() => p.getClient().getTxStatus(hash))}
-          />
-        </>
-      )}
-      <ActionState action={action} />
-    </View>
+    <TxStatusBody
+      transaction={p.tx}
+      theme={theme}
+      accentColor={accentColor}
+      explorerUrl={explorerUrl}
+      walletType={p.walletType}
+      confirmation={confirmation}
+      review={review}
+      successMessage={successMessage}
+      showTitle
+      network={p.network}
+      copyText={p.copyText}
+      language={language}
+    />
   );
 }
 export function TransactionPanel() {
@@ -665,12 +774,12 @@ export function HistoryPanel() {
   const copy = FEATURE_COPY[useModalLanguage()];
   const action = useAction();
   const [chain, setChain] = useState<WalletChain>(p.wallets[0]?.chain ?? 'STELLAR');
+  const walletChains = useWalletChains();
   useEffect(() => {
     void action.run(() => p.fetchTxHistory({ chain }));
   }, [chain]);
   return (
-    <Card title={copy.history.title}>
-      <ChainSelect value={chain} onChange={setChain} />
+    <Card title={copy.history.title} aside={<NetworkChoice options={walletChains} value={chain} onChange={setChain} />}>
       <ActionButton
         title={copy.history.refresh}
         disabled={action.busy}
@@ -788,8 +897,16 @@ function settlementKind(settlement: SwapSettlement | null): 'pending' | 'complet
 }
 export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined }) {
   const p = usePollar();
-  const copy = FEATURE_COPY[useModalLanguage()];
+  const language = useModalLanguage();
+  const copy = FEATURE_COPY[language];
   const action = useAction();
+  const track = useTrackOwnCall();
+  // The Solana swap sent, with its tokens: its transaction carries no build to review it from.
+  const [sentSolana, setSentSolana] = useState<{
+    quote: SolanaSwapQuote;
+    sell: SolanaSwapOption | undefined;
+    buy: SolanaSwapOption | undefined;
+  } | null>(null);
   const [chains, setChains] = useState<SwapChain[] | null>(null);
   const [venues, setVenues] = useState<Record<SwapChain, string[]>>({ STELLAR: [], SOLANA: [] });
   const [venue, setVenue] = useState('auto');
@@ -1000,19 +1117,23 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
     ]),
   );
   return (
-    <Card title={copy.swap.title}>
+    <Card
+      title={copy.swap.title}
+      aside={
+        chains && (
+          <NetworkChoice
+            options={chains}
+            value={chain}
+            locked={runningTx(p.tx.step)}
+            onChange={(v) => {
+              setChain(v);
+              clearPicks();
+            }}
+          />
+        )
+      }
+    >
       <ActionButton title={copy.swap.refresh} disabled={action.busy} onPress={() => void action.run(refreshSwap)} />
-      {chains && chains.length > 1 && (
-        <Choice
-          label={copy.swap.network}
-          options={chains}
-          value={chain}
-          onChange={(v) => {
-            setChain(v);
-            clearPicks();
-          }}
-        />
-      )}
       {chain === 'SOLANA' && destinationChains.length > 0 && (
         <Choice
           label={copy.swap.receiveOn}
@@ -1107,8 +1228,9 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
             onPress={() =>
               void action.run(async () => {
                 setQuotes([]);
+                setSentSolana(null);
                 arm();
-                return p.swap(q, { autoTrustline: true });
+                return track(p.swap(q, { autoTrustline: true }));
               })
             }
           />
@@ -1126,11 +1248,16 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
               onPress={() =>
                 void action.run(async () => {
                   setSolanaQuotes([]);
+                  setSentSolana({
+                    quote: q,
+                    sell: solanaSell.find((o) => o.mint === q.inputMint),
+                    buy: solanaBuy.find((o) => o.mint === q.outputMint),
+                  });
                   arm();
                   const toward = q.destinationChain && q.destinationChain !== 'SOLANA';
                   const key = newKey();
                   setDelivery(toward ? { key, settlement: null } : null);
-                  return p.swapSolana(q, { slippageBps: 50, idempotencyKey: key });
+                  return track(p.swapSolana(q, { slippageBps: 50, idempotencyKey: key }));
                 })
               }
             />
@@ -1155,9 +1282,44 @@ export function SwapPanel({ initial }: { initial?: SwapModalOptions | undefined 
         </>
       )}
       {chain === 'STELLAR' && stellarBuyAll.length === 0 && <Label>{copy.swap.noTokens}</Label>}
-      <TransactionStatus />
+      <TransactionStatus
+        review={
+          sentSolana && !('buildData' in p.tx && p.tx.buildData) ? solanaSwapReview(sentSolana, p.network, language) : undefined
+        }
+      />
       <ActionState action={action} />
     </Card>
+  );
+}
+/** A Solana swap's review from the quote sent, worded like its confirmation, for the steps after the user's yes. */
+function solanaSwapReview(
+  sent: { quote: SolanaSwapQuote; sell: SolanaSwapOption | undefined; buy: SolanaSwapOption | undefined },
+  network: string,
+  language: PollarLanguage,
+): TxReviewData {
+  const { quote, sell, buy } = sent;
+  const toward = quote.destinationChain && quote.destinationChain !== 'SOLANA' ? quote.destinationChain : undefined;
+  const outputDecimals = quote.outputDecimals ?? buy?.decimals;
+  return reviewFromRequest(
+    {
+      chain: 'SOLANA',
+      network,
+      operation: 'swap',
+      details: {
+        provider: quote.provider,
+        inputMint: quote.inputMint,
+        outputMint: quote.outputMint,
+        inAmount: quote.inAmount,
+        outAmount: quote.outAmount,
+        minOut: quote.minOut,
+        ...(toward && { destinationChain: toward }),
+        ...(sell && { inputSymbol: sell.code, inputDecimals: sell.decimals }),
+        ...(buy && { outputSymbol: buy.code }),
+        ...(outputDecimals !== undefined && { outputDecimals }),
+      },
+      fallbackTitle: CONFIRM_COPY[language].operations.swap ?? 'Swap',
+    },
+    TX_REVIEW_COPY[language],
   );
 }
 function earnExplorerUrl(chain: WalletChain, network: string, hash: string): string {
@@ -1182,6 +1344,7 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
   const reviewCopy = TX_REVIEW_COPY[language];
   const { theme = 'light', accentColor = '#005DB4' } = p.styles;
   const action = useAction();
+  const track = useTrackOwnCall();
   // The operation sent, kept for its result once the form changes.
   const [submission, setSubmission] = useState<EarnReviewParts | null>(null);
   const [providers, setProviders] = useState<EarnProviderId[]>([]);
@@ -1246,16 +1409,14 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
     void action.run(refreshEarn);
   }, []);
   return (
-    <Card title={copy.earn.title}>
-      <ActionButton title={copy.earn.refresh} disabled={action.busy} onPress={() => void action.run(refreshEarn)} />
-      {networks.length > 1 && (
-        <Choice
-          label={copy.earn.network}
-          disabled={action.busy}
-          labels={reviewCopy.chains}
-          icons={CHAIN_LOGOS}
+    <Card
+      title={copy.earn.title}
+      aside={
+        <NetworkChoice
           options={networks}
           value={earnChain}
+          disabled={action.busy}
+          locked={runningTx(p.tx.step)}
           onChange={(v) => {
             void action.run(async () => {
               setEarnChain(v);
@@ -1270,7 +1431,9 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
             });
           }}
         />
-      )}
+      }
+    >
+      <ActionButton title={copy.earn.refresh} disabled={action.busy} onPress={() => void action.run(refreshEarn)} />
       {!onSolana && (
         <Choice
           label={copy.provider}
@@ -1390,42 +1553,27 @@ export function EarnPanel({ initial }: { initial?: EarnModalOptions | undefined 
                   wallet: p.wallets.find((w) => (w.chain ?? 'STELLAR') === earnChain)?.address,
                 });
                 if (onSolana)
-                  return tab === 'deposit'
-                    ? p.earnSolanaDeposit({ opportunity, amount })
-                    : p.earnSolanaWithdraw({ opportunity, amount });
-                return tab === 'deposit'
-                  ? p.earnDeposit({ provider: provider!, opportunity, amount })
-                  : p.earnWithdraw({ provider: provider!, opportunity, amount });
+                  return track(
+                    tab === 'deposit'
+                      ? p.earnSolanaDeposit({ opportunity, amount })
+                      : p.earnSolanaWithdraw({ opportunity, amount }),
+                  );
+                return track(
+                  tab === 'deposit'
+                    ? p.earnDeposit({ provider: provider!, opportunity, amount })
+                    : p.earnWithdraw({ provider: provider!, opportunity, amount }),
+                );
               })
         }
       />
       {!networks.length && <Label>{copy.earn.noProviders}</Label>}
-      {submission && p.tx.step === 'success' && (
-        <View style={{ gap: 12 }}>
-          <Label>{earnOutcome(submission, reviewCopy)}</Label>
-          <TxReview
-            data={reviewForEarn(
-              {
-                ...submission,
-                hash: { value: p.tx.hash, explorerUrl: earnExplorerUrl(submission.chain, p.network, p.tx.hash) },
-                ...(p.tx.sponsored !== undefined && { sponsored: p.tx.sponsored }),
-              },
-              reviewCopy,
-            )}
-            theme={theme}
-            accentColor={accentColor}
-            copyText={p.copyText}
-            language={language}
-          />
-          <TxExplorerLink
-            chain={submission.chain}
-            url={earnExplorerUrl(submission.chain, p.network, p.tx.hash)}
-            accentColor={accentColor}
-            language={language}
-          />
-        </View>
-      )}
-      <TransactionStatus />
+      <TransactionStatus
+        review={submission ? reviewForEarn(submission, reviewCopy) : undefined}
+        successMessage={submission ? earnOutcome(submission, reviewCopy) : undefined}
+        explorerUrl={
+          submission && p.tx.step === 'success' ? earnExplorerUrl(submission.chain, p.network, p.tx.hash) : undefined
+        }
+      />
       <ActionState action={action} />
     </Card>
   );

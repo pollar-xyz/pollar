@@ -16,14 +16,28 @@ export function useNativeColors() {
     accent: styles.accentColor || '#005DB4',
   };
 }
-export function Card({ title, children }: { title?: string; children: React.ReactNode }) {
+export function Card({
+  title,
+  aside,
+  children,
+}: {
+  title?: string;
+  /** Sits on the title's row: the panel's network. */
+  aside?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   const c = useNativeColors();
   return (
     <View style={{ backgroundColor: c.card, borderColor: c.border, borderWidth: 1, borderRadius: 20, padding: 20, gap: 14 }}>
-      {title && (
-        <Text accessibilityRole="header" style={{ fontSize: 21, fontWeight: '700', color: c.text }}>
-          {title}
-        </Text>
+      {(title || aside) && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+          {title && (
+            <Text accessibilityRole="header" style={{ fontSize: 21, fontWeight: '700', color: c.text }}>
+              {title}
+            </Text>
+          )}
+          {aside}
+        </View>
       )}
       {children}
     </View>

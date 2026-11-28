@@ -1,12 +1,20 @@
 'use client';
 
 import { useInheritedLanguage } from '../../language-context';
-import { PollarLanguage, TransactionState, WalletBalanceRecord, WalletChain, WalletId } from '@pollar/core';
+import {
+  PollarLanguage,
+  TransactionState,
+  WalletBalanceRecord,
+  WalletChain,
+  WalletId,
+  type PendingConfirmation,
+  type StellarNetwork,
+} from '@pollar/core';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { AmountField } from '../AmountField';
-import { ChainSelect } from '../ChainSelect';
+import { NetworkPill } from '../ChainSelect';
 import { PollarModalFooter, RefreshIcon } from '../commons';
-import { TxStatusView } from '../transaction-modal/TxStatusView';
+import { TxStatusHeading, TxStatusView, txStatusReview } from '../transaction-modal/TxStatusView';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { PollarSelect } from '../PollarSelect';
 import { SEND_COPY } from './send-copy';
@@ -242,6 +250,10 @@ export interface SendModalTemplateProps {
   onDone: () => void;
   /** Language of the modal. Defaults to the user's device; the modal passes the resolved one. */
   language?: PollarLanguage | undefined;
+  /** The signature waiting for the user's yes, answered in the transaction step. */
+  confirmation?: PendingConfirmation | null | undefined;
+  /** The app's network, for the details of a confirmation. */
+  network?: StellarNetwork | undefined;
 }
 
 export function SendModalTemplate({
@@ -290,10 +302,13 @@ export function SendModalTemplate({
   onRetry,
   onDone,
   language: languageProp,
+  confirmation = null,
+  network,
 }: SendModalTemplateProps) {
   const language = useInheritedLanguage(languageProp);
   const cssVars = buildModalCssVars(theme, accentColor, styleOverrides);
   const copy = SEND_COPY[language];
+  const txReview = step === 'tx' ? txStatusReview({ transaction, explorerUrl, confirmation, network, language }) : null;
 
   const parsedAmount = amount ? Number(amount) : 0;
   const availableAmount =
@@ -332,7 +347,23 @@ export function SendModalTemplate({
             </button>
           )}
           <div className="pollar-send-title-copy">
-            <h2 className="pollar-modal-title">{title}</h2>
+            <div className="pollar-title-row">
+              {step === 'tx' ? (
+                <TxStatusHeading review={txReview} fallback={title} />
+              ) : (
+                <h2 className="pollar-modal-title">{title}</h2>
+              )}
+              {chains && (
+                <NetworkPill
+                  value={selectedChain}
+                  options={chains}
+                  {...(onSelectChain ? { onChange: onSelectChain } : {})}
+                  locked={step !== 'form'}
+                  disabled={isLoadingBalance}
+                  language={language}
+                />
+              )}
+            </div>
             {step === 'form' && (
               <p className="pollar-send-subtitle">{copy.subtitle.replace('{chain}', chainLabel(selectedChain, copy))}</p>
             )}
@@ -364,17 +395,6 @@ export function SendModalTemplate({
       {/* Form step */}
       {step === 'form' && (
         <>
-          {/* Network selector - drives the asset list below */}
-          {chains && onSelectChain && (
-            <ChainSelect
-              label={copy.network}
-              value={selectedChain}
-              options={chains}
-              onChange={onSelectChain}
-              disabled={isLoadingBalance}
-            />
-          )}
-
           {!canSendOnChain && <div className="pollar-modal-empty">{copy.sendingUnavailable}</div>}
           {canSendOnChain && notReadyReason && <div className="pollar-modal-empty">{notReadyReason}</div>}
 
@@ -509,6 +529,8 @@ export function SendModalTemplate({
           onCopyHash={onCopyHash}
           onRetry={onRetry}
           onDone={onDone}
+          confirmation={confirmation}
+          network={network}
           language={language}
         />
       )}

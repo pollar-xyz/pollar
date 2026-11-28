@@ -147,6 +147,8 @@ drop-in authentication in React applications.
   PROVIDER_REGISTRATION steps a ramp route can require, as standalone modals for consumers who build their own route list
 - `<KycModal>` - identity verification: hosted (iframe or redirect) flow per option, corridor-scoped when a ramp route
   asks for it, with review, expiry and retry states; `openKycModal()` without a corridor walks the app's own KYC steps
+- `<LoginFlow>` / `<KycFlow>` - the sign-in and the app's own KYC steps inline in the host's page instead of a modal,
+  for a page whose job is signing in or verifying
 - Transaction history modal (`openTxHistoryModal()`, `TxHistoryModalTemplate`) - paginated multichain viewer with auto-fetch on open, a network picker that
   filters server-side, per-chain explorer links (stellar.expert for Stellar, explorer.solana.com for Solana), and the
   unified `{ amount, unit }` fee per row
@@ -450,10 +452,10 @@ store; run `yalc add @pollar/core @pollar/react` (or the packages the app uses) 
 ### Release a candidate
 
 ```bash
-npm run release:rc -- 0.12.1-rc.6
+npm run release:rc -- 0.12.1-rc.23
 ```
 
-Tags the current commit as `v0.12.1-rc.6` and pushes the tag, which runs
+Tags the current commit as `v0.12.1-rc.23` and pushes the tag, which runs
 `.github/workflows/release-rc.yml` (build, unit + smoke tests, publish `@pollar/core`, `@pollar/react`,
 `@pollar/react-native`, `@pollar/stellar-wallets-kit-adapter` and `@pollar/solana-wallet-standard-adapter` to npm on
 the `next` dist-tag) and `.github/workflows/e2e-rc.yml`. Nothing is published from your machine.
@@ -467,6 +469,17 @@ The script refuses to tag unless:
 
 The workflow can also be started by hand from the Actions tab (`workflow_dispatch` with a
 `version` input).
+
+For a quick candidate, `--fast` publishes without the unit and smoke tests:
+
+```bash
+npm run release:rc -- 0.12.1-rc.24 --fast
+```
+
+It creates no tag: it starts `release-rc.yml` by hand on the current branch with `skip_tests`, so `e2e-rc.yml` does not
+run. Besides the checks above, it refuses unless `HEAD` is exactly `origin/<branch>` (the workflow builds the branch as
+it is on `origin`) and the version is not on npm yet. It needs the GitHub CLI (`gh`). A version published without tests
+cannot be published again; a broken one is fixed by the next `rc.N`.
 
 ### Tag a stable release
 

@@ -184,6 +184,13 @@ export interface PollarUserProfile {
   };
 }
 
+/** Your app's support contact, shown where a modal asks the user to contact support. */
+export interface PollarSupportContact {
+  /** A page, chat or form (https). */
+  url?: string;
+  email?: string;
+}
+
 export interface PollarClientConfig {
   stellarNetwork?: StellarNetwork;
   baseUrl?: string;
@@ -291,6 +298,13 @@ export interface PollarClientConfig {
    * If unset, the server-recorded `user_agent` header is the fallback.
    */
   deviceLabel?: string;
+  /**
+   * Where your users reach your support. A ramp order that stops with nothing
+   * they can fix tells them to contact support, links here and shows the order
+   * id to quote. When set, it wins over the contact in the dashboard
+   * (Settings > General), which is Pollar's support email when the app set none.
+   */
+  support?: PollarSupportContact;
   /**
    * Foreground-detection signal for the silent-refresh scheduler. When the
    * app is hidden / backgrounded, scheduled refreshes are skipped (saves
@@ -726,7 +740,14 @@ export type TransactionState =
   // --- Co-signed wallet: waiting for the user's device to vote --------------
   | { step: 'awaiting_cosign'; request: CosignRequest; buildData?: TxBuildContent }
   // --- Post-Horizon-ack, pre-ledger-confirm (shared) --------------------
-  | { step: 'submitted'; buildData?: TxBuildContent; hash: string; sponsored?: boolean }
+  | {
+      step: 'submitted';
+      buildData?: TxBuildContent;
+      hash: string;
+      sponsored?: boolean;
+      /** Past the confirmation window: still pending, and read on in the background until it settles. */
+      slow?: boolean;
+    }
   // --- Terminal success (shared) ----------------------------------------
   | { step: 'success'; buildData?: TxBuildContent; hash: string; sponsored?: boolean }
   // --- Terminal failure with phase context ------------------------------
@@ -1021,6 +1042,26 @@ export function isPollarApiError(err: unknown): err is PollarApiError {
     err instanceof PollarApiError ||
     (typeof err === 'object' && err !== null && (err as { name?: unknown }).name === 'PollarApiError')
   );
+}
+
+/**
+ * True for an API error that says "try again later" rather than "no": a rate
+ * limit (429) or a server failure (5xx). The same request can go again.
+ */
+export function isTransientApiError(err: unknown): boolean {
+  if (!isPollarApiError(err)) return false;
+  if (err.code === 'RATE_LIMITED') return true;
+  const status = err.body.httpStatus;
+  return typeof status === 'number' && (status === 429 || status >= 500);
+}
+
+/**
+ * True for a failure the same request can simply retry later: a transient API
+ * error ({@link isTransientApiError}) or no answer at all (a timeout, or the
+ * `TypeError` fetch rejects with when the connection drops).
+ */
+export function isTransientFailure(err: unknown): boolean {
+  return isTransientApiError(err) || isPollarNetworkError(err) || err instanceof TypeError;
 }
 
 /**

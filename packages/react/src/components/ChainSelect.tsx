@@ -10,6 +10,7 @@
 
 import { useInheritedLanguage } from '../language-context';
 import type { PollarLanguage, WalletChain, WalletInfo } from '@pollar/core';
+import { CHAIN_LOGOS } from '../constants';
 import { COMMONS_COPY } from './commons-copy';
 import { PollarSelect } from './PollarSelect';
 import './send-modal/SendModal.css';
@@ -91,8 +92,68 @@ export function ChainSelect({ label, value, options, onChange, disabled = false,
         disabled={disabled}
         aria-label={label ?? COMMONS_COPY[language].network}
         onChange={(chain) => onChange(chain as WalletChain)}
-        options={options.map((chain) => ({ value: chain, label: CHAIN_LABEL[chain] ?? chain }))}
+        options={options.map((chain) => ({
+          value: chain,
+          label: CHAIN_LABEL[chain] ?? chain,
+          icon: <ChainLogo chain={chain} />,
+        }))}
       />
     </div>
+  );
+}
+
+/** A chain's logo, sized for a pill or a picker option. */
+export function ChainLogo({ chain }: { chain: string }) {
+  const src = CHAIN_LOGOS[chain as keyof typeof CHAIN_LOGOS];
+  return src ? <img className="pollar-network-logo" src={src} alt="" aria-hidden /> : null;
+}
+
+export interface NetworkPillProps {
+  value: WalletChain | null;
+  options: readonly WalletChain[];
+  onChange?: (chain: WalletChain) => void;
+  /** Once a flow runs the network is a label: switching it would change everything the flow is doing. */
+  locked?: boolean;
+  disabled?: boolean;
+  language?: PollarLanguage | undefined;
+}
+
+/**
+ * The modal's network, next to its title and out of the form: switching it
+ * changes every asset, balance and route the modal shows. A pill on the form,
+ * a label once a flow runs, nothing for an app on a single network.
+ */
+export function NetworkPill({
+  value,
+  options,
+  onChange,
+  locked = false,
+  disabled = false,
+  language: languageProp,
+}: NetworkPillProps) {
+  const language = useInheritedLanguage(languageProp);
+  if (!value || options.length < 2) return null;
+  const label = COMMONS_COPY[language].network;
+  if (locked) {
+    return (
+      <span className="pollar-network-tag" title={label}>
+        <ChainLogo chain={value} />
+        {CHAIN_LABEL[value] ?? value}
+      </span>
+    );
+  }
+  return (
+    <PollarSelect
+      className="pollar-network-pill"
+      aria-label={label}
+      value={value}
+      disabled={disabled}
+      onChange={(chain) => onChange?.(chain as WalletChain)}
+      options={options.map((chain) => ({
+        value: chain,
+        label: CHAIN_LABEL[chain] ?? chain,
+        icon: <ChainLogo chain={chain} />,
+      }))}
+    />
   );
 }

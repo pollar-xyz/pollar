@@ -22,6 +22,8 @@ export const ENABLED_ASSETS_COPY: Record<
     enableTrustlineFor: string;
     disableTrustlineFor: string;
     updateFailed: string;
+    /** The outcome strip of adding or removing an asset: where the trustline change stands. */
+    outcome: { adding: string; added: string; removing: string; removed: string; failed: string };
     customTitle: string;
     customHint: string;
     assetCode: string;
@@ -54,6 +56,13 @@ export const ENABLED_ASSETS_COPY: Record<
     enableTrustlineFor: 'Enable {code} trustline',
     disableTrustlineFor: 'Disable {code} trustline',
     updateFailed: 'Trustline update failed. Please try again.',
+    outcome: {
+      adding: 'Adding {code} to your wallet…',
+      added: '{code} added to your wallet',
+      removing: 'Removing {code} from your wallet…',
+      removed: '{code} removed from your wallet',
+      failed: '{code} was not updated',
+    },
     customTitle: 'Add custom trustline',
     customHint: "Custom trustlines aren't sponsored — your wallet pays the 0.5 XLM reserve and the transaction fee.",
     assetCode: 'Asset code',
@@ -85,6 +94,13 @@ export const ENABLED_ASSETS_COPY: Record<
     enableTrustlineFor: 'Activar la línea de confianza de {code}',
     disableTrustlineFor: 'Desactivar la línea de confianza de {code}',
     updateFailed: 'No se pudo actualizar la línea de confianza. Intenta de nuevo.',
+    outcome: {
+      adding: 'Agregando {code} a tu billetera…',
+      added: '{code} agregado a tu billetera',
+      removing: 'Quitando {code} de tu billetera…',
+      removed: '{code} quitado de tu billetera',
+      failed: '{code} no se actualizó',
+    },
     customTitle: 'Agregar línea de confianza personalizada',
     customHint:
       'Las líneas de confianza personalizadas no están patrocinadas: tu billetera paga la reserva de 0.5 XLM y la comisión de la transacción.',
@@ -117,6 +133,13 @@ export const ENABLED_ASSETS_COPY: Record<
     enableTrustlineFor: 'Ativar a linha de confiança de {code}',
     disableTrustlineFor: 'Desativar a linha de confiança de {code}',
     updateFailed: 'Não foi possível atualizar a linha de confiança. Tente novamente.',
+    outcome: {
+      adding: 'Adicionando {code} à sua carteira…',
+      added: '{code} adicionado à sua carteira',
+      removing: 'Removendo {code} da sua carteira…',
+      removed: '{code} removido da sua carteira',
+      failed: '{code} não foi atualizado',
+    },
     customTitle: 'Adicionar linha de confiança personalizada',
     customHint:
       'Linhas de confiança personalizadas não são patrocinadas: sua carteira paga a reserva de 0.5 XLM e a taxa da transação.',

@@ -1,11 +1,12 @@
-import type { PollarLanguage } from '@pollar/core';
+import { isPollarApiError, type PollarLanguage } from '@pollar/core';
 import { KYC_COPY } from './kyc-copy';
 
 /** What a failed KYC call means for the user, by backend code. */
 export function kycErrorMessage(error: unknown, phase: 'load' | 'start', language: PollarLanguage = 'en'): string {
   const copy = KYC_COPY[language];
   const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
-  const known = typeof code === 'string' ? copy.errors[code] : undefined;
+  const reason = isPollarApiError(error) && typeof error.body.reason === 'string' ? error.body.reason : undefined;
+  const known = typeof code === 'string' ? (reason && copy.errors[`${code}:${reason}`]) || copy.errors[code] : undefined;
   if (known) return known;
   return phase === 'load' ? copy.loadFailed : copy.startFailed;
 }

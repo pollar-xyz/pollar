@@ -15,6 +15,7 @@ import type {
 } from '@pollar/core';
 import {
   appUnavailableMessage,
+  rampSupportContact,
   assertRampStellarSigner,
   isPollarApiError,
   isPollarNetworkError,
@@ -22,6 +23,7 @@ import {
   rampNextApproval,
   rampQuoteFields,
   rampTrustlineErrorText,
+  startBackoffPoll,
 } from '@pollar/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
@@ -37,7 +39,10 @@ import { RegistryCheckModal } from '../registry-check-modal/RegistryCheckModal';
 import { ProviderRegistrationModal } from '../provider-registration-modal/ProviderRegistrationModal';
 import { useModalLanguage } from '../../language';
 import { RAMP_COPY, type RampCopy } from './ramp-copy';
-import { PollarOverlay } from '../PollarOverlay';
+import { ModalFrame } from '../ModalFrame';
+import { useInlineConfirmation } from '../../useInlineConfirmation';
+import { CosignPrompt } from '../cosign-modal/CosignModal';
+import { BEST_ROUTE, routeKey } from './ramp-route';
 
 /** Where the ramp widget opens: a starting point the user can change, never a lock. */
 export interface RampModalOptions {
@@ -46,6 +51,8 @@ export interface RampModalOptions {
   country?: string;
   /** e.g. 'BRL'; the country's first fiat when left out or not offered there. */
   fiat?: string;
+  /** How the fiat is paid or received, e.g. 'PIX' or 'BANK_TRANSFER'; the fiat's first rail when left out or not offered there. */
+  rail?: string;
   /** e.g. 'USDC'. */
   asset?: string;
   amount?: string;
@@ -57,6 +64,8 @@ interface RampWidgetProps {
   initial?: RampModalOptions | undefined;
   /** Language of the widget and the steps it opens, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
   language?: string | undefined;
+  /** Render the card in the page instead of over a backdrop, without its close button. */
+  inline?: boolean;
 }
 
 /** After "I've paid", the payment is checked this often for this long, then the order goes back to the server's pace. */
@@ -76,15 +85,12 @@ function rampErrorMessage(error: unknown, fallback: string, copy: RampCopy, lang
   return fallback;
 }
 
-/** A route's identity across quotes: quoting again gives the same route a new quote id. */
-function routeKey(quote: RampQuote): string {
-  const node = (n: RampQuote['legs'][number]['from']) =>
-    n.kind === 'asset' ? `${n.code}:${n.chain}` : `${n.currency}:${n.rail}`;
-  return quote.legs.map((leg) => `${leg.kind}:${node(leg.from)}>${node(leg.to)}`).join('|');
-}
-
 /** An exact decimal, as the API takes amounts: "10", "10.5", never "1e3" or "-2". */
 const DECIMAL = /^\d+(\.\d+)?$/;
+/** How long the amount screen waits after the last keystroke before it quotes. */
+const QUOTE_DEBOUNCE_MS = 600;
+/** How long the widget waits for the order's approval to reach the pending list before offering the modal. */
+const APPROVAL_WAIT_MS = 8000;
 
 /**
  * The choices a seed names among one direction's routes, as the widget's choice
@@ -98,7 +104,14 @@ function seededSelection(
   const wanted = seed.country?.trim().toUpperCase();
   const country = wanted ? countries.find((c) => c.country === wanted) : countries[0];
   if (!country) return null;
-  const fiat = country.fiats.find((f) => f.currency === seed.fiat?.trim().toUpperCase()) ?? null;
+  const wantedFiat = seed.fiat?.trim().toUpperCase();
+  const wantedRail = seed.rail?.trim().toUpperCase();
+  const fiat =
+    (wantedFiat || wantedRail
+      ? country.fiats.find((f) => (!wantedFiat || f.currency === wantedFiat) && (!wantedRail || f.rail === wantedRail))
+      : undefined) ??
+    country.fiats.find((f) => f.currency === wantedFiat) ??
+    null;
   const resolvedFiat = fiat ?? country.fiats[0];
   const asset = routes.find(
     (r) =>
@@ -160,7 +173,7 @@ async function signLegWithWallet(client: PollarClient, orderId: string, actionId
   }
 }
 
-export function RampWidget({ onClose, language: languageProp, initial }: RampWidgetProps) {
+export function RampWidget({ onClose, language: languageProp, initial, inline = false }: RampWidgetProps) {
   const {
     getClient,
     styles,
@@ -173,6 +186,7 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
     appConfig,
     cosign,
     refreshWalletBalance,
+    registerCosignHost,
   } = usePollar();
   const client = getClient();
   const language = useModalLanguage(languageProp);
@@ -180,6 +194,8 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<RampStep>('input');
+  // A leg's signature is confirmed in the status view, not in a prompt over the widget.
+  const confirmation = useInlineConfirmation(step === 'status');
   const [direction, setDirection] = useState<RampDirection>(initial?.direction === 'sell' ? 'OFFRAMP' : 'ONRAMP');
   // Applied to the first routes that load for the seeded direction, then dropped; the user moving first drops it too.
   const seedRef = useRef<{ direction: RampDirection; options: RampModalOptions } | null>(
@@ -207,6 +223,8 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   // The dropped route (its index) whose wallet step is running.
   const [walletBusy, setWalletBusy] = useState<number | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   // A route whose order waits on the new account the user approves on the device: once that
   // request is approved the route is resumed, since its quote may lapse meanwhile.
   const [awaitingAccount, setAwaitingAccount] = useState<{ routeKey: string; requestId: string } | null>(null);
@@ -241,6 +259,59 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   const sellAvailable = useWalletAvailable(
     direction === 'OFFRAMP' && asset ? { chain: asset.chain, code: asset.code, issuer: asset.identifier } : null,
   );
+
+  // The amount screen quotes as the user types: "You receive" shows the best route's amount, and
+  // Continue takes that route unless the user picks another in the details.
+  const [quoting, setQuoting] = useState(false);
+  const [routeChoice, setRouteChoice] = useState<string>(BEST_ROUTE);
+  const quoteRun = useRef(0);
+  const quoteInput = step === 'input' && fiat && asset && DECIMAL.test(amount.trim()) && Number(amount) > 0;
+  const quoteKey = quoteInput ? `${direction}|${fiatKey(fiat)}|${assetKey(asset)}|${amount.trim()}` : null;
+  useEffect(() => {
+    const run = ++quoteRun.current;
+    if (!quoteKey || !fiat || !asset) {
+      setQuoting(false);
+      if (step === 'input') {
+        setQuotes([]);
+        setRejected([]);
+      }
+      return;
+    }
+    setQuoting(true);
+    const timer = setTimeout(() => {
+      client
+        .quoteRamp({
+          direction,
+          fiat: { currency: fiat.currency, rail: fiat.rail, country: fiat.country },
+          asset: { code: asset.code, identifier: asset.identifier, chain: asset.chain },
+          amount: { value: amount.trim(), denomination: 'in' },
+        })
+        .then((result) => {
+          if (run !== quoteRun.current) return;
+          setQuotes(result.quotes);
+          setRejected(result.rejected);
+          setErrorMsg(null);
+        })
+        .catch((error: unknown) => {
+          if (run !== quoteRun.current) return;
+          setQuotes([]);
+          if (isPollarApiError(error) && error.code === 'SDK_RAMPS_NO_ROUTE') {
+            setRejected(Array.isArray(error.body.rejected) ? (error.body.rejected as RampQuoteRejection[]) : []);
+          } else {
+            setRejected([]);
+            setErrorMsg(rampErrorMessage(error, copy.findRouteFailed, copy, language));
+          }
+        })
+        .finally(() => {
+          if (run === quoteRun.current) setQuoting(false);
+        });
+    }, QUOTE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoteKey]);
+  // A route picked from an earlier quote that the new one lacks falls back to the best.
+  const chosenQuote =
+    (routeChoice !== BEST_ROUTE ? quotes.find((q) => routeKey(q) === routeChoice) : undefined) ?? quotes[0] ?? null;
 
   useEffect(() => {
     if (direction === 'OFFRAMP') void refreshWalletBalance();
@@ -321,17 +392,13 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
       setPollKey((key) => key + 1);
       return;
     }
-    const timer = setInterval(() => {
+    return startBackoffPoll(async () => {
       if (Date.now() >= paymentCheckUntil) {
         setPaymentCheckUntil(null);
         return;
       }
-      client
-        .checkRampOrder(orderId)
-        .then(setOrder)
-        .catch(() => undefined);
+      setOrder(await client.checkRampOrder(orderId));
     }, PAYMENT_CHECK_EVERY_MS);
-    return () => clearInterval(timer);
   }, [client, orderId, awaitingPayment, paymentCheckUntil]);
 
   useEffect(() => {
@@ -342,6 +409,11 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   }, [awaitingPayment]);
 
   // A co-signed step of the order waits on the user's device: bring its request up the moment it appears.
+  // A running order shows its co-sign approvals on its own step screen, not in a modal over it.
+  const hostsCosign = step === 'status' && !!order && !['completed', 'failed', 'refunded'].includes(order.state);
+  const hostsCosignRef = useRef(hostsCosign);
+  hostsCosignRef.current = hostsCosign;
+  useEffect(() => (hostsCosign ? registerCosignHost() : undefined), [hostsCosign, registerCosignHost]);
   const approval = order?.pendingAction?.kind === 'COSIGN_APPROVAL' ? order.pendingAction.actionId : null;
   const approvalRequest = order?.pendingAction?.kind === 'COSIGN_APPROVAL' ? order.pendingAction.cosignRequestId : null;
   useEffect(() => {
@@ -354,9 +426,22 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
         // The provider's sign-in moves nothing: under the app's 'auto' confirmation it is approved without the prompt.
         const request = requests.find((r) => r.id === approvalRequest);
         if (request && (await client.autoApproveSignIn(request))) return;
-        openCosignModal();
+        if (!hostsCosignRef.current) openCosignModal();
       });
   }, [approval, approvalRequest, client, openCosignModal]);
+
+  // The order can name its approval before this device's pending list has it. Until it arrives the widget waits instead
+  // of offering the modal; past APPROVAL_WAIT_MS the button comes back, since a request made from another device or
+  // origin may never reach this list.
+  const [approvalWaitOver, setApprovalWaitOver] = useState(false);
+  useEffect(() => {
+    setApprovalWaitOver(false);
+    if (!approvalRequest) return;
+    const timer = setTimeout(() => setApprovalWaitOver(true), APPROVAL_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [approvalRequest]);
+  const approvalLoading =
+    hostsCosign && !!approvalRequest && !approvalWaitOver && !cosign.pending.some((r) => r.id === approvalRequest);
 
   // The approval prompt stays up between two approvals of the order instead of closing and reopening.
   const nextApproval = step === 'status' && order ? rampNextApproval(order, language) : null;
@@ -654,6 +739,21 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
     }
   }
 
+  /** Cancels the order the user is leaving; the cancelled order stays on screen, saying so. */
+  async function handleCancelOrder() {
+    if (!order || cancelling) return;
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      setOrder(await client.cancelRampOrder(order.id));
+      void loadPendingOrders();
+    } catch (error) {
+      setCancelError(rampErrorMessage(error, copy.cancelOrderFailed, copy, language));
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   /** The price changed before anything moved: the same amount is quoted again and the routes shown. */
   async function handleRequote() {
     setOrder(null);
@@ -697,11 +797,11 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   const stepLabel: Partial<Record<RampStep, string>> = {
     select_route: copy.steps.route,
     contact: copy.steps.details,
-    status: copy.steps.complete,
   };
   const label = stepLabel[step];
 
-  // The step replaces the widget while it is open; the widget keeps what was entered.
+  // The step replaces the widget while it is open; the widget keeps what was entered. It opens over the page even
+  // when the widget is inline: inline, a step has no close button, and the user could not back out of it.
   if (verifying) {
     const progress = { progress: { position: verifying.completed + 1, total: verifying.total } };
     const done = () => verificationDone(verifying);
@@ -748,7 +848,7 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={onClose}>
+    <ModalFrame inline={inline} overlayStyle={overlayStyle} {...(step !== 'status' && { onClose })}>
       <RampWidgetTemplate
         language={language}
         theme={theme}
@@ -796,6 +896,11 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
           setErrorMsg(null);
         }}
         onFindRoute={() => void handleFindRoute()}
+        quoting={quoting}
+        routeChoice={routeChoice}
+        chosenQuote={chosenQuote}
+        onRouteChoice={setRouteChoice}
+        onContinue={() => (chosenQuote ? handleSelectQuote(chosenQuote) : setStep('select_route'))}
         onSelectQuote={(quote) => handleSelectQuote(quote)}
         onVerifyRoute={handleVerifyRoute}
         trustingAsset={trustingAsset}
@@ -810,11 +915,14 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
         }}
         onSign={() => void handleSign()}
         onApprove={openCosignModal}
+        cosignPrompt={hostsCosign && cosign.pending.length > 0 ? <CosignPrompt inline onClose={() => undefined} /> : null}
+        approvalLoading={approvalLoading}
         retrying={retrying}
         onRetryOrder={() => void handleRetryOrder()}
         onRequote={() => void handleRequote()}
         onSetUpRecovery={openRecoveryModal}
         recoveryMissing={recovery === null ? null : recoveryLocked}
+        support={rampSupportContact(client.getSupportContact(), appConfig.application?.support)}
         pollTrouble={pollTrouble}
         checkingPayment={paymentCheckUntil !== null}
         onCheckPayment={() => void handleCheckPayment()}
@@ -827,8 +935,13 @@ export function RampWidget({ onClose, language: languageProp, initial }: RampWid
           setStep('input');
         }}
         onRefresh={() => void handleRefresh()}
+        inline={inline}
         onClose={onClose}
+        confirmation={confirmation}
+        onCancelOrder={() => void handleCancelOrder()}
+        cancelling={cancelling}
+        cancelError={cancelError}
       />
-    </PollarOverlay>
+    </ModalFrame>
   );
 }

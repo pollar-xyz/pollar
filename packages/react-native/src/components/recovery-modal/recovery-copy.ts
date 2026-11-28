@@ -18,6 +18,9 @@ export const RECOVERY_COPY: Record<
     acceptRisks: string;
     recoverEmailIntro: (address: string) => string;
     sendCode: string;
+    sendCodeIn: (seconds: number) => string;
+    resendCode: string;
+    resendCodeIn: (seconds: number) => string;
     recover: string;
     back: string;
     emailIntro: string;
@@ -74,6 +77,9 @@ export const RECOVERY_COPY: Record<
     recoverEmailIntro: (address) =>
       `We'll email a code to ${address}. The code goes straight to the wallet provider, encrypted on this device.`,
     sendCode: 'Send code',
+    sendCodeIn: (seconds) => `Send code in ${seconds}s`,
+    resendCode: 'Send a new code',
+    resendCodeIn: (seconds) => `Send a new code in ${seconds}s`,
     recover: 'Recover',
     back: 'Back',
     emailIntro:
@@ -134,6 +140,9 @@ export const RECOVERY_COPY: Record<
     recoverEmailIntro: (address) =>
       `Te enviaremos un código a ${address}. El código va directo al proveedor de la billetera, cifrado en este dispositivo.`,
     sendCode: 'Enviar código',
+    sendCodeIn: (seconds) => `Enviar código en ${seconds} s`,
+    resendCode: 'Enviar otro código',
+    resendCodeIn: (seconds) => `Enviar otro código en ${seconds} s`,
     recover: 'Recuperar',
     back: 'Atrás',
     emailIntro:
@@ -194,6 +203,9 @@ export const RECOVERY_COPY: Record<
     recoverEmailIntro: (address) =>
       `Vamos enviar um código para ${address}. O código vai direto para o provedor da carteira, criptografado neste dispositivo.`,
     sendCode: 'Enviar código',
+    sendCodeIn: (seconds) => `Enviar código em ${seconds} s`,
+    resendCode: 'Enviar outro código',
+    resendCodeIn: (seconds) => `Enviar outro código em ${seconds} s`,
     recover: 'Recuperar',
     back: 'Voltar',
     emailIntro:

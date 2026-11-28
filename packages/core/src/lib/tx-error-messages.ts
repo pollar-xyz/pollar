@@ -33,6 +33,7 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     TX_LINE_FULL: "The destination can't hold that much of this asset.",
     TX_NOT_AUTHORIZED: "This account isn't authorized to hold or send this asset.",
     TX_TOO_LATE: 'The transaction expired before it was sent. Please try again.',
+    TX_NOT_CONFIRMED: 'The network did not confirm this transaction in time, so nothing moved. Please try again.',
     TX_BAD_SEQUENCE: 'Another transaction was sent from this wallet at the same time. Please try again.',
     TX_SUBMIT_FAILED: "The network didn't accept the transaction. Please try again.",
     TX_SUBMIT_UNCONFIRMED: "The transaction was sent but isn't confirmed yet. Check its status before sending again.",
@@ -47,6 +48,8 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     SDK_WALLET_RECOVERY_REQUIRED:
       'Set up a way to recover this wallet first: a passkey, a second device or your email. Without one, losing this device means losing the funds, and nobody can get them back.',
     SDK_COSIGN_TURNKEY_REJECTED: 'The wallet provider refused the request. Please try again in a moment.',
+    SDK_COSIGN_OTP_RATE_LIMITED:
+      'Too many codes were requested for this email. Wait a few minutes, and check your inbox and spam folder for a code that already arrived.',
     SDK_COSIGN_GAS_PENDING:
       'The network fee for this step is still on its way to your wallet. Please try again in a few seconds.',
     SDK_COSIGN_CUSTODY_SWITCH_PENDING: 'Finish or cancel the pending approvals before changing how this wallet is secured.',
@@ -54,6 +57,7 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     SDK_COSIGN_PASSKEY_UNAVAILABLE: "Passkeys aren't available on this device.",
     SDK_CREDITS_INSUFFICIENT: APP_UNAVAILABLE.en,
     SDK_BILLING_OVERDUE: APP_UNAVAILABLE.en,
+    RATE_LIMITED: 'Too many requests from this connection right now. Wait a minute and try again.',
   },
   es: {
     TX_INSUFFICIENT_BALANCE: 'No tienes saldo suficiente para cubrir el monto y la comisión de la red.',
@@ -67,6 +71,7 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     TX_LINE_FULL: 'El destino no puede tener tanto de este activo.',
     TX_NOT_AUTHORIZED: 'Esta cuenta no está autorizada para tener o enviar este activo.',
     TX_TOO_LATE: 'La transacción venció antes de enviarse. Intenta de nuevo.',
+    TX_NOT_CONFIRMED: 'La red no confirmó esta transacción a tiempo, así que no se movió nada. Intenta de nuevo.',
     TX_BAD_SEQUENCE: 'Se envió otra transacción desde esta billetera al mismo tiempo. Intenta de nuevo.',
     TX_SUBMIT_FAILED: 'La red no aceptó la transacción. Intenta de nuevo.',
     TX_SUBMIT_UNCONFIRMED:
@@ -83,6 +88,8 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     SDK_WALLET_RECOVERY_REQUIRED:
       'Primero configura una forma de recuperar esta billetera: una passkey, un segundo dispositivo o tu email. Sin una, perder este dispositivo significa perder los fondos, y nadie podrá recuperarlos.',
     SDK_COSIGN_TURNKEY_REJECTED: 'El proveedor de la billetera rechazó la solicitud. Intenta de nuevo en un momento.',
+    SDK_COSIGN_OTP_RATE_LIMITED:
+      'Se pidieron demasiados códigos para este correo. Espera unos minutos y revisa tu bandeja de entrada y spam por si ya te llegó uno.',
     SDK_COSIGN_GAS_PENDING:
       'La comisión de la red para este paso todavía está llegando a tu billetera. Intenta de nuevo en unos segundos.',
     SDK_COSIGN_CUSTODY_SWITCH_PENDING:
@@ -91,6 +98,7 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     SDK_COSIGN_PASSKEY_UNAVAILABLE: 'Las passkeys no están disponibles en este dispositivo.',
     SDK_CREDITS_INSUFFICIENT: APP_UNAVAILABLE.es,
     SDK_BILLING_OVERDUE: APP_UNAVAILABLE.es,
+    RATE_LIMITED: 'Hay demasiadas solicitudes desde esta conexión en este momento. Espera un minuto e intenta de nuevo.',
   },
   pt: {
     TX_INSUFFICIENT_BALANCE: 'Você não tem saldo suficiente para cobrir o valor e a taxa da rede.',
@@ -104,6 +112,7 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     TX_LINE_FULL: 'O destino não pode manter tanto deste ativo.',
     TX_NOT_AUTHORIZED: 'Esta conta não está autorizada a manter ou enviar este ativo.',
     TX_TOO_LATE: 'A transação expirou antes de ser enviada. Tente novamente.',
+    TX_NOT_CONFIRMED: 'A rede não confirmou esta transação a tempo, então nada foi movido. Tente novamente.',
     TX_BAD_SEQUENCE: 'Outra transação foi enviada desta carteira ao mesmo tempo. Tente novamente.',
     TX_SUBMIT_FAILED: 'A rede não aceitou a transação. Tente novamente.',
     TX_SUBMIT_UNCONFIRMED: 'A transação foi enviada, mas ainda não foi confirmada. Verifique o status antes de enviar de novo.',
@@ -119,6 +128,8 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     SDK_WALLET_RECOVERY_REQUIRED:
       'Primeiro configure uma forma de recuperar esta carteira: uma passkey, um segundo dispositivo ou seu email. Sem uma, perder este dispositivo significa perder os fundos, e ninguém poderá recuperá-los.',
     SDK_COSIGN_TURNKEY_REJECTED: 'O provedor da carteira recusou a solicitação. Tente novamente em instantes.',
+    SDK_COSIGN_OTP_RATE_LIMITED:
+      'Foram pedidos códigos demais para este email. Aguarde alguns minutos e confira sua caixa de entrada e o spam, caso um já tenha chegado.',
     SDK_COSIGN_GAS_PENDING:
       'A taxa da rede desta etapa ainda está a caminho da sua carteira. Tente novamente em alguns segundos.',
     SDK_COSIGN_CUSTODY_SWITCH_PENDING:
@@ -127,6 +138,7 @@ const MESSAGES: Record<PollarLanguage, Record<string, string>> = {
     SDK_COSIGN_PASSKEY_UNAVAILABLE: 'Passkeys não estão disponíveis neste dispositivo.',
     SDK_CREDITS_INSUFFICIENT: APP_UNAVAILABLE.pt,
     SDK_BILLING_OVERDUE: APP_UNAVAILABLE.pt,
+    RATE_LIMITED: 'Há solicitações demais desta conexão neste momento. Aguarde um minuto e tente novamente.',
   },
 };
 

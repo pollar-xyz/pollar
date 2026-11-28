@@ -8,6 +8,7 @@ import { GithubButton } from './GithubButton';
 import { GoogleButton } from './GoogleButton';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
 import { LOGIN_COPY } from './login-copy';
+import { CloseButton } from './LoginModalTemplate';
 
 type StateStatus = 'NONE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 
@@ -27,6 +28,8 @@ interface PrivyLoginSubmodalProps {
   /** The provider login finished - hand off to `login({ provider })`. */
   onAuthenticated: () => void;
   language: PollarLanguage;
+  /** In the host's page instead of over a backdrop: no close button. */
+  inline?: boolean;
 }
 
 /**
@@ -49,6 +52,7 @@ export function PrivyLoginSubmodal({
   onCancel,
   onAuthenticated,
   language,
+  inline = false,
 }: PrivyLoginSubmodalProps) {
   const copy = LOGIN_COPY[language];
   const options = useMemo(() => adapter.getAuthOptions(), [adapter]);
@@ -126,21 +130,12 @@ export function PrivyLoginSubmodal({
   const showGithub = options.includes('github');
 
   return (
-    <div className="pollar-modal-card pollar-modal" style={cssVars} onClick={(e) => e.stopPropagation()}>
-      <button type="button" className="pollar-close-btn" onClick={onCancel} aria-label={copy.close}>
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      </button>
+    <div
+      className={`pollar-modal-card pollar-modal ${inline ? 'pollar-modal-card--inline' : ''}`}
+      style={cssVars}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {!inline && <CloseButton onClick={onCancel} label={copy.close} />}
 
       <div className="pollar-header">
         <div className="pollar-logo-wrap">

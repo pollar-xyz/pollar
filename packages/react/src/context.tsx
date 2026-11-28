@@ -2,6 +2,7 @@
 
 import {
   isPollarClient,
+  isTransientFailure,
   BuildOutcome,
   CosignCustody,
   EnabledAssetsState,
@@ -184,6 +185,18 @@ interface PollarContextValue {
   refreshCustodyMigration: () => void;
   /** Signing calls waiting for the user under `confirmation: 'prompt'`; the provider shows the first one. */
   confirmations: PendingConfirmation[];
+  /**
+   * A modal that shows the transaction it signs answers the confirmation itself:
+   * while one is registered the provider does not open its own prompt over it.
+   * Returns the unregister.
+   */
+  registerConfirmationHost: () => () => void;
+  /**
+   * A flow that shows its co-sign approvals inside its own modal (the ramp's running
+   * order): while one is registered the provider does not open `CosignModal` over it.
+   * Returns the unregister.
+   */
+  registerCosignHost: () => () => void;
   appConfig: PollarConfig;
   styles: PollarStyles;
   /** Remote app-config load state. 'loading' while the initial fetch is in
@@ -543,6 +556,11 @@ export function PollarProvider({
   const [cosign, setCosign] = useState<CosignState>({ pending: [] });
   const [confirmations, setConfirmations] = useState<PendingConfirmation[]>([]);
   const firstConfirmation = confirmations[0] ?? null;
+  const [confirmationHosts, setConfirmationHosts] = useState(0);
+  const registerConfirmationHost = useCallback(() => {
+    setConfirmationHosts((n) => n + 1);
+    return () => setConfirmationHosts((n) => n - 1);
+  }, []);
   const [walletBalance, setWalletBalance] = useState<WalletBalanceState>({ step: 'idle' });
   const [enabledAssets, setEnabledAssets] = useState<EnabledAssetsState>({ step: 'idle' });
   const [resolvedConfig, setResolvedConfig] = useState<PollarConfig>(() => appConfigProp ?? DEFAULT_APP_CONFIG);
@@ -737,14 +755,19 @@ export function PollarProvider({
   const [sessionsModalOpen, setSessionsModalOpen] = useState(false);
   const [cosignModalOpen, setCosignModalOpen] = useState(false);
   const [cosignNextStep, setCosignNextStep] = useState<string | null>(null);
+  const [cosignHosts, setCosignHosts] = useState(0);
+  const registerCosignHost = useCallback(() => {
+    setCosignHosts((n) => n + 1);
+    return () => setCosignHosts((n) => n - 1);
+  }, []);
   const [recoveryModalOpen, setRecoveryModalOpen] = useState(false);
   // A signing call that came back pending needs the user's vote now; open the
   // prompt the moment a new request appears, never when one merely resolves.
   const cosignPendingCount = useRef(0);
   useEffect(() => {
-    if (cosign.pending.length > cosignPendingCount.current) setCosignModalOpen(true);
+    if (cosign.pending.length > cosignPendingCount.current && cosignHosts === 0) setCosignModalOpen(true);
     cosignPendingCount.current = cosign.pending.length;
-  }, [cosign.pending.length]);
+  }, [cosign.pending.length, cosignHosts]);
   // A co-signed signature this device cannot vote on: the recovery modal is
   // where it gets added (another device, a passkey or the email).
   useEffect(() => pollarClient.onCosignDeviceNotEnrolled(() => setRecoveryModalOpen(true)), [pollarClient]);
@@ -806,16 +829,22 @@ export function PollarProvider({
       return;
     }
     let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | null = null;
     pollarClient.cosign.recovery
       .status()
       .then((next) => {
         if (!cancelled) setRecovery(next);
       })
-      .catch(() => {
-        if (!cancelled) setRecovery(null);
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        // A rate limit or a lost answer says nothing about the wallet: keep what
+        // was read before and read again shortly.
+        if (isTransientFailure(err)) retry = setTimeout(() => setRecoveryTick((t) => t + 1), 5_000 + Math.random() * 5_000);
+        else setRecovery(null);
       });
     return () => {
       cancelled = true;
+      if (retry) clearTimeout(retry);
     };
   }, [pollarClient, hasSession, walletAddress, recoveryTick]);
   const recoveryLocked = !!recovery && recovery.required && !recovery.configured;
@@ -832,16 +861,23 @@ export function PollarProvider({
       return;
     }
     let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | null = null;
     pollarClient.cosign
       .custodyMigration()
       .then((next) => {
         if (!cancelled) setCustodyMigration(next);
       })
-      .catch(() => {
-        if (!cancelled) setCustodyMigration(null);
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        // A rate limit or a lost answer says nothing about the wallet: keep what
+        // was read before and read again shortly.
+        if (isTransientFailure(err))
+          retry = setTimeout(() => setCustodyMigrationTick((t) => t + 1), 5_000 + Math.random() * 5_000);
+        else setCustodyMigration(null);
       });
     return () => {
       cancelled = true;
+      if (retry) clearTimeout(retry);
     };
   }, [pollarClient, hasSession, walletAddress, custodyMigrationTick]);
   // refreshBalance resolves the own wallet server-side from the session;
@@ -853,24 +889,47 @@ export function PollarProvider({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- walletAddress is an intentional re-bind trigger, not read in the body
   const refreshAssets = useCallback(() => pollarClient.refreshAssets(), [pollarClient, walletAddress]);
 
-  const contextValue: PollarContextValue = useMemo(() => {
-    const styles: PollarStyles = resolvedConfig.styles ?? {};
-    return {
-      // session
-      wallet: pollarClient.getWallet(),
-      wallets: pollarClient.getWallets(),
-      isAuthenticated: hasSession,
-      hasWallet: pollarClient.hasWallet(),
+  // Bound once per client: a modal that loads on one of these must not reload whenever the session refreshes.
+  const clientMethods = useMemo<
+    Pick<
+      PollarContextValue,
+      | 'createWallet'
+      | 'login'
+      | 'logout'
+      | 'buildTx'
+      | 'signAndSubmitTx'
+      | 'signTx'
+      | 'submitTx'
+      | 'buildAndSignAndSubmitTx'
+      | 'runTx'
+      | 'sendPayment'
+      | 'setTrustline'
+      | 'getSwapConfig'
+      | 'getSwapTokens'
+      | 'getSwapQuote'
+      | 'swap'
+      | 'getSolanaSwapConfig'
+      | 'getSolanaSwapQuote'
+      | 'swapSolana'
+      | 'getSolanaSwapOptions'
+      | 'getSwapStatus'
+      | 'getEarnProviders'
+      | 'getEarnOpportunities'
+      | 'getEarnPosition'
+      | 'earnDeposit'
+      | 'earnWithdraw'
+      | 'getSolanaEarnProviders'
+      | 'getSolanaEarnOpportunities'
+      | 'getSolanaEarnPosition'
+      | 'earnSolanaDeposit'
+      | 'earnSolanaWithdraw'
+      | 'setNetwork'
+    >
+  >(
+    () => ({
       createWallet: (options?: { custody?: CosignCustody }) => pollarClient.createWallet(options),
-      verified,
-      // client
-      getClient,
-      // auth
       login: (options: PollarLoginOptions) => pollarClient.login(options),
       logout: () => pollarClient.logout(),
-      openLoginModal: () => setLoginModalOpen(true),
-      // transactions
-      tx: transaction,
       buildTx: (operation, params, options) => pollarClient.buildTx(operation, params, options),
       signAndSubmitTx: (unsignedXdr?: string) => pollarClient.signAndSubmitTx(unsignedXdr),
       signTx: (unsignedXdr: string) => pollarClient.signTx(unsignedXdr),
@@ -878,6 +937,47 @@ export function PollarProvider({
       buildAndSignAndSubmitTx: (operation, params, options) => pollarClient.buildAndSignAndSubmitTx(operation, params, options),
       runTx: (operation, params, options) => pollarClient.runTx(operation, params, options),
       sendPayment: (params) => pollarClient.sendPayment(params),
+      setTrustline: (asset, opts) => pollarClient.setTrustline(asset, opts),
+      getSwapConfig: () => pollarClient.getSwapConfig(),
+      getSwapTokens: () => pollarClient.getSwapTokens(),
+      getSwapQuote: (params) => pollarClient.getSwapQuote(params),
+      swap: (quote, opts) => pollarClient.swap(quote, opts),
+      getSolanaSwapConfig: () => pollarClient.getSolanaSwapConfig(),
+      getSolanaSwapQuote: (params) => pollarClient.getSolanaSwapQuote(params),
+      swapSolana: (quote, opts) => pollarClient.swapSolana(quote, opts),
+      getSolanaSwapOptions: () => pollarClient.getSolanaSwapOptions(),
+      getSwapStatus: (idempotencyKey) => pollarClient.getSwapStatus(idempotencyKey),
+      getEarnProviders: () => pollarClient.getEarnProviders(),
+      getEarnOpportunities: (provider) => pollarClient.getEarnOpportunities(provider).then(remembered),
+      getEarnPosition: (params) => pollarClient.getEarnPosition(params),
+      earnDeposit: (params) => pollarClient.earnDeposit(params),
+      earnWithdraw: (params) => pollarClient.earnWithdraw(params),
+      getSolanaEarnProviders: () => pollarClient.getSolanaEarnProviders(),
+      getSolanaEarnOpportunities: () => pollarClient.getSolanaEarnOpportunities().then(remembered),
+      getSolanaEarnPosition: (opportunity) => pollarClient.getSolanaEarnPosition(opportunity),
+      earnSolanaDeposit: (params) => pollarClient.earnSolanaDeposit(params),
+      earnSolanaWithdraw: (params) => pollarClient.earnSolanaWithdraw(params),
+      setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
+    }),
+    [pollarClient],
+  );
+
+  const contextValue: PollarContextValue = useMemo(() => {
+    const styles: PollarStyles = resolvedConfig.styles ?? {};
+    return {
+      ...clientMethods,
+      // session
+      wallet: pollarClient.getWallet(),
+      wallets: pollarClient.getWallets(),
+      isAuthenticated: hasSession,
+      hasWallet: pollarClient.hasWallet(),
+      verified,
+      // client
+      getClient,
+      // auth
+      openLoginModal: () => setLoginModalOpen(true),
+      // transactions
+      tx: transaction,
       openTxModal: () => setTransactionModalOpen(true),
       // tx history
       txHistory,
@@ -892,7 +992,6 @@ export function PollarProvider({
       // enabled assets
       enabledAssets,
       refreshAssets,
-      setTrustline: (asset, opts) => pollarClient.setTrustline(asset, opts),
       openEnabledAssetsModal: () => setEnabledAssetsModalOpen(true),
       // send / receive
       openSendModal: (options?: SendModalOptions) => {
@@ -906,15 +1005,6 @@ export function PollarProvider({
         setReceiveModalOpen(true);
       },
       // swap
-      getSwapConfig: () => pollarClient.getSwapConfig(),
-      getSwapTokens: () => pollarClient.getSwapTokens(),
-      getSwapQuote: (params) => pollarClient.getSwapQuote(params),
-      swap: (quote, opts) => pollarClient.swap(quote, opts),
-      getSolanaSwapConfig: () => pollarClient.getSolanaSwapConfig(),
-      getSolanaSwapQuote: (params) => pollarClient.getSolanaSwapQuote(params),
-      swapSolana: (quote, opts) => pollarClient.swapSolana(quote, opts),
-      getSolanaSwapOptions: () => pollarClient.getSolanaSwapOptions(),
-      getSwapStatus: (idempotencyKey) => pollarClient.getSwapStatus(idempotencyKey),
       openSwapModal: (options?: SwapModalOptions) => {
         setSwapModalOptions(options);
         pollarClient.resetTransactionState();
@@ -927,16 +1017,6 @@ export function PollarProvider({
         setBridgeModalOpen(true);
       },
       // earn
-      getEarnProviders: () => pollarClient.getEarnProviders(),
-      getEarnOpportunities: (provider) => pollarClient.getEarnOpportunities(provider).then(remembered),
-      getEarnPosition: (params) => pollarClient.getEarnPosition(params),
-      earnDeposit: (params) => pollarClient.earnDeposit(params),
-      earnWithdraw: (params) => pollarClient.earnWithdraw(params),
-      getSolanaEarnProviders: () => pollarClient.getSolanaEarnProviders(),
-      getSolanaEarnOpportunities: () => pollarClient.getSolanaEarnOpportunities().then(remembered),
-      getSolanaEarnPosition: (opportunity) => pollarClient.getSolanaEarnPosition(opportunity),
-      earnSolanaDeposit: (params) => pollarClient.earnSolanaDeposit(params),
-      earnSolanaWithdraw: (params) => pollarClient.earnSolanaWithdraw(params),
       openEarnModal: (options?: EarnModalOptions) => {
         setEarnModalOptions(options);
         pollarClient.resetTransactionState();
@@ -963,11 +1043,12 @@ export function PollarProvider({
       custodyMigration,
       refreshCustodyMigration,
       confirmations,
+      registerConfirmationHost,
+      registerCosignHost,
       // distribution
       openDistributionRulesModal: () => setDistributionRulesModalOpen(true),
       // network
       network: networkState.step === 'connected' ? networkState.network : 'testnet',
-      setNetwork: (network: StellarNetwork) => pollarClient.setNetwork(network),
       // kyc
       openKycModal: (options = {}) => {
         setKycModalOptions(options);
@@ -987,6 +1068,7 @@ export function PollarProvider({
     } as PollarContextValue;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- walletProvisioning is an intentional recompute trigger, not read in the body
   }, [
+    clientMethods,
     walletAddress,
     walletProvisioning,
     recovery,
@@ -1003,6 +1085,8 @@ export function PollarProvider({
     sessions,
     cosign,
     confirmations,
+    registerConfirmationHost,
+    registerCosignHost,
     walletBalance,
     refreshWalletBalance,
     enabledAssets,
@@ -1108,7 +1192,7 @@ export function PollarProvider({
             <SessionsModal onClose={() => setSessionsModalOpen(false)} />
           </ModalErrorBoundary>
         )}
-        {cosignModalOpen && (
+        {cosignModalOpen && cosignHosts === 0 && (
           <ModalErrorBoundary onClose={() => setCosignModalOpen(false)}>
             <CosignModal nextStep={cosignNextStep} onClose={() => setCosignModalOpen(false)} />
           </ModalErrorBoundary>
@@ -1141,7 +1225,7 @@ export function PollarProvider({
             />
           </ModalErrorBoundary>
         )}
-        {firstConfirmation && (
+        {firstConfirmation && confirmationHosts === 0 && (
           <ModalErrorBoundary onClose={firstConfirmation.reject}>
             <ConfirmModal key={firstConfirmation.id} confirmation={firstConfirmation} />
           </ModalErrorBoundary>

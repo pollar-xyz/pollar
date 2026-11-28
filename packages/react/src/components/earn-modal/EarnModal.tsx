@@ -1,6 +1,13 @@
 'use client';
 
-import { EarnOpportunity, EarnPosition, EarnProviderId, SolanaEarnOpportunity, SolanaEarnPosition } from '@pollar/core';
+import {
+  EarnOpportunity,
+  EarnPosition,
+  EarnProviderId,
+  SolanaEarnOpportunity,
+  SolanaEarnPosition,
+  startBackoffPoll,
+} from '@pollar/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePollar } from '../../context';
 import { useModalLanguage } from '../../language';
@@ -8,8 +15,8 @@ import { useWalletAvailable } from '../../useWalletAvailable';
 import { AmountField } from '../AmountField';
 import { PollarModalFooter } from '../commons';
 import { buildModalCssVars, modalChrome } from '../modal-theme';
-import { TxStatusView } from '../transaction-modal/TxStatusView';
-import { AssetLogo, ChainLogo, TxExplorerLink } from '../tx-review/TxReview';
+import { TxStatusHeading, TxStatusView, txStatusReview } from '../transaction-modal/TxStatusView';
+import { AssetLogo } from '../tx-review/TxReview';
 import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
 import { earnOutcome, reviewForEarn } from '../tx-review/tx-review-model';
 import '../shared.css';
@@ -21,6 +28,8 @@ import { EARN_COPY } from './earn-copy';
 import { oneOf, seededAmount, useSuccessReport } from '../../modal-options';
 import { PollarOverlay } from '../PollarOverlay';
 import { PollarSelect } from '../PollarSelect';
+import { useDeclineOnClose, useInlineConfirmation } from '../../useInlineConfirmation';
+import { NetworkPill } from '../ChainSelect';
 
 /** Where the earn modal opens: a starting point the user can change. An option the app does not offer is left out. */
 export interface EarnModalOptions {
@@ -155,6 +164,9 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<'form' | 'tx'>('form');
+  // The signature's yes is asked here, under the review, not in a prompt over the modal.
+  const confirmation = useInlineConfirmation(step === 'tx');
+  const { track, declineOnClose } = useDeclineOnClose(confirmation);
   const [tab, setTab] = useState<'deposit' | 'withdraw'>(
     () => oneOf<'deposit' | 'withdraw'>(['deposit', 'withdraw'], initial?.tab) ?? 'deposit',
   );
@@ -285,8 +297,7 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
 
   useEffect(() => {
     if (step !== 'form' || (!onSolana && !provider) || !opportunityId) return;
-    const id = setInterval(refreshPosition, POSITION_POLL_MS);
-    return () => clearInterval(id);
+    return startBackoffPoll(async () => refreshPosition(), POSITION_POLL_MS);
   }, [step, onSolana, provider, opportunityId, refreshPosition]);
 
   useEffect(
@@ -352,7 +363,10 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
       ? `https://solscan.io/tx/${hash}${network === 'testnet' ? '?cluster=devnet' : ''}`
       : `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}`;
 
-  const isInProgress = (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step);
+  // A transaction past its confirmation window is read on in the background: the modal can close meanwhile.
+  const isInProgress =
+    (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step) &&
+    !(transaction.step === 'submitted' && transaction.slow);
   const showBack = step === 'tx' && (transaction.step === 'error' || transaction.step === 'success') && !isInProgress;
 
   const txTitle = isInProgress
@@ -435,7 +449,7 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
     // Establish it, then deposit - two signatures, like swap.
     if (tab === 'deposit' && depositNeedsTrustline && selectedOpportunity?.asset.issuer) {
       // Sponsorship is derived automatically from the app config now - no flag.
-      const tl = await setTrustline({ code: assetCode, issuer: selectedOpportunity.asset.issuer });
+      const tl = await track(setTrustline({ code: assetCode, issuer: selectedOpportunity.asset.issuer }));
       if (tl.status === 'error') {
         setFormError(copy.trustlineFailed(assetCode, tl.details ?? copy.unknownError));
         setStep('form');
@@ -457,11 +471,16 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
   function runEarn() {
     if (onSolana) {
       const params = { opportunity: opportunityId, amount };
-      return tab === 'deposit' ? earnSolanaDeposit(params) : earnSolanaWithdraw(params);
+      return track(tab === 'deposit' ? earnSolanaDeposit(params) : earnSolanaWithdraw(params));
     }
     if (!provider) return null;
     const params = { provider, opportunity: opportunityId, amount };
-    return tab === 'deposit' ? earnDeposit(params) : earnWithdraw(params);
+    return track(tab === 'deposit' ? earnDeposit(params) : earnWithdraw(params));
+  }
+
+  function handleClose() {
+    declineOnClose();
+    onClose();
   }
 
   async function handleRetry() {
@@ -558,7 +577,7 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
     ) : null;
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
+    <PollarOverlay style={overlayStyle} onClick={step !== 'tx' && !isInProgress ? handleClose : undefined}>
       <div
         className="pollar-modal-card pollar-send-modal"
         data-theme={theme}
@@ -574,7 +593,34 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
                 </svg>
               </button>
             )}
-            <h2 className="pollar-modal-title">{title}</h2>
+            {step === 'tx' ? (
+              <TxStatusHeading
+                review={txStatusReview({
+                  transaction,
+                  review: submissionReview,
+                  explorerUrl,
+                  confirmation,
+                  network,
+                  language,
+                })}
+                fallback={title}
+              />
+            ) : (
+              <h2 className="pollar-modal-title">{title}</h2>
+            )}
+            <NetworkPill
+              value={earnChain}
+              options={networks}
+              locked={step === 'tx'}
+              onChange={(n) => {
+                if (n === earnChain) return;
+                setEarnChain(n as typeof earnChain);
+                setOpportunityId('');
+                setAmount('');
+                setFormError('');
+              }}
+              language={language}
+            />
           </div>
           <div className="pollar-modal-header-actions">
             {step === 'form' && !earnUnavailable && !smartUnsupported && (
@@ -604,7 +650,7 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
               </button>
             )}
             {!isInProgress && (
-              <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
+              <button type="button" className="pollar-modal-close" onClick={handleClose} aria-label={copy.close}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                   <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
@@ -644,36 +690,6 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
                 {copy.withdraw}
               </button>
             </div>
-
-            {/* Network */}
-            {networks.length > 1 && (
-              <div className="pollar-send-field">
-                <span className="pollar-send-label">{copy.network}</span>
-                <div className="pollar-tabs pollar-earn-networks" role="radiogroup" aria-label={copy.network}>
-                  {networks.map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      role="radio"
-                      aria-checked={earnChain === n}
-                      className="pollar-tab pollar-earn-network"
-                      data-active={earnChain === n}
-                      data-chain={n}
-                      onClick={() => {
-                        if (n === earnChain) return;
-                        setEarnChain(n);
-                        setOpportunityId('');
-                        setAmount('');
-                        setFormError('');
-                      }}
-                    >
-                      <ChainLogo chain={n} />
-                      {reviewCopy.chains[n]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Provider */}
             {!onSolana && providers && providers.length > 1 && (
@@ -781,15 +797,10 @@ export function EarnModal({ onClose, initial }: EarnModalProps) {
             onDone={onClose}
             language={language}
             review={submissionReview}
+            confirmation={confirmation}
+            network={network}
             successMessage={submission ? earnOutcome(submission, reviewCopy) : undefined}
-            successExtra={
-              submission && (
-                <>
-                  {resultPosition}
-                  {explorerUrl && <TxExplorerLink chain={submission.chain} url={explorerUrl} language={language} />}
-                </>
-              )
-            }
+            successExtra={submission && <>{resultPosition}</>}
           />
         )}
 

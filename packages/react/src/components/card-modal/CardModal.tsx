@@ -3,6 +3,7 @@
 import {
   isPollarApiError,
   isPollarNetworkError,
+  startBackoffPoll,
   type CardBalance,
   type CardDepositAddress,
   type CardFunding,
@@ -42,6 +43,9 @@ import '../send-modal/SendModal.css';
 import './CardModal.css';
 import { PollarOverlay } from '../PollarOverlay';
 import { PollarSelect } from '../PollarSelect';
+import { useInlineConfirmation } from '../../useInlineConfirmation';
+import { InlineConfirm } from '../confirm-modal/InlineConfirm';
+import { OutcomeIcon } from '../signing-marks';
 
 /** Where the card modal opens: a starting point the user can change. An option the user cannot use is left out. */
 export interface CardModalOptions {
@@ -183,6 +187,10 @@ export function CardModal({ onClose, initial }: CardModalProps) {
   const [secrets, setSecrets] = useState<CardSecrets | null>(null);
   const [panel, setPanel] = useState<'card' | 'fund'>('card');
   const [busy, setBusy] = useState<string | null>(null);
+  // The funding's signature is confirmed in the panel that sends it, not in a prompt over the modal.
+  const confirmation = useInlineConfirmation(busy === 'fund-send');
+  // The funding sent from this panel: its outcome strip sits under the button that sent it.
+  const [sentFundingId, setSentFundingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -284,16 +292,10 @@ export function CardModal({ onClose, initial }: CardModalProps) {
   const kycPending = holder ? KYC_PENDING.has(holder.kycStatus) : false;
   useEffect(() => {
     if (!kycPending) return;
-    const id = setInterval(() => {
-      loadHolder()
-        .then((h) => {
-          if (h?.kycStatus === 'APPROVED') void loadCardData();
-        })
-        .catch(() => {
-          /* transient; the next tick retries */
-        });
+    return startBackoffPoll(async () => {
+      const h = await loadHolder();
+      if (h?.kycStatus === 'APPROVED') void loadCardData();
     }, KYC_POLL_MS);
-    return () => clearInterval(id);
   }, [kycPending, loadHolder, loadCardData]);
 
   useEffect(
@@ -437,6 +439,7 @@ export function CardModal({ onClose, initial }: CardModalProps) {
           return;
         }
         setFundings((cur) => [outcome.funding, ...(cur ?? []).filter((f) => f.id !== outcome.funding.id)]);
+        setSentFundingId(outcome.funding.id);
         setFundAmount('');
         initial?.onFunded?.(outcome.funding);
       },
@@ -457,24 +460,17 @@ export function CardModal({ onClose, initial }: CardModalProps) {
   const fundingsInflight = (fundings ?? []).some((f) => FUNDING_INFLIGHT.has(f.status));
   useEffect(() => {
     if (panel !== 'fund' || !fundingsInflight) return;
-    const id = setInterval(() => {
-      getClient()
-        .listCardFundings()
-        .then((next) => {
-          setFundings((previous) => {
-            // A funding that just got credited moves the card's balance: re-read it.
-            const credited = next.some(
-              (f) => f.status === 'CREDITED' && previous?.find((p) => p.id === f.id)?.status !== 'CREDITED',
-            );
-            if (credited) void loadCardData().catch(() => {});
-            return next;
-          });
-        })
-        .catch(() => {
-          /* transient; the next tick retries */
-        });
+    return startBackoffPoll(async () => {
+      const next = await getClient().listCardFundings();
+      setFundings((previous) => {
+        // A funding that just got credited moves the card's balance: re-read it.
+        const credited = next.some(
+          (f) => f.status === 'CREDITED' && previous?.find((p) => p.id === f.id)?.status !== 'CREDITED',
+        );
+        if (credited) void loadCardData().catch(() => {});
+        return next;
+      });
     }, FUNDING_POLL_MS);
-    return () => clearInterval(id);
   }, [panel, fundingsInflight, getClient, loadCardData]);
 
   const field = (
@@ -587,8 +583,10 @@ export function CardModal({ onClose, initial }: CardModalProps) {
   const stepsPending = !!requirements?.next;
   const title = panel === 'fund' ? copy.title.addFunds : card ? (card.nickname ?? copy.title.yourCard) : copy.title.getCard;
 
+  const sentFunding = fundings?.find((f) => f.id === sentFundingId) ?? null;
+  const earlierFundings = (fundings ?? []).filter((f) => f.id !== sentFundingId);
   return (
-    <PollarOverlay style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={busy === 'fund-send' ? undefined : onClose}>
       <div
         className="pollar-modal-card pollar-card-modal"
         data-theme={theme}
@@ -943,10 +941,44 @@ export function CardModal({ onClose, initial }: CardModalProps) {
               </button>
             </div>
 
-            {fundings && fundings.length > 0 && (
+            {confirmation && <InlineConfirm confirmation={confirmation} language={language} />}
+            {!confirmation &&
+              sentFunding &&
+              (() => {
+                const f = sentFunding;
+                const state = (f.route === 'DIRECT' ? copy.fundingSolana[f.status] : undefined) ?? copy.funding[f.status];
+                const steps = FUNDING_STEPS[f.route];
+                const step = steps.indexOf(f.status) + 1;
+                const inflight = FUNDING_INFLIGHT.has(f.status);
+                const failed = f.status === 'FAILED';
+                return (
+                  <div
+                    className={`pollar-outcome${failed ? ' pollar-outcome-bad' : ''}${inflight ? ' pollar-outcome-busy' : ''}`}
+                    role="status"
+                  >
+                    <p className="pollar-outcome-main">
+                      {inflight ? (
+                        <span className="pollar-spinner pollar-spinner-sm" aria-hidden />
+                      ) : (
+                        <OutcomeIcon ok={!failed} />
+                      )}
+                      {state?.title ?? f.status} · {money(f.amount, 'USD', language)}
+                    </p>
+                    {inflight && step > 0 && (
+                      <p className="pollar-outcome-note">
+                        {copy.stepOf(step, steps.length)} ·{' '}
+                        {f.error === CREDIT_DELAYED ? copy.fundingProblem.delayed : state?.hint}
+                      </p>
+                    )}
+                    {failed && <p className="pollar-outcome-note">{fundingProblemText(f.error, copy)}</p>}
+                  </div>
+                );
+              })()}
+
+            {earlierFundings.length > 0 && (
               <>
                 <p className="pollar-card-section-title">{copy.yourFundings}</p>
-                {fundings.map((f) => {
+                {earlierFundings.map((f) => {
                   const state = (f.route === 'DIRECT' ? copy.fundingSolana[f.status] : undefined) ?? copy.funding[f.status];
                   const steps = FUNDING_STEPS[f.route];
                   const step = steps.indexOf(f.status) + 1;

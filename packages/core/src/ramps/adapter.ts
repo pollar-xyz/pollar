@@ -105,6 +105,8 @@ export type RampAdapterAction =
       expiresAt: string | null;
       /** The provider's own page for this payment, where its status can be followed. */
       link?: string | null;
+      /** A sandbox provider: no real money moves, and `link` is where the user simulates the transfer. */
+      simulated?: boolean;
     }
   | { kind: 'user_ready'; purpose: 'create_order' | 'withdrawal_payment' | 'onramp_claim' }
   | {
@@ -261,7 +263,13 @@ export type RampAdapterFact =
   | { kind: 'provider_processing' }
   | { kind: 'fiat_receipt_reported' | 'fiat_payout_reported'; reference: string | null }
   | { kind: 'chain_transaction_reported'; chain: string; hash: string; leg: 'source' | 'intermediate' | 'destination' }
-  | { kind: 'provider_rejection_reported' };
+  | { kind: 'provider_rejection_reported' }
+  /**
+   * Something Pollar must take up with the provider while the order goes on,
+   * such as a payout the bank refused that the provider sends again. `detail`
+   * is the provider's own wording, never personal data.
+   */
+  | { kind: 'provider_attention_reported'; code: string; detail: string | null };
 export type RampAdapterObservation = {
   providerOrderRef: string | null;
   identity: string;
@@ -270,6 +278,15 @@ export type RampAdapterObservation = {
   proposedActions: RampAdapterAction[];
   verificationRequired: boolean;
   payment: RampAdapterPayment | null;
+  /**
+   * Version 2. What an order placed on an indicative offer settled for, once the
+   * provider fixes it: the crypto an on-ramp delivers (`cryptoAmount`, with the
+   * `payment` naming the same amount) or the fiat an off-ramp pays out
+   * (`fiatAmount`). The side the user fixed never moves. Pollar amends the
+   * ramp's terms to it before any proof of that side is checked; an offer quoted
+   * firm ignores it.
+   */
+  settled?: { cryptoAmount?: RampDecimal; fiatAmount?: RampDecimal; feeAmount?: RampDecimal } | null;
 };
 export type RampAdapterSubmission =
   | { outcome: 'accepted'; observation: RampAdapterObservation }

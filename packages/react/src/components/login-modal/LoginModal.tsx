@@ -17,15 +17,17 @@ import { LoginModalStatus, LoginModalTemplate } from './LoginModalTemplate';
 import { PrivyLoginSubmodal } from './PrivyLoginSubmodal';
 import '../shared.css';
 import './LoginModal.css';
-import { PollarOverlay } from '../PollarOverlay';
+import { ModalFrame } from '../ModalFrame';
 
 type TimeoutHandle = ReturnType<typeof setTimeout>;
 
 interface LoginModalProps {
   onClose: () => void;
+  /** In the host's page instead of over a backdrop (`LoginFlow`). */
+  inline?: boolean;
 }
 
-export function LoginModal({ onClose }: LoginModalProps) {
+export function LoginModal({ onClose, inline = false }: LoginModalProps) {
   const [email, setEmail] = useState('');
   const { getClient, styles, appConfig: config, configStatus, retryConfig } = usePollar();
   const [authState, setAuthState] = useState<AuthState>(() => getClient().getAuthState());
@@ -139,6 +141,17 @@ export function LoginModal({ onClose }: LoginModalProps) {
   }
 
   function handleRetry() {
+    // A rate-limited send goes again on the same login, with the email already typed.
+    if (
+      authState.step === 'error' &&
+      authState.errorCode === AUTH_ERROR_CODES.EMAIL_SEND_FAILED &&
+      authState.code === 'RATE_LIMITED' &&
+      authState.clientSessionId &&
+      authState.email
+    ) {
+      getClient().sendEmailCode(authState.email);
+      return;
+    }
     getClient().logout();
     if (styles.emailEnabled) {
       getClient().beginEmailLogin();
@@ -156,7 +169,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={handleClose}>
+    <ModalFrame inline={inline} overlayStyle={overlayStyle} onClose={handleClose}>
       {configStatus !== 'ready' ? (
         <LoginModalStatus
           status={configStatus === 'error' ? 'error' : 'loading'}
@@ -168,6 +181,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
           onRetry={retryConfig}
           onCancel={handleClose}
           language={language}
+          inline={inline}
         />
       ) : interactiveAdapter ? (
         <PrivyLoginSubmodal
@@ -181,6 +195,7 @@ export function LoginModal({ onClose }: LoginModalProps) {
           onCancel={handleClose}
           onAuthenticated={handleInteractiveAuthenticated}
           language={language}
+          inline={inline}
         />
       ) : (
         <LoginModalTemplate
@@ -214,8 +229,9 @@ export function LoginModal({ onClose }: LoginModalProps) {
           onCancel={handleClose}
           onRetry={handleRetry}
           language={language}
+          inline={inline}
         />
       )}
-    </PollarOverlay>
+    </ModalFrame>
   );
 }

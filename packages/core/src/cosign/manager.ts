@@ -90,13 +90,13 @@ function accountsOf(value: unknown): { walletId: string; accounts: Array<Record<
   return { walletId, accounts };
 }
 
-function apiError(error: unknown, fallback: string): PollarApiError {
+function apiError(error: unknown, fallback: string, httpStatus?: number): PollarApiError {
   const body = isRecord(error) ? error : {};
-  return new PollarApiError(stringField(body, 'code') ?? fallback, body);
+  return new PollarApiError(stringField(body, 'code') ?? fallback, httpStatus ? { ...body, httpStatus } : body);
 }
 
-function content<T>(res: { data?: { content?: T }; error?: unknown }, fallback: string): T {
-  if (res.error || res.data?.content === undefined) throw apiError(res.error, fallback);
+function content<T>(res: { data?: { content?: T }; error?: unknown; response?: Response }, fallback: string): T {
+  if (res.error || res.data?.content === undefined) throw apiError(res.error, fallback, res.response?.status);
   return res.data.content;
 }
 

@@ -27,6 +27,8 @@ export interface RecoveryModalTemplateProps {
   notice: string | null;
   emailDraft: string;
   codeSent: boolean;
+  /** Seconds until the address in view may get another code; 0 when it may now. */
+  sendWaitSeconds: number;
   /** The recovery phrase, once exported. */
   phrase: string | null;
   onView: (view: RecoveryView) => void;
@@ -212,9 +214,25 @@ export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
       <>
         {muted(copy.recoverEmailIntro(state.email.address ?? copy.yourEmail))}
         {!p.codeSent ? (
-          <Button {...btn} id="recover-send" label={copy.sendCode} kind="primary" onPress={p.onSendRecoveryCode} />
+          <Button
+            {...btn}
+            id="recover-send"
+            label={p.sendWaitSeconds ? copy.sendCodeIn(p.sendWaitSeconds) : copy.sendCode}
+            kind="primary"
+            onPress={p.onSendRecoveryCode}
+            disabled={p.sendWaitSeconds > 0}
+          />
         ) : (
-          <CodeForm {...btn} id="recover-code" label={copy.recover} onSubmit={p.onRecoverWithCode} />
+          <>
+            <CodeForm {...btn} id="recover-code" label={copy.recover} onSubmit={p.onRecoverWithCode} />
+            <Button
+              {...btn}
+              id="recover-send"
+              label={p.sendWaitSeconds ? copy.resendCodeIn(p.sendWaitSeconds) : copy.resendCode}
+              onPress={p.onSendRecoveryCode}
+              disabled={p.sendWaitSeconds > 0}
+            />
+          </>
         )}
         {back}
       </>
@@ -239,14 +257,23 @@ export function RecoveryModalTemplate(p: RecoveryModalTemplateProps) {
             <Button
               {...btn}
               id="email-send"
-              label={copy.sendCode}
+              label={p.sendWaitSeconds ? copy.sendCodeIn(p.sendWaitSeconds) : copy.sendCode}
               kind="primary"
               onPress={p.onSendEmailCode}
-              disabled={!p.emailDraft.trim()}
+              disabled={!p.emailDraft.trim() || p.sendWaitSeconds > 0}
             />
           </View>
         ) : (
-          <CodeForm {...btn} id="email-confirm" label={copy.confirm} onSubmit={p.onConfirmEmail} />
+          <>
+            <CodeForm {...btn} id="email-confirm" label={copy.confirm} onSubmit={p.onConfirmEmail} />
+            <Button
+              {...btn}
+              id="email-send"
+              label={p.sendWaitSeconds ? copy.resendCodeIn(p.sendWaitSeconds) : copy.resendCode}
+              onPress={p.onSendEmailCode}
+              disabled={p.sendWaitSeconds > 0}
+            />
+          </>
         )}
         {back}
       </>

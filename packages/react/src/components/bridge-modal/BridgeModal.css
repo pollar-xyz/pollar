@@ -89,25 +89,14 @@
   color: var(--pollar-muted, #6b7280);
 }
 
-.pollar-bridge-status strong {
-  display: block;
-  font-size: 1rem;
-}
-
-.pollar-bridge-status p {
-  margin: 0.25rem 0 0;
-  font-size: 0.875rem;
-  color: var(--pollar-muted, #6b7280);
-}
-
 .pollar-bridge-steps {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin: 0;
+  gap: 0.35rem;
+  margin: 0.15rem 0 0;
   padding: 0;
   list-style: none;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
 }
 
 .pollar-bridge-step {
@@ -118,28 +107,15 @@
 }
 
 .pollar-bridge-step-done {
-  color: inherit;
+  color: var(--pollar-text);
 }
 
 .pollar-bridge-step-dot {
-  width: 0.625rem;
-  height: 0.625rem;
+  flex-shrink: 0;
+  width: 0.75rem;
+  height: 0.75rem;
+  box-sizing: border-box;
+  margin: 0 0.125rem;
   border-radius: 999px;
   border: 2px solid currentColor;
-}
-
-.pollar-bridge-step-done .pollar-bridge-step-dot {
-  background-color: var(--pollar-accent, #2563eb);
-  border-color: var(--pollar-accent, #2563eb);
-}
-
-.pollar-bridge-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  font-size: 0.8125rem;
-}
-
-.pollar-bridge-links a {
-  color: var(--pollar-accent, #2563eb);
 }

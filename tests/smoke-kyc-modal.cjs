@@ -28,6 +28,23 @@ function load(relativePath, overrides = {}) {
 }
 
 const { KycModalTemplate } = load('packages/react/src/components/kyc-modal/KycModalTemplate.tsx');
+
+// A reason that changes what the user should do gets its own text; any other keeps the code's.
+{
+  const { PollarApiError } = require('../packages/core/dist/index.js');
+  for (const pkg of ['react', 'react-native']) {
+    const { kycErrorMessage } = load(`packages/${pkg}/src/components/kyc-modal/kyc-messages.ts`);
+    const credits = new PollarApiError('SDK_KYC_NOT_CONFIGURED', {
+      code: 'SDK_KYC_NOT_CONFIGURED',
+      reason: 'provider_credits_exhausted',
+      providerId: 'didit',
+    });
+    assert.match(kycErrorMessage(credits, 'start', 'en'), /temporarily unavailable/, pkg);
+    assert.match(kycErrorMessage(credits, 'start', 'es'), /temporalmente/, pkg);
+    const disabled = new PollarApiError('SDK_KYC_NOT_CONFIGURED', { code: 'SDK_KYC_NOT_CONFIGURED', reason: 'kyc_disabled' });
+    assert.match(kycErrorMessage(disabled, 'start', 'en'), /not available for this app yet/, pkg);
+  }
+}
 const props = {
   theme: 'light',
   accentColor: '#0060b8',

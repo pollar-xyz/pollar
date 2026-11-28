@@ -8,6 +8,7 @@ import { buildModalCssVars, modalChrome } from '../modal-theme';
 import {
   answersOf,
   COPY,
+  correctionErrors,
   fieldErrorMessage,
   fieldErrorsOf,
   initialValues,
@@ -21,7 +22,7 @@ import {
 import { useModalLanguage } from '../../language';
 import '../shared.css';
 import './RequirementFormModal.css';
-import { PollarOverlay } from '../PollarOverlay';
+import { ModalFrame } from '../ModalFrame';
 import { PollarSelect } from '../PollarSelect';
 
 interface RequirementFormModalProps {
@@ -33,6 +34,8 @@ interface RequirementFormModalProps {
   onSubmitted: () => void;
   /** Language of the modal, as a BCP 47 tag. A language pinned in the dashboard wins over it. */
   language?: string | undefined;
+  /** Render the card in the page instead of over a backdrop, without its close buttons. */
+  inline?: boolean;
 }
 
 function FieldInput({
@@ -124,6 +127,7 @@ export function RequirementFormModal({
   onClose,
   onSubmitted,
   language: languageProp,
+  inline = false,
 }: RequirementFormModalProps) {
   const { getClient, styles } = usePollar();
   const client = getClient();
@@ -154,6 +158,7 @@ export function RequirementFormModal({
         if (!mounted.current) return;
         setForm(loaded);
         setValues(initialValues(loaded.fields, loaded.answers));
+        setFieldErrors(correctionErrors(loaded));
       })
       .catch(() => mounted.current && setError(copy.loadError));
     // The client instance and the copy do not change while the modal is open.
@@ -205,11 +210,11 @@ export function RequirementFormModal({
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={onClose}>
+    <ModalFrame inline={inline} overlayStyle={overlayStyle} onClose={onClose}>
       <div
-        className="pollar-modal-card pollar-form-modal"
-        role="dialog"
-        aria-modal="true"
+        className={`pollar-modal-card pollar-form-modal ${inline ? 'pollar-modal-card--inline' : ''}`}
+        role={inline ? 'region' : 'dialog'}
+        aria-modal={inline ? undefined : true}
         aria-label={form?.name ?? copy.title}
         style={cssVars}
         onClick={(e) => e.stopPropagation()}
@@ -223,11 +228,13 @@ export function RequirementFormModal({
               </p>
             )}
           </div>
-          <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-              <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </button>
+          {!inline && (
+            <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {error && (
@@ -252,6 +259,12 @@ export function RequirementFormModal({
             }}
           >
             {form.description && <p className="pollar-form-description">{form.description}</p>}
+            {form.corrections && (
+              <div className="pollar-form-error pollar-form-corrections" role="status">
+                <p>{copy.corrections}</p>
+                {form.corrections.note && <p className="pollar-form-corrections-note">{form.corrections.note}</p>}
+              </div>
+            )}
             {visibleFields(form.fields, values).map((field) => {
               const fieldError = fieldErrors[field.key];
               const help = localized(field.help, language);
@@ -294,9 +307,11 @@ export function RequirementFormModal({
               );
             })}
             <div className="pollar-modal-actions">
-              <button type="button" className="pollar-btn-secondary" onClick={onClose} disabled={submitting}>
-                {copy.close}
-              </button>
+              {!inline && (
+                <button type="button" className="pollar-btn-secondary" onClick={onClose} disabled={submitting}>
+                  {copy.close}
+                </button>
+              )}
               <button type="submit" className="pollar-btn-primary" disabled={submitting}>
                 {submitting ? copy.submitting : copy.submit}
               </button>
@@ -305,6 +320,6 @@ export function RequirementFormModal({
         )}
         <PollarModalFooter />
       </div>
-    </PollarOverlay>
+    </ModalFrame>
   );
 }

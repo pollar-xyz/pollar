@@ -18,6 +18,7 @@ import './BridgeModal.css';
 import { BRIDGE_COPY, type BridgeCopy } from './bridge-copy';
 import { BRIDGE_CHAIN_LABEL, BridgeModalTemplate, type BridgeModalStep } from './BridgeModalTemplate';
 import { PollarOverlay } from '../PollarOverlay';
+import { useInlineConfirmation } from '../../useInlineConfirmation';
 
 /** Where the bridge modal opens: a starting point the user can change, never a lock. */
 export interface BridgeModalOptions {
@@ -286,9 +287,11 @@ export function BridgeModal({ onClose, initial }: BridgeModalProps) {
       : config && (!config.available || sources.length === 0)
         ? 'unavailable'
         : 'form';
+  // The signature's yes is asked in the transfer view, not in a prompt over the modal.
+  const confirmation = useInlineConfirmation(step === 'transfer');
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={onClose}>
+    <PollarOverlay style={overlayStyle} onClick={step === 'transfer' ? undefined : onClose}>
       <BridgeModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -324,6 +327,7 @@ export function BridgeModal({ onClose, initial }: BridgeModalProps) {
         onNewBridge={newBridge}
         onClose={onClose}
         language={language}
+        confirmation={confirmation}
       />
     </PollarOverlay>
   );

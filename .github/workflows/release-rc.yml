@@ -9,6 +9,10 @@ on:
         description: RC version to publish (for example, 0.12.0-rc.2)
         required: true
         type: string
+      skip_tests:
+        description: Publish without the unit and smoke tests (quick candidates only)
+        type: boolean
+        default: false
 
 concurrency:
   group: release-rc
@@ -31,6 +35,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org
+          cache: npm
 
       - name: Check the version
         run: |
@@ -72,10 +77,13 @@ jobs:
       - name: Build
         run: npm run build
 
+      # A tag push has no inputs, so it always runs both.
       - name: Unit tests
+        if: ${{ !inputs.skip_tests }}
         run: npm run test:unit
 
       - name: Smoke tests
+        if: ${{ !inputs.skip_tests }}
         run: npm run test:smoke
 
       - name: Publish

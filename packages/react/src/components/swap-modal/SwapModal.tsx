@@ -2,6 +2,7 @@
 
 import {
   fromBaseUnits as unitsToDecimal,
+  startBackoffPoll,
   SolanaSwapQuote,
   SolanaSwapVenue,
   SwapDestinationChain,
@@ -23,7 +24,11 @@ import { SWAP_COPY } from './swap-copy';
 import { SwapAssetOption, SwapChain, SwapModalTemplate, SwapQuoteView, SwapSettlementView } from './SwapModalTemplate';
 import { modalChrome } from '../modal-theme';
 import { byCode, oneOf, seededAmount, useSuccessReport } from '../../modal-options';
-import { PollarOverlay } from '../PollarOverlay';
+import { ModalFrame } from '../ModalFrame';
+import { useDeclineOnClose, useInlineConfirmation } from '../../useInlineConfirmation';
+import { CONFIRM_COPY } from '../confirm-modal/confirm-copy';
+import { TX_REVIEW_COPY } from '../tx-review/tx-review-copy';
+import { reviewFromRequest } from '../tx-review/tx-review-model';
 
 /** Where the swap modal opens: a starting point the user can change. An option the app does not offer is left out. */
 export interface SwapModalOptions {
@@ -42,6 +47,8 @@ export interface SwapModalOptions {
 interface SwapModalProps {
   onClose: () => void;
   initial?: SwapModalOptions | undefined;
+  /** Render the card in the page instead of over a backdrop, without its close button. */
+  inline?: boolean;
 }
 
 /** Debounce (ms) before re-quoting as the user edits the amount / assets. */
@@ -105,7 +112,7 @@ function catalogRef(code: string, issuer: string): SwapQuoteParams['sellAsset'] 
   return code.length <= 4 ? { type: 'credit_alphanum4', code, issuer } : { type: 'credit_alphanum12', code, issuer };
 }
 
-export function SwapModal({ onClose, initial }: SwapModalProps) {
+export function SwapModal({ onClose, initial, inline = false }: SwapModalProps) {
   const {
     getSwapConfig,
     getSwapTokens,
@@ -137,6 +144,9 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   const { theme, accentColor, styleOverrides, overlayStyle } = modalChrome(styles);
 
   const [step, setStep] = useState<'form' | 'tx'>('form');
+  // The signature's yes is asked here, under the review, not in a prompt over the modal.
+  const confirmation = useInlineConfirmation(step === 'tx');
+  const { track, declineOnClose } = useDeclineOnClose(confirmation);
   const [selectedSell, setSelectedSell] = useState<SwapAssetOption | null>(null);
   const [selectedBuy, setSelectedBuy] = useState<SwapAssetOption | null>(null);
   const [amount, setAmount] = useState(() => seededAmount(initial?.amount));
@@ -165,6 +175,12 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   const [formError, setFormError] = useState('');
   const [showXdr, setShowXdr] = useState(false);
   const [copied, setCopied] = useState(false);
+  // The Solana swap in the transaction step, with the assets as the user picked them.
+  const [sentSolana, setSentSolana] = useState<{
+    quote: SolanaSwapQuote;
+    sell: SwapAssetOption;
+    buy: SwapAssetOption;
+  } | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fixed default slippage (0.5%). Exposed as a constant for now; an advanced
@@ -177,9 +193,9 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   }, [refreshWalletBalance, refreshAssets]);
 
   // Which venues this app exposes (operator config intersected with server capability).
+  // A reload keeps the venues on screen until the new ones land: emptying them would let
+  // whichever chain answers first look like the only one offered, and the form would move to it.
   const loadConfig = useCallback(() => {
-    setVenues(null); // back to loading
-    setSolanaVenues(null);
     return Promise.all([
       getSwapConfig()
         .then(setVenues)
@@ -356,7 +372,12 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   // Auto-select the first sell / buy asset once options are available, and keep a
   // valid selection if the list changes - so the pickers never sit empty.
   useEffect(() => {
-    if (sellOptions.length === 0) return;
+    // An empty list (another network's, once read) drops the selection: a pick from the
+    // previous network would leave the pill blank while its balance still shows.
+    if (sellOptions.length === 0) {
+      if (selectedSell && !isLoadingData) setSelectedSell(null);
+      return;
+    }
     const seeded = byCode(sellOptions, sellSeed.current);
     if (seeded) {
       sellSeed.current = undefined;
@@ -366,20 +387,26 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     if (!selectedSell || !sellOptions.some((o) => optKey(o) === optKey(selectedSell))) {
       setSelectedSell(sellOptions[0]!);
     }
-  }, [sellOptions, selectedSell]);
+  }, [sellOptions, selectedSell, isLoadingData]);
 
   useEffect(() => {
-    if (buyOptions.length === 0) return;
+    if (buyOptions.length === 0) {
+      if (selectedBuy && !isLoadingData) setSelectedBuy(null);
+      return;
+    }
     const seeded = byCode(buyOptions, buySeed.current);
     if (seeded) {
       buySeed.current = undefined;
       setSelectedBuy(seeded);
       return;
     }
-    if (!selectedBuy || !buyOptions.some((o) => optKey(o) === optKey(selectedBuy))) {
-      setSelectedBuy(buyOptions[0]!);
+    // Both pickers settle in the same commit, so this list can still hold the asset just picked to sell.
+    const sellKey = selectedSell ? optKey(selectedSell) : '';
+    if (!selectedBuy || optKey(selectedBuy) === sellKey || !buyOptions.some((o) => optKey(o) === optKey(selectedBuy))) {
+      const next = buyOptions.find((o) => optKey(o) !== sellKey) ?? null;
+      if (next !== selectedBuy) setSelectedBuy(next);
     }
-  }, [buyOptions, selectedBuy]);
+  }, [buyOptions, selectedBuy, selectedSell, isLoadingData]);
 
   // Add a user-pasted token (code + issuer) to the buy list and select it.
   // Returns an error message, or null on success.
@@ -462,10 +489,17 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     };
   }, [quotedSolana, step]);
 
-  // Land on a chain the app offers swaps on; Stellar first when it offers both.
+  // Land on a chain the app offers swaps on; Stellar first when it offers both. Only once both
+  // configs are read: with one still loading, the other chain would look like the only one.
   useEffect(() => {
-    if (chains.length > 0 && !chains.includes(chain)) setChain(chains[0]!);
-  }, [chains, chain]);
+    if (configLoading) return;
+    if (chains.length === 0 || chains.includes(chain)) return;
+    // The seeded amount and assets stay: they are what the app opened the modal with.
+    setChain(chains[0]!);
+    setProvider('auto');
+    setQuotes([]);
+    setSolanaQuotes([]);
+  }, [chains, chain, configLoading]);
 
   function handleChainChange(next: SwapChain) {
     sellSeed.current = undefined;
@@ -574,20 +608,17 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
   useEffect(() => {
     if (!settlementKey || settlementDone || !originLanded) return;
     let cancelled = false;
-    const read = () =>
-      getSwapStatus(settlementKey)
-        .then((status) => {
-          if (!cancelled)
-            setSettlement((cur) => (cur && cur.key === settlementKey ? { ...cur, value: status.settlement } : cur));
-        })
-        .catch(() => {
-          /* the next read tries again */
-        });
-    void read();
-    const id = setInterval(read, SETTLEMENT_POLL_MS);
+    const read = async () => {
+      const status = await getSwapStatus(settlementKey);
+      if (!cancelled) setSettlement((cur) => (cur && cur.key === settlementKey ? { ...cur, value: status.settlement } : cur));
+    };
+    void read().catch(() => {
+      /* the poll below tries again */
+    });
+    const stop = startBackoffPoll(read, SETTLEMENT_POLL_MS);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      stop();
     };
   }, [settlementKey, settlementDone, originLanded, getSwapStatus]);
 
@@ -606,6 +637,37 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     : chain === 'SOLANA'
       ? `https://solscan.io/tx/${hash}${network === 'testnet' ? '?cluster=devnet' : ''}`
       : `https://stellar.expert/explorer/${explorerNetwork}/tx/${hash}`;
+
+  // A Solana swap's transaction carries no build to review: once the confirmation is answered, the
+  // review is read from the quote that was sent, so the step keeps saying what is being signed.
+  const solanaReview = useMemo(() => {
+    if (!sentSolana) return null;
+    const { quote: sent, sell, buy } = sentSolana;
+    const toward = sent.destinationChain && sent.destinationChain !== 'SOLANA' ? sent.destinationChain : undefined;
+    return reviewFromRequest(
+      {
+        chain: 'SOLANA',
+        network,
+        operation: 'swap',
+        details: {
+          provider: sent.provider,
+          inputMint: sent.inputMint,
+          outputMint: sent.outputMint,
+          inAmount: sent.inAmount,
+          outAmount: sent.outAmount,
+          minOut: sent.minOut,
+          ...(toward && { destinationChain: toward }),
+          inputSymbol: sell.code,
+          outputSymbol: buy.code,
+          ...(sell.decimals !== undefined && { inputDecimals: sell.decimals }),
+          ...((sent.outputDecimals ?? buy.decimals) !== undefined && { outputDecimals: sent.outputDecimals ?? buy.decimals }),
+        },
+        fallbackTitle: CONFIRM_COPY[language].operations.swap ?? copy.title,
+      },
+      TX_REVIEW_COPY[language],
+    );
+  }, [sentSolana, network, language, copy.title]);
+  const stepReview = solanaReview && !buildData && !confirmation ? solanaReview : null;
 
   const settlementView: SwapSettlementView | null = (() => {
     if (!settlement || transaction.step !== 'success') return null;
@@ -639,7 +701,10 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     'signing-submitting',
     'building-signing-submitting',
   ] as const;
-  const isInProgress = (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step);
+  // A transaction past its confirmation window is read on in the background: the modal can close meanwhile.
+  const isInProgress =
+    (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step) &&
+    !(transaction.step === 'submitted' && transaction.slow);
   const showBack = step === 'tx' && (transaction.step === 'error' || transaction.step === 'success') && !isInProgress;
 
   const txTitle = isInProgress
@@ -677,16 +742,18 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
       const key = newSwapKey();
       const toward = solanaQuote.destinationChain;
       setSettlement(toward && toward !== 'SOLANA' ? { key, chain: toward, value: null } : null);
+      setSentSolana({ quote: solanaQuote, sell: selectedSell, buy: selectedBuy });
       setStep('tx');
-      await swapSolana(solanaQuote, { slippageBps, idempotencyKey: key });
+      await track(swapSolana(solanaQuote, { slippageBps, idempotencyKey: key }));
       return;
     }
     if (!quote) {
       setFormError(copy.noRouteForPair);
       return;
     }
+    setSentSolana(null);
     setStep('tx');
-    await swap(quote);
+    await track(swap(quote));
   }
 
   async function handleRetry() {
@@ -696,10 +763,11 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
       const key = newSwapKey();
       const toward = solanaQuote.destinationChain;
       setSettlement(toward && toward !== 'SOLANA' ? { key, chain: toward, value: null } : null);
-      await swapSolana(solanaQuote, { slippageBps, idempotencyKey: key });
+      if (selectedSell && selectedBuy) setSentSolana({ quote: solanaQuote, sell: selectedSell, buy: selectedBuy });
+      await track(swapSolana(solanaQuote, { slippageBps, idempotencyKey: key }));
       return;
     }
-    if (quote) await swap(quote);
+    if (quote) await track(swap(quote));
   }
 
   function handleMax() {
@@ -727,15 +795,21 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
     });
   }
 
+  function handleClose() {
+    declineOnClose();
+    onClose();
+  }
+
   function handleBack() {
     setSettlement(null);
+    setSentSolana(null);
     setStep('form');
     setShowXdr(false);
     setCopied(false);
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
+    <ModalFrame inline={inline} overlayStyle={overlayStyle} {...(step !== 'tx' && !isInProgress && { onClose: handleClose })}>
       <SwapModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -753,6 +827,9 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
         destination={destination}
         usdcAcross={usdcAcross}
         settlement={settlementView}
+        confirmation={confirmation}
+        review={stepReview}
+        network={network}
         provider={provider}
         providers={providers}
         quote={quoteView}
@@ -772,7 +849,8 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
         showBack={showBack}
         isInProgress={isInProgress}
         language={language}
-        onClose={onClose}
+        inline={inline}
+        onClose={handleClose}
         onBack={handleBack}
         onRefresh={handleRefresh}
         onSelectSell={(option) => {
@@ -796,6 +874,6 @@ export function SwapModal({ onClose, initial }: SwapModalProps) {
         onRetry={() => void handleRetry()}
         onDone={onClose}
       />
-    </PollarOverlay>
+    </ModalFrame>
   );
 }

@@ -16,12 +16,9 @@ export const COSIGN_COPY: Record<
     closeAnyway: string;
     activateWallet: string;
     status: Record<string, string>;
-    sentTransaction: string;
-    copy: string;
-    copied: string;
-    copyHash: string;
-    copyFailed: string;
     signedAppSends: string;
+    signedSent: string;
+    signed: string;
     nothingSigned: string;
     nothingWaiting: string;
     next: (step: string) => string;
@@ -37,6 +34,8 @@ export const COSIGN_COPY: Record<
     approve: string;
     approving: string;
     genericError: string;
+    /** The request never reached Pollar (offline, or a server mid-deploy): nothing was voted, approving again is safe. */
+    unreachable: string;
     deviceNotLinked: string;
     linkDevice: string;
     transaction: string;
@@ -56,12 +55,9 @@ export const COSIGN_COPY: Record<
     closeAnyway: 'Close anyway',
     activateWallet: 'Activate wallet',
     status: { APPROVED: 'Approved', REJECTED: 'Rejected', EXPIRED: 'Expired', FAILED: 'Failed', PENDING: 'Pending' },
-    sentTransaction: 'Sent. Transaction',
-    copy: 'Copy',
-    copied: 'Copied',
-    copyHash: 'Copy transaction hash',
-    copyFailed: 'Copy failed',
     signedAppSends: 'Signed. The app will send it.',
+    signedSent: 'Signed and sent',
+    signed: 'Signed',
     nothingSigned: 'Nothing was signed.',
     nothingWaiting: 'Nothing waits for your approval.',
     next: (step) => `Next: ${step}. It appears here in a few seconds.`,
@@ -77,6 +73,7 @@ export const COSIGN_COPY: Record<
     approve: 'Approve',
     approving: 'Approving...',
     genericError: 'Something went wrong. Please try again.',
+    unreachable: 'We could not reach Pollar, so nothing was approved. Check your connection and approve again.',
     deviceNotLinked:
       "This device isn't linked to your wallet yet, so it can't approve. Add it with a device that already is, your passkey or your email.",
     linkDevice: 'Link this device',
@@ -113,12 +110,9 @@ export const COSIGN_COPY: Record<
     closeAnyway: 'Cerrar igual',
     activateWallet: 'Activar billetera',
     status: { APPROVED: 'Aprobada', REJECTED: 'Rechazada', EXPIRED: 'Vencida', FAILED: 'Fallida', PENDING: 'Pendiente' },
-    sentTransaction: 'Enviada. Transacción',
-    copy: 'Copiar',
-    copied: 'Copiado',
-    copyHash: 'Copiar hash de la transacción',
-    copyFailed: 'No se pudo copiar',
     signedAppSends: 'Firmada. La app la enviará.',
+    signedSent: 'Firmada y enviada',
+    signed: 'Firmada',
     nothingSigned: 'No se firmó nada.',
     nothingWaiting: 'No hay nada esperando tu aprobación.',
     next: (step) => `Siguiente: ${step}. Aparecerá aquí en unos segundos.`,
@@ -134,6 +128,7 @@ export const COSIGN_COPY: Record<
     approve: 'Aprobar',
     approving: 'Aprobando...',
     genericError: 'Algo salió mal. Intenta de nuevo.',
+    unreachable: 'No pudimos conectar con Pollar, así que no se aprobó nada. Revisa tu conexión y aprueba de nuevo.',
     deviceNotLinked:
       'Este dispositivo aún no está vinculado a tu billetera, así que no puede aprobar. Agrégalo con un dispositivo que ya lo esté, tu passkey o tu email.',
     linkDevice: 'Vincular este dispositivo',
@@ -170,12 +165,9 @@ export const COSIGN_COPY: Record<
     closeAnyway: 'Fechar mesmo assim',
     activateWallet: 'Ativar carteira',
     status: { APPROVED: 'Aprovada', REJECTED: 'Rejeitada', EXPIRED: 'Expirada', FAILED: 'Falhou', PENDING: 'Pendente' },
-    sentTransaction: 'Enviada. Transação',
-    copy: 'Copiar',
-    copied: 'Copiado',
-    copyHash: 'Copiar hash da transação',
-    copyFailed: 'Não foi possível copiar',
     signedAppSends: 'Assinada. O app vai enviá-la.',
+    signedSent: 'Assinada e enviada',
+    signed: 'Assinada',
     nothingSigned: 'Nada foi assinado.',
     nothingWaiting: 'Nada aguarda a sua aprovação.',
     next: (step) => `Próximo: ${step}. Aparece aqui em alguns segundos.`,
@@ -191,6 +183,7 @@ export const COSIGN_COPY: Record<
     approve: 'Aprovar',
     approving: 'Aprovando...',
     genericError: 'Algo deu errado. Tente novamente.',
+    unreachable: 'Não conseguimos conectar à Pollar, então nada foi aprovado. Verifique sua conexão e aprove novamente.',
     deviceNotLinked:
       'Este dispositivo ainda não está vinculado à sua carteira, então não pode aprovar. Adicione-o com um dispositivo que já esteja, sua passkey ou seu email.',
     linkDevice: 'Vincular este dispositivo',

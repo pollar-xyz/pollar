@@ -3,7 +3,7 @@
 import { useInheritedLanguage } from '../../language-context';
 import { PollarLanguage, WalletChain } from '@pollar/core';
 import { QRCode } from '../../lib/qr-code';
-import { ChainSelect } from '../ChainSelect';
+import { NetworkPill } from '../ChainSelect';
 import { PollarModalFooter } from '../commons';
 import { PollarLogo } from '../PollarLogo';
 import { buildModalCssVars, type ModalStyleOverrides } from '../modal-theme';
@@ -84,7 +84,10 @@ export function ReceiveModalTemplate({
     >
       {/* Header */}
       <div className="pollar-modal-header">
-        <h2 className="pollar-modal-title">{copy.title}</h2>
+        <div className="pollar-title-row">
+          <h2 className="pollar-modal-title">{copy.title}</h2>
+          {chains && onSelectChain && <NetworkPill value={selectedChain} options={chains} onChange={onSelectChain} />}
+        </div>
         <div className="pollar-modal-header-actions">
           <button type="button" className="pollar-modal-close" onClick={onClose} aria-label={copy.close}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
@@ -93,11 +96,6 @@ export function ReceiveModalTemplate({
           </button>
         </div>
       </div>
-
-      {/* Network selector - drives the address and QR below */}
-      {chains && onSelectChain && (
-        <ChainSelect label={copy.network} value={selectedChain} options={chains} onChange={onSelectChain} />
-      )}
 
       {/* QR code */}
       {recoveryLocked ? (

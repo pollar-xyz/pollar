@@ -2,6 +2,7 @@ import { PollarApiClient } from '../api/client';
 import { abortError, throwIfAborted } from '../lib/abort';
 import type { PollarLogger } from '../lib/logger';
 import { stringField } from '../api/error-fields';
+import { parseRetryAfterMs, retryAfterDelayMs } from '../lib/retry-after';
 
 /** Terminal session-status conditions, surfaced identically by the SSE stream
  *  (as `error` events) and the poll endpoint (as 404 / 410). When either occurs
@@ -47,6 +48,8 @@ function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 const MAX_BACKOFF_MS = 5_000;
+/** The longest a rate-limited status check waits, well inside the login's own deadline. */
+const MAX_RATE_LIMIT_WAIT_MS = 30_000;
 
 /**
  * Poll the session-status SSE stream until `check` returns true.
@@ -72,9 +75,9 @@ export async function streamUntilFound(
   while (true) {
     throwIfAborted(signal);
 
-    let data, error;
+    let data, error, response: Response | undefined;
     try {
-      ({ data, error } = await api.GET('/auth/session/status/{clientSessionId}', {
+      ({ data, error, response } = await api.GET('/auth/session/status/{clientSessionId}', {
         params: { path: { clientSessionId } },
         parseAs: 'stream',
         signal: signal ?? null,
@@ -85,7 +88,11 @@ export async function streamUntilFound(
     }
 
     if (error || !data) {
-      await sleep(backoff);
+      await sleep(
+        response?.status === 429
+          ? retryAfterDelayMs(parseRetryAfterMs(response.headers.get('Retry-After')), backoff, MAX_RATE_LIMIT_WAIT_MS)
+          : backoff,
+      );
       backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
       continue;
     }
@@ -183,9 +190,11 @@ export async function pollUntilFound(
 
     let envelope: StatusPollEnvelope | null = null;
     let httpStatus = 0;
+    let retryAfterMs: number | null = null;
     try {
       const response = await fetch(url, { headers: { accept: 'application/json' }, signal: signal ?? null });
       httpStatus = response.status;
+      retryAfterMs = parseRetryAfterMs(response.headers.get('Retry-After'));
       envelope = (await response.json().catch(() => null)) as StatusPollEnvelope | null;
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') throw e;
@@ -206,11 +215,14 @@ export async function pollUntilFound(
       return envelope.content;
     }
 
-    // A response (even a transient non-terminal error) resets the backoff floor;
-    // a network failure (no response) backs off up to the cap.
-    if (envelope) backoff = intervalMs;
-    else backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
-    await sleep(backoff);
+    // A normal answer resets the backoff floor. A network failure, a rate limit
+    // or a server error backs off up to the cap: a 429 carries a JSON body too,
+    // and resetting on it would keep every phone behind the IP polling twice a
+    // second against the limit it already exhausted.
+    const failed = !envelope || httpStatus === 429 || httpStatus >= 500;
+    if (failed) backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
+    else backoff = intervalMs;
+    await sleep(httpStatus === 429 ? retryAfterDelayMs(retryAfterMs, backoff, MAX_RATE_LIMIT_WAIT_MS) : backoff);
   }
 }
 

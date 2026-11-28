@@ -29,13 +29,22 @@ test('a disposable or blocklisted address ends in EMAIL_NOT_ALLOWED with the bac
   }
 });
 
-test('any other failure stays a retryable send failure', async () => {
+test('a rate limit stays a retryable send failure, says to wait and keeps the login session', async () => {
   const state = await stateAfter({ error: { code: 'RATE_LIMITED', success: false } });
   assert.equal(state.step, 'error');
   if (state.step !== 'error') return;
   assert.equal(state.errorCode, AUTH_ERROR_CODES.EMAIL_SEND_FAILED);
-  assert.equal(state.message, 'Failed to send code');
+  assert.match(state.message, /Wait a minute/);
   assert.equal(state.code, 'RATE_LIMITED');
+  assert.ok(state.clientSessionId, 'the same session can send again');
+});
+
+test('any other failure stays a retryable send failure', async () => {
+  const state = await stateAfter({ error: { code: 'SOMETHING_UNKNOWN', success: false } });
+  assert.equal(state.step, 'error');
+  if (state.step !== 'error') return;
+  assert.equal(state.errorCode, AUTH_ERROR_CODES.EMAIL_SEND_FAILED);
+  assert.equal(state.message, 'Failed to send code');
 });
 
 test('a code goes out, the flow moves on to entering it', async () => {

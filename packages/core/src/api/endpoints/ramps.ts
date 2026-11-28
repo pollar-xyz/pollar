@@ -101,6 +101,16 @@ export async function retryRampOrder(api: PollarApiClient, id: string): Promise<
 }
 
 /**
+ * POST /ramps/orders/{id}/cancel: cancels the user's order before anything moved.
+ * Refused (409) once a payment, burn or swap was sent, or while a co-signed approval is open.
+ */
+export async function cancelRampOrder(api: PollarApiClient, id: string): Promise<RampOrder> {
+  const { data, error } = await api.POST('/ramps/orders/{id}/cancel', { params: { path: { id } } });
+  if (!data?.content || error) throw rampApiError(error, 'Failed to cancel the ramp order');
+  return data.content;
+}
+
+/**
  * POST /ramps/wallets/{chain}: sets up the user's wallet on a chain a route passes
  * through, with `devicePublicKey` as its Turnkey wallet's first credential.
  */

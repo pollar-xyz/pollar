@@ -63,8 +63,11 @@ export {
   isPollarNetworkError,
   PollarApiError,
   isPollarApiError,
+  isTransientApiError,
+  isTransientFailure,
 } from './types';
 export { RampChain } from './types';
+export { startBackoffPoll } from './lib/backoff-poll';
 export { WALLET_NOT_READY_CODE, isWalletNotReady, WALLET_REQUIRED_CODE, isWalletRequired } from './types';
 export { PollarApiClient } from './api/client';
 export type { paths as pollarPaths } from './api/schema';
@@ -75,7 +78,15 @@ export { completeAuthEntryStep, isAuthEntryAdapterStep } from './adapter-steps';
 export type { StellarNetwork, StellarClientConfig, StellarBalance } from './stellar/StellarClient';
 
 // --- KYC endpoints ------------------------------------------------------------
-export { getKycStatus, getKycProviders, startKyc, resolveKyc, pollKycStatus, pollKycDecision } from './api/endpoints/kyc';
+export {
+  getKycStatus,
+  getKycProviders,
+  startKyc,
+  resolveKyc,
+  pollKycStatus,
+  pollKycDecision,
+  isKycSettled,
+} from './api/endpoints/kyc';
 export {
   getAppRequirements,
   getRequirementForm,
@@ -128,6 +139,10 @@ export {
   rampStepTitle,
   rampOrderReceive,
   rampOrderResolutionText,
+  rampFailureReason,
+  rampFailureNeedsSupport,
+  rampSupportCopy,
+  rampSupportContact,
   rampOrderStopped,
   rampLegTitle,
   rampNoRouteText,

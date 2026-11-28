@@ -15,6 +15,7 @@ import { SEND_COPY } from './send-copy';
 import { SendModalTemplate, type SendMemoType } from './SendModalTemplate';
 import { modalChrome } from '../modal-theme';
 import { PollarOverlay } from '../PollarOverlay';
+import { useDeclineOnClose, useInlineConfirmation } from '../../useInlineConfirmation';
 
 /** Where the send modal opens: a starting point the user can change. An option the wallet cannot use is left out. */
 export interface SendModalOptions {
@@ -99,6 +100,9 @@ export function SendModal({ onClose, initial }: SendModalProps) {
   const copy = SEND_COPY[language];
 
   const [step, setStep] = useState<'form' | 'create-account' | 'tx'>('form');
+  // The signature's yes is asked here, under the review, not in a prompt over the modal.
+  const confirmation = useInlineConfirmation(step === 'tx');
+  const { track, declineOnClose } = useDeclineOnClose(confirmation);
   // The destination had no Stellar account, so the tx being built creates it.
   const [createsAccount, setCreatesAccount] = useState(false);
   const [checkingDestination, setCheckingDestination] = useState(false);
@@ -201,7 +205,10 @@ export function SendModal({ onClose, initial }: SendModalProps) {
     'signing-submitting',
     'building-signing-submitting',
   ] as const;
-  const isInProgress = (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step);
+  // A transaction past its confirmation window is read on in the background: the modal can close meanwhile.
+  const isInProgress =
+    (IN_FLIGHT_STEPS as readonly string[]).includes(transaction.step) &&
+    !(transaction.step === 'submitted' && transaction.slow);
   const showBack =
     step === 'create-account' ||
     (step === 'tx' && (transaction.step === 'error' || transaction.step === 'success') && !isInProgress);
@@ -311,14 +318,16 @@ export function SendModal({ onClose, initial }: SendModalProps) {
     setStep('tx');
 
     if (selectedChain === 'SOLANA' || selectedChain === 'POLYGON') {
-      await sendPayment({
-        chain: selectedChain,
-        destination: destination.trim(),
-        amount: sendAmount,
-        // A native coin carries no token id; an SPL mint or ERC-20 contract rides
-        // in `issuer`, which the guard above proved is present.
-        ...(isNativeAsset ? {} : { mint: selectedAsset.issuer }),
-      });
+      await track(
+        sendPayment({
+          chain: selectedChain,
+          destination: destination.trim(),
+          amount: sendAmount,
+          // A native coin carries no token id; an SPL mint or ERC-20 contract rides
+          // in `issuer`, which the guard above proved is present.
+          ...(isNativeAsset ? {} : { mint: selectedAsset.issuer }),
+        }),
+      );
       return;
     }
 
@@ -343,7 +352,7 @@ export function SendModal({ onClose, initial }: SendModalProps) {
 
   function handleSignAndSend() {
     if (transaction.step === 'built') {
-      void signAndSubmitTx(transaction.buildData.unsignedXdr);
+      void track(signAndSubmitTx(transaction.buildData.unsignedXdr));
     }
   }
 
@@ -396,8 +405,13 @@ export function SendModal({ onClose, initial }: SendModalProps) {
 
   async function handleRetry() {
     if (transaction.step === 'error' && transaction.buildData) {
-      await signAndSubmitTx(transaction.buildData.unsignedXdr);
+      await track(signAndSubmitTx(transaction.buildData.unsignedXdr));
     }
+  }
+
+  function handleClose() {
+    declineOnClose();
+    onClose();
   }
 
   function handleBack() {
@@ -408,7 +422,7 @@ export function SendModal({ onClose, initial }: SendModalProps) {
   }
 
   return (
-    <PollarOverlay style={overlayStyle} onClick={!isInProgress ? onClose : undefined}>
+    <PollarOverlay style={overlayStyle} onClick={step !== 'tx' && !isInProgress ? handleClose : undefined}>
       <SendModalTemplate
         theme={theme}
         accentColor={accentColor}
@@ -436,7 +450,7 @@ export function SendModal({ onClose, initial }: SendModalProps) {
         walletType={walletType}
         showBack={showBack}
         isInProgress={isInProgress}
-        onClose={onClose}
+        onClose={handleClose}
         onBack={handleBack}
         onRefresh={() => void refreshWalletBalance()}
         onSelectAsset={setSelectedAsset}
@@ -455,6 +469,8 @@ export function SendModal({ onClose, initial }: SendModalProps) {
         onRetry={() => void handleRetry()}
         onDone={onClose}
         language={language}
+        confirmation={confirmation}
+        network={network}
       />
     </PollarOverlay>
   );

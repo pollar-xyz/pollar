@@ -27,6 +27,13 @@ import { bytesToHex, encodeStamp, hexToBytes } from './encoding';
  */
 
 const AUTH_PROXY_URL = 'https://authproxy.turnkey.com';
+/**
+ * The wait between two codes to the same address. Turnkey caps the codes it
+ * sends per address and answers 400 past that, for a window it does not state;
+ * spacing the sends keeps a user who taps "send" again from reaching the cap.
+ */
+export const RECOVERY_CODE_COOLDOWN_MS = 60_000;
+const OTP_CAP_MESSAGE = /max number of otps/i;
 const API_KEY_CURVE = 'API_KEY_CURVE_P256';
 const SCHEME = 'SIGNATURE_SCHEME_TK_API_P256';
 
@@ -131,6 +138,8 @@ export class CosignRecovery {
   private deps: CosignRecoveryDeps;
   /** The OTP an email flow is waiting a code for. */
   private otp: { otpId: string; targetBundle: string; email: string; purpose: 'confirm' | 'recover' } | null = null;
+  /** When each address (lowercased) may get its next code. */
+  private nextCodeAt = new Map<string, number>();
 
   constructor(deps: CosignRecoveryDeps) {
     this.deps = deps;
@@ -150,7 +159,10 @@ export class CosignRecovery {
   async status(): Promise<RecoveryState> {
     const res = await this.deps.api.GET('/cosign/recovery');
     if (res.error || !res.data?.content)
-      throw new PollarApiError('SDK_COSIGN_UPSTREAM_ERROR', isRecord(res.error) ? res.error : {});
+      throw new PollarApiError('SDK_COSIGN_UPSTREAM_ERROR', {
+        ...(isRecord(res.error) ? res.error : {}),
+        httpStatus: res.response?.status,
+      });
     return res.data.content;
   }
 
@@ -251,23 +263,42 @@ export class CosignRecovery {
     });
     const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
     if (!res.ok || !json) {
-      throw new PollarApiError('SDK_COSIGN_TURNKEY_REJECTED', {
-        turnkeyStatus: res.status,
-        message: stringField(json, 'message') ?? `Turnkey's Auth Proxy answered ${res.status}`,
-      });
+      const message = stringField(json, 'message') ?? `Turnkey's Auth Proxy answered ${res.status}`;
+      const code = OTP_CAP_MESSAGE.test(message)
+        ? 'SDK_COSIGN_OTP_RATE_LIMITED'
+        : res.status === 429
+          ? 'RATE_LIMITED'
+          : 'SDK_COSIGN_TURNKEY_REJECTED';
+      throw new PollarApiError(code, { turnkeyStatus: res.status, message });
     }
     return json as T;
   }
 
+  /** When `email` may get another code (epoch ms); 0 when it may now. */
+  codeAvailableAt(email: string): number {
+    const at = this.nextCodeAt.get(email.trim().toLowerCase()) ?? 0;
+    return at > Date.now() ? at : 0;
+  }
+
   private async sendCode(email: string, purpose: 'confirm' | 'recover'): Promise<void> {
+    const key = email.trim().toLowerCase();
+    const retryAt = this.codeAvailableAt(key);
+    if (retryAt) throw new PollarApiError('SDK_COSIGN_OTP_RATE_LIMITED', { retryAt });
     const { authProxyConfigId } = await this.requireWallet();
     if (!authProxyConfigId) throw new PollarApiError('SDK_COSIGN_NOT_CONFIGURED', { reason: 'no Auth Proxy config' });
-    const init = await this.authProxy<{ otpId: string; otpEncryptionTargetBundle: string }>(
-      authProxyConfigId,
-      '/v1/otp_init_v2',
-      { otpType: 'OTP_TYPE_EMAIL', contact: email },
-    );
-    this.otp = { otpId: init.otpId, targetBundle: init.otpEncryptionTargetBundle, email, purpose };
+    try {
+      const init = await this.authProxy<{ otpId: string; otpEncryptionTargetBundle: string }>(
+        authProxyConfigId,
+        '/v1/otp_init_v2',
+        { otpType: 'OTP_TYPE_EMAIL', contact: email },
+      );
+      this.otp = { otpId: init.otpId, targetBundle: init.otpEncryptionTargetBundle, email, purpose };
+      this.nextCodeAt.set(key, Date.now() + RECOVERY_CODE_COOLDOWN_MS);
+    } catch (err) {
+      if (err instanceof PollarApiError && err.code === 'SDK_COSIGN_OTP_RATE_LIMITED')
+        this.nextCodeAt.set(key, Date.now() + RECOVERY_CODE_COOLDOWN_MS);
+      throw err;
+    }
   }
 
   /** Verify the code Turnkey emailed; the token is bound to `key`, which the caller holds. */
